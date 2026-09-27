@@ -13,17 +13,33 @@ vi.mock("@shared/http/google-oauth", async (importOriginal) => {
   return {
     ...real,
     // Drive and Sheets work; every Gmail mailbox refuses.
-    getDelegatedToken: vi.fn(async (_subject: string, scope: string) =>
-      scope === real.GMAIL_SCOPE ? null : "token"
+    // Drive and Sheets work; of the Gmail mailboxes only teamwork@ answers.
+    getDelegatedToken: vi.fn(async (subject: string, scope: string) =>
+      scope === real.GMAIL_SCOPE && subject !== "teamwork@loveiq.org" ? null : "token"
     ),
   };
 });
+const fetched: string[] = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
-  fetchWithTimeout: vi.fn(async (url: string) =>
-    String(url).includes("sheets.googleapis.com")
-      ? { ok: true, status: 200, json: async () => ({ values: [] }), text: async () => "" }
-      : { ok: false, status: 503, json: async () => ({}), text: async () => "down" }
-  ),
+  fetchWithTimeout: vi.fn(async (url: string) => {
+    fetched.push(String(url));
+    const ok = (body: unknown) => ({
+      ok: true,
+      status: 200,
+      json: async () => body,
+      text: async () => "",
+    });
+    if (String(url).includes("sheets.googleapis.com")) return ok({ values: [] });
+    // One reachable mailbox, whose invoice list runs to a second page.
+    if (String(url).includes("gmail.googleapis.com")) {
+      return ok(
+        String(url).includes("pageToken=p2")
+          ? { messages: [] }
+          : { messages: [], nextPageToken: "p2" }
+      );
+    }
+    return { ok: false, status: 503, json: async () => ({}), text: async () => "down" };
+  }),
 }));
 const mockNotify = vi.fn();
 vi.mock("@shared/observability/slack", () => ({
@@ -37,7 +53,7 @@ vi.mock("@shared/observability/slack-alert-dedup", () => ({
   startCronTimer: () => async () => undefined,
 }));
 
-import { GET } from "@/app/api/cron/file-invoices/route";
+import { GET, shouldWriteSheet } from "@/app/api/cron/file-invoices/route";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -58,6 +74,16 @@ describe("a filing run that could not read every mailbox", () => {
       expect.stringContaining("no Gmail access to")
     );
     const text = String((mockNotify.mock.calls.at(-1)?.[0] as { text: string }).text);
-    expect(text).toContain("Incomplete run, so invoices may be missing");
+    expect(text).toContain("Incomplete run, so the cost sheet was NOT updated");
+    // Every page of a mailbox's invoice list is read, not just the first hundred.
+    expect(
+      fetched.some((u) => u.includes("gmail.googleapis.com") && u.includes("pageToken=p2"))
+    ).toBe(true);
+  });
+
+  it("writes reconciled figures only from a complete walk", () => {
+    expect(shouldWriteSheet([{}], [])).toBe(true);
+    expect(shouldWriteSheet([{}], ["no Gmail access to x@loveiq.org"])).toBe(false);
+    expect(shouldWriteSheet([], [])).toBe(false);
   });
 });

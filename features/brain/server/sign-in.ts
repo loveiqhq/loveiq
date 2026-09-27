@@ -46,6 +46,15 @@ const MAX_CACHED = 500;
 
 const members = new Map<string, { member: Member | null; until: number }>();
 const tokens = new Map<string, { caller: Caller; until: number }>();
+/**
+ * Accounts (a token's `sub`) that Supabase vouched for recently. Their re-checks get a
+ * bucket of their own instead of the per-address one, so a flood of forged tokens through
+ * Anthropic's shared addresses cannot make a connected member's once-a-minute re-check
+ * fail. A forger would need a member's account id, which only appears in that member's
+ * own tokens. Kept a day; per instance, so a cold instance falls back to the address.
+ */
+const VERIFIED_SUB_MS = 24 * 3_600_000;
+const verifiedSubs = new Map<string, number>();
 
 /** Drop the oldest entry once a cache is full; Map keeps insertion order. */
 function remember<V>(cache: Map<string, V>, key: string, value: V): void {
@@ -58,6 +67,7 @@ function remember<V>(cache: Map<string, V>, key: string, value: V): void {
 export function forgetSignIns(): void {
   members.clear();
   tokens.clear();
+  verifiedSubs.clear();
 }
 
 /**
@@ -127,8 +137,9 @@ export async function resolveCaller(
    * refuses it with a 429. The limit sits here, on the one step that costs something,
    * rather than on the door: the door's limit is per address, and claude.ai's calls leave
    * from Anthropic's shared addresses, so strangers sending junk would spend the team's.
+   * `knownSub` is set when the token's account verified recently, for a bucket of its own.
    */
-  beforeCheck?: () => Promise<boolean>
+  beforeCheck?: (who: { knownSub?: string }) => Promise<boolean>
 ): Promise<Resolution> {
   const presented = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
   if (!presented) return refused(401, "Sign in to use Jarvis.");
@@ -157,7 +168,9 @@ export async function resolveCaller(
   const hit = tokens.get(hash);
   if (hit && hit.until > now) return { ok: true, caller: hit.caller };
 
-  if (beforeCheck && !(await beforeCheck())) {
+  const sub = typeof claims.sub === "string" ? claims.sub : undefined;
+  const knownSub = sub && (verifiedSubs.get(sub) ?? 0) > now ? sub : undefined;
+  if (beforeCheck && !(await beforeCheck({ knownSub }))) {
     return refused(429, "Too many sign-in checks from this address. Try again in a minute.");
   }
 
@@ -197,6 +210,7 @@ export async function resolveCaller(
   // offboarded person kept access for up to two minutes, not the one we promise.
   const memberUntil = members.get(member.email)?.until ?? now + TRUST_MS;
   remember(tokens, hash, { caller, until: Math.min(now + TRUST_MS, memberUntil) });
+  if (sub) remember(verifiedSubs, sub, now + VERIFIED_SUB_MS);
   return { ok: true, caller };
 }
 

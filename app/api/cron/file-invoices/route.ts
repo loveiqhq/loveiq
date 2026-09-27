@@ -87,6 +87,11 @@ const LOOKBACK_DAYS = 45;
  * partial one, and then carry that wrong figure forward across every forecast
  * month. A partial month must be filed but never reconciled.
  */
+/** Write the reconciled figures only from a complete walk (see the write below). */
+export function shouldWriteSheet(updates: unknown[], incomplete: string[]): boolean {
+  return updates.length > 0 && incomplete.length === 0;
+}
+
 export function monthFullyCovered(year: number, month: number, windowStartMs: number): boolean {
   return Date.UTC(year, month - 1, 1) >= windowStartMs;
 }
@@ -463,12 +468,22 @@ export async function GET(request: Request) {
         continue;
       }
       const q = encodeURIComponent(`has:attachment filename:pdf newer_than:${LOOKBACK_DAYS}d`);
-      const list = await gapi<{ messages?: Array<{ id: string }> }>(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100`,
-        gmailToken
-      );
+      // Every page: one page of 100 silently dropped the oldest invoices in a busy mailbox.
+      const refs: Array<{ id: string }> = [];
+      let pageToken: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        const list = await gapi<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100` +
+            (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
+          gmailToken
+        );
+        refs.push(...(list.messages || []));
+        pageToken = list.nextPageToken;
+        if (!pageToken) break;
+      }
+      if (pageToken) incomplete.push(`more than 1,000 invoice emails in ${mailbox}`);
 
-      for (const ref of list.messages || []) {
+      for (const ref of refs) {
         if (Date.now() - startMs > 240_000) {
           // Stops the whole walk, not just this mailbox. Breaking only the inner
           // loop would start the next mailbox with no budget left and blow the
@@ -690,7 +705,10 @@ export async function GET(request: Request) {
       );
     }
 
-    if (updates.length) {
+    // Nothing is written from an incomplete walk: a month summed from part of a mailbox would
+    // overwrite the right total with a smaller one, carried into every forecast month, and
+    // after about the 15th a re-run can no longer reconcile that month to repair it.
+    if (shouldWriteSheet(updates, incomplete)) {
       await gapi(
         `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
         sheetToken,
@@ -707,7 +725,9 @@ export async function GET(request: Request) {
       ...filed.map((f) => `• ${escapeSlack(f.vendor)}/${f.month}/${escapeSlack(f.file)}`),
       "",
       changes.length
-        ? `:heavy_dollar_sign: *Cost sheet updated* (${changes.length})\n` +
+        ? (incomplete.length
+            ? `:no_entry: *Cost sheet NOT updated, these would have changed* (${changes.length})\n`
+            : `:heavy_dollar_sign: *Cost sheet updated* (${changes.length})\n`) +
           changes.map((c) => `• ${escapeSlack(c)}`).join("\n")
         : ":white_check_mark: Cost sheet already matched every invoice.",
       unconverted.length
@@ -723,7 +743,7 @@ export async function GET(request: Request) {
       "",
       `_No invoice expected by email from: ${NEVER_ATTACHES.map((n) => `${n.sheetName} (${n.why})`).join("; ")}._`,
       incomplete.length
-        ? `:warning: *Incomplete run, so invoices may be missing:* ${escapeSlack(incomplete.join("; "))}. Run it again.`
+        ? `:warning: *Incomplete run, so the cost sheet was NOT updated:* ${escapeSlack(incomplete.join("; "))}. Run it again before the 15th.`
         : "",
     ];
     if (incomplete.length) cronError = `incomplete: ${incomplete.join("; ")}`;

@@ -263,6 +263,27 @@ describe("/api/mcp", () => {
               ([k, o]) => `${(o as { bucket: string }).bucket}:${String(k).split("|")[0]}`
             )
           ).toContain("mcp:shared");
+          // A member whose account verified recently re-checks in their own bucket, so a
+          // flood that spent the address's does not lock them out.
+          mockRateLimit.mockImplementation(async () => ({ allowed: true }));
+          const withSub = (n: string) =>
+            `${part({ alg: "HS256" })}.${part({
+              iss: `${BASE}/auth/v1`,
+              client_id: n,
+              sub: "user-mo",
+              exp: Math.floor(Date.now() / 1000) + 3600,
+            })}.sig`;
+          expect((await POST(rpc({ method: "ping" }, withSub("first")))).status).toBe(200);
+          mockRateLimit.mockImplementation(async (...a: unknown[]) => ({
+            allowed: (a[1] as { bucket: string }).bucket !== "mcp-sign-in",
+          }));
+          expect((await POST(rpc({ method: "ping" }, withSub("refreshed")))).status).toBe(200);
+          expect(
+            mockRateLimit.mock.calls.some(
+              ([k, o]) =>
+                (o as { bucket: string }).bucket === "mcp-sign-in-member" && k === "sub:user-mo"
+            )
+          ).toBe(true);
           // A token that cannot be a sign-in is refused before any bucket is touched.
           mockRateLimit.mockClear();
           expect((await POST(rpc({ method: "ping" }, "not-a-sign-in-token-000"))).status).toBe(401);
