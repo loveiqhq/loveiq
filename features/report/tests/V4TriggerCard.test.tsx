@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4TriggerCard from "@features/report/ui/v3/V4TriggerCard";
 import { buildAccelerators } from "@/data/report3-accelerators";
+import { installRevealObserver, mockRect, observerOf } from "./v4RevealTestKit";
 
 /**
  * The two trigger cards of Accelerator & Brakes — "WHAT BRAKES YOU" (Figma 713:6132,
@@ -167,6 +168,39 @@ describe("V4TriggerCard — paywalled (386:416 / 386:444)", () => {
   });
 });
 
+// Review 27.09, Mark: "accelerators & Brakes - let's have the headlines fade in, ie
+// 'what brakes you' 'what accelerates you'".
+describe("V4TriggerCard — the headline fades in once the card reaches the screen", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const head = (root: Element) => root.querySelector(".rv4-trig__head")!;
+
+  it("holds the badge and label back until the head is in view, then lets them in", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
+    expect(head(container)).toHaveClass("is-pending");
+    expect(screen.getByRole("heading", { name: "WHAT BRAKES YOU" })).toBeTruthy();
+    observerOf(head(container))!.fire(true);
+    expect(head(container)).not.toHaveClass("is-pending");
+    expect(container.querySelector(".rv4-reveal")).toBeNull();
+  });
+
+  it("fades the paywalled card's headline in too: heads are never blurred", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(
+      <V4TriggerCard tone="accel" rows={LOCKED.accelerators} lockedFrom={LOCKED.lockedFrom} />
+    );
+    expect(head(container)).toHaveClass("is-pending");
+    observerOf(head(container))!.fire(true);
+    expect(head(container)).not.toHaveClass("is-pending");
+  });
+});
+
 describe("reportV3.css — trigger card contracts", () => {
   const rule = (selector: string) => {
     const at = V3_CSS.indexOf(selector);
@@ -191,6 +225,31 @@ describe("reportV3.css — trigger card contracts", () => {
     expect(css).toContain("font-size: 12px");
     expect(css).toContain("font-weight: 800");
     expect(css).toContain("letter-spacing: 1.56px");
+  });
+
+  it("fades the badge in, then the label, 6px up from under the head (review 27.09)", () => {
+    const pending = rule(`.rv3 .rv4-trig__head.is-pending > .rv4-trig__badge,
+.rv3 .rv4-trig__head.is-pending > .rv4-trig__label {`);
+    expect(pending).toContain("opacity: 0");
+    expect(pending).toContain("transform: translateY(6px)");
+    const moving = rule(`.rv3 .rv4-trig__head > .rv4-trig__badge,
+.rv3 .rv4-trig__head > .rv4-trig__label {`);
+    expect(moving).toMatch(/opacity 420ms/);
+    expect(moving).toMatch(/transform 520ms/);
+    // The label's own rule, after the shared one whose second line reads the same.
+    const labelAt = V3_CSS.lastIndexOf(".rv3 .rv4-trig__head > .rv4-trig__label {");
+    expect(V3_CSS.slice(labelAt, V3_CSS.indexOf("}", labelAt))).toContain("transition-delay: 90ms");
+  });
+
+  it("shows the headline in place under reduced motion, pending or not", () => {
+    const at = V3_CSS.indexOf(`@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-trig__head > .rv4-trig__badge,`);
+    expect(at).toBeGreaterThan(0);
+    const media = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
+    expect(media).toContain(".rv3 .rv4-trig__head.is-pending > .rv4-trig__label");
+    expect(media).toContain("opacity: 1");
+    expect(media).toContain("transform: none");
+    expect(media).toContain("transition: none");
   });
 
   it("keeps nothing of the scales or their reveal", () => {

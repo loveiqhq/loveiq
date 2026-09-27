@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState, type FC } from "react";
 import type { Report3TriggerRow } from "@/data/report3-accelerators";
+import useV4Reveal from "./useV4Reveal";
 import V4LockBadge from "./V4LockBadge";
 import { guardedUnlock } from "./v4Unlock";
 
@@ -26,6 +27,11 @@ import { guardedUnlock } from "./v4Unlock";
  * rows since review 26.09); they are `aria-hidden` and `inert`, and the group around
  * them owns the click, so a tap anywhere on the blur opens the paywall once (the badge
  * has no handler of its own and bubbles to it — the same seam as V4ShadowBeliefs).
+ *
+ * THE HEADLINE (review 27.09). Mark: "let's have the headlines fade in, ie 'what
+ * brakes you' 'what accelerates you'". The head holds its badge and label back
+ * (`is-pending`) until it is in view, then they rise into place, the label a beat
+ * after the badge. Heads are never blurred, so a locked reader sees it too.
  *
  * The chrome text lives here, never in the paid module.
  */
@@ -104,6 +110,7 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
   const clear = locked ? rows.slice(0, lockedFrom) : collapsed ? rows.slice(0, CLEAR_ROWS) : rows;
   const peek = collapsed ? rows[CLEAR_ROWS] : undefined;
   const blurred = locked ? rows.slice(lockedFrom) : [];
+  const [headRef, headInView] = useV4Reveal<HTMLDivElement>();
 
   useEffect(() => {
     if (!showAll || !revealed.current) return;
@@ -118,7 +125,7 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
       data-node-id={locked ? NODE[tone].locked : NODE[tone].open}
       data-name={tone === "brake" ? "Card · What shuts you down" : "Card · What opens you"}
     >
-      <div className="rv4-trig__head">
+      <div ref={headRef} className={`rv4-trig__head${headInView ? "" : " is-pending"}`}>
         <span className="rv4-trig__badge" aria-hidden="true">
           <Image src={ICON[tone]} alt="" width={16} height={16} unoptimized />
         </span>

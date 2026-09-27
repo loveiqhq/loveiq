@@ -7352,3 +7352,33 @@ html {
     transition: none;
   }
 }
+
+/* ── Accelerators & Brakes: the headlines fade in — 713:6132 / 713:6181 ─────────────
+ * "let's have the headlines fade in, ie 'what brakes you' 'what accelerates you'". The
+ * head holds its badge and label 6px low and clear (`is-pending`) until it is in view;
+ * then the badge rises into place and the label follows a beat later. Heads are never
+ * blurred, so a locked reader sees it as well. */
+.rv3 .rv4-trig__head > .rv4-trig__badge,
+.rv3 .rv4-trig__head > .rv4-trig__label {
+  transition:
+    opacity 420ms ease,
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rv3 .rv4-trig__head > .rv4-trig__label {
+  transition-delay: 90ms;
+}
+.rv3 .rv4-trig__head.is-pending > .rv4-trig__badge,
+.rv3 .rv4-trig__head.is-pending > .rv4-trig__label {
+  opacity: 0;
+  transform: translateY(6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-trig__head > .rv4-trig__badge,
+  .rv3 .rv4-trig__head > .rv4-trig__label,
+  .rv3 .rv4-trig__head.is-pending > .rv4-trig__badge,
+  .rv3 .rv4-trig__head.is-pending > .rv4-trig__label {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
