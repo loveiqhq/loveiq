@@ -21,6 +21,8 @@ concurrency:
 
 permissions:
   contents: read
+  # Read by the alert step, to tell a new failure from one already reported.
+  actions: read
 
 jobs:
   embed:
@@ -29,12 +31,14 @@ jobs:
     # The backfill stops itself between passes after BACKFILL_BUDGET_MIN (a pass is at
     # most nine minutes), so this is only the ceiling if a pass hangs.
     timeout-minutes: 130
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    # The service key is given to the two steps that use it, not the whole job: at job
+    # level it also reached `npm ci`, and every package install script with it.
     steps:
       - name: Count chunks with no embedding
         id: count
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
@@ -70,17 +74,30 @@ jobs:
         # Exit 0 when done, or at the budget after making progress (the next hour carries
         # on). Non-zero when a pass embeds nothing or errors, so a stall is a failure.
         env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           BACKFILL_BUDGET_MIN: "100"
         run: npx tsx scripts/brain-embed-backfill.ts
 
       - name: Tell the brain channel the embeddings are not catching up
-        if: failure()
+        # cancelled() too: GitHub ends a run that hits timeout-minutes as CANCELLED, and
+        # failure() alone would say nothing about a hang.
+        if: failure() || cancelled()
         env:
           SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then
             echo "::warning::SLACK_BRAIN_WEBHOOK_URL is not set, so this failure alerts nobody"
+            exit 0
+          fi
+          # Once per outage, not once an hour: say it when the run before this one was clean.
+          prev=$(gh run list -R "$GITHUB_REPOSITORY" --workflow brain-embed.yml --limit 5 \
+            --json databaseId,conclusion \
+            -q "[.[] | select(.databaseId != ${GITHUB_RUN_ID} and .conclusion != \"\")][0].conclusion" || true)
+          if [ "$prev" = "failure" ] || [ "$prev" = "cancelled" ]; then
+            echo "The previous run already failed and was reported; not posting again."
             exit 0
           fi
           curl -sS --fail -X POST -H 'Content-type: application/json' \
