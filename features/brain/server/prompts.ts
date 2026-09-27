@@ -235,7 +235,7 @@ export const PROMPTS: BrainPrompt[] = [
         `Write the monthly review of ${span ? `${span.name} (${since} to ${until})` : month} for the team.\n\n` +
         `1. Funnel and money: get_business_numbers with since ${since}, until ${until} and compare_to ${before}. ` +
         "Lead with paywall conversion, the core goal. For a day that jumped, explain_change before calling it real.\n" +
-        "2. What we paid for tools: cost_watch. Its latest settled month is usually this one; for an older month use its " +
+        "2. What we paid for tools: cost_watch. Its latest closed month is usually this one; for an older month use its " +
         "trend line. Name any hand-typed line it flags.\n" +
         `3. Who our users were: user_totals with since ${since} and until ${until}, grouped by archetype, then by country.\n` +
         `4. What shipped: what_shipped from ${since} to ${until} a week at a time (a month of changes is longer than one ` +
