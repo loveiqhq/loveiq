@@ -183,16 +183,19 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
                 <button
                   type="button"
                   className="rv4-loop__dot"
-                  style={at}
+                  style={{ ...at, "--rv4-loop-dot": step.dot } as CSSProperties}
                   tabIndex={-1}
                   aria-label={`Show ${step.title}`}
                   onClick={() => goTo(i)}
                 />
+                {/* Tappable too (review 27.09: "It is hard to click the stages/dots"):
+                 * a reader aims at the words as often as at the 11px dot. */}
                 <span
                   className={`rv4-loop__label rv4-loop__label--${LABEL_SIDE[i]}${
                     i === active ? " is-active" : ""
                   }`}
                   style={at}
+                  onClick={() => goTo(i)}
                 >
                   {step.title}
                 </span>

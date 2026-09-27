@@ -167,6 +167,29 @@ describe("V4PartnershipLoop — following the swipe", () => {
   });
 });
 
+// Review 27.09, Mark: "It is hard to click the stages/dots in the flywheel. I tried a few
+// times and only once did it work. Let's also have the colors of the stages/dots in the
+// flywheel match the ones from the tile (grey etc)."
+describe("V4PartnershipLoop — the orbit's dots: easy to hit, in the tiles' colours", () => {
+  it("colours each orbit dot as its slide's own dot", () => {
+    const { container } = renderLoop();
+    const dots = container.querySelectorAll<HTMLElement>(".rv4-loop__dot");
+    expect(dots).toHaveLength(6);
+    dots.forEach((dot, i) => {
+      expect(dot.style.getPropertyValue("--rv4-loop-dot")).toBe(LOOP_STEPS[i]!.dot);
+    });
+  });
+
+  it("lets a tap on a step's label choose it, as its dot does", () => {
+    const { container } = renderLoop();
+    const viewport = layOut(container);
+    const scrollTo = vi.fn();
+    viewport.scrollTo = scrollTo as unknown as typeof viewport.scrollTo;
+    fireEvent.click(container.querySelectorAll(".rv4-loop__label")[4]!);
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 4 * STEP, behavior: "smooth" });
+  });
+});
+
 describe("V4PartnershipLoop — locked (612:862)", () => {
   it("blurs the orbit and slides behind the brand lock, the pager sharp but inert", () => {
     const { container } = renderLoop({ stages: LOCKED.loop, locked: true, onUnlock: () => {} });
@@ -214,6 +237,26 @@ describe("V4PartnershipLoop — CSS contract", () => {
     const first = firstRule(".rv4-loop");
     expect(first).toBeGreaterThan(0);
     expect(lineOf(first)).toBeGreaterThan(1884);
+  });
+
+  it("fills the orbit's dots with the tiles' colours and their violet glow (532:266)", () => {
+    const at = V3_CSS.indexOf(".rv3 .rv4-loop__dot {");
+    const dot = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(dot).toContain("background: var(--rv4-loop-dot");
+    expect(dot).toContain("0 0 10px rgba(192, 132, 252, 0.8)");
+    expect(dot).not.toContain("inset 0 0 0 1px #a855f7");
+  });
+
+  it("gives each 11px orbit dot a 44px target, and its label a tap", () => {
+    const hitAt = V3_CSS.indexOf(".rv3 .rv4-loop__dot::before {");
+    expect(hitAt).toBeGreaterThan(0);
+    const hit = V3_CSS.slice(hitAt, V3_CSS.indexOf("}", hitAt));
+    expect(hit).toContain("inset: -16.5px");
+    expect(hit).toContain("position: absolute");
+    const labelAt = V3_CSS.indexOf(".rv3 .rv4-loop__label {");
+    const label = V3_CSS.slice(labelAt, V3_CSS.indexOf("}", labelAt));
+    expect(label).toContain("pointer-events: auto");
+    expect(label).toContain("cursor: pointer");
   });
 
   it("uses no class name a V3 catch-all would restyle", () => {
