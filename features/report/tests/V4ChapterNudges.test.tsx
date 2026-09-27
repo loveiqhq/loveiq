@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4ChapterNudges from "@features/report/ui/v3/V4ChapterNudges";
 import { V4_OPEN_CHAPTER_EVENT } from "@features/report/ui/v3/v4OpenChapter";
@@ -197,6 +197,21 @@ describe("V4ChapterNudges — the rows fade up one by one as the panel comes int
     const { container } = render(<V4ChapterNudges />);
     expect(panel(container)).toHaveClass("is-pending");
     observerOf(panel(container))!.fire(true);
+    expect(panel(container)).not.toHaveClass("is-pending");
+  });
+
+  // Final review 27.09: the rows hold buttons, and until the panel is in view they are
+  // clear — a keyboard reader tabbing into it would see neither the rows nor the focus.
+  it("shows the rows the moment a keyboard reader tabs into the panel still held back", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4ChapterNudges />);
+    expect(panel(container)).toHaveClass("is-pending");
+    act(() =>
+      within(panel(container) as HTMLElement)
+        .getAllByRole("button")[0]!
+        .focus()
+    );
     expect(panel(container)).not.toHaveClass("is-pending");
   });
 });

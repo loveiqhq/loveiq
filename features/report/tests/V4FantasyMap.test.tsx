@@ -439,6 +439,18 @@ describe("V4FantasyMap — the dots arrive one by one as the map comes into view
     expect(mapOf(container)).toHaveClass("is-entering");
   });
 
+  // Final review 27.09: the dots are buttons, and until the map is in view they are
+  // clear — a keyboard reader tabbing onto one would see neither it nor its readout.
+  it("lets the dots in the moment a keyboard reader tabs onto one still held back", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    expect(mapOf(container)).toHaveClass("is-pending");
+    act(() => dots(container)[0]!.focus());
+    expect(mapOf(container)).not.toHaveClass("is-pending");
+    expect(mapOf(container)).toHaveClass("is-entering");
+  });
+
   it("settles once the last dot has arrived, not before", () => {
     installRevealObserver();
     mockRect({ top: 5000 });
