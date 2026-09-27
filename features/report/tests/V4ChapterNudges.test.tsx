@@ -7,6 +7,7 @@ import V4ChapterNudges from "@features/report/ui/v3/V4ChapterNudges";
 import { V4_OPEN_CHAPTER_EVENT } from "@features/report/ui/v3/v4OpenChapter";
 import { REPORT_V4_CHAPTERS } from "@features/report/ui/v3/reportV3Nav";
 import { REPORT_V4_NUDGES } from "@/data/report3-archetype-page";
+import { installRevealObserver, mockRect, observerOf } from "./v4RevealTestKit";
 
 /**
  * Part II's "A Snapshot of what you will learn" — Figma 1:763: the H2 1:766 over the chapter
@@ -169,6 +170,37 @@ describe("V4ChapterNudges — 663:1089", () => {
   });
 });
 
+// Our own extra, one of the two Fatih approved on 27.09 in answer to Mark's "maybe you
+// also have some good ideas": the Snapshot's rows fade up one after another.
+describe("V4ChapterNudges — the rows fade up one by one as the panel comes into view", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const panel = (root: ParentNode) => root.querySelector(".rv4-nudges__panel")!;
+
+  it("numbers the rows, and the closing line after them, in reading order", () => {
+    const { container } = render(<V4ChapterNudges />);
+    const rows = container.querySelectorAll<HTMLElement>(".rv4-nudges__row");
+    expect(rows).toHaveLength(REPORT_V4_NUDGES.length);
+    rows.forEach((row, i) => {
+      expect(row.style.getPropertyValue("--rv4-nudge-i")).toBe(String(i));
+    });
+    const coda = container.querySelector<HTMLElement>(".rv4-nudges__coda")!;
+    expect(coda.style.getPropertyValue("--rv4-nudge-i")).toBe(String(rows.length));
+  });
+
+  it("holds the rows back until the panel is in view, then lets them in", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4ChapterNudges />);
+    expect(panel(container)).toHaveClass("is-pending");
+    observerOf(panel(container))!.fire(true);
+    expect(panel(container)).not.toHaveClass("is-pending");
+  });
+});
+
 describe("V4ChapterNudges — CSS contract", () => {
   it("sets the panel in the column, radius 27, with the frame's hairline and soft shadow", () => {
     const panel = rule(".rv3 .rv4-nudges__panel");
@@ -225,5 +257,32 @@ describe("V4ChapterNudges — CSS contract", () => {
         /__(body|card|eyebrow|result|heading|details|details-[a-z-]+|learn-[a-z-]+)$/
       );
     }
+  });
+});
+
+describe("V4ChapterNudges — the fade-up's CSS (review 27.09)", () => {
+  const ROWS = `.rv3 .rv4-nudges__panel > .rv4-nudges__row,
+.rv3 .rv4-nudges__panel > .rv4-nudges__coda`;
+  const PENDING = `.rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__row,
+.rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__coda`;
+
+  it("rises each row 10px into place, 90ms after the one before", () => {
+    const moving = rule(ROWS);
+    expect(moving).toContain("opacity 420ms");
+    expect(moving).toContain("transform 560ms");
+    expect(moving).toContain("transition-delay: calc(var(--rv4-nudge-i, 0) * 90ms)");
+    const pending = rule(PENDING);
+    expect(pending).toContain("opacity: 0");
+    expect(pending).toContain("transform: translateY(10px)");
+  });
+
+  it("shows every row in place under reduced motion, pending or not", () => {
+    const at = V3_CSS.indexOf(`@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-nudges__panel > .rv4-nudges__row,`);
+    expect(at).toBeGreaterThan(0);
+    const media = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(media).toContain(".rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__coda");
+    expect(media).toContain("opacity: 1");
+    expect(media).toContain("transition: none");
   });
 });

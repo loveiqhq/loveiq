@@ -7506,3 +7506,30 @@ html {
     transform: translateX(-50%);
   }
 }
+
+/* ── Extra: the Snapshot's rows fade up one by one (ours, review 27.09) ────────────
+ * The panel's four rows, then its "+ N other chapters" line, rise 10px into place one
+ * after another, 90ms apart, as the panel comes into view (`--rv4-nudge-i` is each
+ * one's turn). The rows keep their own clip; nothing else about them moves. */
+.rv3 .rv4-nudges__panel > .rv4-nudges__row,
+.rv3 .rv4-nudges__panel > .rv4-nudges__coda {
+  transition:
+    opacity 420ms ease,
+    transform 560ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--rv4-nudge-i, 0) * 90ms);
+}
+.rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__row,
+.rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__coda {
+  opacity: 0;
+  transform: translateY(10px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-nudges__panel > .rv4-nudges__row,
+  .rv3 .rv4-nudges__panel > .rv4-nudges__coda,
+  .rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__row,
+  .rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__coda {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
