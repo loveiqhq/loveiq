@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore,
   type FC,
+  type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
@@ -30,6 +31,11 @@ import {
   REPORT_SECTION_ORDER,
   RETIRED_REPORT_SECTION_IDS,
 } from "./reportNav";
+import {
+  createActiveSectionStore,
+  useActiveSectionId,
+  type ActiveSectionStore,
+} from "./activeSectionStore";
 import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
 import { V4ChapterCardsProvider } from "./v3/V4ChapterCards";
@@ -504,6 +510,15 @@ interface ReportExperienceProps {
  */
 const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
 
+/** A nav that follows the current chapter; it alone renders again when that moves. */
+const WithActiveSection: FC<{
+  store: ActiveSectionStore;
+  children: (activeSectionId: string) => ReactNode;
+}> = ({ store, children }) => {
+  const activeSectionId = useActiveSectionId(store);
+  return <>{children(activeSectionId)}</>;
+};
+
 const ReportExperience: FC<ReportExperienceProps> = ({
   isV3,
   isV4,
@@ -607,7 +622,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       onFeedback={(payload) => submitFeedback(sectionId, payload)}
     />
   );
-  const [activeSectionId, setActiveSectionId] = useState(REPORT_NAV_IDS[0] ?? "core_archetype");
+  // The chapter the navs mark as current. A store, not state: only the navs read it,
+  // and as state every change down the page rendered the whole report again.
+  const [activeSection] = useState(() =>
+    createActiveSectionStore(REPORT_NAV_IDS[0] ?? "core_archetype")
+  );
   // Live full-report quote used by the locked premium cards' price/strike/save.
   // Same source the pricing modal and sticky bar read, so all three agree.
   const fullReportQuote = pricingQuotes?.full_report ?? null;
@@ -675,7 +694,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
   const handleSectionClick = (sectionId: string) => {
     clickLockUntilRef.current = Date.now() + 800;
-    setActiveSectionId(sectionId);
+    activeSection.set(sectionId);
   };
 
   const unlockSection = (section: DisplayReportSection) => {
@@ -811,7 +830,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           break;
         }
       }
-      setActiveSectionId(activeId);
+      activeSection.set(activeId);
     }
 
     function onScroll() {
@@ -838,7 +857,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     };
     // `REPORT_NAV_IDS` is a module constant; `resolvedSections` only matters
     // because the sections have to be in the DOM before the tops are measured.
-  }, [resolvedSections]);
+    // `activeSection` never changes: it is created once.
+  }, [resolvedSections, activeSection]);
 
   const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
 
@@ -966,29 +986,33 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         aria-hidden={isPricingModalOpen || isShareModalOpen}
         inert={isPricingModalOpen || isShareModalOpen}
       >
-        <ReportMobileNav
-          activeSectionId={activeSectionId}
-          accessById={navAccessById}
-          onDrawerOpened={() => {
-            trackReportChapterMenuOpened({
-              archetype: viewArchetype || null,
-              active_section_id: activeSectionId,
-            });
-          }}
-          onReferFriend={() => {
-            trackReferFriendOpened({ source: "drawer" });
-            setShowInvite(true);
-          }}
-          onSectionClick={handleSectionClick}
-          onShareClick={
-            viewMode === "owner" && ownerToken
-              ? () => {
-                  trackReportShareOpened({ source: "drawer" });
-                  onOpenShareModal();
-                }
-              : undefined
-          }
-        />
+        <WithActiveSection store={activeSection}>
+          {(activeSectionId) => (
+            <ReportMobileNav
+              activeSectionId={activeSectionId}
+              accessById={navAccessById}
+              onDrawerOpened={() => {
+                trackReportChapterMenuOpened({
+                  archetype: viewArchetype || null,
+                  active_section_id: activeSectionId,
+                });
+              }}
+              onReferFriend={() => {
+                trackReferFriendOpened({ source: "drawer" });
+                setShowInvite(true);
+              }}
+              onSectionClick={handleSectionClick}
+              onShareClick={
+                viewMode === "owner" && ownerToken
+                  ? () => {
+                      trackReportShareOpened({ source: "drawer" });
+                      onOpenShareModal();
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </WithActiveSection>
         <div
           className={[
             "report-page__shell-wrap",
@@ -998,23 +1022,27 @@ const ReportExperience: FC<ReportExperienceProps> = ({
             .join(" ")}
         >
           <div className="report-shell">
-            <ReportDesktopSidebar
-              activeSectionId={activeSectionId}
-              accessById={navAccessById}
-              onReferFriend={() => {
-                trackReferFriendOpened({ source: "sidebar" });
-                setShowInvite(true);
-              }}
-              onSectionClick={handleSectionClick}
-              onShareClick={
-                viewMode === "owner" && ownerToken
-                  ? () => {
-                      trackReportShareOpened({ source: "sidebar" });
-                      onOpenShareModal();
-                    }
-                  : undefined
-              }
-            />
+            <WithActiveSection store={activeSection}>
+              {(activeSectionId) => (
+                <ReportDesktopSidebar
+                  activeSectionId={activeSectionId}
+                  accessById={navAccessById}
+                  onReferFriend={() => {
+                    trackReferFriendOpened({ source: "sidebar" });
+                    setShowInvite(true);
+                  }}
+                  onSectionClick={handleSectionClick}
+                  onShareClick={
+                    viewMode === "owner" && ownerToken
+                      ? () => {
+                          trackReportShareOpened({ source: "sidebar" });
+                          onOpenShareModal();
+                        }
+                      : undefined
+                  }
+                />
+              )}
+            </WithActiveSection>
 
             <div className="report-content">
               {/* Part I — Welcome. V4 draws 1:168: a part heading, the
