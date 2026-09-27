@@ -5489,6 +5489,43 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toContain("1:3");
     });
 
+    it("marks in the listing exactly the frames the render would refuse, wide ones too", async () => {
+      // The listing flagged only TALL frames while the render refused wide ones, so a
+      // 3554x701 child was listed with no warning and then answered "cannot be shown".
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nodes: { "1:2": { document: { id: "1:2", name: "Page", type: "CANVAS" } } },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nodes: {
+              "1:2": {
+                document: {
+                  name: "Page",
+                  children: [
+                    {
+                      id: "1:3",
+                      name: "Banner",
+                      absoluteBoundingBox: { width: 3554, height: 701 },
+                    },
+                    { id: "1:4", name: "Nav", absoluteBoundingBox: { width: 1115, height: 95 } },
+                  ],
+                },
+              },
+            },
+          }),
+        });
+      const text = (await call({ node_id: "1:2" })).content[0].text as string;
+      expect(text).toMatch(/1:3 {2}3554x701 {2}\(too long to render\) {2}Banner/);
+      expect(text).toMatch(/1:4 {2}1115x95 {2}Nav/);
+    });
+
     it("says Figma is still rendering, not that the frame is empty", async () => {
       mockFetch
         .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(800, 600) })
