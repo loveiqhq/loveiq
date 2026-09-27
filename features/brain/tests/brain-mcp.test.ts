@@ -5406,17 +5406,30 @@ describe("/api/mcp", () => {
     });
 
     it("refuses a frame too long to survive the client's downscale, and offers its children", async () => {
+      // Answered the way Figma does: `depth=0` carries no children. This fixture used to
+      // hand them over at any depth, so the tool passed here while every real tall frame
+      // said it "has no children to ask for".
       mockFetch
-        .mockResolvedValueOnce({
+        .mockImplementationOnce(async (url: string) => ({
           ok: true,
           status: 200,
           json: async () =>
-            nodeBody(1440, 11800, {
-              children: [
-                { id: "1:3", name: "Top", absoluteBoundingBox: { width: 1440, height: 900 } },
-              ],
-            }),
-        })
+            nodeBody(
+              1440,
+              11800,
+              String(url).includes("depth=0")
+                ? {}
+                : {
+                    children: [
+                      {
+                        id: "1:3",
+                        name: "Top",
+                        absoluteBoundingBox: { width: 1440, height: 900 },
+                      },
+                    ],
+                  }
+            ),
+        }))
         .mockResolvedValueOnce({
           ok: true,
           status: 200,

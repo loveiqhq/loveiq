@@ -181,8 +181,11 @@ export async function renderDesign(
   maxPx: number
 ): Promise<ShowDesignOutcome> {
   // 1. Measure before rendering, so the scale is chosen rather than discovered.
+  // depth=1, not 0: depth=0 returns the node with NO children (checked live 2026-09-27,
+  // the landing frame had 0 at depth 0 and 15 at depth 1), so every frame taller than
+  // 3:1 said it "has no children to ask for" and could not be shown at all.
   const meta = await figmaGet(
-    api(fileKey, `/files/<key>/nodes?ids=${encodeURIComponent(nodeId)}&depth=0`),
+    api(fileKey, `/files/<key>/nodes?ids=${encodeURIComponent(nodeId)}&depth=1`),
     token
   );
   if (!meta.ok)
