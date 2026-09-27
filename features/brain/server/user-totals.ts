@@ -29,6 +29,8 @@ export type Dimension = (typeof DIMENSIONS)[number];
 export const MIN_GROUP = 5;
 
 export interface Person {
+  /** Who finished, so one person who finished twice is counted once. */
+  userId?: string;
   gender: string;
   age: string;
   orientation: string;
@@ -45,6 +47,7 @@ export interface Person {
 }
 
 interface Row {
+  user_id?: string | number | null;
   created_date_time: string;
   /** The answer to the survey's age question: the profile's birthday is never filled. */
   age: Array<{ answer_option: { option_text: string | null } | null }> | null;
@@ -96,6 +99,7 @@ export function toPerson(r: Row): Person | null {
     }
   }
   return {
+    ...(r.user_id != null ? { userId: String(r.user_id) } : {}),
     gender: clean(p?.gender),
     age: clean(r.age?.[0]?.answer_option?.option_text),
     orientation: clean(p?.sexual_orientation),
@@ -125,14 +129,48 @@ export async function loadPeople(since?: string, until?: string): Promise<Person
     (since ? `&created_date_time=gte.${since}T00:00:00Z` : "") +
     (until ? `&created_date_time=lt.${nextDay(until)}T00:00:00Z` : "");
   const rows = await readAll<Row>(
-    `/rest/v1/survey_submission?select=created_date_time,` +
+    `/rest/v1/survey_submission?select=user_id,created_date_time,` +
       `age:survey_submission_answer(answer_option(option_text)),` +
       `app_user(email,user_profile(gender,sexual_orientation,relationship_status,location_primary)),` +
       `scoring_result(v5_primary_archetype,primary_archetype),` +
       `personal_report(payment!fk_payment_personal_report(amount,currency,status,is_test))` +
       `&age.survey_question_id=eq.${ageId}&status=eq.completed${range}&order=id.asc`
   );
-  return rows ? rows.map(toPerson).filter((p): p is Person => p !== null) : null;
+  return rows ? onePerPerson(rows.map(toPerson).filter((p): p is Person => p !== null)) : null;
+}
+
+/**
+ * ONE PERSON, ONE FINISHER. 36 users have finished the survey more than once (one tester
+ * 31 times, checked 2026-09-27), so counting submissions let a row read "18 finished" for
+ * 2 people, under the floor that is this tool's whole promise. Merged per user, in the
+ * order the rows arrive (oldest first): the first finish sets the month, the latest sets
+ * the answers and the archetype, and payments on any of their reports add up.
+ */
+export function onePerPerson(people: Person[]): Person[] {
+  const byUser = new Map<string, Person>();
+  const out: Person[] = [];
+  for (const p of people) {
+    const seen = p.userId ? byUser.get(p.userId) : undefined;
+    if (!seen) {
+      const copy = { ...p };
+      if (p.userId) byUser.set(p.userId, copy);
+      out.push(copy);
+      continue;
+    }
+    Object.assign(seen, {
+      gender: p.gender,
+      age: p.age,
+      orientation: p.orientation,
+      relationship: p.relationship,
+      country: p.country,
+      archetype: p.archetype,
+      revenue: seen.revenue + p.revenue,
+      sales: seen.sales + p.sales,
+      otherCurrency: seen.otherCurrency + p.otherCurrency,
+      comps: seen.comps + p.comps,
+    });
+  }
+  return out;
 }
 
 const nextDay = (day: string) =>
@@ -150,15 +188,21 @@ export interface TotalsRequest {
 }
 
 /**
- * The totals as text. Every number shown describes at least MIN_GROUP people: a smaller
- * group is hidden, and when exactly one group would be hidden the next-smallest goes with
- * it, so no hidden group's size can be worked out by subtracting the shown ones from the
- * total.
+ * The totals as text. No shown group, and no hidden remainder, is fewer than MIN_GROUP
+ * people: a smaller group is hidden, and while the hidden groups add up to fewer than
+ * MIN_GROUP the smallest shown group is hidden too, so subtracting the shown rows from the
+ * total cannot reveal a small group. How many groups are hidden is never said: "2 more
+ * people, in 2 groups" was two groups of one.
+ *
+ * What this does NOT promise: inside a shown group, how many paid is shown as it is, and
+ * each answer is protected on its own, so two answers (a day apart, one filter narrower)
+ * can still be subtracted. The tool description says so.
  */
 export function renderTotals(req: TotalsRequest, people: Person[]): string {
+  // Cleaned like the stored values, so "25–34" as the survey writes it matches "25-34".
   const matches = people.filter((p) =>
     Object.entries(req.filter).every(
-      ([k, v]) => p[k as Dimension].toLowerCase() === String(v).trim().toLowerCase()
+      ([k, v]) => p[k as Dimension].toLowerCase() === clean(String(v)).toLowerCase()
     )
   );
   const scope =
@@ -204,17 +248,15 @@ export function renderTotals(req: TotalsRequest, people: Person[]): string {
     );
     let shown = ordered.filter(([, ps]) => ps.length >= MIN_GROUP);
     let hidden = ordered.filter(([, ps]) => ps.length < MIN_GROUP);
-    if (hidden.length === 1 && shown.length > 0) {
+    const hiddenCount = () => hidden.reduce((s, [, ps]) => s + ps.length, 0);
+    while (hiddenCount() > 0 && hiddenCount() < MIN_GROUP && shown.length > 0) {
       const smallest = shown.reduce((a, b) => (b[1].length < a[1].length ? b : a));
       shown = shown.filter((g) => g !== smallest);
       hidden = [...hidden, smallest];
     }
     out.push("", `By ${req.groupBy.join(" and ")}:`, ...shown.map(([k, ps]) => line(k, ps)));
     if (hidden.length) {
-      const count = hidden.reduce((s, [, ps]) => s + ps.length, 0);
-      out.push(
-        `- ${n(count)} more people, in ${hidden.length} groups too small to show on their own.`
-      );
+      out.push(`- ${n(hiddenCount())} more people, in groups too small to show on their own.`);
     }
   }
   const comps = matches.reduce((s, p) => s + p.comps, 0);
@@ -228,7 +270,8 @@ export function renderTotals(req: TotalsRequest, people: Person[]): string {
         : ".") +
       ` A finisher is counted once however many times they paid.` +
       (other
-        ? ` ${n(other)} sales in other currencies are counted as paid but not in the EUR revenue.`
+        ? ` ${n(other)} ${other === 1 ? "sale" : "sales"} in other currencies ${other === 1 ? "is" : "are"} ` +
+          `counted as paid but not in the EUR revenue.`
         : "")
   );
   return out.join("\n");

@@ -4,7 +4,12 @@
  * "paid" means what the recorded definition says.
  */
 import { describe, expect, it } from "vitest";
-import { renderTotals, toPerson, type Person } from "@features/brain/server/user-totals";
+import {
+  onePerPerson,
+  renderTotals,
+  toPerson,
+  type Person,
+} from "@features/brain/server/user-totals";
 
 const person = (over: Partial<Person> = {}): Person => ({
   gender: "Woman",
@@ -67,6 +72,32 @@ describe("toPerson", () => {
   });
 });
 
+describe("onePerPerson", () => {
+  it("counts someone who finished twice once: first month, latest answers, payments added", () => {
+    const merged = onePerPerson([
+      person({ userId: "u1", month: "2026-08", archetype: "Old", sales: 1, revenue: 29 }),
+      person({ userId: "u2" }),
+      person({ userId: "u1", month: "2026-09", archetype: "New", sales: 1, revenue: 9.99 }),
+      person({}),
+    ]);
+    expect(merged).toHaveLength(3);
+    expect(merged[0]).toMatchObject({
+      month: "2026-08",
+      archetype: "New",
+      sales: 2,
+      revenue: 38.99,
+    });
+  });
+
+  it("stops one repeat finisher from filling a group on their own", () => {
+    const text = renderTotals(
+      { groupBy: [], filter: {} },
+      onePerPerson(Array.from({ length: 6 }, () => person({ userId: "same" })))
+    );
+    expect(text).toMatch(/^Fewer than 5 people finished/);
+  });
+});
+
 describe("renderTotals", () => {
   it("shows nothing at all when fewer than five people match", () => {
     const text = renderTotals({ groupBy: [], filter: { country: "Iceland" } }, [
@@ -89,7 +120,7 @@ describe("renderTotals", () => {
     expect(text).toContain("- Woman: 12 finished");
     expect(text).toContain("- Man: 9 finished");
     expect(text).not.toMatch(/Nonbinary|Other:/);
-    expect(text).toContain("- 5 more people, in 2 groups too small to show on their own.");
+    expect(text).toContain("- 5 more people, in groups too small to show on their own.");
   });
 
   it("hides the next-smallest group too when only one would be hidden, so subtraction reveals nothing", () => {
@@ -103,7 +134,7 @@ describe("renderTotals", () => {
     expect(text).toContain("- Woman: 12 finished");
     expect(text).toContain("- Man: 9 finished");
     expect(text).not.toContain("Nonbinary");
-    expect(text).toContain("- 7 more people, in 2 groups too small to show on their own.");
+    expect(text).toContain("- 7 more people, in groups too small to show on their own.");
   });
 
   it("shows only the total when one of two groups is small, since the other would give it away", () => {
@@ -113,7 +144,28 @@ describe("renderTotals", () => {
     ]);
     expect(text).toContain("- All: 9 finished");
     expect(text).not.toMatch(/Woman:|Man:/);
-    expect(text).toContain("- 9 more people, in 2 groups too small to show on their own.");
+    expect(text).toContain("- 9 more people, in groups too small to show on their own.");
+  });
+
+  it("keeps hiding while the hidden groups add up to fewer than five, and never counts them", () => {
+    // "2 more people, in 2 groups" beside a total with 1 paid and two visible rows with
+    // none said: two people alone in their groups, and one of them paid EUR 29.
+    const people = [
+      ...many(12, { gender: "Woman" }),
+      ...many(9, { gender: "Man" }),
+      person({ gender: "Nonbinary", sales: 1, revenue: 29 }),
+      person({ gender: "Other" }),
+    ];
+    const text = renderTotals({ groupBy: ["gender"], filter: {} }, people);
+    expect(text).toContain("- Woman: 12 finished");
+    expect(text).not.toMatch(/Man:|Nonbinary|Other:/);
+    expect(text).toContain("- 11 more people, in groups too small to show on their own.");
+    expect(text).not.toMatch(/in \d+ groups/);
+  });
+
+  it("matches a filter written the way the survey writes it", () => {
+    const text = renderTotals({ groupBy: [], filter: { age: "25–34" } }, many(6, { age: "25-34" }));
+    expect(text).toContain("- All: 6 finished");
   });
 
   it("counts buyers once, prices a sale, and narrows by any key whatever its case", () => {
