@@ -1,12 +1,13 @@
 "use client";
 
-import { Fragment, useId, useState, type FC } from "react";
+import { Fragment, useId, useState, type CSSProperties, type FC } from "react";
 import {
   REPORT_V4_NUDGES,
   REPORT_V4_NUDGES_HEADING,
   REPORT_V4_PARTS,
 } from "@/data/report3-archetype-page";
 import { REPORT_V4_CHAPTER_BY_ID, REPORT_V4_CHAPTERS } from "./reportV3Nav";
+import useV4Reveal from "./useV4Reveal";
 import { goToV4Chapter } from "./v4OpenChapter";
 
 /**
@@ -112,20 +113,33 @@ const V4ChapterNudges: FC = () => {
       else next.add(id);
       return next;
     });
+  // Review 27.09 (our own extra): the rows, then the closing line, fade up one after
+  // another as the panel comes into view; `--rv4-nudge-i` is each one's turn.
+  const [panelRef, inView] = useV4Reveal<HTMLDivElement>();
+  const turn = (i: number) => ({ "--rv4-nudge-i": i }) as CSSProperties;
 
   return (
     <section className="rv4-nudges" data-node-id="1:763" data-name="Snapshot">
       <h2 className="rv4-nudges__head" data-node-id="1:766">
         {REPORT_V4_NUDGES_HEADING}
       </h2>
-      <div className="rv4-nudges__panel" data-node-id="663:1089" data-name="Chapter nudges">
-        {REPORT_V4_NUDGES.map((nudge) => {
+      <div
+        ref={panelRef}
+        className={`rv4-nudges__panel${inView ? "" : " is-pending"}`}
+        data-node-id="663:1089"
+        data-name="Chapter nudges"
+      >
+        {REPORT_V4_NUDGES.map((nudge, i) => {
           const label = nudgeLabel(nudge.id);
           if (!label) return null;
           const isOpen = open.has(nudge.id);
           const moreId = `${baseId}-${nudge.id}`;
           return (
-            <div key={nudge.id} className={`rv4-nudges__row${isOpen ? " is-open" : ""}`}>
+            <div
+              key={nudge.id}
+              className={`rv4-nudges__row${isOpen ? " is-open" : ""}`}
+              style={turn(i)}
+            >
               {isOpen ? (
                 <Fragment>
                   <span
@@ -173,7 +187,11 @@ const V4ChapterNudges: FC = () => {
         })}
         {/* 713:6231 — the closing line: how many more chapters there are. Figma's
          * "+ 16" counts the preview's rows; this counts the report's own. */}
-        <div className="rv4-nudges__coda" data-node-id="713:6231">
+        <div
+          className="rv4-nudges__coda"
+          data-node-id="713:6231"
+          style={turn(REPORT_V4_NUDGES.length)}
+        >
           <p className="rv4-nudges__tally">
             <span className="rv4-nudges__tally-line">
               <span className="rv4-nudges__tally-n">+ {MORE_CHAPTERS}</span> Other <TallyBook />{" "}
