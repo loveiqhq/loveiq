@@ -1106,15 +1106,20 @@ run is a failure when the group has had no new message for a week. That almost a
 means WhatsApp Desktop is closed or unlinked, and the sync would otherwise read a frozen
 copy "successfully".
 
-**Never touch WhatsApp's folder from node.** The first version (#340) read the database's
-file times from node. Every run after it hung for good in sqlite3's `open()` of the
-database: scheduled runs as well as hand-started ones, on no other change to the Mac. That
-is macOS asking whether "node" may access another app's data, and until someone answers,
-every open of the database by the job, sqlite3 included, waits. A waiting run blocks every
-hourly run after it. #343 took the read out, but a question already asked stays open.
-**If runs hang:** at the Mac, answer the prompt with Allow, or give `/usr/local/bin/node`
-Full Disk Access (System Settings → Privacy & Security). Stop a stuck run with
-`launchctl kill SIGTERM gui/$(id -u)/org.loveiq.whatsapp-sync`.
+**launchd runs a launcher that has Full Disk Access, not the script.** macOS asks "…
+would like to access data from other apps" when a program reads WhatsApp's folder, and an
+Allow there lasts only while that one process runs. The sync starts a new one every hour,
+so it asked every hour, and a run waiting on the question blocks every run after it. So
+launchd starts `~/.loveiq-brain/bin/loveiq-whatsapp-sync`
+(`scripts/whatsapp-sync-launcher.c`), which runs the script as its child. macOS holds the
+program launchd started responsible for everything under it, so that one binary having
+Full Disk Access (System Settings → Privacy & Security → Full Disk Access) means no
+prompt, ever.
+
+- Build it once. Rebuilding changes its ad-hoc signature, and the grant has to be given
+  again.
+- A stuck run: `launchctl kill SIGTERM gui/$(id -u)/org.loveiq.whatsapp-sync`.
+- Never read WhatsApp's folder from node itself. #340 did, and that started the prompts.
 
 The stall watcher counts only successful runs for this job (`LAPTOP_JOBS` in
 `features/cron/server/cron-stall.ts`) and alerts after **three days** without one, with the
@@ -1630,6 +1635,7 @@ where a cron should be.
 
 ```text
 ~/Library/LaunchAgents/org.loveiq.whatsapp-sync.plist   launchd, StartInterval 3600
+~/.loveiq-brain/bin/loveiq-whatsapp-sync                what launchd runs; has Full Disk Access
 ~/.loveiq-brain/run-whatsapp-sync.sh                    the runner
 ~/.loveiq-brain/whatsapp-sync.log                       what it did, per run
 ```
