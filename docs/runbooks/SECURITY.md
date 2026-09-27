@@ -242,7 +242,14 @@ detail is in `docs/runbooks/COMPANY_BRAIN.md` ("Connecting Claude to it").
   accepted. An admin-panel session token is not a Jarvis sign-in.
 - **Open client registration is safe only with the callback allowlist.** Approvals go
   back only to claude.ai, claude.com or localhost (Claude Code). Any other app is refused
-  on the consent page and in `/api/jarvis/decision`.
+  on the consent page and in `/api/jarvis/decision`. That includes a request Supabase
+  approves on its own because the person allowed the app before: consent is kept per app,
+  not per return address, so the address is checked again there (fixed 2026-09-27; before
+  that, an app allowed once through Claude could collect codes at another address).
+- **The authorization id is checked before it reaches Supabase** (32 letters and digits).
+  The SDK puts it into the request path unencoded.
+- **Signing out on the page ends that browser's session only.** An unreadable registry is
+  a 503, never a sign-out.
 - **Staff accounts in Supabase Auth reach no data directly.** Every public table's RLS
   policy is `service_role` only, and no function is executable by `authenticated` that
   `anon` could not already run (checked 2026-09-26). Creating an auth user for a member

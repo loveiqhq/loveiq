@@ -6083,24 +6083,10 @@ export async function POST(request: Request) {
    * jobs use. See features/brain/server/sign-in.ts. A 401 names where to sign in
    * (RFC 9728), which is how claude.ai and Claude Code find the sign-in page on their own.
    */
-  const who = await resolveCaller(request.headers.get("authorization"));
-  if (!who.ok) {
-    return NextResponse.json(
-      { error: who.message },
-      {
-        status: who.status,
-        headers:
-          who.status === 401
-            ? { "WWW-Authenticate": signInChallenge(new URL(request.url).origin) }
-            : undefined,
-      }
-    );
-  }
-  const caller = who.caller;
-
   // The corpus is undifferentiated — revenue, ad spend, every internal doc — so a
   // leaked token (the shared one, or a person's) is the whole thing. A rate limit
-  // bounds how fast that could be drained.
+  // bounds how fast that could be drained. It runs BEFORE the sign-in check: checking a
+  // token-shaped string costs a call to Supabase, and that must not be free to repeat.
   const rate = await checkRateLimit(getClientIp(request), {
     bucket: "mcp",
     limit: 120,
@@ -6121,6 +6107,21 @@ export async function POST(request: Request) {
       { status: 429 }
     );
   }
+
+  const who = await resolveCaller(request.headers.get("authorization"));
+  if (!who.ok) {
+    return NextResponse.json(
+      { error: who.message },
+      {
+        status: who.status,
+        headers:
+          who.status === 401
+            ? { "WWW-Authenticate": signInChallenge(new URL(request.url).origin) }
+            : undefined,
+      }
+    );
+  }
+  const caller = who.caller;
 
   /**
    * A SECOND, TIGHTER BUCKET FOR THE TOOLS THAT RETURN PIXELS.

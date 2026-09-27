@@ -19,6 +19,17 @@ import logger from "@shared/observability/logger";
  */
 export const SIGN_IN_CODE = /^\d{6,10}$/;
 
+/**
+ * An authorization id as Supabase mints them: 32 letters and digits. Checked before it
+ * reaches Supabase, because the SDK puts it into the request PATH unencoded, so a value
+ * like "../authorize?..." would call a different Supabase endpoint and could hand back
+ * somewhere else to send the browser.
+ */
+export const AUTHORIZATION_ID = /^[A-Za-z0-9]{32}$/;
+const NOT_OURS =
+  "This sign-in link is not one Jarvis can use. Go back to Claude and connect again.";
+const REGISTRY_DOWN = "Jarvis could not check your membership just now. Try again in a minute.";
+
 export type ConnectState =
   | { kind: "no-request" }
   | { kind: "sign-in" }
@@ -33,12 +44,16 @@ type Supabase = Awaited<ReturnType<typeof createSupabaseServer>>;
 /** What the page should show for this browser and this authorization request. */
 export async function connectState(authorizationId: string | null): Promise<ConnectState> {
   if (!authorizationId) return { kind: "no-request" };
+  if (!AUTHORIZATION_ID.test(authorizationId)) return { kind: "error", message: NOT_OURS };
   const supabase = await createSupabaseServer();
   const { data } = await supabase.auth.getUser();
   const email = data.user?.email;
   if (!email) return { kind: "sign-in" };
 
-  const member = await memberByEmail(email).catch(() => null);
+  // An outage is not an answer: a registry that cannot be read must not tell a member
+  // they are not one.
+  const member = await memberByEmail(email).catch(() => undefined);
+  if (member === undefined) return { kind: "error", message: REGISTRY_DOWN };
   if (!member) return { kind: "not-member", email };
   return requestFor(supabase, authorizationId, member);
 }
@@ -56,8 +71,27 @@ async function requestFor(
         "This sign-in request has expired or was already used. Go back to Claude and connect again.",
     };
   }
-  // Consent was given before for this app: Supabase sends the code straight back.
-  if (!("authorization_id" in data)) return { kind: "redirect", url: data.redirect_url };
+  /**
+   * Consent was given before for this app, so Supabase has already issued a code for the
+   * return address THIS request names. Consent is kept per app, not per address, and an
+   * app may register several, so an app allowed once through a Claude address could ask
+   * again with any other. The address gets the same Claude-only check as a first approval;
+   * refused, the code never leaves this server and expires unused.
+   */
+  if (!("authorization_id" in data)) {
+    if (!isClaudeRedirect(data.redirect_url)) {
+      logger.warn(
+        { host: hostOf(data.redirect_url) },
+        "jarvis: refused to send an already-allowed app's code outside Claude"
+      );
+      return {
+        kind: "not-claude",
+        app: "An app you allowed before",
+        host: hostOf(data.redirect_url),
+      };
+    }
+    return { kind: "redirect", url: data.redirect_url };
+  }
   const app = data.client?.name?.trim() || "An app";
   if (!isClaudeRedirect(data.redirect_uri)) {
     return { kind: "not-claude", app, host: hostOf(data.redirect_uri) };
@@ -85,11 +119,13 @@ export async function decide(
   | { ok: true; url: string; app: string; member: string }
   | { ok: false; status: number; message: string }
 > {
+  if (!AUTHORIZATION_ID.test(authorizationId)) return { ok: false, status: 400, message: NOT_OURS };
   const supabase = await createSupabaseServer();
   const { data } = await supabase.auth.getUser();
   const email = data.user?.email;
   if (!email) return { ok: false, status: 401, message: "Sign in first." };
-  const member = await memberByEmail(email).catch(() => null);
+  const member = await memberByEmail(email).catch(() => undefined);
+  if (member === undefined) return { ok: false, status: 503, message: REGISTRY_DOWN };
   if (!member) return { ok: false, status: 403, message: `${email} cannot use Jarvis.` };
 
   const state = await requestFor(supabase, authorizationId, member);

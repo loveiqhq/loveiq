@@ -181,8 +181,11 @@ export async function resolveCaller(
   }
 
   const caller: Caller = { kind: "person", name: member.name, email: member.email };
-  // An expired token is refused above, before the cache is read, so a minute is the only limit.
-  remember(tokens, hash, { caller, until: now + TRUST_MS });
+  // An expired token is refused above, before the cache is read. Trusted no longer than the
+  // membership answer it rests on, which may itself be most of a minute old: otherwise an
+  // offboarded person kept access for up to two minutes, not the one we promise.
+  const memberUntil = members.get(member.email)?.until ?? now + TRUST_MS;
+  remember(tokens, hash, { caller, until: Math.min(now + TRUST_MS, memberUntil) });
   return { ok: true, caller };
 }
 

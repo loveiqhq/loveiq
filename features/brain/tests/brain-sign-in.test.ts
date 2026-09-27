@@ -163,6 +163,17 @@ describe("resolveCaller", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("stops a member within a minute even on a token first seen late in that minute", async () => {
+    // The membership answer is cached for a minute. A token trusted a full minute from ITS
+    // first sight outlived that answer by up to another minute (a refresh is a new token).
+    signedIn("mo@loveiq.org", "Mark Oldenburg");
+    expect((await resolveCaller(bearer(oauth({ client_id: "a" })), NOW)).ok).toBe(true);
+    const refreshed = oauth({ client_id: "b" });
+    expect((await resolveCaller(bearer(refreshed), NOW + 59_000)).ok).toBe(true);
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
+    expect(await resolveCaller(bearer(refreshed), NOW + 61_000)).toMatchObject({ status: 403 });
+  });
+
   it("stops a member within a minute of their registry row going inactive", async () => {
     signedIn("mo@loveiq.org", "Mark Oldenburg");
     expect((await resolveCaller(bearer(oauth()), NOW)).ok).toBe(true);
