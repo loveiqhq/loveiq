@@ -8,6 +8,7 @@ import {
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { COST_SHEET_ID } from "@features/brain/server/cost-sheet";
 import { splitBody } from "./notion";
 import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
 import { domainMailboxes } from "./gmail";
@@ -608,6 +609,15 @@ const clean = (t: string): string =>
     .trim();
 
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+
+/**
+ * Tabs left out of the index, by spreadsheet. The Business Case's `Core_KPI` tab holds
+ * example figures, not measured ones ("false, not real numbers": Eman, 2026-09-28), and
+ * because the example-figures mark is decided per FILE, it also labelled the real `Costs`
+ * tab as examples. Left out here, where both the ingest and the nightly reconciler read
+ * the tab list, so the reconciler does not report the tab as missing.
+ */
+const SKIP_TABS: Record<string, string[]> = { [COST_SHEET_ID]: ["Core_KPI"] };
 /** Same ceiling as a pdf: a spreadsheet is the other easy way to blow up a chunk. */
 const SHEET_TEXT_LIMIT = 400_000;
 
@@ -634,7 +644,8 @@ export async function sheetTabTitles(token: string, fileId: string): Promise<str
   const meta = (await metaRes.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
   return (meta.sheets ?? [])
     .map((sh) => sh?.properties?.title)
-    .filter((t): t is string => typeof t === "string" && t.length > 0);
+    .filter((t): t is string => typeof t === "string" && t.length > 0)
+    .filter((t) => !SKIP_TABS[fileId]?.includes(t));
 }
 
 /**
@@ -916,11 +927,14 @@ export function isAuthoredMarketingCopy(text: string): boolean {
  *
  * Keyed on the `Formula / Calculation` column header rather than on a filename or a tone,
  * because that header is the thing that makes it a definition table. Measured across every
- * Drive document: it selects exactly those two, both the same owner. "Why it matters"
- * alone was rejected as a signal — it appears in 24 documents, most of them report copy.
+ * Drive document when this was written: it selected exactly two, both the same owner, the
+ * Business Case and the KPI Framework. "Why it matters" alone was rejected as a signal — it
+ * appears in 24 documents, most of them report copy.
  *
- * Marked, not excluded. A business case is a real document the team should find; it just
- * must not be quotable as what happened.
+ * Marked, not excluded — with one exception since 2026-09-28: the Business Case's KPI tab
+ * is left out entirely (SKIP_TABS), so the mark now reaches only the KPI Framework. A
+ * definition document is real and the team should find it; it just must not be quotable as
+ * what happened.
  */
 const KPI_DEFINITION_TABLE = /formula\s*\/\s*calculation/i;
 export function isIllustrativeFigures(text: string): boolean {
