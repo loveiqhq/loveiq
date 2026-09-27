@@ -84,11 +84,12 @@ describe("adsForMonth", () => {
 describe("renderCostWatch", () => {
   const now = new Date("2026-09-27T12:00:00Z");
   const parsed = parseCosts(
+    // Not in size order, so the moved list has to sort itself.
     sheet([
+      line("Jira", "Software", 66.29, 66.29, 55.5, 55.5),
       line("Claude", "Software", 400, 476.77, 537.88, 576.01),
       line("Adwords", "Marketing", 909.54, 1129, 1129, 1129),
       line("Slack", "Software", 33.27, 33.27, 44.44, 78.77),
-      line("Jira", "Software", 66.29, 66.29, 55.5, 55.5),
       line("Small", "Software", 3, 3, 4, 4),
       line("NewTool", "Software", "N/A", "N/A", 20, 20),
       line("OldTool", "Software", 15, 15, "N/A", "N/A"),
