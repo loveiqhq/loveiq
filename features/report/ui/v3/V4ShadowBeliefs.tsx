@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type FC } from "react";
+import { useRef, type FC } from "react";
 import type { Report3BeliefTurnView } from "@/data/report3-typical-beliefs";
+import useMidlineRows from "./useMidlineRows";
 import V4LockBadge from "./V4LockBadge";
 import { guardedUnlock } from "./v4Unlock";
 
@@ -40,13 +41,6 @@ import { guardedUnlock } from "./v4Unlock";
  */
 
 /**
- * How far above the viewport's middle a row's top must reach before it turns.
- * The frame puts the line at the middle exactly; the 12px keeps a row resting on
- * the line from flickering on every scroll of a pixel.
- */
-const TURN_MARGIN_PX = 12;
-
-/**
  * 368:5486 and 368:5566. Panel chrome, so it lives here rather than in
  * report3-typical-beliefs.ts: that module is registered paid copy, and a client
  * component may not reach into it at runtime even for a heading.
@@ -82,42 +76,8 @@ interface Props {
 const V4ShadowBeliefs: FC<Props> = ({ turns, lockedFrom = null, onUnlock }) => {
   const animatedCount = lockedFrom ?? turns.length;
   const rowsRef = useRef<(HTMLLIElement | null)[]>([]);
-  const [turned, setTurned] = useState<ReadonlySet<number>>(new Set());
-  const queued = useRef(false);
-  const frame = useRef(0);
-
-  useEffect(() => {
-    const read = () => {
-      const line = window.innerHeight / 2;
-      const next = new Set<number>();
-      rowsRef.current.forEach((el, i) => {
-        if (!el || i >= animatedCount) return;
-        if (el.getBoundingClientRect().top < line - TURN_MARGIN_PX) next.add(i);
-      });
-      setTurned((prev) =>
-        prev.size === next.size && [...next].every((i) => prev.has(i)) ? prev : next
-      );
-    };
-    // Same coalescing as V4BackToTop, and the same reason for a separate flag:
-    // the rAF handle is assigned only after the call returns.
-    const onScroll = () => {
-      if (queued.current) return;
-      queued.current = true;
-      frame.current = window.requestAnimationFrame(() => {
-        queued.current = false;
-        read();
-      });
-    };
-
-    read();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (frame.current) window.cancelAnimationFrame(frame.current);
-    };
-  }, [animatedCount]);
+  // A row turns as it passes the middle of the viewport (useMidlineRows).
+  const turned = useMidlineRows(rowsRef, animatedCount);
 
   const locked = lockedFrom !== null;
 
