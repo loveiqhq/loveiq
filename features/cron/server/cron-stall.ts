@@ -116,7 +116,7 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "ux-review-verify": 3 * 3_600_000,
   "ux-digest-audit": 26 * 3_600_000,
   /**
-   * HOURLY ON A LAPTOP, not a server (LAPTOP_JOBS below), so it pauses whenever the Mac is
+   * EVERY FIVE MINUTES ON A LAPTOP, not a server (LAPTOP_JOBS below), so it pauses whenever the Mac is
    * closed, and only a successful run counts. Three days because a closed laptop only
    * delays WhatsApp: the servers hold undelivered messages, and keep a linked Mac linked,
    * for 30 days. Three days is long enough not to page over a weekend away, and leaves
@@ -135,7 +135,7 @@ export const LAPTOP_JOBS: Record<string, { script: string; remedy: string }> = {
   "brain-whatsapp": {
     script: "scripts/whatsapp-sync.ts",
     remedy:
-      "It runs hourly on Eman's Mac (launchd org.loveiq.whatsapp-sync) and reads WhatsApp " +
+      "It runs every five minutes on Eman's Mac (launchd org.loveiq.whatsapp-sync) and reads WhatsApp " +
       "Desktop there: open the Mac and WhatsApp Desktop, and check the phone still lists it " +
       "under Linked devices. Nothing is lost until a message is 30 days old.",
   },

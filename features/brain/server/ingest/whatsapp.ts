@@ -19,6 +19,7 @@
  * ingester produces.
  */
 
+import { createHash } from "node:crypto";
 import { splitBody } from "./notion";
 import type { BrainRow } from "./upsert";
 
@@ -242,4 +243,32 @@ export const GROUP_QUIET_LIMIT_DAYS = 7;
 export function groupQuietDays(messageTimesMs: number[], nowMs: number): number {
   const newest = Math.max(...messageTimesMs.filter((t) => Number.isFinite(t)));
   return Number.isFinite(newest) ? Math.max(0, (nowMs - newest) / 86_400_000) : Infinity;
+}
+
+/**
+ * A stored day is rewritten only when it changed. Rewriting an unchanged row still rewrites
+ * every index on it (`updated_at` is indexed, so no update is HOT), and rewriting every row
+ * over and over is what exhausted the database's disk budget on 2026-08-31. The sync runs
+ * every five minutes, so it writes the days that changed, usually just today's.
+ *
+ * The fingerprint covers everything a row holds except when it was written, plus the
+ * people the registry resolves for it, so a registry change rewrites the days it touches.
+ * Bump the version to rewrite every day once after changing how a day is built.
+ */
+export const DAY_ROW_VERSION = 1;
+
+export function dayFingerprint(row: BrainRow, people: string[] | undefined): string {
+  const content = { ...row, updated_at: undefined };
+  return createHash("sha256")
+    .update(JSON.stringify([DAY_ROW_VERSION, content, people ?? []]))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/** New days, and days whose stored fingerprint differs: the only ones worth writing. */
+export function daysToWrite<T extends { source_id: string; meta?: Record<string, unknown> | null }>(
+  rows: T[],
+  stored: ReadonlyMap<string, string | null>
+): T[] {
+  return rows.filter((r) => stored.get(r.source_id) !== r.meta?.fingerprint);
 }

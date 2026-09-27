@@ -8,6 +8,8 @@ import {
   parseWhatsApp,
   whatsappRows,
   groupQuietDays,
+  dayFingerprint,
+  daysToWrite,
 } from "@features/brain/server/ingest/whatsapp";
 
 const STAMP = "2026-08-31T00:00:00.000Z";
@@ -187,5 +189,51 @@ describe("groupQuietDays", () => {
   it("calls a group with no readable message silent forever, not fresh", () => {
     expect(groupQuietDays([Number.NaN], NOW)).toBe(Infinity);
     expect(groupQuietDays([], NOW)).toBe(Infinity);
+  });
+});
+
+describe("writing only the days that changed", () => {
+  const part = (over: Record<string, unknown> = {}, meta: Record<string, unknown> = {}) =>
+    ({
+      source: "whatsapp",
+      source_id: "wa:g#wa-2026-09-26",
+      title: "WhatsApp: LoveIQ — 2026-09-26",
+      url: null,
+      body: "[09:00] Mark: shipped",
+      meta: { day: "2026-09-26", messages: 1, speakers: ["Mark"], ...meta },
+      updated_at: "2026-09-27T07:00:00Z",
+      period_end: "2026-09-26",
+      ...over,
+    }) as never;
+
+  it("fingerprints what a day holds, never when it was written", () => {
+    const fp = dayFingerprint(part(), ["Mark Oldenburg"]);
+    expect(dayFingerprint(part({ updated_at: "2026-09-27T07:05:00Z" }), ["Mark Oldenburg"])).toBe(
+      fp
+    );
+    expect(dayFingerprint(part({ body: "[09:00] Mark: shipped it" }), ["Mark Oldenburg"])).not.toBe(
+      fp
+    );
+    expect(dayFingerprint(part({}, { messages: 2 }), ["Mark Oldenburg"])).not.toBe(fp);
+    // A registry change that names someone new rewrites the day.
+    expect(dayFingerprint(part(), ["Mark Oldenburg", "Fatih Hadzic"])).not.toBe(fp);
+    expect(dayFingerprint(part(), undefined)).not.toBe(fp);
+  });
+
+  it("writes new and changed days, and skips the ones already stored as they are", () => {
+    const same = { source_id: "a", meta: { fingerprint: "x" } };
+    const moved = { source_id: "b", meta: { fingerprint: "y2" } };
+    const fresh = { source_id: "c", meta: { fingerprint: "z" } };
+    const unmarked = { source_id: "d", meta: { fingerprint: "w" } };
+    const stored = new Map<string, string | null>([
+      ["a", "x"],
+      ["b", "y1"],
+      ["d", null], // written before fingerprints existed
+    ]);
+    expect(daysToWrite([same, moved, fresh, unmarked], stored).map((r) => r.source_id)).toEqual([
+      "b",
+      "c",
+      "d",
+    ]);
   });
 });
