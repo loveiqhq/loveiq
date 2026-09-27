@@ -7,6 +7,7 @@ import V4FantasyMap from "@features/report/ui/v3/V4FantasyMap";
 import { MAP_DOTS } from "@features/report/ui/sections/FantasySection";
 import { getFantasyMapDots, type FantasyMapDot } from "@features/report/server/fantasyMap";
 import { placeNames } from "@features/report/ui/v3/fantasyMapNames";
+import { installRevealObserver, mockRect, observerOf } from "./v4RevealTestKit";
 
 /**
  * The fantasy map over the table — Figma 696:4393 in the open chapter (304:290),
@@ -406,6 +407,76 @@ describe("V4FantasyMap — the illustrative layout (V2's, as Figma draws it)", (
   });
 });
 
+// Review 27.09, Mark: "fantasy vs reality - let's have the dots appear on the graph one
+// by one when scrolling".
+describe("V4FantasyMap — the dots arrive one by one as the map comes into view", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const row = (root: HTMLElement) => root.querySelector(".rv4-fvm__row")!;
+
+  it("numbers every dot in order, so each takes its turn", () => {
+    const own = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    dots(own.container).forEach((dot, i) => {
+      expect(dot.style.getPropertyValue("--fvm-i")).toBe(String(i));
+    });
+    own.unmount();
+    const illustrative = render(<V4FantasyMap dots={null} locked={false} />);
+    dots(illustrative.container).forEach((dot, i) => {
+      expect(dot.style.getPropertyValue("--fvm-i")).toBe(String(i));
+    });
+  });
+
+  it("holds the dots back until the map is in view, then lets them in", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    expect(mapOf(container)).toHaveClass("is-pending");
+    observerOf(row(container))!.fire(true);
+    expect(mapOf(container)).not.toHaveClass("is-pending");
+    expect(mapOf(container)).toHaveClass("is-entering");
+  });
+
+  it("settles once the last dot has arrived, not before", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    observerOf(row(container))!.fire(true);
+    const pips = container.querySelectorAll(".rv4-fvm__pip");
+    fireEvent.animationEnd(pips[0]!);
+    expect(mapOf(container)).toHaveClass("is-entering");
+    fireEvent.animationEnd(pips[pips.length - 1]!);
+    expect(mapOf(container)).not.toHaveClass("is-entering");
+    expect(mapOf(container)).not.toHaveClass("is-pending");
+  });
+
+  it("keeps the filter chips working while the dots arrive", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    observerOf(row(container))!.fire(true);
+    fireEvent.click(chips(container)[1]!);
+    expect(dots(container).some((dot) => dot.classList.contains("is-dim"))).toBe(true);
+    expect(mapOf(container)).toHaveClass("is-entering");
+  });
+
+  it("keeps a locked map still, the reader's dots or the stand-ins: nothing under the blur moves", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    for (const view of [SPARK_DOTS, null]) {
+      const { container, unmount } = render(
+        <V4FantasyMap dots={view} locked onUnlock={() => {}} />
+      );
+      expect(mapOf(container)).not.toHaveClass("is-pending");
+      expect(mapOf(container)).not.toHaveClass("is-entering");
+      expect(observerOf(row(container))).toBeUndefined();
+      unmount();
+    }
+  });
+});
+
 describe("V4FantasyMap — paywalled (368:3481)", () => {
   it("blurs the plot under the lock badge, V2's illustrative dots behind it", () => {
     const { container } = render(<V4FantasyMap dots={null} locked onUnlock={() => {}} />);
@@ -551,5 +622,55 @@ describe("reportV3.css — the fantasy map (696:4393 / 368:3481)", () => {
 
   it("blurs the locked plot 2px, as the table's stand-ins", () => {
     expect(ruleOf(".rv3 .rv4-fvm__blurred")).toContain("filter: blur(var(--rv4-veil, 5px))");
+  });
+});
+
+describe("reportV3.css — the map's dots arrive one by one (review 27.09)", () => {
+  const at = (selector: string) => {
+    const i = V3_CSS.indexOf(selector);
+    expect(i, selector).toBeGreaterThan(0);
+    return V3_CSS.slice(i, V3_CSS.indexOf("}", i));
+  };
+  const keyframes = (name: string) => {
+    const i = V3_CSS.indexOf(`@keyframes ${name} {`);
+    expect(i, name).toBeGreaterThan(0);
+    return V3_CSS.slice(i, V3_CSS.indexOf("}\n}", i) + 3);
+  };
+
+  it("holds the dots back as one layer, by opacity so their labels still read", () => {
+    const css = at(".rv3 .rv4-fvm.is-pending .rv4-fvm__dots {");
+    expect(css).toContain("opacity: 0");
+    expect(css).not.toContain("visibility");
+  });
+
+  it("pops each pip in on its turn and hands it back to its state after", () => {
+    const pip = at(".rv3 .rv4-fvm.is-entering .rv4-fvm__pip {");
+    expect(pip).toContain("rv4-fvm-pop 320ms");
+    expect(pip).toContain("backwards");
+    expect(pip).toContain("animation-delay: calc(var(--fvm-i, 0) * 70ms)");
+    // From-only keyframes run to whatever the dot's state is: dimmed, inspected or open.
+    expect(keyframes("rv4-fvm-pop")).not.toContain("to {");
+  });
+
+  it("fades each name in with its dot, never moving it: the name placer measures them", () => {
+    const name = at(".rv3 .rv4-fvm.is-entering .rv4-fvm__name {");
+    expect(name).toContain("rv4-fvm-fade");
+    expect(name).toContain("backwards");
+    expect(keyframes("rv4-fvm-fade")).not.toContain("transform");
+  });
+
+  it("shows the finished map under reduced motion", () => {
+    const i = V3_CSS.indexOf(
+      "@media (prefers-reduced-motion: reduce) {" +
+        String.fromCharCode(10) +
+        "  .rv3 .rv4-fvm.is-pending .rv4-fvm__dots {"
+    );
+    expect(i).toBeGreaterThan(0);
+    const media = V3_CSS.slice(
+      i,
+      V3_CSS.indexOf(String.fromCharCode(10) + "}" + String.fromCharCode(10), i)
+    );
+    expect(media).toContain("opacity: 1");
+    expect(media).toContain("animation: none");
   });
 });

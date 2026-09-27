@@ -1,6 +1,14 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FC } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FC,
+} from "react";
 import type { FantasyMapDot } from "@features/report/server/fantasyMap";
 import {
   MAP_DOTS,
@@ -10,6 +18,7 @@ import {
   type MapFilter,
   type Quadrant,
 } from "../sections/FantasySection";
+import useV4Reveal from "./useV4Reveal";
 import V4LockBadge from "./V4LockBadge";
 import { placeNames, type NameDot, type NameSpot } from "./fantasyMapNames";
 import { guardedUnlock } from "./v4Unlock";
@@ -34,6 +43,13 @@ import { guardedUnlock } from "./v4Unlock";
  * unlocked content but blurred"), or none in decoy mode, when it draws the
  * illustrative layout — never sharp, where invented placements would read as the
  * reader's own.
+ *
+ * THE ENTRANCE (review 27.09). Mark: "let's have the dots appear on the graph one by
+ * one when scrolling". The map holds its dots back (`is-pending`) until it is in
+ * view, then each pip pops in on its turn (`is-entering`, `--fvm-i`), its name fading
+ * in with it, and the class goes when the last pip lands, so a collapsed and reopened
+ * chapter never replays it. The keyframes only say where a dot comes from, so a chip
+ * tapped mid-entrance still dims its dots. A locked map never moves.
  *
  * No copy is quoted in these comments on purpose: production serves browser source
  * maps, so a client component's comments are public.
@@ -122,6 +138,23 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
   );
   const frameRef = useRef<HTMLDivElement>(null);
   const [spots, setSpots] = useState<(NameSpot | null)[] | null>(null);
+  const dotsRef = useRef<HTMLDivElement>(null);
+  const [rowRef, inView] = useV4Reveal<HTMLDivElement>({ band: 0.55, enabled: !locked });
+  const [arrived, setArrived] = useState(false);
+  const entrance = locked ? "" : !inView ? " is-pending" : arrived ? "" : " is-entering";
+
+  // The entrance is over when the last dot's pip lands. A native listener, because
+  // jsdom cannot fire React's onAnimationEnd.
+  useEffect(() => {
+    const layer = dotsRef.current;
+    if (entrance !== " is-entering" || !layer) return;
+    const last = layer.querySelectorAll(".rv4-fvm__pip")[shown.length - 1];
+    const end = (event: Event) => {
+      if (event.target === last) setArrived(true);
+    };
+    layer.addEventListener("animationend", end);
+    return () => layer.removeEventListener("animationend", end);
+  }, [entrance, shown.length]);
 
   /*
    * Sets the reader's names once the plot and the names have sizes: again when the
@@ -188,7 +221,7 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
           <span className="rv4-fvm__zone">{quad.label}</span>
         </div>
       ))}
-      <div className="rv4-fvm__dots">
+      <div className="rv4-fvm__dots" ref={dotsRef}>
         {shown.map((dot, i) => {
           const name = dot.name ?? dot.label ?? null;
           const pull = dot.pull ?? null;
@@ -217,7 +250,11 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
                 open ? " is-open" : ""
               }${flip}`}
               style={
-                { "--fvm-x": `${dot.x * 100}%`, "--fvm-y": `${dot.y * 100}%` } as CSSProperties
+                {
+                  "--fvm-x": `${dot.x * 100}%`,
+                  "--fvm-y": `${dot.y * 100}%`,
+                  "--fvm-i": i,
+                } as CSSProperties
               }
               aria-label={readout}
               aria-expanded={open}
@@ -274,7 +311,7 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
 
   return (
     <div
-      className={`rv4-fvm${openDot === null ? "" : " is-inspecting"}`}
+      className={`rv4-fvm${openDot === null ? "" : " is-inspecting"}${entrance}`}
       data-node-id={locked ? "368:3481" : "696:4393"}
     >
       <div className="rv4-fvm__chips" role="group" aria-label="Filter the map by zone">
@@ -292,7 +329,7 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
       </div>
 
       {/* 696:4405 → 696:4406: the plot 26 in from the left, the axes around it. */}
-      <div className="rv4-fvm__row">
+      <div className="rv4-fvm__row" ref={rowRef}>
         <div className="rv4-fvm__img">
           {locked ? (
             <div
