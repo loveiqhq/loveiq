@@ -6615,9 +6615,10 @@ html {
 /* 305:228 — all of "Common challenges" under the full blur (Figma radius 5), at full
  * length so nothing moves on unlock. Mark, 25.09 (1941866053): "move this CTA down a
  * bit so that it isnt immediately following the drop down", with a separator after
- * it. 305:225 spaces the table, that separator and the blurred copy 16 apart and
- * floats the card 103.3 into the copy (305:250), centred; the open body (304:290)
- * keeps them flush. */
+ * it; 305:225 floats the card 103.3 into the copy (305:250), centred. 305:225 also
+ * spaced the table, that separator and the copy 16 apart — 76 in all, which Mark read
+ * as too wide on 27.09 ("Is that more than a separator element in figma?"), so the
+ * paywalled body now keeps them flush like the open one (304:290): one 44px separator. */
 .rv3 .rv4-fvr__gate {
   cursor: pointer;
   position: relative;
@@ -6625,9 +6626,6 @@ html {
 .rv3 .rv4-fvr__blurred {
   filter: blur(var(--rv4-veil, 5px));
   user-select: none;
-}
-.rv3 .rv4-fvr.is-locked > .rv4-fvt + .rv4-sep {
-  margin: 16px 0;
 }
 .rv3 .rv4-fvr__gate .rv4-premium {
   top: 103.3px;
