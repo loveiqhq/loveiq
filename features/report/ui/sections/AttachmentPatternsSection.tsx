@@ -90,8 +90,13 @@ const ATTACHMENT_ROW_LABELS_BY_FAMILY: Record<string, { row2: string; row3: stri
   avoidant: { row2: "When closeness stays constant", row3: "After space is restored" },
 };
 
-/** The five universal attachment patterns (Figma 8439:653–739). Not per-archetype. */
-const ATTACHMENT_FAMILY_CARDS: {
+/**
+ * The five universal attachment patterns (Figma 8439:653–739). Not per-archetype.
+ * Exported, with their title, for V4's "Go deeper & learn more" card, which carries
+ * this panel's copy since review 27.09 (v4CardsFromV2).
+ */
+export const ATTACHMENT_PATTERNS_TITLE = "Common Attachment Style Patterns Across Archetypes";
+export const ATTACHMENT_FAMILY_CARDS: {
   title: string;
   body: string;
   chips: { label: string; color: string }[];
@@ -375,9 +380,7 @@ const AttachmentPatternsSection: FC<Props> = ({
      exactly what the locked-state test guards against.  */
   const patternsBlock = (
     <div className="report-attachment__patterns">
-      <h3 className="report-attachment__patterns-title">
-        Common Attachment Style Patterns Across Archetypes
-      </h3>
+      <h3 className="report-attachment__patterns-title">{ATTACHMENT_PATTERNS_TITLE}</h3>
       <div className="report-attachment__patterns-grid">
         {ATTACHMENT_FAMILY_CARDS.map((card) => (
           <div key={card.title} className="report-attachment-family">
