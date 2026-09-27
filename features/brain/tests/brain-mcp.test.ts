@@ -104,6 +104,12 @@ vi.mock("@features/brain/server/whats-new", async (importOriginal) => ({
   whatsNew: (...a: unknown[]) => mockWhatsNew(...a),
 }));
 
+const mockLoadCostSheet = vi.fn();
+vi.mock("@features/brain/server/cost-watch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/cost-watch")>()),
+  loadCostSheet: (...a: unknown[]) => mockLoadCostSheet(...a),
+}));
+
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...a: unknown[]) => mockRateLimit(...(a as [])),
   getClientIp: () => "1.2.3.4",
@@ -121,6 +127,7 @@ import { SlackTargetError } from "@features/brain/server/act/slack";
 import { NotionTargetError } from "@features/brain/server/act/notion";
 import { EmailRefusal } from "@features/brain/server/act/email";
 import { DelegationNotGranted, GoogleDocRefusal } from "@features/brain/server/act/gdoc";
+import { lastBilledMonth } from "@features/brain/server/cost-watch";
 
 const TOKEN = "test-token-0123456789";
 
@@ -1445,6 +1452,7 @@ describe("/api/mcp", () => {
         "show_chart",
         "break_even",
         "user_totals",
+        "cost_watch",
         "check_answer",
         "experiments",
         "comment_asks",
@@ -3825,6 +3833,75 @@ describe("/api/mcp", () => {
       const r = await call({});
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toMatch(/outage/);
+    });
+  });
+
+  describe("cost_watch", () => {
+    const call = () =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 71,
+          method: "tools/call",
+          params: { name: "cost_watch", arguments: {} },
+        })
+      ).then((r) =>
+        r.json().then((b) => b.result as { isError: boolean; content: Array<{ text: string }> })
+      );
+    // Built around today, since the answer is always about the latest settled month.
+    const billed = lastBilledMonth(new Date());
+    const prev = new Date(Date.parse(`${billed}-01T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 7);
+    const serial = (month: string) =>
+      (Date.parse(`${month}-01T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86_400_000;
+    const sheet = [
+      ["", "", "", serial(prev), serial(billed)],
+      ["Name", "Description", "Category"],
+      ["Slack", "", "Software", -30, -40],
+      ["Adwords", "", "Marketing", -1000, -1000],
+      ["A. Person", "", "Intern - full time", -987.65, -987.65],
+    ];
+    afterEach(() => {
+      mockAdCost = { byDay: new Map(), from: null, to: null };
+    });
+
+    it("answers from the sheet without anyone's pay, and checks Google Ads against GA4", async () => {
+      mockLoadCostSheet.mockResolvedValue(sheet);
+      mockAdCost = {
+        byDay: new Map([[`${billed}-02`, 1100]]),
+        from: `${billed}-01`,
+        to: `${billed}-28`,
+      };
+      const r = await call();
+      expect(r.isError).toBe(false);
+      const text = r.content[0]!.text;
+      expect(text).toContain("EUR 1,040.00, against EUR 1,030.00");
+      expect(text).toContain("- Slack EUR 30.00 → EUR 40.00 (+EUR 10.00)");
+      expect(text).toContain("may never have been entered. GA4 recorded EUR 1,100.00");
+      expect(text).not.toMatch(/Person|987/);
+      expect(mockLoadCostSheet).toHaveBeenCalledTimes(1);
+    });
+
+    it("still answers when the GA4 check fails, only without it", async () => {
+      mockLoadCostSheet.mockResolvedValue(sheet);
+      mockAdCost = { byDay: undefined as never, from: `${billed}-01`, to: `${billed}-28` };
+      const r = await call();
+      expect(r.isError).toBe(false);
+      expect(r.content[0]!.text).toContain("EUR 1,040.00");
+      expect(r.content[0]!.text).not.toContain("GA4");
+    });
+
+    it("calls an unreadable sheet an outage, and a changed layout a change, never a zero", async () => {
+      mockLoadCostSheet.mockRejectedValue(new Error("the cost sheet could not be read (403)"));
+      let r = await call();
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toMatch(/outage/);
+
+      mockLoadCostSheet.mockResolvedValue([[serial(billed)], ["Vendor", "Category"]]);
+      r = await call();
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toMatch(/layout has changed/);
     });
   });
 
@@ -6485,6 +6562,7 @@ describe("the runbook's tool count is the real one", () => {
     33: "Thirty-three",
     34: "Thirty-four",
     35: "Thirty-five",
+    36: "Thirty-six",
   };
 
   it("matches what the server actually exposes", () => {

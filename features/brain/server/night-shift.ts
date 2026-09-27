@@ -226,6 +226,8 @@ export const RESEARCH_TOOLS = [
   "user_totals",
   // Read-only, and the check an unattended answer most needs: a wrong figure nobody saw.
   "check_answer",
+  // Tools and services only; people's pay never leaves the sheet.
+  "cost_watch",
 ];
 /** Named as well as left off the list, so the model never even sees them. */
 export const WRITE_TOOLS = [

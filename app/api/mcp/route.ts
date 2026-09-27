@@ -30,6 +30,13 @@ import {
   renderTotals,
   type Dimension as UserDimension,
 } from "@features/brain/server/user-totals";
+import {
+  adsForMonth,
+  lastBilledMonth,
+  loadCostSheet,
+  parseCosts,
+  renderCostWatch,
+} from "@features/brain/server/cost-watch";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { ARRAY_META_KEYS, UNFILTERABLE_META_KEYS } from "@features/brain/server/retrieve";
 import {
@@ -1877,6 +1884,19 @@ export const TOOLS = [
         until: { type: "string", description: "Last day, YYYY-MM-DD." },
       },
     },
+  },
+  {
+    name: "cost_watch",
+    title: "What we pay for tools and services, month by month",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "What LoveIQ pays each month for tools and services (Google Ads, Claude, Google " +
+      "Workspace, Figma, Slack and the rest), read live from the Business Case cost sheet that " +
+      "the monthly invoice filing keeps current: the latest settled month against the one " +
+      "before, the biggest lines, what moved, what started or stopped, the trend since the " +
+      "sheet begins, and the month still open. Lines typed in by hand are flagged when they " +
+      "have not moved, and Google Ads is set beside what GA4 recorded. People's pay is left out.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "check_answer",
@@ -5472,6 +5492,34 @@ async function callTool(
     );
   }
 
+  if (name === "cost_watch") {
+    let rows: unknown[][];
+    try {
+      rows = await loadCostSheet(oidcForReport);
+    } catch (err) {
+      logger.warn({ err }, "mcp: could not read the cost sheet");
+      return textResult(
+        "The cost sheet could not be read right now. This is an outage, not a result.",
+        true
+      );
+    }
+    const parsed = parseCosts(rows);
+    if (!parsed.lines.length) {
+      return textResult(
+        "The cost sheet was read but has no cost lines under its Name header, so its layout " +
+          "has changed and this tool needs updating.",
+        true
+      );
+    }
+    const now = new Date();
+    // The GA4 check is a cross-check, not the answer: without it the sheet still speaks.
+    const ads = await adCostByDay()
+      .then((ad) => adsForMonth(ad, lastBilledMonth(now)))
+      .catch(() => undefined);
+    stats.sourceCount = 1;
+    return textResult(renderCostWatch(parsed, now, ads));
+  }
+
   if (name === "explain_change") {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
@@ -5891,6 +5939,8 @@ export const MCP_INSTRUCTIONS =
   "OUR USERS, as totals: user_totals counts who finished the survey, who paid and what they " +
   "paid, by gender, age, orientation, relationship, country, archetype or month, never a " +
   "person, with any group under 5 hidden.\n\n" +
+  "WHAT WE SPEND: cost_watch reads what we pay each month for tools and services from the " +
+  "cost sheet, what moved, and which hand-typed lines may be stale.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +
   "finish, the share who pay, the average order, the net) and what each would have to reach " +
   "alone to earn the spend back, with 'what if' values in place of any of them.\n\n" +
