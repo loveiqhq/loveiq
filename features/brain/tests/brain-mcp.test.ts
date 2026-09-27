@@ -1747,6 +1747,20 @@ describe("/api/mcp", () => {
         expect(text).toContain("settled in a thread and never recorded");
       });
 
+      it("lists only decisions made by `until`, and says the list stops there", async () => {
+        withDecisions();
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide", until: "2026-09-14" })).json()).result
+            .content[0].text
+        );
+        expect(text).toContain("MOST RECENT DECISIONS UP TO 2026-09-14");
+        const listed = mockSupabaseFetch.mock.calls
+          .map(([u]) => String(u))
+          .find((u) => u.includes("source=eq.decision") && u.includes("order=period_end.desc"));
+        expect(listed).toContain("&period_end=lte.2026-09-14");
+      });
+
       it("leaves a question with a topic to the ranked search", async () => {
         withDecisions();
         mockRetrieve.mockResolvedValue([chunk({})]);
