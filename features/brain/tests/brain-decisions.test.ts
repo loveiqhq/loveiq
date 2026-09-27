@@ -609,6 +609,30 @@ describe("markSuperseded", () => {
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
   });
 
+  it("finds the decision by the short id settle prints, and drops its conflict marks", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 7,
+            meta: { topic: "tooling", disputed_by: [{ id: "decision:b", on: "x", why: "y" }] },
+            period_end: "2026-05-15",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    expect(
+      await markSuperseded("decision/2026-05-15-a", "decision:2026-09-03-b", "2026-09-03")
+    ).toBe(1);
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain(
+      "source_id=eq.decision%3A2026-05-15-a"
+    );
+    const meta = JSON.parse((mockSupabaseFetch.mock.calls[1]![1] as { body: string }).body).meta;
+    expect(meta).toMatchObject({ topic: "tooling", superseded_by: "decision:2026-09-03-b" });
+    expect(meta.disputed_by).toBeUndefined();
+  });
+
   it("refuses to re-mark a decision another one already replaced, writing nothing", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,

@@ -501,7 +501,18 @@ export async function settleConflict(
   const winner = input.keep === "earlier" ? c.earlier : input.keep === "later" ? c.later : null;
   const loser = input.keep === "earlier" ? c.later : input.keep === "later" ? c.earlier : null;
   // No day passed: the replacement takes effect from the decisions' own dates, not today's.
-  if (winner && loser) await markSuperseded(loser, winner);
+  if (winner && loser) {
+    try {
+      await markSuperseded(loser, winner);
+    } catch (err) {
+      // Said to the person settling (e.g. the loser was already replaced by a third
+      // decision), where it used to surface as "That lookup failed", with the pair left open.
+      return {
+        ok: false,
+        error: `${err instanceof Error ? err.message : String(err)}. Nothing was changed.`,
+      };
+    }
+  }
   await write(
     `/rest/v1/brain_decision_conflict?earlier=eq.${encodeURIComponent(c.earlier)}&later=eq.${encodeURIComponent(c.later)}`,
     "PATCH",

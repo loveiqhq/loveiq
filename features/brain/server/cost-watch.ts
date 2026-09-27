@@ -151,7 +151,8 @@ export function renderCostWatch(
   const out = [
     `Tools and services, EUR a month, from the Business Case cost sheet. People's pay is left out.`,
     "",
-    `${label(billed)}, the latest month the invoice filing has settled: ${eur(latest)}, against ${eur(before)} in ${label(prev)}${change}.`,
+    // "Closed", which the calendar says; whether a filing run settled it is the next line's.
+    `${label(billed)}, the latest closed month: ${eur(latest)}, against ${eur(before)} in ${label(prev)}${change}.`,
     ...filingCaveat(billed, settledByFiling),
     "",
     "Biggest:",

@@ -96,7 +96,9 @@ jobs:
           prev=$(gh run list -R "$GITHUB_REPOSITORY" --workflow brain-embed.yml --limit 5 \
             --json databaseId,conclusion \
             -q "[.[] | select(.databaseId != ${GITHUB_RUN_ID} and .conclusion != \"\")][0].conclusion" || true)
-          if [ "$prev" = "failure" ] || [ "$prev" = "cancelled" ]; then
+          # Only "failure": a queued run GitHub replaced never started, so it reads
+          # "cancelled" and would have silenced the next real failure, and every one after.
+          if [ "$prev" = "failure" ]; then
             echo "The previous run already failed and was reported; not posting again."
             exit 0
           fi

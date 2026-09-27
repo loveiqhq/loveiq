@@ -1905,7 +1905,7 @@ export const TOOLS = [
     description:
       "What LoveIQ pays each month for tools and services (Google Ads, Claude, Google " +
       "Workspace, Figma, Slack and the rest), read live from the Business Case cost sheet that " +
-      "the monthly invoice filing keeps current: the latest settled month against the one " +
+      "the monthly invoice filing keeps current: the latest closed month against the one " +
       "before, the biggest lines, what moved, what started or stopped, the trend since the " +
       "sheet begins, and the month still open. Lines typed in by hand are flagged when they " +
       "have not moved, and Google Ads is set beside what GA4 recorded. People's pay is left out.",

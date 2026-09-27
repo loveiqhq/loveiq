@@ -251,20 +251,30 @@ export function whatsappRows(
 export const GROUP_QUIET_LIMIT_DAYS = 14;
 
 /**
- * Which stored parts a sweep may remove: only those of days this run READ. After WhatsApp
- * Desktop is linked again it holds a few weeks and fills in the rest over hours; an
- * unscoped sweep deleted every older day it had not reached yet whenever the fresh copy
- * was over half the source (reproduced: 244 of 544 parts gone). Also says whether a sweep
- * is needed at all, so a partial copy does not re-read every row every five minutes.
+ * Which stored parts a sweep may remove: those of days strictly AFTER the first day this
+ * run read, up to the last. After WhatsApp Desktop is linked again it holds a few weeks and
+ * fills in the rest over hours; an unscoped sweep deleted every older day it had not
+ * reached yet (reproduced: 244 of 544 parts gone). The first day read may itself be only
+ * partly filled in, so it is left alone too. A day inside the range with nothing left (all
+ * its messages deleted, or disappearing ones) is swept, since the range covers it. Also
+ * says whether a sweep is needed at all, so a partial copy does not re-read every row every
+ * five minutes.
  */
 export function sweepScope(
   storedIds: string[],
   parts: Array<{ source_id: string; meta?: Record<string, unknown> | null }>
 ): { needed: boolean; days: Set<string> } {
   const current = new Set(parts.map((r) => r.source_id));
-  const days = new Set(parts.map((r) => String(r.meta?.day ?? "")));
+  const read = parts
+    .map((r) => String(r.meta?.day ?? ""))
+    .filter(Boolean)
+    .sort();
+  const first = read[0] ?? "";
+  const last = read.at(-1) ?? "";
   const dayOf = (id: string) => /#wa-(\d{4}-\d{2}-\d{2})-/.exec(id)?.[1] ?? "";
-  return { needed: storedIds.some((id) => !current.has(id) && days.has(dayOf(id))), days };
+  const inRange = (day: string) => day > first && day <= last;
+  const days = new Set([...read, ...storedIds.map(dayOf)].filter(inRange));
+  return { needed: storedIds.some((id) => !current.has(id) && inRange(dayOf(id))), days };
 }
 
 export function groupQuietDays(messageTimesMs: number[], nowMs: number): number {

@@ -104,9 +104,9 @@ describe("renderCostWatch", () => {
   );
   const text = renderCostWatch(parsed, now, { eur: 1252.99, covered: 31, days: 31 });
 
-  it("compares the latest settled month with the one before, without anyone's pay", () => {
+  it("compares the latest closed month with the one before, without anyone's pay", () => {
     expect(text).toContain(
-      "August 2026, the latest month the invoice filing has settled: EUR 1,880.07, " +
+      "August 2026, the latest closed month: EUR 1,880.07, " +
         "against EUR 1,818.92 in July 2026 (+3.4%)."
     );
     expect(text).not.toMatch(/Jane|Intern|2,468|555/);
