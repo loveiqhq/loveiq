@@ -166,6 +166,15 @@ describe("the completed-report marker", () => {
     expect(completedReportToken()).toBeNull();
   });
 
+  it("forgetting it also drops the finished run's session id", () => {
+    // A retake under the old id is answered with the old submission (#375).
+    sessionStorage.setItem(SURVEY_SESSION_KEY, "finished-run");
+    rememberCompletedReport("rpt_finished");
+    forgetCompletedReport();
+    expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+    expect(getSessionId()).not.toBe("finished-run");
+  });
+
   it("ignores an empty token rather than marking the tab finished", () => {
     rememberCompletedReport("");
     expect(completedReportToken()).toBeNull();
