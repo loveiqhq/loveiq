@@ -2717,11 +2717,13 @@
   justify-content: flex-start;
   width: 100%;
 }
-/* 1:205 — 34.977 tile, accent at 11% behind a 30% border, 10px radius. */
+/* 1:205 — the glyph in its 34.977 slot. Mark, 28.09 (1943960826): "We took away the
+ * colored boxes around the icons", so the slot keeps its size, and the title its 9px
+ * gap, with no tile or border drawn. */
 .rv3 .rv3-method.is-v4 .rv3-sci__icon {
   align-items: center;
-  background: color-mix(in srgb, var(--rv3-accent) 11%, transparent);
-  border: 1px solid color-mix(in srgb, var(--rv3-accent) 30%, transparent);
+  background: none;
+  border: 0;
   border-radius: 10px;
   display: flex;
   flex-shrink: 0;
