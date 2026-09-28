@@ -6580,7 +6580,9 @@ html {
   line-height: 12px;
   padding: 7.5px 20.5px 8.5px;
   position: relative;
-  text-transform: uppercase;
+  /* Mark, 28.09 (1944175761 / 1944177596): "All CTAs updated, to no longer be CAPs".
+   * 713:6179 and 639:499 are title case now ("Show All"). */
+  text-transform: capitalize;
   white-space: nowrap;
 }
 /* Laid from the padding box, inside the 1.5px outline: -8px reaches 6.5 past the
