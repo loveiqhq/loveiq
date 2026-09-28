@@ -202,6 +202,32 @@ jobs:
             exit 1
           fi
 
+      - name: Start a new one starts a new submission
+        env:
+          REPORT_ORIGIN: ${{ inputs.origin }}
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        # A reader pressed it on 2026-09-28 and answered for 23 minutes; the tab
+        # kept the finished run's session id, so none of it was stored (#375).
+        # Reads storage only: it never submits.
+        run: |
+          set +e
+          if [ -n "$REPORT_ORIGIN" ]; then
+            npx tsx scripts/probes/verify-start-over-new-session.mjs
+          else
+            env -u REPORT_ORIGIN npx tsx scripts/probes/verify-start-over-new-session.mjs
+          fi
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            echo "::error::a retake would be filed under the finished submission"
+            exit 1
+          elif [ "$code" -eq 3 ]; then
+            echo "::warning::probe could not measure — not a pass, investigate"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::probe exited $code"
+            exit 1
+          fi
+
       - name: Probes do not claim defects that are not defects
         env:
           # The replay case reads its reader's route from PostHog. Without the

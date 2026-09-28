@@ -103,6 +103,7 @@ of a defect either.
 | `verify-dead-click-target.mjs`        | Whether the element this reader actually tapped is a dead control, read from the session's own `dead_click` event (D1/V1).                                                                                             |
 | `verify-cta-visibility.mjs`           | The primary CTA is in the first viewport, reachable by a real tap, and at least 44px (V1).                                                                                                                             |
 | `verify-survey-loop.mjs`              | Finishing the survey and pressing Back lands the reader on the intro screen with progress reset (L1). The first defect this pipeline ever reproduced.                                                                  |
+| `verify-start-over-new-session.mjs`   | "Start a new one" on the finished screen drops the finished run's session id, so a retake is stored (#375). Reads storage only; runs daily in probe-guard.                                                             |
 
 ## Replaying a route, and the two traps in it
 
