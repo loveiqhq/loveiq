@@ -580,11 +580,12 @@ async function resolveShortcuts(
   let unreachable = 0;
   let skippedNonDoc = 0;
   /**
-   * Lookups that got NO answer: a timeout, an overload, an unreadable body, or no time
-   * left to ask. Unlike an unshared target, the note may well exist, and leaving it out
-   * of a complete listing let the sweep delete it, so any of these makes the listing
-   * incomplete. About 130 shortcuts across the colleagues' Drives on 2026-09-28, so the
-   * clock is checked here too.
+   * Lookups that got no answer about the note: anything but a 404 (a timeout, an
+   * overload, Drive's 403 rate limit, a 401 from a token that expired mid-run), an
+   * unreadable body, or no time left to ask. Unlike an unshared target, the note may well
+   * exist, and leaving it out of a complete listing let the sweep delete it, so any of
+   * these makes the listing incomplete. About 130 shortcuts across the colleagues' Drives
+   * on 2026-09-28, so the clock is checked here too.
    */
   let failed = 0;
 
@@ -618,8 +619,9 @@ async function resolveShortcuts(
         `&supportsAllDrives=true`
     );
     if (!res.ok) {
-      if (RETRYABLE.has(res.status)) failed += 1;
-      else unreachable += 1;
+      // Drive answers 404 for a file this account cannot see: the unshared note above.
+      if (res.status === 404) unreachable += 1;
+      else failed += 1;
       continue;
     }
     const target = (await res.json().catch(() => null)) as DriveFile | null;

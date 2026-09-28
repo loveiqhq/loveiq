@@ -1591,9 +1591,10 @@ describe("a Drive request that times out is a refusal, not the end of the run", 
     expect(deletedIds()).not.toContain("doc:tgt1");
   });
 
-  it("keeps it when the lookup was overloaded or unreadable, and not when it is unshared", async () => {
+  it("keeps it on any answer but a 404, which is the only one that means unshared", async () => {
+    // 503 an overload, 403 Drive's rate limit, 401 a token that expired mid-run.
     files = [FILE, OTHER, shortcut(1)];
-    for (const failure of [503, "unreadable"] as const) {
+    for (const failure of [503, 403, 401, "unreadable"] as const) {
       targetFailure = failure;
       expect((await ingestDrive(STAMP)).sweepBlocked, String(failure)).toBe(true);
     }
