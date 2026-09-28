@@ -52,6 +52,13 @@ describe("parseCosts", () => {
     expect(Object.is(zero.lines[0]!.months.get("2026-09"), 0)).toBe(true);
   });
 
+  it("reads the same months the invoice filing writes, not every date in row 1", () => {
+    // An "as of" date in the blank beside the months is a date, not a month column.
+    const rows = sheet([line("Slack", "Software", 30, 31, 32, 33)]);
+    rows[0]![2] = serial("2026-09") + 18;
+    expect(parseCosts(rows).months).toEqual(MONTHS);
+  });
+
   it("finds no lines when the header is gone, rather than reading the wrong rows", () => {
     expect(parseCosts([[serial("2026-08")], ["Slack", "", "Software", -30]]).lines).toEqual([]);
   });

@@ -6,8 +6,10 @@
  * the =SUM at the top still adds up — so nobody notices until a runway
  * conversation is built on it.
  *
- * These assert the anchors against the real sheet: column I is November 2025, and
- * column S is September 2026 (the month the 2026-09-19 audit corrected by hand).
+ * These assert the anchors on a row 1 shaped like the real sheet's: column I is November
+ * 2025, and column S is September 2026 (the month the 2026-09-19 audit corrected by hand).
+ * The column is found in row 1's run of monthly date serials, so an inserted column moves
+ * it with them, and nothing outside that run is ever written.
  */
 
 import { describe, it, expect } from "vitest";
@@ -21,9 +23,20 @@ import {
   rateOn,
   toEur,
 } from "@/app/api/cron/file-invoices/route";
+import { monthColumns } from "@features/brain/server/cost-sheet";
 
-// The Costs tab currently runs out to column X (February 2027).
-const LAST = 23; // 0-based index of "X"
+// Row 1 as the real Costs tab has it: a label, blanks, then one date serial per month,
+// November 2025 (column I) to February 2027 (column X).
+const serial = (y: number, m: number) =>
+  (Date.UTC(y, m - 1, 1) - Date.UTC(1899, 11, 30)) / 86_400_000;
+const MONTHS = Array.from({ length: 16 }, (_, i) =>
+  serial(2025 + Math.floor((10 + i) / 12), ((10 + i) % 12) + 1)
+);
+const HEADER = ["Costs in €", "", "", "", "", "", "", "", ...MONTHS];
+const col = (y: number, m: number, header: unknown[] = HEADER) => {
+  const i = columnForMonth(header, y, m);
+  return i === null ? null : colLetter(i);
+};
 
 describe("colLetter", () => {
   it("maps 0-based indexes onto spreadsheet letters", () => {
@@ -41,29 +54,54 @@ describe("colLetter", () => {
 
 describe("columnForMonth", () => {
   it("anchors November 2025 to column I", () => {
-    expect(columnForMonth(2025, 11, LAST)).toBe("I");
+    expect(col(2025, 11)).toBe("I");
   });
 
   it("puts September 2026 in column S — the month the audit corrected by hand", () => {
-    expect(columnForMonth(2026, 9, LAST)).toBe("S");
+    expect(col(2026, 9)).toBe("S");
   });
 
   it("crosses the year boundary without drifting", () => {
-    expect(columnForMonth(2025, 12, LAST)).toBe("J");
-    expect(columnForMonth(2026, 1, LAST)).toBe("K");
-    expect(columnForMonth(2027, 1, LAST)).toBe("W");
-    expect(columnForMonth(2027, 2, LAST)).toBe("X");
+    expect(col(2025, 12)).toBe("J");
+    expect(col(2026, 1)).toBe("K");
+    expect(col(2027, 1)).toBe("W");
+    expect(col(2027, 2)).toBe("X");
   });
 
   it("refuses a month before the sheet starts rather than wrapping to column H", () => {
-    expect(columnForMonth(2025, 10, LAST)).toBeNull();
-    expect(columnForMonth(2024, 11, LAST)).toBeNull();
+    expect(col(2025, 10)).toBeNull();
+    expect(col(2024, 11)).toBeNull();
   });
 
   it("refuses a month past the last column rather than inventing one", () => {
     // The sheet has no March 2027. Writing there would silently extend the model
     // past where anyone has forecast, outside the =SUM range shown in the header.
-    expect(columnForMonth(2027, 3, LAST)).toBeNull();
+    expect(col(2027, 3)).toBeNull();
+  });
+
+  it("follows the months when a column is inserted before them", () => {
+    // A fixed "column I is November 2025" wrote September into August's column here.
+    expect(col(2026, 9, ["Costs in €", "Notes", ...HEADER.slice(1)])).toBe("T");
+  });
+
+  it("is not fooled by an 'as of' date, or any other number, left of the months", () => {
+    // 19 September 2026 in C1 matched September first and sent the write to column C.
+    const asOf = ["Costs in €", "", serial(2026, 9) + 18, 1e9, ...HEADER.slice(4)];
+    expect(col(2026, 9, asOf)).toBe("S");
+    // Right beside November 2025 it does not join the months either: it is not the month before.
+    expect(col(2026, 9, [...HEADER.slice(0, 7), serial(2026, 9) + 18, ...MONTHS])).toBe("S");
+  });
+
+  it("ends the months where row 1 stops going up one month at a time", () => {
+    // A "Total 2026" column after December: the carry-forward must stop before it.
+    const withTotal = [...HEADER.slice(0, 22), "Total 2026", ...HEADER.slice(22)];
+    expect(monthColumns(withTotal)).toEqual({ first: 8, last: 21 });
+    expect(col(2027, 1, withTotal)).toBeNull();
+    expect(monthColumns(HEADER)).toEqual({ first: 8, last: 23 });
+    // Two runs of the same length: the older, leftmost one, every time.
+    const twoRuns = ["Costs in €", ...MONTHS.slice(0, 3), "gap", ...MONTHS.slice(5, 8)];
+    expect(monthColumns(twoRuns)).toEqual({ first: 1, last: 3 });
+    expect(monthColumns(["Costs in €", "note"])).toBeNull();
   });
 });
 
