@@ -174,8 +174,42 @@ describe("driveQuoteEscape", () => {
  * version. A live dry run found each of them; none was reachable from a unit test
  * written in advance, which is why they are pinned here now.
  */
+/** A one-page PDF whose only text is `line`, with a correct cross-reference table. */
+function pdfWith(line: string): Buffer {
+  const content = `BT /F1 18 Tf 20 60 Td (${line}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 144] /Contents 4 0 R " +
+      "/Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let out = "%PDF-1.4\n";
+  const offsets = objects.map((body, i) => {
+    const at = out.length;
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
+    return at;
+  });
+  const xref = out.length;
+  out +=
+    `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n` +
+    offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("") +
+    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, "latin1");
+}
+
 describe("amountFrom", () => {
   const read = (text: string) => amountFrom(null, text);
+
+  it("reads the total from the PDF itself, handed over as the Buffer the route holds", async () => {
+    // pdf.js refuses a Buffer, and the fallback to the email body hid it: every PDF failed
+    // from the first run, and vendors whose total is only in the PDF were never written.
+    await expect(amountFrom(pdfWith("Total EUR 58.31"), "")).resolves.toEqual({
+      value: 58.31,
+      currency: "EUR",
+    });
+  });
 
   it("takes the gross total, not the net or a line item", async () => {
     // Anthropic, invoice MKWVRQXU-0010, August 2026.

@@ -325,7 +325,12 @@ export async function amountFrom(pdf: Uint8Array | null, body: string): Promise<
   if (pdf) {
     try {
       const { extractText, getDocumentProxy } = await import("unpdf");
-      const doc = await getDocumentProxy(pdf);
+      // A plain Uint8Array, never the Buffer the caller holds: pdf.js refuses a Buffer
+      // ("Please provide binary data as `Uint8Array`"), and the catch below then read the
+      // email body instead. Every PDF failed that way from the first run (#209), which
+      // left Contentsquare, CookieYes and Google Workspace, whose totals are only in the
+      // PDF, never reconciled.
+      const doc = await getDocumentProxy(new Uint8Array(pdf));
       const extracted = await extractText(doc, { mergePages: true });
       text = String(extracted.text);
     } catch (err) {
