@@ -6117,12 +6117,13 @@ html {
  *
  * The card: a 1px inside stroke insets the children by 1px, so the border alone does
  * it; the V3 card's `padding: 19px 1px` counted the stroke twice. The frame is a
- * fixed 1031, which leaves 31px under the meters: 18 + 31 at the bottom.
+ * fixed 1031, which leaves 31px under the meters (30 + the stroke) since the core
+ * motivation panel grew to 197 on 28.09; it left 50 before.
  *
  * Scoped to both V4 roots: `.rv4` is the live report under `?v4=1`, `.rv4-doc` the
  * standalone /report-v4-preview, which takes the design's own updates too. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch {
-  padding: 18px 0 49px;
+  padding: 18px 0 30px;
 }
 /* 15:816 is a fixed 191: the match row (15:819) grows into the slack and the tagline
  * sits in a fixed 70px box (15:828), so the core motivation panel starts at y=210.
@@ -6138,21 +6139,47 @@ html {
   flex-grow: 1;
   width: min(323px, calc(100% + 8px));
 }
+/* Mark, 28.09 (1943978527): "Decreased Font size here". 15:829 is Lora 16/24, and
+ * sets no tracking. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline {
+  font-size: 16px;
+  letter-spacing: 0;
+  line-height: 24px;
   min-height: 70px;
   width: min(323px, calc(100% + 8px));
 }
-/* 15:832 is 51 tall: the label's box is 23 (Figma rounds the 22.4 line up) and the
- * value sits in a fixed 28 (15:842), which centres the chip 3px down and sets the
- * body 20px under. The body's 259 ran out of its panel at 320. */
+/* Mark, 28.09 — 1943978820: "Changed font size here" and "Also added the 'What drives
+ * your desire'"; 1943982885: "Width of text box was changed". 15:831 is now a 197px
+ * column, 10 apart: the 45px head (15:832), the value (15:843) on a row of its own at
+ * Lora 18/24, and the body (15:845). The head's labels (15:839) fill its 45px from
+ * the top: "Core motivation" in a 23px box (Figma rounds the 22.4 line up) over the
+ * 12/19.2 sub-label. The body is 281 wide, 2px past the panel's padding at 393, as
+ * drawn; it narrows with the panel below that. */
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive {
+  gap: 10px;
+  height: auto;
+  min-height: 197px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-labels {
+  align-self: stretch;
+}
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label {
   min-height: 23px;
 }
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-sub {
+  color: var(--rv3-copy);
+  font-size: 12px;
+  font-weight: 200;
+  line-height: 19.2px;
+}
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-value {
-  min-height: 28px;
+  font-size: 18px;
+  margin: 0;
+  padding-top: 0;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-body {
-  width: min(259px, 100%);
+  margin: 0;
+  width: min(281px, calc(100% + 2px));
 }
 /* The deck is the frame's 359 at 393 and the card's width below it, so its last
  * indicator bar stays inside (at 360 it was 11px out). The cards keep their 268px slot
