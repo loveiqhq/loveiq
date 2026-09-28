@@ -120,6 +120,8 @@ const b = (text: string): Report3Run => ({ text, weight: 700 });
 const i = (text: string): Report3Run => ({ text, italic: true });
 const p = (...runs: Report3Run[]): Report3Block => ({ kind: "para", runs });
 const h = (text: string): Report3Block => ({ kind: "heading", text });
+/** 304:277 — Mark, 28.09: "H2"; the same level as the chapter title "Common challenges". */
+const h2 = (text: string): Report3Block => ({ kind: "heading", text, level: 2 });
 
 /** 304:269 through 304:279 — everything above the coral panel. */
 export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
@@ -150,7 +152,7 @@ export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
       ". Sun beliefs tend to create more room for flexibility, curiosity, and choice. Shadow beliefs make the meaning of a situation more rigid or conditional. A shadow belief is not necessarily false or irrational. It may have developed for understandable reasons. The important question is whether it still helps interpret the present accurately."
     )
   ),
-  h("The Spark Seeker belief map"),
+  h2("The Spark Seeker belief map"),
   p(
     t(
       "The Spark Seeker tends to place unusual value on chemistry, anticipation, play, novelty, and the feeling of being actively wanted. These preferences can support a highly alive and exploratory sexuality. The difference between sun and shadow lies in what those experiences are allowed to mean."

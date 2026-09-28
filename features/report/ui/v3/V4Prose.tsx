@@ -25,6 +25,13 @@ const V4Prose: FC<Props> = ({ blocks }) => (
   <>
     {blocks.map((block, i) => {
       if (block.kind === "heading") {
+        if (block.level === 2) {
+          return (
+            <h3 key={i} className="rv4-prose__h is-h2">
+              {block.text}
+            </h3>
+          );
+        }
         return (
           <h4 key={i} className="rv4-prose__h">
             {block.text}
