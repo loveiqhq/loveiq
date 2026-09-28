@@ -61,9 +61,11 @@ const normText = (s: string) =>
  * Brain ids ("decision/decision:2026-09-09-3d275f5327") carry digits that are not figures.
  * Only the brain's own source names start one, so "5/10" and "26/09/2026" stay figures.
  */
-const SOURCE_NAMES =
-  "decision|plan|notice|report|research|skill|domain|doc|analytics|ga4|gsc|notion|drive|" +
-  "slack|gmail|calendar|whatsapp|people|evidence|clarity";
+const SOURCE_NAMES = [
+  ...["decision", "plan", "notice", "report", "research", "skill", "domain", "doc"],
+  ...["analytics", "ga4", "gsc", "notion", "drive", "slack", "gmail", "calendar"],
+  ...["whatsapp", "people", "evidence", "clarity", "book"],
+].join("|");
 const ID = new RegExp(`\\b(?:${SOURCE_NAMES})\\/[^\\s,;)\\]]+`, "gi");
 /**
  * A web address is a citation, not a claim: the Night Shift ends each point with one, and
