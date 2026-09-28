@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
+import { act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SurveyPage from "@features/survey/ui/SurveyPage";
@@ -132,6 +133,38 @@ describe("SurveyPage", () => {
       expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
       expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
       expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
+    });
+
+    it("starts a new submission when they go back and then forward onto the survey", async () => {
+      // Round-10 audit: Forward remounts the survey through popstate and never passes
+      // "I agree", so the finished id was reused.
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      sessionStorage.setItem("loveiq-survey-session", "finished-run");
+      sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+      render(<SurveyPage />);
+      await screen.findByRole("button", { name: /i agree/i });
+
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 6 } }));
+      });
+
+      expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+      expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
+      expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
+    });
+
+    it("keeps a mid-survey reader's session when they go back and forward", async () => {
+      sessionStorage.setItem("loveiq-survey-session", "mid-run");
+      sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+      render(<SurveyPage />);
+      await screen.findByRole("button", { name: /i agree/i });
+
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 6 } }));
+      });
+
+      expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+      expect(sessionStorage.getItem("loveiq-survey-session")).toBe("mid-run");
     });
 
     it("does not hijack a reader who still has answers", async () => {

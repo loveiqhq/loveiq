@@ -1248,6 +1248,16 @@ function loadInitialStep(): number {
 /* ------------------------------------------------------------------ */
 /*  Root — orchestrates all steps                                      */
 /* ------------------------------------------------------------------ */
+/**
+ * Entering the survey after this tab finished ("I agree", or Forward onto it) starts a NEW
+ * submission, as "Start a new one" does. Under the finished id, submitSurveyOnce() returned
+ * the old submission and kept nothing (#375). Only when finished: forgetting also resets the
+ * in-memory id a storage-refused reader is partway through.
+ */
+function retireFinishedRun(): void {
+  if (completedReportToken()) forgetCompletedReport();
+}
+
 const SurveyPage: FC = () => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
@@ -1295,7 +1305,9 @@ const SurveyPage: FC = () => {
     const handlePopState = (e: PopStateEvent) => {
       isPopStateNav.current = true;
       const prevStep = e.state?.surveyStep;
-      setStep(prevStep !== undefined ? prevStep : 0);
+      const next = prevStep !== undefined ? prevStep : 0;
+      if (next === TOTAL_STEPS + 2) retireFinishedRun();
+      setStep(next);
       setTransitioning(false);
     };
     window.addEventListener("popstate", handlePopState);
@@ -1347,10 +1359,7 @@ const SurveyPage: FC = () => {
   }, []);
 
   const handleAgree = useCallback(() => {
-    // A tab that already finished and is starting again (Back from the screens after
-    // submitting, then "I agree") gets a new submission, as "Start a new one" does. Under
-    // the finished id, submitSurveyOnce() returned the old submission and kept nothing.
-    if (completedReportToken()) forgetCompletedReport();
+    retireFinishedRun();
     setStep(TOTAL_STEPS + 2);
   }, []);
 
