@@ -133,6 +133,21 @@ describe("survey completion fires exactly once", () => {
     expect(analytics.complete).toHaveBeenCalledTimes(1);
   });
 
+  it("does not reopen the last question from the screens after submitting", async () => {
+    // Round-12 audit: ArrowLeft or a right swipe on the wizard also reached the engine and
+    // took the reader back to the email step under the finished session id.
+    const { user } = await completeIt();
+    await waitFor(() => expect(analytics.complete).toHaveBeenCalled());
+    await user.keyboard("{ArrowLeft}");
+    const at = (x: number) => [{ clientX: x, clientY: 200 }] as unknown as TouchList;
+    window.dispatchEvent(new TouchEvent("touchstart", { touches: at(40) }));
+    window.dispatchEvent(new TouchEvent("touchend", { changedTouches: at(240) }));
+    await new Promise((r) => setTimeout(r, 50));
+    // Question screens carry Previous/Next; the screens after submitting do not.
+    expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
+    expect(screen.queryByText("How satisfied are you right now?")).toBeNull();
+  });
+
   it("stays at one across a REMOUNT with the finished index restored", async () => {
     // `useSurveyState` persists `currentIndex` to localStorage and restores it,
     // while `hasCompleted` is a ref that resets — so a remount is the one way a
