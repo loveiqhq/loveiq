@@ -6606,12 +6606,14 @@ html {
   background-image: linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);
   color: transparent;
 }
-/* 639:498 sits 48px into the fade, centred 20px right of the table's middle (x 184
- * of 328) in both open categories — where the locked pills centre on 164. As drawn. */
+/* 639:498 — Mark's 28.09 update (1944175761) sets it centred in the table (x 121 + 43
+ * of 328, where the locked pills centre too) and 54.19px into the fade; it stood 48px
+ * in, 20px right of the middle. The second open category's pill (639:659) was left at
+ * 60.19 in and 15px right; the one pinned in the comment is the one followed. */
 .rv3 .rv4-fvt__peek .rv4-fvt__pill {
-  left: calc(50% + 20px);
+  left: 50%;
   position: absolute;
-  top: 48px;
+  top: 54.19px;
   transform: translateX(-50%);
 }
 /* 639:1905 — the locked rows under the full blur (Figma radius 4; --rv4-veil since

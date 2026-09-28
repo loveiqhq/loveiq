@@ -18,7 +18,7 @@ import { guardedUnlock } from "./v4Unlock";
  * Fantasy Pull and Actual Pleasure scores, each over its likelihood.
  *
  * OPEN. Three rows sharp; the fourth and fifth peek, inert, under a 96px fade with
- * "Show all N fantasies" on it. The peek stands exactly 96px under the third row,
+ * "Show all" on it (its accessible name carries the count). The peek stands exactly 96px under the third row,
  * so the fade always starts where the fourth row does, whatever the first three
  * wrap to — 639:308's fixed 328px frame is that for its two open categories.
  * "Show all" drops the fade and lists every row; Figma draws no way back, so the
@@ -270,15 +270,18 @@ const Category: FC<CategoryProps> = ({
               ))}
             </div>
             <span className="rv4-fvt__fade" aria-hidden="true" />
+            {/* 639:499 — "Show all" since Mark's 28.09 update (1944175761); the count
+             * stays in the accessible name, so each category's pill says what it opens. */}
             <button
               type="button"
               className="rv4-fvt__pill"
+              aria-label={`Show all ${category.total} fantasies`}
               onClick={() => {
                 revealed.current = true;
                 setShowAll(true);
               }}
             >
-              <span className="rv4-fvt__pill-label">Show all {category.total} fantasies</span>
+              <span className="rv4-fvt__pill-label">Show all</span>
             </button>
           </div>
         ) : null}
