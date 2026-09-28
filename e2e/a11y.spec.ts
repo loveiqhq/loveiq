@@ -82,10 +82,63 @@ async function settleAnimations(page: import("@playwright/test").Page) {
  *     scoped, and one engine is all a ratchet needs.
  */
 const KNOWN_GAP = { route: "/survey", id: "color-contrast", fg: "#ffffff", bg: "#fe6839" };
+
+/**
+ * THE BUTTON THE PIN IS ABOUT HAS ITS OWN ENTRANCE: a 700ms inline animation that
+ * can start AFTER settleAnimations has looked, when the button mounts late. Part-way
+ * through it the orange is translucent over the page's gradient, and axe files the
+ * button as `incomplete` ("bgGradient") instead of a violation, so the ratchet
+ * counted no known nodes and said the gap was GONE. That was #324's Desktop Chrome
+ * run on 2026-09-25, attempt and retry both; a rerun passed.
+ *
+ * Measured on production, 10 runs each: axe run as the button appears filed it
+ * incomplete 8 times; after this wait it was a violation 10 times of 10. So on this
+ * route, wait for every white-on-orange element to be fully opaque, with no finite
+ * animation running on it or on anything above it.
+ */
+async function settleKnownGap(page: import("@playwright/test").Page) {
+  await page
+    .waitForFunction(
+      ({ fg, bg }) => {
+        const toHex = (css: string) => {
+          const parts = css.match(/\d+/g);
+          if (!parts || parts.length < 3) return "";
+          return `#${parts
+            .slice(0, 3)
+            .map((n) => Number(n).toString(16).padStart(2, "0"))
+            .join("")}`;
+        };
+        const buttons = [...document.querySelectorAll("*")].filter((el) => {
+          const cs = getComputedStyle(el);
+          return toHex(cs.backgroundColor) === bg && toHex(cs.color) === fg;
+        });
+        if (buttons.length === 0) return false;
+        return buttons.every((el) => {
+          for (let n: Element | null = el; n; n = n.parentElement) {
+            if (Number(getComputedStyle(n).opacity) < 1) return false;
+            const moving = n
+              .getAnimations()
+              .some(
+                (a) =>
+                  a.playState === "running" && a.effect?.getComputedTiming().iterations !== Infinity
+              );
+            if (moving) return false;
+          }
+          return true;
+        });
+      },
+      { fg: KNOWN_GAP.fg, bg: KNOWN_GAP.bg },
+      { timeout: 10_000 }
+    )
+    // Not settling is not a failure here: the painted check and the ratchet below
+    // then say what they saw.
+    .catch(() => {});
+}
 for (const route of criticalRoutes) {
   test(`${route} — no critical accessibility violations`, async ({ page }, testInfo) => {
     await page.goto(route);
     await settleAnimations(page);
+    if (route === KNOWN_GAP.route) await settleKnownGap(page);
 
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
