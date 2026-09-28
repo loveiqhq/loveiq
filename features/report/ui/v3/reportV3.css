@@ -7568,3 +7568,140 @@ html {
   animation-play-state: paused !important;
   transition: none !important;
 }
+
+/* ══ Report V4 · tablet and desktop ══════════════════════════════════
+ * Sync 28.09: "scale the mobile version of the report for desktop". There is no
+ * desktop frame, so V4 keeps the phone's design and lets it breathe: the page
+ * already runs a wider reading column from 700px up (620, then 680 beside the
+ * sidebar at 1280 — the V3 DESKTOP block above), but V4's blocks are drawn at the
+ * phone's 356/361 and sat in it as a narrow strip, left-aligned, with the V2
+ * chapters beside them running the full column. Every V4 block now fills the
+ * column, so one left edge and one measure run from Part I to the end.
+ *
+ * Below 700px nothing here applies, so the phone keeps its 361 column exactly.
+ * Scoped to `.rv3.rv4`, the live `?v4=1` page — the standalone preview draws the
+ * 393 frame and stays at it. */
+@media (min-width: 700px) {
+  .rv3.rv4 .report-shell {
+    padding-inline: 0;
+  }
+  .rv3.rv4 .report-content .rv4-col {
+    padding-inline: 0;
+  }
+  .rv3.rv4 .report-content .rv4-partblock > .rv4-part,
+  .rv3.rv4 .report-content .rv4-partblock > .rv4-chapter,
+  .rv3.rv4 .report-content .rv4-partblock > .rv4-closing {
+    margin-inline: 0;
+    width: 100%;
+  }
+  .rv3.rv4 .rv4-part__intro,
+  .rv3.rv4 .rv4-chapter__body > .rv3-prose,
+  .rv3.rv4 .rv4-chapter__body > *,
+  .rv3.rv4 .rv4-chapter__teaser,
+  .rv3.rv4 .rv4-copy,
+  .rv3.rv4 .rv4-copy > p,
+  .rv3.rv4 .rv4-summary__inner,
+  .rv3.rv4 .rv4-summary__copy,
+  .rv3.rv4 .rv4-summary__closer,
+  .rv3.rv4 .rv4-top3__heading,
+  .rv3.rv4 .rv4-top3__lede {
+    width: 100%;
+  }
+  /* A ceiling for a phone narrower than 393, not a design width. */
+  .rv3.rv4 .rv4-turn,
+  .rv3.rv4 .rv4-sun,
+  .rv3.rv4 .rv4-nudges__head {
+    max-width: none;
+  }
+  /* The Snapshot rows' blurb is held to the phone's 221px so it clears the row's
+   * chevron; at the wider panel that is a sliver, so it takes most of the row. */
+  .rv3.rv4 .rv4-nudges__support {
+    max-width: 480px;
+  }
+}
+
+/* The column itself. V3's 680 (padded to 580 by V2's own gutters) is narrower than
+ * the V2 chapters V4 opens onto were drawn for: the fantasy table holds a 740 floor
+ * and the Other Archetypes rows size their bars off the viewport, so at 580 the
+ * table pushed its chapter 220px past the column and the mottos wrapped a word a
+ * line. 760 edge to edge is V2's own table width, still a comfortable measure at
+ * V4's 16px copy. The tablet column keeps a 24px gutter of its own. */
+@media (min-width: 700px) and (max-width: 1279px) {
+  .rv3.rv4 .report-content {
+    max-width: 704px;
+    padding-inline: 24px;
+  }
+}
+@media (min-width: 1280px) {
+  .rv3.rv4 .report-content {
+    max-width: 760px;
+    padding-inline: 0;
+  }
+}
+@media (min-width: 700px) {
+  /* A flex/grid child defaults to min-width:auto, so one wide descendant widens
+   * the whole chapter instead of scrolling inside its own shell. */
+  .rv3.rv4 .rv3-chapter__body,
+  .rv3.rv4 .rv3-chapter__body-inner,
+  .rv3.rv4 .rv3-chapter__body-inner > * {
+    min-width: 0;
+  }
+  /* The practice table's 740/700 floor forced a sideways scroll in any column
+   * narrower than it; its three columns share whatever the column has instead. */
+  .rv3.rv4 .report-practice-table {
+    min-width: 0;
+  }
+  .rv3.rv4 .report-practice-table__header,
+  .rv3.rv4 .report-practice-table__row {
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* The sidebar's part labels are held to one line for V2's short names; V4's Part
+ * III ("How your archetype works") is longer than the 288px sidebar and was cut
+ * mid-word. It wraps instead. */
+.rv3.rv4 .report-sidebar__part {
+  white-space: normal;
+}
+
+/* Tablet: the floating header pill spans the viewport on a phone, which at 1024
+ * made it twice the width of the 704 column under it. It takes the column's width. */
+@media (min-width: 700px) and (max-width: 1279px) {
+  .rv3.rv4 .report-mobile-topbar {
+    inset-inline: max(8px, calc((100% - 720px) / 2));
+  }
+}
+/* The science deck lays out on a grid from 700px (two across, three on desktop),
+ * and V4 has seven cards, so the seventh sat alone at the left of its row. Centring
+ * the last row keeps the block symmetric under the heading it hangs from. */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__track {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
+    flex: 0 0 calc((100% - 12px) / 2);
+  }
+}
+@media (min-width: 1280px) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
+    flex-basis: calc((100% - 28px) / 3);
+  }
+}
+
+/* The locked reader's sticky "Unlock full report" bar is centred on the WINDOW,
+ * which beside the sidebar put it ~160px left of the column it belongs to. It is
+ * centred on the content track instead, from the shell's own geometry (report.css
+ * `.report-shell` at 1280+: min(1440, 100% - 10rem) wide, a 288 sidebar, a
+ * clamp(0, 2.5vw, 3rem) gap, a content track of at most 1024). The bar is portalled
+ * to <body>, outside `.rv4`, so the page is matched with :has(). */
+@media (min-width: 1280px) {
+  body:has(.rv3.rv4) .report-sticky-unlock--desktop {
+    --rv4-shell: min(1440px, 100% - 10rem);
+    --rv4-gap: clamp(0px, 2.5vw, 3rem);
+    --rv4-track: min(1024px, var(--rv4-shell) - 288px - var(--rv4-gap));
+    left: calc((100% - var(--rv4-shell)) / 2 + 288px + var(--rv4-gap) + var(--rv4-track) / 2);
+    max-width: var(--rv4-track);
+  }
+}

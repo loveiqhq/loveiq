@@ -19644,12 +19644,17 @@
     .report-partnership__orbit-ring-mid,
   .report-partnership__orbit.report-chart-reveal:not(.is-revealed)
     .report-partnership__orbit-ring-inner,
-  .report-partnership__orbit.report-chart-reveal:not(.is-revealed) .report-partnership__orbit-step,
   .report-partnership__orbit.report-chart-reveal:not(.is-revealed) .report-partnership__orbit-hop,
   .report-partnership__orbit.report-chart-reveal:not(.is-revealed)
     .report-partnership__orbit-centre {
     opacity: 1;
     transform: none;
+    translate: none;
+  }
+  /* Not `transform: none`: the cards are PLACED by their transform (translate -50%
+   * about the point they are pinned to), and the pre-state only moves `translate`. */
+  .report-partnership__orbit.report-chart-reveal:not(.is-revealed) .report-partnership__orbit-step {
+    opacity: 1;
     translate: none;
   }
 
@@ -21210,8 +21215,7 @@
 @media (prefers-reduced-motion: reduce) {
   .report-curiosity__fit-dot,
   .report-curiosity__struct-item,
-  .report-partnership__row,
-  .report-partnership__orbit-step {
+  .report-partnership__row {
     opacity: 1 !important;
     transform: none !important;
     transition-duration: 0.01ms !important;
