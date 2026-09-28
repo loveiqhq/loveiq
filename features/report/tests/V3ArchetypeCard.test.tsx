@@ -286,9 +286,10 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
 
-  it("sets the deck card's headline in Lora 20/24 inside 15:847's 29px box", () => {
+  // Mark, 28.09 (1943979946): "Changed font size". Both designs set it at 18 now.
+  it("sets the deck card's headline in Lora 18/24 inside 15:847's 29px box", () => {
     const value = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__value");
-    expect(value).toMatch(/font-size: 20px/);
+    expect(value).toMatch(/font-size: 18px/);
     expect(value).toMatch(/line-height: 24px/);
     // I15:847;11070:796 is a fixed 29px under an 8px pad: 24px of line and 5 below.
     // The peeking card draws the same box at 0.94.
@@ -297,6 +298,20 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     );
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__value")).toMatch(
       /padding-bottom: 3\.26px/
+    );
+  });
+
+  // Mark, 28.09 (1943979283): "Left Aligned now with Gap to the icon". The focused card's
+  // labels start 10px after the chip (I15:847;11070:787); the peeking design keeps its own.
+  it("left-aligns the focused card's labels 10px after the chip", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__head")).toMatch(
+      /gap: 10px/
+    );
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__labels")).toMatch(
+      /align-items: flex-start/
+    );
+    expect(V3_CSS).not.toContain(
+      ".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__labels"
     );
   });
 

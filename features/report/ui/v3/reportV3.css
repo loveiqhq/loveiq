@@ -6201,12 +6201,22 @@ html {
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__meter-bars {
   min-height: 16px;
 }
-/* The deck's headline: Lora 20/24 in a fixed 29px box under the 8px pad (instance
- * 15:847, I15:847;11070:796), so the body keeps its place. The peeking card draws the
- * same box at 0.94. */
+/* The deck's headline in a fixed 29px box under the 8px pad (instance 15:847,
+ * I15:847;11070:796), so the body keeps its place. The peeking card draws the same box
+ * at 0.94. Mark, 28.09 (1943979946): "Changed font size" — Lora 18/24 (was 20) in both
+ * designs, the box unchanged. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__value {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 24px;
+}
+/* Mark, 28.09 (1943979283): "Left Aligned now with Gap to the icon". The focused card's
+ * two labels start 10px after the chip (I15:847;11070:787) instead of sitting against
+ * the card's right edge. The peeking design keeps its right-aligned labels, as drawn. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__head {
+  gap: 10px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__labels {
+  align-items: flex-start;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__value {
   padding-bottom: 5px;
