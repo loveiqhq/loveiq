@@ -56,6 +56,24 @@ describe("V4TriggerCard — open: two rows, the third under a fade (713:6132 / 7
     );
   });
 
+  // Mark, 28.09 (1944177596, "Updated CTAs"): 713:6178 / 713:6226 read "Show all" in
+  // title case (86px, from 138 / 178). The card's name stays in the accessible name, so
+  // the page's several "Show All" pills still say what each opens.
+  it("reads 'Show All' on both pills, as the frame now draws them", () => {
+    const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
+    expect(container.querySelector(".rv4-trig__pill-label")!.textContent).toBe("Show all");
+    cleanup();
+    const accel = render(<V4TriggerCard tone="accel" rows={OPEN.accelerators} />);
+    expect(accel.container.querySelector(".rv4-trig__pill-label")!.textContent).toBe("Show all");
+  });
+
+  it("sets the pill in title case, no longer in capitals", () => {
+    const at = V3_CSS.indexOf(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill {");
+    const pill = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(pill).toContain("text-transform: capitalize");
+    expect(pill).not.toContain("uppercase");
+  });
+
   it("names each pill after its card", () => {
     render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
     expect(screen.getByRole("button", { name: "Show all brakes" })).toBeTruthy();

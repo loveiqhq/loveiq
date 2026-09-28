@@ -43,7 +43,12 @@ const LABEL: Record<Tone, string> = {
   accel: "WHAT ACCELERATES YOU",
 };
 
-/** 713:6179 — set in capitals by the stylesheet, as the frame's text case does. */
+/** 713:6179 — what the pill reads. Mark, 28.09 (1944177596, "Updated CTAs"): "Show
+ * all", set in title case by the stylesheet (it read "SHOW ALL BRAKES" before). */
+const SHOW_ALL_LABEL = "Show all";
+
+/** The pill's accessible name: the page has several "Show All"s, so each says what it
+ * opens. */
 const SHOW_ALL: Record<Tone, string> = {
   brake: "Show all brakes",
   accel: "Show all accelerators",
@@ -158,12 +163,13 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
             <button
               type="button"
               className="rv4-trig__pill"
+              aria-label={SHOW_ALL[tone]}
               onClick={() => {
                 revealed.current = true;
                 setShowAll(true);
               }}
             >
-              <span className="rv4-trig__pill-label">{SHOW_ALL[tone]}</span>
+              <span className="rv4-trig__pill-label">{SHOW_ALL_LABEL}</span>
             </button>
           </div>
         ) : null}
