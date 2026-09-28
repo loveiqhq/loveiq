@@ -72,8 +72,17 @@ describe("V3Methodology chrome", () => {
     const { container } = render(<V3Methodology chrome="deck" />);
     expect(container.querySelector(".rv3-sci__rule")).toBeNull();
     expect(container.querySelector(".rv3-sci__n")).toBeNull();
-    expect(screen.getAllByText("Read more in chapter").length).toBeGreaterThan(0);
+    // Mark, 28.09 (1943960826): "changed the copy over the chapters to simply 'More in
+    // chapter'".
+    expect(screen.getAllByText("More in chapter")).toHaveLength(7);
+    expect(screen.queryByText("Read more in chapter")).toBeNull();
     expect(screen.queryByText("read this in CHAPTER:")).toBeNull();
+  });
+
+  it("keeps V3's small-caps label on the live ?v3=1 deck", () => {
+    render(<V3Methodology />);
+    expect(screen.getAllByText("read this in CHAPTER:")).toHaveLength(7);
+    expect(screen.queryByText("More in chapter")).toBeNull();
   });
 
   it("adds the source-card icons that V4 introduced, and only in V4", () => {
@@ -447,5 +456,29 @@ describe("reportV3.css — V4 science card alignment (493:7082)", () => {
     expect(list).toMatch(/gap:\s*5\.5px/);
     expect(list).toMatch(/margin-top:\s*-9\.5px/);
     expect(list).toMatch(/min-height:\s*71px/);
+  });
+});
+
+// Mark, 28.09 (1943960826): "We took away the colored boxes around the icons". 493:7082
+// draws each glyph bare in the same 34.977px slot, so the title keeps its place.
+describe("reportV3.css — V4 science card icons without their boxes (493:7082)", () => {
+  const rule = (selector: string) => {
+    const at = V3_CSS.lastIndexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThan(-1);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("draws the glyph with no tile behind it and no border round it", () => {
+    const icon = rule(".rv3 .rv3-method.is-v4 .rv3-sci__icon");
+    expect(icon).toMatch(/background: none/);
+    expect(icon).toMatch(/border: 0/);
+    expect(icon).not.toMatch(/color-mix/);
+  });
+
+  it("keeps the slot the tile had, so the title stays 9px after it", () => {
+    const icon = rule(".rv3 .rv3-method.is-v4 .rv3-sci__icon");
+    expect(icon).toMatch(/height: 34\.977px/);
+    expect(icon).toMatch(/width: 34\.977px/);
+    expect(rule(".rv3 .rv3-method.is-v4 .rv3-sci__head")).toMatch(/gap: 9px/);
   });
 });

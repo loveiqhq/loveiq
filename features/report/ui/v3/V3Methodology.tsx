@@ -243,9 +243,10 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
               <p className="rv3-sci__q">
                 {chrome === "deck" ? (card.questionV4 ?? card.question) : card.question}
               </p>
-              {/* 1:225 — sentence case in V4, against V3's small-caps label. */}
+              {/* 1:225 — sentence case in V4, against V3's small-caps label. Mark, 28.09
+                  (1943960826): "changed the copy … to simply 'More in chapter'". */}
               <p className="rv3-sci__label">
-                {chrome === "deck" ? "Read more in chapter" : "read this in CHAPTER:"}
+                {chrome === "deck" ? "More in chapter" : "read this in CHAPTER:"}
               </p>
               <ul className="rv3-sci__list">
                 {((chrome === "deck" && card.chaptersV4) || card.chapters).map((c) => (
