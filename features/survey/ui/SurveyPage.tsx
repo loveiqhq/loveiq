@@ -1306,7 +1306,11 @@ const SurveyPage: FC = () => {
       isPopStateNav.current = true;
       const prevStep = e.state?.surveyStep;
       const next = prevStep !== undefined ? prevStep : 0;
-      if (next === TOTAL_STEPS + 2) retireFinishedRun();
+      if (next === TOTAL_STEPS + 2) {
+        retireFinishedRun();
+        // Back to the start of a new run shows the intro, not the retired report.
+        setFinishedToken(null);
+      }
       setStep(next);
       setTransitioning(false);
     };
@@ -1360,6 +1364,7 @@ const SurveyPage: FC = () => {
 
   const handleAgree = useCallback(() => {
     retireFinishedRun();
+    setFinishedToken(null);
     setStep(TOTAL_STEPS + 2);
   }, []);
 

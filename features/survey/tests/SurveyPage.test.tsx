@@ -153,6 +153,27 @@ describe("SurveyPage", () => {
       expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
     });
 
+    it("shows the intro, not the retired report, on the way back from a new run", async () => {
+      // Review on #393: the page kept the finished token it read on mount.
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+      render(<SurveyPage />);
+      await screen.findByRole("button", { name: /i agree/i });
+
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 6 } }));
+      });
+      await screen.findByTestId("survey-engine");
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+      });
+
+      expect(
+        await screen.findByRole("button", { name: /continue to survey introduction/i })
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /already finished/i })).not.toBeInTheDocument();
+    });
+
     it("keeps a mid-survey reader's session when they go back and forward", async () => {
       sessionStorage.setItem("loveiq-survey-session", "mid-run");
       sessionStorage.setItem(SURVEY_STEP_KEY, "5");
