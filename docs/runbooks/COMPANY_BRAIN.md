@@ -1640,10 +1640,12 @@ READ-ONLY. It never speaks to WhatsApp's servers, so the automation clause does 
 apply — it is your own messages, at rest, on your own machine. Needs Full Disk Access
 for whatever runs it, because macOS protects the app container.
 
-It reads through SQLite's own locking (`mode=ro`), never `immutable=1`. WhatsApp keeps its
+It reads through SQLite's own locking (`mode=ro`), not `immutable=1`. WhatsApp keeps its
 newest messages in the `-wal` file until it checkpoints, and `immutable=1` reads the main
 file alone: on 2026-09-28 it was missing a 20-second-old message that a WAL-inclusive read
-had.
+had. The one exception is when the `-wal` and `-shm` files are gone, which a read-only open
+cannot recreate: then the main file holds everything and is read alone
+(`features/brain/server/ingest/sqlite-read.ts`).
 
 **The safeguard.** That database holds every chat on the account, including private
 ones. The script is scoped to a single group JID and refuses to run without one — an
