@@ -307,7 +307,8 @@ function largest(text: string, pattern: RegExp): number | null {
     const before = text.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0);
     if (/exclusi|excl\./i.test(before)) continue;
     const n = Number((m[1] ?? "").replace(/,/g, ""));
-    if (Number.isFinite(n) && n > 0) nums.push(n);
+    // Zero kept: "Total €0.00" is a total (a free month, a credit), not an unreadable one.
+    if (Number.isFinite(n) && n >= 0) nums.push(n);
   }
   return nums.length ? Math.max(...nums) : null;
 }
@@ -325,7 +326,12 @@ export async function amountFrom(pdf: Uint8Array | null, body: string): Promise<
   if (pdf) {
     try {
       const { extractText, getDocumentProxy } = await import("unpdf");
-      const doc = await getDocumentProxy(pdf);
+      // A plain Uint8Array, never the Buffer the caller holds: pdf.js refuses a Buffer
+      // ("Please provide binary data as `Uint8Array`"), and the catch below then read the
+      // email body instead. Every PDF failed that way from the first run (#209), which
+      // left Contentsquare, CookieYes and Google Workspace, whose totals are only in the
+      // PDF, never reconciled.
+      const doc = await getDocumentProxy(new Uint8Array(pdf));
       const extracted = await extractText(doc, { mergePages: true });
       text = String(extracted.text);
     } catch (err) {
@@ -575,10 +581,12 @@ export async function GET(request: Request) {
          */
         let messageAmount: Charge | null = null;
         let sawPdf = false;
+        let pdfNames = "";
 
         for (const p of parts) {
           if (!p.filename?.toLowerCase().endsWith(".pdf") || !p.body?.attachmentId) continue;
           sawPdf = true;
+          pdfNames += ` ${p.filename}`;
 
           // The attachment is fetched BEFORE the duplicate check, because its
           // total has to be counted whether or not the file is new. Skipping
@@ -634,7 +642,9 @@ export async function GET(request: Request) {
           filed.push({ vendor: vendor.sheetName, month, file: p.filename, amount });
         }
 
-        if (messageAmount !== null) {
+        // A stated zero charged nothing: neither written nor left for a person. Written, it
+        // would carry EUR 0 into every forecast month of a vendor that bills again next month.
+        if (messageAmount !== null && messageAmount.value > 0) {
           // Converted HERE, where the invoice's own date is still in hand. Doing it
           // later, from the month key alone, would convert a 3 September charge at
           // a 30 September rate.
@@ -666,7 +676,13 @@ export async function GET(request: Request) {
               currency: prior?.currency === "OTHER" ? "OTHER" : "EUR",
             });
           }
-        } else if (sawPdf) {
+        } else if (
+          messageAmount === null &&
+          sawPdf &&
+          // Only mail that says it is a bill. The vendor matchers cover a whole sender
+          // domain, so a brochure or a terms PDF from the same address must not block a month.
+          /invoice|receipt|rechnung|factur|bill/i.test(`${subject}${pdfNames}`)
+        ) {
           // An invoice whose total cannot be read still charged us. Dropped, the month was
           // written as the sum of the OTHER invoices, or left stale as "already matched".
           // Poisoned like an unconvertible one, so a person enters it.
@@ -712,17 +728,20 @@ export async function GET(request: Request) {
     const chargedRows = [...charged.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     for (const [key, total] of chargedRows) {
       const [vendorName = "", monthKey = ""] = key.split("|");
-      const row = rowOf(vendorName);
-      if (row === 0) {
-        // Listed apart from the changes: counted among them, it read "Cost sheet updated (1)".
-        noRow.push(vendorName);
-        if (monthKey < thisMonth) unwrittenClosed.push(`${vendorName} ${monthKey}`);
-        continue;
-      }
       const ym = monthKey.split("/");
       const y = Number(ym[0]);
       const m = Number(ym[1]);
       if (!Number.isFinite(y) || !Number.isFinite(m)) continue;
+      const row = rowOf(vendorName);
+      if (row === 0) {
+        // Listed apart from the changes: counted among them, it read "Cost sheet updated (1)".
+        noRow.push(vendorName);
+        // Only a month a run could write: a partial one would fail every re-run for ever.
+        if (monthKey < thisMonth && monthFullyCovered(y, m, windowStartMs)) {
+          unwrittenClosed.push(`${vendorName} ${monthKey}`);
+        }
+        continue;
+      }
       if (!monthFullyCovered(y, m, windowStartMs)) {
         // Filed, deliberately not reconciled — see monthFullyCovered.
         skippedPartial.push(`${vendorName} ${monthKey}`);
