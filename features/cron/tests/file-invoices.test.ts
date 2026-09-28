@@ -18,6 +18,7 @@ import {
   columnForMonth,
   driveQuoteEscape,
   monthFullyCovered,
+  LOOKBACK_DAYS,
   amountFrom,
   betterCharge,
   rateOn,
@@ -136,6 +137,20 @@ describe("monthFullyCovered", () => {
 
   it("accepts the month the run happens in", () => {
     expect(monthFullyCovered(2026, 10, windowStart)).toBe(true);
+  });
+
+  it("never covers two closed months, so a carried write reaches only the month in progress", () => {
+    // Two did, and an earlier month's carry-forward would overwrite a later closed month
+    // that the run left for a person to enter by hand.
+    for (let t = Date.UTC(2026, 0, 1); t < Date.UTC(2029, 0, 1); t += 86_400_000) {
+      const now = new Date(t);
+      const start = t - LOOKBACK_DAYS * 86_400_000;
+      const closed = [1, 2].filter((back) => {
+        const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+        return monthFullyCovered(d.getUTCFullYear(), d.getUTCMonth() + 1, start);
+      });
+      expect(closed.length, now.toISOString().slice(0, 10)).toBeLessThanOrEqual(1);
+    }
   });
 });
 

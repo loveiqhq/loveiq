@@ -69,8 +69,14 @@ const DRIVE_ROOT = "1ml7y_fMcGB8YFpelnQJzWWcpEgTExBBO";
 const SHEET_ID = COST_SHEET_ID;
 const SHEET_TAB = COST_SHEET_TAB;
 
-/** Gmail lookback. Wider than a month so a failed run still catches up next time. */
-const LOOKBACK_DAYS = 45;
+/**
+ * Gmail lookback. Wider than a month so a failed run still catches up next time, and under
+ * 59 days on purpose: then at most ONE closed month is ever wholly inside the window (two
+ * need 59 or more), so a write carried forward can only run into the month in progress. A
+ * wider window would let an earlier month's carry overwrite a later closed month that was
+ * left for a person to enter.
+ */
+export const LOOKBACK_DAYS = 45;
 
 /** Write the reconciled figures only from a complete walk (see the write below). */
 export function shouldWriteSheet(updates: unknown[], incomplete: string[]): boolean {
