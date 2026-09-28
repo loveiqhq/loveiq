@@ -1248,6 +1248,16 @@ function loadInitialStep(): number {
 /* ------------------------------------------------------------------ */
 /*  Root — orchestrates all steps                                      */
 /* ------------------------------------------------------------------ */
+/**
+ * Entering the survey after this tab finished ("I agree", or Forward onto it) starts a NEW
+ * submission, as "Start a new one" does. Under the finished id, submitSurveyOnce() returned
+ * the old submission and kept nothing (#375). Only when finished: forgetting also resets the
+ * in-memory id a storage-refused reader is partway through.
+ */
+function retireFinishedRun(): void {
+  if (completedReportToken()) forgetCompletedReport();
+}
+
 const SurveyPage: FC = () => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
@@ -1256,6 +1266,11 @@ const SurveyPage: FC = () => {
   const [finishedToken, setFinishedToken] = useState<string | null>(null);
   const [transitioning, setTransitioning] = useState(false);
   const isPopStateNav = useRef(false);
+  /** The step on screen, for the popstate handler, which is bound once. */
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   // Restore step from sessionStorage on mount (hydration-safe).
   // setState in a mount-only effect is intentional here — we need to read
@@ -1263,6 +1278,9 @@ const SurveyPage: FC = () => {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const restored = loadInitialStep();
+    // Straight into the survey from saved answers (the landing page's question saves one)
+    // is a new run too. A pending completion carries its own session and is left alone.
+    if (restored === TOTAL_STEPS + 2 && !loadPendingCompletion()) retireFinishedRun();
     if (restored !== 0) setStep(restored);
     setFinishedToken(completedReportToken());
     setHydrated(true);
@@ -1295,7 +1313,15 @@ const SurveyPage: FC = () => {
     const handlePopState = (e: PopStateEvent) => {
       isPopStateNav.current = true;
       const prevStep = e.state?.surveyStep;
-      setStep(prevStep !== undefined ? prevStep : 0);
+      const next = prevStep !== undefined ? prevStep : 0;
+      // Only a real entry: a second history entry for the survey, which a reload on it
+      // pushes, lands on step 6 FROM step 6, and must not retire the run just finished.
+      if (next === TOTAL_STEPS + 2 && stepRef.current !== TOTAL_STEPS + 2) {
+        retireFinishedRun();
+        // Back to the start of a new run shows the intro, not the retired report.
+        setFinishedToken(null);
+      }
+      setStep(next);
       setTransitioning(false);
     };
     window.addEventListener("popstate", handlePopState);
@@ -1347,10 +1373,8 @@ const SurveyPage: FC = () => {
   }, []);
 
   const handleAgree = useCallback(() => {
-    // A tab that already finished and is starting again (Back from the screens after
-    // submitting, then "I agree") gets a new submission, as "Start a new one" does. Under
-    // the finished id, submitSurveyOnce() returned the old submission and kept nothing.
-    if (completedReportToken()) forgetCompletedReport();
+    retireFinishedRun();
+    setFinishedToken(null);
     setStep(TOTAL_STEPS + 2);
   }, []);
 
