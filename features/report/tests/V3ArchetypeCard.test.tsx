@@ -42,8 +42,10 @@ describe("V3ArchetypeCard", () => {
   it("fills the match bar to the match strength, not to a hardcoded width", () => {
     const { container } = renderCard();
     const fill = container.querySelector<HTMLElement>(".rv3-arch__bar-fill");
-    // 43% of the 323px track is the 138.875px the frame draws.
-    expect(fill?.style.width).toBe("43%");
+    // 43% of the 323px track is the 138.875px the frame draws. A custom property, not an
+    // inline width, so the entrance can hold the bar at 0 (v4ArchetypeCardMotion2809).
+    expect(fill?.style.getPropertyValue("--rv3-arch-match")).toBe("43%");
+    expect(V3_CSS).toMatch(/\.rv3 \.rv3-arch__bar-fill \{[^}]*width: var\(--rv3-arch-match\)/);
   });
 
   it("takes its palette from archetypePresentation, so it is not Spark-Seeker-only", () => {
@@ -124,8 +126,18 @@ describe("V3DimensionDeck", () => {
 
   describe("while a swipe is travelling", () => {
     const setup = () => {
+      // Synchronous, for the deck's scroll handler. A frame asked for from inside a
+      // frame is dropped: the match strength's count-up asks for its next one there, and
+      // a real frame is never synchronous, so run in place it would never return.
+      let inFrame = false;
       vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
-        cb(0);
+        if (inFrame) return 1;
+        inFrame = true;
+        try {
+          cb(0);
+        } finally {
+          inFrame = false;
+        }
         return 1;
       });
       vi.stubGlobal("cancelAnimationFrame", () => {});
