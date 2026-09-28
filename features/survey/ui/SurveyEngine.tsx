@@ -358,9 +358,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   ]);
 
   const goPrev = useCallback(() => {
+    // Finished: the screens after submitting are not questions. ArrowLeft and a right swipe
+    // reach this through window listeners on them too, and reopened the last question under
+    // the finished run's session id, saving its answers again; a reload then read them as a
+    // new run (#393) and Next filed the same answers as a second submission.
+    if (currentIndex >= totalQuestions) return;
     trackNavigation("back");
     goTo(currentIndex - 1);
-  }, [currentIndex, goTo, trackNavigation]);
+  }, [currentIndex, totalQuestions, goTo, trackNavigation]);
 
   const handlePause = useCallback(() => {
     savePartial();
