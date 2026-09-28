@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { accessSync, constants } from "node:fs";
 
 /**
  * Rows from a SQLite database another app is writing, read-only, as JSON.
@@ -14,7 +15,8 @@ import { execFileSync } from "node:child_process";
  * ONE FALLBACK. A read-only open cannot create the `-wal` and `-shm` files, so when they are
  * gone (the app closed and removed them) it fails with "unable to open database file". The
  * main file then holds every committed write, which is exactly when reading it alone is
- * right. Nothing else falls back: a lock or a real failure still throws.
+ * right. Only then: with `-shm` missing but `-wal` still there, the WAL can hold committed
+ * rows the main file lacks, so that throws, and so does a lock or any other failure.
  */
 export function readRows<T>(db: string, sql: string): T[] {
   const run = (uri: string) =>
@@ -31,8 +33,22 @@ export function readRows<T>(db: string, sql: string): T[] {
     out = run(`file:${db}?mode=ro`);
   } catch (err) {
     const stderr = String((err as { stderr?: unknown }).stderr ?? "");
-    if (!/unable to open database file/i.test(stderr)) throw err;
+    if (!/unable to open database file/i.test(stderr) || !walIsGone(db)) throw err;
     out = run(`file:${db}?immutable=1`);
   }
   return out.trim() ? (JSON.parse(out) as T[]) : [];
+}
+
+/**
+ * Whether the `-wal` file is known to be absent. `access()`, the call `existsSync` makes,
+ * which the sync has run on WhatsApp's database every run since August; any error other
+ * than "no such file" means not knowing, and not knowing does not fall back.
+ */
+function walIsGone(db: string): boolean {
+  try {
+    accessSync(`${db}-wal`, constants.F_OK);
+    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ENOENT";
+  }
 }
