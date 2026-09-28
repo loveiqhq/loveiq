@@ -412,9 +412,15 @@ function toolForTool(s: WindowStats, b: WindowStats): string {
       .map(([t, v]) => `${t} (95% within ${secs(v)}, was ${secs(was.get(t)!)})`)
       .join(", ")}.`;
   }
-  const tally = `Tool for tool (${n(compared.length)} used in both windows),`;
+  // Tools used in both weeks but too rarely to compare: while any exists, the rise cannot be
+  // put down to the mix, since one of them may be the tool that got slower.
+  const before = new Set(b.byTool.map(([t]) => t));
+  const rare = s.byTool.filter(([t]) => before.has(t) && !compared.some(([c]) => c === t)).length;
+  const tally =
+    `Tool for tool (${n(compared.length)} compared` +
+    `${rare ? `, ${n(rare)} used too rarely to compare` : ""}),`;
   return compared.every(([t, v]) => v <= was.get(t)!)
-    ? ` ${tally} none got slower${rose ? ", so the rise is in which tools were used" : ""}.`
+    ? ` ${tally} none got slower${rose && !rare ? ", so the rise is in which tools were used" : ""}.`
     : ` ${tally} none slowed by 25% and half a second or more.`;
 }
 

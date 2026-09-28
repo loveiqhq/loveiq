@@ -260,6 +260,21 @@ describe("amountFrom", () => {
     await expect(read("Total 41.25")).resolves.toEqual({ value: 41.25, currency: "OTHER" });
   });
 
+  it("never lets a zero line hide a real total", async () => {
+    // Round-10 audit: once zero counted, the euro pass returned "Total VAT €0.00" before the
+    // dollar pass ran, and the USD 20 charge was neither written nor flagged.
+    await expect(read("Total $20.00 USD\nTotal VAT €0.00")).resolves.toEqual({
+      value: 20,
+      currency: "USD",
+    });
+    await expect(read("Amount due €0.00\nTotal 44.44")).resolves.toEqual({
+      value: 44.44,
+      currency: "OTHER",
+    });
+    // A bill that really is zero still says so.
+    await expect(read("Total €0.00 EUR")).resolves.toEqual({ value: 0, currency: "EUR" });
+  });
+
   it("returns null when there is no total at all", async () => {
     await expect(read("Thanks for your business!")).resolves.toBeNull();
   });

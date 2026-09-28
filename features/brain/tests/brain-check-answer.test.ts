@@ -41,6 +41,25 @@ describe("check_answer: what a source confirms", () => {
     expect(bad.text).toMatch(/the quote .*we will revisit subscriptions in 2027.* is not in/);
   });
 
+  it("confirms a day written the way a Gmail part writes it", () => {
+    // Round-10 audit: part 2 of a receipt thread says "Aug 29, 2026", not the ISO day.
+    const r = checkAnswer("On 2026-08-29 Atlassian charged USD 64.62 for Jira.", [
+      { id: "gmail/thread:1a04#2", text: "Receipt from Atlassian, Aug 29, 2026. Total $64.62 USD" },
+    ]);
+    expect(r.missing).toBe(0);
+    expect(r.text).toContain("2026-08-29 in gmail/thread:1a04#2");
+  });
+
+  it("matches a day only as a whole number, never inside a longer one", () => {
+    // Review on #392: "aug 2" sits inside "aug 29", and "2 august" inside "12 august".
+    const on = (day: string, text: string) =>
+      checkAnswer(`It was billed on ${day}.`, [{ id: "gmail/thread:x", text }]).missing;
+    expect(on("2026-08-02", "Receipt, Aug 29, 2026.")).toBe(1);
+    expect(on("2026-08-02", "Receipt, 12 August 2026.")).toBe(1);
+    expect(on("2026-08-02", "Receipt, Aug 2, 2026.")).toBe(0);
+    expect(on("2026-08-12", "Receipt, 12 August 2026.")).toBe(0);
+  });
+
   it("checks a sentence that names an id against that document alone", () => {
     const r = checkAnswer(
       "The decision/decision:2026-09-26-bfc66b0fe8 record puts September at 13,245 visitors.",

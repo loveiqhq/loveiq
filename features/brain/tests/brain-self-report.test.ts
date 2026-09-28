@@ -368,8 +368,7 @@ describe("renderSelfReport", () => {
     );
     expect(mixed).toContain("95% within 9.0 s (before, 0.3 s)");
     expect(mixed).toContain(
-      "Tool for tool (1 used in both windows), none got slower, " +
-        "so the rise is in which tools were used."
+      "Tool for tool (1 compared), none got slower, " + "so the rise is in which tools were used."
     );
 
     const slow = Array.from({ length: 20 }, () => row({ latency_ms: 2_000 }));
@@ -395,7 +394,7 @@ describe("renderSelfReport", () => {
     // A tool that rose, but not that far, is not blamed on the mix.
     const under = render(at(1_400), at(1_000));
     expect(under).toContain(
-      "Tool for tool (1 used in both windows), none slowed by 25% and half a second or more."
+      "Tool for tool (1 compared), none slowed by 25% and half a second or more."
     );
     expect(under).not.toContain("which tools were used");
     // Nothing to compare, and the report says so rather than stopping short.
@@ -434,7 +433,12 @@ describe("renderSelfReport", () => {
       windowStats([...fast, ...rare(1_000)], FLOOR)
     );
     expect(fewNow).not.toContain("list_sources (95% within");
-    expect(fewNow).toContain("Tool for tool (1 used in both windows)");
+    // Round-10 audit: list_sources went 1.0 s to 9.0 s, too rarely used to compare, so the
+    // rise is NOT put down to the mix.
+    expect(fewNow).toContain(
+      "Tool for tool (1 compared, 1 used too rarely to compare), none got slower."
+    );
+    expect(fewNow).not.toContain("which tools were used");
 
     // A recorded 0 ms is a baseline; a tool with no timings at all has none.
     const instant = windowStats(
