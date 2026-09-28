@@ -100,6 +100,21 @@ describe.skipIf(!hasSqlite)("readRows", () => {
     }
   );
 
+  it(
+    "throws on a lock even with no -wal file, so only a failed open falls back",
+    { timeout: 20_000 },
+    async () => {
+      // A rollback-journal database under an exclusive lock has no -wal at all. Falling
+      // back on anything but "unable to open" would read its main file mid-write.
+      const dir = mkdtempSync(join(tmpdir(), "sqlite-read-journal-"));
+      dirs.push(dir);
+      const db = join(dir, "t.db");
+      execFileSync("sqlite3", [db, "create table m(a); insert into m values (1), (2);"]);
+      await holdOpen(db, "begin exclusive;\ninsert into m values (9);");
+      expect(() => count(db)).toThrow(/locked|busy/i);
+    }
+  );
+
   it("does not fall back when it cannot tell whether a -wal exists", () => {
     // A -wal that is a symlink loop: access() says ELOOP, not "no such file", and the
     // read-only open fails the same way a missing pair does. Not knowing never falls back.
