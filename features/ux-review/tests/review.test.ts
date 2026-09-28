@@ -1463,19 +1463,43 @@ describe("the scanner scorecard", () => {
   });
 
   it("says a scanner is sampled on purpose instead of warning about it every week", () => {
-    // Dead-click stays focused because comprehensive would pass its credit cap.
-    // A weekly ⚠ for a decision already made is the warning people learn to skip.
-    const deliberate = UX_SCANNERS.find(
-      (s) => s.role !== "challenger" && s.samplingMode !== "comprehensive"
+    // A scanner kept focused to stay inside its credit cap. A weekly ⚠ for a
+    // decision already made is the warning people learn to skip. Proven against a
+    // constructed one: none is live since the dead-click scanner retired.
+    const coverage = [
+      { scanner: "A focused scanner", triggered: 350, watchable: 350, watched: 168 },
+    ];
+    const sampled = JSON.stringify(
+      buildScorecardMessage(
+        [sc("LoveIQ report UX", 1, 44)],
+        30,
+        new Set(),
+        new Date(),
+        null,
+        coverage,
+        new Set(["A focused scanner"])
+      ).blocks
     );
-    expect(deliberate).toBeDefined();
-    const out = JSON.stringify(
-      buildScorecardMessage([sc("LoveIQ report UX", 1, 44)], 30, new Set(), new Date(), null, [
-        { scanner: deliberate!.name, triggered: 350, watchable: 350, watched: 168 },
-      ]).blocks
+    expect(sampled).toContain("watched 168 of 350 (48%) — sampled on purpose");
+    expect(sampled).not.toMatch(/48%\) ⚠/);
+    // The same number from a scanner that should see everything is a warning.
+    const throttled = JSON.stringify(
+      buildScorecardMessage(
+        [sc("LoveIQ report UX", 1, 44)],
+        30,
+        new Set(),
+        new Date(),
+        null,
+        coverage,
+        new Set()
+      ).blocks
     );
-    expect(out).toContain("watched 168 of 350 (48%) — sampled on purpose");
-    expect(out).not.toMatch(/48%\) ⚠/);
+    expect(throttled).toMatch(/48%\) ⚠/);
+  });
+
+  it("samples on purpose only what git says is not comprehensive", () => {
+    // Every scanner live today watches everything, so none may carry the excuse.
+    expect(UX_SCANNERS.filter((s) => s.samplingMode !== "comprehensive")).toEqual([]);
   });
 
   it("reads triggered, watchable and watched in that order, with one join", async () => {
