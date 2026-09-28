@@ -30,7 +30,7 @@ import { splitEduLabel } from "../sections/eduPara";
 /** 374:224's title, the same on every V4 practice. */
 export const V4_PRACTICE_TITLE = "Try this & see what shifts";
 /** 153:2253's label, the same on every V4 article. */
-export const V4_ARTICLE_LABEL = "Go deeper & learn more";
+export const V4_ARTICLE_LABEL = "Learn more & go deeper";
 
 /** An adult reading prose on a phone; the result is rounded up to whole minutes. */
 const WORDS_PER_MINUTE = 200;

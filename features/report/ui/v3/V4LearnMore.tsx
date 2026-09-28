@@ -9,13 +9,14 @@ import V4Prose from "./V4Prose";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
- * "Go deeper & learn more" — the long-form article inside a chapter.
+ * "Learn more & go deeper" — the long-form article inside a chapter (the label
+ * read "Go deeper & learn more" until Mark's rehaul of 28.09).
  *
  * One component, three states, all drawn in Figma:
- *   153:2240  closed          teaser clamped to 240px, faded, "Read the full article" pill
+ *   153:2240  closed          teaser clamped to 196px, faded, "Read All" pill
  *   153:2260  expanded        the whole article, no gate
  *   153:2280  expanded+gated  free copy, then a blurred 580px window, a fade,
- *                             "Unlock the full article", and the Premium card over it
+ *                             "Show All", and the Premium card over it
  *
  * THE CLOSED STATE IS NEVER GATED. 153:2240 draws no paywall, so a locked and an
  * unlocked reader see the same teaser and the same link. The wall appears only on
@@ -38,12 +39,10 @@ import { guardedUnlock } from "./v4Unlock";
  */
 
 /**
- * How many blocks sit behind the closed state's 240px clamp.
+ * How many blocks sit behind the closed state's 196px clamp.
  *
- * Every frame draws ten lines of copy. Whether that measures 240px (153:2240,
- * 244:238 — ten lines plus one 16px paragraph gap) or 224px (235:234 — ten lines,
- * no gap) depends only on where the paragraph boundary falls, which is why the
- * clamp is per-article. Two blocks over-fill the box for any plausible copy, and
+ * Since the rehaul every frame clamps to 196 (A&B's own teaser, 202), whatever
+ * falls inside it. Two blocks over-fill the box for any plausible copy, and
  * rendering only those keeps what a screen reader announces in step with what a
  * sighted reader can see.
  */
@@ -108,29 +107,24 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement>(null);
   const [eyebrowLabel, eyebrowValue] = splitEyebrow(article.eyebrow);
+  const [titleLead, titleRest] = splitTitle(article.label);
 
   // `.rv4-doc` runs on copyable non-prod deploys, so a drag that ends inside the
   // card must not open the paywall — see v4Unlock.ts.
   const openPaywall = guardedUnlock(onUnlock);
-  // 235:234 moves the pill and trims the card's foot; each falls back in CSS to the
-  // other articles' values, so their cards carry no inline style.
-  const closedGeometry: Record<string, string> = {
-    ...(article.teaserPillBottomPx !== undefined
-      ? { "--rv4-pill-bottom": `${article.teaserPillBottomPx}px` }
-      : {}),
-    ...(article.closedPaddingBottomPx !== undefined
-      ? { "--rv4-closed-pb": `${article.closedPaddingBottomPx}px` }
-      : {}),
-    // 482:6479 — an article's own gate. The other articles keep 173:230's in CSS.
-    ...(article.gate
-      ? {
-          "--rv4-learn-band": `${article.gate.bandPx}px`,
-          "--rv4-learn-window": `${article.gate.windowPx}px`,
-          "--rv4-learn-premium-top": `${article.gate.premiumTopPx}px`,
-          "--rv4-learn-pill-bottom": `${article.gate.pillBottomPx}px`,
-        }
-      : {}),
-  };
+  // 482:6479 — an article's own gate. The other articles keep 173:230's in CSS, so
+  // their cards carry no inline style.
+  const closedGeometry: Record<string, string> = article.gate
+    ? {
+        "--rv4-learn-band": `${article.gate.bandPx}px`,
+        "--rv4-learn-window": `${article.gate.windowPx}px`,
+        "--rv4-learn-premium-top": `${article.gate.premiumTopPx}px`,
+        "--rv4-learn-pill-bottom": `${article.gate.pillBottomPx}px`,
+        ...(article.gate.footPx !== undefined
+          ? { "--rv4-learn-foot": `${article.gate.footPx}px` }
+          : {}),
+      }
+    : {};
   const nodes = article.nodeIds ?? { closed: "153:2240", open: "153:2260", gated: "153:2280" };
   const marks = [
     ...(article.gate ? ["has-own-gate"] : []),
@@ -143,19 +137,20 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
       ref={sectionRef}
       className={["rv4-learn", ...(isOpen ? ["is-open"] : []), ...marks].join(" ")}
       data-node-id={isOpen ? (locked ? nodes.gated : nodes.open) : nodes.closed}
-      data-name="Go deeper & learn more"
+      data-name="Learn more & go deeper"
       style={Object.keys(closedGeometry).length ? (closedGeometry as CSSProperties) : undefined}
     >
-      {/* 230:282 — the layer is named "Adding the right new input genuinely works
-       * for you"; the text is the reading time. Names in this file are stale. */}
+      {/* 230:284 — "Reading Time:" Light in title case, the value Bold in capitals. */}
       <p className="rv4-learn__eyebrow">
+        <span className={`rv4-learn__eyebrow-label${isTimeLabel(eyebrowLabel) ? " is-time" : ""}`}>
+          {eyebrowLabel}
+        </span>
         {eyebrowValue ? (
           <>
-            <span className="rv4-learn__eyebrow-label">{eyebrowLabel}</span> {eyebrowValue}
+            {" "}
+            <span className="rv4-learn__eyebrow-value">{eyebrowValue}</span>
           </>
-        ) : (
-          eyebrowLabel
-        )}
+        ) : null}
       </p>
 
       {/* 153:2247 */}
@@ -166,10 +161,11 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
         aria-controls={bodyId}
         onClick={() => setIsOpen((v) => !v)}
       >
-        <span className="rv4-learn__chip" aria-hidden="true">
-          <Image src="/report/v3/learn/chip-book.svg" alt="" width={17} height={17} unoptimized />
+        {/* 153:2272 — no chip since the rehaul; the title is centred on the disc. */}
+        <span className="rv4-learn__label">
+          <strong className="rv4-learn__lead">{titleLead}</strong>
+          {titleRest}
         </span>
-        <span className="rv4-learn__label">{article.label}</span>
         {/* 299:242 "Control / Disc" — the chevron in a 34px lavender disc. */}
         <span className="rv4-learn__chev" aria-hidden="true">
           <Image src="/report/v3/learn/chevron.svg" alt="" width={15} height={15} unoptimized />
@@ -190,10 +186,15 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
             >
               <V4Prose blocks={article.teaser ?? article.free.slice(0, TEASER_BLOCKS)} />
             </div>
-            {/* 456:261 "Show all pill — article" — Mark's standardised CTA for every
-             * Go deeper teaser: a 163x32 outlined pill over the fade. */}
-            <button type="button" className="rv4-learn__open" onClick={() => setIsOpen(true)}>
-              Read the full article
+            {/* 907:7664's "Read All" — 126x32, outlined, at 292 of the card. The name
+             * says what it opens; the visible words lead it. */}
+            <button
+              type="button"
+              className="rv4-learn__open"
+              aria-label="Read all of the article"
+              onClick={() => setIsOpen(true)}
+            >
+              Read all
             </button>
           </>
         ) : (
@@ -236,11 +237,14 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
                   <span />
                 </span>
                 <span className="rv4-learn__fade" aria-hidden="true" />
-                {/* 230:238 — cannot reveal anything, so it opens the paywall too. */}
-                {/* 663:1359 — Mark swapped the "Show More" link for this pill on
-                 * 2026-09-24 (1940252445). It still bubbles to the band. */}
-                <button type="button" className="rv4-learn__showmore">
-                  <span className="rv4-learn__showmore-label">Unlock the full article</span>
+                {/* 931:8110 "Show All" — cannot reveal anything, so it opens the paywall
+                 * too: it bubbles to the band. */}
+                <button
+                  type="button"
+                  className="rv4-learn__showmore"
+                  aria-label="Show all of the article"
+                >
+                  <span className="rv4-learn__showmore-label">Show all</span>
                 </button>
                 <V4PremiumCard />
               </div>

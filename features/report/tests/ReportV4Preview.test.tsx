@@ -73,7 +73,7 @@ const modalState = (c: HTMLElement) =>
  * exist once the reader has asked for the article.
  */
 const expandFirstCard = () =>
-  fireEvent.click(screen.getAllByRole("button", { name: "Read the full article" })[0]!);
+  fireEvent.click(screen.getAllByRole("button", { name: "Read all of the article" })[0]!);
 
 describe("/report-v4-preview — the paywall is live", () => {
   it("keeps the pricing modal shut until something asks for it", () => {
@@ -86,7 +86,7 @@ describe("/report-v4-preview — the paywall is live", () => {
   it('opens the pricing modal from "Show More" on a gated card', () => {
     const { container } = renderPreview(null);
     expandFirstCard();
-    fireEvent.click(screen.getAllByRole("button", { name: "Unlock the full article" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Show all of the article" })[0]!);
     expect(modalState(container)).toBe("open");
   });
 
@@ -111,7 +111,7 @@ describe("/report-v4-preview — the paywall is live", () => {
     const { container } = renderPreview("full_report");
     expandFirstCard();
     expect(container.querySelector(".rv4-learn__gate")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Unlock the full article" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show all of the article" })).toBeNull();
     expect(modalState(container)).toBe("closed");
   });
 

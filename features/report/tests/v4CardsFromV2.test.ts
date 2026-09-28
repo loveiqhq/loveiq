@@ -142,7 +142,7 @@ describe("v4CardsFromV2 — the Go deeper article", () => {
   it("fills V4's article from the 2.0 panel: fixed label, reading time, teaser then body, nothing gated", () => {
     const article = v4CardsFromV2({ powerCopy: POWER }).cards.get("power_orientation")!.article!;
     expect(article.label).toBe(V4_ARTICLE_LABEL);
-    expect(article.label).toBe("Go deeper & learn more");
+    expect(article.label).toBe("Learn more & go deeper");
     expect(article.eyebrow).toBe("Reading time: ~1 min.");
     expect(article.free[0]).toEqual({ kind: "para", runs: [{ text: POWER["edu.teaser"] }] });
     expect(textOf(article.free)).toContain("Yielding has its own power.");

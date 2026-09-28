@@ -45,9 +45,11 @@ export interface Report3ArticleGate {
   windowPx: number;
   /** The Premium card's top, from the gate's (173:230: 90). */
   premiumTopPx: number;
-  /** The "Unlock the full article" pill's bottom, over the window's foot (19.5). */
+  /** The "Show All" pill's bottom, over the window's foot (153:2280: -0.5). */
   pillBottomPx: number;
-  /** Whether the window fades out at its foot (173:230 does, 482:6479 does not). */
+  /** The card's edge under the window's foot, where the pill sits below it. */
+  footPx?: number;
+  /** Whether the window fades out at its foot (both do since the rehaul). */
   fade: boolean;
 }
 
@@ -71,10 +73,8 @@ export interface Report3LearnMoreArticle {
   /** 153:2253 — the Lora button label. */
   label: string;
   /**
-   * The closed state's clamp. The frame draws TEN LINES of copy; whether that
-   * measures 240px or 224px depends only on whether a paragraph gap happens to
-   * land inside them, and CSS cannot count lines across sibling paragraphs.
-   * Defaults to 240; Accelerators & Brakes' own teaser needs 247 (eleven lines).
+   * The closed state's clamp. Defaults to 196 since Mark's rehaul (28.09);
+   * Accelerators & Brakes' own teaser is 202.
    */
   teaserHeightPx?: number;
   /**
@@ -83,10 +83,6 @@ export interface Report3LearnMoreArticle {
    * Free copy: every reader receives it, locked or not.
    */
   teaser?: readonly Report3Block[];
-  /** The pill's bottom, this far above the teaser box's foot. CSS default 18.5. */
-  teaserPillBottomPx?: number;
-  /** The closed card's padding under the teaser. CSS default 20.5. */
-  closedPaddingBottomPx?: number;
   /** This article's frames, where they are not Typical Beliefs'. */
   nodeIds?: Report3ArticleNodes;
   /** This article's own gate, where its gated frame sets one. */
@@ -119,8 +115,6 @@ export interface Report3LearnMoreView {
   label: string;
   teaserHeightPx?: number;
   teaser?: readonly Report3Block[];
-  teaserPillBottomPx?: number;
-  closedPaddingBottomPx?: number;
   nodeIds?: Report3ArticleNodes;
   gate?: Report3ArticleGate;
   /** Set when the wall falls inside a paragraph: the window runs straight on. */
@@ -1396,7 +1390,7 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
   typical_beliefs: {
     chapterId: "typical_beliefs",
     eyebrow: "Reading time: ~15 min.",
-    label: "Go deeper & learn more",
+    label: "Learn more & go deeper",
     blocks: [...TYPICAL_BELIEFS_FREE, ...TYPICAL_BELIEFS_GATED],
     paywallAt: TYPICAL_BELIEFS_FREE.length,
   },
@@ -1404,13 +1398,12 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
   typical_arousal_accelerators_turn_ons_of_the_core_archetype: {
     chapterId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     eyebrow: "Reading time: ~12 min.",
-    label: "Go deeper & learn more",
-    // 235:234 is now the standard 359px card. Its teaser, 240:239, is the frame's own
-    // copy: broken after "A low sex drive." and "becomes possible." where the article
-    // runs on, and spelled "fantasise" where the article has "fantasize" (flagged for
-    // Mark). Eleven lines (247px), the pill 41.5px above the box's foot — sitting on
-    // the first faded line — and 13.5px of card under it. The copy stops where the
-    // frame's does; the rest of the sentence is clipped there anyway.
+    label: "Learn more & go deeper",
+    // 235:234 is the standard 343px card since the rehaul. Its teaser, 240:239, is the
+    // frame's own copy: broken after "A low sex drive." and "becomes possible." where
+    // the article runs on, and spelled "fantasise" where the article has "fantasize"
+    // (flagged for Mark), in a 202px box. The copy stops where the frame's does; the
+    // box clips it before that anyway.
     teaser: [
       p(
         t(
@@ -1418,9 +1411,7 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
         )
       ),
     ],
-    teaserHeightPx: 247,
-    teaserPillBottomPx: 41.5,
-    closedPaddingBottomPx: 13.5,
+    teaserHeightPx: 202,
     blocks: ACCELERATOR_BRAKES_BLOCKS,
     // 240:240 opens on the heading "The patterns underneath desire".
     paywallAt: 17,
@@ -1429,19 +1420,25 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
   typical_sexual_fantasy_amp_practice_tendencies: {
     chapterId: "typical_sexual_fantasy_amp_practice_tendencies",
     eyebrow: "Reading time: ~13 min.",
-    label: "Go deeper & learn more",
+    label: "Learn more & go deeper",
     blocks: FANTASY_REALITY_BLOCKS,
     // The only mid-paragraph cut: 482:6479 ends the free copy inside block 16, at the
     // end of a line at 393, and its blurred window resumes in the same paragraph.
     paywallAt: 16,
     paywallCharOffset: charsThrough(FANTASY_REALITY_BLOCKS[16], "skip everything before it."),
-    // 368:5450 is 359 tall: a pixel under 153:2240's foot.
-    closedPaddingBottomPx: 19.5,
     nodeIds: { closed: "368:5450", open: "244:258", gated: "482:6479" },
-    // 482:6479 ramps the blur in over the first 90px (488:6499's progressive blur),
-    // ends the window at the pill's foot 606px down, sets the card 229.5px in and
-    // draws no fade.
-    gate: { bandPx: 90, windowPx: 606, premiumTopPx: 229.5, pillBottomPx: 0, fade: false },
+    // 482:6479, redrawn in the rehaul (28.09): the blur ramps in over the first 112px
+    // (482:6499's progressive blur, five lines), the window runs 625px to the fade's
+    // foot, the card sits 161.5px in, "Show All" 4.3px under the window and the card's
+    // edge 45.5px under it.
+    gate: {
+      bandPx: 112,
+      windowPx: 625,
+      premiumTopPx: 161.5,
+      pillBottomPx: -35.3,
+      footPx: 45.5,
+      fade: true,
+    },
   },
 };
 
