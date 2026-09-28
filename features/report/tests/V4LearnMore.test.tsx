@@ -54,10 +54,23 @@ describe("V4LearnMore — closed (153:2240)", () => {
       "Reading time: ~15 min."
     );
     expect(container.querySelector(".rv4-learn__eyebrow-label")?.textContent).toBe("Reading time:");
-    expect(screen.getByText("Go deeper & learn more")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Read the full article" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Go deeper/ }).getAttribute("aria-expanded")).toBe(
+    // Mark's rehaul, 28.09 (1944397393; 230:284): "Reading Time:" in title case, the
+    // value in capitals — the time label is marked, and the value is its own span.
+    expect(container.querySelector(".rv4-learn__eyebrow-label")).toHaveClass("is-time");
+    expect(container.querySelector(".rv4-learn__eyebrow-value")?.textContent).toBe("~15 min.");
+    // 153:2273 — "Learn more & go deeper", "Learn more" in Bold; the book chip is gone.
+    const label = container.querySelector(".rv4-learn__label")!;
+    expect(label.textContent).toBe("Learn more & go deeper");
+    expect(label.querySelector("strong.rv4-learn__lead")?.textContent).toBe("Learn more");
+    expect(container.querySelector(".rv4-learn__chip")).toBeNull();
+    // 907:7664 — "Read All"; the accessible name keeps what it opens.
+    const pill = screen.getByRole("button", { name: "Read all of the article" });
+    expect(pill.textContent).toBe("Read all");
+    expect(screen.getByRole("button", { name: /Learn more/ }).getAttribute("aria-expanded")).toBe(
       "false"
+    );
+    expect(container.querySelector(".rv4-learn")!.getAttribute("data-name")).toBe(
+      "Learn more & go deeper"
     );
   });
 
@@ -95,12 +108,12 @@ describe("V4LearnMore — closed (153:2240)", () => {
     const { container } = render(<V4LearnMore article={ARTICLE} locked />);
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelector(".rv4-learn__gate")).toBeNull();
-    expect(screen.getByRole("button", { name: "Read the full article" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Read all of the article" })).toBeTruthy();
   });
 
   it("opens from either the header button or the read link", () => {
     const { container } = render(<V4LearnMore article={ARTICLE} />);
-    fireEvent.click(screen.getByRole("button", { name: "Read the full article" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read all of the article" }));
     expect(container.querySelector(".rv4-learn")?.className).toContain("is-open");
   });
 });
@@ -111,7 +124,7 @@ describe("V4LearnMore — expanded, unlocked (153:2260)", () => {
     const blocks = container.querySelectorAll(".rv4-prose__p, .rv4-prose__h, .rv4-prose__list");
     expect(blocks).toHaveLength(ARTICLE.free.length + ARTICLE.gated!.length);
     expect(container.querySelector(".rv4-learn__gate")).toBeNull();
-    expect(screen.queryByText("Unlock the full article")).toBeNull();
+    expect(screen.queryByText("Show all")).toBeNull();
     expect(screen.queryByText("Unlock full report")).toBeNull();
   });
 
@@ -134,7 +147,7 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     const { container } = render(<V4LearnMore article={ARTICLE} locked defaultOpen />);
     expect(container.querySelector(".rv4-learn__gated")).toBeTruthy();
     expect(container.querySelector(".rv4-learn__fade")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Unlock the full article" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show all of the article" })).toBeTruthy();
     expect(screen.getByText("Premium content")).toBeTruthy();
     expect(screen.getByText("14-day money-back guarantee")).toBeTruthy();
     expect(screen.getByText("No questions asked.")).toBeTruthy();
@@ -177,7 +190,7 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Unlock full report" }));
     expect(onUnlock).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Unlock the full article" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show all of the article" }));
     expect(onUnlock).toHaveBeenCalledTimes(2);
     fireEvent.click(container.querySelector(".rv4-learn__gate")!);
     expect(onUnlock).toHaveBeenCalledTimes(3);
@@ -223,7 +236,7 @@ describe("V4ChapterPart composition", () => {
     const { container } = render(<V4ChapterPart archetype="Spark Seeker" learnMore={learnMore} />);
     const open = container.querySelectorAll(".rv4-chapter.is-open");
     expect(open).toHaveLength(1);
-    expect(open[0]!.textContent).toContain("Go deeper & learn more");
+    expect(open[0]!.textContent).toContain("Learn more & go deeper");
   });
 
   it("drops the [Chapter Copy] placeholder the article replaces", () => {
@@ -329,8 +342,45 @@ describe("reportV3.css — learn-more contracts", () => {
     expect(rule(".rv3 .rv4-premium__cta {")).toContain("background: #fe6839");
   });
 
-  it("clamps the closed teaser to the frame's 240px box", () => {
-    expect(rule(".rv3 .rv4-learn__teaser {")).toContain("max-height: 240px");
+  // The rehaul (907:7664 and every article's instance): a 196px teaser, and "Read All"
+  // in a 126x32 pill at 292 of the 343 card, whatever the teaser's box.
+  it("clamps the closed teaser to 196px and sets the 126x32 'Read All' pill at 292", () => {
+    expect(rule(".rv3 .rv4-learn__teaser {")).toContain("max-height: 196px");
+    const pill = rule(".rv3 .rv4-learn__open {");
+    expect(pill).toContain("width: 126px");
+    expect(pill).toContain("height: 32px");
+    expect(pill).toContain("border: 1.5px solid #561dbd");
+    expect(pill).toContain("text-transform: capitalize");
+    // 292 of the card is 210.5 into the body, which starts at 81.5.
+    expect(pill).toContain("top: 210.5px");
+    expect(rule(".rv3 .rv4-learn:not(.is-open) .rv4-learn__body {")).toContain(
+      "min-height: 242.5px"
+    );
+    expect(rule(".rv3 .rv4-learn:not(.is-open) {")).toContain("padding-bottom: 18px");
+  });
+
+  it("draws the rehaul's lighter card, the eyebrow 18.5 from its edge", () => {
+    const css = rule(".rv3 .rv4-learn {");
+    expect(css).toContain("rgba(157, 138, 215, 0.07) 0%");
+    expect(css).toContain("rgba(157, 138, 215, 0) 100%");
+    expect(css).toContain("padding: 17.5px 22.5px 20.5px");
+  });
+
+  it("sets the rehaul's eyebrow and title type, the title centred on the disc", () => {
+    const eyebrow = rule(".rv3 .rv4-learn__eyebrow {");
+    expect(eyebrow).toContain("font-size: 12px");
+    expect(eyebrow).toContain("height: 12px");
+    expect(eyebrow).toContain("text-transform: none");
+    expect(rule(".rv3 .rv4-learn__eyebrow-label.is-time {")).toContain(
+      "text-transform: capitalize"
+    );
+    const value = rule(".rv3 .rv4-learn__eyebrow-value {");
+    expect(value).toContain("font-weight: 700");
+    expect(value).toContain("text-transform: uppercase");
+    expect(rule(".rv3 .rv4-learn__label {")).toContain("font-weight: 400");
+    expect(rule(".rv3 .rv4-learn__lead {")).toContain("font-weight: 700");
+    expect(rule(".rv3 .rv4-learn__button {")).toContain("align-items: center");
+    expect(V3_CSS).not.toContain(".rv3 .rv4-learn__chip");
   });
 
   it("keeps the append-only promise — nothing new above line 1884", () => {
@@ -342,10 +392,10 @@ describe("reportV3.css — learn-more contracts", () => {
 });
 
 /**
- * Accelerator & Brakes' closed card, 235:234 — the same 359px card as the others,
- * but its teaser is the frame's own copy (240:239 breaks after "A low sex drive."
- * and "becomes possible.", where the article runs on) in an 11-line box, with the
- * pill 16px higher (41.5px above the box's foot) and 13.5px under it.
+ * Accelerator & Brakes' closed card, 235:234 — the same 343px card as the others
+ * since the rehaul, but its teaser is the frame's own copy (240:239 breaks after
+ * "A low sex drive." and "becomes possible.", where the article runs on) in a 202px
+ * box, against the others' 196. The pill sits at 292 either way.
  */
 describe("V4LearnMore — Accelerator & Brakes closed (235:234)", () => {
   const AB_ID = "typical_arousal_accelerators_turn_ons_of_the_core_archetype";
@@ -370,9 +420,8 @@ describe("V4LearnMore — Accelerator & Brakes closed (235:234)", () => {
     const { container } = render(<V4LearnMore article={AB_OPEN} />);
     const card = container.querySelector<HTMLElement>(".rv4-learn")!;
     const teaser = container.querySelector<HTMLElement>(".rv4-learn__teaser")!;
-    expect(teaser.style.getPropertyValue("--rv4-teaser-h")).toBe("247px");
-    expect(card.style.getPropertyValue("--rv4-pill-bottom")).toBe("41.5px");
-    expect(card.style.getPropertyValue("--rv4-closed-pb")).toBe("13.5px");
+    expect(teaser.style.getPropertyValue("--rv4-teaser-h")).toBe("202px");
+    expect(card.hasAttribute("style")).toBe(false);
   });
 
   it("leaves Typical Beliefs' closed card exactly as it was", () => {
@@ -383,38 +432,49 @@ describe("V4LearnMore — Accelerator & Brakes closed (235:234)", () => {
     );
   });
 
-  it("reads the new custom properties with the old values as fallbacks", () => {
-    expect(V3_CSS).toContain("bottom: var(--rv4-pill-bottom, 18.5px)");
-    expect(V3_CSS).toContain("padding-bottom: var(--rv4-closed-pb, 20.5px)");
+  it("no longer moves the pill or the card's foot per article", () => {
+    expect(V3_CSS).not.toContain("--rv4-pill-bottom");
+    expect(V3_CSS).not.toContain("--rv4-closed-pb");
+    expect(V3_CSS).toContain("max-height: var(--rv4-teaser-h, 196px)");
   });
 });
 
-// Mark, 2026-09-24 (1940252445 on 348:213): "We swapped the CTA. New CTA here." The
-// gated article's "Show More" link (230:238, gone from the file) became 663:1359, the
-// "UNLOCK THE FULL ARTICLE" pill: 163x32, white, a 1.5px gradient outline, 10px bold
-// caps in the same gradient.
-describe("V4LearnMore — the gated article's CTA (663:1359)", () => {
-  it("names it as the frame does", () => {
+// Mark's rehaul, 28.09 (1944397393): the gated article's "UNLOCK THE FULL ARTICLE"
+// pill (663:1359) became 931:8110, "Show All" — 86x31, white, the same 1.5px gradient
+// outline and 10px bold label in the gradient, title case, its foot half a pixel under
+// the window's (153:2280: 4360 against 4359.5).
+describe("V4LearnMore — the gated article's CTA (931:8110)", () => {
+  it("names it as the frame does, and keeps what it opens in its name", () => {
     render(<V4LearnMore article={ARTICLE} locked defaultOpen />);
-    expect(screen.getByRole("button", { name: "Unlock the full article" })).toBeTruthy();
+    const pill = screen.getByRole("button", { name: "Show all of the article" });
+    expect(pill.textContent).toBe("Show all");
     expect(screen.queryByRole("button", { name: "Show More" })).toBeNull();
   });
 
   it("draws the pill", () => {
     const at = V3_CSS.lastIndexOf(".rv3 .rv4-learn__showmore {");
     const css = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
-    expect(css).toMatch(/width:\s*163px/);
-    expect(css).toMatch(/height:\s*32px/);
+    expect(css).toMatch(/width:\s*86px/);
+    expect(css).toMatch(/height:\s*31px/);
     expect(css).toMatch(/border:\s*1\.5px solid transparent/);
-    expect(css).toMatch(/text-transform:\s*uppercase/);
+    expect(css).toMatch(/text-transform:\s*capitalize/);
+    expect(css).toMatch(/bottom:\s*-0\.5px/);
     expect(css).toMatch(/#fb683e/i);
+  });
+
+  it("keeps 24 from the pill to the card's edge, as 153:2280 does", () => {
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn.is-open:has(.rv4-learn__gate) {\n  padding-bottom: calc(var(--rv4-learn-foot, 24.5px) - 1px);"
+    );
   });
 });
 
 /**
  * Fantasy vs. Reality's article on its own frames: 368:5450 closed, 244:258 open,
- * 482:6479 gated — a 90px band, a 606px window with the card 229.5px in and the pill
- * on its foot, no fade, and a window that runs on from the free copy mid-paragraph.
+ * 482:6479 gated. Since the rehaul (28.09) the gate is a 112px band in a 625px window
+ * with the card 161.5px in, a fade at its foot, the "Show All" pill 4.3px under the
+ * window and the card's edge 45.5 under it; the window still runs on from the free
+ * copy mid-paragraph.
  */
 describe("V4LearnMore — Fantasy vs. Reality's own gate (482:6479)", () => {
   const FVR = REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies!;
@@ -436,11 +496,12 @@ describe("V4LearnMore — Fantasy vs. Reality's own gate (482:6479)", () => {
     const { container } = render(<V4LearnMore article={LOCKED_FVR} locked defaultOpen />);
     const card = container.querySelector<HTMLElement>(".rv4-learn")!;
     expect(card).toHaveClass("has-own-gate");
-    expect(card).toHaveClass("no-fade");
-    expect(card.style.getPropertyValue("--rv4-learn-band")).toBe("90px");
-    expect(card.style.getPropertyValue("--rv4-learn-window")).toBe("606px");
-    expect(card.style.getPropertyValue("--rv4-learn-premium-top")).toBe("229.5px");
-    expect(card.style.getPropertyValue("--rv4-learn-pill-bottom")).toBe("0px");
+    expect(card).not.toHaveClass("no-fade");
+    expect(card.style.getPropertyValue("--rv4-learn-band")).toBe("112px");
+    expect(card.style.getPropertyValue("--rv4-learn-window")).toBe("625px");
+    expect(card.style.getPropertyValue("--rv4-learn-premium-top")).toBe("161.5px");
+    expect(card.style.getPropertyValue("--rv4-learn-pill-bottom")).toBe("-35.3px");
+    expect(card.style.getPropertyValue("--rv4-learn-foot")).toBe("45.5px");
   });
 
   it("runs the window on from the free copy, the paragraph unbroken to the eye", () => {
@@ -478,11 +539,14 @@ describe("V4LearnMore — Fantasy vs. Reality's own gate (482:6479)", () => {
       ".rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {\n  display: none;"
     );
     expect(V3_CSS).toContain(".rv3 .rv4-learn.is-continued .rv4-learn__gate {\n  padding-top: 0;");
-    // 482:6479 sets the card and the pill 6px right of the gate's middle. As an
+    // 482:6479 sets the card 6px and the pill 9.5px right of the gate's middle. As an
     // offset from the middle, so a wide column keeps them there: pinned to the 358
     // measure, they sat 109px left of the other articles' at 1280 (final review).
     expect(V3_CSS).toContain(
-      ".rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium,\n.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {\n  left: calc(50% + 6px);"
+      ".rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium {\n  left: calc(50% + 6px);"
+    );
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {\n  left: calc(50% + 9.5px);"
     );
     expect(V3_CSS).not.toContain("min(358px, 100% + 12px)");
   });

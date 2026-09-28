@@ -1619,7 +1619,7 @@ describe("ReportPage", () => {
       expect(power.querySelector(".report-power__card")).not.toBeNull();
       expect(power.querySelector(".report-power__details")).toBeNull();
       const learn = power.querySelector(".rv4-chapter__extras .rv4-learn")!;
-      expect(learn.querySelector(".rv4-learn__label")!.textContent).toBe("Go deeper & learn more");
+      expect(learn.querySelector(".rv4-learn__label")!.textContent).toBe("Learn more & go deeper");
       expect(learn.textContent).toContain(POWER["edu.teaser"]);
       const inner = power.querySelector(".rv3-chapter__body-inner")!;
       expect([...inner.children].map((el) => el.className.split(" ")[0])).toEqual([

@@ -520,12 +520,6 @@ export function splitArticleForReader(
     // The closed card's own copy and geometry, when the frame sets them (235:234).
     // Free copy, so it travels to a locked reader unchanged.
     ...(article.teaser ? { teaser: article.teaser } : {}),
-    ...(article.teaserPillBottomPx !== undefined
-      ? { teaserPillBottomPx: article.teaserPillBottomPx }
-      : {}),
-    ...(article.closedPaddingBottomPx !== undefined
-      ? { closedPaddingBottomPx: article.closedPaddingBottomPx }
-      : {}),
     // The frames and the gate, when the article has its own (482:6479).
     ...(article.nodeIds ? { nodeIds: article.nodeIds } : {}),
     ...(article.gate ? { gate: article.gate } : {}),

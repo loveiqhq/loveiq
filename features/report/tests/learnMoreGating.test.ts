@@ -199,19 +199,21 @@ describe("Fantasy vs. Reality's own gate (482:6479)", () => {
   it("hands the reader the frame's gate, and says the window runs on mid-paragraph", () => {
     for (const view of [locked, unlocked]) {
       expect(view.gate).toEqual({
-        bandPx: 90,
-        windowPx: 606,
-        premiumTopPx: 229.5,
-        pillBottomPx: 0,
-        fade: false,
+        // Redrawn in Mark's rehaul (28.09): a five-line band, a fade, the pill under it.
+        bandPx: 112,
+        windowPx: 625,
+        premiumTopPx: 161.5,
+        pillBottomPx: -35.3,
+        footPx: 45.5,
+        fade: true,
       });
       expect(view.continued).toBe(true);
       expect(view.nodeIds).toEqual({ closed: "368:5450", open: "244:258", gated: "482:6479" });
     }
   });
 
-  it("trims a locked reader's window to its own 606px, not the shared 656", () => {
-    expect(estimateBlocksPx(locked.gated!)).toBeGreaterThanOrEqual(606);
+  it("trims a locked reader's window to its own 625px, not the shared 656", () => {
+    expect(estimateBlocksPx(locked.gated!)).toBeGreaterThanOrEqual(625);
     expect(estimateBlocksPx(locked.gated!)).toBeLessThan(LOCKED_ARTICLE_WINDOW_PX);
   });
 

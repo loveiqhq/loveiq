@@ -3333,7 +3333,7 @@
   scroll-snap-align: start;
 }
 
-/* ══ "Go deeper & learn more" ═══════════════════════════════════════════════
+/* ══ "Learn more & go deeper" ═══════════════════════════════════════════════
  * Figma 153:2240 (closed) · 153:2260 (expanded) · 153:2280 (expanded & gated).
  * Three states of one card that sits inside a chapter, below its body copy.
  *
@@ -3341,39 +3341,45 @@
  * column to both canvas edges — the only full-bleed surface on the page.
  */
 .rv3 .rv4-learn {
-  background: linear-gradient(180deg, rgba(157, 138, 215, 0.1) 0%, rgba(157, 138, 215, 0.02) 100%);
+  /* Mark's rehaul (28.09, 1944397393; 153:2263): a 7% wash fading out. */
+  background: linear-gradient(180deg, rgba(157, 138, 215, 0.07) 0%, rgba(157, 138, 215, 0) 100%);
   border: 1px solid rgba(157, 138, 215, 0.22);
   border-radius: 27px;
   margin-inline: calc(var(--rv3-gutter) * -1);
-  /* 153:2243 — 22px each side, which Mark evened up so the text sits centred, and
-   * 20.5px under the teaser: the card grew from 339 to 359 for "a bit of padding
-   * to the bottom of the element". */
-  padding: 18.5px 22.5px 20.5px;
+  /* 153:2243 — 22px each side, which Mark evened up so the text sits centred; the
+   * eyebrow 18.5 from the card's edge, the 1px border and 17.5. */
+  padding: 17.5px 22.5px 20.5px;
   position: relative;
   width: calc(100% + var(--rv3-gutter) * 2);
 }
 
-/* 230:282 — the layer name is stale; the text is the reading time. */
+/* 230:284 — 12/12 in the green: "Reading Time:" Light in title case, the value Bold
+ * in capitals. Only a time label is title-cased (V4LearnMore marks it). */
 .rv3 .rv4-learn__eyebrow {
   color: #2e7d5b;
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
-  height: 25px;
+  height: 12px;
   line-height: 12px;
   margin: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
-/* 230:282 — "Reading time:" in Light, the value in Bold. */
 .rv3 .rv4-learn__eyebrow-label {
   font-weight: 300;
 }
+.rv3 .rv4-learn__eyebrow-label.is-time {
+  text-transform: capitalize;
+}
+.rv3 .rv4-learn__eyebrow-value {
+  font-weight: 700;
+  text-transform: uppercase;
+}
 
-/* 153:2247 — a FIXED 51px, not content height. The chip is 29px and sits 11px
- * down, so the row would collapse to 40 and cost the card 11px; the frame sets
- * the height explicitly and leaves 11px of air below the chip. */
+/* 153:2267 — a FIXED 51px, not content height, 11 down and the title and disc centred
+ * in the 40 under it: the title at 19, the disc at 14. */
 .rv3 .rv4-learn__button {
-  align-items: flex-start;
+  align-items: center;
   height: 51px;
   background: none;
   border: 0;
@@ -3386,31 +3392,18 @@
   text-align: left;
   width: 100%;
 }
-/* 153:2248 */
-.rv3 .rv4-learn__chip {
-  align-items: center;
-  background: rgba(157, 138, 215, 0.16);
-  border-radius: 9px;
-  display: flex;
-  flex: none;
-  height: 29px;
-  justify-content: center;
-  width: 29px;
-}
-.rv3 .rv4-learn__chip img {
-  display: block;
-  height: 17px;
-  width: 17px;
-}
-/* 153:2253 */
+/* 153:2273 — no chip since the rehaul: "Learn more" in Lora Bold, the rest Regular. */
 .rv3 .rv4-learn__label {
   color: #4000b6;
   flex: 1 1 auto;
   font-family: var(--font-serif);
   font-size: 20px;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: -0.24px;
   line-height: 24px;
+}
+.rv3 .rv4-learn__lead {
+  font-weight: 700;
 }
 /* 299:242 "Control / Disc" — the chevron now sits in a 34px lavender disc, the same
  * disc the chapters and the Snapshot rows use. */
@@ -3444,8 +3437,8 @@
   margin-bottom: 0;
 }
 
-/* 153:2240 — the teaser box is exactly 240px: ten 22.4px lines plus one 16px
- * paragraph gap. Mark faked the fade by colouring the last three lines
+/* 153:2240 — the teaser box is 196px since the rehaul. Mark fakes the fade by
+ * colouring the last three lines
  * progressively lighter (#7e7e7e / #b5b5b5 / #e5e5e5); a mask reproduces those
  * alphas without baking the cut into the copy, so it survives a reflow. */
 .rv3 .rv4-learn__teaser {
@@ -3467,7 +3460,7 @@
     rgba(0, 0, 0, 0.1) 96%,
     rgba(0, 0, 0, 0.05) 100%
   );
-  max-height: 240px;
+  max-height: 196px;
   overflow: hidden;
 }
 
@@ -3492,15 +3485,18 @@
   transform: translateX(-50%);
   white-space: nowrap;
 }
-/* 456:261 — Mark's standardised CTA for every "Go deeper & learn more" teaser:
- * a 163x32 outlined pill (22/10 padding, 1.5px #561dbd, white), 10px bold caps,
- * centred over the fade with its bottom 18.5px above the teaser's end. */
+/* 907:7664 "Read All" — a 126x32 outlined pill (22/10 padding, 1.5px #561dbd, white),
+ * 10px bold in title case, centred at a fixed 292 of the 343 card whatever the
+ * teaser's box — 210.5 into the body, which starts 81.5 down — so the closed body
+ * holds it: 210.5 + 32. */
+.rv3 .rv4-learn:not(.is-open) .rv4-learn__body {
+  min-height: 242.5px;
+}
 .rv3 .rv4-learn__open {
   align-items: center;
   background: #fff;
   border: 1.5px solid #561dbd;
   border-radius: 999px;
-  bottom: 18.5px;
   box-sizing: border-box;
   color: #561dbd;
   cursor: pointer;
@@ -3514,10 +3510,11 @@
   line-height: 12px;
   padding: 10px 22px;
   position: absolute;
-  text-transform: uppercase;
+  text-transform: capitalize;
+  top: 210.5px;
   transform: translateX(-50%);
   white-space: nowrap;
-  width: 163px;
+  width: 126px;
 }
 
 /* ── article body — 153:2277 ─────────────────────────────────────────────── */
@@ -3539,10 +3536,11 @@
  * at 0,4,0 against their 0,3,1. */
 .rv3 .rv3-chapter .rv4-learn .rv4-learn__eyebrow {
   color: #2e7d5b;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 12px;
+  text-transform: none;
 }
 .rv3 .rv3-chapter .rv4-learn .rv4-prose__p {
   color: #000;
@@ -3692,10 +3690,6 @@
   pointer-events: none;
   position: absolute;
   right: calc(var(--rv4-veil, 5px) * -3);
-}
-/* 230:238 — 596 - 576.5 = 19.5 from the window's foot. */
-.rv3 .rv4-learn__showmore {
-  bottom: 19.5px;
 }
 
 /* ── the "Premium content" card — 153:2301 ───────────────────────────────────
@@ -3855,12 +3849,10 @@
 
 /* Chapters 2 and 3 (235:*, 244:*) brought three variations with them. */
 
-/* The closed clamp is ten LINES of copy, which measures 240px when a paragraph
- * gap falls inside them (153:2240, 244:238) and 224px when none does (235:234).
- * CSS cannot count lines across sibling paragraphs, so the article carries the
- * value and this is only the default. */
+/* The closed clamp: 196 since the rehaul, 202 for 235:234's own teaser, which the
+ * article carries. */
 .rv3 .rv4-learn__teaser {
-  max-height: var(--rv4-teaser-h, 240px);
+  max-height: var(--rv4-teaser-h, 196px);
 }
 /* 244:276 stacks three bold questions with no rule between them. */
 .rv3 .rv4-prose__p.is-tight {
@@ -5037,16 +5029,16 @@
   margin-top: 16px;
 }
 
-/* ══ "Go deeper" closed card — per-article pill and foot · 235:234 ═════════════
- * Accelerator & Brakes' 359px card sets an eleven-line teaser (247) with the pill
- * 41.5px above the box's foot, on the first faded line, and 13.5px under it. The
- * values arrive on the card; the fallbacks are 153:2240's, so the other articles
- * are unchanged. */
-.rv3 .rv4-learn__open {
-  bottom: var(--rv4-pill-bottom, 18.5px);
-}
+/* ══ "Learn more" closed card — the foot · 28.09 rehaul ══════════════════════════
+ * Every article's closed card is 343 (907:7664, 153:2240, 235:234, 368:5450): the
+ * pill's foot at 324, and 19 under it — 18 and the border. */
 .rv3 .rv4-learn:not(.is-open) {
-  padding-bottom: var(--rv4-closed-pb, 20.5px);
+  padding-bottom: 18px;
+}
+/* 153:2280 sets the card's edge 24.5 under the window's foot, "Show All" sitting on
+ * it; 482:6479 carries its own, with its pill under the window. */
+.rv3 .rv4-learn.is-open:has(.rv4-learn__gate) {
+  padding-bottom: calc(var(--rv4-learn-foot, 24.5px) - 1px);
 }
 
 /* ══ Chapter title — the suffix on its own line · 1:865 (25.09) ══════════════
@@ -5282,12 +5274,12 @@
   min-height: 20px;
 }
 
-/* ══ The gated article's CTA — 663:1359 · 2026-09-24 ═════════════════════════════
- * "We swapped the CTA. New CTA here" (Mark, 1940252445): the underlined "Show More"
- * link (230:238, since deleted) became "UNLOCK THE FULL ARTICLE", a 163x32 white pill
- * with a 1.5px coral → rose → violet outline and its label in the same gradient,
- * 10/12 bold caps. The outline is a border-box layer under a white padding-box one,
- * as the Premium card's is; it keeps the old centred spot 19.5px off the foot. */
+/* ══ The gated article's CTA — 931:8110 · 28.09 rehaul ═══════════════════════════
+ * "UNLOCK THE FULL ARTICLE" (663:1359) became "Show All": an 86x31 white pill with a
+ * 1.5px coral → rose → violet outline and its label in the same gradient, 10/12 bold
+ * in title case, the label 9 from the top (9 / 10 padding). The outline is a
+ * border-box layer under a white padding-box one, as the Premium card's is. Its foot
+ * sits half a pixel under the window's (153:2280: 4360 against 4359.5). */
 .rv3 .rv4-learn__showmore {
   align-items: center;
   background:
@@ -5295,16 +5287,18 @@
     linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed) border-box;
   border: 1.5px solid transparent;
   border-radius: 999px;
+  bottom: -0.5px;
+  box-sizing: border-box;
   display: flex;
   font-size: 10px;
   font-weight: 700;
-  height: 32px;
+  height: 31px;
   justify-content: center;
   line-height: 12px;
-  padding: 0 22px;
+  padding: 0 22px 1px;
   text-decoration: none;
-  text-transform: uppercase;
-  width: 163px;
+  text-transform: capitalize;
+  width: 86px;
 }
 .rv3 .rv4-learn__showmore-label {
   -webkit-background-clip: text;
@@ -6730,14 +6724,15 @@ html {
 .rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {
   display: none;
 }
-/* 482:6479 sets the card and the pill 6px right of the gate's middle — the centre of
- * the article's 358 measure, which runs 12px into the card's right padding. Held as
- * an offset from the middle, the same through 393: pinned to the measure, a wide
- * column left them 179px in, 109px left of the other articles' at 1280 (final
- * review, 25.09). */
-.rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium,
-.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {
+/* 482:6479 sets the card 6px and, since the rehaul, the pill 9.5px right of the
+ * gate's middle. Held as an offset from the middle, the same through 393: pinned to
+ * the measure, a wide column left them 179px in, 109px left of the other articles'
+ * at 1280 (final review, 25.09). */
+.rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium {
   left: calc(50% + 6px);
+}
+.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {
+  left: calc(50% + 9.5px);
 }
 /* A wall inside a paragraph (482:6479 stacks its free and blurred text boxes flush):
  * the window carries straight on from the free copy's last line. */
