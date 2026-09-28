@@ -106,16 +106,23 @@ test("the final answer reaches the submit payload even when Next is clicked inst
     }
 
     const next = page.getByRole("heading", { name: nextQ.question, exact: true });
-    // A Next that stays disabled is an answer that did not register: say so in seconds,
-    // not at the four-minute test timeout.
     if (needsNext) {
+      // A Next that stays disabled here is an answer that did not register: say so in
+      // seconds, not at the four-minute test timeout.
       await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
       await next.waitFor({ state: "visible", timeout: 12_000 });
     } else {
       try {
         await next.waitFor({ state: "visible", timeout: 1500 });
       } catch {
-        await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
+        // A nudge, not an assertion: the heading decides, as in survey-questions.spec.ts.
+        // A slow runner can advance after this wait gives up. On Desktop Safari
+        // (2026-09-23) auto-advance landed 1s after the tap and the page painted nothing
+        // for 0.8s, so Next already belonged to the unanswered next question.
+        await page
+          .getByRole("button", { name: /next/i })
+          .click({ timeout: 4000 })
+          .catch(() => {});
         await next.waitFor({ state: "visible", timeout: 12_000 });
       }
     }
