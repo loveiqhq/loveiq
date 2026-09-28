@@ -81,8 +81,10 @@ export function partHead(book: Book, part: number, parts: number): string {
 
 /** A book's text as the brain stores it: every part fits the write cap WITH its head. */
 export function bookRows(book: Book, text: string, stampedAt: string): BrainRow[] {
-  // Sized for the longest head this book can have, so no part is cut at the write cap.
-  const widest = partHead(book, 9999, 9999).length + 1;
+  // Sized for the longest head this book can have, so no part is cut at the write cap, and
+  // 32 characters more: the write redacts secrets in URLs BEFORE the cap, and a redaction
+  // can be longer than what it replaces ("&code=12" becomes "&code=[redacted]").
+  const widest = partHead(book, 9999, 9999).length + 1 + 32;
   const parts = splitBody(text, BODY_LIMIT - widest);
   return parts.map((body, i) => ({
     source: "book",

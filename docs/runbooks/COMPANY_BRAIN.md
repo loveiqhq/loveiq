@@ -164,17 +164,18 @@ re-enabling it later means wiring the call back and setting `JIRA_*`, not rewrit
 it. Do not add `jira` back to the source list before chunks exist: naming a source
 with zero rows tells the model to search something that cannot answer.
 
-Books are a source, and an opt-in one (decision 2026-09-28). Eleven third-party books on
-love, desire and sex that we keep in Drive are loaded whole as `book` by
-`npm run brain:books`, which is safe to re-run. `brain_search` returns a `book` row only
-when the caller asks for the source (`sources: ["book"]`), because about 3,200 pages in the
-product's own vocabulary would otherwise crowd company answers out of the semantic
-top-120 before any demotion applied. Every part says whose work it is. The three other
-books in that folder (leadership, habits, persuasion) stay out, and the Drive walk still
-skips all fourteen.
-
 Both are idempotent and both sweep rows they did not rewrite, guarded by the
 write count **of their own source** so an empty run can never wipe a source.
+
+Books are a source, and an opt-in one (decision 2026-09-28). Eleven third-party books on
+love, desire and sex that we keep in Drive are loaded whole as `book` by `npm run
+brain:books`, which is safe to re-run. It is run by hand and sweeps nothing: a book
+taken out of `BOOKS` stays until its rows are deleted. `brain_search` returns a `book`
+row only when the caller asks for the source (`sources: ["book"]`), because about 3,200
+pages in the product's own vocabulary would otherwise crowd company answers out of the
+semantic top-120 before any demotion applied. Every part says whose work it is. The
+three other books in that folder (leadership, habits, persuasion) stay out, and the
+Drive walk still skips all fourteen.
 
 A document that is rewritten SHORTER does not wait for the sweep: `upsertChunks`
 deletes the parts its new version no longer has in the same write (`leftoverParts`,
@@ -1833,7 +1834,7 @@ forced into a closed set so ordering decisions within a topic cannot silently sp
 been read. The first design used a tombstone row in `brain_chunk` under its own source,
 on the reasoning that a new source is invisible to everything already written. It is not:
 `list_sources` can be taught to ignore one, but `brain_search` searches every source by
-default and returned it — 121 rows titled "Scanned for DECISIONS" surfacing on exactly the
+default (every one but the opt-in `book`, since 2026-09-28) and returned it — 121 rows titled "Scanned for DECISIONS" surfacing on exactly the
 word the decision record exists to answer.
 
 **GRADED 2026-09-13 ON THE FIRST 15: 15 of 15.** Every one was a real decision, ours, on

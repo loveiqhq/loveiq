@@ -738,7 +738,8 @@ export const TOOLS = [
           type: "array",
           items: { type: "string", enum: SOURCES_FOR_TEST },
           description:
-            "Restrict to these sources. Omit for all. Use it when you know where the " +
+            "Restrict to these sources. Omit for every source except `book`, which is " +
+            "searched only when named here. Use it when you know where the " +
             "answer lives — a board task, a Slack day, a call note — rather than " +
             "hoping the wording matches.",
         },
@@ -746,7 +747,8 @@ export const TOOLS = [
           type: "array",
           items: { type: "string", enum: SOURCES_FOR_TEST },
           description:
-            "Everything EXCEPT these. Use it when one source keeps answering a question " +
+            "Everything EXCEPT these (books stay out unless named in `sources`). Use it when " +
+            "one source keeps answering a question " +
             "it does not actually hold — the result says which source was held back and " +
             "by how much, so it tells you what to exclude.",
         },
@@ -2714,6 +2716,41 @@ function snakeCase(key: string): string {
  * result never hands the reader a decimal to re-threshold on (see the weak-match note).
  */
 /**
+ * Every stored part of one document, and how many the table holds.
+ *
+ * PAGED, because the order that pages reliably is `source_id`, and that is TEXT order:
+ * "#100" sorts before "#2". Under the old single read of 400, a 540-part book lost parts
+ * 5-9, 46-99 and more from its MIDDLE, while the warning said only the tail was missing.
+ * Reading every page and sorting by part number afterwards fixes both. Stops at 4,000
+ * parts; `total` still says when a document is bigger than that.
+ */
+async function documentRows(
+  select: string,
+  src: string,
+  base: string
+): Promise<{ rows: Array<Record<string, unknown>>; total: number | null }> {
+  const PAGE = 1000; // PostgREST's own ceiling on one response
+  const rows: Array<Record<string, unknown>> = [];
+  let total: number | null = null;
+  for (let offset = 0; offset < 4 * PAGE; offset += PAGE) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=${select}&source=eq.${encodeURIComponent(src)}` +
+        `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc` +
+        `&limit=${PAGE}&offset=${offset}`,
+      { headers: { Prefer: "count=exact" } }
+    );
+    if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
+    const counted = Number(res.headers.get("content-range")?.split("/")[1]);
+    total = Number.isFinite(counted) ? counted : null;
+    const page = (await res.json().catch(() => null)) as Array<Record<string, unknown>> | null;
+    if (!Array.isArray(page)) throw new Error("brain_chunk: non-array body");
+    rows.push(...page);
+    if (page.length < PAGE || (total !== null && rows.length >= total)) break;
+  }
+  return { rows, total };
+}
+
+/**
  * A cited document's whole text, title first, joined as fetch_document joins its parts,
  * or null when the id does not resolve. Throws on an outage, which is not a missing id.
  */
@@ -2723,12 +2760,7 @@ async function documentText(raw: string): Promise<string | null> {
   const rawId = slash > 0 ? raw.slice(slash + 1) : "";
   if (!SOURCES_FOR_TEST.includes(src) || !rawId) return null;
   const { base, sep } = documentParts(src, rawId);
-  const res = await supabaseFetch(
-    `/rest/v1/brain_chunk?select=source_id,title,body&source=eq.${encodeURIComponent(src)}` +
-      `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc&limit=400`
-  );
-  if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
-  const rows = (await res.json()) as Array<Record<string, unknown>>;
+  const { rows } = await documentRows("source_id,title,body,meta", src, base);
   const parts = dropLeftoverParts(
     rows
       .filter((r) => {
@@ -3587,21 +3619,14 @@ async function callTool(
      */
     let matchedTotal: number | null = null;
     try {
-      const res = await supabaseFetch(
-        `/rest/v1/brain_chunk?select=source,source_id,title,url,body,meta,period_end,updated_at` +
-          `&source=eq.${encodeURIComponent(src)}` +
-          // ORDERED. PostgREST returns rows in whatever order the plan produced, and the
-          // sort below could not repair it while every part reported number 1.
-          `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc&limit=400`,
-        { headers: { Prefer: "count=exact" } }
+      // Every page, then sorted by part number below: see documentRows.
+      const read = await documentRows(
+        "source,source_id,title,url,body,meta,period_end,updated_at",
+        src,
+        base
       );
-      if (!res.ok) {
-        return textResult(`Could not read that document (status ${res.status}).`, true);
-      }
-      const total = Number(res.headers.get("content-range")?.split("/")[1]);
-      matchedTotal = Number.isFinite(total) ? total : null;
-      rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
-      if (!Array.isArray(rows)) throw new Error("non-array body");
+      rows = read.rows;
+      matchedTotal = read.total;
     } catch {
       // Same doctrine as search: an outage is not an absence.
       return textResult(
@@ -3695,8 +3720,8 @@ async function callTool(
       `parts ${first}-${last} of ${parts.length}` +
       (more ? ` — call again with from_part=${nextPart} for the rest.` : " — this is all of it.") +
       (capped
-        ? ` WARNING: this document has ${matchedTotal} parts and only the first ${rows.length} ` +
-          `were read, so the count above understates it and the tail is NOT included.`
+        ? ` WARNING: this document has ${matchedTotal} parts and only ${rows.length} ` +
+          `were read, so the count above understates it and some parts are NOT included.`
         : "") +
       (src === "doc"
         ? ` This is one heading of a repository file; open ${String((taken[0]!.meta as Record<string, unknown>)?.path ?? "the file")} for the whole document.`
@@ -4089,6 +4114,8 @@ async function callTool(
     if (opts.sources?.length) qs.set("source", `in.(${opts.sources.join(",")})`);
     if (opts.excludeSources?.length)
       qs.append("source", `not.in.(${opts.excludeSources.join(",")})`);
+    // Books are opt-in here too, as in search_company_context: listed only when named.
+    if (!opts.sources?.includes("book")) qs.append("source", "neq.book");
     if (opts.since) qs.append("period_end", `gte.${opts.since}`);
     if (opts.until) qs.append("period_end", `lte.${opts.until}`);
     if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
@@ -5833,6 +5860,7 @@ async function callTool(
 
       return (
         `${source}: ${total} chunks · newest period ${period ?? "n/a (docs carry no period)"}` +
+        (source === "book" ? ` · searched only when named: sources ["book"]` : "") +
         ` · last wrote ${ingested}${health(source)}`
       );
     };
@@ -5953,7 +5981,9 @@ export const MCP_INSTRUCTIONS =
   "and sex that we keep, whole (Fisher, Perel, Nagoski, Lehmiller, Kleinplatz and Ménard, " +
   "Hite, Ryan and Jethá, Easton and Hardy, Winston, Roach, Bataille). Pass " +
   '`sources: ["book"]`; an ordinary search never returns them. They are other people\'s ' +
-  "work, not LoveIQ's claims, so name the book and author when you use one.\n\n" +
+  "work, not LoveIQ's claims, so name the book and author when you use one. A search " +
+  "shows a book's single best part; fetch_document starts at part 1, so pass from_part " +
+  "to read from the part the search found.\n\n" +
   "LIVE STATE, queried straight from the production database with full history and no " +
   "lag: payments and refunds, Resend email delivery and bounces, call invitations, " +
   "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
