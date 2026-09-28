@@ -2768,8 +2768,8 @@
   gap: 5.502px;
 }
 /* 1:195's own geometry, measured from the frame at 2x: the first card starts 18.5
- * into the section, the pager sits 58 below the cards, the source tiles 29 below
- * the pager, and the closing paragraph 23 below the tiles. V3's spacing left the
+ * into the section, the pager sits 11 below the cards (58 until 28.09), the source
+ * tiles 29 below the pager, and the closing paragraph 23 below the tiles. V3's spacing left the
  * deck 38 down — its 32px margin is for the "WHERE THIS COMES FROM" header that
  * deck mode drops — and the pager crowded the cards. */
 .rv3 .rv3-method.is-v4 .rv3-sci {
@@ -2783,10 +2783,12 @@
 }
 /* 1:195's pager: 6px dots on a 12px pitch, the active one a 16px pill in the
  * coral→orchid wash the source-card tiles carry. V3's is 4px dots and a solid
- * coral pill. */
+ * coral pill. Mark, 28.09 (1943962703): "There was too much space between the tiles
+ * and the navigational element". 1:197 sets it 11px under the cards, which is the
+ * track's 6px bottom padding and 5 more. */
 .rv3 .rv3-method.is-v4 .rv3-sci__dots {
   gap: 6px;
-  padding-top: 49px;
+  padding-top: 5px;
 }
 .rv3 .rv3-method.is-v4 .rv3-sci__dots span {
   height: 6px;

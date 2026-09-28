@@ -482,3 +482,17 @@ describe("reportV3.css — V4 science card icons without their boxes (493:7082)"
     expect(rule(".rv3 .rv3-method.is-v4 .rv3-sci__head")).toMatch(/gap: 9px/);
   });
 });
+
+// Mark, 28.09 (1943962703): "There was too much space between the tiles and the
+// navigational element. Updated here". 1:197 sets the pager (1:415) 11px under the tiles:
+// they end at 254 (6 + 248) and the dots start at 265. The track's own 6px bottom padding
+// is half of that; the pager's padding is the rest.
+describe("reportV3.css — V4 science pager under the tiles (1:197)", () => {
+  it("sets the dots 11px under the cards, not 55", () => {
+    const at = V3_CSS.lastIndexOf(".rv3 .rv3-method.is-v4 .rv3-sci__dots {");
+    expect(at).toBeGreaterThan(-1);
+    const dots = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(dots).toMatch(/padding-top: 5px/);
+    expect(V3_CSS).toMatch(/\.rv3-sci__track \{[^}]*padding: 6px 16px/);
+  });
+});
