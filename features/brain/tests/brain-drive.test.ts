@@ -109,8 +109,8 @@ let listTransientFailures = 0;
 let listTimeouts = 0;
 /** The first listing page names a successor whose body cannot be read. */
 let secondPageUnreadable = false;
-/** How a shortcut target lookup fails: a timeout, a status, or not at all. */
-let targetFailure: "timeout" | number | null = null;
+/** How a shortcut target lookup fails: a timeout, a status, an unreadable body, or not at all. */
+let targetFailure: "timeout" | "unreadable" | number | null = null;
 const timeout = (url: string) => new Error(`Request timeout after 20000ms: ${url}`);
 const httpCalls: string[] = [];
 /** Tab names and their rows, as the Sheets API would answer. */
@@ -195,6 +195,16 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     const meta = /\/files\/([^?]+)\?fields=id,name/.exec(url);
     if (meta) {
       if (targetFailure === "timeout") throw timeout(url);
+      if (targetFailure === "unreadable") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new DOMException("This operation was aborted", "AbortError");
+          },
+          text: async () => "",
+        };
+      }
       if (targetFailure !== null) return { ok: false, status: targetFailure, text: async () => "" };
       const target = targets[decodeURIComponent(meta[1])];
       return target
@@ -1581,10 +1591,12 @@ describe("a Drive request that times out is a refusal, not the end of the run", 
     expect(deletedIds()).not.toContain("doc:tgt1");
   });
 
-  it("keeps it when the lookup was overloaded, and not when the note is unshared", async () => {
+  it("keeps it when the lookup was overloaded or unreadable, and not when it is unshared", async () => {
     files = [FILE, OTHER, shortcut(1)];
-    targetFailure = 503;
-    expect((await ingestDrive(STAMP)).sweepBlocked).toBe(true);
+    for (const failure of [503, "unreadable"] as const) {
+      targetFailure = failure;
+      expect((await ingestDrive(STAMP)).sweepBlocked, String(failure)).toBe(true);
+    }
     targetFailure = 404; // the organiser has not shared it: the normal state
     expect((await ingestDrive(STAMP)).sweepBlocked).toBe(false);
   });
