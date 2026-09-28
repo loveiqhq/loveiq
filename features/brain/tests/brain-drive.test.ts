@@ -220,6 +220,7 @@ import {
 // The predicate lives in `upsert` rather than here: `drive` imports `gmail`, so the
 // mailbox walk cannot import it back, and the same contract arrives both ways.
 import { isLegalInstrument } from "@features/brain/server/ingest/upsert";
+import { COST_SHEET_ID } from "@features/brain/server/cost-sheet";
 
 const STAMP = "2026-08-28T04:47:00.000Z";
 const FILE = {
@@ -2073,5 +2074,14 @@ describe("sheetTabsWithRows", () => {
     sheetTabs = [];
     sheetValues = [];
     await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual([]);
+  });
+
+  it("leaves out the Business Case's example-figures tab, and only there", async () => {
+    // Its Core_KPI tab holds example figures, not measured ones (Eman, 2026-09-28).
+    // Both tabs hold rows, so only the skip can leave Core_KPI out.
+    sheetTabs = ["Costs", "Core_KPI"];
+    sheetValues = [{ values: [["Slack", "41.25"]] }, { values: [["Paid Reports", "600"]] }];
+    await expect(sheetTabsWithRows("t", COST_SHEET_ID)).resolves.toEqual(["Costs"]);
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["Costs", "Core_KPI"]);
   });
 });
