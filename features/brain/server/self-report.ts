@@ -55,7 +55,7 @@ export interface WindowStats {
   p50: number | null;
   p95: number | null;
   slowest: Array<[string, number]>;
-  /** Each tool with ten or more calls and its 95th percentile, slowest first. */
+  /** Each tool with ten or more calls and a recorded timing, and its 95th percentile, slowest first. */
   toolP95: Array<[string, number]>;
   unanswered: Array<{ query: string; times: number; best: number | null }>;
 }
@@ -110,10 +110,11 @@ export function windowStats(rows: CallRow[], floor: number): WindowStats {
   const tools = countBy(rows, (r) => r.tool ?? "unknown");
   const toolP95 = tools
     .filter(([, n]) => n >= 10)
-    .map(([tool]): [string, number] => [
-      tool,
-      percentile(latencies(rows.filter((r) => (r.tool ?? "unknown") === tool)), 0.95) ?? 0,
-    ])
+    .flatMap(([tool]): Array<[string, number]> => {
+      const p95 = percentile(latencies(rows.filter((r) => (r.tool ?? "unknown") === tool)), 0.95);
+      // No timing recorded is no figure, not a figure of 0 s.
+      return p95 === null ? [] : [[tool, p95]];
+    })
     .sort((a, b) => b[1] - a[1]);
   const slowest = toolP95.slice(0, 3);
   const asked = new Map<string, { query: string; times: number; best: number | null }>();
@@ -469,8 +470,8 @@ export function renderSelfReport(
     );
     // Tool for tool, because the overall figure moves with WHICH tools were used: in the
     // week to 2026-09-28 it went from 3.1 s to 5.6 s on 155 Figma renders, with no tool slower.
-    const was = new Map(b.toolP95.filter(([, v]) => v > 0));
-    const compared = s.toolP95.filter(([t, v]) => v > 0 && was.has(t));
+    const was = new Map(b.toolP95);
+    const compared = s.toolP95.filter(([t]) => was.has(t));
     const slower = compared.filter(([t, v]) => v > was.get(t)! * 1.25 && v - was.get(t)! >= 500);
     const rose = s.p95 !== null && b.p95 !== null && s.p95 > b.p95 * 1.25;
     out.push(

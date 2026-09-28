@@ -380,6 +380,24 @@ describe("renderSelfReport", () => {
     expect(slower).toContain(
       "Slower than before, tool for tool: fetch_document (95% within 2.0 s, was 0.3 s)."
     );
+
+    // A recorded 0 ms is a baseline; a tool with no timings at all has none.
+    const instant = windowStats(
+      Array.from({ length: 20 }, () => row({ latency_ms: 0 })),
+      FLOOR
+    );
+    const fromZero = renderSelfReport(
+      report({ now: windowStats(slow, FLOOR), before: instant }),
+      FLOOR,
+      { withQuestions: false, nowMs: NOW }
+    );
+    expect(fromZero).toContain("fetch_document (95% within 2.0 s, was 0.0 s)");
+    const untimed = windowStats(
+      Array.from({ length: 20 }, () => row({ latency_ms: null })),
+      FLOOR
+    );
+    expect(untimed.toolP95).toEqual([]);
+    expect(untimed.slowest).toEqual([]);
   });
 
   it("says who used it once people sign in, and says nothing about it before", () => {
