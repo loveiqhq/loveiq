@@ -6201,6 +6201,12 @@ html {
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__meter-bars {
   min-height: 16px;
 }
+/* Mark, 28.09 (1943985000): "Decreased scale bars width/heigth". Each bar (15:933) is
+ * 104 x 4 now, the 7px fill clipped to 4. The 104 was already built (thread 1937167646);
+ * the top edge stays where it was, so the scale below does not move. */
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__seg {
+  height: 4px;
+}
 /* The deck's headline in a fixed 29px box under the 8px pad (instance 15:847,
  * I15:847;11070:796), so the body keeps its place. The peeking card draws the same box
  * at 0.94. Mark, 28.09 (1943979946): "Changed font size" — Lora 18/24 (was 20) in both
