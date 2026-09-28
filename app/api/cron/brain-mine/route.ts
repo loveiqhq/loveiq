@@ -54,20 +54,16 @@ export async function GET(request: Request) {
 
   try {
     /**
-     * TWELVE, not eight: eight per day could never spend a twenty-a-day allowance.
+     * TWELVE A RUN, a cap sized for the Gemini free tier the miner used until 2026-09-24:
+     * one document is one model call, the tier allowed 20 a day, and the brief and the
+     * Slack bot shared it. Eight was too few (four runs averaged 6.5 documents, 2026-09-15)
+     * and 20 would have spent the whole day's allowance.
      *
-     * One document costs one model call, the free tier allows 20 a day, and this cron is
-     * the only scheduled consumer of any size. At 8 the ceiling was the LIMIT rather than
-     * the quota — measured 2026-09-15, four runs averaged 6.5 documents, 81% of the cap,
-     * while a dozen requests a day went unused. 97 documents remain; 12 a day drains them
-     * in about eight days against fifteen.
-     *
-     * Not 20. `brain-brief` and `/api/slack/events` draw on the same allowance, and the
-     * Slack bot answers on demand — taking the whole quota here would leave the team's
-     * questions unanswerable for the rest of the Pacific day. Twelve leaves roughly eight.
-     *
-     * Time is not the constraint: ~3s per document plus a ~32s per-minute wait every five
-     * puts twelve at ~100s against a 240s budget and a 300s ceiling.
+     * Since then the miner runs on the Team seat in GitHub Actions (brain-daily.yml,
+     * `BRAIN_LLM_CLI=claude`), whose limits are rolling windows shared with the team's own
+     * Claude Code sessions, and steady state is about half a meeting a day, so twelve
+     * still drains a backlog. Time: twelve documents took 116-154s on the seat
+     * (2026-09-25 to 09-27), inside a 240s budget and a 300s ceiling.
      */
     const limit = Number(new URL(request.url).searchParams.get("limit") ?? 12);
     result = await mineDecisions(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 40) : 12);

@@ -139,7 +139,8 @@ describe("an alert dedup key must name the cron that owns it", () => {
  *
  * Moot while the model is the Claude subscription (`BRAIN_LLM_CLI`), whose limits are
  * rolling windows rather than a Pacific day. Kept because the Gemini lane still exists,
- * and the schedule, now in brain-daily.yml, still satisfies it.
+ * and the schedule, on Vercel's clock since 2026-09-28 (features/cron/server/github-jobs.ts),
+ * still satisfies it.
  */
 describe("brain-mine runs on a fresh Gemini quota", () => {
   it("is scheduled after midnight Pacific in both summer and winter", () => {
