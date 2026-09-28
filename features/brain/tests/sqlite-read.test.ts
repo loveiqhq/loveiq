@@ -3,7 +3,7 @@
  * container from a test process makes macOS ask for access, and the run hangs.
  */
 import { type ChildProcess, execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -99,6 +99,16 @@ describe.skipIf(!hasSqlite)("readRows", () => {
       expect(() => count(db)).toThrow(/locked|busy/i);
     }
   );
+
+  it("does not fall back when it cannot tell whether a -wal exists", () => {
+    // A -wal that is a symlink loop: access() says ELOOP, not "no such file", and the
+    // read-only open fails the same way a missing pair does. Not knowing never falls back.
+    const db = walDb();
+    rmSync(`${db}-wal`, { force: true });
+    rmSync(`${db}-shm`, { force: true });
+    symlinkSync(`${db}-wal`, `${db}-wal`);
+    expect(() => count(db)).toThrow(/unable to open database file/);
+  });
 
   it("still throws for a database that is not there", () => {
     expect(() => count(join(tmpdir(), "no-such-dir-sqlite-read", "t.db"))).toThrow();
