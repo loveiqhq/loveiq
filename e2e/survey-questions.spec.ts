@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
 import { orderEmailLast, orderedOptions } from "../features/survey/ui/questionOrder";
+import { instantScroll } from "./fixtures/instant-scroll";
 
 /**
  * Walks the whole survey in a real browser and checks the three behaviours the survey
@@ -42,6 +43,8 @@ const WRITE_ROUTES = [
 ];
 
 async function blockWrites(page: Page) {
+  // Every test here also taps through the survey, and calls this first.
+  await instantScroll(page);
   for (const pattern of WRITE_ROUTES) {
     await page.route(pattern, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
