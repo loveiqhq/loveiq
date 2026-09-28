@@ -118,7 +118,16 @@ vi.mock("@shared/http/ratelimit", () => ({
 import { flushAfterResponse } from "@shared/http/after-response";
 import { recordToolCall } from "@features/brain/server/log";
 import { forgetSignIns } from "@features/brain/server/sign-in";
-import { outrankingHeldBack, POST, RELEVANCE_FLOOR, TOOLS } from "@/app/api/mcp/route";
+import {
+  outrankingHeldBack,
+  POST,
+  RELEVANCE_FLOOR,
+  SOURCES_FOR_TEST,
+  TOOLS,
+} from "@/app/api/mcp/route";
+import { atomsIn } from "@features/brain/server/check-answer";
+import { citesSources } from "@features/brain/server/night-shift";
+import { BOOKS, partHead } from "@/scripts/brain-books";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
@@ -1232,6 +1241,44 @@ describe("/api/mcp", () => {
         expect(r.content[0]!.text).toMatch(
           /440 \(nearest there: 434\) is not in analytics\/monthly:2026-09/
         );
+      });
+
+      it("checks a book against the part cited, without the head every part opens with", async () => {
+        // Joined whole, a book's 300-odd parts held nearly every integer, so a made-up
+        // "73%" was "found" in "Part 73 of 328".
+        const book = BOOKS.find((b) => b.title === "Mating in Captivity")!;
+        const id = `book:${book.id}#73`;
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.book") &&
+            path.includes(`source_id=eq.${encodeURIComponent(id)}`)
+              ? [{ body: `${partHead(book, 73, 328)}\nDesire needs space between self and other.` }]
+              : [],
+        }));
+        const r = await call({
+          answer:
+            `Perel reports that 73% of couples lose desire after a first child (book/${id}). ` +
+            `She writes "desire needs space between self and other" (book/${id}).`,
+          sources: [`book/${id}`],
+        });
+        expect(r.content[0]!.text).toContain(`73% is not in book/${id}`);
+        expect(r.content[0]!.text).toContain(
+          `"desire needs space between self and other" in book/${id}`
+        );
+        // Its digits are an id, not two more figures.
+        expect(r.content[0]!.text).toContain("Checked 1 figure and 1 quote");
+      });
+
+      it("reads every indexed source's ids as ids, here and in the Night Shift", () => {
+        // `book` reached neither list when it was indexed, so a book id's digits were
+        // figures and a Night Shift answer citing only books "cited no sources".
+        for (const src of SOURCES_FOR_TEST) {
+          expect(atomsIn(`See ${src}/x:13DIy7#46.`), src).toEqual([]);
+          expect(citesSources(`See ${src}/x:13DIy7#46.`), src).toBe(true);
+        }
       });
 
       it("says which ids it could not find, and refuses when it can find none", async () => {

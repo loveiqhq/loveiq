@@ -136,7 +136,7 @@ export function failedRow(req: ResearchRequest, reason: string, now: Date): Brai
  * cites nothing is the model talking from memory, which is exactly what this is not for.
  */
 const OWN_ID =
-  /\b(?:drive|notion|gmail|slack|whatsapp|calendar|evidence|decision|notice|research|ga4|report|domain|skill|plan|people|search_console|clarity|analytics)\/[\w:.#-]{3,}/;
+  /\b(?:drive|notion|gmail|slack|whatsapp|calendar|evidence|decision|notice|research|ga4|gsc|report|domain|skill|plan|people|clarity|analytics|doc|book)\/[\w:.#-]{3,}/;
 export function citesSources(text: string): boolean {
   return /https?:\/\/[^\s)\]]+/.test(text) || OWN_ID.test(text);
 }

@@ -1927,9 +1927,9 @@ export const TOOLS = [
       "Every number, date and quoted phrase in it is looked up in those documents, and anything " +
       "not there is listed with the nearest figure the source does hold, so a rounding slip or " +
       "a wrong number is caught before a person reads it. A sentence that names an id is " +
-      "checked against that document alone. It cannot judge wording, only whether each figure " +
-      "and quote is in the cited record, and it says which sentences it could not check. Use it " +
-      "on any answer with numbers.",
+      "checked against that document alone, and a book against the part cited. It cannot judge " +
+      "wording, only whether each figure and quote is in the cited record, and it says which " +
+      "sentences it could not check. Use it on any answer with numbers.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2750,6 +2750,10 @@ async function documentRows(
   return { rows, total };
 }
 
+/** The line every book part opens with (partHead in scripts/brain-books.ts). */
+const BOOK_PART_HEAD =
+  /^[^\n]* A third-party book in our library, not LoveIQ's own claim\. Part \d+ of \d+\.\n/;
+
 /**
  * A cited document's whole text, title first, joined as fetch_document joins its parts,
  * or null when the id does not resolve. Throws on an outage, which is not a missing id.
@@ -2759,6 +2763,18 @@ async function documentText(raw: string): Promise<string | null> {
   const src = slash > 0 ? raw.slice(0, slash) : "";
   const rawId = slash > 0 ? raw.slice(slash + 1) : "";
   if (!SOURCES_FOR_TEST.includes(src) || !rawId) return null;
+  if (src === "book") {
+    // The PART cited, never the whole book, and without the head every part opens with.
+    // Joined, 300-odd parts of prose held nearly every integer ("Part 73 of 328", page
+    // numbers), so any figure attributed to a book was "found" in it.
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=body&source=eq.book&source_id=eq.${encodeURIComponent(rawId)}&limit=1`
+    );
+    if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
+    const rows = (await res.json().catch(() => null)) as Array<{ body?: unknown }> | null;
+    if (!Array.isArray(rows)) throw new Error("brain_chunk: non-array body");
+    return rows[0] ? String(rows[0].body ?? "").replace(BOOK_PART_HEAD, "") : null;
+  }
   const { base, sep } = documentParts(src, rawId);
   const { rows } = await documentRows("source_id,title,body,meta", src, base);
   const parts = dropLeftoverParts(
