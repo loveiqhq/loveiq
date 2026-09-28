@@ -403,7 +403,7 @@ function toolForTool(s: WindowStats, b: WindowStats): string {
   const rose = s.p95 !== null && b.p95 !== null && s.p95 > b.p95 * 1.25;
   if (!compared.length) {
     return rose
-      ? " No tool used ten or more times this week was used before, so this cannot be compared tool for tool."
+      ? " No tool used ten or more times this week had three or more calls before, so this cannot be compared tool for tool."
       : "";
   }
   const slower = compared.filter(([t, v]) => v >= was.get(t)! * 1.25 && v - was.get(t)! >= 500);

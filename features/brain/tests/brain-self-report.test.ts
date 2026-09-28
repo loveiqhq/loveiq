@@ -400,7 +400,7 @@ describe("renderSelfReport", () => {
     expect(under).not.toContain("which tools were used");
     // Nothing to compare, and the report says so rather than stopping short.
     expect(render(windowStats(renders, FLOOR), before)).toContain(
-      "No tool used ten or more times this week was used before, so this cannot be compared tool for tool."
+      "No tool used ten or more times this week had three or more calls before, so this cannot be compared tool for tool."
     );
 
     // Round-9 audit: 8 calls at 1.0 s before, 60 at 9.0 s now, is a slower tool, not a mix.
