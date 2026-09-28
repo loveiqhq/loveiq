@@ -381,6 +381,23 @@ describe("reportV3.css — belief panel contracts", () => {
     expect(block(".rv3 .rv4-sun {")).toContain("0 6px 14px -8px rgba(46, 125, 91, 0.34)");
   });
 
+  // Mark, 28.09 (1944062651): "We decrease the background color intensity". 368:5482
+  // washes 0.10 to 0.01 of its coral now, 368:5623 0.08 to 0.01 of its green (both were
+  // 0.11 to 0.03).
+  it("washes both panels as lightly as the frame now does", () => {
+    const turn = block(".rv3 .rv4-turn {");
+    expect(turn).toContain(
+      "linear-gradient(180deg, rgba(194, 84, 47, 0.1) 0%, rgba(194, 84, 47, 0.01) 100%), #fff"
+    );
+    const sun = block(".rv3 .rv4-sun {");
+    expect(sun).toContain(
+      "linear-gradient(180deg, rgba(46, 125, 91, 0.08) 0%, rgba(46, 125, 91, 0.01) 100%), #fff"
+    );
+    // No V4 panel rule keeps the old wash (V3's own panel, frozen at line 1514, does).
+    expect(turn).not.toContain("0.03)");
+    expect(sun).not.toContain("0.03)");
+  });
+
   it("collapses the shift with 0fr, not a max-height guess", () => {
     // Rows land on the frame's 126px whether their shift wraps to one line or two,
     // which a fixed max-height cannot do.
