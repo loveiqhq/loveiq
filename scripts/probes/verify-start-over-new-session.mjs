@@ -24,12 +24,15 @@
  * survey again after completing it, none with a second submission.
  *
  * A third door (round-10 audit): Back to the consent screen, then the browser's
- * Forward button, remounts the survey without passing "I agree" at all.
+ * Forward button, remounts the survey without passing "I agree" at all. A fourth
+ * (round-11): the landing page's question saves an answer, and /survey then opens
+ * straight into the survey, again past "I agree".
  *
  * This probe puts the tab in the finished state three times per device:
  *   A. on the already-finished screen, presses "Start a new one";
  *   B. on the consent screen, ticks both boxes and presses "I agree";
  *   C. on the consent screen with the survey one step ahead, presses Forward;
+ *   D. with an answer saved by the landing page's question, opens /survey;
  * and each time reads the session id the next run would submit under. It stops
  * there on purpose, and every request to /api/ other than a GET is aborted:
  * finishing the survey would write a real submission, and the engine that B and
@@ -151,6 +154,41 @@ async function forwardAgain(page) {
   return ["ok", "Forward after finishing starts the new run under a new session id"];
 }
 
+/** D. An answer from the landing page's question, then /survey. */
+async function landingAgain(page) {
+  await page.evaluate(
+    ([token, old]) => {
+      localStorage.removeItem("loveiq-survey-index");
+      localStorage.removeItem("loveiq-survey-pending-completion");
+      sessionStorage.removeItem("loveiq-survey-step");
+      // The shape saveLandingPrefill writes.
+      localStorage.setItem(
+        "loveiq-survey-answers",
+        JSON.stringify({
+          answers: { probe_landing_question: 3 },
+          startedAt: new Date().toISOString(),
+          prefilled: ["probe_landing_question"],
+        })
+      );
+      sessionStorage.setItem("loveiq-survey-session", old);
+      sessionStorage.setItem("loveiq-completed-report", token);
+    },
+    [TOKEN, OLD_SESSION]
+  );
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 120_000 });
+  await page.waitForTimeout(3_000);
+  const state = await sessionAfter(page);
+  if (state.step !== "6")
+    return ["inconclusive", `the saved answer did not open the survey (step ${state.step})`];
+  if (state.session === OLD_SESSION) {
+    return [
+      "fail",
+      "a landing answer after finishing starts the new run under the finished session id",
+    ];
+  }
+  return ["ok", "a landing answer after finishing starts the new run under a new session id"];
+}
+
 let bad = 0;
 let unmeasured = 0;
 
@@ -188,6 +226,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
       ["A", startOver],
       ["B", agreeAgain],
       ["C", forwardAgain],
+      ["D", landingAgain],
     ]) {
       const [verdict, what] = await scenario(page);
       if (verdict === "fail") {
