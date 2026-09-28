@@ -426,6 +426,16 @@ describe("renderSelfReport", () => {
     expect(quiet).toContain("search_company_context (95% within 9.0 s, was 1.0 s)");
     expect(quiet).not.toContain("which tools were used");
 
+    // Five calls this week are too few to name as a slowdown, however slow they were.
+    const rare = (ms: number) =>
+      Array.from({ length: 5 }, () => row({ tool: "list_sources", latency_ms: ms }));
+    const fewNow = render(
+      windowStats([...fast, ...rare(9_000)], FLOOR),
+      windowStats([...fast, ...rare(1_000)], FLOOR)
+    );
+    expect(fewNow).not.toContain("list_sources (95% within");
+    expect(fewNow).toContain("Tool for tool (1 used in both windows)");
+
     // A recorded 0 ms is a baseline; a tool with no timings at all has none.
     const instant = windowStats(
       Array.from({ length: 20 }, () => row({ latency_ms: 0 })),
