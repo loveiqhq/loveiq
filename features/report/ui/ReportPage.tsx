@@ -3229,6 +3229,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     accelCopy: data.accelCopy ?? null,
     fantasyCopy: data.fantasyCopy ?? null,
     partnershipCopy: data.partnershipCopy ?? null,
+    // No card, but V4 takes their "What you will learn" out too (review 28.09).
+    growthCopy: data.growthCopy ?? null,
+    readingCopy: data.readingCopy ?? null,
   };
   const v4Chapters =
     isV4 && effectiveViewArchetype === (data.contentArchetype ?? primaryArchetype)
@@ -3297,9 +3300,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             initiationConfig={data.initiationConfig ?? null}
             libidoCopy={v2Copies.libidoCopy}
             libidoConfig={data.libidoConfig ?? null}
-            growthCopy={data.growthCopy ?? null}
+            growthCopy={v2Copies.growthCopy}
             growthRungs={data.growthRungs ?? null}
-            readingCopy={data.readingCopy ?? null}
+            readingCopy={v2Copies.readingCopy}
             partnershipCopy={v2Copies.partnershipCopy}
             partnershipLoop={data.partnershipLoop ?? null}
             partnership={data.partnership ?? null}

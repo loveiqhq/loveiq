@@ -86,17 +86,31 @@ describe("v4CardsFromV2 — what it takes off each 2.0 section", () => {
     expect(power["edu.teaser"]).toBeNull();
     expect(power["edu.body.p1"]).toBeNull();
     expect(power["edu.body.p2"]).toBeNull();
-    for (const kept of [
-      "edu.eyebrow",
-      "learn.eyebrow",
-      "learn.body",
-      "takeaway",
-      "body.p1",
-      "zone",
-    ]) {
+    for (const kept of ["edu.eyebrow", "takeaway", "body.p1", "zone"]) {
       expect(power[kept as keyof typeof power], kept).toBe(POWER[kept as keyof typeof POWER]);
     }
     expect(power.locked).toBe(false);
+  });
+
+  // Mark, 28.09: "can we take out the 'what you will learn' text sections from the V2
+  // report chapters. This is the equivalent of the new teaser texts."
+  it("takes 'What you will learn' off every unlocked copy, with a card or without", () => {
+    const growth = {
+      "learn.eyebrow": "What you will learn",
+      "learn.body": "Growth.",
+      locked: false,
+    };
+    const { copies } = v4CardsFromV2({ powerCopy: POWER, growthCopy: growth });
+    for (const copy of [copies.powerCopy!, copies.growthCopy!]) {
+      expect(copy["learn.eyebrow"]).toBeNull();
+      expect(copy["learn.body"]).toBeNull();
+    }
+  });
+
+  it("leaves 'What you will learn' on a locked copy, beside its paywall", () => {
+    const locked = { ...POWER, locked: true };
+    const { copies } = v4CardsFromV2({ powerCopy: locked });
+    expect(copies.powerCopy!["learn.body"]).toBe(POWER["learn.body"]);
   });
 
   it("takes exactly a practical panel's copy off its section, keeping its label", () => {
