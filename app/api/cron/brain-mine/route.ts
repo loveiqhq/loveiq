@@ -10,31 +10,31 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** Eight meetings at up to 60s each will not fit; the loop stops when the clock does
- *  and the rest are simply still unmined tomorrow. */
+/** A run is capped (twelve meetings, about two and a half minutes on the Team seat); if the
+ *  clock runs out first, the loop stops and the rest are simply still unmined tomorrow. */
 export const maxDuration = 300;
 
 /**
  * GET /api/cron/brain-mine
  *
- * Turns meeting notes into decision records, eight meetings a night.
+ * Turns meeting notes into decision records, up to twelve meetings a run, once a day.
  *
  * The decision record is the best evidence this corpus holds and the thinnest thing in
  * it — FOUR records against 22,951 chunks — because it depends on somebody remembering
  * to write one. Meanwhile 121 meeting documents carry 356 passages of explicit decision
  * language that nobody ever promoted to a record.
  *
- * EIGHT PER RUN, AND THE BACKLOG DRAINS IN A FORTNIGHT. The model runs on Google's free
- * tier, which is rate-limited by request; a burst of 121 calls simply fails partway and
- * leaves the corpus half-mined with no record of where it stopped. Steady state is about
- * 0.5 meetings a day, so eight is ~16x headroom and absorbs any backlog on its own.
+ * A CAPPED DAILY RUN, NOT ONE BURST. A burst over the whole backlog would hit the model's
+ * limit partway and leave the corpus half-mined with no record of where it stopped.
+ * Steady state is about 0.5 meetings a day, so the cap (explained where it is set,
+ * below) is ample headroom and absorbs a backlog on its own.
  *
  * A RATE LIMIT IS NOT AN EMPTY MEETING. When the model refuses, the loop stops and the
  * unread meetings keep no tombstone — otherwise a quota exhaustion would mark a dozen
  * meetings "scanned, nothing found" and they would never be read again.
  *
  * Nothing here posts to Slack. Mined decisions appear in search like any other, marked
- * as reconstructed; a nightly "I read eight meetings" message is the kind of noise that
+ * as reconstructed; a daily "I read twelve meetings" message is the kind of noise that
  * gets a channel muted.
  */
 export async function GET(request: Request) {
