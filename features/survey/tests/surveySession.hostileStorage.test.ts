@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   __resetInMemorySessionIdForTests,
+  completedReportToken,
+  forgetCompletedReport,
   getSessionId,
+  rememberCompletedReport,
 } from "@features/survey/ui/hooks/surveySession";
 
 /**
@@ -72,6 +75,22 @@ describe("getSessionId under hostile storage", () => {
       // Partial save and tracking both call this; two different ids would
       // split one visitor into two sessions.
       expect(getSessionId()).toBe(getSessionId());
+    } finally {
+      restore();
+    }
+  });
+
+  it("remembers a finished run for the page load, and starting again gets a new id", () => {
+    // With storage refused, the finished marker could not be kept at all, so starting
+    // again in the same page load reused the in-memory id and lost the retake.
+    const restore = breakStorage("throws");
+    try {
+      const finished = getSessionId();
+      rememberCompletedReport("rpt_finished");
+      expect(completedReportToken()).toBe("rpt_finished");
+      forgetCompletedReport();
+      expect(completedReportToken()).toBeNull();
+      expect(getSessionId()).not.toBe(finished);
     } finally {
       restore();
     }

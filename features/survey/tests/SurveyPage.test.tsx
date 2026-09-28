@@ -114,6 +114,26 @@ describe("SurveyPage", () => {
       expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
     });
 
+    it("starts a new submission when they go back to consent and agree again", async () => {
+      // Round-9 audit: Back from the screens after submitting lands on consent, and
+      // "I agree" opened a new run under the finished id, which the server answers with
+      // the OLD submission. The same loss as "Start a new one" before #378.
+      const user = userEvent.setup();
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      // The survey session key, as the probe verify-start-over-new-session.mjs seeds it.
+      sessionStorage.setItem("loveiq-survey-session", "finished-run");
+      sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+      render(<SurveyPage />);
+
+      const agree = await screen.findByRole("button", { name: /i agree/i });
+      for (const box of screen.getAllByRole("checkbox")) await user.click(box);
+      await user.click(agree);
+
+      expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
+      expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
+      expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
+    });
+
     it("does not hijack a reader who still has answers", async () => {
       // Someone mid-survey belongs in the engine. The finished screen is only
       // for the case where the step logic would otherwise show the intro.

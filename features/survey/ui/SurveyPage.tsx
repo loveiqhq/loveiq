@@ -1347,6 +1347,10 @@ const SurveyPage: FC = () => {
   }, []);
 
   const handleAgree = useCallback(() => {
+    // A tab that already finished and is starting again (Back from the screens after
+    // submitting, then "I agree") gets a new submission, as "Start a new one" does. Under
+    // the finished id, submitSurveyOnce() returned the old submission and kept nothing.
+    if (completedReportToken()) forgetCompletedReport();
     setStep(TOTAL_STEPS + 2);
   }, []);
 
