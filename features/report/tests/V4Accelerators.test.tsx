@@ -184,9 +184,15 @@ describe("reportV3.css — chapter body contracts", () => {
     expect(css).toContain("margin: 0 0 16.19px");
   });
 
-  it("ramps the gate over 314:307's two lines, blurs the rest by the veil, and floats the card at 197", () => {
-    expect(rule(".rv3 .rv4-ab__ramp {")).toContain("--rv4-band: 51.2px");
-    expect(rule(".rv3 .rv4-ab__blurred {")).toContain("filter: blur(var(--rv4-veil, 5px))");
+  // Mark, Figma 314:307 (28.09): "Please update how we blur this text section. Staging
+  // was too aggressive". 314:284 draws everything after the first paragraph under ONE
+  // layer blur of 2.5, with no ramp; matched on the render, that is CSS 1.75px.
+  it("blurs the gate evenly and lightly, as 314:284 draws it, and floats the card at 197", () => {
+    expect(rule(".rv3 .rv4-ab__gated {")).toContain(
+      "filter: blur(calc(var(--rv4-veil, 5px) * 0.35))"
+    );
+    expect(rule(".rv3 .rv4-ab__ramp > .rv4-pblur {")).toContain("display: none");
+    expect(V3_CSS).not.toMatch(/.rv3 .rv4-ab__blurred {[^}]*filter/);
     // 314:308 sits 197 into the section; the gate opens 10 + 21.6 + 16.19 + two
     // 25.6 lines + 16 = 114.99 in, so the card is 82 below it.
     expect(rule(".rv3 .rv4-ab__gate .rv4-premium {")).toContain("top: 82px");

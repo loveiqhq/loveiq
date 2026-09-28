@@ -5014,16 +5014,18 @@
   --rv4-band: 51.2px;
   position: relative;
 }
-.rv3 .rv4-ab__blurred {
-  filter: blur(var(--rv4-veil, 5px));
+/* Mark, 314:307 (28.09): "Please update how we blur this text section. Staging was
+ * too aggressive." 314:284 now draws everything after the first paragraph under ONE
+ * layer blur of 2.5, with no ramp: matched on the render, CSS 1.75px, a third of the
+ * veil. The only locked surface lighter than the veil, on Mark's word. */
+.rv3 .rv4-ab__gated {
+  filter: blur(calc(var(--rv4-veil, 5px) * 0.35));
+}
+.rv3 .rv4-ab__ramp > .rv4-pblur {
+  display: none;
 }
 .rv3 .rv4-ab__gate .rv4-premium {
   top: 82px;
-}
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .rv3 .rv4-ab__ramp {
-    filter: blur(calc(var(--rv4-veil, 5px) / 2));
-  }
 }
 /* 310:229's 16px continues to the practice card and the article. */
 .rv3 .rv4-ab + .rv4-try {
