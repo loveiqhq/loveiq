@@ -386,7 +386,16 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
 
   it("steps the two meters 77px apart, as 15:926's fixed 57px rows do", () => {
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__meters")).toMatch(/grid-auto-rows: 57px/);
-    // 15:932: the bars row is 7px tall around its 6px track.
+    // 15:932: the bars row keeps its 7px under the 9px pad, so the scale stays put.
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__meter-bars")).toMatch(/min-height: 16px/);
+  });
+
+  // Mark, 28.09 (1943985000): "Decreased scale bars width/heigth". 15:933 and its
+  // siblings are 104 x 4 now, the 7px fill clipped to 4; the 104 was already built.
+  it("draws each meter bar 4px tall on its 104px track", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__seg")).toMatch(/height: 4px/);
+    expect(V3_CSS).toMatch(
+      /\.rv3 \.rv3-arch__meter-bars \{[^}]*gap: 10px[^}]*padding-inline: 8\.5px/
+    );
   });
 });
