@@ -1,7 +1,9 @@
 import {
   COST_SHEET_ID,
   COST_SHEET_READ_URL,
+  monthColumns,
   NEVER_ATTACHES,
+  serialMonth,
   TOOL_CATEGORIES,
 } from "@features/brain/server/cost-sheet";
 import { supabaseFetch } from "@features/admin/server/supabase";
@@ -36,20 +38,17 @@ export interface CostLine {
   months: Map<string, number | null>;
 }
 
-/** The month a Costs-tab date serial stands for (a spreadsheet day count from 1899-12-30). */
-export function serialMonth(serial: number): string {
-  return new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000).toISOString().slice(0, 7);
-}
-
 export function parseCosts(rows: unknown[][]): { months: string[]; lines: CostLine[] } {
   const months: string[] = [];
   const monthCols: number[] = [];
-  (rows[0] ?? []).forEach((v, i) => {
-    if (typeof v === "number" && v > 40_000 && v < 80_000) {
-      months.push(serialMonth(v));
-      monthCols.push(i);
-    }
-  });
+  // The same months the invoice filing writes: the longest run of monthly dates in row 1, so
+  // an "as of" date or a total column is not a month to one of them and a month to the other.
+  const row1 = rows[0] ?? [];
+  const run = monthColumns(row1);
+  for (let i = run?.first ?? 0; run && i <= run.last; i++) {
+    months.push(serialMonth(row1[i] as number));
+    monthCols.push(i);
+  }
   const header = rows.findIndex((r) => String(r?.[0] ?? "").trim() === "Name");
   const lines: CostLine[] = [];
   for (const r of header < 0 ? [] : rows.slice(header + 1)) {

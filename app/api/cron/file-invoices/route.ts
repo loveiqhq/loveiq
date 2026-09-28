@@ -31,8 +31,9 @@
  *     renewal confirmations ONLY to the portfolio owner's personal account, so no
  *     domain invoice can ever reach a loveiq.org mailbox. That is by design, not
  *     a lost email — do not "fix" it by widening the search.
- * These three are reported as "no invoice seen" rather than omitted, because an
- * absent line is indistinguishable from a working one at a glance.
+ * These, and Google Ads (billed in its own console), are reported as "no invoice seen"
+ * rather than omitted, because an absent line is indistinguishable from a working one at a
+ * glance.
  *
  * Schedule: 06:40 UTC on the 3rd of each month — late enough that the vendors
  * billing on the 1st and 2nd (Google, CookieYes) have sent, early enough to be
@@ -46,7 +47,9 @@ import {
   COST_SHEET_ID,
   COST_SHEET_READ_URL,
   COST_SHEET_TAB,
+  monthColumns,
   NEVER_ATTACHES,
+  serialMonth,
 } from "@features/brain/server/cost-sheet";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
@@ -66,16 +69,13 @@ const DRIVE_ROOT = "1ml7y_fMcGB8YFpelnQJzWWcpEgTExBBO";
 const SHEET_ID = COST_SHEET_ID;
 const SHEET_TAB = COST_SHEET_TAB;
 
-/**
- * Column I is November 2025 — the first month the sheet models. Every other month
- * column is offset from there, so a month maps to a column by counting from it.
- */
-const FIRST_COL_INDEX = 8; // 0-based, i.e. "I"
-const FIRST_YEAR = 2025;
-const FIRST_MONTH = 11;
-
 /** Gmail lookback. Wider than a month so a failed run still catches up next time. */
 const LOOKBACK_DAYS = 45;
+
+/** Write the reconciled figures only from a complete walk (see the write below). */
+export function shouldWriteSheet(updates: unknown[], incomplete: string[]): boolean {
+  return updates.length > 0 && incomplete.length === 0;
+}
 
 /**
  * True only when EVERY day of that month is inside the lookback window.
@@ -87,11 +87,6 @@ const LOOKBACK_DAYS = 45;
  * partial one, and then carry that wrong figure forward across every forecast
  * month. A partial month must be filed but never reconciled.
  */
-/** Write the reconciled figures only from a complete walk (see the write below). */
-export function shouldWriteSheet(updates: unknown[], incomplete: string[]): boolean {
-  return updates.length > 0 && incomplete.length === 0;
-}
-
 export function monthFullyCovered(year: number, month: number, windowStartMs: number): boolean {
   return Date.UTC(year, month - 1, 1) >= windowStartMs;
 }
@@ -99,8 +94,8 @@ export function monthFullyCovered(year: number, month: number, windowStartMs: nu
 /**
  * ECB euro reference rates, USD per EUR, by date.
  *
- * The Costs tab is denominated in euros and five of the nine vendors invoice in
- * dollars, so something has to convert. The ECB's daily reference rate is the
+ * The Costs tab is denominated in euros and most vendors invoice in dollars, so
+ * something has to convert. The ECB's daily reference rate is the
  * published one, needs no credential, and — crucially — is dated: a charge is
  * converted at the rate on ITS OWN invoice date, not at today's. Converting
  * everything at a single current rate would silently restate history every month.
@@ -191,14 +186,12 @@ export function driveQuoteEscape(name: string): string {
  * The mailbox a vendor bills is not guessable and has bitten us: Supabase mails
  * mo@, Google and Slack mail mb@, everything else mails ec@. Walking all of them
  * is cheaper than maintaining a map that goes stale when somebody is offboarded.
+ *
+ * Not admin@: it is an alias of teamwork@ (its Gmail profile IS teamwork@), so walking
+ * both read one mailbox twice. An email that still reaches two mailboxes is counted once,
+ * by its Message-ID, in the walk below.
  */
-const MAILBOXES = [
-  "ec@loveiq.org",
-  "mb@loveiq.org",
-  "mo@loveiq.org",
-  "teamwork@loveiq.org",
-  "admin@loveiq.org",
-];
+const MAILBOXES = ["ec@loveiq.org", "mb@loveiq.org", "mo@loveiq.org", "teamwork@loveiq.org"];
 
 /**
  * `sheetName` must match column A of the Costs tab exactly — the row is looked up
@@ -253,12 +246,18 @@ export function colLetter(index0: number): string {
   return s;
 }
 
-/** Returns null when the month predates the sheet or runs past its last column. */
-export function columnForMonth(year: number, month: number, lastIndex: number): string | null {
-  const offset = (year - FIRST_YEAR) * 12 + (month - FIRST_MONTH);
-  const idx = FIRST_COL_INDEX + offset;
-  if (offset < 0 || idx > lastIndex) return null;
-  return colLetter(idx);
+/**
+ * The 0-based column of a month inside that run, or null when the sheet does not model it.
+ * Counting from a fixed "column I is November 2025" sent every write to the wrong month the
+ * day a column was inserted.
+ */
+export function columnForMonth(header: unknown[], year: number, month: number): number | null {
+  const run = monthColumns(header);
+  const want = `${year}-${String(month).padStart(2, "0")}`;
+  for (let i = run?.first ?? 0; run && i <= run.last; i++) {
+    if (serialMonth(header[i] as number) === want) return i;
+  }
+  return null;
 }
 
 async function gapi<T>(url: string, token: string, init?: RequestInit): Promise<T> {
@@ -276,14 +275,12 @@ async function gapi<T>(url: string, token: string, init?: RequestInit): Promise<
  * A charged total, WITH the currency it was charged in.
  *
  * The currency is not decoration. The Costs tab is denominated in euros, but
- * Vercel, Resend, GitHub, CookieYes and Atlassian all invoice in dollars — five
- * of the nine vendors this cron watches. Returning a bare number let the first
- * version write "20.00" into a euro column for a USD 20 charge, which is not a
- * rounding error, it is the wrong number.
+ * Vercel, Resend, GitHub, CookieYes and Atlassian all invoice in dollars.
+ * Returning a bare number let the first version write "20.00" into a euro column
+ * for a USD 20 charge, which is not a rounding error, it is the wrong number.
  *
- * We do NOT convert. An FX rate applied silently here would disagree with what
- * the card was actually charged, and would drift every month. A foreign-currency
- * invoice is reported to #ops with its amount and left for a human.
+ * Dollars are converted at the ECB rate on the invoice's own date (toEur). A total
+ * with no currency marker beside it is reported to #ops for a person, never guessed.
  */
 export interface Charge {
   value: number;
@@ -394,7 +391,16 @@ export async function GET(request: Request) {
     }
 
     const filed: Filed[] = [];
-    const unconverted: string[] = [];
+    let convertedAny = false;
+    /**
+     * vendor|month -> EVERY charge of that month as it was charged, for the line a person
+     * must enter by hand. All of them, not just the ones that failed to convert: a month
+     * with a EUR 450.78 invoice and a 66.82 one with no currency listed only the 66.82, so
+     * whoever typed it in would have understated the month by the 450.78.
+     */
+    const chargesAs = new Map<string, string[]>();
+    // One email can reach two walked mailboxes (a vendor addressing two of us); counted once.
+    const seenMessageIds = new Set<string>();
     /**
      * Vendor+month -> summed charge. BOTH halves matter.
      *
@@ -517,6 +523,17 @@ export async function GET(request: Request) {
         );
         if (!vendor) continue;
 
+        // Only now is this copy known to be usable: a copy relayed through a group, whose
+        // sender line no longer names the vendor, must not shadow the direct one.
+        // The header's case varies by sender ("Message-ID", "Message-Id").
+        const messageId = (msg.payload.headers || []).find(
+          (h) => h.name.toLowerCase() === "message-id"
+        )?.value;
+        if (messageId) {
+          if (seenMessageIds.has(messageId)) continue;
+          seenMessageIds.add(messageId);
+        }
+
         const parts: Array<{
           filename?: string;
           body?: { attachmentId?: string; data?: string };
@@ -617,16 +634,25 @@ export async function GET(request: Request) {
           const eur = toEur(messageAmount, rates, isoDate);
           const key = `${vendor.sheetName}|${month}`;
           const prior = charged.get(key);
+          const as = `${messageAmount.currency} ${messageAmount.value.toFixed(2)}`;
+          chargesAs.set(key, [
+            ...(chargesAs.get(key) ?? []),
+            !eur
+              ? messageAmount.currency === "OTHER"
+                ? `${messageAmount.value.toFixed(2)} with no currency beside the total`
+                : `${as} on ${isoDate}, no ECB rate for it`
+              : messageAmount.currency === "EUR"
+                ? as
+                : `${as} (EUR ${eur.value.toFixed(2)} at the ECB rate)`,
+          ]);
           if (!eur) {
-            unconverted.push(
-              `${vendor.sheetName} ${month}: ${messageAmount.currency} ${messageAmount.value.toFixed(2)}`
-            );
             // Poison the month so a half-converted sum is never written.
             charged.set(key, {
               value: (prior?.value ?? 0) + messageAmount.value,
               currency: "OTHER",
             });
           } else {
+            if (messageAmount.currency !== "EUR") convertedAny = true;
             charged.set(key, {
               value: (prior?.value ?? 0) + eur.value,
               currency: prior?.currency === "OTHER" ? "OTHER" : "EUR",
@@ -639,16 +665,21 @@ export async function GET(request: Request) {
     // ---- reconcile against the sheet ------------------------------------
     const grid = await gapi<{ values?: string[][] }>(COST_SHEET_READ_URL, sheetToken);
     const rows = grid.values || [];
-    // Bound the model to the month columns that actually exist. Row 1 carries a
-    // date serial per month, so its width IS the model's width. Deriving this from
-    // the widest row instead would let one stray cell out near AZ convince the
-    // carry-forward to write twenty-odd columns past February 2027, outside
-    // anything the header or the =SUM row describes.
-    const lastIndex = (rows[0]?.length ?? 0) - 1;
+    // A carry-forward ends at the last month of row 1's month run (monthColumns), never at
+    // the widest row: one stray cell out near AZ would have written twenty-odd columns past
+    // February 2027, and a total or note column after the last month would be overwritten.
+    const lastIndex = monthColumns(rows[0] ?? [])?.last ?? -1;
     const rowOf = (name: string) => rows.findIndex((r) => String(r?.[0] ?? "").trim() === name) + 1;
 
     const changes: string[] = [];
     const skippedPartial: string[] = [];
+    const noColumn: string[] = [];
+    const noRow: string[] = [];
+    // A closed month with no column fails the run. The month in progress does not: on the 3rd
+    // it holds only the invoices of the 1st and 2nd, and failing for it would tell cost_watch
+    // the whole run settled nothing.
+    const noColumnClosed: string[] = [];
+    const thisMonth = new Date().toISOString().slice(0, 7).replace("-", "/");
     const foreignCurrency: string[] = [];
     const updates: Array<{ range: string; values: number[][] }> = [];
     const windowStartMs = Date.now() - LOOKBACK_DAYS * 86_400_000;
@@ -662,9 +693,8 @@ export async function GET(request: Request) {
       const [vendorName = "", monthKey = ""] = key.split("|");
       const row = rowOf(vendorName);
       if (row === 0) {
-        changes.push(
-          `:warning: ${vendorName} — no row in the sheet, PDF filed but nothing updated`
-        );
+        // Listed apart from the changes: counted among them, it read "Cost sheet updated (1)".
+        noRow.push(vendorName);
         continue;
       }
       const ym = monthKey.split("/");
@@ -676,16 +706,22 @@ export async function GET(request: Request) {
         skippedPartial.push(`${vendorName} ${monthKey}`);
         continue;
       }
-      const col = columnForMonth(y, m, lastIndex);
-      if (!col) continue;
-
-      const colIndex = FIRST_COL_INDEX + (y - FIRST_YEAR) * 12 + (m - FIRST_MONTH);
-      const current = Number(rows[row - 1]?.[colIndex] ?? NaN);
+      const colIndex = columnForMonth(rows[0] ?? [], y, m);
+      if (colIndex === null) {
+        // Never silent: from March 2027 every invoice lands here until the sheet grows.
+        noColumn.push(`${vendorName} ${monthKey}`);
+        if (monthKey < thisMonth) noColumnClosed.push(`${vendorName} ${monthKey}`);
+        continue;
+      }
+      const col = colLetter(colIndex);
+      const cell = rows[row - 1]?.[colIndex];
+      // An empty cell is blank, not zero.
+      const current = cell === undefined || cell === "" ? NaN : Number(cell);
       if (total.currency !== "EUR") {
         // The Costs tab is in euros and we do not invent an FX rate. Reported so
         // a person can enter the converted figure; never written blind.
         foreignCurrency.push(
-          `${vendorName} ${monthKey}: ${total.currency} ${total.value.toFixed(2)}`
+          `${vendorName} ${monthKey}: ${chargesAs.get(key)?.join(" + ") ?? `${total.currency} ${total.value.toFixed(2)}`}`
         );
         continue;
       }
@@ -703,6 +739,11 @@ export async function GET(request: Request) {
       changes.push(
         `${vendorName} ${monthKey}: ${Number.isFinite(current) ? current.toFixed(2) : "(blank)"} → ${next.toFixed(2)}`
       );
+      // The sheet as this run leaves it. The next month is compared with the figure just
+      // carried into it: compared with the read from before the batch, a month whose own
+      // total matched its old cell was skipped and kept the earlier month's new figure.
+      const carried = (rows[row - 1] ??= []) as unknown[];
+      for (let c = colIndex; c <= lastIndex; c++) carried[c] = next;
     }
 
     // Nothing is written from an incomplete walk: a month summed from part of a mailbox would
@@ -729,13 +770,21 @@ export async function GET(request: Request) {
             ? `:no_entry: *Cost sheet NOT updated, these would have changed* (${changes.length})\n`
             : `:heavy_dollar_sign: *Cost sheet updated* (${changes.length})\n`) +
           changes.map((c) => `• ${escapeSlack(c)}`).join("\n")
-        : ":white_check_mark: Cost sheet already matched every invoice.",
-      unconverted.length
-        ? `_Converted to EUR at the ECB reference rate on each invoice's own date._`
+        : incomplete.length || noColumn.length || noRow.length || foreignCurrency.length
+          ? "" // it cannot say every invoice matched; the lines below say which did not
+          : ":white_check_mark: Cost sheet already matched every invoice.",
+      convertedAny
+        ? `_Dollar invoices are converted to EUR at the ECB reference rate on each invoice's own date._`
         : "",
       foreignCurrency.length
         ? `:currency_exchange: *Not written — could not be converted, enter by hand:*\n` +
           foreignCurrency.map((f) => `• ${escapeSlack(f)}`).join("\n")
+        : "",
+      noRow.length
+        ? `:warning: *No row in the cost sheet for:* ${escapeSlack([...new Set(noRow)].join(", "))}. The PDFs are filed; add the row and run this again.`
+        : "",
+      noColumn.length
+        ? `:warning: *No month column in the cost sheet, so nothing written for:* ${escapeSlack(noColumn.join(", "))}. Row 1 must list the months as one unbroken run of dates: add the month to it, or move what breaks it, and run this again.`
         : "",
       skippedPartial.length
         ? `_Filed but not reconciled (month only partly inside the ${LOOKBACK_DAYS}-day window): ${escapeSlack(skippedPartial.join(", "))}._`
@@ -747,6 +796,9 @@ export async function GET(request: Request) {
         : "",
     ];
     if (incomplete.length) cronError = `incomplete: ${incomplete.join("; ")}`;
+    else if (noColumnClosed.length) {
+      cronError = `no sheet column for ${noColumnClosed.join(", ")}`;
+    }
 
     await notifySlack({
       channel: "ops",
