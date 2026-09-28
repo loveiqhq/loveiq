@@ -355,6 +355,33 @@ describe("renderSelfReport", () => {
     ...over,
   });
 
+  it("compares speed tool for tool, so a change in which tools were used is not a slowdown", () => {
+    const fast = Array.from({ length: 20 }, () => row({ latency_ms: 300 }));
+    const before = windowStats(fast, FLOOR);
+    const renders = Array.from({ length: 20 }, () =>
+      row({ tool: "show_design", latency_ms: 9_000 })
+    );
+    const mixed = renderSelfReport(
+      report({ now: windowStats([...fast, ...renders], FLOOR), before }),
+      FLOOR,
+      { withQuestions: false, nowMs: NOW }
+    );
+    expect(mixed).toContain("95% within 9.0 s (before, 0.3 s)");
+    expect(mixed).toContain(
+      "Tool for tool, none of the 1 used ten or more times in both windows got slower, " +
+        "so the rise is in which tools were used."
+    );
+
+    const slow = Array.from({ length: 20 }, () => row({ latency_ms: 2_000 }));
+    const slower = renderSelfReport(report({ now: windowStats(slow, FLOOR), before }), FLOOR, {
+      withQuestions: false,
+      nowMs: NOW,
+    });
+    expect(slower).toContain(
+      "Slower than before, tool for tool: fetch_document (95% within 2.0 s, was 0.3 s)."
+    );
+  });
+
   it("says who used it once people sign in, and says nothing about it before", () => {
     const signedIn = windowStats(
       [

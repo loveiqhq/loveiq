@@ -55,6 +55,8 @@ export interface WindowStats {
   p50: number | null;
   p95: number | null;
   slowest: Array<[string, number]>;
+  /** Each tool with ten or more calls and its 95th percentile, slowest first. */
+  toolP95: Array<[string, number]>;
   unanswered: Array<{ query: string; times: number; best: number | null }>;
 }
 
@@ -106,14 +108,14 @@ export function windowStats(rows: CallRow[], floor: number): WindowStats {
       .sort((a, b) => a - b);
   const all = latencies(rows);
   const tools = countBy(rows, (r) => r.tool ?? "unknown");
-  const slowest = tools
+  const toolP95 = tools
     .filter(([, n]) => n >= 10)
     .map(([tool]): [string, number] => [
       tool,
       percentile(latencies(rows.filter((r) => (r.tool ?? "unknown") === tool)), 0.95) ?? 0,
     ])
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+    .sort((a, b) => b[1] - a[1]);
+  const slowest = toolP95.slice(0, 3);
   const asked = new Map<string, { query: string; times: number; best: number | null }>();
   for (const r of searches.filter((s) => isEmpty(s) || isWeak(s))) {
     const query = (r.query ?? "").replace(/\s+/g, " ").trim();
@@ -142,6 +144,7 @@ export function windowStats(rows: CallRow[], floor: number): WindowStats {
     p50: percentile(all, 0.5),
     p95: percentile(all, 0.95),
     slowest,
+    toolP95,
     unanswered: [...asked.values()].sort(
       (a, b) => b.times - a.times || (a.best ?? -1) - (b.best ?? -1)
     ),
@@ -464,13 +467,27 @@ export function renderSelfReport(
           ? `; most often: ${s.topRefusals.map(([k, v]) => `"${k}" ${n(v)}`).join("; ")}.`
           : ".")
     );
+    // Tool for tool, because the overall figure moves with WHICH tools were used: in the
+    // week to 2026-09-28 it went from 3.1 s to 5.6 s on 155 Figma renders, with no tool slower.
+    const was = new Map(b.toolP95.filter(([, v]) => v > 0));
+    const compared = s.toolP95.filter(([t, v]) => v > 0 && was.has(t));
+    const slower = compared.filter(([t, v]) => v > was.get(t)! * 1.25 && v - was.get(t)! >= 500);
+    const rose = s.p95 !== null && b.p95 !== null && s.p95 > b.p95 * 1.25;
     out.push(
       s.p50 === null
         ? "Speed: no timings recorded."
         : `Speed: half of all calls answered within ${secs(s.p50)}, 95% within ${secs(s.p95)} (before, ${secs(b.p95)}).` +
             (s.slowest.length
               ? ` Slowest: ${s.slowest.map(([k, v]) => `${k} (95% within ${secs(v)})`).join(", ")}.`
-              : "")
+              : "") +
+            (slower.length
+              ? ` Slower than before, tool for tool: ${slower
+                  .map(([t, v]) => `${t} (95% within ${secs(v)}, was ${secs(was.get(t)!)})`)
+                  .join(", ")}.`
+              : compared.length
+                ? ` Tool for tool, none of the ${n(compared.length)} used ten or more times in both windows got slower` +
+                  (rose ? ", so the rise is in which tools were used." : ".")
+                : "")
     );
   }
 
