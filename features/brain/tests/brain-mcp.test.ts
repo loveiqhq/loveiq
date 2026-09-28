@@ -3117,6 +3117,17 @@ describe("/api/mcp", () => {
       });
     }
 
+    it("says books are opt-in when a book filter comes back empty", async () => {
+      // Round-8 audit: meta {kind:"book"} without sources matched nothing and was told to
+      // "widen it", which cannot help: books are searched only when named.
+      wire([]);
+      const r = await call({ meta: { kind: "book" } });
+      expect(r.content[0].text).toContain('Books are left out unless `sources` names "book".');
+      wire([]);
+      const other = await call({ meta: { kind: "meeting-notes" } });
+      expect(other.content[0].text).not.toContain("Books are left out");
+    });
+
     it("gives a plain total when nothing is grouped", async () => {
       wire([{ bucket: "(all)", n: 91, total: 91 }]);
       const r = await call({ sources: ["calendar"] });
@@ -3373,6 +3384,12 @@ describe("/api/mcp", () => {
      * 2026-09-09: `newest` and a nonsense value were byte-identical, and neither matched
      * `recently_learned`.
      */
+    it("says books are opt-in when a book filter lists nothing", async () => {
+      wire([], 0);
+      const r = await call({ meta: { kind: "book" } });
+      expect(r.content[0].text).toContain('Books are left out unless `sources` names "book".');
+    });
+
     it("marks a replaced decision on its line, and as it stood on `until`", async () => {
       wire(
         [
