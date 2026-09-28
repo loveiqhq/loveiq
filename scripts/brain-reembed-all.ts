@@ -16,7 +16,12 @@
 
 import { writeFileSync } from "node:fs";
 
-import { EMBED_BATCH, embedText, toVectorLiteral } from "@features/brain/server/embed";
+import {
+  EMBED_BATCH,
+  embedText,
+  storeVectors,
+  toVectorLiteral,
+} from "@features/brain/server/embed";
 
 const READ = 100;
 
@@ -104,19 +109,17 @@ async function main(): Promise<void> {
         process.exitCode = 1;
         return;
       }
-      const write = await supabaseFetch("/rest/v1/rpc/brain_set_embeddings", {
-        method: "POST",
-        body: JSON.stringify({
-          ids: slice.map((r) => r.id),
-          vecs: vectors.map((v) => toVectorLiteral(v)),
-        }),
-      });
-      if (!write.ok) {
-        console.error(`write failed (${write.status}) — re-run with cursor ${after}`);
+      // A row rewritten meanwhile is cleared, and the regular queue embeds it again.
+      const kept = await storeVectors(
+        slice,
+        vectors.map((v) => toVectorLiteral(v))
+      );
+      if (kept === null) {
+        console.error(`write failed — re-run with cursor ${after}`);
         process.exitCode = 1;
         return;
       }
-      done += slice.length;
+      done += kept;
     }
 
     after = rows[rows.length - 1]!.id;

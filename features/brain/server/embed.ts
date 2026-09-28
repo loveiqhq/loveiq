@@ -88,8 +88,13 @@ async function embedBatch(
   // unsearchable. A QUESTION wants to fail fast: it sits in front of a person
   // waiting for an answer, and lexical search is a perfectly good fallback. Same
   // call, different patience, so the caller sets it.
-  const attempts = Math.max(1, opts.attempts ?? 6);
-  const timeoutMs = opts.timeoutMs ?? 120_000;
+  //
+  // Patience is attempts, not one long wait. Under load the edge can leave a call hanging
+  // with no answer at all (2026-09-28, loading the books): at 120 s a call, the backfill sat
+  // on 1,478 waiting rows for twelve minutes and embedded none. At 30 s the same queue drained
+  // while a cold worker still gets eight tries, about five minutes, to load its model.
+  const attempts = Math.max(1, opts.attempts ?? 8);
+  const timeoutMs = opts.timeoutMs ?? 30_000;
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
@@ -132,8 +137,17 @@ async function embedBatch(
     // 503 with an empty body is the platform's own "not now", and it counted as final:
     // on 2026-09-27 15:42 one ended the hourly catch-up on its first try and posted a
     // FAILED alert to #brain, after eight clean runs.
+    //
+    // EVERY 5xx IS RETRIED. Loading the books on 2026-09-28, back-to-back batches alternated
+    // 200 and 546, with a 500 WORKER_ERROR ("Function exited due to an error") and a 500
+    // "expected value at line 1 column 1" among them, and each of those rows embedded on its
+    // own a moment later. A 500 counted as final, so the batch was lost. Our own function
+    // (supabase/functions/brain-embed) also answers 500 for any error its model throws, so a
+    // text the model rejects every time is retried too: that costs its attempts, and then
+    // it waits for the next run like any other failed row. A 4xx stays final.
     const transient =
-      [429, 502, 503, 504, 546].includes(res.status) ||
+      res.status >= 500 ||
+      res.status === 429 ||
       /WORKER_RESOURCE_LIMIT|BOOT_ERROR|timed out/i.test(detail);
     if (!transient || attempt === attempts - 1) {
       logger.warn({ status: res.status, detail, attempt }, "brain-embed: edge function refused");
@@ -179,8 +193,8 @@ export async function embedMissing(
    * Per-request bounds for ONE embed call, for callers that live inside a function
    * ceiling.
    *
-   * The default here is the BACKFILL's patience: 6 attempts at 120s each, plus
-   * 22.5s of backoff. That is correct for `scripts/brain-embed-backfill.ts`, which
+   * The default here is the BACKFILL's patience: 8 attempts at 30s each, plus
+   * 42s of backoff. That is correct for `scripts/brain-embed-backfill.ts`, which
    * has no ceiling and would rather wait than lose a batch. It is catastrophic
    * inside `brain-fast`, whose `maxDuration` is 60s: a single cold edge worker --
    * the model is ~130MB and loads on first call -- hangs longer than the function
@@ -241,47 +255,110 @@ export async function embedMissing(
     }>;
     if (rows.length === 0) return { embedded, remaining: 0, complete: true };
 
-    const ids: number[] = [];
+    const done: typeof rows = [];
     const vecs: string[] = [];
 
     for (let i = 0; i < rows.length; i += EMBED_BATCH) {
       if (isOutOfTime()) break;
       const slice = rows.slice(i, i + EMBED_BATCH);
-      const vectors = await embedBatch(
-        slice.map((r) => embedText(r.title, r.body)),
-        { isOutOfTime, attempts: opts.attempts, timeoutMs: opts.timeoutMs }
-      );
+      const texts = slice.map((r) => embedText(r.title, r.body));
+      const bounds = { isOutOfTime, attempts: opts.attempts, timeoutMs: opts.timeoutMs };
+      let vectors: Array<number[] | null> | null = await embedBatch(texts, bounds);
       if (!vectors || vectors.length !== slice.length) {
         logger.warn(
           { asked: slice.length, got: vectors?.length ?? 0 },
           "brain-embed: batch returned the wrong number of vectors"
         );
-        break;
+        /**
+         * ONE TEXT MUST NOT HOLD THE QUEUE. It is read newest first, so a batch that always
+         * fails sits at the head of every later read: breaking here left every row behind
+         * it unembedded for good. Each row gets a try of its own, a row that fails alone
+         * waits for the next run, and the batch after it goes on. Only a whole batch of rows
+         * that each fail alone still stops the run, as an edge that is down does.
+         */
+        vectors = [];
+        for (const text of slice.length > 1 ? texts : []) {
+          if (isOutOfTime()) break;
+          vectors.push((await embedBatch([text], bounds))?.[0] ?? null);
+        }
       }
-      for (let j = 0; j < slice.length; j++) {
-        ids.push(slice[j]!.id);
-        vecs.push(toVectorLiteral(vectors[j]!));
-      }
+      let got = 0;
+      slice.forEach((row, j) => {
+        const vector = vectors?.[j];
+        if (!vector) return;
+        done.push(row);
+        vecs.push(toVectorLiteral(vector));
+        got++;
+      });
+      // Not one row, even alone: the edge is down rather than the text. Stop, as before.
+      if (got === 0) break;
     }
 
-    if (ids.length === 0) return { embedded, remaining: -1, complete: false };
+    if (done.length === 0) return { embedded, remaining: -1, complete: false };
 
-    // ONE round trip for the whole read batch. PostgREST cannot update many rows
-    // with differing values, so a PATCH per row meant ~21,000 requests.
-    const wrote = await supabaseFetch("/rest/v1/rpc/brain_set_embeddings", {
-      method: "POST",
-      body: JSON.stringify({ ids, vecs }),
-    });
-    if (!wrote.ok) {
-      logger.warn(
-        { status: wrote.status, detail: (await wrote.text().catch(() => "")).slice(0, 200) },
-        "brain-embed: could not store the vectors"
-      );
-      return { embedded, remaining: -1, complete: false };
-    }
-    embedded += ids.length;
+    const kept = await storeVectors(done, vecs);
+    if (kept === null) return { embedded, remaining: -1, complete: false };
+    embedded += kept;
   }
   return { embedded, remaining: await countMissing(), complete: false };
+}
+
+/**
+ * Stores each row's vector, then clears any row rewritten while it was being embedded, and
+ * returns how many kept theirs (null when the write failed). Every embedding writer goes
+ * through here.
+ *
+ * Such a row would hold the OLD text's vector, and a row with an embedding never re-enters
+ * the queue: the trigger clears a vector only when the text changes, and that change had
+ * already happened. So the batch is read back, and a row whose text moved is cleared for the
+ * next run to embed as it reads now.
+ */
+export async function storeVectors(
+  rows: Array<{ id: number; title: string | null; body: string }>,
+  vecs: string[]
+): Promise<number | null> {
+  const ids = rows.map((r) => r.id);
+  // ONE round trip for the whole batch. PostgREST cannot update many rows with differing
+  // values, so a PATCH per row meant ~21,000 requests.
+  const wrote = await supabaseFetch("/rest/v1/rpc/brain_set_embeddings", {
+    method: "POST",
+    body: JSON.stringify({ ids, vecs }),
+  });
+  if (!wrote.ok) {
+    logger.warn(
+      { status: wrote.status, detail: (await wrote.text().catch(() => "")).slice(0, 200) },
+      "brain-embed: could not store the vectors"
+    );
+    return null;
+  }
+
+  // The vectors are stored by now, so a check that fails or throws must not fail the call.
+  try {
+    const sent = new Map(rows.map((r) => [r.id, embedText(r.title, r.body)]));
+    const back = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=id,title,body&id=in.(${ids.join(",")})`
+    );
+    if (!back.ok) {
+      logger.warn({ status: back.status }, "brain-embed: could not re-read a batch");
+      return ids.length;
+    }
+    const now = (await back.json().catch(() => [])) as typeof rows;
+    const moved = now.filter((r) => embedText(r.title, r.body) !== sent.get(r.id)).map((r) => r.id);
+    // A row deleted since the write is not in `now`, and kept no vector.
+    if (moved.length === 0) return now.length;
+    const cleared = await supabaseFetch(`/rest/v1/brain_chunk?id=in.(${moved.join(",")})`, {
+      method: "PATCH",
+      body: JSON.stringify({ embedding: null }),
+    });
+    if (!cleared.ok) {
+      logger.warn({ status: cleared.status, moved }, "brain-embed: could not clear stale vectors");
+      return ids.length;
+    }
+    return now.length - moved.length;
+  } catch (err) {
+    logger.warn({ err }, "brain-embed: could not check a stored batch for rewritten rows");
+    return ids.length;
+  }
 }
 
 async function countMissing(): Promise<number> {
