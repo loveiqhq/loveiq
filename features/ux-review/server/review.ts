@@ -963,7 +963,15 @@ export function buildScorecardMessage(
   /** Null when PostHog could not be read — the line is then omitted, never guessed at. */
   paywallTaps: PaywallDeadTaps | null = null,
   /** Same: null omits the block rather than printing a coverage nobody measured. */
-  coverage: ScannerCoverage[] | null = null
+  coverage: ScannerCoverage[] | null = null,
+  /**
+   * Scanners that watch a sample by decision, from git. A parameter for the same
+   * reason as `liveChallengerNames`: since the dead-click scanner retired
+   * (2026-09-28) none does, and the rule must stay testable with none live.
+   */
+  sampledOnPurpose: ReadonlySet<string> = new Set(
+    UX_SCANNERS.filter((sc) => sc.samplingMode !== "comprehensive").map((sc) => sc.name)
+  )
 ): { text: string; blocks: SlackBlock[] } {
   const n = (s: ScannerScore) => s.right + s.wrong;
   const pct = (s: ScannerScore) => (n(s) === 0 ? "n/a" : `${Math.round((s.right / n(s)) * 100)}%`);
@@ -1069,9 +1077,6 @@ export function buildScorecardMessage(
      * Monday, and a warning that always fires teaches people to skip the ones
      * that mean something. It says so instead, and the number stays visible.
      */
-    const sampledOnPurpose = new Set(
-      UX_SCANNERS.filter((sc) => sc.samplingMode !== "comprehensive").map((sc) => sc.name)
-    );
     const lines = coverage
       .filter((c) => c.watchable > 0)
       .map((c) => {

@@ -135,6 +135,27 @@ not visible — do not name a button you did not watch being pressed.
  * champion/challenger machinery stays — the next experiment will use it.
  */
 /**
+ * THE DEAD-CLICK SCANNER IS RETIRED (2026-09-28), by the rule its probation set.
+ *
+ * `LoveIQ dead-click cause` (id 01a0a00f-8e95-76a8-9192-b1a7463db22f) was kept on
+ * probation from 2026-09-21 because its input was wrong: a disabled control is
+ * `pointer-events: none`, so our own `dead_click` recorded the survey's disabled
+ * Next as prose. The rule was: if blocked controls start appearing and it still
+ * confirms nothing, retire it. Both happened. Our `dead_click` now marks
+ * `reason=disabled_control` (57 taps across 49 sessions in the week to 09-28, none
+ * before 09-20), and the weekly ledger score was 0 of 29 confirmed by a probe.
+ *
+ * Nothing is lost by it going. Every dead tap is still recorded by our own
+ * `dead_click` event, which uses no model, and the verifier's "our own dead_click
+ * events" lane probes the element each reader tapped. It was costing about 1,600
+ * credits a month (its cap; PostHog projected 1,740) out of a 7,500 ceiling.
+ *
+ * It is DISABLED in PostHog, not deleted: its observations stay browsable there and
+ * its verdicts stay in `ux_finding`, both keyed by name. To bring it back, restore
+ * its entry from git history and PATCH `enabled: true` on that id; the sync never
+ * sends `enabled` for an existing scanner.
+ */
+/**
  * SAMPLING: WHY TWO OF THE FOCUSED SCANNERS ARE NOW COMPREHENSIVE (2026-09-23).
  *
  * `focused` does not mean "every session, carefully". PostHog documents it as
@@ -274,105 +295,6 @@ export const UX_SCANNERS: readonly UxScanner[] = [
       "In particular, answer NO when the user was impatient but the product responded:",
       "a slow but working load, a double-tap on a working button, clicking plain text or",
       "decorative artwork, or text selection.",
-      "",
-      CITE,
-    ].join("\n"),
-  },
-  /**
-   * THE DEAD-CLICK SCANNER IS ON PROBATION UNTIL 2026-09-28.
-   *
-   * It has 0 confirmed findings in 22 and flags ~10% of what it watches, which
-   * made it the obvious candidate to retire. It is not being retired yet,
-   * because on 2026-09-21 we found that its inputs were wrong in the one place
-   * that mattered: a disabled control is `pointer-events: none`, so the browser
-   * reports the CONTAINER, and our own `dead_click` recorded the site's most
-   * dead-tapped button (the survey's disabled Next — PostHog counted 20,081
-   * taps across 929 sessions) as ordinary prose. `verify-dead-click-target.mjs`
-   * then inspected that container and correctly returned clean. The scanner was
-   * being graded on evidence that could not have agreed with it.
-   *
-   * A WEEK, NOT A MONTH, and the primary test is mechanical rather than
-   * statistical. The last experiment set its threshold from the champion's flag
-   * rate and applied it to a scanner whose whole hypothesis was flagging less,
-   * so it needed ~300 days to reach a verdict; set the bar from the behaviour
-   * you are testing. At ~55 observations and ~6 findings a week, one week
-   * cannot settle a confirm rate — but it can answer the question that decides
-   * this, which is whether the detector now sees blocked controls at all.
-   *
-   *   PRIMARY   Does `dead_click` carry `deadClickReason: "blocked_control"`
-   *             for the survey's disabled Next? Thirty days of the old
-   *             detector produced 28 dead_click rows and NOT ONE as a control.
-   *             If a week of real traffic still produces zero, the fix did not
-   *             take and the scanner is being fed the same wrong input — retune
-   *             the trigger before judging the scanner at all.
-   *   SECONDARY Confirmed findings in the week, POOLED with the existing 0 of
-   *             22. Six more is not a sample on its own; 0 of 28 bounds the true
-   *             rate near 10% and that is the number to decide on.
-   *
-   *   DECIDE    Blocked controls appearing AND still 0 confirmed → retire it;
-   *             the input was fixed and it still finds nothing.
-   *             Blocked controls appearing AND ≥1 confirmed → keep, and stop
-   *             treating its clears as evidence until they are claim-scoped.
-   *             No blocked controls → the fix did not reach production; that is
-   *             a bug to chase, not a verdict on the scanner.
-   *
-   * Credits are not the pressure: 476 a month against a 7,500 ceiling.
-   */
-  {
-    id: "01a0a00f-8e95-76a8-9192-b1a7463db22f",
-    name: "LoveIQ dead-click cause",
-    role: "champion",
-    triggerEvent: "dead_click",
-    samplingMode: "focused",
-    // Measured, not guessed: 238 observations over 30 days to 2026-09-21 at 2
-    // credits each on the lite model. The old 1,474 was ~3x the truth and fed
-    // UX_REVIEW_ESTIMATED_MONTHLY_CREDITS, which is the figure an operator
-    // agreed to. PostHog's own `projected_monthly_credits` is authoritative;
-    // this is the repo's cross-check against it.
-    estimatedMonthlyCredits: 476,
-    creditLimit: 1600,
-    scannerVersion: 3,
-    prompt: [
-      "This recording contains at least one dead click on loveiq.org — a tap that our",
-      "instrumentation judged did nothing. Decide whether it had a visible cause.",
-      "",
-      "THE EVENT TELLS YOU WHICH KIND IT IS. Read the dead_click event properties:",
-      "- reason=disabled_control — the reader tapped a real control that was switched",
-      "  off. This is the case worth reporting. It includes controls the browser could",
-      "  not even deliver the tap to, which look and read exactly like live ones.",
-      "- reason=non_interactive — the tap was on text, an image or a container. This is",
-      "  a reader resting a thumb, and it is the large majority of these events.",
-      "- repeat_count=3 means they tapped the same thing again and again rather than",
-      "  once. Someone who keeps trying expected it to work; that is the strongest",
-      "  evidence available to you, and a single tap is the weakest.",
-      "",
-      "PostHog's own $dead_click is in the same session and is defined differently:",
-      "a click after which the page did not change at all for three seconds. It sees",
-      "one case ours cannot — a control that is fully enabled and simply broken —",
-      "so it is worth checking when the tap was on something that should have",
-      "worked. It is also far noisier, so treat it as corroboration, never as the",
-      "reason on its own.",
-      "",
-      CORRECT_LOOKS_LIKE,
-      "",
-      "Answer YES only when the thing tapped genuinely invited the tap and did nothing:",
-      "- It is a disabled control that gives no explanation of what would enable it, and",
-      "  nothing on screen tells the reader what to do to make it work.",
-      "- It is styled as a control — a button, card, row, icon, price or link — or the",
-      "  cursor changes over it, and nothing happened.",
-      "- On-screen copy told the user to do it (for example an instruction to swipe, flip",
-      "  or tap something) and that action does nothing.",
-      "- The tap was swallowed by something invisible sitting on top of the target.",
-      "",
-      "A disabled control is NOT automatically a defect. A Next button that is off until",
-      "the question is answered is working as intended — say NO unless the screen fails",
-      "to make that obvious, or they tapped it repeatedly, which means it was not.",
-      "",
-      DO_NOT_FLAG,
-      "HARD RULE: if the thing tapped is a paragraph, a heading, an image, a badge or",
-      "decoration, the answer is NO. Not 'no, but' — NO. A reader resting a thumb on",
-      "text is the most common case here by a wide margin, and describing it and then",
-      "answering yes anyway is the single failure this rule exists to stop.",
       "",
       CITE,
     ].join("\n"),
