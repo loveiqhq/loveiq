@@ -15,8 +15,8 @@ import { MAX_BODY_CHARS } from "@features/brain/server/ingest/upsert";
 const book = BOOKS.find((b) => b.title === "Mating in Captivity")!;
 
 describe("bookRows", () => {
-  // Longer than the cap many times over, with no paragraph breaks to cut at.
-  const text = "desire ".repeat(40_000);
+  // Longer than the Drive walk's 400,000-character cut, with no paragraph breaks to cut at.
+  const text = "desire ".repeat(70_000);
   const rows = bookRows(book, text, "2026-09-28T00:00:00.000Z");
 
   it("fits every part, head included, under the write cap", () => {

@@ -2867,8 +2867,50 @@ describe("/api/mcp", () => {
       wirePartsWithTotal([part(1, "ONE"), part(2, "TWO")], 900);
       const r = await call({ id: "drive/doc:1AbC" });
       const text = r.content[0].text as string;
-      expect(text).toMatch(/this document has 900 parts and only the first 2 were read/);
-      expect(text).toMatch(/the tail is NOT included/);
+      expect(text).toMatch(/this document has 900 parts and only 2 were read/);
+      expect(text).toMatch(/some parts are NOT included/);
+    });
+
+    it("reads a long document whole and in order, across pages kept in text order", async () => {
+      // The table pages by source_id, which is TEXT order ("#100" before "#2"). A single
+      // read of 400 lost parts 5-9, 46-99 and more from the middle of a 540-part book, and
+      // at 1,200 parts even one page of 1,000 misses every id that starts with 8 or 9.
+      const ids = Array.from({ length: 1200 }, (_, i) => i + 1);
+      const rowOf = (n: number) => ({
+        source: "book",
+        source_id: n === 1 ? "book:B" : `book:B#${n}`,
+        title: `Book: T${n === 1 ? "" : ` (part ${n} of 1200)`}`,
+        url: null,
+        body: `P${n}.`,
+        meta: { kind: "book", part: n },
+        period_end: null,
+      });
+      const inTextOrder = ids.map(rowOf).sort((a, b) => a.source_id.localeCompare(b.source_id));
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        const u = new URL(`http://x${path}`);
+        const offset = Number(u.searchParams.get("offset") ?? 0);
+        const limit = Number(u.searchParams.get("limit") ?? 400);
+        const page = inTextOrder.slice(offset, offset + limit);
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": `${offset}-${offset + page.length - 1}/1200` }),
+          json: async () => page,
+        };
+      });
+      const early = (await call({ id: "book/book:B", from_part: 5, max_chars: 38_000 })).content[0]
+        .text as string;
+      expect(early).toMatch(/parts 5-\d+ of 1200/);
+      expect(early.indexOf("P5.")).toBeLessThan(early.indexOf("P6."));
+      expect(early).toContain("P46.");
+      expect(early).not.toMatch(/NOT included/);
+      // Past the first page of 1,000, in text order.
+      const late = (await call({ id: "book/book:B", from_part: 950, max_chars: 38_000 })).content[0]
+        .text as string;
+      expect(late).toMatch(/parts 950-\d+ of 1200/);
+      expect(late.indexOf("P950.")).toBeLessThan(late.indexOf("P951."));
     });
 
     it("stays quiet when everything matched was returned", async () => {
@@ -3429,6 +3471,21 @@ describe("/api/mcp", () => {
       expect(url).toContain("period_end=gte.2026-08-01");
       expect(url).toContain("period_end=lte.2026-08-31");
       expect(url).toContain('meta=cs.{"status":"WIP"}');
+    });
+
+    it("lists books only when they are named, like search_company_context", async () => {
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.book");
+      wire([row(1)], 1);
+      await call({ sources: ["book"] });
+      expect(urlOf()).not.toContain("neq.book");
     });
 
     it("orders by when the brain learned it, and shows that date", async () => {
@@ -6028,6 +6085,8 @@ describe("/api/mcp", () => {
         // only its own description would contain.
         plan: "what is open on the board",
         notice: "noticed without being asked",
+        // Not the bare id: "book" is inside "booking" and the source enum already.
+        book: "third-party books on love, desire",
       };
       const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
       expect(sources.length).toBeGreaterThan(0);
