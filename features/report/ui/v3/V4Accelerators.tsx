@@ -108,7 +108,7 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
         practice={view.practice}
         onUnlock={onUnlock}
         nodeIds={{ closed: "377:221", open: "374:304", gated: "375:221" }}
-        teaserHeightPx={224}
+        teaserHeightPx={202}
         rampBandPx={89.6}
         openPaddingTopPx={8}
         premiumTopPx={155}

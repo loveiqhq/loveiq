@@ -207,7 +207,8 @@ describe("reportV3.css — Fantasy vs. Reality body contracts", () => {
     expect(ruleOf(".rv3 .rv4-fvr")).toContain("padding: 20px 0;");
   });
 
-  it("ends the card 247.5px under the teaser's top, where 441:6422 does", () => {
-    expect(ruleOf(".rv3 .rv4-fvr + .rv4-try:not(.is-open)")).toContain("padding-bottom: 29px");
+  // Mark's rehaul (28.09): 441:6422 is 343 tall now, like every chapter's teaser card.
+  it("ends the closed card where every chapter's does, 343 tall", () => {
+    expect(V3_CSS).not.toContain(".rv3 .rv4-fvr + .rv4-try:not(.is-open) {");
   });
 });

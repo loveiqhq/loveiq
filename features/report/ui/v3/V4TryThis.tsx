@@ -3,7 +3,7 @@
 import { useId, useState, type CSSProperties, type FC } from "react";
 import type { Report3Block } from "@/data/report3-learn-more";
 import type { Report3PracticeView } from "@features/report/server/gatedCopy";
-import { splitEyebrow } from "./V4LearnMore";
+import { isTimeLabel, splitEyebrow, splitTitle } from "./V4LearnMore";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
 import { guardedUnlock } from "./v4Unlock";
@@ -14,7 +14,7 @@ import { guardedUnlock } from "./v4Unlock";
  * and Accelerator & Brakes' (377:221 / 374:304 / 375:221).
  *
  * One component, three states, all drawn in Figma:
- *   374:217  closed          teaser clamped to 218px, faded, "Read the full practice" pill
+ *   374:217  closed          teaser clamped to 196px, faded, the "Read All" pill
  *   374:238  open            the whole practice, no gate
  *   374:258  open & gated    two clear paragraphs, the third under a ramping blur,
  *                            the rest under the full blur at full length, and the
@@ -55,20 +55,6 @@ const teaserOf = (blocks: readonly Report3Block[]): Report3Block[] => {
   }
   return blocks.slice(0, 2);
 };
-
-/** 374:226 — the lightbulb, from vectors 374:227 and 374:228. */
-const Bulb: FC = () => (
-  <svg viewBox="0 0 17 17" fill="none">
-    <path
-      transform="translate(3.72 1.8)"
-      d="M5.0696 0C3.9873-.0018 2.9329.3434 2.0611.985 1.1894 1.6266.5463 2.5307.2263 3.5647-.0937 4.5986-.0739 5.708.283 6.7298.6398 7.7516 1.3149 8.6322 2.209 9.2421 2.7591 9.6382 3.0892 10.2323 3.0892 10.8925V11.2226H7.0501V10.8925C7.0501 10.2323 7.3802 9.6382 7.9303 9.2421 8.8244 8.6322 9.4995 7.7516 9.8563 6.7298 10.2132 5.708 10.233 4.5986 9.913 3.5647 9.5929 2.5307 8.9499 1.6266 8.0782.985 7.2064.3434 6.152-.0018 5.0696 0Z"
-      stroke="currentColor"
-      strokeWidth="1.1333"
-      strokeLinejoin="round"
-    />
-    <path d="M7.2 15.36H10.5008" stroke="currentColor" strokeWidth="1.1333" strokeLinecap="round" />
-  </svg>
-);
 
 /** 374:234 — the gold chevron, drawn pointing down; CSS turns it up when open. */
 const Chevron: FC = () => (
@@ -129,6 +115,7 @@ const V4TryThis: FC<Props> = ({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
   const [eyebrowLabel, eyebrowValue] = splitEyebrow(practice.eyebrow);
+  const [titleLead, titleRest] = splitTitle(practice.title);
   const { free, ramp, rest } = practice;
   const all = [...free, ...(ramp ? [ramp] : []), ...rest];
   // A ramp only ever arrives for a locked reader; unlocked, everything is `free`.
@@ -149,15 +136,17 @@ const V4TryThis: FC<Props> = ({
       data-name={practice.title}
       style={Object.keys(geometry).length ? (geometry as CSSProperties) : undefined}
     >
-      {/* 374:221 — "Practice time:" in Light, the value in Bold. */}
+      {/* 185:256 — "Practice Time:" in Light, title case; the value in Bold capitals. */}
       <p className="rv4-try__eyebrow">
+        <span className={`rv4-try__eyebrow-label${isTimeLabel(eyebrowLabel) ? " is-time" : ""}`}>
+          {eyebrowLabel}
+        </span>
         {eyebrowValue ? (
           <>
-            <span className="rv4-try__eyebrow-label">{eyebrowLabel}</span> {eyebrowValue}
+            {" "}
+            <span className="rv4-try__eyebrow-value">{eyebrowValue}</span>
           </>
-        ) : (
-          eyebrowLabel
-        )}
+        ) : null}
       </p>
 
       {/* 374:224 */}
@@ -168,10 +157,11 @@ const V4TryThis: FC<Props> = ({
         aria-controls={bodyId}
         onClick={() => setIsOpen((v) => !v)}
       >
-        <span className="rv4-try__chip" aria-hidden="true">
-          <Bulb />
+        {/* 185:265 — Mark's rehaul (28.09) drops the lightbulb chip. */}
+        <span className="rv4-try__label">
+          <strong className="rv4-try__lead">{titleLead}</strong>
+          {titleRest}
         </span>
-        <span className="rv4-try__label">{practice.title}</span>
         {/* 374:232 closed / 374:253 open — "Control / Disc". */}
         <span className="rv4-try__chev" aria-hidden="true">
           <Chevron />
@@ -185,9 +175,15 @@ const V4TryThis: FC<Props> = ({
             <div className="rv4-try__teaser">
               <V4Prose blocks={practice.teaser ?? teaserOf(all)} />
             </div>
-            {/* 452:295 "Show all pill" — Mark's standard 163x32 teaser CTA. */}
-            <button type="button" className="rv4-try__open" onClick={() => setIsOpen(true)}>
-              Read the full practice
+            {/* 894:7594 "Show all pill" — "Read All", 126x32, at 298 of the card. The
+             * accessible name keeps what it opens; it contains the visible words. */}
+            <button
+              type="button"
+              className="rv4-try__open"
+              aria-label="Read all of the practice"
+              onClick={() => setIsOpen(true)}
+            >
+              Read all
             </button>
           </div>
         ) : gatedRamp ? (

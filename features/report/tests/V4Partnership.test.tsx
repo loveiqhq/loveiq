@@ -85,7 +85,7 @@ describe("the chapter body — 38:1679", () => {
     const { container } = render(<V4Partnership view={OPEN} />);
     const practice = container.querySelector(".rv4-cip + .rv4-try")!;
     expect(practice.getAttribute("data-node-id")).toBe("399:219");
-    expect(practice.textContent).toContain("Read the full practice");
+    expect(practice.textContent).toContain("Read all");
     fireEvent.click(practice.querySelector(".rv4-try__button")!);
     expect(practice.getAttribute("data-node-id")).toBe("399:240");
     const lists = practice.querySelectorAll("ol");
@@ -167,9 +167,10 @@ describe("the paywalled body — 305:358", () => {
     expect(text.hasAttribute("inert")).toBe(true);
     expect(text.getAttribute("aria-hidden")).toBe("true");
     const practice = container.querySelector<HTMLElement>(".rv4-cip + .rv4-try")!;
-    // 399:219's 240px teaser box; 399:260's card 528px down the card, measured at 393
-    // with the real fonts as 147.5px below the gate.
-    expect(practice.style.getPropertyValue("--rv4-try-teaser-h")).toBe("240px");
+    // Since Mark's rehaul (28.09) 399:219 draws the shared 196px teaser box, so the
+    // card carries none of its own. 399:260's card, measured at 393 with the real
+    // fonts, 147.5px below the gate.
+    expect(practice.style.getPropertyValue("--rv4-try-teaser-h")).toBe("");
     expect(practice.style.getPropertyValue("--rv4-try-premium-top")).toBe("147.5px");
     fireEvent.click(practice.querySelector(".rv4-try__button")!);
     expect(practice.getAttribute("data-node-id")).toBe("399:260");
@@ -198,11 +199,10 @@ describe("the CSS contract", () => {
     );
   });
 
-  it("leaves the frame's air above the loop and sets the closed pill 200px into the teaser", () => {
+  it("leaves the frame's air above the loop, and the closed pill where every chapter's is", () => {
     expect(rule(".rv3 .rv4-cip__text + .rv4-loop")).toContain("margin-top: 24px");
-    expect(rule(".rv3 .rv4-cip + .rv4-try .rv4-try__open")).toContain(
-      "bottom: calc(var(--rv4-try-teaser-h, 218px) - 232px)"
-    );
+    // The rehaul sets 399:219's pill at 298 of the card like the others (28.09).
+    expect(V3_CSS).not.toContain(".rv3 .rv4-cip + .rv4-try .rv4-try__open {");
   });
 
   it("never runs the progressive blur past a ramp's scrambled tail (--rv4-band-fit)", () => {

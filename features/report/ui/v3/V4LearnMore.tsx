@@ -58,6 +58,23 @@ export const splitEyebrow = (text: string): [string, string] => {
   return colon < 0 ? [text, ""] : [text.slice(0, colon + 1), text.slice(colon + 1).trim()];
 };
 
+/**
+ * Mark's rehaul (28.09): "Practice Time:" / "Reading Time:" in title case, which a
+ * label of any other kind must not get — the Report 2.0 practices carry their own
+ * ("Working with your sensitivity: three moves"), set as written.
+ */
+export const isTimeLabel = (label: string) => /\btime:$/i.test(label.trim());
+
+/**
+ * 185:265 / 153:2253 — the title's lead in Bold, the rest in Regular: "Try this" | " &
+ * see what shifts", "Learn more" | " & go deeper". Split at the first " & "; a title
+ * without one is all lead.
+ */
+export const splitTitle = (title: string): [string, string] => {
+  const at = title.indexOf(" & ");
+  return at < 0 ? [title, ""] : [title.slice(0, at), title.slice(at)];
+};
+
 interface Props {
   article: Report3LearnMoreView;
   /**

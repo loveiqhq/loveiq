@@ -148,7 +148,7 @@ describe("the paywalled chapter — 314:211", () => {
 
   it("hands the locked practice card its gated node", () => {
     const { container } = render(<V4Accelerators view={LOCKED} />);
-    fireEvent.click(screen.getByRole("button", { name: "Read the full practice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read all of the practice" }));
     expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("375:221");
   });
 });
