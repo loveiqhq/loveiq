@@ -278,11 +278,51 @@ describe("a complete filing run", () => {
     await run();
     expect(sheetWrites).toEqual([]);
     const text = slackText();
-    expect(text).toContain("could not be converted, enter by hand");
+    expect(text).toContain("could not be read or converted, enter by hand");
     // As it was charged, not as the "OTHER" that keeps it out of the sheet.
     expect(text).toContain("Vercel 2026/09: USD 11.70 on 2026-09-20, no ECB rate for it");
     expect(text).not.toContain("converted to EUR");
     expect(text).not.toContain("already matched");
+    // September is closed, so the run did not settle it and must not say it did.
+    expect(mockRecord).toHaveBeenCalledWith(
+      "file-invoices",
+      expect.any(Number),
+      "error",
+      "not written, needs a person: Vercel 2026/09"
+    );
+  });
+
+  it("never drops an invoice whose total it cannot read", async () => {
+    // Dropped, September was written as -450.78, the readable invoice alone.
+    inbox = { "ec@loveiq.org": ["eur", "blank"] };
+    more = {
+      eur: { day: Date.UTC(2026, 8, 10, 12), text: "Total €450.78 EUR" },
+      blank: { day: Date.UTC(2026, 8, 12, 12), text: "Thanks for your business!" },
+    };
+    await run();
+    expect(sheetWrites).toEqual([]);
+    expect(slackText()).toContain(
+      "Vercel 2026/09: EUR 450.78 + a total that could not be read (2026-09-12)"
+    );
+    expect(mockRecord).toHaveBeenCalledWith(
+      "file-invoices",
+      expect.any(Number),
+      "error",
+      "not written, needs a person: Vercel 2026/09"
+    );
+  });
+
+  it("does not claim every invoice matched when a month was only filed, or none was found", async () => {
+    // August is only partly inside the window on 3 October, so it is filed, not compared.
+    inbox = { "ec@loveiq.org": ["aug"] };
+    more = { aug: { day: Date.UTC(2026, 7, 10, 12), text: "Total €5.00 EUR" } };
+    await run();
+    expect(slackText()).toContain("Filed but not reconciled");
+    expect(slackText()).not.toContain("already matched");
+
+    inbox = {};
+    await run();
+    expect(slackText()).toContain("No invoice total was found to compare with the cost sheet.");
   });
 
   it("calls an empty cell blank, not zero", async () => {
@@ -347,5 +387,11 @@ describe("a complete filing run", () => {
     await run();
     expect(slackText()).toContain("No row in the cost sheet for:* Vercel");
     expect(slackText()).not.toContain("Cost sheet updated");
+    expect(mockRecord).toHaveBeenCalledWith(
+      "file-invoices",
+      expect.any(Number),
+      "error",
+      "not written, needs a person: Vercel 2026/09"
+    );
   });
 });
