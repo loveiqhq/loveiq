@@ -1814,7 +1814,7 @@ carried 356 passages of explicit decision language that nobody had promoted to a
 Those are the numbers that motivated this job, not a current count; the current one is
 `count_context` with `sources:["decision"]`.
 
-`/api/cron/brain-mine` reads up to twelve meetings a night and writes what was **settled** in
+`/api/cron/brain-mine` reads up to twelve meetings a day and writes what was **settled** in
 them as ordinary decision records. Steady state is about 0.5 meetings a day, so that is
 ample headroom and drains a backlog on its own. The cap dates from Gemini's free tier,
 which allowed twenty requests a day; since 2026-09-24 the miner runs on the Team
