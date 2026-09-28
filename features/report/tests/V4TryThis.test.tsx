@@ -25,8 +25,18 @@ describe("V4TryThis — closed (374:217)", () => {
       "Practice time: ~15 min."
     );
     expect(container.querySelector(".rv4-try__eyebrow-label")?.textContent).toBe("Practice time:");
-    expect(screen.getByText("Try this & see what shifts")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Read the full practice" })).toBeInTheDocument();
+    // Mark's rehaul, 28.09 (1944397594; 185:256): "Practice Time:" in title case, the
+    // value in capitals — so a time label is marked, and the value is its own span.
+    expect(container.querySelector(".rv4-try__eyebrow-label")).toHaveClass("is-time");
+    expect(container.querySelector(".rv4-try__eyebrow-value")?.textContent).toBe("~15 min.");
+    const label = container.querySelector(".rv4-try__label")!;
+    expect(label.textContent).toBe("Try this & see what shifts");
+    // 185:265 — "Try this" in Bold, the rest Regular; the lightbulb chip is gone.
+    expect(label.querySelector("strong.rv4-try__lead")?.textContent).toBe("Try this");
+    expect(container.querySelector(".rv4-try__chip")).toBeNull();
+    // 894:7594 — "Read All"; the accessible name keeps what it opens.
+    const pill = screen.getByRole("button", { name: "Read all of the practice" });
+    expect(pill.textContent).toBe("Read all");
     expect(screen.getByRole("button", { name: /Try this/ }).getAttribute("aria-expanded")).toBe(
       "false"
     );
@@ -57,7 +67,7 @@ describe("V4TryThis — closed (374:217)", () => {
 describe("V4TryThis — open (374:238)", () => {
   it("opens from the pill onto all nine paragraphs", () => {
     const { container } = render(<V4TryThis practice={OPEN} />);
-    fireEvent.click(screen.getByRole("button", { name: "Read the full practice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read all of the practice" }));
     expect(container.querySelector(".rv4-try")!.classList.contains("is-open")).toBe(true);
     expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("374:238");
     expect(container.querySelectorAll(".rv4-prose__p")).toHaveLength(
@@ -137,21 +147,47 @@ describe("reportV3.css — practice card contracts", () => {
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
 
-  it("draws 374:241's gold card, full-bleed like the article", () => {
+  it("draws 185:255's gold card, full-bleed like the article", () => {
     const css = rule(".rv3 .rv4-try {");
-    expect(css).toContain("rgba(230, 182, 92, 0.14) 0%");
-    expect(css).toContain("rgba(230, 182, 92, 0.03) 100%");
+    // The rehaul's lighter wash: 7% of the gold, fading out (it was 14% to 3%).
+    expect(css).toContain("rgba(230, 182, 92, 0.07) 0%");
+    expect(css).toContain("rgba(230, 182, 92, 0) 100%");
+    // 18.5 from the card's edge to the eyebrow: the 1px border and 17.5.
+    expect(css).toContain("padding: 17.5px 22px 20px");
     expect(css).toContain("border: 1px solid rgba(230, 182, 92, 0.6)");
     expect(css).toContain("border-radius: 27px");
     expect(css).toContain("width: calc(100% + var(--rv3-gutter) * 2)");
   });
 
-  it("clamps the teaser to 375:270's 218px and uses Mark's 163x32 pill", () => {
-    expect(rule(".rv3 .rv4-try__teaser {")).toContain("max-height: 218px");
+  // The rehaul (894:7574 and every chapter's instance): a 196px teaser, and "Read All"
+  // in a 126x32 pill at 298 of the 343 card, whatever the teaser's box.
+  it("clamps the teaser to 196px and sets the 126x32 'Read All' pill at 298", () => {
+    expect(rule(".rv3 .rv4-try__teaser {")).toContain("max-height: 196px");
     const pill = rule(".rv3 .rv4-try__open {");
-    expect(pill).toContain("width: 163px");
+    expect(pill).toContain("width: 126px");
     expect(pill).toContain("height: 32px");
     expect(pill).toContain("border: 1.5px solid #8f5e16");
+    expect(pill).toContain("text-transform: capitalize");
+    // 298 of the card is 212.5 into the closed block, which starts at 85.5.
+    expect(pill).toContain("top: 212.5px");
+    expect(rule(".rv3 .rv4-try__closed {")).toContain("min-height: 244.5px");
+    expect(rule(".rv3 .rv4-try:not(.is-open) {")).toContain("padding-bottom: 12px");
+  });
+
+  it("sets the rehaul's eyebrow and title type", () => {
+    const eyebrow = rule(".rv3 .rv4-try__eyebrow {");
+    expect(eyebrow).toContain("font-size: 12px");
+    expect(eyebrow).toContain("text-transform: none");
+    expect(rule(".rv3 .rv4-try__eyebrow-label {")).toContain("font-weight: 300");
+    expect(rule(".rv3 .rv4-try__eyebrow-label.is-time {")).toContain("text-transform: capitalize");
+    const value = rule(".rv3 .rv4-try__eyebrow-value {");
+    expect(value).toContain("font-weight: 700");
+    expect(value).toContain("text-transform: uppercase");
+    expect(rule(".rv3 .rv4-try__label {")).toContain("font-weight: 400");
+    expect(rule(".rv3 .rv4-try__lead {")).toContain("font-weight: 700");
+    expect(V3_CSS).not.toContain(".rv3 .rv4-try__chip");
+    // 894:7589 — the closed disc at 18% of the gold.
+    expect(rule(".rv3 .rv4-try__chev {")).toContain("background: rgba(178, 138, 60, 0.18)");
   });
 
   it("lets the heading row grow instead of overlapping the copy on a narrow phone", () => {
@@ -182,7 +218,7 @@ describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () 
   const AB_LOCKED = buildAccelerators("Spark Seeker", { locked: true })!.practice;
   const AB = {
     nodeIds: { closed: "377:221", open: "374:304", gated: "375:221" },
-    teaserHeightPx: 224,
+    teaserHeightPx: 202,
     rampBandPx: 89.6,
     openPaddingTopPx: 8,
     premiumTopPx: 155,
@@ -204,7 +240,7 @@ describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () 
   it("carries its geometry as custom properties on the card", () => {
     const { container } = render(<V4TryThis practice={AB_OPEN} {...AB} />);
     const card = container.querySelector<HTMLElement>(".rv4-try")!;
-    expect(card.style.getPropertyValue("--rv4-try-teaser-h")).toBe("224px");
+    expect(card.style.getPropertyValue("--rv4-try-teaser-h")).toBe("202px");
     expect(card.style.getPropertyValue("--rv4-try-band")).toBe("89.6px");
     expect(card.style.getPropertyValue("--rv4-try-open-pt")).toBe("8px");
     expect(card.style.getPropertyValue("--rv4-try-premium-top")).toBe("155px");
@@ -235,9 +271,10 @@ describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () 
   });
 
   it("reads each custom property with Typical Beliefs' value as the fallback", () => {
-    expect(V3_CSS).toContain("max-height: var(--rv4-try-teaser-h, 218px)");
-    expect(V3_CSS).toContain("bottom: calc(var(--rv4-try-teaser-h, 218px) - 228.5px)");
-    expect(V3_CSS).toContain("padding-bottom: calc(257px - var(--rv4-try-teaser-h, 218px))");
+    expect(V3_CSS).toContain("max-height: var(--rv4-try-teaser-h, 196px)");
+    // The pill and the card's foot no longer follow the teaser's box: fixed at 298 / 343.
+    expect(V3_CSS).not.toContain("228.5px)");
+    expect(V3_CSS).not.toContain("padding-bottom: calc(257px - var(--rv4-try-teaser-h");
     expect(V3_CSS).toContain("--rv4-band: var(--rv4-try-band, 100%)");
     expect(V3_CSS).toContain("top: var(--rv4-try-premium-top, 148px)");
     expect(V3_CSS).toContain("padding-top: var(--rv4-try-open-pt, 4px)");

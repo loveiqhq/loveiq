@@ -4530,33 +4530,44 @@
 
 /* ══ "Try this & see what shifts" — 374:217 / 374:238 / 374:258 ═══════════════
  * The practice card. Full-bleed like "Go deeper" (392 wide in a 393 frame), in the
- * frame's gold: a 14% → 3% wash, a 60% hairline, radius 27. Padding is the frame's
- * own 18 / 22 around a 1px centred stroke. */
+ * frame's gold. Mark's rehaul (28.09, 1944397594; 185:255): a 7% wash fading out, a
+ * 60% hairline, radius 27, the eyebrow 18.5 from the card's edge — the 1px border
+ * and 17.5. */
 .rv3 .rv4-try {
-  background: linear-gradient(180deg, rgba(230, 182, 92, 0.14) 0%, rgba(230, 182, 92, 0.03) 100%);
+  background: linear-gradient(180deg, rgba(230, 182, 92, 0.07) 0%, rgba(230, 182, 92, 0) 100%);
   border: 1px solid rgba(230, 182, 92, 0.6);
   border-radius: 27px;
   margin-inline: calc(var(--rv3-gutter) * -1);
-  padding: 18px 22px 20px;
+  padding: 17.5px 22px 20px;
   position: relative;
   width: calc(100% + var(--rv3-gutter) * 2);
 }
-/* 374:217 is 343 tall: 40px from the teaser's foot to the card's edge. */
+/* Every chapter's closed card is 343 (374:217, 377:221, 399:219, 441:6422): the pill
+ * at 298, 32 tall, and 13 under it — 12 and the border. */
 .rv3 .rv4-try:not(.is-open) {
-  padding-bottom: 39px;
+  padding-bottom: 12px;
 }
-/* 374:221 — "Practice time:" in Light, the value in Bold. */
+/* 185:256 — 12/12 in the green: "Practice Time:" Light in title case, the value Bold
+ * in capitals. Only a time label is title-cased (V4TryThis marks it); a Report 2.0
+ * practice's own label is set as written. */
 .rv3 .rv4-try__eyebrow {
   color: #2e7d5b;
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 12px;
   margin: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 .rv3 .rv4-try__eyebrow-label {
   font-weight: 300;
+}
+.rv3 .rv4-try__eyebrow-label.is-time {
+  text-transform: capitalize;
+}
+.rv3 .rv4-try__eyebrow-value {
+  font-weight: 700;
+  text-transform: uppercase;
 }
 /* 374:224 — 51px, but a MINIMUM: on a 320 phone the title wraps to two lines and
  * the row grows instead of running into the copy. */
@@ -4574,39 +4585,25 @@
   text-align: left;
   width: 100%;
 }
-/* 374:225 */
-.rv3 .rv4-try__chip {
-  align-items: center;
-  background: rgba(230, 182, 92, 0.16);
-  border-radius: 9px;
-  color: #b28a3c;
-  display: flex;
-  flex: none;
-  height: 29px;
-  justify-content: center;
-  width: 29px;
-}
-.rv3 .rv4-try__chip svg {
-  display: block;
-  height: 17px;
-  width: 17px;
-}
-/* 374:230 */
+/* 185:265 — no chip since the rehaul: "Try this" in Lora Bold, the rest Regular. */
 .rv3 .rv4-try__label {
   color: #7a4e12;
   flex: 1 1 auto;
   font-family: var(--font-serif);
   font-size: 20px;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: -0.24px;
   line-height: 24px;
   min-width: 0;
 }
-/* 374:232 closed — gold at 10%, chevron down; 374:253 open — white, a 1.5px gold
+.rv3 .rv4-try__lead {
+  font-weight: 700;
+}
+/* 894:7589 closed — gold at 18%, chevron down; 185:266 open — white, a 1.5px gold
  * ring, chevron up. */
 .rv3 .rv4-try__chev {
   align-items: center;
-  background: rgba(178, 138, 60, 0.1);
+  background: rgba(178, 138, 60, 0.18);
   border-radius: 17px;
   color: #b28a3c;
   display: flex;
@@ -4638,10 +4635,12 @@
 .rv3 .rv4-try__blurred > :last-child {
   margin-bottom: 0;
 }
-/* 375:270 — the closed teaser: a 218px box, faded over its last three lines the way
- * Mark coloured them (#7e7e7e / #b5b5b5 / #e5e5e5), and the pill overlapping its foot
- * by 10.5px, centred in the card. */
+/* 375:270 — the closed teaser: a 196px box since the rehaul, faded over its last
+ * lines the way Mark coloured them (#7e7e7e / #b5b5b5 / #e5e5e5), and the pill at a
+ * fixed 298 of the card whatever the box — 212.5 into this block, which starts 85.5
+ * down — so the block holds it: 212.5 + 32. */
 .rv3 .rv4-try__closed {
+  min-height: 244.5px;
   position: relative;
 }
 .rv3 .rv4-try__teaser {
@@ -4663,19 +4662,18 @@
     rgba(0, 0, 0, 0.1) 95%,
     rgba(0, 0, 0, 0.05) 100%
   );
-  max-height: 218px;
+  max-height: 196px;
   overflow: hidden;
 }
 .rv3 .rv4-try__teaser .rv4-prose__p {
   width: auto;
 }
-/* 452:295 "Show all pill" — Mark's standard 163x32 teaser CTA, in the card's brown. */
+/* 894:7594 "Show all pill" — "Read All", 126x32, in the card's brown. */
 .rv3 .rv4-try__open {
   align-items: center;
   background: #fff;
   border: 1.5px solid #8f5e16;
   border-radius: 999px;
-  bottom: -10.5px;
   box-sizing: border-box;
   color: #8f5e16;
   cursor: pointer;
@@ -4689,10 +4687,11 @@
   line-height: 12px;
   padding: 10px 22px;
   position: absolute;
-  text-transform: uppercase;
+  text-transform: capitalize;
+  top: 212.5px;
   transform: translateX(-50%);
   white-space: nowrap;
-  width: 163px;
+  width: 126px;
 }
 /* 374:258 — the gated practice. The third paragraph ramps over its full height
  * (411:5690); the rest is under the full blur (375:220) with the card 88px in. */
@@ -4931,20 +4930,14 @@
 
 /* ══ "Try this & see what shifts" — per-chapter numbers ═══════════════════════
  * Accelerator & Brakes draws the same card (377:221 / 374:304 / 375:221) with its
- * own teaser box (224 against 218), a ramp that fades in over four lines, open copy
- * set 8px under the button (its closed teaser, like all of Typical Beliefs, 4px),
- * and the Premium card measured from the gate. V4TryThis sets these as custom
- * properties; each falls back to Typical Beliefs' value, so its card is unchanged.
- * The pill keeps 200.5px into the paragraph and the closed card 343 tall either
- * way. */
+ * own teaser box (202 against the others' 196 since the rehaul), a ramp that fades in
+ * over four lines, open copy set 8px under the button (its closed teaser, like all of
+ * Typical Beliefs, 4px), and the Premium card measured from the gate. V4TryThis sets
+ * these as custom properties; each falls back to Typical Beliefs' value. The pill and
+ * the closed card's foot are the same in every chapter (298 / 343), so they no
+ * longer follow the teaser's box. */
 .rv3 .rv4-try__teaser {
-  max-height: var(--rv4-try-teaser-h, 218px);
-}
-.rv3 .rv4-try__open {
-  bottom: calc(var(--rv4-try-teaser-h, 218px) - 228.5px);
-}
-.rv3 .rv4-try:not(.is-open) {
-  padding-bottom: calc(257px - var(--rv4-try-teaser-h, 218px));
+  max-height: var(--rv4-try-teaser-h, 196px);
 }
 .rv3 .rv4-try__ramp {
   --rv4-band: var(--rv4-try-band, 100%);
@@ -5795,11 +5788,6 @@ html {
 }
 .rv3 .rv4-cip + .rv4-try {
   margin-top: 0;
-}
-/* 399:219 sets its pill 200px into the teaser (285 of the card), 3.5 lower than the
- * other chapters' 196.5, so it sits 8px off the teaser box's foot. */
-.rv3 .rv4-cip + .rv4-try .rv4-try__open {
-  bottom: calc(var(--rv4-try-teaser-h, 218px) - 232px);
 }
 /* 399:259 — the practice's three questions: 21px in, flush, 8px above what follows. */
 .rv3 .rv4-cip + .rv4-try .rv4-prose__list {
@@ -6699,14 +6687,9 @@ html {
 .rv3 .rv4-fvr__gate .rv4-premium {
   top: 103.3px;
 }
-/* 441:6422 draws Typical Beliefs' teaser — nine lines, the last three faded, the pill
- * 196.5px in — in a 247px text box the card ends at, so the card is 9.5px shorter
- * than 374:217's 343. */
+/* 441:6422 is 343 like every chapter's teaser card since the rehaul (28.09). */
 .rv3 .rv4-fvr + .rv4-try {
   margin-top: 0;
-}
-.rv3 .rv4-fvr + .rv4-try:not(.is-open) {
-  padding-bottom: 29px;
 }
 /* "Go deeper" 16.2 under the practice card: the card ends 16 above 441:6168's foot
  * and the article starts 0.175 into 244:258 (Mark, 1941885039, 25.09 — the report
