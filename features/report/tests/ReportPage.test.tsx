@@ -1714,6 +1714,27 @@ describe("ReportPage", () => {
     });
   });
 
+  // Sync 28.09 (Notion: "Take out the end of the report summary - 'Where this leaves
+  // you'"): hardly anyone scrolls that far, and its points belong in the chapters.
+  describe("V4 — the report ends without 'Where this leaves you'", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("drops the closing note under ?v4=1", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container } = render(<ReportPage />);
+      expect(container.querySelector(".report-closing")).toBeNull();
+    });
+
+    it("keeps it everywhere else", () => {
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container } = render(<ReportPage />);
+      expect(container.querySelector(".report-closing")).not.toBeNull();
+    });
+  });
+
   // Fatih, 27.09: "the entire page is laggy". The chapter the nav marks as current
   // changes some twenty times down the page. As state on ReportExperience, every change
   // re-rendered the whole report — ~120ms each on the dev server, and more once the
