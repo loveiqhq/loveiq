@@ -18,7 +18,8 @@ import type { Report3Run } from "./report3-archetype-page";
 
 /** One block of article body. The article mixes all three kinds. */
 export type Report3Block =
-  | { kind: "heading"; text: string }
+  /** `level: 2` sets a heading in the chapter H2 type (Lora 18) instead of the subheading one. */
+  | { kind: "heading"; text: string; level?: 2 }
   /** `tight` drops the 16px rule below — FvR stacks three bold questions flush. */
   | { kind: "para"; runs: readonly Report3Run[]; tight?: true }
   /**

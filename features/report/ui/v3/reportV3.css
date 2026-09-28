@@ -7705,3 +7705,14 @@ html {
     max-width: var(--rv4-track);
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════════
+ * REVIEW 28.09
+ * ════════════════════════════════════════════════════════════════════════════════ */
+
+/* 304:277 — Mark: "H2". A prose heading at level 2 takes the chapter H2's type
+ * (304:379, "Common challenges"); its spacing stays the subheading's. */
+.rv3 .rv4-prose__h.is-h2 {
+  font-size: 18px;
+  line-height: 21.6px;
+}

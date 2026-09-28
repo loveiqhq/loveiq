@@ -63,6 +63,20 @@ describe("the chapter body — 304:256", () => {
     ]);
   });
 
+  // Mark, Figma 304:277 (28.09): "H2". The belief map heads its section as "Common
+  // challenges" heads its own, so it takes that heading's level and type.
+  it("sets the belief map as an H2, in Common challenges' type", () => {
+    render(<V4TypicalBeliefs view={VIEW} />);
+    const map = screen.getByText("The Spark Seeker belief map");
+    expect(map.tagName).toBe("H3");
+    expect(map).toHaveClass("is-h2");
+    const css = V3_CSS.slice(V3_CSS.indexOf(".rv3 .rv4-prose__h.is-h2 {"));
+    expect(css.indexOf(".rv3 .rv4-prose__h.is-h2 {")).toBe(0);
+    expect(css.slice(0, css.indexOf("}"))).toMatch(
+      /font-size:\s*18px[\s\S]*line-height:\s*21\.6px/
+    );
+  });
+
   it("carries the frame's headings", () => {
     render(<V4TypicalBeliefs view={VIEW} />);
     expect(screen.getByText("The Spark Seeker belief map")).toBeInTheDocument();
