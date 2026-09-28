@@ -52,6 +52,10 @@ vi.mock("@features/admin/server/supabase", () => ({
 /** Per-mailbox file lists, keyed by the owner in the query. */
 const drive: Record<string, Array<{ id: string; name: string }>> = {};
 const listFails = new Set<string>();
+/** Owners whose listing times out this many more times before it answers. */
+const hangs = new Map<string, number>();
+/** Owners whose listing answers with a body that cannot be read. */
+const unreadable = new Set<string>();
 const queries: string[] = [];
 
 /** Owners whose listing is returned across two pages, to exercise the paging. */
@@ -63,6 +67,20 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     const decoded = decodeURIComponent(url);
     const owner = decoded.match(/'([^']+)' in owners/)?.[1] ?? "";
     if (listFails.has(owner)) return { ok: false, status: 403, text: async () => "denied" };
+    if ((hangs.get(owner) ?? 0) > 0) {
+      hangs.set(owner, hangs.get(owner)! - 1);
+      throw new Error(`Request timeout after 20000ms: ${url}`);
+    }
+    if (unreadable.has(owner)) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new DOMException("This operation was aborted", "AbortError");
+        },
+        text: async () => "",
+      };
+    }
     const all = drive[owner] ?? [];
     if (paged.has(owner)) {
       const second = /pageToken=/.test(decoded);
@@ -89,6 +107,8 @@ beforeEach(() => {
   mailboxes.value = null;
   refuseToken.clear();
   listFails.clear();
+  hangs.clear();
+  unreadable.clear();
   paged.clear();
   queries.length = 0;
   for (const k of Object.keys(drive)) delete drive[k];
@@ -101,6 +121,36 @@ describe("colleagueDocuments", () => {
     expect(r.items).toEqual([]);
     expect(r.tokens.size).toBe(0);
     expect({ asked: r.asked, refused: r.refused }).toEqual({ asked: 0, refused: 0 });
+  });
+
+  /**
+   * 2026-09-28: one colleague's first listing page took 13.8s, 0.6s and 4.8s on three
+   * tries, and twice that day it passed the 20s timeout, which THREW and ended the whole
+   * Drive run. A timeout is now a refusal: retried, then only that colleague's.
+   */
+  it("retries a colleague's listing that timed out, and lists it", async () => {
+    mailboxes.value = ["mo@loveiq.org"];
+    drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
+    hangs.set("mo@loveiq.org", 1);
+    const r = await colleagueDocuments(new Set(), () => false);
+    expect(r.items.map((f) => f.id)).toEqual(["n1"]);
+    expect(r.complete).toBe(true);
+  });
+
+  it("costs a colleague whose listing never answers only their own Drive", async () => {
+    mailboxes.value = ["mo@loveiq.org", "sk@loveiq.org"];
+    drive["sk@loveiq.org"] = [{ id: "s1", name: NOTE }];
+    hangs.set("mo@loveiq.org", 99);
+    const r = await colleagueDocuments(new Set(), () => false);
+    expect(r.items.map((f) => f.id)).toEqual(["s1"]);
+    expect({ refused: r.refused, complete: r.complete }).toEqual({ refused: 1, complete: false });
+  });
+
+  it("does not take a colleague's page it could not read for their last one", async () => {
+    mailboxes.value = ["mo@loveiq.org"];
+    unreadable.add("mo@loveiq.org");
+    const r = await colleagueDocuments(new Set(), () => false);
+    expect({ refused: r.refused, complete: r.complete }).toEqual({ refused: 1, complete: false });
   });
 
   it("collects a meeting note that only a colleague can see", async () => {

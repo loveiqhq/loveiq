@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The colleague half of the walk is real in these tests, not stubbed, so the
@@ -105,6 +105,13 @@ let exportFails = false;
 let exportFailStatus = 500;
 /** How many times the listing should answer with a transient 5xx before succeeding. */
 let listTransientFailures = 0;
+/** Listing requests that time out (fetchWithTimeout throws) before one answers. */
+let listTimeouts = 0;
+/** The first listing page names a successor whose body cannot be read. */
+let secondPageUnreadable = false;
+/** How a shortcut target lookup fails: a timeout, a status, an unreadable body, or not at all. */
+let targetFailure: "timeout" | "unreadable" | number | null = null;
+const timeout = (url: string) => new Error(`Request timeout after 20000ms: ${url}`);
 const httpCalls: string[] = [];
 /** Tab names and their rows, as the Sheets API would answer. */
 let sheetTabs: string[] = ["Costs", "Core_KPI"];
@@ -139,6 +146,22 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       };
     }
     if (url.includes("/files?q=")) {
+      if (listTimeouts > 0) {
+        listTimeouts -= 1;
+        throw timeout(url);
+      }
+      if (secondPageUnreadable) {
+        const second = /pageToken=/.test(url);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            if (second) throw new DOMException("This operation was aborted", "AbortError");
+            return { files, nextPageToken: "more" };
+          },
+          text: async () => "",
+        };
+      }
       if (listTransientFailures > 0) {
         listTransientFailures -= 1;
         return { ok: false, status: 500, text: async () => "backend error" };
@@ -171,6 +194,18 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     // single-file metadata GET, which is how a shortcut's TARGET is resolved
     const meta = /\/files\/([^?]+)\?fields=id,name/.exec(url);
     if (meta) {
+      if (targetFailure === "timeout") throw timeout(url);
+      if (targetFailure === "unreadable") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new DOMException("This operation was aborted", "AbortError");
+          },
+          text: async () => "",
+        };
+      }
+      if (targetFailure !== null) return { ok: false, status: targetFailure, text: async () => "" };
       const target = targets[decodeURIComponent(meta[1])];
       return target
         ? { ok: true, status: 200, json: async () => target, text: async () => "" }
@@ -1461,6 +1496,119 @@ describe("a transient Drive refusal is retried, not fatal", () => {
 
     expect(result.skipped).toBe("drive-list-failed");
     expect(listCalls()).toBe(1);
+  });
+});
+
+/**
+ * A TIMEOUT THROWS instead of answering, and until 2026-09-28 it escaped the retry above
+ * and every caller's refusal handling, so one slow request ended the whole run: three
+ * runs that day, two on one colleague's first listing page. Treating it as a refusal
+ * also needs every "no answer" to keep the listing incomplete, or the sweep deletes
+ * what it did not see.
+ */
+describe("a Drive request that times out is a refusal, not the end of the run", () => {
+  const OTHER = {
+    ...FILE,
+    id: "2ZyXwV",
+    webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+  };
+  const shortcut = (n: number) => ({
+    id: `sc${n}`,
+    name: `Meeting ${n} - Notes by Gemini`,
+    mimeType: "application/vnd.google-apps.shortcut",
+    shortcutDetails: {
+      targetId: `tgt${n}`,
+      targetMimeType: "application/vnd.google-apps.document",
+    },
+  });
+  const target = (n: number) => ({
+    ...FILE,
+    id: `tgt${n}`,
+    name: `Meeting ${n} - Notes by Gemini`,
+  });
+  // Old enough to be re-read, so both live documents are written and kept, and a third
+  // row is a minority the sweep's majority guard would let go.
+  const row = (id: string) => ({
+    source_id: `doc:${id}`,
+    meta: { edited: "2026-01-01T00:00:00.000Z" },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    files = [FILE, OTHER];
+    existing = [];
+    listOk = true;
+    exportFails = false;
+    alwaysMorePages = false;
+    listTransientFailures = 0;
+    targets = {};
+    pdfText = "";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
+  });
+  afterEach(() => {
+    listTimeouts = 0;
+    secondPageUnreadable = false;
+    targetFailure = null;
+  });
+
+  const listCalls = () => httpCalls.filter((u) => u.includes("/files?q=")).length;
+
+  it("retries a listing page that timed out, and completes the walk", async () => {
+    listTimeouts = 1;
+    const result = await ingestDrive(STAMP);
+    expect(result.complete).toBe(true);
+    expect(result.sweepBlocked).toBe(false);
+    expect(listCalls()).toBe(2);
+  });
+
+  it("gives up on a page that never answers without ending the run", async () => {
+    listTimeouts = 99;
+    await expect(ingestDrive(STAMP)).resolves.toMatchObject({ skipped: "drive-list-failed" });
+    expect(listCalls()).toBe(3);
+  });
+
+  it("does not take a page it could not read for the last one", async () => {
+    // Page 0 names a successor, whose body the timeout cut off. Called complete, the
+    // sweep deleted every indexed document that page would have listed.
+    secondPageUnreadable = true;
+    existing = [row(FILE.id), row(OTHER.id), row("on-page-two")];
+    const result = await ingestDrive(STAMP);
+    expect(result.sweepBlocked).toBe(true);
+    expect(result.detail).toMatch(/stopped=listing-unreadable@p1/);
+    expect(deletedIds()).not.toContain("doc:on-page-two");
+  });
+
+  it("keeps a shortcut's note when looking it up timed out", async () => {
+    files = [FILE, OTHER, shortcut(1)];
+    targetFailure = "timeout";
+    existing = [row(FILE.id), row(OTHER.id), row("tgt1")];
+    const result = await ingestDrive(STAMP);
+    expect(result.sweepBlocked).toBe(true);
+    expect(result.detail).toMatch(/stopped=shortcut-lookup-failed=1/);
+    expect(deletedIds()).not.toContain("doc:tgt1");
+  });
+
+  it("keeps it on any answer but a 404, which is the only one that means unshared", async () => {
+    // 503 an overload, 403 Drive's rate limit, 401 a token that expired mid-run.
+    files = [FILE, OTHER, shortcut(1)];
+    for (const failure of [503, 403, 401, "unreadable"] as const) {
+      targetFailure = failure;
+      expect((await ingestDrive(STAMP)).sweepBlocked, String(failure)).toBe(true);
+    }
+    targetFailure = 404; // the organiser has not shared it: the normal state
+    expect((await ingestDrive(STAMP)).sweepBlocked).toBe(false);
+  });
+
+  it("stops looking shortcuts up once the time is gone, and calls the listing short", async () => {
+    files = [FILE, OTHER, shortcut(1), shortcut(2)];
+    targets = { tgt1: target(1), tgt2: target(2) };
+    const asked = (n: number) => httpCalls.some((u) => u.includes(`/files/tgt${n}?fields=`));
+    const result = await ingestDrive(STAMP, () => asked(1));
+    expect(asked(2)).toBe(false);
+    expect(result.sweepBlocked).toBe(true);
   });
 });
 
