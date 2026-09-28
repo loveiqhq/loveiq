@@ -147,6 +147,16 @@ describe("V4FantasyTable — open (639:308)", () => {
     expect(within(cat).getByRole("button", { name: "Show all 11 fantasies" })).toBeTruthy();
   });
 
+  // Mark, 28.09 (1944175761): "All CTAs updated, to no longer be CAPs". 639:499 reads
+  // "Show all" (title case; it read "Show all 11 Fantasies"), and the count stays in the
+  // accessible name. The paywalled pills (639:2100) keep their words.
+  it("reads 'Show all' on the pill, the count left to its accessible name", () => {
+    const { container } = render(<V4FantasyTable table={OPEN} />);
+    const cat = categories(container)[0]!;
+    const pill = within(cat).getByRole("button", { name: "Show all 11 fantasies" });
+    expect(pill.querySelector(".rv4-fvt__pill-label")!.textContent).toBe("Show all");
+  });
+
   it("shows every fantasy on 'Show all', and the pill goes", () => {
     const { container } = render(<V4FantasyTable table={OPEN} />);
     const cat = categories(container)[0]!;
@@ -355,6 +365,15 @@ describe("reportV3.css — fantasy table contracts", () => {
       "margin-right: -0.8px"
     );
     expect(ruleOf(".rv3 .rv4-fvt__num")).toContain("margin-right: 0.58px");
+  });
+
+  // 639:498 now stands centred in the table (x 121 + 43 of 328) and 54.19 into the fade;
+  // it stood 20px right of the middle, 48 in.
+  it("centres the open pill in the table, 54.19px into the fade", () => {
+    const pill = ruleOf(".rv3 .rv4-fvt__peek .rv4-fvt__pill");
+    expect(pill).toContain("left: 50%");
+    expect(pill).toContain("top: 54.19px");
+    expect(pill).not.toContain("+ 20px");
   });
 
   it("uses no class name the V3 chapter catch-alls restyle", () => {
