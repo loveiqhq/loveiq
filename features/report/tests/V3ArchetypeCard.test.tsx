@@ -66,6 +66,22 @@ describe("V3ArchetypeCard", () => {
     }
   });
 
+  it("heads core motivation with its label over 'What drives your desire', the value below", () => {
+    const { container } = renderCard();
+    const labels = container.querySelector(".rv3-arch__motive-labels");
+    expect(labels?.querySelector(".rv3-arch__motive-label")?.textContent).toBe("Core motivation");
+    expect(labels?.querySelector(".rv3-arch__motive-sub")?.textContent).toBe(
+      "What drives your desire"
+    );
+    // 15:843 left the labels for a row of its own under the head (15:832).
+    expect(labels?.querySelector(".rv3-arch__motive-value")).toBeNull();
+    const head = container.querySelector(".rv3-arch__motive-head");
+    const value = container.querySelector(".rv3-arch__motive-value");
+    expect(value?.textContent).toBe(copy.coreMotivation.value);
+    expect(head?.nextElementSibling).toBe(value);
+    expect(value?.nextElementSibling?.className).toBe("rv3-arch__motive-body");
+  });
+
   it("does not build the frames' hidden sub-trees (15:848, 15:966, 15:967)", () => {
     const { container } = renderCard();
     // Those carry hidden="true" in Figma; the only spacers are the three real ones.
@@ -298,13 +314,40 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline")).toMatch(/min-height: 70px/);
   });
 
-  it("sizes the core motivation head to 15:832's 51px", () => {
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label")).toMatch(/min-height: 23px/);
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-value")).toMatch(/min-height: 28px/);
+  // Mark, 28.09 (1943978527): "Decreased Font size here". 15:829 is Lora 16/24.
+  it("sets the tagline in Lora 16/24 inside 15:828's 70px box", () => {
+    const tagline = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline");
+    expect(tagline).toMatch(/font-size: 16px/);
+    expect(tagline).toMatch(/line-height: 24px/);
+    expect(tagline).toMatch(/letter-spacing: 0/);
   });
 
-  it("insets the content by the 1px stroke alone and keeps the fixed frame's room below", () => {
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 49px/);
+  // Mark, 28.09 (1943978820, "Changed font size here" / "Also added the 'What drives
+  // your desire'"; 1943982885, "Width of text box was changed"). 15:831 is a 197px
+  // column, 10 apart: the 45px head (label over sub-label), the value, the body.
+  it("lays the core motivation panel out as 15:831's 197px column, 10px apart", () => {
+    const panel = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive");
+    expect(panel).toMatch(/gap: 10px/);
+    expect(panel).toMatch(/height: auto/);
+    expect(panel).toMatch(/min-height: 197px/);
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-labels")).toMatch(
+      /align-self: stretch/
+    );
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label")).toMatch(/min-height: 23px/);
+    const sub = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-sub");
+    expect(sub).toMatch(/font-size: 12px/);
+    expect(sub).toMatch(/line-height: 19\.2px/);
+    const value = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-value");
+    expect(value).toMatch(/font-size: 18px/);
+    expect(value).toMatch(/padding-top: 0/);
+    const body = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-body");
+    expect(body).toMatch(/margin: 0/);
+    // 15:845 is 281 wide, 2px past the panel's padding at 393; it narrows below that.
+    expect(body).toMatch(/width: min\(281px, calc\(100% \+ 2px\)\)/);
+  });
+
+  it("keeps the card at 15:815's 1031, the taller panel taken out of the bottom room", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 30px/);
   });
 
   it("keeps the frame's widths at 393 but narrows instead of clipping on smaller phones", () => {
@@ -316,9 +359,6 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     );
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline")).toMatch(
       /width: min\(323px, calc\(100% \+ 8px\)\)/
-    );
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-body")).toMatch(
-      /width: min\(259px, 100%\)/
     );
     for (const part of [
       ".rv3:is(.rv4, .rv4-doc) .rv3-deck",

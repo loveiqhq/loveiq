@@ -27,6 +27,11 @@ const METER_STOPS: ReadonlyArray<{ level: Report3MeterLevel; label: string }> = 
   { level: "medium", label: "Medium" },
   { level: "high", label: "High" },
 ];
+/**
+ * 870:7211, under "Core motivation" — Mark added it on 28.09 (1943978820), in the manner
+ * of the deck cards' "How desire gets spoken". Chrome, the same for every archetype.
+ */
+const CORE_MOTIVATION_SUB = "What drives your desire";
 
 interface Props {
   archetype: ArchetypeName;
@@ -88,7 +93,8 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
         </p>
       </header>
 
-      {/* 15:830 / 15:831 — core motivation panel on the peach gradient. */}
+      {/* 15:830 / 15:831 — core motivation panel on the peach gradient: the head (chip,
+       * label and sub-label), then the value on a row of its own, then the body. */}
       <div className="rv3-arch__motive-wrap" data-node-id="15:830">
         <div className="rv3-arch__motive" data-node-id="15:831">
           <div className="rv3-arch__motive-head" data-node-id="15:832">
@@ -99,11 +105,14 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
               <span className="rv3-arch__motive-label" data-node-id="15:841">
                 Core motivation
               </span>
-              <span className="rv3-arch__motive-value" data-node-id="15:843">
-                {copy.coreMotivation.value}
+              <span className="rv3-arch__motive-sub" data-node-id="870:7211">
+                {CORE_MOTIVATION_SUB}
               </span>
             </span>
           </div>
+          <p className="rv3-arch__motive-value" data-node-id="15:843">
+            {copy.coreMotivation.value}
+          </p>
           <p className="rv3-arch__motive-body" data-node-id="15:845">
             {copy.coreMotivation.body}
           </p>
