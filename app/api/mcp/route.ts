@@ -3721,12 +3721,13 @@ async function callTool(
     const nextPart = last + 1;
     const more = wanted.length > taken.length;
     /**
-     * THE 400-ROW CAP, SAID OUT LOUD WHEN IT FIRES.
+     * THE READ CAP, SAID OUT LOUD WHEN IT FIRES.
      *
      * `parts.length` counts what came back, not what exists, so a document over the cap
      * printed a denominator that was simply wrong and claimed "this is all of it".
      * `matchedTotal` is the real count from `content-range`; null means the header was
-     * unreadable, which is distinct from "not capped" and says so rather than guessing.
+     * unreadable, and then nothing is claimed about a cap: the read pages on until a short
+     * page, so only a document past the 4,000-row read limit could still be cut, silently.
      */
     const capped = matchedTotal !== null && matchedTotal > rows.length;
     const head =
@@ -3944,6 +3945,12 @@ async function callTool(
       until: typeof args.until === "string" ? args.until : undefined,
       meta: asMeta(args.meta),
     };
+    // A book filter without the book source matches nothing, because books are opt-in, and
+    // "widen it" was the wrong advice for that.
+    const bookHint =
+      !opts.sources?.includes("book") && (opts.meta?.kind === "book" || opts.meta?.book)
+        ? ' Books are left out unless `sources` names "book".'
+        : "";
     const learnedSince =
       typeof args.learned_since === "string" && args.learned_since.trim()
         ? args.learned_since.trim()
@@ -4037,7 +4044,7 @@ async function callTool(
       if (rows.length === 0) {
         return textResult(
           `Nothing matches (${applied}). That is what this request selected, not what the ` +
-            `company has — widen it before concluding the record does not exist.`
+            `company has — widen it before concluding the record does not exist.${bookHint}`
         );
       }
       const total = rows[0]!.total;
@@ -4210,7 +4217,7 @@ async function callTool(
     if (rows.length === 0) {
       return textResult(
         `Nothing matches (${applied}). That is what this request selected, not what the ` +
-          `company has — widen it before concluding the record does not exist.`
+          `company has — widen it before concluding the record does not exist.${bookHint}`
       );
     }
     stats.sourceCount = rows.length;
@@ -5872,7 +5879,7 @@ async function callTool(
       const ingested = lastRows?.[0]?.updated_at?.slice(0, 10) ?? "?";
 
       return (
-        `${source}: ${total} chunks · newest period ${period ?? "n/a (docs carry no period)"}` +
+        `${source}: ${total} chunks · newest period ${period ?? "n/a (its records carry no date)"}` +
         (source === "book" ? ` · searched only when named: sources ["book"]` : "") +
         ` · last wrote ${ingested}${health(source)}`
       );
