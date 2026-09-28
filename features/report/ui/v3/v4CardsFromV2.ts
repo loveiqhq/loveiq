@@ -201,6 +201,9 @@ const practiceOf = (copy: Copy, label: string): Report3PracticeView | null => {
 };
 
 /** The copy with the given fields cleared, so the section's panel guard finds nothing. */
+/** Each 2.0 section draws its "What you will learn" block only while these are set. */
+const LEARN_KEYS = ["learn.eyebrow", "learn.body"] as const;
+
 const without = (copy: Copy, keys: readonly string[]): Copy => ({
   ...copy,
   ...Object.fromEntries(keys.map((key) => [key, null])),
@@ -241,6 +244,14 @@ export function v4CardsFromV2<T extends V2ChapterCopies>(
         ...(chapter === "curiosity_level" ? EDU_STRUCT_KEYS : []),
       ])
     );
+  }
+
+  // Mark, 28.09: "can we take out the 'what you will learn' text sections from the V2
+  // report chapters. This is the equivalent of the new teaser texts." Every unlocked
+  // copy loses the block, with a card or without; a locked one keeps it by its paywall.
+  for (const [key, copy] of out) {
+    if (!copy || copy.locked !== false) continue;
+    out.set(key, without(copy, LEARN_KEYS));
   }
 
   return { copies: Object.fromEntries(out) as T, cards };

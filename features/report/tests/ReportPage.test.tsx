@@ -1714,6 +1714,47 @@ describe("ReportPage", () => {
     });
   });
 
+  // Mark, 28.09: "can we take out the 'what you will learn' text sections from the V2
+  // report chapters." Growth has no card, so its copy reached it without the mapper.
+  describe("V4 — the 2.0 chapters open without 'What you will learn'", () => {
+    const GROWTH = {
+      locked: false,
+      "learn.eyebrow": "What you will learn",
+      "learn.body": "The shifts that move you forward.",
+    };
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+    const withGrowth = () => {
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        accessPlan: "full_report",
+        growthCopy: GROWTH,
+      });
+      return response;
+    };
+    const learnIn = (root: HTMLElement) =>
+      root
+        .querySelector("#typical_growth_potentials_for_the_core_archetype")
+        ?.querySelector('[class$="__learn-body"]') ?? null;
+
+    it("drops it from Growth, a chapter with no card, under ?v4=1", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withGrowth());
+      const { container } = render(<ReportPage />);
+      expect(
+        container.querySelector("#typical_growth_potentials_for_the_core_archetype")
+      ).not.toBeNull();
+      expect(learnIn(container)).toBeNull();
+    });
+
+    it("keeps it under ?v2=1", () => {
+      mockUseReportData.mockReturnValue(withGrowth());
+      const { container } = render(<ReportPage />);
+      expect(learnIn(container)).not.toBeNull();
+    });
+  });
+
   // Sync 28.09 (Notion: "Take out the end of the report summary - 'Where this leaves
   // you'"): hardly anyone scrolls that far, and its points belong in the chapters.
   describe("V4 — the report ends without 'Where this leaves you'", () => {
