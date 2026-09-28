@@ -295,6 +295,13 @@ const BACKOFF_MS = [400, 1200];
  *
  * A 4xx that is not 429 is the caller's fault and is returned immediately: retrying a
  * 403 just spends the time budget arriving at the same answer.
+ *
+ * A TIMEOUT IS A 504 HERE. `fetchWithTimeout` throws instead of answering, which skipped
+ * this retry and every caller's refusal handling, so one slow request ended the whole run:
+ * three runs on 2026-09-28, two of them on one colleague's first listing page, which
+ * took 13.8s, 0.6s and 4.8s on three tries that evening against ~0.5s for everyone else.
+ * Retried like the gateway timeout it amounts to, and handed back as one, so it costs
+ * what a slow 504 already could and the callers' own handling decides what it means.
  */
 async function driveGet(token: string, path: string): Promise<Response> {
   let res: Response | undefined;
@@ -305,10 +312,15 @@ async function driveGet(token: string, path: string): Promise<Response> {
     }
     // An absolute URL passes through, so the Sheets API reuses this retry/backoff
     // instead of growing a second copy of it.
-    res = await fetchWithTimeout(path.startsWith("https://") ? path : `${API}${path}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      timeoutMs: TIMEOUT_MS,
-    });
+    try {
+      res = await fetchWithTimeout(path.startsWith("https://") ? path : `${API}${path}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        timeoutMs: TIMEOUT_MS,
+      });
+    } catch (err) {
+      logger.warn({ attempt, err: String(err) }, "brain-ingest drive: request failed");
+      res = new Response(String(err), { status: 504 });
+    }
     if (!RETRYABLE.has(res.status)) return res;
   }
   // Out of attempts: hand back the last refusal so the caller names it as it always did.
@@ -366,8 +378,12 @@ async function listDocs(
       files?: DriveFile[];
       nextPageToken?: string;
     } | null;
-    for (const f of json?.files ?? []) if (f.id) out.push(f);
-    pageToken = json?.nextPageToken;
+    // NOT an empty last page. The timeout also covers reading the body, and a page that
+    // could not be read has no nextPageToken, so it called a cut-short listing complete
+    // and handed the sweep everything after it.
+    if (!json) return { items: out, complete: false, stopped: `listing-unreadable@p${page}` };
+    for (const f of json.files ?? []) if (f.id) out.push(f);
+    pageToken = json.nextPageToken;
     if (!pageToken) break;
     // The cap is PAGE_SIZE * MAX_PAGES documents. Named separately because hitting it
     // is a capacity decision to revisit, not a fault to chase.
@@ -511,10 +527,16 @@ export async function colleagueDocuments(
         complete = false;
         break;
       }
-      const body = (await res.json().catch(() => ({}))) as {
+      const body = (await res.json().catch(() => null)) as {
         files?: DriveFile[];
         nextPageToken?: string;
-      };
+      } | null;
+      // Unreadable is not "no more files" (see listDocs).
+      if (!body) {
+        refused += 1;
+        complete = false;
+        break;
+      }
       for (const f of body.files ?? []) {
         if (!f.id || seen.has(f.id)) continue;
         seen.add(f.id);
@@ -550,12 +572,21 @@ export async function colleagueDocuments(
  */
 async function resolveShortcuts(
   token: string,
-  listed: DriveFile[]
-): Promise<{ docs: DriveFile[]; unreachable: number; skippedNonDoc: number }> {
+  listed: DriveFile[],
+  isOutOfTime: () => boolean
+): Promise<{ docs: DriveFile[]; unreachable: number; skippedNonDoc: number; failed: number }> {
   const docs: DriveFile[] = [];
   const seen = new Set<string>();
   let unreachable = 0;
   let skippedNonDoc = 0;
+  /**
+   * Lookups that got NO answer: a timeout, an overload, an unreadable body, or no time
+   * left to ask. Unlike an unshared target, the note may well exist, and leaving it out
+   * of a complete listing let the sweep delete it, so any of these makes the listing
+   * incomplete. About 130 shortcuts across the colleagues' Drives on 2026-09-28, so the
+   * clock is checked here too.
+   */
+  let failed = 0;
 
   for (const f of listed) {
     if (f.mimeType && WANTED_MIMES.includes(f.mimeType) && f.id) {
@@ -576,6 +607,10 @@ async function resolveShortcuts(
     // A target can also be directly visible; do not index it twice.
     if (seen.has(targetId)) continue;
 
+    if (isOutOfTime()) {
+      failed += 1;
+      continue;
+    }
     const res = await driveGet(
       token,
       `/files/${encodeURIComponent(targetId)}` +
@@ -583,11 +618,16 @@ async function resolveShortcuts(
         `&supportsAllDrives=true`
     );
     if (!res.ok) {
-      unreachable += 1;
+      if (RETRYABLE.has(res.status)) failed += 1;
+      else unreachable += 1;
       continue;
     }
     const target = (await res.json().catch(() => null)) as DriveFile | null;
-    if (!target?.id) {
+    if (!target) {
+      failed += 1;
+      continue;
+    }
+    if (!target.id) {
       unreachable += 1;
       continue;
     }
@@ -597,7 +637,7 @@ async function resolveShortcuts(
     docs.push({ ...target, name: target.name || f.name });
   }
 
-  return { docs, unreachable, skippedNonDoc };
+  return { docs, unreachable, skippedNonDoc, failed };
 }
 
 /** A Google Doc as plain text. */
@@ -1267,7 +1307,7 @@ export async function ingestDrive(
     isOutOfTime,
     oidcToken
   );
-  const resolved = await resolveShortcuts(token, [...raw.items, ...colleagues.items]);
+  const resolved = await resolveShortcuts(token, [...raw.items, ...colleagues.items], isOutOfTime);
   // Filtered here rather than at fetch time so the ids never reach `toFetch`,
   // `touch` or `deferred` either: a skipped document must look absent to the
   // sweep, not merely unfetched, or the sweep would protect the rows we are
@@ -1286,8 +1326,14 @@ export async function ingestDrive(
      * refused token would otherwise present ~100 live documents to the sweep as
      * deleted — not enough to trip the majority guard, so they would actually go.
      */
-    complete: raw.complete && colleagues.complete,
-    stopped: raw.stopped ?? (colleagues.complete ? undefined : "colleague-walk-incomplete"),
+    complete: raw.complete && colleagues.complete && resolved.failed === 0,
+    stopped:
+      raw.stopped ??
+      (!colleagues.complete
+        ? "colleague-walk-incomplete"
+        : resolved.failed > 0
+          ? `shortcut-lookup-failed=${resolved.failed}`
+          : undefined),
   };
 
   if (resolved.unreachable > 0 || resolved.skippedNonDoc > 0) {
