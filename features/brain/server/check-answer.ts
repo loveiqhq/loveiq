@@ -129,6 +129,10 @@ export function atomsIn(sentence: string): Atom[] {
   return atoms;
 }
 
+/** A date form found only where no digit runs on either side of it. */
+const wholeDate = (form: string) =>
+  new RegExp(`(?<!\\d)${form.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`);
+
 /**
  * A figure is in a source when a number there rounds to it at the answer's own places:
  * "3.3%" is confirmed by "3.28%", and "EUR 70.00" by "70".
@@ -195,7 +199,8 @@ export function checkAnswer(answer: string, sources: SourceText[]): CheckResult 
       const home = against.find((id) => {
         const s = byId.get(id)!;
         if (a.kind === "quote") return s.norm.includes(a.norm);
-        if (a.kind === "date") return a.forms.some((f) => s.norm.includes(f));
+        // Whole numbers only: "aug 2" sits inside "aug 29", and "2 august" inside "12 august".
+        if (a.kind === "date") return a.forms.some((f) => wholeDate(f).test(s.norm));
         return holdsNumber(s.numbers, a);
       });
       if (home) {
