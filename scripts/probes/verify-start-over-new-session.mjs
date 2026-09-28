@@ -46,12 +46,16 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     continue;
   }
   const engine = /iphone|ipad|safari/i.test(name) ? webkit : chromium;
-  const browser = await engine.launch();
-  const ctx = await browser.newContext({ ...device, locale: "en-US" });
-  await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
-  const page = await ctx.newPage();
+  let browser;
 
   try {
+    // Inside the try: a browser that will not start measured nothing, and an
+    // uncaught throw here would exit 1, the code for "reproduced".
+    browser = await engine.launch();
+    const ctx = await browser.newContext({ ...device, locale: "en-US" });
+    await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
+    const page = await ctx.newPage();
+
     await page.goto(`${ORIGIN}/survey`, { waitUntil: "domcontentloaded", timeout: 120_000 });
     // The banner covers 316px of a phone and could sit over the button.
     await page
@@ -119,7 +123,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     console.log(`${name}: exception: ${String(err.message).split("\n")[0].slice(0, 120)}`);
     unmeasured += 1;
   } finally {
-    await browser.close();
+    await browser?.close();
   }
 }
 
