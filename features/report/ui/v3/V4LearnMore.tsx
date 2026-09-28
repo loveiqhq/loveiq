@@ -60,7 +60,7 @@ export const splitEyebrow = (text: string): [string, string] => {
 /**
  * Mark's rehaul (28.09): "Practice Time:" / "Reading Time:" in title case, which a
  * label of any other kind must not get — the Report 2.0 practices carry their own
- * ("Working with your sensitivity: three moves"), set as written.
+ * titles as the eyebrow, set as written.
  */
 export const isTimeLabel = (label: string) => /\btime:$/i.test(label.trim());
 
