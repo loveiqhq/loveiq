@@ -355,6 +355,106 @@ describe("renderSelfReport", () => {
     ...over,
   });
 
+  it("compares speed tool for tool, so a change in which tools were used is not a slowdown", () => {
+    const fast = Array.from({ length: 20 }, () => row({ latency_ms: 300 }));
+    const before = windowStats(fast, FLOOR);
+    const renders = Array.from({ length: 20 }, () =>
+      row({ tool: "show_design", latency_ms: 9_000 })
+    );
+    const mixed = renderSelfReport(
+      report({ now: windowStats([...fast, ...renders], FLOOR), before }),
+      FLOOR,
+      { withQuestions: false, nowMs: NOW }
+    );
+    expect(mixed).toContain("95% within 9.0 s (before, 0.3 s)");
+    expect(mixed).toContain(
+      "Tool for tool (1 used in both windows), none got slower, " +
+        "so the rise is in which tools were used."
+    );
+
+    const slow = Array.from({ length: 20 }, () => row({ latency_ms: 2_000 }));
+    const slower = renderSelfReport(report({ now: windowStats(slow, FLOOR), before }), FLOOR, {
+      withQuestions: false,
+      nowMs: NOW,
+    });
+    expect(slower).toContain(
+      "Slower than before, tool for tool: fetch_document (95% within 2.0 s, was 0.3 s)."
+    );
+
+    // Exactly 25% and half a second slower is slower.
+    const at = (ms: number) =>
+      windowStats(
+        Array.from({ length: 20 }, () => row({ latency_ms: ms })),
+        FLOOR
+      );
+    const render = (now: ReturnType<typeof windowStats>, was: ReturnType<typeof windowStats>) =>
+      renderSelfReport(report({ now, before: was }), FLOOR, { withQuestions: false, nowMs: NOW });
+    expect(render(at(2_500), at(2_000))).toContain(
+      "Slower than before, tool for tool: fetch_document (95% within 2.5 s, was 2.0 s)."
+    );
+    // A tool that rose, but not that far, is not blamed on the mix.
+    const under = render(at(1_400), at(1_000));
+    expect(under).toContain(
+      "Tool for tool (1 used in both windows), none slowed by 25% and half a second or more."
+    );
+    expect(under).not.toContain("which tools were used");
+    // Nothing to compare, and the report says so rather than stopping short.
+    expect(render(windowStats(renders, FLOOR), before)).toContain(
+      "No tool used ten or more times this week had three or more calls before, so this cannot be compared tool for tool."
+    );
+
+    // Round-9 audit: 8 calls at 1.0 s before, 60 at 9.0 s now, is a slower tool, not a mix.
+    const quietBefore = windowStats(
+      [
+        ...fast,
+        ...Array.from({ length: 8 }, () =>
+          row({ tool: "search_company_context", latency_ms: 1_000 })
+        ),
+      ],
+      FLOOR
+    );
+    const busyNow = windowStats(
+      [
+        ...fast,
+        ...Array.from({ length: 60 }, () =>
+          row({ tool: "search_company_context", latency_ms: 9_000 })
+        ),
+      ],
+      FLOOR
+    );
+    const quiet = render(busyNow, quietBefore);
+    expect(quiet).toContain("search_company_context (95% within 9.0 s, was 1.0 s)");
+    expect(quiet).not.toContain("which tools were used");
+
+    // Five calls this week are too few to name as a slowdown, however slow they were.
+    const rare = (ms: number) =>
+      Array.from({ length: 5 }, () => row({ tool: "list_sources", latency_ms: ms }));
+    const fewNow = render(
+      windowStats([...fast, ...rare(9_000)], FLOOR),
+      windowStats([...fast, ...rare(1_000)], FLOOR)
+    );
+    expect(fewNow).not.toContain("list_sources (95% within");
+    expect(fewNow).toContain("Tool for tool (1 used in both windows)");
+
+    // A recorded 0 ms is a baseline; a tool with no timings at all has none.
+    const instant = windowStats(
+      Array.from({ length: 20 }, () => row({ latency_ms: 0 })),
+      FLOOR
+    );
+    const fromZero = renderSelfReport(
+      report({ now: windowStats(slow, FLOOR), before: instant }),
+      FLOOR,
+      { withQuestions: false, nowMs: NOW }
+    );
+    expect(fromZero).toContain("fetch_document (95% within 2.0 s, was 0.0 s)");
+    const untimed = windowStats(
+      Array.from({ length: 20 }, () => row({ latency_ms: null })),
+      FLOOR
+    );
+    expect(untimed.toolP95).toEqual([]);
+    expect(untimed.slowest).toEqual([]);
+  });
+
   it("says who used it once people sign in, and says nothing about it before", () => {
     const signedIn = windowStats(
       [
