@@ -59,8 +59,18 @@ const DB = join(
 /** Core Data counts seconds from 2001-01-01, not from 1970. */
 const CORE_DATA_EPOCH = 978_307_200;
 
+/**
+ * Read-only, but through SQLite's own locking, NOT `immutable=1`. WhatsApp keeps its newest
+ * writes in the `-wal` file until it checkpoints, and `immutable=1` reads the main file
+ * alone: measured through the launcher on 2026-09-28, a message 20 seconds old was missing
+ * from it while a read that included the WAL had it (2,522 against 2,523). It also promises
+ * SQLite the file cannot change, and during a checkpoint it does, which SQLite documents as
+ * wrong results or SQLITE_CORRUPT. A reader in WAL mode never blocks WhatsApp's writes; the
+ * busy timeout covers the moment WhatsApp holds the lock to reset the WAL.
+ */
 function query<T>(sql: string): T[] {
-  const out = execFileSync("sqlite3", ["-readonly", "-json", `file:${DB}?immutable=1`, sql], {
+  const args = ["-readonly", "-json", "-cmd", ".timeout 5000", `file:${DB}?mode=ro`, sql];
+  const out = execFileSync("sqlite3", args, {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
     // A read that hangs (it did, for 7.5 hours on 2026-09-26) blocks every later run, since
