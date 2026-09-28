@@ -1,6 +1,5 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
-import { CLOCK_WORKFLOWS } from "./github-jobs";
 
 /**
  * Watchdog for crons that stop firing.
@@ -81,7 +80,7 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-brief": 26 * 3_600_000,
   // Daily, and silent like the brief: it posts nothing to Slack at all, so a dead miner
   // looks exactly like a fortnight of quiet meetings. Watched for the same reason — it
-  // records a run every night whether or not it found a decision, and the thing it is
+  // records a run every day whether or not it found a decision, and the thing it is
   // building, the decision record, is the corpus's thinnest and most valuable material.
   "brain-mine": 26 * 3_600_000,
   // Daily, and silent like the brief and the miner. Watched for an extra reason: its
@@ -96,8 +95,8 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // Nightly, in GitHub Actions. It records a run whether or not anything was queued, so a
   // missing night means the job did not fire, and questions are waiting on it.
   "brain-night-shift": 26 * 3_600_000,
-  // Nightly, straight after the miner in the same GitHub job: decisions that may not both
-  // stand. It records a run whether or not anything changed, so a missing night shows.
+  // Daily, straight after the miner in the same GitHub job: decisions that may not both
+  // stand. It records a run whether or not anything changed, so a missing day shows.
   "brain-radar": 26 * 3_600_000,
   // WEEKLY, Mondays in GitHub Actions: the two test batteries record their results, then
   // the brain's report on itself is written. Eight days is one missed Monday, and a missed
@@ -142,11 +141,10 @@ export const LAPTOP_JOBS: Record<string, { script: string; remedy: string }> = {
 };
 
 /**
- * Watched jobs that run in GitHub Actions, and their workflow. Most are started by
- * Vercel's clock (CLOCK_WORKFLOWS), so when one goes quiet the clock or its token is the
- * likeliest cause; the brain's still use GitHub's schedule, which runs hours late. Either
- * way the remedy is to start it by hand, so the alert says where. A test keeps this in
- * step with the workflows.
+ * Watched jobs that run in GitHub Actions, and their workflow. Vercel's clock starts every
+ * one (CLOCK_WORKFLOWS), so when one goes quiet the clock or its token is the likeliest
+ * cause, and the remedy is to start it by hand; the alert says where. A test keeps this in
+ * step with the workflows, and fails if one is left on GitHub's own schedule.
  */
 export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-brief": "brain-daily.yml",
@@ -232,15 +230,11 @@ export function describeStall(s: StalledCron): string {
     );
   }
   const workflow = GITHUB_WORKFLOW[s.cron];
-  const byClock = (CLOCK_WORKFLOWS as readonly string[]).includes(workflow ?? "");
-  const github = !workflow
-    ? null
-    : byClock
-      ? `Vercel's clock starts it in GitHub Actions (${workflow}, via start-github-jobs): ` +
-        `check that cron's last run and its GITHUB_DISPATCH_TOKEN, or start it by hand ` +
-        `from the Actions tab.`
-      : `GitHub Actions starts it (${workflow}) and runs this repo's schedules hours late, ` +
-        `sometimes not at all: start it by hand from the Actions tab if it cannot wait.`;
+  const github = workflow
+    ? `Vercel's clock starts it in GitHub Actions (${workflow}, via start-github-jobs): ` +
+      `check that cron's last run and its GITHUB_DISPATCH_TOKEN, or start it by hand ` +
+      `from the Actions tab.`
+    : null;
   if (s.lastRunAt === null) {
     return (
       `*${s.cron}* has NEVER recorded a run. If it was deployed within the last ` +

@@ -23,8 +23,9 @@ retired without deleting the code. Check `vercel.json` before assuming one of th
 **GitHub Actions jobs are started by Vercel's clock, and watched.** GitHub's own schedule
 starts this repo's jobs 4.5 to 5.5 hours late and drops the slots that fall due meanwhile
 (since its 2026-08-26 incident; an hourly cron still ran four times a day), so
-`/api/cron/start-github-jobs` starts the UX verifier every hour and probe guard, survey DB
-sync, health monitor and the digest audit in their morning hours, through
+`/api/cron/start-github-jobs` starts the UX verifier and the brain's embedding catch-up every
+hour, probe guard, survey DB sync, health monitor and the digest audit in their morning
+hours, and the brain's daily jobs (`brain-daily.yml`) at theirs, through
 `workflow_dispatch` with `GITHUB_DISPATCH_TOKEN` (`server/github-jobs.ts` says when). Those
 workflows have no `schedule:`, so GitHub cannot start late duplicates. The verifier and the
 audit record the clock's runs with `scripts/record-cron-run.mjs <name>` (their `on_time`
@@ -32,8 +33,8 @@ input), and `server/cron-stall.ts` alerts #ops when one goes quiet: 3 h and 26 h
 for the clock itself. A start GitHub refuses is an error log, which reaches #prod-alerts.
 The stall test counts a GitHub job only if it is scheduled (by GitHub or the clock) and
 records under that name. For a job in GitHub Actions the alert names its workflow
-(`GITHUB_WORKFLOW`), because the fix is usually to start it by hand, not to debug it. The
-brain's jobs still use GitHub's schedule, timed to land after its delay.
+(`GITHUB_WORKFLOW`), because the fix is usually to start it by hand, not to debug it. Every
+watched GitHub job is on the clock, and a test fails if one is left on GitHub's schedule.
 
 **Belongs:** cron job handlers + their tests.
 

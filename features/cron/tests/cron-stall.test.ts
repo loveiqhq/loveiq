@@ -99,9 +99,8 @@ describe("findStalledCrons", () => {
   });
 
   it("tells the reader where a quiet GitHub job is started, and to start it by hand", () => {
-    // "Not firing" alone sends the reader to debug the job. For one Vercel's clock starts,
-    // the clock or its token is the likelier cause; for one on GitHub's own schedule, the
-    // scheduler, which runs this repo's jobs hours late.
+    // "Not firing" alone sends the reader to debug the job. Vercel's clock starts every
+    // watched GitHub job, so the clock or its token is the likelier cause.
     const stall = {
       cron: "ux-review-verify",
       lastRunAt: "2026-08-29T05:00:00Z",
@@ -113,7 +112,7 @@ describe("findStalledCrons", () => {
     );
     expect(describeStall({ ...stall, lastRunAt: null, ageMs: null })).toMatch(/start it by hand/);
     expect(describeStall({ ...stall, cron: "brain-brief" })).toMatch(
-      /\(brain-daily\.yml\) and runs this repo's schedules hours late.*start it by hand/
+      /\(brain-daily\.yml, via start-github-jobs\).*start it by hand/
     );
     expect(describeStall({ ...stall, cron: "brain-fast" })).not.toMatch(/GitHub/);
   });
@@ -187,6 +186,11 @@ describe("the watch list must not drift from what is scheduled", () => {
         ...githubRecordedCrons(fs),
       ])
     );
+    // GitHub's own schedule runs this repo's jobs hours late, sometimes not at all, and the
+    // alert tells the reader the clock started it: start any new one from github-jobs.ts.
+    for (const workflow of new Set(Object.values(GITHUB_WORKFLOW))) {
+      expect(CLOCK_WORKFLOWS, `${workflow} is on GitHub's schedule`).toContain(workflow);
+    }
   });
 
   it("does not watch a cron that is not scheduled at all", async () => {

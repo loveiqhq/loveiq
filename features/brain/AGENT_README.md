@@ -75,7 +75,9 @@ Claude Code) is the door people use; the operator's guide is
   are no longer sources.
 - **The brief and miner schedules.** `brain-daily.yml` runs them in GitHub Actions through
   `scripts/brain-cron.ts`, because the model is `claude -p` on the Team subscription
-  (`BRAIN_LLM_CLI`) and Vercel has no `claude` binary. They are not in `vercel.json`.
+  (`BRAIN_LLM_CLI`) and Vercel has no `claude` binary. They are not in `vercel.json`:
+  Vercel's clock starts them (`features/cron/server/github-jobs.ts`), and the workflow has
+  no `schedule:`.
 - **Live state.** Payments, email delivery, PostHog, Stripe, Vercel and the product
   database are read at ask time through tools, never indexed: an indexed state is a stale
   state. DATED history is the exception (`analytics`, `ga4`, `gsc`), because "1,000 visits

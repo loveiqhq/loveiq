@@ -26,9 +26,9 @@ export const maxDuration = 120;
  *
  * The one job here that PUSHES instead of waiting to be asked.
  *
- * Scheduled at 01:10, 03:10 and 06:10 UTC in GitHub Actions, which starts this repo's
- * schedules 4.5 to 5.5 hours late (measured 2026-09-25), so it lands in the morning,
- * before the funnel numbers: what happened, then how it did.
+ * Started in GitHub Actions at 06:41 UTC by Vercel's clock, with retries at 07:41 and 08:41
+ * (features/cron/server/github-jobs.ts), so it lands in the morning, before the funnel
+ * numbers at 09:00: what happened, then how it did.
  *
  * Deliberately not another numbers digest — `conversion-digest` already posts the
  * funnel and `anomaly-watcher` already watches for moves. This covers what is

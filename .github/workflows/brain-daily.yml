@@ -9,26 +9,17 @@ name: Company Brain daily jobs
 # runner does. scripts/brain-cron.ts calls the same route handlers Vercel used to, so the
 # day claim, the cron_run row, the Slack post and the stall watch behave exactly as before.
 #
-# Times are UTC, and GitHub can start a scheduled run late. Nothing here is time-critical:
-# the brief's second firing exists precisely so that one late or failed run is retried.
+# NO `schedule:`. Vercel's clock starts each job through `inputs.job`
+# (features/cron/server/github-jobs.ts), UTC: the Night Shift at 00:41, the Monday health
+# report at 01:41, the brief at 06:41 with retries at 07:41 and 08:41, and the decision
+# miner, with the radar after it, at 09:41. GitHub's own schedule starts this repo's jobs
+# hours late and drops some: on 2026-09-28 the miner ran 8.5 hours late. The brief's
+# retries are no-ops once it delivered: claim_slack_alert re-grants an undelivered day
+# only once its claim is ten minutes old.
 
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || github.event.schedule == '40 1 * * 1' && 'brain-health' || 'brain-brief') }}
+run-name: ${{ inputs.job }}
 
 on:
-  schedule:
-    # The brief, three firings. GitHub starts this repo's schedules 4.5 to 5.5 hours late
-    # (measured 2026-09-25: health-monitor due 08:00 ran ~13:20, survey-db-sync 07:00 ran
-    # ~12:35, the Night Shift 00:30 ran 05:08), so 01:10 is what lands in the morning.
-    # The later two are retries: claim_slack_alert re-grants an undelivered day once its
-    # claim is ten minutes old, so after a delivery they are no-ops.
-    - cron: "10 1,3,6 * * *"
-    # The decision miner, after the brief's retry.
-    - cron: "25 8 * * *"
-    # The Night Shift, 02:30 in Berlin: the research queued in the day, answered by morning.
-    - cron: "30 0 * * *"
-    # Mondays: the test batteries record their results, then the brain's weekly report on
-    # itself is written as a notice. No model; it runs here so the report follows the tests.
-    - cron: "40 1 * * 1"
   workflow_dispatch:
     inputs:
       job:
@@ -52,13 +43,13 @@ jobs:
     runs-on: ubuntu-latest
     # The Night Shift answers up to three questions of up to 20 minutes each. The miner and
     # the decision radar after it get 40: the radar's first run reads every topic.
-    timeout-minutes: ${{ (github.event.schedule == '30 0 * * *' || inputs.job == 'brain-night-shift') && 75 || (github.event.schedule == '25 8 * * *' || inputs.job == 'brain-mine' || inputs.job == 'brain-radar') && 40 || 20 }}
+    timeout-minutes: ${{ inputs.job == 'brain-night-shift' && 75 || (inputs.job == 'brain-mine' || inputs.job == 'brain-radar') && 40 || 20 }}
     env:
-      JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || github.event.schedule == '40 1 * * 1' && 'brain-health' || 'brain-brief') }}
+      JOB: ${{ inputs.job }}
     # One of each job at a time. Overlap would be harmless (the brief's day claim and the
     # miner's tombstones both dedupe), but it would spend the seat's allowance twice.
     concurrency:
-      group: brain-daily-${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || github.event.schedule == '40 1 * * 1' && 'brain-health' || 'brain-brief') }}
+      group: brain-daily-${{ inputs.job }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
