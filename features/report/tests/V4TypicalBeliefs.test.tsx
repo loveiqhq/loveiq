@@ -398,6 +398,15 @@ describe("reportV3.css — belief panel contracts", () => {
     expect(sun).not.toContain("0.03)");
   });
 
+  // Mark, 28.09 (1944065364): "We changed the font color to black." 368:5633 and its
+  // siblings are #161021, the report's ink; the coral panel's shift stays green.
+  it("sets the sun beliefs in the report's ink, and leaves the shift green", () => {
+    const sunText = block(".rv3 .rv4-sun__text {");
+    expect(sunText).toContain("color: var(--rv3-ink)");
+    expect(sunText).not.toContain("#1d3a2f");
+    expect(block(".rv3 .rv4-turn__shift-text {")).toContain("color: #2e7d5b");
+  });
+
   it("collapses the shift with 0fr, not a max-height guess", () => {
     // Rows land on the frame's 126px whether their shift wraps to one line or two,
     // which a fixed max-height cannot do.

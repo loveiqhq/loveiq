@@ -4083,7 +4083,6 @@
     opacity 420ms ease,
     text-decoration-color 420ms ease;
 }
-.rv3 .rv4-sun__text,
 .rv3 .rv4-turn__shift-text {
   color: #2e7d5b;
 }
@@ -4308,13 +4307,15 @@
 .rv3 .rv4-sun__row {
   align-items: center;
 }
-/* 368:5627 / 368:5633 — the green panel's title is #23503f and its beliefs #1d3a2f,
- * darker than the #2e7d5b the coral panel's shift text uses. */
+/* 368:5627 — the green panel's title is #23503f, darker than the #2e7d5b the coral
+ * panel's shift text uses. Mark, 28.09 (1944065364): "We changed the font color to
+ * black." — its beliefs (368:5633 and siblings) are the report's ink, #161021 (they
+ * were #1d3a2f). */
 .rv3 .rv4-sun__head {
   color: #23503f;
 }
 .rv3 .rv4-sun__text {
-  color: #1d3a2f;
+  color: var(--rv3-ink);
 }
 /* 368:5501 — a turned belief is #a8705c, solid. The crossing row's #5f403e
  * (368:5549) is exactly halfway from ink to it, which the colour transition draws
