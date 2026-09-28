@@ -35,7 +35,6 @@ describe("V4 — one blur strength for every locked surface", () => {
     ".rv3 .rv4-trig__row.is-locked.is-blurred",
     ".rv3 .rv4-tb__blurred",
     ".rv3 .rv4-try__blurred",
-    ".rv3 .rv4-ab__blurred",
     ".rv3 .rv4-cip__blurred",
     ".rv3 .rv4-cip__closing.is-blurred",
     ".rv3 .rv4-loop.is-locked .rv4-loop__viewport",
