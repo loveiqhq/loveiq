@@ -69,8 +69,14 @@ const DRIVE_ROOT = "1ml7y_fMcGB8YFpelnQJzWWcpEgTExBBO";
 const SHEET_ID = COST_SHEET_ID;
 const SHEET_TAB = COST_SHEET_TAB;
 
-/** Gmail lookback. Wider than a month so a failed run still catches up next time. */
-const LOOKBACK_DAYS = 45;
+/**
+ * Gmail lookback. Wider than a month so a failed run still catches up next time, and under
+ * 59 days on purpose: then at most ONE closed month is ever wholly inside the window (two
+ * need 59 or more), so a write carried forward can only run into the month in progress. A
+ * wider window would let an earlier month's carry overwrite a later closed month that was
+ * left for a person to enter.
+ */
+export const LOOKBACK_DAYS = 45;
 
 /** Write the reconciled figures only from a complete walk (see the write below). */
 export function shouldWriteSheet(updates: unknown[], incomplete: string[]): boolean {
@@ -568,9 +574,11 @@ export async function GET(request: Request) {
          * figure and the larger is the one that survives a partial parse.
          */
         let messageAmount: Charge | null = null;
+        let sawPdf = false;
 
         for (const p of parts) {
           if (!p.filename?.toLowerCase().endsWith(".pdf") || !p.body?.attachmentId) continue;
+          sawPdf = true;
 
           // The attachment is fetched BEFORE the duplicate check, because its
           // total has to be counted whether or not the file is new. Skipping
@@ -658,6 +666,16 @@ export async function GET(request: Request) {
               currency: prior?.currency === "OTHER" ? "OTHER" : "EUR",
             });
           }
+        } else if (sawPdf) {
+          // An invoice whose total cannot be read still charged us. Dropped, the month was
+          // written as the sum of the OTHER invoices, or left stale as "already matched".
+          // Poisoned like an unconvertible one, so a person enters it.
+          const key = `${vendor.sheetName}|${month}`;
+          chargesAs.set(key, [
+            ...(chargesAs.get(key) ?? []),
+            `a total that could not be read (${date.toISOString().slice(0, 10)})`,
+          ]);
+          charged.set(key, { value: charged.get(key)?.value ?? 0, currency: "OTHER" });
         }
       }
     }
@@ -679,6 +697,9 @@ export async function GET(request: Request) {
     // it holds only the invoices of the 1st and 2nd, and failing for it would tell cost_watch
     // the whole run settled nothing.
     const noColumnClosed: string[] = [];
+    // A closed month the sheet could not take (no row, or a total to enter by hand) fails the
+    // run too: cost_watch counts a month settled once any run succeeds, and this one did not.
+    const unwrittenClosed: string[] = [];
     const thisMonth = new Date().toISOString().slice(0, 7).replace("-", "/");
     const foreignCurrency: string[] = [];
     const updates: Array<{ range: string; values: number[][] }> = [];
@@ -695,6 +716,7 @@ export async function GET(request: Request) {
       if (row === 0) {
         // Listed apart from the changes: counted among them, it read "Cost sheet updated (1)".
         noRow.push(vendorName);
+        if (monthKey < thisMonth) unwrittenClosed.push(`${vendorName} ${monthKey}`);
         continue;
       }
       const ym = monthKey.split("/");
@@ -723,6 +745,7 @@ export async function GET(request: Request) {
         foreignCurrency.push(
           `${vendorName} ${monthKey}: ${chargesAs.get(key)?.join(" + ") ?? `${total.currency} ${total.value.toFixed(2)}`}`
         );
+        if (monthKey < thisMonth) unwrittenClosed.push(`${vendorName} ${monthKey}`);
         continue;
       }
       const next = -Math.abs(total.value);
@@ -770,14 +793,20 @@ export async function GET(request: Request) {
             ? `:no_entry: *Cost sheet NOT updated, these would have changed* (${changes.length})\n`
             : `:heavy_dollar_sign: *Cost sheet updated* (${changes.length})\n`) +
           changes.map((c) => `• ${escapeSlack(c)}`).join("\n")
-        : incomplete.length || noColumn.length || noRow.length || foreignCurrency.length
+        : incomplete.length ||
+            noColumn.length ||
+            noRow.length ||
+            foreignCurrency.length ||
+            skippedPartial.length
           ? "" // it cannot say every invoice matched; the lines below say which did not
-          : ":white_check_mark: Cost sheet already matched every invoice.",
+          : charged.size
+            ? ":white_check_mark: Cost sheet already matched every invoice."
+            : "No invoice total was found to compare with the cost sheet.",
       convertedAny
         ? `_Dollar invoices are converted to EUR at the ECB reference rate on each invoice's own date._`
         : "",
       foreignCurrency.length
-        ? `:currency_exchange: *Not written — could not be converted, enter by hand:*\n` +
+        ? `:currency_exchange: *Not written — could not be read or converted, enter by hand:*\n` +
           foreignCurrency.map((f) => `• ${escapeSlack(f)}`).join("\n")
         : "",
       noRow.length
@@ -798,6 +827,8 @@ export async function GET(request: Request) {
     if (incomplete.length) cronError = `incomplete: ${incomplete.join("; ")}`;
     else if (noColumnClosed.length) {
       cronError = `no sheet column for ${noColumnClosed.join(", ")}`;
+    } else if (unwrittenClosed.length) {
+      cronError = `not written, needs a person: ${unwrittenClosed.join(", ")}`;
     }
 
     await notifySlack({
