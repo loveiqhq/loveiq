@@ -3,7 +3,15 @@
  * container from a test process makes macOS ask for access, and the run hangs.
  */
 import { type ChildProcess, execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,14 +40,16 @@ function walDb(): string {
 const count = (db: string) => readRows<{ n: number }>(db, "select count(*) as n from m;")[0]?.n;
 
 /**
- * A writer that runs `sql`, then keeps its connection open. Ready is a file it touches
- * AFTER the SQL ran: its stdout is a pipe, which sqlite3 buffers until it exits.
+ * A writer that runs `sql`, then keeps its connection open: stdin stays open, so sqlite3
+ * waits for more input until the test kills it (a `.shell sleep` would outlive the kill).
+ * Ready is a file it touches AFTER the SQL ran: its stdout is a pipe, which sqlite3
+ * buffers until it exits.
  */
 async function holdOpen(db: string, sql: string): Promise<void> {
   const ready = `${db}.ready`;
   const writer = spawn("sqlite3", [db], { stdio: ["pipe", "ignore", "ignore"] });
   writers.push(writer);
-  writer.stdin.write(`${sql}\n.shell touch '${ready}'; sleep 20\n`);
+  writer.stdin.write(`${sql}\n.shell touch '${ready}'\n`);
   for (let waited = 0; !existsSync(ready); waited += 25) {
     if (waited > 10_000) throw new Error("the writer never got ready");
     await new Promise((r) => setTimeout(r, 25));
@@ -66,7 +76,7 @@ describe.skipIf(!hasSqlite)("readRows", () => {
     expect(count(db)).toBe(2);
   });
 
-  it("throws, not reads the main file, when -wal holds rows and -shm cannot be made", async () => {
+  it("throws, not reads the main file, when -wal holds rows and -shm cannot be made", async (ctx) => {
     // With -shm missing in a directory it cannot write, a read-only open fails as it does
     // when both files are gone. Read alone, the main file here lacks row 3, which only
     // the WAL holds, so falling back would drop it.
@@ -79,6 +89,17 @@ describe.skipIf(!hasSqlite)("readRows", () => {
     copyFileSync(`${db}-wal`, `${copy}-wal`);
     chmodSync(dir, 0o555);
     try {
+      // A runner that ignores file modes (root) can still create -shm: nothing to test there.
+      let writable = true;
+      try {
+        writeFileSync(join(dir, ".writable"), "");
+      } catch {
+        writable = false;
+      }
+      if (writable) {
+        ctx.skip();
+        return;
+      }
       expect(() => count(copy)).toThrow(/unable to open database file/);
     } finally {
       chmodSync(dir, 0o755);
