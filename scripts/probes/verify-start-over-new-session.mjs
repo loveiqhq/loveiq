@@ -23,13 +23,19 @@
  * the finished id. The audit found 13 sessions since March that answered the whole
  * survey again after completing it, none with a second submission.
  *
- * This probe puts the tab in the finished state twice per device:
+ * A third door (round-10 audit): Back to the consent screen, then the browser's
+ * Forward button, remounts the survey without passing "I agree" at all.
+ *
+ * This probe puts the tab in the finished state three times per device:
  *   A. on the already-finished screen, presses "Start a new one";
  *   B. on the consent screen, ticks both boxes and presses "I agree";
+ *   C. on the consent screen with the survey one step ahead, presses Forward;
  * and each time reads the session id the next run would submit under. It stops
  * there on purpose, and every request to /api/ other than a GET is aborted:
- * finishing the survey would write a real submission to production, and the
- * engine that B opens would send tracking events.
+ * finishing the survey would write a real submission, and the engine that B and
+ * C open would send tracking events. Loading /survey still counts as a visit in
+ * our own tables and, with the banner accepted, in GA4 and Clarity, as every
+ * probe that loads a page does.
  *
  *   REPORT_ORIGIN=https://www.loveiq.org node scripts/probes/verify-start-over-new-session.mjs
  *   MUTATE=1 ...   # puts the old id back after each press; must exit 1
@@ -119,6 +125,32 @@ async function agreeAgain(page) {
   return ["ok", '"I agree" after finishing starts the new run under a new session id'];
 }
 
+/** C. Back to the consent screen after finishing, then the browser's Forward button. */
+async function forwardAgain(page) {
+  await seedFinished(page, "5");
+  const ready = await page
+    .getByRole("button", { name: /i agree/i })
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!ready) return ["inconclusive", "no consent screen to go forward from"];
+  // The history the page itself writes: the survey one entry ahead of consent.
+  await page.evaluate(() => {
+    history.pushState({ surveyStep: 6 }, "");
+    history.back();
+  });
+  await page.waitForTimeout(500);
+  await page.goForward({ timeout: 15_000 }).catch(() => {});
+  await page.waitForTimeout(2_000);
+  const state = await sessionAfter(page);
+  if (state.step !== "6")
+    return ["inconclusive", `Forward did not open the survey (step ${state.step})`];
+  if (state.session === OLD_SESSION) {
+    return ["fail", "Forward after finishing starts the new run under the finished session id"];
+  }
+  return ["ok", "Forward after finishing starts the new run under a new session id"];
+}
+
 let bad = 0;
 let unmeasured = 0;
 
@@ -139,7 +171,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     const ctx = await browser.newContext({ ...device, locale: "en-US" });
     await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
     const page = await ctx.newPage();
-    // Nothing this probe does may write to production.
+    // Nothing this probe does may submit or save survey data.
     await page.route("**/api/**", (route) =>
       route.request().method() === "GET" ? route.continue() : route.abort()
     );
@@ -155,6 +187,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     for (const [label, scenario] of [
       ["A", startOver],
       ["B", agreeAgain],
+      ["C", forwardAgain],
     ]) {
       const [verdict, what] = await scenario(page);
       if (verdict === "fail") {
