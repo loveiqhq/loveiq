@@ -277,11 +277,19 @@ export function completedReportToken(): string | null {
   }
 }
 
-/** Forget it, so "start a new one" really does start a new one. */
+/**
+ * Forget it, so "start a new one" really does start a new one.
+ *
+ * The session id goes too. Submitting keeps it, and a report opened by token
+ * never finalizes it, so a retake submitted under the finished run's id, and
+ * `submitSurveyOnce()` answers a known id with the existing submission. One
+ * reader spent 23 minutes answering again and got submission 2263 back (#375).
+ */
 export function forgetCompletedReport(): void {
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
+    sessionStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
     /* ignore */
   }
