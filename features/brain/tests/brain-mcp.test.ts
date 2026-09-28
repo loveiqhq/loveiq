@@ -1272,6 +1272,36 @@ describe("/api/mcp", () => {
         expect(r.content[0]!.text).toContain("Checked 1 figure and 1 quote");
       });
 
+      it("checks a long document's part alone, not the document it belongs to", async () => {
+        // Round-9 audit: joined whole, 3 of the 9 largest Drive documents "confirmed" all
+        // 90 made-up percentages from 10% to 99%.
+        const id = "doc:1AbC#12";
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.drive") &&
+            path.includes(`source_id=eq.${encodeURIComponent(id)}`)
+              ? [
+                  {
+                    title: "Drive: Growth plan (part 12 of 40)",
+                    body: "Only 18% of readers finished.",
+                  },
+                ]
+              : [{ title: "Drive: Growth plan", body: "73% converted across 40 teams." }],
+        }));
+        const r = await call({
+          answer:
+            `The plan says 18% finished (drive/${id}). ` +
+            `It says 73% converted, across 40 teams (drive/${id}).`,
+          sources: [`drive/${id}`],
+        });
+        expect(r.content[0]!.text).toContain(`18% in drive/${id}`);
+        // Another part's figure, and the "(part 12 of 40)" we add to titles, prove nothing.
+        expect(r.content[0]!.text).toMatch(/73%; 40 are not in drive\/doc:1AbC#12/);
+      });
+
       it("reads every indexed source's ids as ids, here and in the Night Shift", () => {
         // `book` reached neither list when it was indexed, so a book id's digits were
         // figures and a Night Shift answer citing only books "cited no sources".

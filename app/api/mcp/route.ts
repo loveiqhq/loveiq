@@ -1927,7 +1927,8 @@ export const TOOLS = [
       "Every number, date and quoted phrase in it is looked up in those documents, and anything " +
       "not there is listed with the nearest figure the source does hold, so a rounding slip or " +
       "a wrong number is caught before a person reads it. A sentence that names an id is " +
-      "checked against that document alone, and a book against the part cited. It cannot judge " +
+      "checked against that record alone: the part cited, never the whole document it belongs " +
+      "to, since a long document holds nearly every number. It cannot judge " +
       "wording, only whether each figure and quote is in the cited record, and it says which " +
       "sentences it could not check. Use it on any answer with numbers.",
     inputSchema: {
@@ -2755,39 +2756,35 @@ const BOOK_PART_HEAD =
   /^[^\n]* A third-party book in our library, not LoveIQ's own claim\. Part \d+ of \d+\.\n/;
 
 /**
- * A cited document's whole text, title first, joined as fetch_document joins its parts,
- * or null when the id does not resolve. Throws on an outage, which is not a missing id.
+ * The text of exactly the record an id names, title first, or null when the id does not
+ * resolve. Throws on an outage, which is not a missing id.
+ *
+ * THE RECORD CITED, NEVER THE WHOLE DOCUMENT IT BELONGS TO. Joined, a long document holds
+ * nearly every number: measured 2026-09-28 against production, 3 of the 9 largest Drive
+ * documents "confirmed" all 90 made-up percentages from 10% to 99%, and a 300-part book
+ * confirmed any integer up to its part count ("Part 73 of 328"). Search prints each part's
+ * own id, so the part a figure came from is the one to cite. The "(part N of M)" on a
+ * part's title, and the head every book part opens with, are ours, not the source's.
  */
 async function documentText(raw: string): Promise<string | null> {
   const slash = raw.indexOf("/");
   const src = slash > 0 ? raw.slice(0, slash) : "";
   const rawId = slash > 0 ? raw.slice(slash + 1) : "";
   if (!SOURCES_FOR_TEST.includes(src) || !rawId) return null;
-  if (src === "book") {
-    // The PART cited, never the whole book, and without the head every part opens with.
-    // Joined, 300-odd parts of prose held nearly every integer ("Part 73 of 328", page
-    // numbers), so any figure attributed to a book was "found" in it.
-    const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?select=body&source=eq.book&source_id=eq.${encodeURIComponent(rawId)}&limit=1`
-    );
-    if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
-    const rows = (await res.json().catch(() => null)) as Array<{ body?: unknown }> | null;
-    if (!Array.isArray(rows)) throw new Error("brain_chunk: non-array body");
-    return rows[0] ? String(rows[0].body ?? "").replace(BOOK_PART_HEAD, "") : null;
-  }
-  const { base, sep } = documentParts(src, rawId);
-  const { rows } = await documentRows("source_id,title,body,meta", src, base);
-  const parts = dropLeftoverParts(
-    rows
-      .filter((r) => {
-        const sid = String(r.source_id ?? "");
-        return sid === base || (sep !== null && sid.startsWith(base + sep));
-      })
-      .sort((a, b) => partNumber(a) - partNumber(b)),
-    base
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=title,body&source=eq.${encodeURIComponent(src)}` +
+      `&source_id=eq.${encodeURIComponent(rawId)}&limit=1`
   );
-  if (parts.length === 0) return null;
-  return [String(parts[0]!.title ?? ""), ...parts.map((p) => String(p.body ?? ""))].join("\n");
+  if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
+  const rows = (await res.json().catch(() => null)) as Array<{
+    title?: unknown;
+    body?: unknown;
+  }> | null;
+  if (!Array.isArray(rows)) throw new Error("brain_chunk: non-array body");
+  if (!rows[0]) return null;
+  const title = String(rows[0].title ?? "").replace(/\s*\(part \d+ of \d+\)$/, "");
+  const body = String(rows[0].body ?? "");
+  return `${title}\n${src === "book" ? body.replace(BOOK_PART_HEAD, "") : body}`;
 }
 
 export function outsideTheFilter(
