@@ -7574,19 +7574,15 @@ html {
 /* ══ Report V4 · tablet and desktop ══════════════════════════════════
  * Sync 28.09: "scale the mobile version of the report for desktop". There is no
  * desktop frame, so V4 keeps the phone's design and lets it breathe: the page
- * already runs a wider reading column from 700px up (620, then 680 beside the
- * sidebar at 1280 — the V3 DESKTOP block above), but V4's blocks are drawn at the
- * phone's 356/361 and sat in it as a narrow strip, left-aligned, with the V2
- * chapters beside them running the full column. Every V4 block now fills the
- * column, so one left edge and one measure run from Part I to the end.
+ * runs a wider column from 700px up, but V4's blocks are drawn at the phone's
+ * 356/361 and sat in it as a narrow strip, left-aligned, with the V2 chapters beside
+ * them running the full column. Every V4 block now fills the column, so one left
+ * edge runs from Part I to the end, and the column is production's own (below).
  *
  * Below 700px nothing here applies, so the phone keeps its 361 column exactly.
  * Scoped to `.rv3.rv4`, the live `?v4=1` page — the standalone preview draws the
  * 393 frame and stays at it. */
 @media (min-width: 700px) {
-  .rv3.rv4 .report-shell {
-    padding-inline: 0;
-  }
   .rv3.rv4 .report-content .rv4-col {
     padding-inline: 0;
   }
@@ -7622,22 +7618,74 @@ html {
   }
 }
 
-/* The column itself. V3's 680 (padded to 580 by V2's own gutters) is narrower than
- * the V2 chapters V4 opens onto were drawn for: the fantasy table holds a 740 floor
- * and the Other Archetypes rows size their bars off the viewport, so at 580 the
- * table pushed its chapter 220px past the column and the mottos wrapped a word a
- * line. 760 edge to edge is V2's own table width, still a comfortable measure at
- * V4's 16px copy. The tablet column keeps a 24px gutter of its own. */
+/* The column is PRODUCTION's (review 28.09: "check how it is now on the prod"),
+ * so V4 opens at the same width and margins as the report every reader has today.
+ * Measured on www.loveiq.org: beside the sidebar the content box is the whole
+ * track (at most 1024) padded clamp(1.5rem, 3.5vw, 4rem) — 855px of content at
+ * 1440; on a tablet it is the full width inside 16 + 24px margins. V3 had clamped
+ * it to 680, which left V4 a strip with ~200px of white on either side.
+ * Copy keeps production's 760 measure while cards and charts take the column. */
 @media (min-width: 700px) and (max-width: 1279px) {
+  .rv3.rv4 .report-shell {
+    padding-inline: 1.5rem;
+  }
   .rv3.rv4 .report-content {
-    max-width: 704px;
-    padding-inline: 24px;
+    max-width: none;
+    padding-inline: clamp(1rem, 2vw, 4rem);
   }
 }
 @media (min-width: 1280px) {
   .rv3.rv4 .report-content {
+    max-width: 1024px;
+    padding-inline: clamp(1.5rem, 3.5vw, 4rem);
+  }
+}
+@media (min-width: 700px) {
+  /* `.report-content` for weight: the narrow-phone rule further down is an :is()
+   * list, which takes the specificity of its heaviest entry. */
+  .rv3.rv4 .report-content .rv4-part__intro,
+  .rv3.rv4 .report-content .rv4-chapter__body > .rv3-prose,
+  .rv3.rv4 .report-content .rv4-chapter__teaser,
+  .rv3.rv4 .report-content .rv4-copy,
+  .rv3.rv4 .report-content .rv4-summary__copy,
+  .rv3.rv4 .report-content .rv4-summary__closer,
+  .rv3.rv4 .report-content .rv4-top3__lede,
+  .rv3.rv4 .report-content .rv3-method .rv3-prose,
+  .rv3.rv4 .report-content .report-means__body {
     max-width: 760px;
-    padding-inline: 0;
+  }
+
+  /* Headings at production's scale. Its section titles are 40px beside the
+   * sidebar; V4's are the phone's 24, which read as a zoomed-out page in a
+   * 900px column. V4's own hierarchy is kept, lifted by a third. */
+  .rv3.rv4 .rv4-chapter__title,
+  .rv3.rv4 .rv4-chapter__title.has-suffix .rv4-chapter__name {
+    font-size: 32px;
+    letter-spacing: -0.32px;
+    line-height: 38.4px;
+  }
+  .rv3.rv4 .rv4-chapter__title.has-suffix .rv4-chapter__of {
+    font-size: 16px;
+    line-height: 25.6px;
+  }
+  .rv3.rv4 .rv4-chapter__teaser {
+    font-size: 16px;
+    line-height: 25.6px;
+  }
+  .rv3.rv4 .rv4-top3__heading {
+    font-size: 28px;
+    letter-spacing: -0.9px;
+    line-height: 33.6px;
+  }
+  .rv3.rv4 .rv4-summary__heading,
+  .rv3.rv4 .rv4-nudges__head {
+    font-size: 24px;
+    line-height: 28.8px;
+  }
+  /* A Part heading is a composition in px — glow, eyebrow and title placed in a
+   * 148px stage — so it scales as one piece rather than by its font sizes. */
+  .rv3.rv4 .rv4-part__stage {
+    zoom: 1.3;
   }
 }
 @media (min-width: 700px) {
@@ -7666,14 +7714,7 @@ html {
   white-space: normal;
 }
 
-/* Tablet: the floating header pill spans the viewport on a phone, which at 1024
- * made it twice the width of the 704 column under it. It takes the column's width. */
-@media (min-width: 700px) and (max-width: 1279px) {
-  .rv3.rv4 .report-mobile-topbar {
-    inset-inline: max(8px, calc((100% - 720px) / 2));
-  }
-}
-/* The science deck lays out on a grid from 700px (two across, three on desktop),
+/* The science deck lays out on a grid from 700px (two across, three from 1024),
  * and V4 has seven cards, so the seventh sat alone at the left of its row. Centring
  * the last row keeps the block symmetric under the heading it hangs from. */
 @media (min-width: 700px) {
@@ -7686,7 +7727,7 @@ html {
     flex: 0 0 calc((100% - 12px) / 2);
   }
 }
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
     flex-basis: calc((100% - 28px) / 3);
   }

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
  * Sync 28.09 — "scale the mobile version of the report for desktop". V4 was drawn at
  * 393 only; on a wide screen its blocks sat at the phone's 356/361 inside a wider
  * column, and the V2 chapters it opens onto broke in the 580px measure V3 left them.
+ * Review 28.09: it now opens at production's width and margins.
  */
 const ui = join(__dirname, "..", "ui");
 const v3 = readFileSync(join(ui, "v3", "reportV3.css"), "utf8");
@@ -18,13 +19,17 @@ const rules = (css: string) =>
   );
 
 describe("V4 on tablet and desktop", () => {
-  it("runs the column at V2's 760 beside the sidebar and 704 on a tablet", () => {
+  it("opens at production's column: the full track beside the sidebar, full width on a tablet", () => {
     expect(v3).toMatch(
-      /@media \(min-width: 1280px\) \{\s*\.rv3\.rv4 \.report-content \{\s*max-width: 760px;\s*padding-inline: 0;/
+      /@media \(min-width: 1280px\) \{\s*\.rv3\.rv4 \.report-content \{\s*max-width: 1024px;\s*padding-inline: clamp\(1\.5rem, 3\.5vw, 4rem\);/
     );
     expect(v3).toMatch(
-      /@media \(min-width: 700px\) and \(max-width: 1279px\) \{\s*\.rv3\.rv4 \.report-content \{\s*max-width: 704px;/
+      /@media \(min-width: 700px\) and \(max-width: 1279px\) \{\s*\.rv3\.rv4 \.report-shell \{\s*padding-inline: 1\.5rem;\s*\}\s*\.rv3\.rv4 \.report-content \{\s*max-width: none;/
     );
+  });
+
+  it("keeps copy at production's 760 measure, heavier than the narrow-phone :is() rule", () => {
+    expect(v3).toMatch(/\.rv3\.rv4 \.report-content \.rv4-copy,[\s\S]{0,400}max-width: 760px;/);
   });
 
   it("lets every phone-width V4 block fill the column from 700px", () => {
