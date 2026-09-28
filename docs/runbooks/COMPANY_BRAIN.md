@@ -457,7 +457,7 @@ only the first table will not know the brain can send an email.
 | `check_answer`           | Before an answer is sent: every number, date and quoted phrase in the draft is looked up in the documents it cites, and anything not there is listed with the nearest figure the source holds. A sentence that names an id is checked against that record alone: the part cited, never the whole document, since a long document holds nearly every number. Deterministic: it cannot judge wording, and says which sentences it could not check                                 |
 | `experiments`            | The A/B registry (/admin's own `admin_experiment` table): every test with its hypothesis, deciding metric, dates and outcome, a live readout for a running test whose arms are stamped (the code and words of /admin's A/B overview, which never calls a winner the numbers cannot support), and the four tests that ended before the registry existed                                                                                                                          |
 | `comment_asks`           | Every ask left in a Figma or Google Docs comment: who asked whom, for what, a link, and whether it is still open, checked live. Figma is read from its API for every file whose link was shared somewhere the brain reads; Google from each person's notification emails, checked against Drive as that person. Says what it could not read                                                                                                                                     |
-| `decision_conflicts`     | Recorded decisions that may not both stand: one may replace the other, or they give different answers to the same question. Found nightly by the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a person                                                                                                                                                                                                                  |
+| `decision_conflicts`     | Recorded decisions that may not both stand: one may replace the other, or they give different answers to the same question. Found daily by the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a person                                                                                                                                                                                                                    |
 | `brain_health`           | How the brain itself is doing over 1 to 30 days, against the days before: use by tool, weak and empty searches and the questions it could not answer well, failed calls and error messages, speed, the weekly test batteries with what fails, and every brain job that failed or stopped running                                                                                                                                                                                |
 | `whats_new`              | What the brain produced on its own since a time (default the last 24 hours): notices, the Night Shift's research answers and decisions, newest first with ids, plus how many questions still wait for tonight. The door for "what's new", and what the Claude Code session hook shows at startup                                                                                                                                                                                |
 | `check_copy`             | Report copy against the house rules, with the sentence behind each finding: em dashes, machine-written phrases, absolute claims, reading level, length, lines that fit every archetype or repeat another chapter, and the chapter's shipped voice. Leave out `text` and name a chapter and archetype to audit what shipped                                                                                                                                                      |
@@ -957,7 +957,7 @@ a stale pool config degrades to the previous path rather than to no access.
 
 ### The brief and the miner run in GitHub Actions, on the Team subscription
 
-`brain-brief` (01:10, 03:10 and 06:10 UTC) and `brain-mine` (08:25 UTC) are the two crons that
+`brain-brief` (06:41 UTC, retried at 07:41 and 08:41) and `brain-mine` (09:41 UTC) are the two crons that
 need a language model, and since 2026-09-24 the model is the Claude Team plan we already
 pay for rather than an API key. Only the `claude` binary may use a subscription:
 `claude setup-token` mints a one-year `CLAUDE_CODE_OAUTH_TOKEN`, and Anthropic's terms
@@ -975,16 +975,14 @@ watch behave exactly as they did on Vercel.
   after the seat (repository variable `CLAUDE_TOKEN_OWNER_SLACK_ID`, Eman). The limit resets
   on its own; run the job again from Actions once it has. On 2026-09-19 `generate-fix`
   stopped on "You've hit your session limit" for exactly this reason.
-- **GitHub starts these hours late.** Measured 2026-09-25, this repo's scheduled workflows
-  start 4.5 to 5.5 hours after their cron time and frequent ones are sometimes dropped
-  (health-monitor due 08:00 ran ~13:20; the Night Shift due 00:30 ran 05:08). The brief is
-  scheduled at 01:10 so it lands in the morning, with two retries. A job that has not
-  started by its usual time has probably not been dropped yet: check `cron_run`, then run
-  it by hand. The punctual alternative exists since 2026-09-26: `/api/cron/start-github-jobs`
-  starts jobs through `workflow_dispatch` with `GITHUB_DISPATCH_TOKEN`, and runs the UX
-  verifier and the morning checks. The brain's jobs are not on it, because their times
-  assume GitHub's delay; to move one, add it to `features/cron/server/github-jobs.ts` at
-  the hour it should land and delete its `schedule:`.
+- **Vercel's clock starts them.** GitHub's own schedule starts this repo's workflows 4.5 to
+  5.5 hours late and drops some (measured 2026-09-25: health-monitor due 08:00 ran ~13:20;
+  the Night Shift due 00:30 ran 05:08), and on 2026-09-28 the miner ran 8.5 hours late.
+  Since 2026-09-28 `/api/cron/start-github-jobs` starts every job in `brain-daily.yml`
+  through `workflow_dispatch` with `GITHUB_DISPATCH_TOKEN`, at the hours in
+  `features/cron/server/github-jobs.ts`, and the workflow has no `schedule:`, so GitHub
+  cannot start a late copy. A job that has not run by its hour: check that cron's last
+  `cron_run`, then start the job by hand from Actions.
 - **Replacing the token.** Run `claude setup-token` with the browser signed in to the seat's
   claude.ai account (it approves on its own when that account has approved Claude Code
   before, so the account is whichever one the browser holds), then
@@ -1011,7 +1009,7 @@ watch behave exactly as they did on Vercel.
 ### The Night Shift: research queued in the day, answered by morning
 
 `queue_research` (plan item A16) writes a question as a `research` record with status
-`queued`. At 00:30 UTC `brain-daily.yml` runs `brain-night-shift`, which answers up to
+`queued`. At 00:41 UTC `brain-daily.yml` runs `brain-night-shift`, which answers up to
 three, oldest first, each through Claude Code on the Team subscription with the brain's
 read-only tools over MCP (`LOVEIQ_MCP_TOKEN`, a repository secret) and the web. Nothing
 that writes is available to it: `RESEARCH_TOOLS` and `WRITE_TOOLS` in
@@ -1033,7 +1031,7 @@ a new writing tool is on neither.
 
 ### Mondays: the test batteries, then the brain's report on itself
 
-At 01:40 UTC on Mondays `brain-daily.yml` runs `brain-health` (plan item G9). It needs no
+At 01:41 UTC on Mondays `brain-daily.yml` runs `brain-health` (plan item G9). It needs no
 model; it runs here so the report follows the tests:
 
 1. `scripts/brain-battery.ts --retrieval --record` and `--mcp --record` run the two test
@@ -1076,7 +1074,7 @@ days, so a skipped run is caught up by the next.
 185 of the 200 decisions are mined from meeting notes, and nothing used to compare one with
 another, so "Require Jira tickets for all major features" (May) and a September decision
 whose reason is "concerns with using Notion for tracking bug fixes" both read as current.
-`brain-radar` (plan item G13) runs nightly in GitHub Actions straight after the miner, in the
+`brain-radar` (plan item G13) runs daily in GitHub Actions straight after the miner, in the
 same `brain-mine` job, on the Team subscription:
 
 - **Two model calls per pair, never one.** Per topic, a generous first call proposes up to

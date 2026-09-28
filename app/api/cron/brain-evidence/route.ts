@@ -33,7 +33,7 @@ export const maxDuration = 120;
  * dies loses that day rather than losing its place.
  *
  * 04:20 UTC, off every other job's lane: brain-fast is on the quarter hours, gmail at :11,
- * calendar at :26, notion at :41, drive at :52, clarity at 05:40 and the brief at 06:10.
+ * calendar at :26, notion at :41, drive at :52, clarity at 05:40 and the brief at 06:41.
  */
 
 export async function GET(request: Request) {

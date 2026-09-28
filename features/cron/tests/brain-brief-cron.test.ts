@@ -163,18 +163,20 @@ describe("a day this job failed must be recoverable", () => {
    * back. A tidy-up that merges the two hours back into one would silently undo this.
    */
   /**
-   * GitHub starts this repo's schedules 4.5 to 5.5 hours late (measured 2026-09-25). A first
-   * firing at 06:10 therefore delivered the morning brief around lunchtime, so the first
-   * firing must be early enough that such a delay still lands it before 08:00 UTC.
+   * In the morning, and not before it. GitHub started this repo's schedules 4.5 to 5.5 hours
+   * late (measured 2026-09-25), so the brief was scheduled at 01:10 to land by 08:00 UTC.
+   * Since 2026-09-28 Vercel's clock starts it on time, so its own hour is the landing hour:
+   * by 08:00 UTC, and not in the small hours, when its first run would have been 01:10.
    */
-  it("fires first early enough that GitHub's usual delay still lands it in the morning", () => {
+  it("fires first in the morning, on time now that the clock starts it", () => {
     const hourField = brainDailySchedules()["brain-brief"].split(" ")[1]!;
     const first = Math.min(...hourField.split(",").map(Number));
-    expect(first + 5.5).toBeLessThanOrEqual(8);
+    expect(first).toBeGreaterThanOrEqual(5);
+    expect(first).toBeLessThan(8);
   });
 
   it("fires twice a day, further apart than the claim lease", () => {
-    // GitHub Actions schedules it now (it needs the `claude` binary), not vercel.json.
+    // GitHub Actions runs it (it needs the `claude` binary), started by Vercel's clock.
     const [, hourField, dom, month, dow] = brainDailySchedules()["brain-brief"].split(" ");
     expect([dom, month, dow]).toEqual(["*", "*", "*"]);
     const hours = hourField.split(",").map(Number);

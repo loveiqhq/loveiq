@@ -13,7 +13,7 @@ import { recordNotice, type NoticeInput } from "@features/brain/server/notice";
  * morning. Plan item A16, and Mark's overnight agent (12 Aug) without the credentials, the
  * 403s and the draft-only mail that stopped his.
  *
- * `queue_research` writes the question as a `research` chunk with status "queued". At 00:30
+ * `queue_research` writes the question as a `research` chunk with status "queued". At 00:41
  * UTC `.github/workflows/brain-daily.yml` runs `brain-night-shift`, which hands each one to
  * Claude Code on the Team subscription: the brain's read-only tools over MCP, plus the web,
  * and nothing that writes. The answer replaces the question in the same chunk, so it is

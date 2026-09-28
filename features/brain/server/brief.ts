@@ -116,8 +116,8 @@ export async function buildDailyBrief(day: string): Promise<DailyBrief | null> {
    * The caller claims the day's alert slot BEFORE calling this, and only marks it
    * delivered on success or on a deliberate quiet day. So a throw here leaves the
    * claim unmarked — and until 2026-09-23 the schedule, which only ever asks for
-   * yesterday, never came back for it. It now fires at 01:10, 03:10 AND 06:10 UTC (early,
-   * because GitHub starts it hours late):
+   * yesterday, never came back for it. It now fires at 06:41, 07:41 AND 08:41 UTC (Vercel's
+   * clock, features/cron/server/github-jobs.ts):
    * `claim_slack_alert` re-grants an undelivered claim once it is 10 minutes old, so
    * the second firing is a real retry after a failure and a no-op after a delivery.
    * Two hours outlasts an overload; the five seconds below did not (2026-09-23: two

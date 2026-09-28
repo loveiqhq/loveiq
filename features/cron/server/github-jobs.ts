@@ -11,9 +11,10 @@
  * :41, and their workflows carry no `schedule:` of their own, so GitHub cannot start a
  * late duplicate.
  *
- * The brain's daily jobs (brain-daily.yml) are not here: their times were chosen to land
- * after GitHub's delay, so starting them on time would move the brief to the small hours.
- * The brain's embedding catch-up (brain-embed.yml) is, hourly: it has no time of day.
+ * The brain's daily jobs (brain-daily.yml) are here too since 2026-09-28, the day the miner
+ * ran 8.5 hours late and set off two stall alerts. The brief had been scheduled at 01:10 so
+ * that it landed in the morning; it now starts in the morning. The brain's embedding
+ * catch-up (brain-embed.yml) is hourly: it has no time of day.
  */
 
 export interface GithubJob {
@@ -31,6 +32,7 @@ export const CLOCK_WORKFLOWS = [
   "health-monitor.yml",
   "ux-digest-audit.yml",
   "brain-embed.yml",
+  "brain-daily.yml",
 ] as const;
 
 /** The jobs to start at `at`, a run of the hourly :41 cron. Times are UTC. */
@@ -56,5 +58,15 @@ export function jobsDue(at: Date): GithubJob[] {
   if (hour === 8 || hour === 10) {
     jobs.push({ workflow: "ux-digest-audit.yml", inputs: { on_time: "true" } });
   }
+  // The brain, on the teamwork@ Claude seat. The Night Shift answers the day's queued
+  // research by morning; the Monday report follows the test batteries it reports on.
+  if (hour === 0) jobs.push(brain("brain-night-shift"));
+  if (monday && hour === 1) jobs.push(brain("brain-health"));
+  // The brief, and two retries: its day claim makes a retry a no-op once one delivered.
+  if (hour >= 6 && hour <= 8) jobs.push(brain("brain-brief"));
+  // The decision miner after the brief's last retry; the radar runs inside its job.
+  if (hour === 9) jobs.push(brain("brain-mine"));
   return jobs;
 }
+
+const brain = (job: string): GithubJob => ({ workflow: "brain-daily.yml", inputs: { job } });

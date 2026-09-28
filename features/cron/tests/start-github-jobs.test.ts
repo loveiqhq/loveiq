@@ -95,6 +95,23 @@ describe("when each GitHub job is due", () => {
     expect(workflows("2026-09-29T04:41:00Z")).not.toContain("probe-guard.yml");
   });
 
+  it("starts the brain's jobs overnight, then the brief, then the miner", () => {
+    const brain = (iso: string) =>
+      jobsDue(at(iso))
+        .filter((j) => j.workflow === "brain-daily.yml")
+        .map((j) => j.inputs?.job);
+    expect(brain("2026-09-29T00:41:00Z")).toEqual(["brain-night-shift"]);
+    // The Monday report, after the week's test batteries, and only on Mondays.
+    expect(brain("2026-09-28T01:41:00Z")).toEqual(["brain-health"]);
+    expect(brain("2026-09-29T01:41:00Z")).toEqual([]);
+    // The brief, then two retries that are no-ops once one delivered.
+    for (const hh of ["06", "07", "08"]) {
+      expect(brain(`2026-09-29T${hh}:41:00Z`), hh).toEqual(["brain-brief"]);
+    }
+    expect(brain("2026-09-29T09:41:00Z")).toEqual(["brain-mine"]);
+    expect(brain("2026-09-29T15:41:00Z")).toEqual([]);
+  });
+
   it("starts the digest audit after the digest in winter as well as summer", () => {
     // The digest posts at 08:17 UTC in winter; the audit's first start must be later.
     const hours = [...Array(24).keys()].filter((h) =>
@@ -131,11 +148,12 @@ describe("the workflows the clock starts", () => {
           const dispatch = load(job.workflow).workflow_dispatch as {
             inputs?: Record<string, unknown>;
           } | null;
-          for (const key of Object.keys(job.inputs ?? {})) {
-            expect(
-              Object.keys(dispatch?.inputs ?? {}),
-              `${job.workflow} at ${when.toISOString()}`
-            ).toContain(key);
+          for (const [key, value] of Object.entries(job.inputs ?? {})) {
+            const where = `${job.workflow} at ${when.toISOString()}`;
+            expect(Object.keys(dispatch?.inputs ?? {}), where).toContain(key);
+            // A value a choice input does not list is refused just the same.
+            const spec = dispatch?.inputs?.[key] as { type?: string; options?: string[] };
+            if (spec?.type === "choice") expect(spec.options, where).toContain(value);
           }
         }
       }

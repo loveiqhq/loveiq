@@ -18,7 +18,7 @@ export const maxDuration = 60;
  * GET /api/cron/brain-night-shift
  *
  * Answers the research questions queued with `queue_research`, overnight, on the Team
- * subscription. Runs ONLY in GitHub Actions (`brain-daily.yml`, 00:30 UTC, through
+ * subscription. Runs ONLY in GitHub Actions (`brain-daily.yml`, 00:41 UTC, through
  * scripts/brain-cron.ts): the research agent is the `claude` binary, which Vercel does not
  * have, so without BRAIN_LLM_CLI this refuses rather than pretending to have run.
  *
