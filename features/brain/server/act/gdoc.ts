@@ -31,8 +31,9 @@ export class GoogleDocRefusal extends Error {}
 export class DelegationNotGranted extends Error {
   constructor(scope: string) {
     super(
-      `Google refused a delegated token for ${scope} even with a working credential, so ` +
-        `the scope is not authorised for this workspace. Someone with Workspace admin ` +
+      `Google gave no delegated token for ${scope} even with a working credential. If the ` +
+        `log does not say it timed out, the scope is not authorised for this workspace: ` +
+        `someone with Workspace admin ` +
         `access adds it under Security → Access and data control → API controls → Manage ` +
         `Domain Wide Delegation, for client id 116552495667268648554. TWO SEPARATE ` +
         `SWITCHES are needed and this is only one of them: the other is the Docs API ` +

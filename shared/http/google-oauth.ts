@@ -330,15 +330,21 @@ async function serviceAccountToken(rawKey: string, nowMs: number): Promise<strin
     return null;
   }
 
-  const res = await fetchWithTimeout(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }).toString(),
-    timeoutMs: TIMEOUT_MS,
-  });
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion,
+      }).toString(),
+      timeoutMs: TIMEOUT_MS,
+    });
+  } catch (err) {
+    logger.error({ err }, "google oauth: service-account exchange failed");
+    return null;
+  }
 
   if (!res.ok) {
     const detail = (await res.text().catch(() => "")).slice(0, 300);
@@ -614,43 +620,60 @@ export async function getDelegatedToken(
     exp: iat + 3600,
   });
 
-  const signed = await fetchWithTimeout(
-    `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(sa)}:signJwt`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${caller}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ payload }),
-      timeoutMs: 15_000,
+  /**
+   * A TIMEOUT IS A REFUSAL HERE, as every other failure in this module already is.
+   *
+   * `fetchWithTimeout` throws instead of answering, and this was the one function here
+   * that let it through, so a slow token request ended the caller's whole run instead of
+   * costing it one mailbox: the way one slow Drive listing ended the import three times
+   * on 2026-09-28. Every per-mailbox caller (Gmail, calendar, Drive, invoice filing)
+   * already treats null as "not read this run" and keeps its sweep off for it.
+   */
+  try {
+    const signed = await fetchWithTimeout(
+      `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(sa)}:signJwt`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${caller}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ payload }),
+        timeoutMs: 15_000,
+      }
+    );
+    if (!signed.ok) {
+      const detail = (await signed.text().catch(() => "")).slice(0, 300);
+      logger.error({ status: signed.status, subject, detail }, "google oauth: signJwt refused");
+      return null;
     }
-  );
-  if (!signed.ok) {
-    const detail = (await signed.text().catch(() => "")).slice(0, 300);
-    logger.error({ status: signed.status, subject, detail }, "google oauth: signJwt refused");
-    return null;
-  }
-  const { signedJwt } = (await signed.json()) as { signedJwt?: string };
-  if (!signedJwt) return null;
+    const { signedJwt } = (await signed.json()) as { signedJwt?: string };
+    if (!signedJwt) return null;
 
-  const exchanged = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: signedJwt,
-    }).toString(),
-    timeoutMs: 15_000,
-  });
-  if (!exchanged.ok) {
-    const detail = (await exchanged.text().catch(() => "")).slice(0, 300);
-    // `unauthorized_client` here means the Admin console step is missing or the
-    // scope list there does not include the one being asked for. It is a
-    // configuration answer, not a code one, so say which.
-    logger.error(
-      { status: exchanged.status, subject, scope, detail },
-      "google oauth: delegated token exchange refused — check domain-wide delegation in the Workspace Admin console"
+    const exchanged = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: signedJwt,
+      }).toString(),
+      timeoutMs: 15_000,
+    });
+    if (!exchanged.ok) {
+      const detail = (await exchanged.text().catch(() => "")).slice(0, 300);
+      // `unauthorized_client` here means the Admin console step is missing or the
+      // scope list there does not include the one being asked for. It is a
+      // configuration answer, not a code one, so say which.
+      logger.error(
+        { status: exchanged.status, subject, scope, detail },
+        "google oauth: delegated token exchange refused — check domain-wide delegation in the Workspace Admin console"
+      );
+      return null;
+    }
+    const { access_token: token } = (await exchanged.json()) as { access_token?: string };
+    return token ?? null;
+  } catch (err) {
+    logger.warn(
+      { subject, scope, err: String(err) },
+      "google oauth: delegated token request failed"
     );
     return null;
   }
-  const { access_token: token } = (await exchanged.json()) as { access_token?: string };
-  return token ?? null;
 }

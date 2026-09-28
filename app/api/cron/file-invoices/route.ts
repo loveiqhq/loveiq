@@ -401,7 +401,7 @@ export async function GET(request: Request) {
     const sheetToken = await getDelegatedToken("ec@loveiq.org", SHEETS_SCOPE);
     if (!driveToken || !sheetToken) {
       throw new Error(
-        "delegation unavailable — check GOOGLE_IMPERSONATE_SERVICE_ACCOUNT and the domain-wide grant"
+        "delegation unavailable: Google refused or did not answer (the log says which); if refused, check GOOGLE_IMPERSONATE_SERVICE_ACCOUNT and the domain-wide grant"
       );
     }
 
