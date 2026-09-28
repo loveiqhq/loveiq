@@ -105,9 +105,14 @@ export function atomsIn(sentence: string): Atom[] {
     atoms.push({
       kind: "date",
       raw: m[0],
-      forms: [m[0], `${day} ${month}`, `${day} ${month.slice(0, 3)}`, `${month} ${day}`].map(
-        normText
-      ),
+      // "Aug 29, 2026" too: a Gmail part carries its date in that form, not the ISO one.
+      forms: [
+        m[0],
+        `${day} ${month}`,
+        `${day} ${month.slice(0, 3)}`,
+        `${month} ${day}`,
+        `${month.slice(0, 3)} ${day}`,
+      ].map(normText),
     });
   }
   for (const m of unquoted.replace(ISO_DAY, " ").matchAll(NUMBER)) {

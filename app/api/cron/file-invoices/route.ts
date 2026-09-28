@@ -356,17 +356,20 @@ export async function amountFrom(pdf: Uint8Array | null, body: string): Promise<
     text,
     new RegExp(TOTAL + String.raw`[^\d]{0,28}?(?:€|EUR)[\s€]*([\d,]+\.\d{2})`, "gi")
   );
-  if (eur !== null) return { value: eur, currency: "EUR" };
-
   const usd = largest(
     text,
     new RegExp(TOTAL + String.raw`[^\d]{0,28}?(?:\$|USD)[\s$]*([\d,]+\.\d{2})`, "gi")
   );
-  if (usd !== null) return { value: usd, currency: "USD" };
-
   // No currency marker beside the total, so we cannot claim it is euros.
   const bare = largest(text, new RegExp(TOTAL + String.raw`[^\d]{0,28}?([\d,]+\.\d{2})`, "gi"));
-  return bare !== null ? { value: bare, currency: "OTHER" } : null;
+  const readings: Charge[] = [
+    ...(eur !== null ? [{ value: eur, currency: "EUR" as const }] : []),
+    ...(usd !== null ? [{ value: usd, currency: "USD" as const }] : []),
+    ...(bare !== null ? [{ value: bare, currency: "OTHER" as const }] : []),
+  ];
+  // A zero is the answer only when nothing else was charged: "Total VAT €0.00" beside
+  // "Total $20.00" must not read as a free month and hide the 20.
+  return readings.find((r) => r.value > 0) ?? readings[0] ?? null;
 }
 
 interface Filed {

@@ -41,6 +41,15 @@ describe("check_answer: what a source confirms", () => {
     expect(bad.text).toMatch(/the quote .*we will revisit subscriptions in 2027.* is not in/);
   });
 
+  it("confirms a day written the way a Gmail part writes it", () => {
+    // Round-10 audit: part 2 of a receipt thread says "Aug 29, 2026", not the ISO day.
+    const r = checkAnswer("On 2026-08-29 Atlassian charged USD 64.62 for Jira.", [
+      { id: "gmail/thread:1a04#2", text: "Receipt from Atlassian, Aug 29, 2026. Total $64.62 USD" },
+    ]);
+    expect(r.missing).toBe(0);
+    expect(r.text).toContain("2026-08-29 in gmail/thread:1a04#2");
+  });
+
   it("checks a sentence that names an id against that document alone", () => {
     const r = checkAnswer(
       "The decision/decision:2026-09-26-bfc66b0fe8 record puts September at 13,245 visitors.",
