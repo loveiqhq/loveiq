@@ -174,6 +174,46 @@ describe("SurveyPage", () => {
       expect(screen.queryByRole("heading", { name: /already finished/i })).not.toBeInTheDocument();
     });
 
+    it("keeps a run it just finished when Back lands on a second survey entry", async () => {
+      // Round-11 audit: a reload on the survey pushes a second entry for it, and Back from
+      // the screens after submitting lands there, step 6 to step 6: no new run begins.
+      localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "a" } }));
+      render(<SurveyPage />);
+      await screen.findByTestId("survey-engine");
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_just_finished");
+      sessionStorage.setItem("loveiq-survey-session", "just-finished");
+
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 6 } }));
+      });
+
+      expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBe("rpt_just_finished");
+      expect(sessionStorage.getItem("loveiq-survey-session")).toBe("just-finished");
+    });
+
+    it("starts a new submission when a landing answer opens the survey after finishing", async () => {
+      // Round-11 audit: the landing page's question saves an answer, and /survey then opens
+      // straight into the survey, past "I agree".
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      sessionStorage.setItem("loveiq-survey-session", "finished-run");
+      localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: 3 } }));
+      render(<SurveyPage />);
+
+      expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+      expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
+      expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
+    });
+
+    it("leaves a pending completion's session alone", async () => {
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      sessionStorage.setItem("loveiq-survey-session", "pending-run");
+      localStorage.setItem(PENDING_COMPLETION_KEY, JSON.stringify(pendingCompletion));
+      render(<SurveyPage />);
+
+      expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+      expect(sessionStorage.getItem("loveiq-survey-session")).toBe("pending-run");
+    });
+
     it("keeps a mid-survey reader's session when they go back and forward", async () => {
       sessionStorage.setItem("loveiq-survey-session", "mid-run");
       sessionStorage.setItem(SURVEY_STEP_KEY, "5");
