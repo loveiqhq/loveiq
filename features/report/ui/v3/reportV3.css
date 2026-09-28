@@ -7829,3 +7829,51 @@ html {
     transition: none;
   }
 }
+
+/* ══ REVIEW 28.09 (b) — Mark's Figma comments on 1:165, after his 15:13 edit ════════
+ *
+ * ── The top three count in (1:497) ─────────────────────────────────────────────────
+ * Mark (1943965090): "Can you add animations for this. Please check how the animation
+ * in V2 worked. We can have the scale start from 0 and the % also count up from 0 …
+ * Also the Archetype names should fade in after the animations have finished to build
+ * up curiosity." V2's match strength (report-hero-card) grows over 1800ms on
+ * cubic-bezier(0.645, 0.045, 0.355, 1) while its % counts up over the same 1800ms
+ * (useV4CountUp). Each row does that 150ms behind the one above (--rv4-t3-i, set by
+ * V3TopThree's `animate`), the dot riding the head of its fill; the names fade in once
+ * the third bar lands, at 2 x 150 + 1800 = 2100ms, 120ms apart. The rank, icon and
+ * description stay in place throughout. Pending until useV4Reveal sees the list. */
+.rv3 .rv3-top3__list.is-animated .rv3-top3__fill {
+  transform-origin: left center;
+  transition: transform 1800ms cubic-bezier(0.645, 0.045, 0.355, 1) calc(var(--rv4-t3-i, 0) * 150ms);
+}
+.rv3 .rv3-top3__list.is-animated .rv3-top3__dot {
+  transition: left 1800ms cubic-bezier(0.645, 0.045, 0.355, 1) calc(var(--rv4-t3-i, 0) * 150ms);
+}
+.rv3 .rv3-top3__list.is-animated .rv3-top3__name {
+  transition: opacity 600ms ease-out calc(2100ms + var(--rv4-t3-i, 0) * 120ms);
+}
+.rv3 .rv3-top3__list.is-animated.is-pending .rv3-top3__fill {
+  transform: scaleX(0);
+}
+.rv3 .rv3-top3__list.is-animated.is-pending .rv3-top3__dot {
+  left: 0;
+}
+.rv3 .rv3-top3__list.is-animated.is-pending .rv3-top3__name {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv3-top3__list.is-animated.is-pending .rv3-top3__fill {
+    transform: none;
+  }
+  .rv3 .rv3-top3__list.is-animated.is-pending .rv3-top3__dot {
+    left: var(--rv3-fill);
+  }
+  .rv3 .rv3-top3__list.is-animated.is-pending .rv3-top3__name {
+    opacity: 1;
+  }
+  .rv3 .rv3-top3__list.is-animated .rv3-top3__fill,
+  .rv3 .rv3-top3__list.is-animated .rv3-top3__dot,
+  .rv3 .rv3-top3__list.is-animated .rv3-top3__name {
+    transition: none;
+  }
+}

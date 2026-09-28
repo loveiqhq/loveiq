@@ -50,7 +50,8 @@ const V4TopThreeSection: FC<Props> = ({ percentages = REPORT_V4_TOP_THREE, feedb
       ))}
     </div>
 
-    <V3TopThree percentages={percentages} blurbs={report4ArchetypeBlurbs} />
+    {/* Mark, 28.09 (1943965090): the bars grow, the % count up, the names fade in. */}
+    <V3TopThree percentages={percentages} blurbs={report4ArchetypeBlurbs} animate />
 
     {/* 1:560 — a live widget takes the rating's geometry: right-aligned row, then
      * the frame's 44px tail. */}
