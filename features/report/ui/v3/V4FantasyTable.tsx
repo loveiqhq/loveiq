@@ -71,8 +71,8 @@ const Chevron: FC = () => (
 );
 
 /**
- * The info mark — 639:338 in a row (10.875px, a 0.906 stroke at 92%), 639:322 in a
- * column head (9.89px, 0.824 at 82%). One drawing, scaled by its box.
+ * The info mark — 639:338 in a row (10.875px, a 0.906 stroke at 92%). The column heads
+ * drew a smaller one (639:322) until 28.09.
  */
 const Mark: FC = () => (
   <svg viewBox="0 0 10.875 10.875" fill="none" aria-hidden="true">
@@ -103,36 +103,54 @@ interface RowProps {
   onToggleNote?: () => void;
 }
 
+/**
+ * A name's leading words and its last one. Mark, 28.09 (1944174274): "the information
+ * icons ('i') were set in weird positions. Now updated." 639:315 sets the mark right
+ * after the last word, so the last word carries it and the two never part at a wrap.
+ */
+const splitLast = (name: string): [string, string] => {
+  const at = name.trimEnd().lastIndexOf(" ");
+  return at < 0 ? ["", name] : [name.slice(0, at + 1), name.slice(at + 1)];
+};
+
 const Row: FC<RowProps> = ({ row, standIn, noteId, noteOpen = false, onToggleNote }) => {
   const pull = row.pull ?? standIn?.[0] ?? 0;
   const pleasure = row.pleasure ?? standIn?.[1] ?? 0;
   const hasNote = Boolean(row.description && noteId && onToggleNote);
+  const [lead, last] = splitLast(row.practice);
+  const mark = hasNote ? (
+    <button
+      type="button"
+      className="rv4-fvt__info"
+      aria-label={`What ${row.practice} tends to organize`}
+      aria-expanded={noteOpen}
+      aria-controls={noteId}
+      data-fvt-note
+      onClick={onToggleNote}
+    >
+      <span className="rv4-fvt__mark">
+        <Mark />
+      </span>
+    </button>
+  ) : (
+    <span className="rv4-fvt__info" aria-hidden="true">
+      <span className="rv4-fvt__mark">
+        <Mark />
+      </span>
+    </span>
+  );
   return (
     <>
       <div className="rv4-fvt__row" role="row">
         <div className="rv4-fvt__label" role="cell">
-          <span className="rv4-fvt__name">{row.practice}</span>
-          {hasNote ? (
-            <button
-              type="button"
-              className="rv4-fvt__info"
-              aria-label={`What ${row.practice} tends to organize`}
-              aria-expanded={noteOpen}
-              aria-controls={noteId}
-              data-fvt-note
-              onClick={onToggleNote}
-            >
-              <span className="rv4-fvt__mark">
-                <Mark />
-              </span>
-            </button>
-          ) : (
-            <span className="rv4-fvt__info" aria-hidden="true">
-              <span className="rv4-fvt__mark">
-                <Mark />
-              </span>
+          <span className="rv4-fvt__name">
+            {lead}
+            <span className="rv4-fvt__tail">
+              {last}
+              {/* Zero-width, so the mark overhangs the line rather than moving its wrap. */}
+              <span className="rv4-fvt__anchor">{mark}</span>
             </span>
-          )}
+          </span>
         </div>
         <Score tone="pull" value={pull} />
         <Score tone="pleasure" value={pleasure} />
@@ -218,24 +236,14 @@ const Category: FC<CategoryProps> = ({
               Fantasy &amp; Practice
             </span>
             {/* 639:319 — the frame breaks both heads after their first word, so the
-             * lines are set apart here, each centred on the whole cell. The info mark
-             * hangs off the first line, so it follows the word below Figma's 82. */}
+             * lines are set apart here, each centred on the whole cell. Since 28.09
+             * (1944174274) the heads carry no info mark. */}
             <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
-              <span className="rv4-fvt__col-line">
-                Fantasy
-                <span className="rv4-fvt__mark" aria-hidden="true">
-                  <Mark />
-                </span>
-              </span>{" "}
+              <span className="rv4-fvt__col-line">Fantasy</span>{" "}
               <span className="rv4-fvt__col-line">Pull</span>
             </span>
             <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
-              <span className="rv4-fvt__col-line">
-                Actual
-                <span className="rv4-fvt__mark" aria-hidden="true">
-                  <Mark />
-                </span>
-              </span>{" "}
+              <span className="rv4-fvt__col-line">Actual</span>{" "}
               <span className="rv4-fvt__col-line">Pleasure</span>
             </span>
           </div>

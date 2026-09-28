@@ -62,15 +62,26 @@ describe("V4FantasyTable — open (639:308)", () => {
     }
   });
 
-  it("hangs each head's info mark off its first line, so it follows the word", () => {
+  // Mark, 28.09 (1944174274): "the information icons ('i') were set in weird positions.
+  // Now updated." 639:315 (and 639:1912 paywalled) draws each row's mark right after
+  // the last word of its name, and none on the column heads any more.
+  it("sets each row's info mark after the last word of its name, never alone on a line", () => {
     const { container } = render(<V4FantasyTable table={OPEN} />);
-    const cat = categories(container)[0]!;
-    for (const head of cat.querySelectorAll(".rv4-fvt__col--score")) {
-      expect(head.querySelector(".rv4-fvt__col-line:first-child > .rv4-fvt__mark")).not.toBeNull();
+    for (const row of liveRows(categories(container)[0]!)) {
+      const name = row.querySelector(".rv4-fvt__name")!;
+      const tail = name.querySelector(".rv4-fvt__tail")!;
+      const words = name.textContent!.trim().split(/\s+/);
+      expect(tail.textContent!.trim()).toBe(words[words.length - 1]);
+      expect(tail.querySelector(".rv4-fvt__anchor > .rv4-fvt__info")).not.toBeNull();
     }
   });
 
-  it("sets the three column heads, their info marks decorative", () => {
+  it("draws no info mark on the column heads", () => {
+    const { container } = render(<V4FantasyTable table={OPEN} />);
+    expect(container.querySelectorAll(".rv4-fvt__cols .rv4-fvt__mark")).toHaveLength(0);
+  });
+
+  it("sets the three column heads", () => {
     const { container } = render(<V4FantasyTable table={OPEN} />);
     const cat = categories(container)[0]!;
     const heads = [...cat.querySelectorAll('[role="columnheader"]')];
@@ -79,12 +90,6 @@ describe("V4FantasyTable — open (639:308)", () => {
       "Fantasy Pull",
       "Actual Pleasure",
     ]);
-    const marks = cat.querySelectorAll(".rv4-fvt__cols .rv4-fvt__mark");
-    expect(marks).toHaveLength(2);
-    marks.forEach((mark) => {
-      expect(mark.getAttribute("aria-hidden")).toBe("true");
-      expect(mark.closest("button")).toBeNull();
-    });
   });
 
   it("shows three rows sharp, each with both scores and their likelihood", () => {
@@ -326,18 +331,23 @@ describe("reportV3.css — fantasy table contracts", () => {
     expect(ruleOf(".rv3 .rv4-trig__pill")).toContain("height: 31px");
   });
 
-  it("sets a head's mark where 639:319 draws it at 82, and after its word when narrower", () => {
-    // Measured at 393: 2.34 past "FANTASY", 5.70 past "ACTUAL" — both at Figma's 72.11.
-    // At 320 the columns are 72 and the mark, fixed to the cell's right, ran into
-    // "FANTASY" (final review, 25.09).
-    const mark = ruleOf(".rv3 .rv4-fvt__cols .rv4-fvt__mark");
-    expect(mark).toContain("left: calc(100% + var(--fvt-mark-gap))");
-    expect(mark).not.toContain("right: 0");
-    expect(ruleOf(".rv3 .rv4-fvt__col--score")).toContain("--fvt-mark-gap: 2.34px");
-    expect(ruleOf(".rv3 .rv4-fvt__col--score:last-child")).toContain("--fvt-mark-gap: 5.7px");
-    const first = ruleOf(".rv3 .rv4-fvt__col--score .rv4-fvt__col-line:first-child");
-    expect(first).toContain("width: fit-content");
-    expect(first).toContain("position: relative");
+  // 639:335 and its siblings: the 14.39px button 5.6 after the last word, 3.2 down from
+  // that line's top. It hangs from a zero-width anchor, so the name wraps at Figma's 102
+  // as if it were not there ("wake-up sex" and its mark run past 102 on one line).
+  it("hangs the row's mark 5.6 after the last word, taking no width in the wrap", () => {
+    expect(ruleOf(".rv3 .rv4-fvt__tail")).toContain("white-space: nowrap");
+    const anchor = ruleOf(".rv3 .rv4-fvt__anchor");
+    expect(anchor).toContain("display: inline-block");
+    expect(anchor).toContain("width: 0");
+    expect(anchor).toContain("position: relative");
+    expect(anchor).toContain("vertical-align: top");
+    const info = ruleOf(".rv3 .rv4-fvt__anchor > .rv4-fvt__info");
+    expect(info).toContain("position: absolute");
+    expect(info).toContain("left: 5.6px");
+    expect(info).toContain("top: 3.2px");
+    // 122 less the mark and its gap: Figma's 102 at 393, narrower with the column.
+    expect(ruleOf(".rv3 .rv4-fvt__name")).toContain("max-width: calc(100% - 20px)");
+    expect(V3_CSS).not.toContain(".rv4-fvt__cols .rv4-fvt__mark");
   });
 
   it("centres the column heads' lines as Figma does, on the letters and their gaps", () => {
