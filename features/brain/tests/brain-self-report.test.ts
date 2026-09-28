@@ -381,6 +381,28 @@ describe("renderSelfReport", () => {
       "Slower than before, tool for tool: fetch_document (95% within 2.0 s, was 0.3 s)."
     );
 
+    // Exactly 25% and half a second slower is slower.
+    const at = (ms: number) =>
+      windowStats(
+        Array.from({ length: 20 }, () => row({ latency_ms: ms })),
+        FLOOR
+      );
+    const render = (now: ReturnType<typeof windowStats>, was: ReturnType<typeof windowStats>) =>
+      renderSelfReport(report({ now, before: was }), FLOOR, { withQuestions: false, nowMs: NOW });
+    expect(render(at(2_500), at(2_000))).toContain(
+      "Slower than before, tool for tool: fetch_document (95% within 2.5 s, was 2.0 s)."
+    );
+    // A tool that rose, but not that far, is not blamed on the mix.
+    const under = render(at(1_400), at(1_000));
+    expect(under).toContain(
+      "none of the 1 used ten or more times in both windows slowed by 25% and half a second or more."
+    );
+    expect(under).not.toContain("which tools were used");
+    // Nothing to compare, and the report says so rather than stopping short.
+    expect(render(windowStats(renders, FLOOR), before)).toContain(
+      "No tool was used ten or more times in both windows, so this cannot be compared tool for tool."
+    );
+
     // A recorded 0 ms is a baseline; a tool with no timings at all has none.
     const instant = windowStats(
       Array.from({ length: 20 }, () => row({ latency_ms: 0 })),

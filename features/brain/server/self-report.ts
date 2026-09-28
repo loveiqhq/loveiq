@@ -384,6 +384,33 @@ function batteryLine(label: string, runs: BatteryRun[]): string {
 }
 
 /**
+ * Speed tool for tool, because the overall figure moves with WHICH tools were used: in the
+ * week to 2026-09-28 it went from 3.1 s to 5.6 s on 155 Figma renders, with no tool slower.
+ * A tool counts as slower at 25% and half a second or more, so noise on a fast tool is not
+ * named; the rise is put down to the mix only when no compared tool rose at all.
+ */
+function toolForTool(s: WindowStats, b: WindowStats): string {
+  const was = new Map(b.toolP95);
+  const compared = s.toolP95.filter(([t]) => was.has(t));
+  const rose = s.p95 !== null && b.p95 !== null && s.p95 > b.p95 * 1.25;
+  if (!compared.length) {
+    return rose
+      ? " No tool was used ten or more times in both windows, so this cannot be compared tool for tool."
+      : "";
+  }
+  const slower = compared.filter(([t, v]) => v >= was.get(t)! * 1.25 && v - was.get(t)! >= 500);
+  if (slower.length) {
+    return ` Slower than before, tool for tool: ${slower
+      .map(([t, v]) => `${t} (95% within ${secs(v)}, was ${secs(was.get(t)!)})`)
+      .join(", ")}.`;
+  }
+  const none = `none of the ${n(compared.length)} used ten or more times in both windows`;
+  return compared.every(([t, v]) => v <= was.get(t)!)
+    ? ` Tool for tool, ${none} got slower${rose ? ", so the rise is in which tools were used" : ""}.`
+    : ` Tool for tool, ${none} slowed by 25% and half a second or more.`;
+}
+
+/**
  * The report as prose. `withQuestions: false` leaves out the text of the questions asked:
  * the weekly notice is stored in the searchable corpus, and a question can carry a name
  * or a token the log should keep to itself. The tool, read live, lists them.
@@ -468,12 +495,6 @@ export function renderSelfReport(
           ? `; most often: ${s.topRefusals.map(([k, v]) => `"${k}" ${n(v)}`).join("; ")}.`
           : ".")
     );
-    // Tool for tool, because the overall figure moves with WHICH tools were used: in the
-    // week to 2026-09-28 it went from 3.1 s to 5.6 s on 155 Figma renders, with no tool slower.
-    const was = new Map(b.toolP95);
-    const compared = s.toolP95.filter(([t]) => was.has(t));
-    const slower = compared.filter(([t, v]) => v > was.get(t)! * 1.25 && v - was.get(t)! >= 500);
-    const rose = s.p95 !== null && b.p95 !== null && s.p95 > b.p95 * 1.25;
     out.push(
       s.p50 === null
         ? "Speed: no timings recorded."
@@ -481,14 +502,7 @@ export function renderSelfReport(
             (s.slowest.length
               ? ` Slowest: ${s.slowest.map(([k, v]) => `${k} (95% within ${secs(v)})`).join(", ")}.`
               : "") +
-            (slower.length
-              ? ` Slower than before, tool for tool: ${slower
-                  .map(([t, v]) => `${t} (95% within ${secs(v)}, was ${secs(was.get(t)!)})`)
-                  .join(", ")}.`
-              : compared.length
-                ? ` Tool for tool, none of the ${n(compared.length)} used ten or more times in both windows got slower` +
-                  (rose ? ", so the rise is in which tools were used." : ".")
-                : "")
+            toolForTool(s, b)
     );
   }
 
