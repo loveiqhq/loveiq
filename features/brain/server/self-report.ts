@@ -55,8 +55,11 @@ export interface WindowStats {
   p50: number | null;
   p95: number | null;
   slowest: Array<[string, number]>;
-  /** Each tool with ten or more calls and a recorded timing, and its 95th percentile, slowest first. */
-  toolP95: Array<[string, number]>;
+  /**
+   * Each tool with three or more timed calls: its 95th percentile and its call count,
+   * slowest first. Three, not ten, so last week's quiet tool can still be the baseline.
+   */
+  toolP95: Array<[string, number, number]>;
   unanswered: Array<{ query: string; times: number; best: number | null }>;
 }
 
@@ -109,14 +112,17 @@ export function windowStats(rows: CallRow[], floor: number): WindowStats {
   const all = latencies(rows);
   const tools = countBy(rows, (r) => r.tool ?? "unknown");
   const toolP95 = tools
-    .filter(([, n]) => n >= 10)
-    .flatMap(([tool]): Array<[string, number]> => {
+    .filter(([, n]) => n >= 3)
+    .flatMap(([tool, calls]): Array<[string, number, number]> => {
       const p95 = percentile(latencies(rows.filter((r) => (r.tool ?? "unknown") === tool)), 0.95);
       // No timing recorded is no figure, not a figure of 0 s.
-      return p95 === null ? [] : [[tool, p95]];
+      return p95 === null ? [] : [[tool, p95, calls]];
     })
     .sort((a, b) => b[1] - a[1]);
-  const slowest = toolP95.slice(0, 3);
+  const slowest = toolP95
+    .filter(([, , calls]) => calls >= 10)
+    .slice(0, 3)
+    .map(([tool, p95]): [string, number] => [tool, p95]);
   const asked = new Map<string, { query: string; times: number; best: number | null }>();
   for (const r of searches.filter((s) => isEmpty(s) || isWeak(s))) {
     const query = (r.query ?? "").replace(/\s+/g, " ").trim();
@@ -390,12 +396,14 @@ function batteryLine(label: string, runs: BatteryRun[]): string {
  * named; the rise is put down to the mix only when no compared tool rose at all.
  */
 function toolForTool(s: WindowStats, b: WindowStats): string {
-  const was = new Map(b.toolP95);
-  const compared = s.toolP95.filter(([t]) => was.has(t));
+  // Ten or more calls now, three or more before: a search that went from 8 calls at 1.0 s
+  // to 60 at 9.0 s must be compared, not waved through as a change of mix.
+  const was = new Map(b.toolP95.map(([t, v]): [string, number] => [t, v]));
+  const compared = s.toolP95.filter(([t, , calls]) => calls >= 10 && was.has(t));
   const rose = s.p95 !== null && b.p95 !== null && s.p95 > b.p95 * 1.25;
   if (!compared.length) {
     return rose
-      ? " No tool was used ten or more times in both windows, so this cannot be compared tool for tool."
+      ? " No tool used ten or more times this week was used before, so this cannot be compared tool for tool."
       : "";
   }
   const slower = compared.filter(([t, v]) => v >= was.get(t)! * 1.25 && v - was.get(t)! >= 500);
@@ -404,10 +412,10 @@ function toolForTool(s: WindowStats, b: WindowStats): string {
       .map(([t, v]) => `${t} (95% within ${secs(v)}, was ${secs(was.get(t)!)})`)
       .join(", ")}.`;
   }
-  const none = `none of the ${n(compared.length)} used ten or more times in both windows`;
+  const tally = `Tool for tool (${n(compared.length)} used in both windows),`;
   return compared.every(([t, v]) => v <= was.get(t)!)
-    ? ` Tool for tool, ${none} got slower${rose ? ", so the rise is in which tools were used" : ""}.`
-    : ` Tool for tool, ${none} slowed by 25% and half a second or more.`;
+    ? ` ${tally} none got slower${rose ? ", so the rise is in which tools were used" : ""}.`
+    : ` ${tally} none slowed by 25% and half a second or more.`;
 }
 
 /**
