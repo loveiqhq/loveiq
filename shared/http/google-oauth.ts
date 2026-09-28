@@ -645,7 +645,10 @@ export async function getDelegatedToken(
       return null;
     }
     const { signedJwt } = (await signed.json()) as { signedJwt?: string };
-    if (!signedJwt) return null;
+    if (!signedJwt) {
+      logger.error({ subject }, "google oauth: signJwt answered without a signedJwt");
+      return null;
+    }
 
     const exchanged = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -668,6 +671,8 @@ export async function getDelegatedToken(
       return null;
     }
     const { access_token: token } = (await exchanged.json()) as { access_token?: string };
+    if (!token)
+      logger.error({ subject, scope }, "google oauth: token exchange answered without a token");
     return token ?? null;
   } catch (err) {
     logger.warn(

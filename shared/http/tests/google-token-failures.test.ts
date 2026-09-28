@@ -11,11 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * already handles as "not read this run".
  */
 
-vi.mock("@shared/observability/logger", () => ({
-  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
+vi.mock("@shared/observability/logger", () => ({ default: log }));
 
-type How = "ok" | "refuse" | "timeout" | "unreadable";
+type How = "ok" | "refuse" | "timeout" | "unreadable" | "blank";
 /** What each Google endpoint does in this test. */
 const how: Record<"sign" | "exchange" | "keyExchange" | "refresh", How> = {
   sign: "ok",
@@ -45,6 +44,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
         if (answer === "unreadable") {
           throw new DOMException("This operation was aborted", "AbortError");
         }
+        if (answer === "blank") return {};
         return step === "sign"
           ? { signedJwt: "signed.jwt" }
           : { access_token: `${step}-token`, expires_in: 3600 };
@@ -104,6 +104,20 @@ describe("getDelegatedToken", () => {
     how[step] = answer;
     await expect(getDelegatedToken("mo@loveiq.org", "drive")).resolves.toBeNull();
   });
+
+  // Callers tell the reader "the log says which", so every null must leave a log line.
+  it.each(["sign", "exchange"] as const)(
+    "logs why when the %s step answers ok but without a token",
+    async (step) => {
+      how[step] = "blank";
+      log.error.mockClear();
+      await expect(getDelegatedToken("mo@loveiq.org", "drive")).resolves.toBeNull();
+      expect(log.error).toHaveBeenCalledWith(
+        expect.objectContaining({ subject: "mo@loveiq.org" }),
+        expect.stringMatching(/answered without/)
+      );
+    }
+  );
 });
 
 describe("the service-account key path", () => {
