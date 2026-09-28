@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden } from "../features/survey/questionFlags";
 import { orderEmailLast } from "../features/survey/ui/questionOrder";
+import { instantScroll } from "./fixtures/instant-scroll";
 
 /**
  * The last question's answer must survive into the submit payload.
@@ -54,6 +55,7 @@ test("the final answer reaches the submit payload even when Next is clicked inst
   await page.addInitScript(() => {
     window.localStorage.setItem("loveiq-survey-autoadvance", "true");
   });
+  await instantScroll(page);
 
   await page.goto("/survey");
   await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
@@ -104,14 +106,16 @@ test("the final answer reaches the submit payload even when Next is clicked inst
     }
 
     const next = page.getByRole("heading", { name: nextQ.question, exact: true });
+    // A Next that stays disabled is an answer that did not register: say so in seconds,
+    // not at the four-minute test timeout.
     if (needsNext) {
-      await page.getByRole("button", { name: /next/i }).click();
+      await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
       await next.waitFor({ state: "visible", timeout: 12_000 });
     } else {
       try {
         await next.waitFor({ state: "visible", timeout: 1500 });
       } catch {
-        await page.getByRole("button", { name: /next/i }).click();
+        await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
         await next.waitFor({ state: "visible", timeout: 12_000 });
       }
     }
