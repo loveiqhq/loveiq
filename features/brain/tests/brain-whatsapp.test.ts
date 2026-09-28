@@ -213,7 +213,16 @@ describe("whatsappRows — one chunk per DAY", () => {
     expect(script).toContain(
       'sweepMissing("whatsapp", current, { scopeKey: "day", walkedScopes: scope.days })'
     );
-    expect(script).toContain("timeout: 120_000");
+    // Every read goes through the shared reader, and the reader keeps the timeout.
+    expect(script).toContain(
+      'import { readRows } from "@features/brain/server/ingest/sqlite-read"'
+    );
+    expect(script).not.toContain("execFileSync");
+    const reader = readFileSync(
+      join(process.cwd(), "features/brain/server/ingest/sqlite-read.ts"),
+      "utf8"
+    );
+    expect(reader).toContain("timeout: 120_000");
     expect(script).toMatch(/select max\(ZMESSAGEDATE\) as ts from ZWAMESSAGE where ZCHATSESSION/);
   });
 

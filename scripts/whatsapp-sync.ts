@@ -24,10 +24,11 @@
  * Security -> Full Disk Access), because macOS protects the app container.
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+import { readRows } from "@features/brain/server/ingest/sqlite-read";
 
 /** The ONLY conversation this script may read. */
 const GROUP_JID = process.env.WHATSAPP_GROUP_JID ?? "120363422139124113@g.us";
@@ -59,25 +60,9 @@ const DB = join(
 /** Core Data counts seconds from 2001-01-01, not from 1970. */
 const CORE_DATA_EPOCH = 978_307_200;
 
-/**
- * Read-only, but through SQLite's own locking, NOT `immutable=1`. WhatsApp keeps its newest
- * writes in the `-wal` file until it checkpoints, and `immutable=1` reads the main file
- * alone: measured through the launcher on 2026-09-28, a message 20 seconds old was missing
- * from it while a read that included the WAL had it (2,522 against 2,523). It also promises
- * SQLite the file cannot change, and during a checkpoint it does, which SQLite documents as
- * wrong results or SQLITE_CORRUPT. A reader in WAL mode never blocks WhatsApp's writes; the
- * busy timeout covers the moment WhatsApp holds the lock to reset the WAL.
- */
+/** Read-only through SQLite's locking, with one fallback: see readRows. */
 function query<T>(sql: string): T[] {
-  const args = ["-readonly", "-json", "-cmd", ".timeout 5000", `file:${DB}?mode=ro`, sql];
-  const out = execFileSync("sqlite3", args, {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-    // A read that hangs (it did, for 7.5 hours on 2026-09-26) blocks every later run, since
-    // launchd never starts a second copy. Killed after two minutes, it fails the run instead.
-    timeout: 120_000,
-  });
-  return out.trim() ? (JSON.parse(out) as T[]) : [];
+  return readRows<T>(DB, sql);
 }
 
 /**
