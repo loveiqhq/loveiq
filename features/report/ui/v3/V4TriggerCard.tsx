@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import type { Report3TriggerRow } from "@/data/report3-accelerators";
 import useV4Reveal from "./useV4Reveal";
 import V4LockBadge from "./V4LockBadge";
@@ -83,10 +83,13 @@ const Row: FC<{
   locked?: LockedAs;
   last: boolean;
   focusable?: boolean;
-}> = ({ row, locked, last, focusable = false }) => (
+  /** Its turn in the rows' entrance (review 28.09). */
+  index: number;
+}> = ({ row, locked, last, focusable = false, index }) => (
   <li
     className={`rv4-trig__row${locked ? ` is-locked is-${locked}` : ""}${last ? " is-last" : ""}`}
     tabIndex={focusable ? -1 : undefined}
+    style={{ "--rv4-trig-i": index } as CSSProperties}
   >
     <p className="rv4-trig__title">{row.label}</p>
     <p className="rv4-trig__sub">{row.subtext}</p>
@@ -111,6 +114,9 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
   const peek = collapsed ? rows[CLEAR_ROWS] : undefined;
   const blurred = locked ? rows.slice(lockedFrom) : [];
   const [headRef, headInView] = useV4Reveal<HTMLDivElement>();
+  // Mark, 28.09: "also animate the headlines and texts". The clear rows rise in one by
+  // one once they reach the screen, after the headline; rows under the blur stay still.
+  const [rowsRef, rowsInView] = useV4Reveal<HTMLDivElement>();
 
   useEffect(() => {
     if (!showAll || !revealed.current) return;
@@ -131,7 +137,7 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
         </span>
         <h4 className="rv4-trig__label">{LABEL[tone]}</h4>
       </div>
-      <div className="rv4-trig__rows">
+      <div ref={rowsRef} className={`rv4-trig__rows${rowsInView ? "" : " is-pending"}`}>
         <ul className="rv4-trig__list" ref={listRef}>
           {clear.map((row, index) => (
             <Row
@@ -139,13 +145,14 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
               row={row}
               last={!locked && !collapsed && index === rows.length - 1}
               focusable={showAll && index === CLEAR_ROWS}
+              index={index}
             />
           ))}
         </ul>
         {peek ? (
           <div className="rv4-trig__peek">
             <ul className="rv4-trig__list" aria-hidden="true" inert>
-              <Row row={peek} last />
+              <Row row={peek} last index={CLEAR_ROWS} />
             </ul>
             <span className="rv4-trig__fade" aria-hidden="true" />
             <button
@@ -169,6 +176,7 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
                   row={row}
                   locked={index === 0 ? "ramp" : "blurred"}
                   last={index === blurred.length - 1}
+                  index={clear.length + index}
                 />
               ))}
             </ul>

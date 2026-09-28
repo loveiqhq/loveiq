@@ -7716,3 +7716,26 @@ html {
   font-size: 18px;
   line-height: 21.6px;
 }
+
+/* Mark, 28.09: "the same animations of the headlines of accelerators & brakes in the
+ * text also". Once the rows reach the screen, each clear row rises into place 6px
+ * after the headline, 90ms after the one before (`--rv4-trig-i`). Rows under the blur
+ * never move. */
+.rv3 .rv4-trig__rows .rv4-trig__row:not(.is-locked) {
+  transition:
+    opacity 420ms ease,
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(180ms + var(--rv4-trig-i, 0) * 90ms);
+}
+.rv3 .rv4-trig__rows.is-pending .rv4-trig__row:not(.is-locked) {
+  opacity: 0;
+  transform: translateY(6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-trig__rows .rv4-trig__row:not(.is-locked),
+  .rv3 .rv4-trig__rows.is-pending .rv4-trig__row:not(.is-locked) {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

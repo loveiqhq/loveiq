@@ -189,6 +189,22 @@ describe("V4TriggerCard — the headline fades in once the card reaches the scre
     expect(container.querySelector(".rv4-reveal")).toBeNull();
   });
 
+  // Mark, 28.09: "the same animations of the headlines of accelerators & brakes in the
+  // text also. So also animate the headlines and texts".
+  const rowsBlock = (root: HTMLElement) => root.querySelector<HTMLElement>(".rv4-trig__rows")!;
+
+  it("holds the rows back until they reach the screen, each numbered for its turn", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
+    expect(rowsBlock(container)).toHaveClass("is-pending");
+    const rows = [...container.querySelectorAll<HTMLElement>(".rv4-trig__row")];
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+    rows.forEach((row, i) => expect(row.style.getPropertyValue("--rv4-trig-i")).toBe(String(i)));
+    observerOf(rowsBlock(container))!.fire(true);
+    expect(rowsBlock(container)).not.toHaveClass("is-pending");
+  });
+
   it("fades the paywalled card's headline in too: heads are never blurred", () => {
     installRevealObserver();
     mockRect({ top: 5000 });
@@ -239,6 +255,22 @@ describe("reportV3.css — trigger card contracts", () => {
     // The label's own rule, after the shared one whose second line reads the same.
     const labelAt = V3_CSS.lastIndexOf(".rv3 .rv4-trig__head > .rv4-trig__label {");
     expect(V3_CSS.slice(labelAt, V3_CSS.indexOf("}", labelAt))).toContain("transition-delay: 90ms");
+  });
+
+  it("lets the clear rows rise 6px after the headline, one by one; rows under the blur stay still (review 28.09)", () => {
+    const pending = rule(".rv3 .rv4-trig__rows.is-pending .rv4-trig__row:not(.is-locked) {");
+    expect(pending).toContain("opacity: 0");
+    expect(pending).toContain("transform: translateY(6px)");
+    const moving = rule(".rv3 .rv4-trig__rows .rv4-trig__row:not(.is-locked) {");
+    expect(moving).toMatch(/opacity 420ms/);
+    expect(moving).toMatch(/transform 520ms/);
+    expect(moving).toMatch(/transition-delay:\s*calc\(180ms \+ var\(--rv4-trig-i, 0\) \* 90ms\)/);
+    const at = V3_CSS.indexOf("@media (prefers-reduced-motion: reduce) {\n  .rv3 .rv4-trig__rows");
+    expect(at).toBeGreaterThan(0);
+    const media = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
+    expect(media).toContain(".rv3 .rv4-trig__rows.is-pending .rv4-trig__row:not(.is-locked)");
+    expect(media).toContain("opacity: 1");
+    expect(media).toContain("transition: none");
   });
 
   it("shows the headline in place under reduced motion, pending or not", () => {
