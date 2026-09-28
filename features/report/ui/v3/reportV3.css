@@ -3956,16 +3956,19 @@
   overflow: clip;
   width: 100%;
 }
+/* Mark, 28.09 (1944062651): "We decrease the background color intensity". Both
+ * washes are lighter in 368:5482 / 368:5623: coral 0.10 to 0.01, green 0.08 to 0.01
+ * (both were 0.11 to 0.03). */
 .rv3 .rv4-turn {
   background:
-    linear-gradient(180deg, rgba(194, 84, 47, 0.11) 0%, rgba(194, 84, 47, 0.03) 100%), #fff;
+    linear-gradient(180deg, rgba(194, 84, 47, 0.1) 0%, rgba(194, 84, 47, 0.01) 100%), #fff;
   border: 1px solid rgba(194, 84, 47, 0.26);
   box-shadow: 0 6px 14px -8px rgba(194, 84, 47, 0.34);
   position: relative;
 }
 .rv3 .rv4-sun {
   background:
-    linear-gradient(180deg, rgba(46, 125, 91, 0.11) 0%, rgba(46, 125, 91, 0.03) 100%), #fff;
+    linear-gradient(180deg, rgba(46, 125, 91, 0.08) 0%, rgba(46, 125, 91, 0.01) 100%), #fff;
   border: 1px solid rgba(46, 125, 91, 0.26);
   box-shadow: 0 6px 14px -8px rgba(46, 125, 91, 0.34);
 }

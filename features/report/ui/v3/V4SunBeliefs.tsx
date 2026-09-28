@@ -9,8 +9,9 @@ import { guardedUnlock } from "./v4Unlock";
  * "Typical sun beliefs" — Figma 368:5623, the green panel that follows the coral
  * one in the Typical Beliefs chapter.
  *
- * The same chrome as 368:5482 in the other hue — white under a 0.11 to 0.03
- * vertical wash, a hairline at 26%, a 20px radius and one soft drop shadow.
+ * The same chrome as 368:5482 in the other hue — white under a 0.08 to 0.01
+ * vertical wash (0.11 to 0.03 until Mark lightened both on 28.09), a hairline at
+ * 26%, a 20px radius and one soft drop shadow.
  *
  * THE DRAW (review 27.09). Mark: "similarly as above with the scroll. When element is
  * at the scroll line place the round green circle and then draw the tick into the
