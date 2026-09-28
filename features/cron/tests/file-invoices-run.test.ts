@@ -41,13 +41,13 @@ let invoiceText = "Total $11.70 USD";
 let relayedIn = "";
 let ecbDown = false;
 /** More Vercel invoices by message id, each with its own day, text and Message-ID. */
-let more: Record<string, { day: number; text: string }> = {};
-const invoiceOn = (id: string, day: number, text: string) => ({
+let more: Record<string, { day: number; text: string; subject?: string }> = {};
+const invoiceOn = (id: string, day: number, text: string, subject = "Your receipt") => ({
   internalDate: String(day),
   payload: {
     headers: [
       { name: "From", value: "Vercel Inc. <invoice@vercel.com>" },
-      { name: "Subject", value: "Your receipt" },
+      { name: "Subject", value: subject },
       { name: "Message-Id", value: `<${id}@vercel.com>` },
     ],
     parts: [
@@ -109,7 +109,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     if (u.includes("format=full")) {
       const id = /messages\/([^/?]+)\?/.exec(u)?.[1] ?? "";
       const spec = more[id];
-      return ok(spec ? invoiceOn(id, spec.day, spec.text) : invoice(mailbox));
+      return ok(spec ? invoiceOn(id, spec.day, spec.text, spec.subject) : invoice(mailbox));
     }
     if (u.includes("gmail.googleapis.com")) {
       const ids = inbox[mailbox] ?? [];
@@ -309,6 +309,51 @@ describe("a complete filing run", () => {
       expect.any(Number),
       "error",
       "not written, needs a person: Vercel 2026/09"
+    );
+  });
+
+  it("reads a stated zero as nothing charged, and a PDF that is not a bill as no invoice", async () => {
+    // Round-9 audit: both failed the run as "a total that could not be read", every month.
+    const settled = () =>
+      expect(mockRecord).toHaveBeenCalledWith(
+        "file-invoices",
+        expect.any(Number),
+        "success",
+        undefined
+      );
+    inbox = { "ec@loveiq.org": ["free"] };
+    more = { free: { day: Date.UTC(2026, 8, 10, 12), text: "Total €0.00 EUR" } };
+    await run();
+    expect(slackText()).not.toContain("could not be read");
+    expect(sheetWrites).toEqual([]);
+    settled();
+
+    mockRecord.mockClear();
+    inbox = { "ec@loveiq.org": ["brochure"] };
+    more = {
+      brochure: {
+        day: Date.UTC(2026, 8, 10, 12),
+        text: "Thanks for being a customer.",
+        subject: "What is new this autumn",
+      },
+    };
+    await run();
+    expect(slackText()).not.toContain("could not be read");
+    settled();
+  });
+
+  it("fails a no-row vendor only for a month a run could write", async () => {
+    // 25 August is only partly inside the window on 3 October: no run can ever write it.
+    inbox = { "ec@loveiq.org": ["aug"] };
+    more = { aug: { day: Date.UTC(2026, 7, 25, 12), text: "Total €5.00 EUR" } };
+    sheet = [HEADER, ["Slack", ...HEADER.slice(1).map(() => -5)]];
+    await run();
+    expect(slackText()).toContain("No row in the cost sheet for:* Vercel");
+    expect(mockRecord).toHaveBeenCalledWith(
+      "file-invoices",
+      expect.any(Number),
+      "success",
+      undefined
     );
   });
 
