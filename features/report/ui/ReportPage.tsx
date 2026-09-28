@@ -2433,8 +2433,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
               {/* Report 2.0 closing note (Figma 8427:2837) — universal + free,
                   no gating, no CTA. Mounts LAST in the report content, right
-                  before the footer. Same for every archetype and every plan. */}
-              <ClosingSection />
+                  before the footer. Same for every archetype and every plan. V4
+                  drops it (sync 28.09): hardly anyone scrolls that far, and its
+                  points belong in the chapters. */}
+              {isV4 ? null : <ClosingSection />}
 
               <FooterSection />
             </div>
