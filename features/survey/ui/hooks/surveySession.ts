@@ -91,9 +91,13 @@ export function getSessionId(): string {
   }
 }
 
-/** Reset the in-memory fallback — for tests only. */
+/** The finished report, for a browser that refuses storage: remembered for this page load. */
+let inMemoryCompleted: string | null = null;
+
+/** Reset the in-memory fallbacks — for tests only. */
 export function __resetInMemorySessionIdForTests(): void {
   inMemorySessionId = null;
+  inMemoryCompleted = null;
 }
 
 export function setReportSessionId(sessionId: string): void {
@@ -263,7 +267,9 @@ export function rememberCompletedReport(token: string): void {
   try {
     sessionStorage.setItem(COMPLETED_REPORT_KEY, token);
   } catch {
-    /* storage THROWS in Safari private mode and several in-app WebViews */
+    // Storage THROWS in Safari private mode and several in-app WebViews. Kept for this
+    // page load, so starting again after finishing still gets a new session id there too.
+    inMemoryCompleted = token;
   }
 }
 
@@ -271,9 +277,9 @@ export function rememberCompletedReport(token: string): void {
 export function completedReportToken(): string | null {
   if (!canUseStorage()) return null;
   try {
-    return sessionStorage.getItem(COMPLETED_REPORT_KEY);
+    return sessionStorage.getItem(COMPLETED_REPORT_KEY) ?? inMemoryCompleted;
   } catch {
-    return null;
+    return inMemoryCompleted;
   }
 }
 
@@ -286,6 +292,8 @@ export function completedReportToken(): string | null {
  * reader spent 23 minutes answering again and got submission 2263 back (#375).
  */
 export function forgetCompletedReport(): void {
+  inMemoryCompleted = null;
+  inMemorySessionId = null;
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
