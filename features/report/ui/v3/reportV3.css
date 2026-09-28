@@ -7973,3 +7973,87 @@ html {
     transition: none;
   }
 }
+
+/* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
+ * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
+ * properly to not have these huge gaps and spaces". Production's column (991cb18c) is
+ * 620–917px from 700 up, and a handful of V4 blocks kept their phone widths inside it,
+ * each leaving half the column white beside it. Measured at 1536 (917 column): the
+ * archetype card's match row and tagline at 323 and its motivation body at 281, the
+ * fantasy map's plot at 300 and the fantasy table at 328, each top-three row holding
+ * the phone's 100px description track for a one-line description, the science cards'
+ * questions at 183 in 295px cards, and the Summary's copy centred 80px in from its own
+ * heading. Each now takes the column the way the blocks around it do; copy keeps
+ * production's 760 measure. The live page only (`.rv3.rv4`) and only from 700px, so the
+ * phone and the 393 preview are exactly as before. */
+@media (min-width: 700px) {
+  /* 15:815 — the match row runs the card; the tagline and the motivation body read at
+   * the copy measure rather than the phone's 323 and 281. The header and the panel
+   * size to their content: the phone frame's fixed 191 and 197 (and the 70 under the
+   * tagline) left white under a one-line tagline and a one-line body here. */
+  .rv3.rv4 .rv3-arch__head {
+    min-height: 0;
+  }
+  .rv3.rv4 .rv3-arch__match {
+    width: 100%;
+  }
+  .rv3.rv4 .rv3-arch__tagline {
+    max-width: 760px;
+    min-height: 0;
+    width: 100%;
+  }
+  .rv3.rv4 .rv3-arch__motive {
+    min-height: 0;
+  }
+  .rv3.rv4 .rv3-arch__motive-body {
+    max-width: 760px;
+    width: auto;
+  }
+
+  /* 1:497 — a row as tall as its description: at this width it is one or two lines,
+   * and the phone's 100px track left a band of white under it in every row. */
+  .rv3.rv4 .rv4-top3 .rv3-top3__row {
+    grid-template-rows: 26px auto 17.08px;
+  }
+
+  /* 1:736 — the copy under its heading's left edge, not centred in the column. */
+  .rv3.rv4 .rv4-summary__body {
+    align-items: flex-start;
+  }
+  .rv3.rv4 .rv4-summary__copy {
+    width: auto;
+  }
+
+  /* 493:7082 — the question uses its card (it wrapped at the phone's 183). */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__q {
+    width: auto;
+  }
+
+  /* Fantasy vs. Reality, at the chapter's 760 copy measure. The map's plot is the
+   * phone's 300 at most, placed in percentages, so it scales as one piece: 520 here,
+   * the figure centred under the copy; its labels keep their size and so crowd less.
+   * The table runs the measure (at the full 917 its names sat 600px from their
+   * scores), its score columns 140 so a fantasy's name sits on one line. */
+  .rv3.rv4 .rv4-fvm {
+    margin-left: max(0px, (min(760px, 100%) - 548px) / 2);
+    width: min(548px, 100%);
+  }
+  .rv3.rv4 .rv4-fvm__img {
+    --fvm-plot: min(520px, 100cqi - 28px);
+  }
+  .rv3.rv4 .rv4-fvt {
+    width: min(760px, 100%);
+  }
+  .rv3.rv4 .rv4-fvt__cols,
+  .rv3.rv4 .rv4-fvt__row {
+    grid-template-columns: minmax(0, 1fr) repeat(2, 140px);
+  }
+}
+/* The science deck four across where four 212px cards fit: the column is 903 at 1024
+ * and 855+ from 1400, but 710 beside the sidebar at 1280, which keeps three. Seven
+ * cards then set four and three, the last row centred (the rule above). */
+@media (min-width: 1000px) and (max-width: 1279px), (min-width: 1400px) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
+    flex-basis: calc((100% - 42px) / 4);
+  }
+}

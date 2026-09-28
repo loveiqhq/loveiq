@@ -1,0 +1,111 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+/**
+ * Desktop touch-up, 28.09 evening. Fatih: "just touch up the desktop version so please
+ * can you just scale it properly to not have these huge gaps and spaces". Production's
+ * column (Eman, 991cb18c) is 620–917px wide beside the sidebar, and a handful of V4
+ * blocks kept their phone widths inside it — the archetype card's 323px match row and
+ * tagline and 281px motivation body, the fantasy map's 300px plot and the fantasy
+ * table's 328px, the top three's 100px description track, and the science cards'
+ * 183px questions — leaving half the column empty beside them. The Summary's copy sat
+ * centred, 80px in from its own heading.
+ *
+ * All of it is scoped to `.rv3.rv4` from 700px, so the phone (and the standalone 393
+ * preview, `.rv4-doc`) is exactly as it was.
+ */
+const v3 = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
+
+const MARK = "Desktop touch-up — 28.09 (c)";
+
+/** The touch-up's own CSS, comments dropped. */
+const block = () => {
+  const at = v3.indexOf(MARK);
+  expect(at, "the desktop touch-up block").toBeGreaterThan(-1);
+  // From the heading comment's own opening, so the comment strips whole.
+  return v3.slice(v3.lastIndexOf("/*", at)).replace(/\/\*[\s\S]*?\*\//g, "");
+};
+
+/** The body of `selector`'s rule inside the touch-up. */
+const ruleIn = (selector: string) => {
+  const css = block();
+  const at = css.indexOf(`${selector} {`);
+  expect(at, selector).toBeGreaterThan(-1);
+  return css.slice(at, css.indexOf("}", at));
+};
+
+describe("V4 desktop touch-up — scoped to the live page from 700px", () => {
+  it("opens inside a 700px media query, after every phone rule", () => {
+    const css = block();
+    expect(css.trimStart().startsWith("@media (min-width: 700px) {")).toBe(true);
+    expect(v3.slice(0, v3.indexOf(MARK)).split("\n").length).toBeGreaterThan(1884);
+    // Every selector is the live page's, never the 393 preview's.
+    for (const [, sel] of css.matchAll(/\n\s*([^@{}\n][^{}]*)\{/g)) {
+      for (const part of sel!.split(",")) expect(part.trim()).toMatch(/^\.rv3\.rv4 /);
+    }
+  });
+});
+
+describe("the archetype card uses the column", () => {
+  it("runs the match row across the card and gives the tagline the copy measure", () => {
+    expect(ruleIn(".rv3.rv4 .rv3-arch__match")).toContain("width: 100%");
+    const tagline = ruleIn(".rv3.rv4 .rv3-arch__tagline");
+    expect(tagline).toContain("width: 100%");
+    expect(tagline).toContain("max-width: 760px");
+  });
+
+  // The phone's fixed 191 header and 197 panel left white under a one-line tagline and
+  // a one-line body here; the card sizes to its content (1031 is the phone frame's).
+  it("sizes the header and the motivation panel to their content", () => {
+    expect(ruleIn(".rv3.rv4 .rv3-arch__head")).toContain("min-height: 0");
+    expect(ruleIn(".rv3.rv4 .rv3-arch__motive")).toContain("min-height: 0");
+    expect(ruleIn(".rv3.rv4 .rv3-arch__tagline")).toContain("min-height: 0");
+  });
+
+  it("lets the motivation body run to the copy measure, not the phone's 281", () => {
+    const body = ruleIn(".rv3.rv4 .rv3-arch__motive-body");
+    expect(body).toContain("width: auto");
+    expect(body).toContain("max-width: 760px");
+  });
+});
+
+describe("the top three, the Summary and the science deck", () => {
+  it("sizes each top-three row to its description, not the phone's 100px track", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row")).toContain(
+      "grid-template-rows: 26px auto 17.08px"
+    );
+  });
+
+  it("sets the Summary's copy under its heading, not centred in the column", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-summary__body")).toContain("align-items: flex-start");
+    expect(ruleIn(".rv3.rv4 .rv4-summary__copy")).toContain("width: auto");
+  });
+
+  it("lets a science card's question use the card, and lays four across where they fit", () => {
+    expect(ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__q")).toContain("width: auto");
+    // The column is 903 at 1024 and 855+ from 1400; beside the sidebar at 1280 it is 710.
+    const css = block();
+    expect(css).toMatch(
+      /@media \(min-width: 1000px\) and \(max-width: 1279px\), \(min-width: 1400px\) \{\s*\.rv3\.rv4 \.rv3-method\.is-v4 \.rv3-sci__card \{\s*flex-basis: calc\(\(100% - 42px\) \/ 4\);/
+    );
+  });
+});
+
+describe("Fantasy vs. Reality uses the column", () => {
+  // Both keep to the chapter's 760 copy measure: the table at the full 917 set its names
+  // 600px from their scores, and the map centres under the copy, not the column.
+  it("grows the map's plot to 520, centred under the copy measure", () => {
+    const map = ruleIn(".rv3.rv4 .rv4-fvm");
+    expect(map).toContain("margin-left: max(0px, (min(760px, 100%) - 548px) / 2)");
+    expect(map).toContain("width: min(548px, 100%)");
+    expect(ruleIn(".rv3.rv4 .rv4-fvm__img")).toContain("--fvm-plot: min(520px, 100cqi - 28px)");
+  });
+
+  it("runs the table across the copy measure with wider score columns", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-fvt")).toContain("width: min(760px, 100%)");
+    expect(ruleIn(".rv3.rv4 .rv4-fvt__cols,\n  .rv3.rv4 .rv4-fvt__row")).toContain(
+      "grid-template-columns: minmax(0, 1fr) repeat(2, 140px)"
+    );
+  });
+});
