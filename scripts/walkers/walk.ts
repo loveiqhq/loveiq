@@ -857,10 +857,11 @@ async function payWithTestCard(page: Page, email: string): Promise<void> {
   await fillIfShown(/zip|postal/i, "10967");
   // Link's "Save my information for faster checkout" comes ticked on some sessions (US
   // ones, which is where GitHub's runners are) and then requires a phone number. A buyer
-  // who only wants to pay unticks it, and so does the walk.
+  // who only wants to pay unticks it, and so does the walk. If it cannot, the walk stops
+  // here and says why, rather than pressing Pay and waiting two minutes for nothing.
   const save = page.getByRole("checkbox", { name: /save my info/i }).first();
   if ((await save.count()) && (await save.isChecked().catch(() => false))) {
-    await save.uncheck({ timeout: 10_000 }).catch(() => {});
+    await save.uncheck({ timeout: 10_000 });
   }
   await page
     .getByRole("button", { name: /^pay/i })
