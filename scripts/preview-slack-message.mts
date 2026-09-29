@@ -385,8 +385,12 @@ async function main(): Promise<void> {
    * an hour or two off every bound and lands a different day either side of a
    * DST change, so it previews numbers the real message will not print.
    */
-  const dayKey = reportingDay(now);
-  const dayStart = reportingDayStart(dayKey);
+  const dayStart = reportingDayStart(reportingDay(now));
+  // YESTERDAY, exactly as the cron derives it. This used to be today, so the
+  // preview headed itself with a day the window does not contain and every
+  // "Yesterday vs a normal day" field read "—": a different message from the
+  // one that posts.
+  const dayKey = reportingDay(new Date(dayStart.getTime() - 1));
   const windowStart = reportingDayStart(
     reportingDay(new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000))
   ).toISOString();

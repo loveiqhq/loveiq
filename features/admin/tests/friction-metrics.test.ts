@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  FRICTION_BLIND_SPOTS,
   TABLE_W,
   buildFrictionSection,
   buildReportSignals,
@@ -261,5 +262,24 @@ describe("buildFrictionSection", () => {
     expect(row.length).toBeLessThanOrEqual(TABLE_W);
     expect(row).toContain("25.8s (2.8x)");
     expect(row).toContain("…");
+  });
+
+  it("names what the table cannot see in plain words", () => {
+    /**
+     * Mark, 2026-09-21, on the daily message's fine print: "Not easy to consume
+     * at all." This line read "dead clicks (PostHog only — 3,249 a week, writes
+     * nothing to Postgres); form errors (PostHog only — no submission exists
+     * mid-survey to key a row to); …", with a weekly count frozen into the code.
+     * The reasons now live beside the list, not in the message.
+     */
+    const section = buildFrictionSection(
+      { signals: buildReportSignals(reportSnap()), rowsRead: 0, blind: FRICTION_BLIND_SPOTS },
+      30
+    );
+    const line = section.split("\n").at(-1)!;
+    expect(line).toMatch(/^_Not in this table: .+\. PostHog has them\._$/);
+    for (const name of FRICTION_BLIND_SPOTS) expect(line).toContain(name);
+    expect(line, "no count frozen into the copy").not.toMatch(/\d/);
+    expect(line).not.toMatch(/Postgres|\(|—/);
   });
 });

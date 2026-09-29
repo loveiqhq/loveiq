@@ -522,35 +522,19 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     }
   }
 
-  const blocks: SlackBlock[] = [header(`📈 Conversion — ${dayKey}`)];
-  // Definitions ride at the TOP, not the bottom. fitBlocks keeps from the front,
-  // so as the last block this was the first thing dropped when a message ran
-  // long — leaving every number in place and no statement of what any of them
-  // meant.
   /**
-   * The funnel spans TWO spans, and says so rather than implying one.
+   * No definitions line under the header. It used to say that visits are
+   * visitor-days and that the "…of those" rows follow finishers forward with no
+   * end date. Mark, 2026-09-21: "Not easy to consume at all. Take out or simplify
+   * heavily." The row labels already carry both facts ("Visits", "…of those"),
+   * so it went rather than being reworded.
    *
-   * Rows down to "Finished the survey" count events inside the window. The
-   * "…of those" rows below follow those finishers FORWARD with no end date, so a
-   * purchase after the window closes still counts.
-   *
-   * WHY NOT BOUND THEM TO THE WINDOW and make it one span. Because that trades a
-   * labelling problem for a measurement one: a person who finished on day 29 has a
-   * day to buy, against thirty for someone who finished on day 1, and the nurture
-   * sequence does not even finish emailing them until 78h in. Truncating would
-   * under-report conversion for every recent cohort and make the funnel appear to
-   * decline whenever traffic grows. Measured 2026-09-15 the unbounded reading costs
-   * exactly one row of difference — 33 reached checkout ever against 32 inside the
-   * window, and 5 paid either way — so the honest fix is to name the two spans,
-   * not to distort the number to force one.
+   * The spans themselves are unchanged. Rows down to "Finished the survey" count
+   * the window; the "…of those" rows follow those finishers forward, because
+   * bounding them to the window gives a day-29 finisher one day to buy against
+   * thirty for a day-1 one, and the funnel would sag whenever traffic grows.
    */
-  blocks.push(
-    context(
-      `${windowLabel} · "visits" are visitor-days on any page, not people · rows down to ` +
-        `"Finished the survey" count the window; the "…of those" rows follow those finishers ` +
-        `forward with no end date`
-    )
-  );
+  const blocks: SlackBlock[] = [header(`📈 Conversion — ${dayKey}`)];
 
   /**
    * "Where the tests stand" used to sit here: a 30-day, paid-based verdict per
@@ -857,9 +841,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const peak = Math.max(...real);
       const direction =
         peak - latest >= 1
-          ? ` — down from ${peak}% at its peak this window`
+          ? `, down from ${peak}% at its peak`
           : latest - Math.min(...real) >= 1
-            ? ` — up from ${Math.min(...real)}% this window`
+            ? `, up from ${Math.min(...real)}%`
             : "";
       const url = await signedChartUrl({
         windowLabel,
@@ -878,20 +862,19 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
          */
         colorFirst: "#334155",
         headline: `${latest}% of visits reach the survey${direction}`,
-        footnote:
-          "survey starts ÷ all-page visit-days, 7-day trailing · a gap is a day with no visits",
+        footnote: "survey starts ÷ visits, 7-day average · a gap is a day with no visits",
         emptyLabel: "Awaiting data — no visits recorded in this window yet.",
       });
       if (url) {
+        // "Visits", as the funnel's top row says, and "average", not "visit-days"
+        // and "trailing": the line that defined those two words is gone.
         blocks.push(
-          section(
-            `*Visits that reach the survey* — ${latest}% of visit-days, 7-day trailing${direction}.`
-          )
+          section(`*Visits that reach the survey*  ·  ${latest}%, as a 7-day average${direction}.`)
         );
         blocks.push({
           type: "image",
           image_url: url,
-          alt_text: `Site-wide share of visit-days that reach the survey questions, 7-day trailing, over the reporting window. Currently ${latest}%, peak ${peak}%.`,
+          alt_text: `Site-wide share of visits that reach the survey, as a 7-day average. Currently ${latest}%, peak ${peak}%.`,
         });
       }
     }
@@ -946,7 +929,24 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   const midwayRowShown =
     !!midway && steps.some((step) => step.step === `Reached question ${midway.midwayIndex}`);
-  if (midway && midwayRowShown) {
+  /**
+   * The per-landing-page blocks exist only while the landing test is live.
+   *
+   * Gated on the AXIS LIST, which is the one place that says what is being
+   * randomised — not on `liveArms` below (a literal, so retiring an arm never
+   * reaches it) and not on `armLabel(...).retired` (a second source of truth
+   * that can disagree with the list). Without this the message went on drawing
+   * a two-arm chart of a test that had ended, which is the exact failure the
+   * axis-level retirement idiom exists to avoid.
+   *
+   * Midway obeys it too. Drafts only began recording a landing page on
+   * 2026-09-19, the day the test ended, so its "by landing page" block never had
+   * a second page to compare: it printed V2 beside "no landing page recorded",
+   * and a second question-30 count that disagreed with the funnel row above it.
+   * The funnel row stays; it is the midway number.
+   */
+  const landingIsLive = verdictAxes.includes("landing");
+  if (midway && midwayRowShown && landingIsLive) {
     const armTotal = (arm: string) => midway.totals.find((t) => t.arm === arm);
     const named = (["white_prev", "white"] as const).filter(
       (a) => (armTotal(a)?.sessions ?? 0) > 0
@@ -1030,20 +1030,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * ONLY READING ORDER and changing it cannot repaint anything.
      */
     const liveArms: [string, string] = ["white_prev", "white"];
-    /**
-     * The comparison only exists while the axis is live.
-     *
-     * Gated on the AXIS LIST, which is the one place that says what is being
-     * randomised — not on `liveArms` (a literal, so retiring an arm never
-     * reaches it) and not on `armLabel(...).retired` (a second source of truth
-     * that can disagree with the list). Without this the block went on drawing
-     * a two-arm chart of a test that had ended, which is the exact failure the
-     * axis-level retirement idiom exists to avoid.
-     *
-     * The site-wide "Visits that reach the survey" chart above is unaffected —
-     * it never split by arm, and it is the one that still measures something.
-     */
-    const landingIsLive = verdictAxes.includes("landing");
+    // `landingIsLive` gates this comparison (see the midway block above). The
+    // site-wide "Visits that reach the survey" chart is unaffected — it never
+    // split by arm, and it is the one that still measures something.
     const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
     const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
@@ -1126,7 +1115,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       if (stillInWindow) {
         landingStartBlocks.push(
           context(
-            `_Landing page test concluded ${LANDING_CONCLUDED_ON} — ${armLabel("landing", "white").short} now serves all traffic, so there is no per-arm split to chart. The site-wide rate above still applies._`
+            `_Landing page test concluded ${LANDING_CONCLUDED_ON}. ${armLabel("landing", "white").short} now gets every visitor._`
           )
         );
       }

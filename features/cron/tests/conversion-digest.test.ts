@@ -625,22 +625,45 @@ describe("conversion-digest handler", () => {
     }
   });
 
-  it("names both spans the funnel covers, instead of implying one", async () => {
+  it("reads in plain words, with no engineering fine print", async () => {
     /**
-     * The chart is not one window and must not read as one. Everything down to
-     * "Finished the survey" is events inside it; the "…of those" rows follow those
-     * finishers forward with no end date. Unstated, a reader takes the "30 days"
-     * heading as covering all six rows.
+     * Mark, 2026-09-21, on the definitions line that sat under the header ("visits
+     * are visitor-days… the '…of those' rows follow those finishers forward with no
+     * end date"): "Not easy to consume at all. Take out or simplify heavily."
+     *
+     * It went, and so did the other lines of its kind: words that only read with
+     * a definition beside them. Every section that ever carried one is switched on
+     * here and asserted present, so this cannot pass by leaving them out.
      */
+    mockFetchFunnelCvrSparklines.mockResolvedValue({
+      days: Array.from({ length: 14 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
+        visitors: 190,
+        starts: 20 + i,
+      })),
+    });
+    mockFetchUnitEconomics.mockResolvedValue({
+      adSpend: 1187.6,
+      revenue: 70,
+      paidReports: 2,
+      compedReports: 1,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
-    expect(flat).toContain("count the window");
-    expect(flat).toContain("follow those finishers forward with no end date");
-    // The definition has to sit ABOVE the numbers it defines: fitBlocks keeps
-    // blocks from the front, so a footnote is the first thing dropped when the
-    // message runs long — leaving every figure and no statement of what it means.
-    expect(flat.indexOf("with no end date")).toBeLessThan(flat.indexOf("Visits to the site"));
+
+    expect(flat).toContain("Visits to the site");
+    expect(flat).toContain("*Visits that reach the survey*");
+    expect(flat).toContain("Break-even");
+    expect(flat).toContain("Landing page test concluded");
+    // The friction table's footnote is guarded in friction-metrics.test.ts: that
+    // section needs a database this suite does not mock, so it is absent here.
+    for (const jargon of ["visitor-days", "visit-days", "no end date", "trailing", "per-arm"]) {
+      expect(flat, `"${jargon}" is back in the daily message`).not.toContain(jargon);
+    }
   });
 
   it("puts the survey-start row in the message, not just in the builder", async () => {
@@ -879,9 +902,10 @@ describe("conversion-digest handler", () => {
       midwayIndex: 30,
       firstArmDay: "2026-09-19",
     });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    // Through the builder with the landing axis LIVE: per-landing midway only
+    // exists while the test runs (see "ships no landing comparison at all").
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
 
     expect(flat).toContain("Midway progress, by landing page");
     // Plain-English arm names, never a raw stored value.
@@ -892,7 +916,7 @@ describe("conversion-digest handler", () => {
     expect(flat).toContain("224 of 420 drafts reached question 30");
 
     // And the trend chart is drawn, in each arm's own colour.
-    const midwayChart = arg.blocks
+    const midwayChart = blocks
       .map((b) => (b as { image_url?: string }).image_url)
       .filter((u): u is string => typeof u === "string")
       .map(
@@ -937,15 +961,16 @@ describe("conversion-digest handler", () => {
       midwayIndex: 30,
       firstArmDay: "2026-09-19",
     });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    // Through the builder with the landing axis LIVE: per-landing midway only
+    // exists while the test runs (see "ships no landing comparison at all").
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
 
     // The counts ARE worth printing.
     expect(flat).toContain("Midway progress, by landing page");
     expect(flat).toContain("48 of 90 drafts reached question 30");
     // The chart is not.
-    const titles = arg.blocks
+    const titles = blocks
       .map((b) => (b as { image_url?: string }).image_url)
       .filter((u): u is string => typeof u === "string")
       .map(
@@ -977,9 +1002,10 @@ describe("conversion-digest handler", () => {
       midwayIndex: 30,
       firstArmDay: "2026-09-19",
     });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    // Through the builder with the landing axis LIVE: per-landing midway only
+    // exists while the test runs (see "ships no landing comparison at all").
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
     expect(flat).not.toContain("Reached question");
     expect(flat).not.toContain("Midway progress, by landing page");
     // Not the empty-state note either — that is for "no arm data", not "distrusted".
@@ -1011,9 +1037,10 @@ describe("conversion-digest handler", () => {
       midwayIndex: 30,
       firstArmDay: "2026-09-19",
     });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    // Through the builder with the landing axis LIVE: per-landing midway only
+    // exists while the test runs (see "ships no landing comparison at all").
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
     expect(flat).toContain("no landing page recorded");
     expect(flat).toContain("61 of 104 drafts");
     // 476 + 420 + 104 = 1000 = overall.sessions, and every part is on screen.
@@ -1036,14 +1063,15 @@ describe("conversion-digest handler", () => {
       midwayIndex: 30,
       firstArmDay: "2026-09-19",
     });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    // Through the builder with the landing axis LIVE: per-landing midway only
+    // exists while the test runs (see "ships no landing comparison at all").
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
 
     expect(flat).toContain("Midway progress per landing page starts from 2026-09-19");
     // A sentence, not a picture, and not a silent omission either.
     expect(flat).not.toContain("Midway progress, by landing page");
-    const titles = arg.blocks
+    const titles = blocks
       .map((b) => (b as { image_url?: string }).image_url)
       .filter((u): u is string => typeof u === "string")
       .map(
@@ -1414,7 +1442,7 @@ describe("conversion-digest handler", () => {
     let arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
     expect(flat).toContain("*Visits that reach the survey*");
-    expect(flat).toMatch(/of visit-days, 7-day trailing/);
+    expect(flat).toMatch(/, as a 7-day average/);
 
     const img = arg.blocks.find((b) =>
       (b as { alt_text?: string }).alt_text?.startsWith("Site-wide share")
@@ -1446,7 +1474,9 @@ describe("conversion-digest handler", () => {
     expect(payload.headline).toMatch(/\d+\.\d+% of visits/);
     // The image and the caption beside it must agree — they did not when the
     // image rounded 6.1 to "6" while the caption said 6.1%.
-    const caption = flat.match(/\*Visits that reach the survey\* — ([\d.]+)% of visit-days/);
+    const caption = flat.match(
+      /\*Visits that reach the survey\* {2}· {2}([\d.]+)%, as a 7-day average/
+    );
     expect(caption).not.toBeNull();
     expect(payload.headline).toContain(`${caption![1]}%`);
     expect(img!.alt_text).toContain(`${caption![1]}%`);
@@ -1691,9 +1721,27 @@ describe("conversion-digest handler", () => {
      * looked at the message the handler really sends.
      *
      * Asserted on the LIVE path, with fixtures that would happily draw the
-     * chart: makeStartFunnel() and makeAxisRows() both carry two landing arms.
+     * chart: makeStartFunnel() and makeAxisRows() both carry two landing arms,
+     * and the midway fixture below carries both arms plus an unattributed bucket.
      * If they did not, this would pass by having nothing to omit.
      */
+    mockFetchMidwayProgress.mockResolvedValue({
+      // Above the fixture's 510 finishers, so the funnel keeps the midway row.
+      overall: { sessions: 1000, reached: 620 },
+      daily: Array.from({ length: 14 }, (_, i) =>
+        new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+      ).flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 476, reached: 294 },
+        { arm: "white_prev", sessions: 420, reached: 224 },
+        { arm: "unknown", sessions: 104, reached: 61 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const json = JSON.stringify(arg.blocks);
@@ -1705,6 +1753,13 @@ describe("conversion-digest handler", () => {
     expect(json).not.toContain("no clear winner yet");
     const landingCharts = landingChartPayloads(arg.blocks);
     expect(landingCharts, "no chart may legend a landing arm").toHaveLength(0);
+
+    // Midway by landing page goes with it. The funnel's own midway row stays:
+    // that is the number, and it was never split by arm.
+    expect(json).toContain("Reached question 30");
+    expect(json).not.toContain("Midway progress");
+    expect(json).not.toContain("no landing page recorded");
+    expect(json).not.toContain("drafts reached question");
 
     // And it says why, rather than the chart simply vanishing.
     expect(json).toContain("Landing page test concluded");
@@ -1719,16 +1774,6 @@ describe("conversion-digest handler", () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     expect(JSON.stringify(arg.blocks)).not.toContain("Landing page test concluded");
-  });
-
-  it("keeps the definitions at the top, where trimming cannot reach them", async () => {
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    // fitBlocks keeps from the front, so as the LAST block this was the first
-    // thing dropped — leaving every number and no statement of what it meant.
-    const idx = arg.blocks.findIndex((b) => JSON.stringify(b).includes("visitor-days"));
-    expect(idx).toBeGreaterThanOrEqual(0);
-    expect(idx).toBeLessThan(3);
   });
 });
 
