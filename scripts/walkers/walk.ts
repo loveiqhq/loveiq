@@ -301,6 +301,18 @@ async function main(argv: string[]): Promise<number> {
     slowRequests: [],
   };
   const t0 = Date.now();
+  // Stopped at its time limit, or killed: say so in the record rather than vanish.
+  process.once("SIGTERM", () => {
+    walk.stoppedAt ??= "stopped at its time limit";
+    walk.durationMs = Date.now() - t0;
+    writeFileSync(join(dir, "walk.json"), JSON.stringify(walk, null, 2) + "\n");
+    process.exit(1);
+  });
+  // Its own limit rather than the shell's, so it holds on any runner (macOS has no
+  // `timeout`): 20 minutes, or WALK_TIME_LIMIT_MIN. Set before the browser starts, so a
+  // launch that hangs is stopped and recorded too.
+  const limitMin = Number(process.env.WALK_TIME_LIMIT_MIN) || 20;
+  setTimeout(() => process.kill(process.pid, "SIGTERM"), limitMin * 60_000).unref();
   const engine = device.defaultBrowserType === "webkit" ? webkit : chromium;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...device, locale: "en-US", timezoneId: "Europe/Berlin" });
@@ -310,17 +322,6 @@ async function main(argv: string[]): Promise<number> {
   await ctx.route(/^https:\/\/(www\.)?loveiq\.org\//, (r) => r.abort());
   const page = await ctx.newPage();
   await page.route(ANALYTICS, (r) => r.abort());
-  // Stopped at its time limit, or killed: say so in the record rather than vanish.
-  process.once("SIGTERM", () => {
-    walk.stoppedAt ??= "stopped at its time limit";
-    walk.durationMs = Date.now() - t0;
-    writeFileSync(join(dir, "walk.json"), JSON.stringify(walk, null, 2) + "\n");
-    process.exit(1);
-  });
-  // Its own limit rather than the shell's, so it holds on any runner (macOS has no
-  // `timeout`): 20 minutes, or WALK_TIME_LIMIT_MIN.
-  const limitMin = Number(process.env.WALK_TIME_LIMIT_MIN) || 20;
-  setTimeout(() => process.kill(process.pid, "SIGTERM"), limitMin * 60_000).unref();
 
   const mark = (what: string) => walk.timeline.push(`${Date.now() - t0}ms ${what}`);
   page.on("framenavigated", (f) => {
