@@ -68,7 +68,7 @@ const V4Fantasy: FC<Props> = ({ view, onUnlock }) => {
         <div className="rv4-sep" aria-hidden="true" data-node-id="368:5447" />
 
         {locked ? (
-          /* 305:228 "Locked copy", its card 103.3 into it (1015:1379 since 29.09). */
+          /* 305:228 "Locked copy", its card 258.3 into it (1015:1379, 29.09). */
           <div className="rv4-fvr__gate" data-node-id="305:228" onClick={guardedUnlock(onUnlock)}>
             <div className="rv4-fvr__blurred" aria-hidden="true" inert>
               <V4Prose blocks={view.challenges} />
@@ -94,7 +94,7 @@ const V4Fantasy: FC<Props> = ({ view, onUnlock }) => {
         nodeIds={{ closed: "441:6422", open: "441:6168", gated: "441:6188" }}
         rampBandPx={84.5}
         gatedPaddingTopPx={8}
-        premiumTopPx={238}
+        premiumTopPx={167.3}
       />
     </>
   );

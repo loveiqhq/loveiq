@@ -3900,10 +3900,12 @@
   position: relative;
   width: 28.779px;
 }
+/* 1015:1181 — the file keeps the stroke's overhang: 29.499 round the 28.779 box. */
 .rv3 .rv4-premium__shield-bg {
   display: block;
-  height: 28.779px;
-  width: 28.779px;
+  height: 29.499px;
+  margin: -0.36px;
+  width: 29.499px;
 }
 /* 1015:1222 — the file keeps the stroke's overhang, 12.87 x 15.81. */
 .rv3 .rv4-premium__shield-tick {
@@ -4868,8 +4870,10 @@
 .rv3 .rv4-tb__blurred {
   filter: blur(var(--rv4-veil, 5px));
 }
+/* 1015:1004 (29.09) sits 45 into "The problem is not the preference…" (348:334), which
+ * the page sets 339.1 into this gate at 393. */
 .rv3 .rv4-tb__gate .rv4-premium {
-  top: 87px;
+  top: 384px;
 }
 
 /* ══ "Try this & see what shifts" — 374:217 / 374:238 / 374:258 ═══════════════
@@ -5082,8 +5086,9 @@
 .rv3 .rv4-try__blurred {
   filter: blur(var(--rv4-veil, 5px));
 }
+/* 1015:980 (29.09): 48.5 into the rest, 40 higher than the old card's 88.5. */
 .rv3 .rv4-try__rest .rv4-premium {
-  top: 88px;
+  top: 48.5px;
 }
 
 /* ── "Go deeper" inside this chapter ─────────────────────────────────────────── */
@@ -5366,8 +5371,10 @@
 .rv3 .rv4-ab__ramp > .rv4-pblur {
   display: none;
 }
+/* 1015:1163 (29.09): 408 into 314:284, whose first line is the ramp's, where this gate
+ * starts. */
 .rv3 .rv4-ab__gate .rv4-premium {
-  top: 82px;
+  top: 408px;
 }
 /* 310:229's 16px continues to the practice card and the article. */
 .rv3 .rv4-ab + .rv4-try {
@@ -5397,10 +5404,10 @@
 .rv3 .rv4-learn.is-open:has(.rv4-learn__gate) {
   padding-bottom: calc(var(--rv4-learn-foot, 24.5px) - 1px);
 }
-/* 153:2280 floats the Premium card 67 into the shared gate (it read 90 when the card
- * was built); 235:317, on the same gate, 88 — which that article carries. */
+/* 153:2280 floats the 29.09 card (1015:1138) 176.5 into the shared gate (the old one
+ * sat at 67); 235:317, on the same gate, 78.5 (1015:1232) — which that article carries. */
 .rv3 .rv4-learn__gate > .rv4-premium {
-  top: var(--rv4-learn-premium-top, 67px);
+  top: var(--rv4-learn-premium-top, 176.5px);
 }
 
 /* ══ Chapter title — the suffix on its own line · 1:865 (25.09) ══════════════
@@ -6080,8 +6087,9 @@ html {
 .rv3 .rv4-cip__blurred {
   filter: blur(var(--rv4-veil, 5px));
 }
+/* 1015:1257 (29.09): 303 into 305:462, where this gate starts. */
 .rv3 .rv4-cip__gate .rv4-premium {
-  top: 282px;
+  top: 303px;
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .rv3 .rv4-cip__ramp {
@@ -7110,8 +7118,9 @@ html {
   filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
+/* 1015:1379 (29.09): 258.27 into 305:228, this gate — 155 lower than the old card. */
 .rv3 .rv4-fvr__gate .rv4-premium {
-  top: 103.3px;
+  top: 258.3px;
 }
 /* 441:6422 is 343 like every chapter's teaser card since the rehaul (28.09). */
 .rv3 .rv4-fvr + .rv4-try {
@@ -7156,13 +7165,10 @@ html {
 .rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {
   display: none;
 }
-/* 482:6479 sets the card 6px and, since the rehaul, the pill 9.5px right of the
- * gate's middle. Held as an offset from the middle, the same through 393: pinned to
- * the measure, a wide column left them 179px in, 109px left of the other articles'
- * at 1280 (final review, 25.09). */
-.rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium {
-  left: calc(50% + 6px);
-}
+/* 482:6479 sets, since the rehaul, the pill 9.5px right of the gate's middle. Held as
+ * an offset from the middle, the same through 393: pinned to the measure, a wide column
+ * left it 179px in, 109px left of the other articles' at 1280 (final review, 25.09).
+ * The 29.09 card (1015:1354) stands centred, where the old one stood 6px right. */
 .rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {
   left: calc(50% + 9.5px);
 }

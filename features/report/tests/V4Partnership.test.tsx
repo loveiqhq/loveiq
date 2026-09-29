@@ -171,7 +171,7 @@ describe("the paywalled body — 305:358", () => {
     // card carries none of its own. 399:260's card, measured at 393 with the real
     // fonts, 147.5px below the gate.
     expect(practice.style.getPropertyValue("--rv4-try-teaser-h")).toBe("");
-    expect(practice.style.getPropertyValue("--rv4-try-premium-top")).toBe("147.5px");
+    expect(practice.style.getPropertyValue("--rv4-try-premium-top")).toBe("219.5px");
     fireEvent.click(practice.querySelector(".rv4-try__button")!);
     expect(practice.getAttribute("data-node-id")).toBe("399:260");
     const tail = practice.querySelector<HTMLOListElement>(".rv4-try__blurred ol");
@@ -223,7 +223,7 @@ describe("the CSS contract", () => {
   it("ramps the blur in over ~105px and floats the card 282px into the gate", () => {
     expect(rule(".rv3 .rv4-cip__ramp")).toContain("--rv4-band: 105px");
     expect(rule(".rv3 .rv4-cip__blurred")).toContain("filter: blur(var(--rv4-veil, 5px))");
-    expect(rule(".rv3 .rv4-cip__gate .rv4-premium")).toContain("top: 282px");
+    expect(rule(".rv3 .rv4-cip__gate .rv4-premium")).toContain("top: 303px");
   });
 
   it("sets the practice list flush, 21px in and 8px above what follows (399:259)", () => {

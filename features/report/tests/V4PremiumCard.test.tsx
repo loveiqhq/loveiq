@@ -180,6 +180,14 @@ describe("reportV3.css — the 29.09 card", () => {
     expect(rule(".rv3 .rv4-premium--body .rv4-premium__guarantee")).toContain("height: 47px;");
   });
 
+  it("draws the shield at its file's 29.5, the stroke's overhang around the 28.78 box", () => {
+    // 1015:1181 / 1015:1225: a 28.779 box, its image inset -1.25% all round.
+    const bg = rule(".rv3 .rv4-premium__shield-bg");
+    expect(bg).toContain("height: 29.499px;");
+    expect(bg).toContain("width: 29.499px;");
+    expect(bg).toContain("margin: -0.36px;");
+  });
+
   it("sets the features in Light 12/19.2 grey, the checks 11 from the text", () => {
     const feat = rule(".rv3 .rv4-premium__feats > li");
     expect(feat).toContain("gap: 11px;");

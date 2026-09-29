@@ -199,10 +199,11 @@ describe("Fantasy vs. Reality's own gate (482:6479)", () => {
   it("hands the reader the frame's gate, and says the window runs on mid-paragraph", () => {
     for (const view of [locked, unlocked]) {
       expect(view.gate).toEqual({
-        // Redrawn in Mark's rehaul (28.09): a five-line band, a fade, the pill under it.
+        // Redrawn in Mark's rehaul (28.09): a five-line band, a fade, the pill under it;
+        // the 29.09 card (1015:1354) 49.23 higher than the old one.
         bandPx: 112,
         windowPx: 625,
-        premiumTopPx: 161.5,
+        premiumTopPx: 112.3,
         pillBottomPx: -35.3,
         footPx: 45.5,
         fade: true,
