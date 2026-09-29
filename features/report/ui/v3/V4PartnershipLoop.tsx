@@ -30,7 +30,8 @@ import { guardedUnlock } from "./v4Unlock";
  * Clarity logged readers tapping its cards (SexualStageExplorer.tsx). Fatih's call,
  * 2026-09-24.
  *
- * LOCKED (612:862): the orbit and the slides are blurred, the pager is left sharp,
+ * LOCKED (612:862): the orbit, the slides and — since the 28.09 mobile review ("lets
+ * blur also the navigational element of the visualisation") — the pager are blurred,
  * and the brand lock sits on the seam between them — the lock goes on visuals only
  * (V4LockBadge). The slides' lines arrive as the server sends them (lockedBlurCopy.ts:
  * the real lines since review 26.09), and a tap anywhere on the section opens the
@@ -291,8 +292,15 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
         </div>
       </div>
 
-      {/* 532:399 — six dots joined by hairlines; sharp even when locked. */}
-      <div className="rv4-loop__pager" role="group" aria-label="Loop steps" inert={locked}>
+      {/* 532:399 — six dots joined by hairlines; blurred with the rest when locked
+       * (612:982), so hidden from assistive tech like the orbit and the slides. */}
+      <div
+        className="rv4-loop__pager"
+        role="group"
+        aria-label="Loop steps"
+        aria-hidden={locked || undefined}
+        inert={locked}
+      >
         {LOOP_STEPS.map((step, i) => (
           <Fragment key={step.title}>
             {i > 0 ? <span className="rv4-loop__pager-line" aria-hidden="true" /> : null}

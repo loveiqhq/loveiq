@@ -5765,6 +5765,14 @@ html {
   filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
+/* 612:982 — the pager is blurred too since the 28.09 mobile review (Mark on the frame,
+ * 1945267516: "Now blurred"), at LAYER_BLUR radius 4 where the orbit and the slides
+ * take 5: four fifths of the veil. The section clips its halo at the foot, as the
+ * frame (clipsContent) does. */
+.rv3 .rv4-loop.is-locked .rv4-loop__pager {
+  filter: blur(calc(var(--rv4-veil, 5px) * 0.8));
+  user-select: none;
+}
 .rv3 .rv4-loop .rv4-lockbadge {
   --rv4-lock-top: calc(clamp(180px, calc(100cqw - 169px), 224px) + 48px);
 }
