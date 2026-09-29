@@ -285,8 +285,9 @@ describe("the top three take V2's desktop rows", () => {
 });
 
 // "Should also be a tile gallery that you can click through. Maybe make them bigger so that
-// you…" (the sentence stops there; Fatih, 29.09: build the gallery now). One snapping row
-// at 1.25x the phone's tile, a pager under it (V3Methodology / useSciPager).
+// you only see 2,5 similarly to the archetype card" (Mark's full sentence, via Fatih,
+// 30.09). One snapping row of tiles sized so two and a half are in view, never under
+// 1.25x the phone's tile, a pager under it (V3Methodology / useSciPager).
 describe("the science tiles run as a gallery on desktop", () => {
   it("runs the deck as one snapping row, flush with the column", () => {
     const track = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__track");
@@ -304,25 +305,52 @@ describe("the science tiles run as a gallery on desktop", () => {
     }
   });
 
-  it("sets each tile at 1.25x the phone's 212 x 248, every length inside it with it", () => {
-    const card = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card");
-    expect(card).toContain("flex: 0 0 265px");
-    expect(card).toContain("height: 310px");
-    expect(card).toContain("padding: 19.92px 18.44px 20.9px");
+  it("sizes each tile so two and a half are in view, never under 1.25x the phone's", () => {
+    // The column is the track: a size container, so a tile reads its width. Two tiles,
+    // their two 12px gaps and half a third fill it. A tile is as wide as its question
+    // box (183), the padding either side (14.752) and its 1px border: 212.504 of the
+    // phone's pixels and 2px. From 700 to 768 that would be under the 1.25x of 29.09,
+    // which the tiles keep there.
+    const track = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__track");
+    expect(track).toContain("container-type: inline-size");
+    expect(track).toContain("gap: 12px");
+    expect(track).toContain(
+      "--rv3-sci-u: max(1.25px, calc(((100cqw - 24px) / 2.5 - 2px) / 212.504));"
+    );
+  });
+
+  it("scales every length in the tile with it, from the phone's 212 x 248", () => {
+    // --rv3-sci-u is one of the phone tile's pixels at this width, so each question
+    // still breaks where it does on the phone.
+    const u = (px: number) => `calc(var(--rv3-sci-u) * ${px})`;
+    // Whitespace-insensitive: Prettier breaks the padding over two lines.
+    const card = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card").replace(/\s+/g, " ");
+    expect(card).toContain(`flex: 0 0 ${u(212)}`);
+    expect(card).toContain(`height: ${u(248)}`);
+    expect(card).toContain(`padding: ${u(15.936)} ${u(14.752)} ${u(16.72)}`);
+    expect(card).toContain(`border-radius: ${u(18)}`);
     const scaled: [string, string][] = [
-      [".rv3-sci__title", "font-size: 20px"],
-      [".rv3-sci__title", "line-height: 24px"],
-      [".rv3-sci__q", "font-size: 15px"],
-      [".rv3-sci__q", "width: 228.75px"],
-      [".rv3-sci__label", "font-size: 12.5px"],
-      [".rv3-sci__list", "min-height: 88.75px"],
-      [".rv3-sci__list li", "min-height: 25px"],
-      [".rv3-sci__icon", "width: 43.72px"],
-      [".rv3-sci__bullet", "width: 16.25px"],
+      [".rv3-sci__head", `gap: ${u(9)}`],
+      [".rv3-sci__icon", `width: ${u(34.976)}`],
+      [".rv3-sci__glyph", `width: ${u(19.648)}`],
+      [".rv3-sci__title", `font-size: ${u(16)}`],
+      [".rv3-sci__title", `line-height: ${u(19.2)}`],
+      [".rv3-sci__q", `font-size: ${u(12)}`],
+      [".rv3-sci__q", `width: ${u(183)}`],
+      [".rv3-sci__label", `font-size: ${u(10)}`],
+      [".rv3-sci__list", `min-height: ${u(71)}`],
+      [".rv3-sci__list li", `font-size: ${u(12.184)}`],
+      [".rv3-sci__list li", `min-height: ${u(20)}`],
+      [".rv3-sci__bullet", `width: ${u(13)}`],
     ];
     for (const [part, declaration] of scaled) {
       expect(ruleIn(`.rv3.rv4 .rv3-method.is-v4 ${part}`), part).toContain(declaration);
     }
+    // No fixed 1.25x length is left behind.
+    const gallery = v3.slice(v3.indexOf(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {"));
+    expect(gallery.slice(0, gallery.indexOf(".rv3-sci__nav {"))).not.toMatch(
+      /:\s*-?\d+(\.\d+)?px;/
+    );
   });
 
   it("draws the pager on the live desktop page only", () => {
