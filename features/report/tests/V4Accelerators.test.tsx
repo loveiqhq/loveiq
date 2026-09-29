@@ -93,8 +93,8 @@ describe("the paywalled chapter — 314:211", () => {
     expect(ramp.querySelector(".rv4-pblur")).not.toBeNull();
     expect(gate.querySelectorAll(".rv4-ab__blurred .rv4-prose__p")).toHaveLength(5);
     const card = gate.querySelector(".rv4-premium")!;
-    expect(card.classList.contains("rv4-premium--guarantee")).toBe(true);
-    expect(card.getAttribute("data-node-id")).toBe("314:309");
+    expect(card.classList.contains("rv4-premium--body")).toBe(true);
+    expect(card.getAttribute("data-node-id")).toBe("1015:1163");
     // No lock badge on the prose: the frame puts badges only on the cards.
     expect(gate.querySelector(".rv4-lockbadge")).toBeNull();
   });
@@ -132,7 +132,8 @@ describe("the paywalled chapter — 314:211", () => {
       container.querySelector(".rv4-trig--accel .rv4-tb-lock")!,
       container.querySelector(".rv4-ab__gate")!,
       screen.getAllByRole("button", { name: "Unlock Report" })[0]!,
-      screen.getAllByRole("button", { name: "Unlock full report" })[0]!,
+      // The paywall card's pill (29.09), named as it reads.
+      container.querySelector(".rv4-ab__gate .rv4-premium__cta")!,
     ];
     for (const surface of surfaces) {
       onUnlock.mockClear();

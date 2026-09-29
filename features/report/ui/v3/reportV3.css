@@ -3811,77 +3811,86 @@
   right: calc(var(--rv4-veil, 5px) * -3);
 }
 
-/* ── the "Premium content" card — 153:2301 ───────────────────────────────────
- * Floats 90px into the blurred window. Its geometry is a uniform x0.71941 scale
- * of a larger original (0.719 was 1px, 17.268 was 24, 162.604 was 226), so the
- * fractions are the design rather than rounding noise and are kept as drawn. */
+/* ══ Premium card — Mark's paywall CTA, 29.09 (1945959774 / 1945959900) ══════════
+ * "We have updated the paywall CTAs": every card in the file was redrawn. The practice
+ * and article gates draw it 330x205 (1015:1207 and its siblings); the chapter-body
+ * gates 330x363, with three features (1015:1163, 1015:1004, 1015:1257, 1015:1379).
+ * Still a uniform x0.71941 scale of a larger original (0.719 was 1px, 17.268 was 24),
+ * so the fractions are the design, not rounding noise.
+ *
+ * The frames' strokes are INSIDE, where CSS adds them, so the card's 0.719 comes out
+ * of its padding and the head sits 15.109 / 25.719 down as drawn. The stroke is the
+ * gradient style the export flattens to #fe6839 ("Logo Gradient Temporary"), painted
+ * as a border-box layer under a white padding-box one so the corners stay crisp. The
+ * pill is placed as the frames place it, absolutely: 147 / 302.28 down the card (the
+ * body frame sets it 1.78 right of centre, a slip; it is centred here). */
 .rv3 .rv4-premium {
   align-items: center;
-  background: #fff;
-  border: 0.719px solid #fe6839;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(120deg, #fe6839 0%, #c167cf 52%, #8887f6 100%) border-box;
+  border: 0.719px solid transparent;
   border-radius: 17.268px;
   box-shadow: -0.719px 5.756px 7.195px 0 rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
   gap: 15px;
-  height: 191px;
+  height: 205px;
   left: 50%;
   overflow: clip;
-  padding: 15.109px 32.376px 0.719px;
+  padding: 14.39px 31.657px 0;
   position: absolute;
   top: 90px;
   transform: translateX(-50%);
   width: 330px;
 }
-/* 153:2303 */
+/* 1015:1165 — the lock and the headline, 9.824 apart. */
 .rv3 .rv4-premium__head {
   align-items: center;
   display: flex;
+  flex: none;
   gap: 9.824px;
   justify-content: center;
+  min-height: 29px;
 }
-/* 153:2304 */
-.rv3 .rv4-premium__badge {
-  align-items: center;
-  background: linear-gradient(135deg, #d05976 0%, #c167cf 47%, #8887f6 100%);
-  border-radius: 5.881px;
-  box-shadow: 0 2.941px 7.352px -2.206px rgba(193, 103, 207, 0.5);
-  display: flex;
+/* 1015:1168 — the 28px gradient disc with Figma's 14px lock (locks/lock-14.svg), as
+ * the chapter heads and the table tiles draw it. */
+.rv3 .rv4-premium__lock {
+  background: linear-gradient(135deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%);
+  border-radius: 50%;
+  box-shadow: 0 3.294px 4.941px rgba(168, 90, 76, 0.3);
   flex: none;
-  height: 22.055px;
-  justify-content: center;
-  width: 22.055px;
+  height: 28px;
+  position: relative;
+  width: 28px;
 }
-.rv3 .rv4-premium__badge img {
+.rv3 .rv4-premium__lock img {
   display: block;
-  height: 9.557px;
-  width: 9.557px;
+  left: 6.59px;
+  position: absolute;
+  top: 6.59px;
 }
-/* 153:2307 */
+/* 1015:1216 */
 .rv3 .rv4-premium__title {
   color: #000;
   font-family: var(--font-serif);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.4666px;
   line-height: 28.8px;
   margin: 0;
   white-space: nowrap;
 }
-/* 153:2309. Figma draws a uniform 20.865px pad, but its own row is 229.5 wide
- * inside a 223.5 container — it simply lets the guarantee line overflow. Here it
- * would wrap instead, which costs 20px of card height, so the HORIZONTAL pad
- * comes down to 17px: "14-day money-back guarantee" needs 183.83px in Plus
- * Jakarta Sans Bold 12 and that buys it 187.5. Vertical padding is untouched, so
- * the box keeps the 78px the frame measures. */
+/* 1015:1218 — the gate card's box, 20.865 all round (its stroke inside): 80.73. */
 .rv3 .rv4-premium__guarantee {
   align-items: center;
   background: rgba(0, 0, 0, 0.01);
   border: 0.719px solid rgba(0, 0, 0, 0.08);
   border-radius: 14.39px;
   display: flex;
+  flex: none;
   gap: 11.512px;
-  padding: 20.865px 17px;
+  padding: 20.146px;
   width: 100%;
 }
 .rv3 .rv4-premium__shield {
@@ -3896,25 +3905,28 @@
   height: 28.779px;
   width: 28.779px;
 }
+/* 1015:1222 — the file keeps the stroke's overhang, 12.87 x 15.81. */
 .rv3 .rv4-premium__shield-tick {
-  height: 13.5px;
+  height: 15.812px;
   left: 50%;
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 9.233px;
+  width: 12.872px;
 }
 .rv3 .rv4-premium__guarantee-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
+/* 1015:1227 / 1015:1228 */
 .rv3 .rv4-premium__guarantee-head {
   color: #009148;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 19.2px;
+  line-height: 22.4px;
+  min-height: 23px;
 }
 .rv3 .rv4-premium__guarantee-sub {
   color: #505253;
@@ -3923,28 +3935,142 @@
   font-weight: 400;
   line-height: 16px;
 }
-/* 153:2320 */
+/* 1015:1229 — 163x32 in the brand gradient, its glow rendered (the old button's
+ * never was). */
 .rv3 .rv4-premium__cta {
   align-items: center;
-  background: #fe6839;
+  background: linear-gradient(168.893deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%);
   border: 0;
   border-radius: 999px;
-  box-shadow:
-    0 5.756px 7.195px -4.317px rgba(254, 104, 57, 0.35),
-    0 14.39px 17.987px -3.597px rgba(254, 104, 57, 0.3);
+  box-shadow: 0 4px 12px rgba(168, 90, 76, 0.3);
   color: #fff;
   cursor: pointer;
   display: flex;
-  flex: none;
   font-family: var(--font-sans);
   font-size: 12px;
-  font-weight: 800;
-  height: 26.621px;
+  font-weight: 700;
+  height: 32px;
   justify-content: center;
-  line-height: 19.2px;
-  padding: 0;
+  left: 50%;
+  line-height: 12px;
+  padding: 0 22px;
+  position: absolute;
+  top: 146.281px;
+  transform: translateX(-50%);
   white-space: nowrap;
-  width: 162.604px;
+  width: 163px;
+}
+.rv3 .rv4-premium__cta:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 2px;
+}
+/* The pill answers the pointer as the round's other CTAs do (Mark, 1945270164: "an
+ * hover effect so that it is clear that these are clickable"). Fine pointers only. */
+@media (hover: hover) and (pointer: fine) {
+  .rv3 .rv4-premium__cta {
+    transition:
+      box-shadow 180ms ease,
+      filter 180ms ease,
+      translate 180ms ease;
+  }
+  .rv3 .rv4-premium__cta:hover {
+    box-shadow: 0 6px 14px rgba(168, 90, 76, 0.4);
+    filter: brightness(1.04);
+    translate: 0 -1px;
+  }
+  .rv3 .rv4-premium__cta:active {
+    translate: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-premium__cta,
+  .rv3 .rv4-premium__cta:hover {
+    transition: none;
+    translate: none;
+  }
+}
+
+/* The chapter-body card — 1015:1163. The head 25.719 down; the guarantee box a compact
+ * 47 (its copy 4 from either edge) 20 into its frame; the features 24 under it. */
+.rv3 .rv4-premium--body {
+  height: 363px;
+  padding-top: 25px;
+}
+.rv3 .rv4-premium--body .rv4-premium__guarantee {
+  height: 47px;
+  margin-top: 20px;
+  padding-bottom: 3.281px;
+  padding-top: 3.281px;
+}
+/* 1015:1184 — the body card's grey line is the features' #6b6678. */
+.rv3 .rv4-premium--body .rv4-premium__guarantee-sub {
+  color: #6b6678;
+}
+/* 1015:1178 — a pixel wider than the gate card's, its middle 0.71 right of the
+ * shield's. */
+.rv3 .rv4-premium--body .rv4-premium__shield-tick {
+  margin-left: 0.71px;
+  width: 13.872px;
+}
+/* 1015:1185 / 1015:1198 — left-aligned 45 in (the frame starts its second block at
+ * 46, a slip), each text as wide as the frame sets it so it breaks where it breaks:
+ * 160.72, 194.72 and 229.72 down the card. The last (1015:1204) is 242 wide from 72,
+ * past the content box into the padding, so the list is 27 + 242. */
+.rv3 .rv4-premium__feats {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 9px 0 0 12.624px;
+  padding: 0;
+  width: 269px;
+}
+.rv3 .rv4-premium__feats > li {
+  align-items: flex-start;
+  color: #6b6678;
+  display: flex;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 300;
+  gap: 11px;
+  line-height: 19.2px;
+  min-height: 20px;
+}
+.rv3 .rv4-premium__feats > li + li {
+  margin-top: 14px;
+}
+.rv3 .rv4-premium__feats > li + li + li {
+  margin-top: 15px;
+}
+.rv3 .rv4-premium__feats > li > img {
+  flex: none;
+  margin-top: 2px;
+}
+.rv3 .rv4-premium__feats > li > span {
+  max-width: 242px;
+}
+.rv3 .rv4-premium--body .rv4-premium__cta {
+  top: 301.561px;
+}
+
+/* On small phones. 330 is 42px more than a 320 phone's column, and the card's height
+ * is fixed with its overflow clipped — so below 362 it narrows to the viewport less
+ * the gutters, its side padding and the box's come in to 12, and the features start
+ * at the box's edge. */
+@media (max-width: 361px) {
+  .rv3 .rv4-premium {
+    padding-left: 11.281px;
+    padding-right: 11.281px;
+    width: calc(100vw - 32px);
+  }
+  .rv3 .rv4-premium__guarantee {
+    padding-left: 11.281px;
+    padding-right: 11.281px;
+  }
+  .rv3 .rv4-premium__feats {
+    margin-left: 12px;
+    width: auto;
+  }
 }
 
 /* The article's copy keeps to the card's content box. 153:2277 draws it 358 wide at
@@ -4975,39 +5101,6 @@
 /* The gated window, the blur laid over it and the fade span the card's content box,
  * as the copy now does (the blur overhanging it, above). */
 
-/* ── The Premium card on small phones ────────────────────────────────────────
- * 330 wide is 42px more than a 320 phone's column, and its height is fixed with
- * overflow clipped — so it narrows to the viewport less the gutters, and below 362
- * its side padding comes in far enough for "14-day money-back guarantee" to stay on
- * one line and the CTA in view. */
-.rv3 .rv4-premium {
-  width: min(330px, calc(100vw - 32px));
-}
-@media (max-width: 361px) {
-  .rv3 .rv4-premium {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-  .rv3 .rv4-premium__guarantee {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-}
-
-/* ══ Premium card, chapter-body copy — 348:373 (Typical Beliefs) / 314:309 (A&B) ══
- * The body gates set "14-day money-back" in bold 14/22.4 over "Guaranteed, no
- * questions asked." (the article and practice gates keep 153:2301's 12/19.2
- * "…guarantee" / "No questions asked."). The taller line grows the guarantee box
- * 36 → 39px inside the same fixed 191px card, and 314:321 draws the tick 14.625px
- * tall against 153:2313's 13.5. */
-.rv3 .rv4-premium--guarantee .rv4-premium__guarantee-head {
-  font-size: 14px;
-  line-height: 22.4px;
-}
-.rv3 .rv4-premium--guarantee .rv4-premium__shield-tick {
-  height: 14.625px;
-}
-
 /* ══ Accelerator & Brakes — trigger cards · 713:6132 / 713:6181, paywalled 386:416 / 386:444 ══
  * One card, two tones: coral brakes, green accelerators. Every tint is the tone at
  * a fixed alpha, so the tone is carried as an RGB triple. No scales since 25.09
@@ -5330,61 +5423,6 @@
   display: block;
   font-size: 14px;
   line-height: 22.4px;
-}
-
-/* ══ Premium card — the stroke · 153:2301 / 348:373 / 314:309 ══════════════
- * Every card frame renders its 0.719px stroke in a gradient style ("Logo Gradient
- * Temporary") that the export flattens to the #fe6839 above: orange on the left,
- * pink across the top, violet down the right. The card is a 0.719x scale of the V2
- * paywall card (8005:735), whose border is exactly that gradient — painted, as
- * there, as a border-box layer under a white padding-box one so the corners stay
- * crisp.
- *
- * The frame's strokes are also INSIDE, where CSS adds them, so the card's is taken
- * out of its padding and the guarantee box's out of its own; and the text boxes
- * the frame rounds up (28.8 → 29, 19.2 → 20, 22.4 → 23) are held at their whole
- * heights. With the box and the button grouped 11.512 apart as 153:2308 / 314:316
- * group them, the button lands at 148.35 / 151.35 as drawn, where it sat 4.9 /
- * 5.67 low. */
-.rv3 .rv4-premium {
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(120deg, #fe6839 0%, #c167cf 52%, #8887f6 100%) border-box;
-  border-color: transparent;
-  padding: 14.39px 31.657px 0;
-}
-.rv3 .rv4-premium__head {
-  min-height: 29px;
-}
-.rv3 .rv4-premium__offer {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  gap: 11.512px;
-  width: 100%;
-}
-.rv3 .rv4-premium__guarantee {
-  padding-bottom: 20.146px;
-  padding-top: 20.146px;
-}
-.rv3 .rv4-premium__guarantee-head {
-  min-height: 20px;
-}
-.rv3 .rv4-premium--guarantee .rv4-premium__guarantee-head {
-  min-height: 23px;
-}
-/* 153:2321 / 314:329 hang the button's glow on a transparent layer, and none of the
- * three card frames renders it — white under the button — while the badge's glow
- * above does render and stays. */
-.rv3 .rv4-premium__cta {
-  box-shadow: none;
-}
-/* The small-phone side padding above, less the same stroke. */
-@media (max-width: 361px) {
-  .rv3 .rv4-premium {
-    padding-left: 11.281px;
-    padding-right: 11.281px;
-  }
 }
 
 /* ══ Chapter anchors — where a chapter reached from the drawer lands ═════════

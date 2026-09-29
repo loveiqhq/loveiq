@@ -197,10 +197,11 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     expect(container.querySelector(".rv4-learn__gated")).toBeTruthy();
     expect(container.querySelector(".rv4-learn__fade")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show all of the article" })).toBeTruthy();
-    expect(screen.getByText("Premium content")).toBeTruthy();
-    expect(screen.getByText("14-day money-back guarantee")).toBeTruthy();
-    expect(screen.getByText("No questions asked.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Unlock full report" })).toBeTruthy();
+    // Mark's 29.09 card (1015:1232), with the 14-day guarantee (Fatih, 29.09).
+    expect(screen.getByText("Unlock full insights!")).toBeTruthy();
+    expect(screen.getByText("14-day money-back")).toBeTruthy();
+    expect(screen.getByText("Guaranteed, no questions asked.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unlock Report" })).toBeTruthy();
   });
 
   it("hides the blurred window from assistive tech", () => {
@@ -228,7 +229,7 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     const { container: withNone } = render(<V4LearnMore article={stripped} locked defaultOpen />);
     expect(shape(withNone)).toEqual(withCopyShape);
     expect(withNone.querySelector(".rv4-learn__gated")!.textContent).toBe("");
-    expect(screen.getByRole("button", { name: "Unlock full report" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unlock Report" })).toBeTruthy();
     expect(withNone.textContent).not.toContain(GATED_PROBE);
   });
 
@@ -237,7 +238,7 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     const { container } = render(
       <V4LearnMore article={ARTICLE} locked defaultOpen onUnlock={onUnlock} />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Unlock full report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlock Report" }));
     expect(onUnlock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Show all of the article" }));
     expect(onUnlock).toHaveBeenCalledTimes(2);
@@ -383,12 +384,14 @@ describe("reportV3.css — learn-more contracts", () => {
     expect(css).toContain("height: 63px");
   });
 
-  it("sizes the premium card as 153:2301 does", () => {
+  it("sizes the premium card as 1015:1232 does (Mark, 29.09)", () => {
     const css = rule(".rv3 .rv4-premium {");
     expect(css).toContain("width: 330px");
-    expect(css).toContain("height: 191px");
-    expect(css).toContain("border: 0.719px solid #fe6839");
-    expect(rule(".rv3 .rv4-premium__cta {")).toContain("background: #fe6839");
+    expect(css).toContain("height: 205px");
+    expect(css).toContain("border: 0.719px solid transparent");
+    expect(rule(".rv3 .rv4-premium__cta {")).toContain(
+      "background: linear-gradient(168.893deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%)"
+    );
   });
 
   // The rehaul (907:7664 and every article's instance): a 196px teaser, and "Read All"

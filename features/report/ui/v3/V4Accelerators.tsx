@@ -97,8 +97,8 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
                   <V4Prose blocks={rest} />
                 </div>
               </div>
-              {/* 314:309 — the chapter-body copy of the card, as the frame draws it. */}
-              <V4PremiumCard variant="guarantee" nodeId="314:309" />
+              {/* 1015:1163 — the chapter-body card, with its features (29.09). */}
+              <V4PremiumCard variant="body" nodeId="1015:1163" />
             </div>
           ) : null}
         </section>

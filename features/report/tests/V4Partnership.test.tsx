@@ -135,11 +135,11 @@ describe("the paywalled body — 305:358", () => {
     expect(gated.querySelector(".rv4-cip__blurred")).not.toBeNull();
   });
 
-  it("floats the chapter-body Premium card on the gate, as 305:362 draws it", () => {
+  it("floats the chapter-body Premium card on the gate, as 1015:1257 draws it", () => {
     const { container } = render(<V4Partnership view={LOCKED} />);
     const card = container.querySelector(".rv4-cip__gate > .rv4-premium")!;
-    expect(card).toHaveClass("rv4-premium--guarantee");
-    expect(card.getAttribute("data-node-id")).toBe("305:362");
+    expect(card).toHaveClass("rv4-premium--body");
+    expect(card.getAttribute("data-node-id")).toBe("1015:1257");
   });
 
   it("opens the paywall once from the gate, its card, the loop or the blurred result", () => {
