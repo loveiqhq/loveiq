@@ -34,7 +34,8 @@ import { guardedUnlock } from "./v4Unlock";
  * ON THE BACK-TO-TOP CONTROL. Expanded, 153:2260 is 11,624px — about eleven phone
  * screens — and the only way back to the collapse control was to flick upwards for
  * several seconds. V4BackToTop shows from the moment the article opens and returns
- * the reader to the card head. It is mounted only while open, because closed the
+ * the reader to the card head (on the phone: from 700px it stays mounted but is not
+ * drawn, per Mark's desktop review). It is mounted only while open, because closed the
  * card is 341px and there is nothing to come back from; for a locked reader it sits
  * before the gate, so its sticky range ends with the free copy.
  */
@@ -193,8 +194,9 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
             >
               <V4Prose blocks={article.teaser ?? article.free.slice(0, TEASER_BLOCKS)} />
             </div>
-            {/* 907:7664's "Read All" — 126x32, outlined, at 292 of the card. The name
-             * says what it opens; the visible words lead it. */}
+            {/* 907:7664's "Read All" — 126x32, outlined, at 292 of the card on the phone;
+             * from 700px it follows the copy. The name says what it opens; the visible
+             * words lead it. */}
             <button
               type="button"
               className="rv4-learn__open"

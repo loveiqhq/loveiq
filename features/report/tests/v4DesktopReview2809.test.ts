@@ -223,7 +223,9 @@ describe("the top three take V2's desktop rows", () => {
       flat(`grid-template-areas: "rank icon name bar pct" "rank icon blurb bar pct"`)
     );
     expect(row).toContain(
-      flat("grid-template-columns: 28px 24px minmax(0, 1fr) clamp(96px, 12vw, 160px) 52px")
+      flat(
+        "grid-template-columns: minmax(24px, auto) 24px minmax(0, 1fr) clamp(96px, 12vw, 160px) 52px"
+      )
     );
     expect(row).toContain("grid-template-rows:autoauto");
     expect(row).toContain("column-gap:clamp(12px,1.4vw,16px)");
