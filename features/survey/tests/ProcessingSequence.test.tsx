@@ -50,6 +50,42 @@ describe("ProcessingSequence", () => {
     cleanup();
   });
 
+  it("never shows a negative percent when a frame is stamped before the start", () => {
+    // A browser stamps each frame with the moment the frame began, which can be a few
+    // milliseconds BEFORE the performance.now() the effect read just before asking for
+    // it. Elapsed time then comes out negative, and the first frame painted "-1% complete"
+    // (a persona walk on staging caught it on 2026-09-29).
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      rafId += 1;
+      const id = rafId;
+      const frameBegan = performance.now() - 12;
+      const timer = setTimeout(() => {
+        rafTimers.delete(id);
+        callback(frameBegan);
+      }, 16);
+      rafTimers.set(id, timer);
+      return id;
+    });
+
+    const onComplete = vi.fn();
+    render(<ProcessingSequence onComplete={onComplete} submitDone />);
+    const shown: number[] = [];
+    // One frame per step, so the frame that goes wrong is the one that gets read.
+    for (let i = 0; i < 2000 && !onComplete.mock.calls.length; i += 1) {
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+      const text = screen.queryByText(/% complete$/)?.textContent;
+      if (text) shown.push(Number.parseInt(text, 10));
+    }
+
+    expect(onComplete).toHaveBeenCalled();
+    expect(shown[0]).toBe(0);
+    // Neither the 0→95 count nor the 95→100 finish may dip below 0 or step backwards.
+    expect(shown.every((pct, i) => pct >= 0 && (i === 0 || pct >= shown[i - 1]!))).toBe(true);
+    expect(shown.at(-1)).toBe(100);
+  });
+
   it("moves through the processing steps in order", () => {
     render(<ProcessingSequence onComplete={vi.fn()} submitDone={false} />);
 
