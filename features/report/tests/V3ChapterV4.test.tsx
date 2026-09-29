@@ -359,7 +359,14 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     expect(section).toHaveClass("rv4-chapter", "is-locked");
     expect(section).not.toHaveClass("is-open");
     expect(section.querySelector(".rv4-chapter__name")!.textContent).toBe("Core Insecurities");
-    expect(section.querySelector(".rv4-chapter__button .rv4-chapter__lock svg")).not.toBeNull();
+    // Mark, 29.09 (1945269177): "Updated Lock icon + Text." — 982:379: the frame's 14px
+    // lock on a 28px disc over "Unlock Report".
+    const lock = section.querySelector(".rv4-chapter__button .rv4-chapter__lock")!;
+    expect(lock.querySelector(".rv4-chapter__lock-disc img")!.getAttribute("src")).toBe(
+      "/report/v3/locks/lock-14.svg"
+    );
+    expect(lock.querySelector(".rv4-chapter__lock-disc")!.getAttribute("aria-hidden")).toBe("true");
+    expect(lock.querySelector(".rv4-chapter__lock-label")!.textContent).toBe("Unlock Report");
     expect(section.querySelector(".rv4-chapter__chev")).toBeNull();
     const tease = section.querySelector(".rv4-chapter__tease")!;
     expect(tease.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.core_insecurities);
@@ -380,12 +387,11 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     const button = container.querySelector<HTMLButtonElement>(".rv4-chapter__button")!;
     expect(button.hasAttribute("aria-expanded")).toBe(false);
     expect(button.hasAttribute("aria-controls")).toBe(false);
-    expect(button.querySelector(".rv3-sr")!.textContent).toBe("Locked — unlock to read");
-    // Named "Core Insecurities of the Spark Seeker Locked — unlock to read": the
-    // space is for assistive tech, as the title's own runs have one.
-    expect(button.textContent).toBe(
-      "Core Insecurities of the Spark Seeker Locked — unlock to read"
-    );
+    // Named by what it shows: the title, then the lock's "Unlock Report", which now
+    // says what the hidden "Locked — unlock to read" used to. The space is for
+    // assistive tech, as the title's own runs have one.
+    expect(button.querySelector(".rv3-sr")).toBeNull();
+    expect(button.textContent).toBe("Core Insecurities of the Spark Seeker Unlock Report");
     fireEvent.click(button);
     expect(onUnlock).toHaveBeenCalledTimes(1);
     // The paywall decides what opens, not the tap.
@@ -428,19 +434,27 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     expect(container.querySelector(".rv4-chapter__lock")).toBeNull();
   });
 
-  it("sets the lock as 34px of 441:5956's gradient, the padlock scaled with it", () => {
-    // The chevron's 34px disc (1:867), filled as the 48px "Lock / Gradient Brand"
-    // badge is; Mark's mock draws it at the disc's size. The 22px padlock scales by
-    // 34/48 to 15.6.
-    const disc = cssRule(".rv3.rv4 .rv4-chapter__lock");
+  it("sets 982:379's lock: a 28px gradient disc over 'Unlock Report', 56x46", () => {
+    const group = cssRule(".rv3.rv4 .rv4-chapter__lock");
+    expect(group).toContain("width: 56px;");
+    expect(group).toContain("height: 46px;");
+    expect(group).toContain("flex-shrink: 0;");
+    const disc = cssRule(".rv3.rv4 .rv4-chapter__lock-disc");
     expect(disc).toContain(
-      "background: linear-gradient(135deg, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);"
+      "background: linear-gradient(135deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%);"
     );
-    expect(disc).toContain("border-radius: 17px;");
-    expect(disc).toContain("height: 34px;");
-    expect(disc).toContain("width: 34px;");
-    expect(cssRule(".rv3.rv4 .rv4-chapter__lock svg")).toContain("height: 15.6px;");
-    // Appended below the frozen top of the stylesheet.
+    expect(disc).toContain("box-shadow: 0 3.294px 4.941px rgba(168, 90, 76, 0.3);");
+    expect(disc).toContain("height: 28px;");
+    expect(disc).toContain("width: 28px;");
+    expect(disc).toContain("left: 14px;");
+    expect(cssRule(".rv3.rv4 .rv4-chapter__lock-disc img")).toContain("left: 6.59px;");
+    const label = cssRule(".rv3.rv4 .rv4-chapter__lock-label");
+    expect(label).toContain("font-size: 8px;");
+    expect(label).toContain("line-height: 12px;");
+    expect(label).toContain("font-weight: 700;");
+    expect(label).toContain("color: #868686;");
+    expect(label).toContain("top: 34px;");
+    // Below the frozen top of the stylesheet.
     const at = V3_CSS.indexOf(".rv3.rv4 .rv4-chapter__lock {");
     expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
   });

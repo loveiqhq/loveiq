@@ -120,8 +120,10 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
 
   if (isV4 && lock) {
     // Mark's "fully locked" mock (26.09): the head and the teaser as a closed chapter
-    // draws them, the gradient lock where the chevron was. A plain button, not a
-    // disclosure: a tap opens the paywall, and there is no body to open.
+    // draws them, the gradient lock where the chevron was — with "Unlock Report" under
+    // it since 29.09, which names the button's purpose as the hidden "Locked — unlock
+    // to read" did. A plain button, not a disclosure: a tap opens the paywall, and
+    // there is no body to open.
     const teaser = REPORT_V4_CHAPTER_TEASERS[sectionId];
     return (
       <section
@@ -136,7 +138,6 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
             title={chapter.title}
             archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
           />{" "}
-          <span className="rv3-sr">Locked — unlock to read</span>
           <V4ChapterLockDisc />
         </button>
         {teaser ? (

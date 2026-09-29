@@ -1,5 +1,5 @@
+import Image from "next/image";
 import type { FC } from "react";
-import { V4Padlock } from "./V4LockBadge";
 
 /**
  * The head of a Report V4 chapter row — Figma 1:863 / 1:874 — shared by V4Chapter
@@ -50,12 +50,17 @@ export const V4ChapterChevron: FC = () => (
 );
 
 /**
- * A locked chapter's disc, in the chevron's place (Mark's mock, 26.09): the
- * chevron's 34px disc filled as 441:5956's "Lock / Gradient Brand" is. A span, not
- * V4LockBadge's button: it sits inside the chapter's own button.
+ * A locked chapter's lock, in the chevron's place (Mark's mock, 26.09). Since 29.09
+ * (1945269177, "Updated Lock icon + Text."): 982:379, a 28px disc in the brand gradient
+ * with the frame's 14px lock, and "Unlock Report" under it — the visuals' CTA
+ * (V4LockBadge) at the head's size. A span, not V4LockBadge's button: it sits inside
+ * the chapter's own button, whose name its words finish.
  */
 export const V4ChapterLockDisc: FC = () => (
-  <span className="rv4-chapter__lock" aria-hidden="true">
-    <V4Padlock />
+  <span className="rv4-chapter__lock" data-node-id="982:379">
+    <span className="rv4-chapter__lock-disc" aria-hidden="true">
+      <Image src="/report/v3/locks/lock-14.svg" alt="" width={14} height={14} unoptimized />
+    </span>
+    <span className="rv4-chapter__lock-label">Unlock Report</span>
   </span>
 );
