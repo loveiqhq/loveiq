@@ -38,10 +38,10 @@ instrument ships first is their decision too.
    - the source, license, credit line or published form is missing;
    - our copy (bands and safety messages) breaks the Copy Gate or reads as a diagnosis;
    - `validated` is set without the standard sign-off lines, each signed and dated, against
-     the current source.
+     what is there now.
 
-   The test also pins each instrument's fingerprint (`sourceHash`), so any change to the
-   wording fails the build until the test is updated on purpose.
+   The test also pins each instrument's fingerprint (`reviewHash`), so any change to what
+   the sign-off covers fails the build until the test is updated on purpose.
 
 6. **Send the validation pack:** `npx tsx scripts/assessments/validation-pack.ts <id>`
    prints the review document. It shows:
@@ -52,9 +52,11 @@ instrument ships first is their decision too.
    - the gate's result;
    - the lines to sign, and the fingerprint they sign against.
 7. **Record the sign-off.** Fill each `signOff` line's `by` and `on` (YYYY-MM-DD). Set
-   `signedHash` to the pack's fingerprint, and `status: "validated"`. A later change to the
-   wording, answers, scoring or bands changes the fingerprint, and the gate then refuses
-   `validated` until it is signed again. A change to our copy alone does not.
+   `signedHash` to the pack's fingerprint, and `status: "validated"`. A later change to
+   anything the lines cover changes the fingerprint, and the gate then refuses `validated`
+   until it is signed again: the wording, answers, scoring and bands, and also our copy, the
+   safety routing and its help lines, the license and the sources. Only the bookkeeping
+   (`status`, `version`, the sign-off lines themselves) is left out.
 8. **Then build on it.** Taking an instrument in the product, storing results and the
    Humangraph come after the first validation, once Mark and Sanjin choose what ships first.
 

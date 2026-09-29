@@ -11,7 +11,7 @@
  */
 import { INSTRUMENTS, instrument } from "@features/assessments/instruments";
 import { checkInstrument } from "@features/assessments/logic/check";
-import { optionsOf, scoreRange, sourceHash } from "@features/assessments/logic/score";
+import { optionsOf, reviewHash, scoreRange } from "@features/assessments/logic/score";
 import type { InstrumentDefinition } from "@features/assessments/logic/types";
 
 const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
@@ -96,8 +96,9 @@ export function validationPack(def: InstrumentDefinition): string {
     "",
     "Tick each line, with your name and the date (YYYY-MM-DD). The instrument can only be " +
       "marked validated when every line is signed, and when `signedHash` in its definition " +
-      `is set to this source's fingerprint, **${sourceHash(def)}**. Any later change to the ` +
-      "wording, answers, scoring or bands changes the fingerprint and needs a new sign-off.",
+      `is set to this version's fingerprint, **${reviewHash(def)}**. Any later change to ` +
+      "what these lines cover, our copy and the safety routing included, changes the " +
+      "fingerprint and needs a new sign-off.",
     "",
     ...def.signOff.map(
       (s) =>

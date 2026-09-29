@@ -32,7 +32,7 @@ const safety: SafetyRule[] = [
       { region: "NZ", lines: ["Emergency: 111", "Need to talk?: call or text 1737"] },
       {
         region: "DE",
-        lines: ["Notruf: 112", "TelefonSeelsorge: 0800 111 0 111 or 0800 111 0 222"],
+        lines: ["Emergency: 112", "TelefonSeelsorge: 0800 111 0 111 or 0800 111 0 222"],
       },
       {
         region: "ANY",

@@ -142,9 +142,9 @@ export interface InstrumentDefinition {
   /** Filled in by Mark and Sanjin; `validated` needs every line signed. */
   signOff: SignOff[];
   /**
-   * `sourceHash(def)` at the moment of sign-off. A change to anything a reviewer signed as
-   * faithful (instructions, items, answers, scoring, bands) changes the hash, and the gate
-   * then refuses `validated` until it is signed again.
+   * `reviewHash(def)` at the moment of sign-off. A change to anything the sign-off covers
+   * (the wording, answers, scoring, bands, our copy, the safety routing, the license)
+   * changes the hash, and the gate then refuses `validated` until it is signed again.
    */
   signedHash?: string;
 }

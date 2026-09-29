@@ -13,8 +13,8 @@ import { checkInstrument, reachableTotals } from "@features/assessments/logic/ch
 import {
   helpFor,
   scoreInstrument,
+  reviewHash,
   scoreRange,
-  sourceHash,
   type Answers,
 } from "@features/assessments/logic/score";
 import { standardSignOff } from "@features/assessments/logic/signoff";
@@ -62,17 +62,18 @@ describe("every instrument in the factory", () => {
   });
 
   /**
-   * THE WORDING, PINNED. A change to anything a reviewer signs as faithful (instructions,
-   * items, answers, scoring, bands) changes the fingerprint, and this fails until it is
-   * updated here on purpose, which is the moment to ask Mark and Sanjin to sign again.
-   * Dropping "in some way" from PHQ-9's item 9 would otherwise pass every other test.
+   * WHAT WAS SIGNED, PINNED. A change to anything the sign-off covers (the wording, answers,
+   * scoring, bands, our copy, the safety routing, the license) changes the fingerprint, and
+   * this fails until it is updated here on purpose, which is the moment to ask Mark and
+   * Sanjin to sign again. Dropping "in some way" from PHQ-9's item 9, or a digit from a
+   * crisis line, would otherwise pass every other test.
    */
   it.each([
-    ["gad7", "0170f4c45c9792ec"],
-    ["phq9", "b123baf60c3a5566"],
-    ["ucla3", "35963ef5f54b8746"],
-  ])("%s's source wording has the fingerprint it was checked at", (id, hash) => {
-    expect(sourceHash(def(id))).toBe(hash);
+    ["gad7", "ca077e97a4a2d2b7"],
+    ["phq9", "a38a3e3655c255a1"],
+    ["ucla3", "e012a9c769e9dbaa"],
+  ])("%s has the fingerprint it was checked at", (id, hash) => {
+    expect(reviewHash(def(id))).toBe(hash);
   });
 });
 
@@ -326,16 +327,17 @@ describe("the gate catches a broken definition", () => {
   });
 
   describe("sign-off", () => {
+    // In the runbook's order: the fingerprint is the pack's, taken before anyone signs.
     const signed = (d: InstrumentDefinition) => {
-      d.status = "validated";
+      d.signedHash = reviewHash(d);
       d.signOff = standardSignOff(d).map((s) => ({ ...s, by: "Mark", on: "2026-10-01" }));
-      d.signedHash = sourceHash(d);
+      d.status = "validated";
     };
-    const statusOf = (change: (d: InstrumentDefinition) => void) =>
+    const statusOf = (change: (d: InstrumentDefinition) => void, base = def("gad7")) =>
       broken((d) => {
         signed(d);
         change(d);
-      }).filter((p) => p.startsWith("status:"));
+      }, base).filter((p) => p.startsWith("status:"));
 
     it("passes with every standard line signed and dated against this source", () => {
       expect(statusOf(() => {})).toEqual([]);
@@ -356,13 +358,44 @@ describe("the gate catches a broken definition", () => {
       );
     });
 
-    it("refuses a source that changed after it was signed, but not a change to our copy", () => {
-      expect(statusOf((d) => void (d.items[0]!.text = "Feeling nervous"))).toContain(
-        "status: validated, but the source changed after it was signed: sign it again"
+    it("refuses anything signed that changed after, our copy and the safety routing included", () => {
+      const changed = "status: validated, but it changed after it was signed: sign it again";
+      const changes: Array<(d: InstrumentDefinition) => void> = [
+        (d) => void (d.items[0]!.text = "Feeling nervous"),
+        (d) => void (d.bands[0]!.summary = "Your answers show few signs."),
+        (d) => void (d.bands[0]!.nextStep = "Carry on."),
+        (d) => void (d.license = { ...d.license, attribution: "Someone else" }),
+        (d) => void (d.citations = []),
+      ];
+      for (const change of changes) expect(statusOf(change)).toContain(changed);
+      // PHQ-9's crisis message, and one digit of one help line.
+      const phq9 = def("phq9");
+      expect(statusOf((d) => void (d.safety![0]!.message = "Call someone."), phq9)).toContain(
+        changed
       );
-      expect(statusOf((d) => void (d.bands[0]!.summary = "Your answers show few signs."))).toEqual(
-        []
+      const gb = (d: InstrumentDefinition) =>
+        d.safety![0]!.resources.find((r) => r.region === "GB")!;
+      expect(statusOf((d) => void (gb(d).lines[1] = "Samaritans: 116 124"), phq9)).toContain(
+        changed
       );
+      expect(statusOf(() => {}, phq9)).toEqual([]);
+    });
+
+    it("does not count the bookkeeping, or the order a file lists its fields in, as a change", () => {
+      expect(statusOf((d) => void (d.version = "9.9.9"))).toEqual([]);
+      expect(statusOf((d) => void (d.signOff[0]!.note = "Checked against the PDF."))).toEqual([]);
+      const reversed = (v: unknown): unknown =>
+        Array.isArray(v)
+          ? v.map(reversed)
+          : v !== null && typeof v === "object"
+            ? Object.fromEntries(
+                Object.entries(v)
+                  .reverse()
+                  .map(([k, x]) => [k, reversed(x)])
+              )
+            : v;
+      const d = def("phq9");
+      expect(reviewHash(reversed(d) as InstrumentDefinition)).toBe(reviewHash(d));
     });
 
     it("refuses a permission license with no record of the permission", () => {
