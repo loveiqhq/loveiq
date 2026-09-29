@@ -28,17 +28,23 @@ export function checkWalk(w: Walk): Check[] {
       ? { ok: true, what: `Reached the end in ${minutes(w.durationMs ?? 0)}.` }
       : { ok: false, what: `Stopped before the end: ${w.stoppedAt ?? "no reason recorded"}.` }
   );
-  // The server's answer is the score; the page's is what the reader was told. Both count.
-  const scored = w.serverArchetype ?? w.assignedArchetype;
-  if (scored !== undefined) {
+  // The server's answer is the score; the page's is what the reader was told. Both count,
+  // but only the server's can pass: a page reading that happens to match proves nothing.
+  const reachedReport = w.finished || w.steps.some((s) => s.kind === "report");
+  if (w.serverArchetype !== undefined) {
     checks.push(
-      scored === w.persona
+      w.serverArchetype === w.persona
         ? { ok: true, what: `The report named ${w.persona}, as the answers should.` }
         : {
             ok: false,
-            what: `Answered as ${w.persona}, but the report named ${scored ?? "no archetype"}.`,
+            what: `Answered as ${w.persona}, but the report named ${w.serverArchetype ?? "no archetype"}.`,
           }
     );
+  } else if (reachedReport) {
+    checks.push({
+      ok: false,
+      what: `Reached the report but never saw its score from the server${w.assignedArchetype ? `; the page led with ${w.assignedArchetype}` : ""}.`,
+    });
   }
   if (w.serverArchetype && w.assignedArchetype && w.serverArchetype !== w.assignedArchetype) {
     checks.push({

@@ -41,8 +41,9 @@ concurrency:
 jobs:
   walk:
     runs-on: ubuntu-latest
-    # Four walks of about eight minutes, then two judge passes of up to 25 minutes each.
-    timeout-minutes: 100
+    # What the job allows its own parts, added up: four walks of up to 20 minutes, two judge
+    # passes of up to 25, and about 15 to install. A walk takes about eight minutes.
+    timeout-minutes: 150
     steps:
       # No GitHub token left in .git/config: the judge can read this folder.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

@@ -138,12 +138,52 @@ export interface LoadedWalk {
   checks: Check[];
 }
 
+/** The lists every walk record has, for a record cut short or written by an older walker. */
+const NO_LISTS = {
+  unknownQuestions: [],
+  missingOptions: [],
+  steps: [],
+  timeline: [],
+  consoleErrors: [],
+  failedRequests: [],
+  slowRequests: [],
+};
+
+/**
+ * Every walk under `dir`, each on its own: one record that cannot be read becomes a stopped
+ * walk that says so, and the other walks' checks still reach the channel.
+ */
 export function loadWalks(dir: string): LoadedWalk[] {
   return readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && existsSync(join(dir, d.name, "walk.json")))
     .map((d) => {
-      const walk = JSON.parse(readFileSync(join(dir, d.name, "walk.json"), "utf8")) as Walk;
-      return { slug: d.name, walk, checks: checkWalk(walk) };
+      let walk: Walk;
+      let checks: Check[];
+      try {
+        const parsed = JSON.parse(readFileSync(join(dir, d.name, "walk.json"), "utf8")) as Walk;
+        if (typeof parsed?.persona !== "string") throw new Error("it names no persona");
+        walk = { ...NO_LISTS, ...parsed };
+        checks = checkWalk(walk);
+      } catch (err) {
+        // Not the parser's message: it can quote the record.
+        const why =
+          err instanceof SyntaxError
+            ? "it is not valid JSON"
+            : (err instanceof Error ? err.message : String(err)).slice(0, 120);
+        walk = {
+          ...NO_LISTS,
+          persona: d.name,
+          device: "a device its record does not say",
+          plan: null,
+          report: "default",
+          origin: "",
+          startedAt: "",
+          finished: false,
+          stoppedAt: `its record could not be read (${why})`,
+        };
+        checks = checkWalk(walk);
+      }
+      return { slug: d.name, walk, checks };
     })
     .sort((a, b) => a.slug.localeCompare(b.slug));
 }

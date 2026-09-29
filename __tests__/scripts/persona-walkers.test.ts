@@ -2,6 +2,10 @@
  * The persona walkers (scripts/walkers/): the answers each persona gives, which walks run
  * tonight, what a walk proves on its own, and what the judge may do and post.
  */
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { surveyQuestions } from "@/data/survey-data";
@@ -13,6 +17,7 @@ import {
   cleanFindings,
   judgeArgs,
   judgeEnv,
+  loadWalks,
   parseJsonAnswer,
   slackMessage,
   verdictOf,
@@ -183,11 +188,13 @@ const walk = (over: Partial<Walk> = {}): Walk => ({
   persona: "Spark Seeker",
   device: "iPhone 15 Pro",
   plan: "full_report",
+  report: "default",
   origin: "https://staging.loveiq.org",
   startedAt: "2026-09-29T02:41:00Z",
   finished: true,
   unknownQuestions: [],
   missingOptions: [],
+  serverArchetype: "Spark Seeker",
   assignedArchetype: "Spark Seeker",
   paid: true,
   locksBefore: 68,
@@ -207,9 +214,36 @@ describe("what a walk proves on its own", () => {
   });
 
   it("says when the report named another archetype", () => {
-    const c = checkWalk(walk({ assignedArchetype: "Radiant Performer" })).find((x) => !x.ok);
+    const c = checkWalk(
+      walk({ serverArchetype: "Radiant Performer", assignedArchetype: "Radiant Performer" })
+    ).find((x) => !x.ok);
     expect(c?.what).toContain("Spark Seeker");
     expect(c?.what).toContain("Radiant Performer");
+  });
+
+  it("never passes a report whose score it did not see, whatever the page said", () => {
+    const unseen = (w: Walk) =>
+      checkWalk(w).some((c) => !c.ok && c.what.includes("never saw its score from the server"));
+    // The page matching the persona is a heuristic that happens to agree, not proof.
+    expect(unseen(walk({ serverArchetype: undefined }))).toBe(true);
+    expect(unseen(walk({ serverArchetype: undefined, assignedArchetype: undefined }))).toBe(true);
+    const onTheReport = walk({
+      finished: false,
+      stoppedAt: "no unlock",
+      serverArchetype: undefined,
+      steps: [{ n: 1, kind: "report", at: 0, ms: 0, url: "/r", heading: null }],
+    });
+    expect(unseen(onTheReport)).toBe(true);
+    // The server saying it has no archetype is its own failure, not a pass.
+    expect(checkWalk(walk({ serverArchetype: null })).some((c) => !c.ok)).toBe(true);
+    // A walk that never got to the report has nothing to score: its stop is the finding.
+    const early = walk({
+      finished: false,
+      stoppedAt: "stuck on question 12",
+      serverArchetype: undefined,
+      assignedArchetype: undefined,
+    });
+    expect(unseen(early)).toBe(false);
   });
 
   it("takes the server's archetype as the score, and says when the page led with another", () => {
@@ -378,6 +412,43 @@ describe("the judge", () => {
     fix: "…",
     main: "same",
     ...over,
+  });
+
+  it("loads each walk on its own, so one unreadable record does not lose the others", () => {
+    const dir = mkdtempSync(join(tmpdir(), "walks-"));
+    try {
+      const put = (slug: string, text: string) => {
+        mkdirSync(join(dir, slug));
+        writeFileSync(join(dir, slug, "walk.json"), text);
+      };
+      put("a-good", JSON.stringify(walk()));
+      put("b-cut-short", '{"persona": "Spark Seeker", "steps": [');
+      const { timeline: _t, slowRequests: _s, ...older } = walk();
+      put("c-older-walker", JSON.stringify(older));
+      put("d-no-persona", JSON.stringify({ steps: [] }));
+      mkdirSync(join(dir, "e-no-record"));
+
+      const loaded = loadWalks(dir);
+      expect(loaded.map((w) => w.slug)).toEqual([
+        "a-good",
+        "b-cut-short",
+        "c-older-walker",
+        "d-no-persona",
+      ]);
+      expect(loaded[0]!.checks.every((c) => c.ok)).toBe(true);
+      expect(loaded[1]!.checks.find((c) => !c.ok)?.what).toBe(
+        "Stopped before the end: its record could not be read (it is not valid JSON)."
+      );
+      expect(loaded[2]!.walk.timeline).toEqual([]);
+      expect(loaded[2]!.checks.every((c) => c.ok)).toBe(true);
+      expect(loaded[3]!.checks.find((c) => !c.ok)?.what).toContain("it names no persona");
+
+      const text = slackMessage("2026-09-29", loaded, { failed: "no judge tonight" });
+      expect(text).toContain("4 walks, 2 reached the end");
+      expect(text).toContain("its record could not be read (it is not valid JSON)");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("posts every walk's problems and only the new confirmed findings", () => {
