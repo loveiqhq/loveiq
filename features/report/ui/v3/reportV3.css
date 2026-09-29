@@ -8726,3 +8726,20 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     flex-basis: calc((100% - 42px) / 4);
   }
 }
+
+/* ══ Desktop review — 28.09 (Notion) ═══════════════════════════════════════════════
+ * Mark, 29.09: "Finished my review for the Desktop version. left comments in Notion."
+ * (Review Round 28.09 – Desktop). The live page only (`.rv3.rv4`) and only from 700px,
+ * as the touch-up above, so the phone and the 393 preview are exactly as before. */
+@media (min-width: 700px) {
+  /* "Alignment of the Practical Element is off with the rest. The left should be aligned
+   * and the width should be equal with the text in Desktop." Both cards bleed 16px into
+   * the phone's gutter (`margin-inline: -16px`); from 700px the column rules pin their
+   * width to the column, so they sat 16px left of the text and 11px short of its right
+   * edge, and the 2.0 chapters' cards overhung both sides. Here they run the column. */
+  .rv3.rv4 .rv4-try,
+  .rv3.rv4 .rv4-learn {
+    margin-inline: 0;
+    width: 100%;
+  }
+}
