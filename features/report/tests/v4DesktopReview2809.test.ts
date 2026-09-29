@@ -281,3 +281,83 @@ describe("the top three take V2's desktop rows", () => {
     expect(v3).not.toContain("grid-template-rows: 26px auto 17.08px");
   });
 });
+
+// "Should also be a tile gallery that you can click through. Maybe make them bigger so that
+// you…" (the sentence stops there; Fatih, 29.09: build the gallery now). One snapping row
+// at 1.25x the phone's tile, a pager under it (V3Methodology / useSciPager).
+describe("the science tiles run as a gallery on desktop", () => {
+  it("runs the deck as one snapping row, flush with the column", () => {
+    const track = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__track");
+    for (const declaration of [
+      "display: flex",
+      "flex-wrap: nowrap",
+      "margin: 0",
+      "overflow-x: auto",
+      "overscroll-behavior-x: contain",
+      "padding: 6px 0",
+      "scroll-padding-inline: 0",
+      "scroll-snap-type: x mandatory",
+    ]) {
+      expect(track).toContain(declaration);
+    }
+  });
+
+  it("sets each tile at 1.25x the phone's 212 x 248, every length inside it with it", () => {
+    const card = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card");
+    expect(card).toContain("flex: 0 0 265px");
+    expect(card).toContain("height: 310px");
+    expect(card).toContain("padding: 19.92px 18.44px 20.9px");
+    const scaled: [string, string][] = [
+      [".rv3-sci__title", "font-size: 20px"],
+      [".rv3-sci__title", "line-height: 24px"],
+      [".rv3-sci__q", "font-size: 15px"],
+      [".rv3-sci__q", "width: 228.75px"],
+      [".rv3-sci__label", "font-size: 12.5px"],
+      [".rv3-sci__list", "min-height: 88.75px"],
+      [".rv3-sci__list li", "min-height: 25px"],
+      [".rv3-sci__icon", "width: 43.72px"],
+      [".rv3-sci__bullet", "width: 16.25px"],
+    ];
+    for (const [part, declaration] of scaled) {
+      expect(ruleIn(`.rv3.rv4 .rv3-method.is-v4 ${part}`), part).toContain(declaration);
+    }
+  });
+
+  it("draws the pager on the live desktop page only", () => {
+    // Before the touch-up mark, where a rule may reach the phone, the 393 preview and
+    // `?v3=1`: none of them draws it.
+    const at = v3.indexOf(".rv3 .rv3-method.is-v4 .rv3-sci__nav {");
+    expect(at).toBeGreaterThan(-1);
+    expect(at).toBeLessThan(v3.indexOf("Desktop touch-up — 28.09 (c)"));
+    expect(v3.split("\n").slice(0, 1884).join("\n")).not.toContain("rv3-sci__nav");
+    expect(firstRule(".rv3 .rv3-method.is-v4 .rv3-sci__nav")).toContain("display: none");
+    expect(ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__nav")).toContain("display: flex");
+  });
+
+  it("lifts the arrows only under a fine pointer, by the translate property", () => {
+    const hover = v3
+      .split("@media (hover: hover) and (pointer: fine) {")
+      .slice(1)
+      .map((rest) => rest.slice(0, rest.indexOf("\n}\n")))
+      .join("\n");
+    expect(hover).toContain(
+      '.rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:not([aria-disabled="true"]):hover'
+    );
+    expect(hover).toContain("translate: 0 -1px");
+    expect(v3).not.toMatch(/^\.rv3[^\n{]*\.rv3-sci__arrow[^\n{]*:hover/m);
+  });
+
+  it("rings the arrows and the dots for the keyboard", () => {
+    expect(
+      ruleIn(
+        ".rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:focus-visible,\n  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip:focus-visible"
+      )
+    ).toContain("outline: 2px solid var(--rv3-violet)");
+  });
+
+  it("drops the old grid's wrap and its two-, three- and four-across widths", () => {
+    expect(v3).not.toContain("(100% - 12px) / 2");
+    expect(v3).not.toContain("(100% - 28px) / 3");
+    expect(v3).not.toContain("(100% - 42px) / 4");
+  });
+});

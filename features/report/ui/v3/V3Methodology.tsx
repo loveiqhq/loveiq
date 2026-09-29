@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
 import { REPORT_V4_CLOSING } from "@/data/report3-archetype-page";
+import useSciPager from "./useSciPager";
 import V4Runs from "./V4Runs";
 
 /**
@@ -10,7 +11,28 @@ import V4Runs from "./V4Runs";
  * Universal, archetype-independent content: the eyebrow + heading + intro, a
  * horizontally-scrolled deck of seven science cards (10360:9879, each linking to
  * the chapters it feeds), a pagination dot row, and three source cards.
+ *
+ * From 700px V4's deck is a gallery (Mark's desktop review, 28.09): one row of tiles
+ * at 1.25x, the next one cut by the column's edge, and a pager under it (useSciPager).
+ * The phone keeps its dot row, which only reports; the pager is drawn nowhere else.
  */
+
+/** 304:263's 15px chevron, stroke 3, turned to point back or on. */
+const Chevron: FC<{ back?: boolean }> = ({ back = false }) => (
+  <svg viewBox="0 0 15 15" fill="none" aria-hidden="true">
+    <path
+      d={
+        back
+          ? "M9.375 3.28125L5.15625 7.5L9.375 11.7188"
+          : "M5.625 3.28125L9.84375 7.5L5.625 11.7188"
+      }
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 interface ScienceCard {
   /** Accent, taken from the stroke baked into each card's exported icon —
@@ -148,9 +170,12 @@ interface Props {
 }
 
 const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
-  const cards = chrome === "deck" ? CARDS_V4 : CARDS;
+  const deck = chrome === "deck";
+  const cards = deck ? CARDS_V4 : CARDS;
   const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+  const trackId = useId();
+  const pager = useSciPager(trackRef, cards.length, deck);
 
   // The dot row reflects which card is nearest the scroller's left edge.
   useEffect(() => {
@@ -212,7 +237,7 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
       ) : null}
 
       <div className="rv3-sci" data-node-id="10360:9879">
-        <div className="rv3-sci__track" ref={trackRef}>
+        <div className="rv3-sci__track" ref={trackRef} id={deck ? trackId : undefined}>
           {cards.map((card) => (
             <article
               key={card.title}
@@ -264,6 +289,45 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
             <span key={c.title} className={i === active ? "is-active" : ""} />
           ))}
         </div>
+        {/* The desktop gallery's pager: hidden on the phone and in the 393 preview. The
+         * arrows stay focusable at the ends (aria-disabled), so a keyboard keeps its place. */}
+        {deck && pager.stops.length > 1 ? (
+          <div className="rv3-sci__nav" role="group" aria-label="Science cards">
+            <button
+              type="button"
+              className="rv3-sci__arrow"
+              aria-label="Previous card"
+              aria-controls={trackId}
+              aria-disabled={pager.at <= 0 || undefined}
+              onClick={() => pager.step(-1)}
+            >
+              <Chevron back />
+            </button>
+            <div className="rv3-sci__pips">
+              {pager.stops.map((stop, k) => (
+                <button
+                  key={stop.card}
+                  type="button"
+                  className={`rv3-sci__pip${k === pager.at ? " is-active" : ""}`}
+                  aria-label={`Show ${cards[stop.card]!.title}`}
+                  aria-current={k === pager.at ? "true" : undefined}
+                  aria-controls={trackId}
+                  onClick={() => pager.goTo(k)}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              className="rv3-sci__arrow"
+              aria-label="Next card"
+              aria-controls={trackId}
+              aria-disabled={pager.at >= pager.stops.length - 1 || undefined}
+              onClick={() => pager.step(1)}
+            >
+              <Chevron />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="rv3-src" data-node-id="10392:18700">
