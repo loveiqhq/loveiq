@@ -8645,10 +8645,9 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
  * 620–917px from 700 up, and a handful of V4 blocks kept their phone widths inside it,
  * each leaving half the column white beside it. Measured at 1536 (917 column): the
  * archetype card's match row and tagline at 323 and its motivation body at 281, the
- * fantasy map's plot at 300 and the fantasy table at 328, each top-three row holding
- * the phone's 100px description track for a one-line description, the science cards'
+ * fantasy map's plot at 300 and the fantasy table at 328, the science cards'
  * questions at 183 in 295px cards, and the Summary's copy centred 80px in from its own
- * heading. Each now takes the column the way the blocks around it do; copy keeps
+ * heading (the top three's rows, then here too, now follow V2's desktop rows below). Each now takes the column the way the blocks around it do; copy keeps
  * production's 760 measure. The live page only (`.rv3.rv4`) and only from 700px, so the
  * phone and the 393 preview are exactly as before. */
 @media (min-width: 700px) {
@@ -8673,12 +8672,6 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   .rv3.rv4 .rv3-arch__motive-body {
     max-width: 760px;
     width: auto;
-  }
-
-  /* 1:497 — a row as tall as its description: at this width it is one or two lines,
-   * and the phone's 100px track left a band of white under it in every row. */
-  .rv3.rv4 .rv4-top3 .rv3-top3__row {
-    grid-template-rows: 26px auto 17.08px;
   }
 
   /* 1:736 — the copy under its heading's left edge, not centred in the column. */
@@ -8826,5 +8819,66 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     position: relative;
     top: auto;
     transform: none;
+  }
+
+  /* "Lets follow the V2 desktop of Other Archetypes for this and cap after the first 3.
+   * But take out 'View Report'." V2's rows (8946:4058, report.css's constellation row,
+   * which V4 already draws in its own Other Archetypes chapter): rank, icon, the name
+   * over its line, the bar and the %, on one line and centred on it, at V2's type
+   * clamps and bar width, a hairline between the plain rows. Three rows and no View
+   * report, as V3TopThree already has it. Fatih (29.09) kept V4's #1 card, Sanjin's
+   * descriptions and the count-up. The rank and % tracks are fixed, not V2's auto:
+   * each row is its own grid, and auto tracks sized to each rank or to a % still
+   * counting up would set the icons and bars a few px apart, row to row. */
+  .rv3.rv4 .rv4-top3 .rv3-top3__row {
+    column-gap: clamp(12px, 1.4vw, 16px);
+    grid-template-areas:
+      "rank icon name bar pct"
+      "rank icon blurb bar pct";
+    grid-template-columns: 28px 24px minmax(0, 1fr) clamp(96px, 12vw, 160px) 52px;
+    grid-template-rows: auto auto;
+    row-gap: 2px;
+  }
+  /* The #1 card's ring sits inside its box: a pixel less padding keeps its columns on
+   * the other rows'. The phone's taller foot goes with the stacked layout. */
+  .rv3.rv4 .rv4-top3 .rv3-top3__row.is-lead {
+    padding: 13px 11px 14px;
+  }
+  .rv3.rv4 .rv4-top3 .rv3-top3__row:not(.is-lead) + .rv3-top3__row {
+    margin-top: 0;
+  }
+  .rv3.rv4 .rv4-top3 .rv3-top3__row:not(.is-lead):not(:last-child) {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  .rv3.rv4 .rv4-top3 .rv3-top3__rank {
+    font-size: clamp(1.15rem, 1.6vw, 1.5rem);
+    grid-area: rank;
+    line-height: 1.17;
+  }
+  .rv3.rv4 .rv4-top3 .rv3-top3__icon {
+    align-self: center;
+    grid-area: icon;
+    margin-top: 0;
+  }
+  /* V2 sets every name alike; the #1 card carries the lead's emphasis. */
+  .rv3.rv4 .rv4-top3 .rv3-top3__name {
+    font-size: clamp(1rem, 1.5vw, 1.25rem);
+    grid-area: name;
+    line-height: 1.125;
+  }
+  /* Two sentences at 12/19.2, held to about 75 characters a line: V2's 384 suits its
+   * one-line motto at 11px and would stack these four deep. */
+  .rv3.rv4 .rv4-top3 .rv3-top3__blurb {
+    grid-area: blurb;
+    max-width: 480px;
+    padding-top: 0;
+  }
+  .rv3.rv4 .rv4-top3 .rv3-top3__bar {
+    grid-area: bar;
+  }
+  .rv3.rv4 .rv4-top3 .rv3-top3__pct {
+    font-size: clamp(0.875rem, 1.2vw, 1rem);
+    grid-area: pct;
+    line-height: 1.22;
   }
 }

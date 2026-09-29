@@ -198,3 +198,86 @@ describe("the closed teasers fade their last three lines and keep the pill close
     ).toContain("margin-bottom: 0");
   });
 });
+
+// "Lets follow the V2 desktop of Other Archetypes for this and cap after the first 3. But
+// take out 'View Report'." V2's rows (8946:4058; report.css .report-constellation__row,
+// which V4 already draws in its own Other Archetypes chapter): rank, icon, the name over
+// its line, the bar and the % on one line and centred on it. Fatih (29.09): keep V4's #1
+// card, its descriptions and its count-up.
+describe("the top three take V2's desktop rows", () => {
+  const v2 = readFileSync(join(__dirname, "..", "ui", "report.css"), "utf8");
+  const v2Rule = (selector: string) => {
+    const at = v2.indexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThan(-1);
+    return v2.slice(at, v2.indexOf("}", at));
+  };
+  /** The clamp() a rule gives `property`, or undefined. */
+  const clampOf = (rule: string, property: string) => {
+    const at = rule.indexOf(`${property}: clamp(`);
+    return at < 0 ? undefined : rule.slice(at + property.length + 2, rule.indexOf(";", at));
+  };
+
+  it("lays each row as rank, icon, the name over its description, the bar and the %", () => {
+    const row = flat(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row"));
+    expect(row).toContain(
+      flat(`grid-template-areas: "rank icon name bar pct" "rank icon blurb bar pct"`)
+    );
+    expect(row).toContain(
+      flat("grid-template-columns: 28px 24px minmax(0, 1fr) clamp(96px, 12vw, 160px) 52px")
+    );
+    expect(row).toContain("grid-template-rows:autoauto");
+    expect(row).toContain("column-gap:clamp(12px,1.4vw,16px)");
+    expect(row).toContain("row-gap:2px");
+    for (const [part, area] of [
+      ["rank", "rank"],
+      ["icon", "icon"],
+      ["name", "name"],
+      ["blurb", "blurb"],
+      ["bar", "bar"],
+      ["pct", "pct"],
+    ] as const) {
+      expect(ruleIn(`.rv3.rv4 .rv4-top3 .rv3-top3__${part}`), part).toContain(`grid-area: ${area}`);
+    }
+  });
+
+  it("sets them at V2's own sizes, so they match the Other Archetypes chapter at every width", () => {
+    expect(clampOf(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__rank"), "font-size")).toBe(
+      clampOf(v2Rule(".report-constellation__rank"), "font-size")
+    );
+    expect(clampOf(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__name"), "font-size")).toBe(
+      clampOf(v2Rule(".report-constellation__name"), "font-size")
+    );
+    expect(clampOf(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__pct"), "font-size")).toBe(
+      clampOf(v2Rule(".report-constellation__pct"), "font-size")
+    );
+    expect(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row")).toContain(
+      clampOf(v2Rule(".report-constellation__bar"), "width")
+    );
+    expect(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row")).toContain(
+      clampOf(v2Rule(".report-constellation__row"), "column-gap")
+    );
+  });
+
+  it("keeps V4's #1 card, its ring inside the row's columns, and its description's measure", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row.is-lead")).toContain(
+      "padding: 13px 11px 14px"
+    );
+    expect(v3).toMatch(/\.rv3-top3__row\.is-lead \{[^}]*background: color-mix/);
+    const blurb = ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__blurb");
+    expect(blurb).toContain("max-width: 480px");
+    expect(blurb).toContain("padding-top: 0");
+  });
+
+  it("splits the two plain rows with V2's hairline, flush", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row:not(.is-lead):not(:last-child)")).toContain(
+      "border-bottom: 1px solid rgba(0, 0, 0, 0.05)"
+    );
+    expect(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row:not(.is-lead) + .rv3-top3__row")).toContain(
+      "margin-top: 0"
+    );
+  });
+
+  it("leaves no rule for the phone's stacked rows behind", () => {
+    expect(v3).not.toContain("grid-template-rows: 26px auto 17.08px");
+  });
+});
