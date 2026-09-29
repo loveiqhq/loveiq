@@ -1,11 +1,12 @@
 "use client";
 
-import { useId, useState, type CSSProperties, type FC } from "react";
+import { useId, useRef, useState, type CSSProperties, type FC } from "react";
 import type { Report3Block } from "@/data/report3-learn-more";
 import type { Report3PracticeView } from "@features/report/server/gatedCopy";
 import { isTimeLabel, splitEyebrow, splitTitle } from "./V4LearnMore";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
+import { useTeaserFade } from "./useTeaserFade";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
@@ -114,6 +115,9 @@ const V4TryThis: FC<Props> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
+  // The closed teaser greys its last three lines, wherever they fall.
+  const teaserRef = useRef<HTMLDivElement>(null);
+  useTeaserFade(teaserRef, !isOpen);
   const [eyebrowLabel, eyebrowValue] = splitEyebrow(practice.eyebrow);
   const [titleLead, titleRest] = splitTitle(practice.title);
   const { free, ramp, rest } = practice;
@@ -172,7 +176,7 @@ const V4TryThis: FC<Props> = ({
       <div className="rv4-try__body" id={bodyId}>
         {!isOpen ? (
           <div className="rv4-try__closed">
-            <div className="rv4-try__teaser">
+            <div className="rv4-try__teaser" ref={teaserRef}>
               <V4Prose blocks={practice.teaser ?? teaserOf(all)} />
             </div>
             {/* 894:7594 "Show all pill" — "Read All", 126x32, at 298 of the card. The

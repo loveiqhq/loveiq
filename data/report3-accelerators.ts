@@ -268,13 +268,13 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
         )
       ),
     ],
-    // 377:242 — the same first paragraph, broken with a blank line after the lead and
-    // a fresh line before "A playful message".
+    // 377:242 — the same first paragraph, on a fresh line after the lead and another
+    // before "A playful message": one line separator each, no blank line.
     practiceTeaser: [
       p(
         b("Notice the moment the state changes."),
         t(
-          " \n\nInstead of judging desire globally as high or low, pay attention to transitions. When did interest increase? When did it suddenly disappear? What happened immediately beforehand? \nA playful message, a confident look, a change of setting, an expectation, criticism or a shift into serious conversation can reveal far more than asking whether the Spark Seeker simply “has enough desire.”"
+          " \nInstead of judging desire globally as high or low, pay attention to transitions. When did interest increase? When did it suddenly disappear? What happened immediately beforehand? \nA playful message, a confident look, a change of setting, an expectation, criticism or a shift into serious conversation can reveal far more than asking whether the Spark Seeker simply “has enough desire.”"
         )
       ),
     ],
