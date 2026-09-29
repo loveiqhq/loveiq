@@ -1566,4 +1566,46 @@ export const surveyQuestions: SurveyQuestion[] = [
       "The only behavioural signal in this block. What people say they want and what they sign up for usually differ, and the sign-up is the one to trust.",
     formatGuidance: "Select one option.",
   },
+  {
+    qId: "16019",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question:
+      "What are the most interesting insights that you have come across around sexuality to date?",
+    answerType: "open",
+    options: ["Free text"],
+    required: false,
+    guide:
+      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
+    supportAndGuidance:
+      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
+    inputType: "text",
+    placeholder: "Type your answer…",
+    comment:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    howAnswerIsUsed:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    formatGuidance: "Optional. Share as much or as little as you like.",
+  },
+  {
+    qId: "16020",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question:
+      "What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?",
+    answerType: "open",
+    options: ["Free text"],
+    required: false,
+    guide:
+      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
+    supportAndGuidance:
+      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
+    inputType: "text",
+    placeholder: "Type your answer…",
+    comment:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    howAnswerIsUsed:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    formatGuidance: "Optional. Share as much or as little as you like.",
+  },
 ];

@@ -632,7 +632,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
             <SurveyNav
               canGoBack={currentIndex > 0}
               canGoNext={canGoNext}
-              hasAnswer={hasAnswer}
+              // Drawn "ready" on an optional question even when it is empty: the faded
+              // Next would tell the respondent they are blocked when they are not.
+              hasAnswer={hasAnswer || !question.required}
               statusText={statusText}
               onPrevious={goPrev}
               onNext={goNext}

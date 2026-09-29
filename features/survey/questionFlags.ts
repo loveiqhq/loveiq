@@ -68,3 +68,20 @@ export const HIDDEN_QIDS: ReadonlySet<string> = new Set(["15011"]);
 export function isHidden(qId: string): boolean {
   return HIDDEN_QIDS.has(qId);
 }
+
+/**
+ * Open questions answered in a multi-line box instead of a single-line input.
+ *
+ * `16019` and `16020` are Mark's content asks (29.09): the most interesting insights about
+ * sexuality someone has come across, and the books, articles, blogs or YouTube channels
+ * they rate. Both invite a list or a few sentences, which a single line would clip.
+ *
+ * A presentation flag, so it lives here with the others rather than in a CSV column the
+ * next upstream export could drop.
+ */
+export const MULTILINE_QIDS: ReadonlySet<string> = new Set(["16019", "16020"]);
+
+/** Whether this open question is answered in a multi-line box. */
+export function isMultiline(qId: string): boolean {
+  return MULTILINE_QIDS.has(qId);
+}

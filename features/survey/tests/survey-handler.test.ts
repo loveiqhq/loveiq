@@ -518,6 +518,35 @@ describe("POST /api/survey", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────────
+  // Optional content asks (16019, 16020)
+  // ────────────────────────────────────────────────────────────────────────
+
+  it("drops a blank optional answer before submit_survey, and keeps one that says something", async () => {
+    // A box typed into and cleared leaves "" behind. submit_survey would store it as an
+    // empty answer_text row that reads as answered, so the route drops it first.
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    await POST(
+      makeRequest({
+        ...validBody(),
+        answers: { ...validBody().answers, "16019": "   ", "16020": "Come as you are" },
+      })
+    );
+
+    const rpcCall = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/rpc/submit_survey")
+    );
+    expect(rpcCall, "expected RPC call to submit_survey").toBeDefined();
+    const rpcBody = JSON.parse((rpcCall![1] as { body: string }).body);
+    expect(rpcBody.p_answers).not.toHaveProperty("16019");
+    expect(rpcBody.p_answers["16020"]).toBe("Come as you are");
+    expect(rpcBody.p_answers.q1).toBe("yes");
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
   // Q16015 marketing opt-in
   // ────────────────────────────────────────────────────────────────────────
 

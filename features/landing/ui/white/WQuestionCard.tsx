@@ -37,11 +37,13 @@ const GUIDE_LONG = `${GUIDE_SHORT} If you are not having sex right now, rate how
  * missed twice — it read 59 while the survey asked 57 — and the demand block would
  * have made it a third. `WQuestionCard.test.tsx` now asserts it against
  * `SURVEY_TOTAL_QUESTIONS`, which is derived, so the next change fails in CI
- * instead of quietly showing the reader a wrong number.
+ * instead of quietly showing the reader a wrong number. 62 since the two optional
+ * content asks (16019, 16020): they are asked, so they count, even though a
+ * respondent may leave them blank.
  *
  * Exported for that test only.
  */
-export const TOTAL_QUESTIONS = 60;
+export const TOTAL_QUESTIONS = 62;
 
 /** Ring / dot diameters per scale point (Figma "scale" asset, 1→7). */
 const SCALE = [

@@ -219,13 +219,19 @@ function main() {
     const answerOptions = (row["Answer options"] || row["Answer Options"] || "").trim();
     const answerTypeRaw = (row["Answer format"] || row["Answer Type"] || "").trim();
     const howAnswerIsUsed = cleanText(row["How this answer will be used"] || row["Comment"] || "");
-    // Marketing opt-in questions (e.g. Q16015) are not required.
-    // Convention: "Marketing opt-in" in the "How this answer will be used" column flips required→false.
-    const required = !/marketing opt-in/i.test(howAnswerIsUsed);
+    const formatGuidance = cleanText(row["Answer format guidance"] || "");
+    // Two conventions flip required→false, both read off copy the source already carries
+    // rather than a dedicated column (the V3 export drops columns; see questionFlags.ts):
+    //  - "Marketing opt-in" in the "How this answer will be used" column (e.g. Q16015);
+    //  - an "Answer format guidance" that begins "Optional" (Q16019, Q16020). That sentence
+    //    is the subtitle the respondent reads, the same way the selection cap below is read
+    //    out of "Select up to three options.", so what the respondent is told and how the
+    //    question behaves cannot drift apart.
+    const required =
+      !/marketing opt-in/i.test(howAnswerIsUsed) && !/^optional\b/i.test(formatGuidance);
     const supportAndGuidance = cleanText(
       row["Support and guidance"] || row["Guide (display)"] || row["Info and guidance"] || ""
     );
-    const formatGuidance = cleanText(row["Answer format guidance"] || "");
     // V3 CSV drops the explicit "Max selections" column. The cap was previously
     // embedded as "(Pick up to N.)" in the question text — V3 (May 2026) moved
     // that wording into the formatGuidance column as "Select up to N options." or

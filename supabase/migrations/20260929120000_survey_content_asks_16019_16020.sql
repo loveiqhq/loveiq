@@ -1,0 +1,90 @@
+-- Database rows for Mark's two open-text content asks, 16019 and 16020.
+--
+-- WHY THE ROWS. submit_survey resolves a question by survey_question.frontend_qid and,
+-- finding nothing, skips the answer with no error (see 20260918081040). Without these rows
+-- both questions would render, feel normal, and collect nothing. Open questions take no
+-- answer_option rows: the answer lands in survey_submission_answer.answer_text, as it does
+-- for 00001 and 15002 (seed, 20260307100001).
+--
+-- BOTH ARE OPTIONAL. required = false matches the survey data, where the flag is derived
+-- from the subtitle the respondent reads ("Optional. Share as much or as little as you
+-- like."). The API drops a blank optional answer before submit_survey runs, so a skipped
+-- question stores no row at all rather than an empty one.
+--
+-- STAGING ONLY, LIKE THE DEMAND BLOCK. Production renders the survey from main, which does
+-- not ask these questions, so the rows are inert there: shown to nobody, and only a
+-- reverse-direction WARNING in check-survey-db-sync and /admin/health until the frontend
+-- reaches main. They must exist in the STAGING database for staging to keep the answers,
+-- and in the database the survey-db-sync workflow checks, or a push to staging goes red
+-- (the rows it cannot find are CRITICAL).
+--
+-- Idempotent. Each insert skips when its frontend_qid already holds the SAME question,
+-- and refuses outright when the id holds a different one: answers to a new question must
+-- never merge into an unrelated row under a shared id (the reason retired ids are never
+-- reused, see features/survey/ui/questionOrder.ts).
+--
+-- display_order appends after the current maximum; the survey renders in qId order and
+-- this column only affects admin listings (20260911152724).
+
+-- 16019 - the most interesting insights about sexuality someone has come across.
+DO $$
+DECLARE
+  v_survey_id BIGINT;
+  v_q_id      BIGINT;
+  v_order     INTEGER;
+  v_existing  TEXT;
+BEGIN
+  SELECT question INTO v_existing FROM survey_question WHERE frontend_qid = '16019';
+  IF FOUND THEN
+    IF v_existing = 'What are the most interesting insights that you have come across around sexuality to date?' THEN
+      RAISE NOTICE 'survey_question 16019 already exists, skipping';
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'survey_question 16019 already exists with different text (%) - refusing to merge new answers into it', v_existing;
+  END IF;
+
+  SELECT id INTO v_survey_id FROM survey WHERE title = 'LoveIQ Survey' AND status = 'active' LIMIT 1;
+  IF v_survey_id IS NULL THEN
+    RAISE EXCEPTION 'No active "LoveIQ Survey" row found - refusing to add an orphan question';
+  END IF;
+
+  SELECT COALESCE(MAX(display_order), 0) + 1 INTO v_order FROM survey_question;
+
+  INSERT INTO survey_question (type, question, subinfo, display_order, required, frontend_qid, status)
+  VALUES ('open', 'What are the most interesting insights that you have come across around sexuality to date?', 'We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.', v_order, false, '16019', 'active')
+  RETURNING id INTO v_q_id;
+
+  INSERT INTO survey_question_mapping (survey_id, question_id) VALUES (v_survey_id, v_q_id);
+END $$;
+
+-- 16020 - the best books, articles, blogs or YouTube channels about sexuality someone knows.
+DO $$
+DECLARE
+  v_survey_id BIGINT;
+  v_q_id      BIGINT;
+  v_order     INTEGER;
+  v_existing  TEXT;
+BEGIN
+  SELECT question INTO v_existing FROM survey_question WHERE frontend_qid = '16020';
+  IF FOUND THEN
+    IF v_existing = 'What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?' THEN
+      RAISE NOTICE 'survey_question 16020 already exists, skipping';
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'survey_question 16020 already exists with different text (%) - refusing to merge new answers into it', v_existing;
+  END IF;
+
+  SELECT id INTO v_survey_id FROM survey WHERE title = 'LoveIQ Survey' AND status = 'active' LIMIT 1;
+  IF v_survey_id IS NULL THEN
+    RAISE EXCEPTION 'No active "LoveIQ Survey" row found - refusing to add an orphan question';
+  END IF;
+
+  SELECT COALESCE(MAX(display_order), 0) + 1 INTO v_order FROM survey_question;
+
+  INSERT INTO survey_question (type, question, subinfo, display_order, required, frontend_qid, status)
+  VALUES ('open', 'What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?', 'We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.', v_order, false, '16020', 'active')
+  RETURNING id INTO v_q_id;
+
+  INSERT INTO survey_question_mapping (survey_id, question_id) VALUES (v_survey_id, v_q_id);
+END $$;
+

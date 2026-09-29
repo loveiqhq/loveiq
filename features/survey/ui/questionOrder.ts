@@ -77,6 +77,46 @@ export function orderDemandBlockBeforeEmail(questions: SurveyQuestion[]): Survey
 }
 
 /**
+ * Mark's two open-text content asks (29.09): the most interesting insights about sexuality
+ * someone has come across, and the best books, articles, blogs or YouTube channels they
+ * know. Both are optional, and both feed the report's Learn and Practice sections rather
+ * than the archetype.
+ */
+export const CONTENT_ASK_QIDS: readonly string[] = ["16019", "16020"];
+
+/**
+ * Move the content asks to sit immediately before C9 (16016).
+ *
+ * WHY THESE IDS, AND WHY A RENDER-TIME MOVE. The same two reasons as the demand block:
+ * every id below the opt-in is live or retired-but-still-holding-answers, so these were
+ * allocated above the demand block, and `scripts/update-survey.js` sorts by qId, so without
+ * this they would render after the opt-in.
+ *
+ * WHY BEFORE C9 (Fatih, 29.09). The buying and spend questions before them are about the
+ * respondent's sex life; C9 opens "Beyond sex". Asking these two first keeps the
+ * sexuality questions together and lets the demand block lead into email and the opt-in.
+ * Never between C9 and C10 or C12, which refer back to C9's picks.
+ *
+ * Anchors on C9, then email, then the opt-in, so the asks never land after the final
+ * question whichever of those is present. Pure and total, like the stages above: a
+ * permutation that keeps every other question's relative order and the asks' own order.
+ */
+export function orderContentAsksBeforeDemandBlock(questions: SurveyQuestion[]): SurveyQuestion[] {
+  const asks = CONTENT_ASK_QIDS.map((qId) => questions.find((q) => q.qId === qId)).filter(
+    (q): q is SurveyQuestion => q !== undefined
+  );
+  if (asks.length === 0) return questions; // nothing to move
+
+  const rest = questions.filter((q) => !CONTENT_ASK_QIDS.includes(q.qId));
+  const anchorIdx = [DEMAND_BLOCK_QIDS[0], EMAIL_QID, OPT_IN_QID]
+    .map((qId) => rest.findIndex((q) => q.qId === qId))
+    .find((idx) => idx !== -1);
+  if (anchorIdx === undefined) return questions; // defensive: no anchor, leave untouched
+
+  return [...rest.slice(0, anchorIdx), ...asks, ...rest.slice(anchorIdx)];
+}
+
+/**
  * C13 variant — the opening order the teardown proposes, exactly as specified.
  *
  * Slots 1-8. `00001` (name) and `01002` (satisfaction baseline) are unchanged;
@@ -180,7 +220,9 @@ export function orderAskedQuestions(
   questions: SurveyQuestion[],
   arm: QuestionOrderArm
 ): SurveyQuestion[] {
-  const base = orderDemandBlockBeforeEmail(orderEmailLast(questions));
+  const base = orderContentAsksBeforeDemandBlock(
+    orderDemandBlockBeforeEmail(orderEmailLast(questions))
+  );
   return arm === "variant" ? orderC13Opening(base) : base;
 }
 

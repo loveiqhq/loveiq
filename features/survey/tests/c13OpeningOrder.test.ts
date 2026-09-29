@@ -8,9 +8,8 @@ import {
   C13_DEMOTED,
   C13_DEMOTED_AFTER,
   C13_OPENING,
+  orderAskedQuestions,
   orderC13Opening,
-  orderDemandBlockBeforeEmail,
-  orderEmailLast,
 } from "@features/survey/ui/questionOrder";
 import {
   assignQuestionOrderArm,
@@ -19,13 +18,15 @@ import {
   resolveQuestionOrderOverride,
 } from "@shared/experiments/questionOrderArm";
 
-/** The production pipeline, minus the per-respondent prefill filter. */
+/**
+ * The production pipeline, minus the per-respondent prefill filter. Built from the
+ * composer, never by hand: a hand-built pipeline silently stopped matching the engine when
+ * the content asks (16019, 16020) gained their own stage.
+ */
 const control = () =>
-  orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions)).filter((q) => !isHidden(q.qId));
+  orderAskedQuestions(surveyQuestions, "control").filter((q) => !isHidden(q.qId));
 const variant = () =>
-  orderC13Opening(orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions))).filter(
-    (q) => !isHidden(q.qId)
-  );
+  orderAskedQuestions(surveyQuestions, "variant").filter((q) => !isHidden(q.qId));
 const ids = (qs: SurveyQuestion[]) => qs.map((q) => q.qId);
 const chapterOf = (qId: string) => surveyQuestions.find((q) => q.qId === qId)?.chapter ?? "";
 

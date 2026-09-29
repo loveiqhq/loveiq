@@ -118,8 +118,13 @@ vi.mock("@features/survey/ui/SurveyHeader", () => ({
 }));
 
 vi.mock("@features/survey/ui/SurveyNav", () => ({
-  default: (props: { canGoNext: boolean; onNext: () => void; onPrevious: () => void }) => (
-    <div data-testid="survey-nav">
+  default: (props: {
+    canGoNext: boolean;
+    hasAnswer: boolean;
+    onNext: () => void;
+    onPrevious: () => void;
+  }) => (
+    <div data-testid="survey-nav" data-ready={String(props.hasAnswer)}>
       <button data-testid="survey-nav-prev" onClick={props.onPrevious}>
         Previous
       </button>
@@ -252,6 +257,27 @@ describe("SurveyEngine", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("open-response")).toBeInTheDocument();
     expect(screen.getByText("Q3?")).toBeInTheDocument();
+  });
+
+  it("lets an optional open question go Next with nothing typed", () => {
+    // Mark's content asks (16019, 16020) are optional: an empty box must never block the
+    // survey. q3 is the fixture's optional open question.
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav-next")).not.toBeDisabled();
+  });
+
+  it("draws Next as ready on an empty optional question, not in its greyed 'answer first' style", () => {
+    // SurveyNav fades Next until the question has an answer. On an optional question that
+    // fade tells the respondent they are blocked when they are not.
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav")).toHaveAttribute("data-ready", "true");
+  });
+
+  it("still fades Next on an empty required question", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav")).toHaveAttribute("data-ready", "false");
   });
 
   it("renders multiple choice question component for answerType multiple", () => {
