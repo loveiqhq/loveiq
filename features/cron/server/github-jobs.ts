@@ -14,7 +14,8 @@
  * The brain's daily jobs (brain-daily.yml) are here too since 2026-09-28, the day the miner
  * ran 8.5 hours late and set off two stall alerts. The brief had been scheduled at 01:10 so
  * that it landed in the morning; it now starts in the morning. The brain's embedding
- * catch-up (brain-embed.yml) is hourly: it has no time of day.
+ * catch-up (brain-embed.yml) is hourly: it has no time of day. The persona walks on staging
+ * (persona-walkers.yml) run nightly at 02:41.
  */
 
 export interface GithubJob {
@@ -33,6 +34,7 @@ export const CLOCK_WORKFLOWS = [
   "ux-digest-audit.yml",
   "brain-embed.yml",
   "brain-daily.yml",
+  "persona-walkers.yml",
 ] as const;
 
 /** The jobs to start at `at`, a run of the hourly :41 cron. Times are UTC. */
@@ -61,6 +63,9 @@ export function jobsDue(at: Date): GithubJob[] {
   // The brain, on the teamwork@ Claude seat. The Night Shift answers the day's queued
   // research by morning; the Monday report follows the test batteries it reports on.
   if (hour === 0) jobs.push(brain("brain-night-shift"));
+  // Persona walks on staging, judged on the same seat: after the Night Shift, before the
+  // brief. Four walks and two judge passes take about an hour.
+  if (hour === 2) jobs.push({ workflow: "persona-walkers.yml" });
   if (monday && hour === 1) jobs.push(brain("brain-health"));
   // The brief, and two retries: its day claim makes a retry a no-op once one delivered.
   if (hour >= 6 && hour <= 8) jobs.push(brain("brain-brief"));

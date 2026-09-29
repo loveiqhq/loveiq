@@ -1,0 +1,166 @@
+name: Persona walks on staging
+
+# Four scripted people a night take the survey on staging.loveiq.org, one archetype each,
+# read the free report, buy a plan with Stripe's test card and read what they bought
+# (scripts/walkers/walk.ts; which four: scripts/walkers/rotation.ts). A judge on the
+# teamwork@ Claude seat then says what a real person would have run into, against Marcus's
+# 22 signals; a second pass tries to prove each finding wrong; what survives goes to #brain
+# and to Jarvis (scripts/walkers/judge.ts).
+#
+# STAGING ONLY. A walk submits, pays and emails. On staging all three are harmless: its own
+# database, Stripe in test mode, its alerts in #brain, email to Resend's test inbox.
+# walk.ts refuses any other host.
+#
+# NOTHING IS UPLOADED. This repository is public, and so are its artifacts and logs; the
+# screenshots include the unlocked paid report. The walks and the judge share one job so
+# the screenshots never leave the runner, and the log carries counts, not findings.
+#
+# NO `schedule:`. Vercel's clock starts it at 02:41 UTC (features/cron/server/github-jobs.ts):
+# GitHub's own schedule starts this repository's jobs hours late.
+
+on:
+  workflow_dispatch:
+    inputs:
+      walks:
+        description: 'Optional: a JSON list of {"persona","device","plan"}. Empty walks tonight''s rotation.'
+        required: false
+        default: ""
+      judge:
+        description: "Judge the walks and post the result (off: walk only, post nothing)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One night at a time: two runs would walk the same people and post twice.
+concurrency:
+  group: persona-walkers
+  cancel-in-progress: false
+
+jobs:
+  walk:
+    runs-on: ubuntu-latest
+    # Four walks of about eight minutes, then two judge passes of up to 25 minutes each.
+    timeout-minutes: 100
+    steps:
+      # No GitHub token left in .git/config: the judge can read this folder.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: main
+          persist-credentials: false
+
+      # Staging's own code, for the judge to trace a finding to (the walk runs from main).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: staging
+          path: staging
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: main/package-lock.json
+
+      - run: npm ci
+        working-directory: main
+
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: main
+
+      - name: Walk
+        working-directory: main
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          # Through the environment: `${{ }}` inside `run:` is substituted before bash sees it.
+          WALKS: ${{ inputs.walks }}
+          WALK_OUT: ${{ runner.temp }}/walks
+        run: |
+          set -uo pipefail
+          mkdir -p "$WALK_OUT"
+          if [ -z "${STAGING_PASSWORD:-}" ]; then
+            echo "::error::STAGING_PASSWORD is not set, so no walk can pass the staging gate"
+            exit 1
+          fi
+          if [ -z "$WALKS" ]; then WALKS=$(npx tsx scripts/walkers/rotation.ts); fi
+          if ! jq -e 'type == "array" and length > 0' <<<"$WALKS" >/dev/null; then
+            echo "::error::walks must be a non-empty JSON list of {persona, device, plan, report}"
+            exit 1
+          fi
+          # One at a time: the survey allows three submissions a minute from one address. Each
+          # walk has 20 minutes; one that runs over writes its own record and stops.
+          while read -r w; do
+            rc=0
+            timeout 20m npx tsx scripts/walkers/walk.ts \
+              --persona "$(jq -r .persona <<<"$w")" \
+              --device "$(jq -r .device <<<"$w")" \
+              --plan "$(jq -r .plan <<<"$w")" \
+              --report "$(jq -r '.report // "default"' <<<"$w")" </dev/null || rc=$?
+            # 1 is a walk that stopped early, which the judge reports. 2 is a walk we asked for
+            # wrongly: noted, judged with the rest, and it fails the job at the end.
+            if [ "$rc" -eq 2 ]; then touch "$WALK_OUT/.bad-request"; fi
+          done < <(jq -c '.[]' <<<"$WALKS")
+
+      - name: Install Claude Code
+        if: ${{ !cancelled() && inputs.judge }}
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Judge and post
+        if: ${{ !cancelled() && inputs.judge }}
+        working-directory: main
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          BRAIN_LLM_CLI: claude
+          NODE_ENV: production
+          WALK_OUT: ${{ runner.temp }}/walks
+        run: |
+          set -uo pipefail
+          missing=""
+          for v in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY CLAUDE_CODE_OAUTH_TOKEN SLACK_BRAIN_WEBHOOK_URL; do
+            [ -n "${!v:-}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+          rc=0
+          npx tsx scripts/walkers/judge.ts --walks "$WALK_OUT" --staging-src ../staging || rc=1
+          # The judge writes the message even when it could not judge: the walks' own checks
+          # are facts and are worth posting on their own.
+          if [ -s "$WALK_OUT/slack.txt" ]; then
+            jq -Rs '{text: .}' "$WALK_OUT/slack.txt" |
+              curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL" &&
+              touch "$WALK_OUT/.posted" || rc=1
+          fi
+          exit $rc
+
+      - name: Fail on a walk that was asked for wrongly
+        if: ${{ !cancelled() }}
+        env:
+          WALK_OUT: ${{ runner.temp }}/walks
+        run: |
+          if [ -f "$WALK_OUT/.bad-request" ]; then
+            echo "::error::A walk was asked for with an unknown persona, device, plan or report"
+            exit 1
+          fi
+
+      # Anything that stopped the night: a missing secret, a failed install, the seat's limit.
+      # Silent when the night's message already went out, which says what went wrong itself.
+      - name: Tell the brain channel the walks failed
+        if: (failure() || cancelled()) && inputs.judge
+        env:
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          WALK_OUT: ${{ runner.temp }}/walks
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          if [ -f "$WALK_OUT/.posted" ] || [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then exit 0; fi
+          how="failed"
+          if [ "${JOB_STATUS:-}" = "cancelled" ]; then how="was stopped before it finished (cancelled or timed out)"; fi
+          text=":walking: The persona walks on staging ${how} in GitHub Actions. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          jq -n --arg text "$text" '{text: $text}' |
+            curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL"
