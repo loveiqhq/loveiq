@@ -5345,10 +5345,11 @@
 
 /* ══ The gated article's CTA — 931:8110 · 28.09 rehaul ═══════════════════════════
  * "UNLOCK THE FULL ARTICLE" (663:1359) became "Show All": an 86x31 white pill with a
- * 1.5px coral → rose → violet outline and its label in the same gradient, 10/12 bold
- * in title case, the label 9 from the top (9 / 10 padding). The outline is a
- * border-box layer under a white padding-box one, as the Premium card's is. Its foot
- * sits half a pixel under the window's (153:2280: 4360 against 4359.5). */
+ * 1.5px coral → rose → violet outline and a 10/12 bold label in title case, 9 from the
+ * top (9 / 10 padding) — grey #575757 since 29.09 (979:558 / 979:561 / 979:564 replaced
+ * the gradient-label pills). The outline is a border-box layer under a white
+ * padding-box one, as the Premium card's is. Its foot sits half a pixel under the
+ * window's (153:2280: 4360 against 4359.5). */
 .rv3 .rv4-learn__showmore {
   align-items: center;
   background:
@@ -5370,11 +5371,7 @@
   width: 86px;
 }
 .rv3 .rv4-learn__showmore-label {
-  -webkit-background-clip: text;
-  background-clip: text;
-  /* The longhand, so it cannot reset the clip above as the shorthand would. */
-  background-image: linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed);
-  color: transparent;
+  color: #575757;
 }
 
 /* ── Challenges in Partnerships · the loop — Figma 532:231, 612:862 locked ───────────
@@ -6617,10 +6614,10 @@ html {
   position: absolute;
 }
 /* 639:498 / 639:2099 — a white pill 31 tall, a 1.5px coral → rose → violet outline
- * and its 10/12 bold caps in the same gradient; Figma's handles, in CSS stops. The
- * height is set, not summed: Chromium floors a 1.5px border to 1, which would take
- * a pixel off it. The hit area is 44 tall. The A&B cards' "Show all" (713:6178 /
- * 713:6226) is the same pill. */
+ * (Figma's handles, in CSS stops) and a 10/12 bold label, grey since Mark's 29.09 pass
+ * (below). The height is set, not summed: Chromium floors a 1.5px border to 1, which
+ * would take a pixel off it. The hit area is 44 tall. The A&B cards' "Show all"
+ * (713:6178 / 713:6226, now 979:567 / 979:573) is the same pill. */
 .rv3 .rv4-fvt__pill,
 .rv3 .rv4-trig__pill {
   align-items: center;
@@ -6637,6 +6634,9 @@ html {
   height: 31px;
   justify-content: center;
   line-height: 12px;
+  /* 979:567 is 86 wide: its "Show all " text box carries a trailing space (42 against
+   * the glyphs' 40.6), so the content alone drew it 84.6. */
+  min-width: 86px;
   padding: 7.5px 20.5px 8.5px;
   position: relative;
   /* Mark, 28.09 (1944175761 / 1944177596): "All CTAs updated, to no longer be CAPs".
@@ -6657,13 +6657,12 @@ html {
   outline: 2px solid var(--rv3-violet);
   outline-offset: 2px;
 }
+/* Mark, 29.09 (1945260099): "We have updated the CTAs that expand elements on visuals"
+ * — the label is solid #575757 now, no longer the outline's gradient (979:568, 639:2265;
+ * Marcus's grey "for better readability and contrast", 1944661166). */
 .rv3 .rv4-fvt__pill-label,
 .rv3 .rv4-trig__pill-label {
-  -webkit-background-clip: text;
-  background-clip: text;
-  /* The longhand, so it cannot reset the clip above as the shorthand would. */
-  background-image: linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);
-  color: transparent;
+  color: #575757;
 }
 /* 639:498 — Mark's 28.09 update (1944175761) sets it centred in the table (x 121 + 43
  * of 328, where the locked pills centre too) and 54.19px into the fade; it stood 48px
@@ -6674,6 +6673,83 @@ html {
   position: absolute;
   top: 54.19px;
   transform: translateX(-50%);
+}
+
+/* ── The pills' hover — 29.09 ────────────────────────────────────────────────────────
+ * Mark on 1945259495 and 1945260099 (1945270267 / 1945270164): "For all of these CTAs,
+ * can we please have an hover effect so that it is clear that these are clickable".
+ * Figma draws no hover state, so this one is ours: the pill rises a pixel onto a soft
+ * shadow over a faint wash, and a grey label darkens to the ink. Only where a fine
+ * pointer hovers — after a tap a touch screen would leave it stuck — and by the
+ * `translate` property, which composes with the transform: translateX(-50%) that
+ * centres four of these pills where a hover transform would replace it. */
+@media (hover: hover) and (pointer: fine) {
+  .rv3 .rv4-trig__pill,
+  .rv3 .rv4-fvt__pill,
+  .rv3 .rv4-learn__showmore,
+  .rv3 .rv4-try__open,
+  .rv3 .rv4-learn__open {
+    transition:
+      background-color 180ms ease,
+      box-shadow 180ms ease,
+      translate 180ms ease;
+  }
+  .rv3 .rv4-trig__pill:hover,
+  .rv3 .rv4-fvt__pill:hover,
+  .rv3 .rv4-learn__showmore:hover,
+  .rv3 .rv4-try__open:hover,
+  .rv3 .rv4-learn__open:hover {
+    box-shadow: 0 4px 10px rgba(22, 16, 33, 0.1);
+    translate: 0 -1px;
+  }
+  .rv3 .rv4-trig__pill:hover,
+  .rv3 .rv4-fvt__pill:hover {
+    background:
+      linear-gradient(#faf7ff, #faf7ff) padding-box,
+      linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%) border-box;
+  }
+  .rv3 .rv4-learn__showmore:hover {
+    background:
+      linear-gradient(#faf7ff, #faf7ff) padding-box,
+      linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed) border-box;
+  }
+  .rv3 .rv4-trig__pill:hover .rv4-trig__pill-label,
+  .rv3 .rv4-fvt__pill:hover .rv4-fvt__pill-label,
+  .rv3 .rv4-learn__showmore:hover .rv4-learn__showmore-label {
+    color: #3f3a4d;
+  }
+  /* The read-all pills keep their own ink and outline; the wash is theirs, faintly. */
+  .rv3 .rv4-try__open:hover {
+    background-color: #fdf8f0;
+  }
+  .rv3 .rv4-learn__open:hover {
+    background-color: #f8f4fe;
+  }
+  .rv3 .rv4-trig__pill:active,
+  .rv3 .rv4-fvt__pill:active,
+  .rv3 .rv4-learn__showmore:active,
+  .rv3 .rv4-try__open:active,
+  .rv3 .rv4-learn__open:active {
+    box-shadow: none;
+    translate: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-trig__pill:hover,
+  .rv3 .rv4-fvt__pill:hover,
+  .rv3 .rv4-learn__showmore:hover,
+  .rv3 .rv4-try__open:hover,
+  .rv3 .rv4-learn__open:hover {
+    transition: none;
+    translate: none;
+  }
+}
+/* Keyboard focus, which these three had none of — the ring the A&B and table pills use. */
+.rv3 .rv4-learn__showmore:focus-visible,
+.rv3 .rv4-try__open:focus-visible,
+.rv3 .rv4-learn__open:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 2px;
 }
 /* 639:1905 — the locked rows under the full blur (Figma radius 4; --rv4-veil since
  * review 26.09), the badge on their middle; the group owns the click. 4px on, the
