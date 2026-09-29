@@ -300,19 +300,22 @@ describe("the paywalled chapter — 348:213", () => {
     for (const group of container.querySelectorAll(".rv4-tb-lock")) {
       expect(group.hasAttribute("inert")).toBe(false);
     }
-    expect(screen.getAllByRole("button", { name: "Unlock Report" })).toHaveLength(2);
+    // The two tiles, and the paywall card's "Unlock Report →" pill (29.09) under the gate.
+    expect(container.querySelectorAll("button.rv4-lockbadge")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Unlock Report" })).toHaveLength(3);
   });
 
   it("opens the paywall once from every locked surface", () => {
     const onUnlock = vi.fn();
     const { container } = render(<V4TypicalBeliefs view={LOCKED} onUnlock={onUnlock} />);
+    // The tiles and the paywall card's pill all read "Unlock Report" since 29.09.
     const targets = [
       ...screen.getAllByRole("button", { name: "Unlock Report" }),
       container.querySelector(".rv4-turn__lock")!,
       container.querySelector(".rv4-sun__lock")!,
       container.querySelector(".rv4-tb__gate")!,
-      screen.getByRole("button", { name: "Unlock full report" }),
     ];
+    expect(targets).toContain(container.querySelector(".rv4-tb__gate .rv4-premium__cta"));
     for (const target of targets) {
       onUnlock.mockClear();
       fireEvent.click(target);

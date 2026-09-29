@@ -176,7 +176,7 @@ describe("V4TryThis — open & gated (374:258)", () => {
     fireEvent.click(container.querySelector(".rv4-try__gate")!);
     expect(onUnlock).toHaveBeenCalledTimes(1);
     onUnlock.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Unlock full report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlock Report" }));
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 

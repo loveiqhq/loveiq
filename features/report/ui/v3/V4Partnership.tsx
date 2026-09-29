@@ -70,7 +70,7 @@ const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
                   <V4Prose blocks={rest} />
                 </div>
               </div>
-              <V4PremiumCard variant="guarantee" nodeId="305:362" />
+              <V4PremiumCard variant="body" nodeId="1015:1257" />
             </div>
           ) : null}
         </div>

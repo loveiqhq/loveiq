@@ -132,8 +132,8 @@ describe("V4Fantasy — paywalled (305:217)", () => {
       "A fantasy often works because reality has been edited out."
     );
     const card = gate.querySelector(".rv4-premium")!;
-    expect(card).toHaveClass("rv4-premium--guarantee");
-    expect(card.getAttribute("data-node-id")).toBe("305:250");
+    expect(card).toHaveClass("rv4-premium--body");
+    expect(card.getAttribute("data-node-id")).toBe("1015:1379");
   });
 
   it("opens the paywall once per tap on the blurred copy or its card", () => {

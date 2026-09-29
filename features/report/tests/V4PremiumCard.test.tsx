@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import V4PremiumCard from "@features/report/ui/v3/V4PremiumCard";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
@@ -9,54 +9,120 @@ import V4TryThis from "@features/report/ui/v3/V4TryThis";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 
 /**
- * The floating "Premium content" card comes in two copies. The article and the
- * practice gates draw 153:2301 ("14-day money-back guarantee" / "No questions
- * asked."); the chapter-body gates draw 348:373 and 314:309 ("14-day money-back" /
- * "Guaranteed, no questions asked."). Fatih's call, 2026-09-23: build each gate as
- * its frame draws it.
+ * Mark, 29.09 (1945959774 / 1945959900, pinned on A&B's two gates): "We have updated
+ * the paywall CTAs". Every card in the file is the new one. The practice and article
+ * gates draw it 330x205 (1015:1207, 1015:1232 and their siblings); the chapter-body
+ * gates draw it 330x363 with three ticked features (1015:1163, 1015:1004, 1015:1257,
+ * 1015:1379). Both set a gradient lock beside "Unlock full insights!", the guarantee
+ * box, and a gradient "Unlock Report →" pill.
+ *
+ * The frames say "7-day money-back". Fatih, 29.09: keep the 14-day the Terms, the
+ * landing page and every other surface promise, and flag the 7 to Mark.
  */
 
 const V3_CSS = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
+const BLOCK = "Premium card — Mark's paywall CTA, 29.09";
+
+/** The rule for `selector` inside the 29.09 block. */
+const rule = (selector: string) => {
+  const from = V3_CSS.indexOf(BLOCK);
+  expect(from, "the 29.09 premium card block is missing").toBeGreaterThan(-1);
+  const at = V3_CSS.indexOf(`${selector} {`, from);
+  expect(at, `${selector} missing from the 29.09 block`).toBeGreaterThan(-1);
+  return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+};
 
 afterEach(cleanup);
 
-describe("V4PremiumCard", () => {
-  it("draws the article card by default", () => {
+describe("V4PremiumCard — the gate card (1015:1207)", () => {
+  it("sets the gradient lock beside 'Unlock full insights!'", () => {
     const { container } = render(<V4PremiumCard />);
     const card = container.querySelector(".rv4-premium")!;
-    expect(card.getAttribute("data-node-id")).toBe("153:2301");
-    expect(card.classList.contains("rv4-premium--guarantee")).toBe(false);
-    expect(screen.getByText("14-day money-back guarantee")).toBeTruthy();
-    expect(screen.getByText("No questions asked.")).toBeTruthy();
+    expect(card.classList.contains("rv4-premium--body")).toBe(false);
+    const head = card.querySelector(".rv4-premium__head")!;
+    expect(head.querySelector(".rv4-premium__lock img")!.getAttribute("src")).toBe(
+      "/report/v3/locks/lock-14.svg"
+    );
+    expect(within(card as HTMLElement).getByRole("heading").textContent).toBe(
+      "Unlock full insights!"
+    );
+    expect(screen.queryByText("Premium content")).toBeNull();
   });
 
-  it("draws the chapter-body copy as the guarantee variant", () => {
-    const { container } = render(<V4PremiumCard variant="guarantee" />);
-    const card = container.querySelector(".rv4-premium")!;
-    expect(card.classList.contains("rv4-premium--guarantee")).toBe(true);
-    expect(card.getAttribute("data-node-id")).toBe("314:309");
+  it("keeps the 14-day guarantee the rest of the site promises", () => {
+    const { container } = render(<V4PremiumCard />);
     expect(screen.getByText("14-day money-back")).toBeTruthy();
     expect(screen.getByText("Guaranteed, no questions asked.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Unlock full report" })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/7-day/);
   });
 
-  it("takes the frame's node id when a chapter names its own", () => {
-    const { container } = render(<V4PremiumCard variant="guarantee" nodeId="348:373" />);
-    expect(container.querySelector(".rv4-premium")!.getAttribute("data-node-id")).toBe("348:373");
+  it("draws the frame's new shield and tick", () => {
+    const { container } = render(<V4PremiumCard />);
+    const shield = container.querySelector(".rv4-premium__shield")!;
+    expect(shield.querySelector(".rv4-premium__shield-bg")!.getAttribute("src")).toBe(
+      "/report/v3/premium/shield.svg"
+    );
+    expect(shield.querySelector(".rv4-premium__shield-tick")!.getAttribute("src")).toBe(
+      "/report/v3/premium/tick.svg"
+    );
+  });
+
+  it("ends on the 'Unlock Report →' pill, named for what it says", () => {
+    const { container } = render(<V4PremiumCard />);
+    const cta = within(container.querySelector(".rv4-premium") as HTMLElement).getByRole("button", {
+      name: "Unlock Report",
+    });
+    expect(cta.className).toBe("rv4-premium__cta");
+    // A no-break space: the pill is a flex box, which drops a plain one at the start of
+    // the arrow's run ("Report→").
+    expect(cta.textContent).toBe("Unlock Report →");
+    expect(cta.querySelector("[aria-hidden='true']")!.textContent).toBe(" →");
+  });
+
+  it("lists no features", () => {
+    const { container } = render(<V4PremiumCard />);
+    expect(container.querySelector(".rv4-premium__feats")).toBeNull();
+  });
+});
+
+describe("V4PremiumCard — the chapter-body card (1015:1163)", () => {
+  it("adds the three ticked features, each with the frame's check", () => {
+    const { container } = render(<V4PremiumCard variant="body" nodeId="1015:1163" />);
+    const card = container.querySelector(".rv4-premium")!;
+    expect(card.classList.contains("rv4-premium--body")).toBe(true);
+    expect(card.getAttribute("data-node-id")).toBe("1015:1163");
+    const feats = [...card.querySelectorAll(".rv4-premium__feats > li")];
+    expect(feats.map((li) => li.textContent)).toEqual([
+      "Your complete archetype report",
+      "+20 chapters and personalised growth",
+      "Finally understand old patterns and learn how to move past them",
+    ]);
+    for (const li of feats) {
+      const img = li.querySelector("img")!;
+      expect(img.getAttribute("src")).toBe("/report/v3/premium/check.svg");
+      expect(img.getAttribute("alt")).toBe("");
+    }
+  });
+
+  it("draws the body card's own, wider tick", () => {
+    const { container } = render(<V4PremiumCard variant="body" />);
+    expect(container.querySelector(".rv4-premium__shield-tick")!.getAttribute("src")).toBe(
+      "/report/v3/premium/tick-body.svg"
+    );
   });
 });
 
 describe("where each variant goes", () => {
-  it("puts the guarantee card on Typical Beliefs' body gate (348:373), as its frame draws it", () => {
+  it("puts the body card on Typical Beliefs' body gate (1015:1004)", () => {
     const { container } = render(
       <V4TypicalBeliefs view={buildTypicalBeliefs("Spark Seeker", { locked: true })!} />
     );
     const card = container.querySelector(".rv4-tb__gate .rv4-premium")!;
-    expect(card.classList.contains("rv4-premium--guarantee")).toBe(true);
-    expect(card.getAttribute("data-node-id")).toBe("348:373");
+    expect(card.classList.contains("rv4-premium--body")).toBe(true);
+    expect(card.getAttribute("data-node-id")).toBe("1015:1004");
   });
 
-  it("keeps the article card on the practice gate (374:280)", () => {
+  it("keeps the gate card on the practice gate", () => {
     const { container } = render(
       <V4TryThis
         practice={buildTypicalBeliefs("Spark Seeker", { locked: true })!.practice}
@@ -64,96 +130,98 @@ describe("where each variant goes", () => {
       />
     );
     const card = container.querySelector(".rv4-try__rest .rv4-premium")!;
-    expect(card.classList.contains("rv4-premium--guarantee")).toBe(false);
+    expect(card.classList.contains("rv4-premium--body")).toBe(false);
   });
 });
 
-describe("reportV3.css — the guarantee variant", () => {
-  const rule = (selector: string) => {
-    const at = V3_CSS.indexOf(selector);
-    expect(at, `${selector} missing from reportV3.css`).toBeGreaterThan(-1);
-    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
-  };
-
-  it("sets the heading line at 314:326's 14/22.4", () => {
-    const css = rule(".rv3 .rv4-premium--guarantee .rv4-premium__guarantee-head {");
-    expect(css).toContain("font-size: 14px");
-    expect(css).toContain("line-height: 22.4px");
+describe("reportV3.css — the 29.09 card", () => {
+  it("draws the gate card 330x205 and the body card 330x363", () => {
+    const card = rule(".rv3 .rv4-premium");
+    expect(card).toContain("height: 205px;");
+    expect(card).toContain("width: 330px;");
+    // 1015:1163 starts its head 25.719 down (the stroke inside, as CSS lays it).
+    const body = rule(".rv3 .rv4-premium--body");
+    expect(body).toContain("height: 363px;");
+    expect(body).toContain("padding-top: 25px;");
   });
 
-  it("draws 314:321's taller tick", () => {
-    expect(rule(".rv3 .rv4-premium--guarantee .rv4-premium__shield-tick {")).toContain(
-      "height: 14.625px"
-    );
-  });
-});
-
-/**
- * Every Premium card frame — 153:2301, 348:373, 314:309 — renders its 0.719px stroke
- * in a gradient style ("Logo Gradient Temporary") that the export flattens to its
- * #fe6839 fallback: orange on the left, pink across the top, violet down the right.
- * The card is a 0.719x scale of the V2 paywall card (8005:735), whose border is that
- * gradient, so the same paint is laid over the base rule.
- */
-describe("reportV3.css — the card's gradient stroke", () => {
-  const strokeRule = () => {
-    const at = V3_CSS.indexOf(".rv3 .rv4-premium {", V3_CSS.indexOf("Premium card — the stroke"));
-    expect(at, "the stroke block is missing").toBeGreaterThan(-1);
-    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
-  };
-
-  it("paints the border as 8005:735's orange-to-violet gradient", () => {
-    const css = strokeRule();
-    expect(css).toContain("border-color: transparent;");
-    expect(css).toContain("linear-gradient(#fff, #fff) padding-box");
-    expect(css).toContain(
+  it("keeps the gradient stroke the cards still carry ('Logo Gradient Temporary')", () => {
+    const card = rule(".rv3 .rv4-premium");
+    expect(card).toContain("border: 0.719px solid transparent;");
+    expect(card).toContain("linear-gradient(#fff, #fff) padding-box");
+    expect(card).toContain(
       "linear-gradient(120deg, #fe6839 0%, #c167cf 52%, #8887f6 100%) border-box"
     );
   });
-});
 
-/**
- * Where the frames put the card's contents (153:2301 / 314:309, card-relative).
- * The guarantee box and the button share one frame (153:2308 / 314:316) spaced
- * 11.512 apart — the card's own 15 only separates the heading from that frame.
- * Figma's strokes are inside and its text boxes round up (19.2 → 20, 22.4 → 23,
- * 28.8 → 29), so the button lands at 148.35 (article) / 151.35 (chapter body).
- */
-describe("V4PremiumCard — the offer frame (153:2308 / 314:316)", () => {
-  it("groups the guarantee box and the button", () => {
-    const { container } = render(<V4PremiumCard variant="guarantee" />);
-    const offer = container.querySelector(".rv4-premium > .rv4-premium__offer")!;
-    expect([...offer.children].map((c) => c.className)).toEqual([
-      "rv4-premium__guarantee",
-      "rv4-premium__cta",
-    ]);
-  });
-
-  it("spaces them as the frame does, with its strokes inside and its text boxes whole", () => {
-    const rule = (selector: string, from = 0) => {
-      const at = V3_CSS.indexOf(selector, from);
-      expect(at, `${selector} missing`).toBeGreaterThan(-1);
-      return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
-    };
-    const from = V3_CSS.indexOf("Premium card — the stroke");
-    expect(rule(".rv3 .rv4-premium {", from)).toContain("padding: 14.39px 31.657px 0;");
-    expect(rule(".rv3 .rv4-premium__head {", from)).toContain("min-height: 29px;");
-    expect(rule(".rv3 .rv4-premium__offer {", from)).toContain("gap: 11.512px;");
-    const box = rule(".rv3 .rv4-premium__guarantee {", from);
-    expect(box).toContain("padding-top: 20.146px;");
-    expect(box).toContain("padding-bottom: 20.146px;");
-    expect(rule(".rv3 .rv4-premium__guarantee-head {", from)).toContain("min-height: 20px;");
-    expect(rule(".rv3 .rv4-premium--guarantee .rv4-premium__guarantee-head {", from)).toContain(
-      "min-height: 23px;"
+  it("sets 'Unlock full insights!' in Lora SemiBold 20/28.8 beside a 28px gradient lock", () => {
+    const title = rule(".rv3 .rv4-premium__title");
+    expect(title).toContain("font-size: 20px;");
+    expect(title).toContain("font-weight: 600;");
+    expect(title).toContain("line-height: 28.8px;");
+    expect(title).toContain("letter-spacing: -0.4666px;");
+    const lock = rule(".rv3 .rv4-premium__lock");
+    expect(lock).toContain("height: 28px;");
+    expect(lock).toContain(
+      "linear-gradient(135deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%)"
     );
+    expect(lock).toContain("box-shadow: 0 3.294px 4.941px rgba(168, 90, 76, 0.3);");
   });
 
-  it("draws the button without the glow no frame renders", () => {
-    // 153:2321 / 314:329 carry a shadow on a transparent layer, and all three card
-    // frames render nothing under the button — while the badge's glow does render.
-    const from = V3_CSS.indexOf("Premium card — the stroke");
-    const at = V3_CSS.indexOf(".rv3 .rv4-premium__cta {", from);
-    expect(at, "the button rule is missing").toBeGreaterThan(-1);
-    expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toContain("box-shadow: none;");
+  it("sets the guarantee in Bold 14/22.4 green over the grey line, the body card's box 47 tall", () => {
+    const head = rule(".rv3 .rv4-premium__guarantee-head");
+    expect(head).toContain("font-size: 14px;");
+    expect(head).toContain("line-height: 22.4px;");
+    expect(head).toContain("color: #009148;");
+    expect(rule(".rv3 .rv4-premium__guarantee-sub")).toContain("color: #505253;");
+    expect(rule(".rv3 .rv4-premium--body .rv4-premium__guarantee-sub")).toContain(
+      "color: #6b6678;"
+    );
+    expect(rule(".rv3 .rv4-premium--body .rv4-premium__guarantee")).toContain("height: 47px;");
+  });
+
+  it("sets the features in Light 12/19.2 grey, the checks 11 from the text", () => {
+    const feat = rule(".rv3 .rv4-premium__feats > li");
+    expect(feat).toContain("gap: 11px;");
+    expect(feat).toContain("font-size: 12px;");
+    expect(feat).toContain("font-weight: 300;");
+    expect(feat).toContain("line-height: 19.2px;");
+    expect(feat).toContain("color: #6b6678;");
+  });
+
+  it("gives the last feature the frame's 242px, into the card's padding, so it breaks after 'learn'", () => {
+    // 1015:1204 is 242 wide from x=72, past the content box (297): the list is 27 + 242.
+    expect(rule(".rv3 .rv4-premium__feats")).toContain("width: 269px;");
+    // Below 362 the card narrows, and the list takes what the card leaves it.
+    const small = V3_CSS.slice(V3_CSS.indexOf("@media (max-width: 361px)", V3_CSS.indexOf(BLOCK)));
+    const feats = small.slice(small.indexOf(".rv3 .rv4-premium__feats {"));
+    expect(feats.slice(0, feats.indexOf("}"))).toContain("width: auto;");
+  });
+
+  it("draws the pill 163x32 in the brand gradient, where each frame sets it", () => {
+    const pill = rule(".rv3 .rv4-premium__cta");
+    expect(pill).toContain("width: 163px;");
+    expect(pill).toContain("height: 32px;");
+    expect(pill).toContain("border-radius: 999px;");
+    expect(pill).toContain(
+      "linear-gradient(168.893deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%)"
+    );
+    expect(pill).toContain("box-shadow: 0 4px 12px rgba(168, 90, 76, 0.3);");
+    expect(pill).toContain("font-size: 12px;");
+    expect(pill).toContain("font-weight: 700;");
+    // 1015:1229 at 147 and 1015:1205 at 302.28 of the card, less the 0.719 stroke.
+    expect(pill).toContain("top: 146.281px;");
+    expect(rule(".rv3 .rv4-premium--body .rv4-premium__cta")).toContain("top: 301.561px;");
+  });
+
+  it("answers the pointer on the pill as the round's other CTAs do", () => {
+    const at = V3_CSS.indexOf("@media (hover: hover) and (pointer: fine)", V3_CSS.indexOf(BLOCK));
+    expect(at).toBeGreaterThan(-1);
+    const hover = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
+    expect(hover).toContain(".rv3 .rv4-premium__cta:hover");
+    expect(hover).toContain("translate: 0 -1px;");
+    expect(rule(".rv3 .rv4-premium__cta:focus-visible")).toContain(
+      "outline: 2px solid var(--rv3-violet);"
+    );
   });
 });
