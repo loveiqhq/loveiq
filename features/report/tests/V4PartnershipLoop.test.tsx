@@ -237,16 +237,19 @@ describe("V4PartnershipLoop — The Situation pulses as the loop comes into view
 });
 
 describe("V4PartnershipLoop — locked (612:862)", () => {
-  it("blurs the orbit and slides behind the brand lock, the pager sharp but inert", () => {
+  // Review 28.09, mobile: "In Challenges in Parternships, lets blur also the navigational
+  // element of the visualisation" — and Mark's "Now blurred" on 612:982 (1945267516).
+  it("blurs the orbit, the slides and the pager behind the brand lock", () => {
     const { container } = renderLoop({ stages: LOCKED.loop, locked: true, onUnlock: () => {} });
     const section = container.querySelector(".rv4-loop")!;
     expect(section).toHaveClass("is-locked");
     expect(section.getAttribute("data-node-id")).toBe("612:862");
-    for (const part of container.querySelectorAll(".rv4-loop__orbit-box, .rv4-loop__viewport")) {
+    for (const part of container.querySelectorAll(
+      ".rv4-loop__orbit-box, .rv4-loop__viewport, .rv4-loop__pager"
+    )) {
       expect(part.getAttribute("aria-hidden")).toBe("true");
       expect(part.hasAttribute("inert")).toBe(true);
     }
-    expect(container.querySelector(".rv4-loop__pager")!.hasAttribute("inert")).toBe(true);
     expect(screen.getByRole("button", { name: "Unlock the full report" })).toHaveClass(
       "rv4-lockbadge"
     );
@@ -361,5 +364,14 @@ describe("V4PartnershipLoop — CSS contract", () => {
     expect(slide.slice(0, slide.indexOf("}"))).toContain("scroll-snap-align: center");
     const locked = V3_CSS.slice(firstRule(".rv3 .rv4-loop.is-locked .rv4-loop__orbit-box"));
     expect(locked.slice(0, locked.indexOf("}"))).toContain("filter: blur(var(--rv4-veil, 5px))");
+  });
+
+  it("blurs the locked pager at 612:982's radius 4, four fifths of the veil", () => {
+    // Its own rule: the orbit and slides are radius 5 (the veil itself).
+    const at = firstRule(".rv3 .rv4-loop.is-locked .rv4-loop__pager {");
+    expect(at).toBeGreaterThan(0);
+    const pager = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(pager).toContain("filter: blur(calc(var(--rv4-veil, 5px) * 0.8))");
+    expect(pager).toContain("user-select: none");
   });
 });
