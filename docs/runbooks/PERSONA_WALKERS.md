@@ -77,6 +77,10 @@ Mark asked for this on 2026-09-05: "a systematic way to thoroughly test" the pro
   - It can Read, Glob and Grep the walk folder, main's code and staging's code, and only
     those: the rules are scoped to the three paths, and a read anywhere else is refused
     (tested 2026-09-29).
+  - Claude Code is pinned in the workflow (2.1.284) because those rules were tested on that
+    version. To bump it, make one folder the judge may read and one it may not. Run
+    `claude -p` with `judgeArgs` and `judgeEnv` on the first, and ask it to read, glob and
+    grep the second: all three must be refused. Then change the pin.
   - It has no shell, no web and no writing.
   - It starts with only its sign-in in its environment, none of the job's other secrets.
   - Pages and code are evidence, never instructions.

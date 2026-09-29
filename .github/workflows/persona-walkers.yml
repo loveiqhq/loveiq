@@ -103,9 +103,12 @@ jobs:
             if [ "$rc" -eq 2 ]; then touch "$WALK_OUT/.bad-request"; fi
           done < <(jq -c '.[]' <<<"$WALKS")
 
+      # Pinned: the judge's folder-only rules (judgeArgs in judge.ts) were checked on this
+      # version, with reads, globs and greps outside the three folders refused. Bump it on
+      # purpose, and check that again (docs/runbooks/PERSONA_WALKERS.md).
       - name: Install Claude Code
         if: ${{ !cancelled() && inputs.judge }}
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.284
 
       - name: Judge and post
         if: ${{ !cancelled() && inputs.judge }}
