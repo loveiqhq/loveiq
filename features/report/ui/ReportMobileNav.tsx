@@ -83,6 +83,15 @@ const ReportMobileNav: FC<Props> = ({
     () => (isV4 ? NAV_LABEL_BY_ID_V4 : NAV_LABEL_BY_ID).get(activeSectionId) ?? "Overview",
     [activeSectionId, isV4]
   );
+  // Both pills. Mark's 961:333 (29.09): "Selected Chapter font changed to Bold and took
+  // out the "Chapter:"" — V4's names the chapter alone. The floating one still tells a
+  // screen reader what it is for, in its label.
+  const pillLabel = (
+    <span className="report-chapter-pill__label">
+      {isV4 ? null : "Chapter:"}
+      <span className="report-chapter-pill__chapter">{activeChapter}</span>
+    </span>
+  );
 
   // Pill scroll-hide. Intentionally no `drawerOpen` dep — guards the same
   // race-condition class we hit on the landing NavSection where including a
@@ -268,14 +277,13 @@ const ReportMobileNav: FC<Props> = ({
           ref={pillButtonRef}
           type="button"
           className="report-chapter-pill__btn"
+          aria-label={isV4 ? `Chapter: ${activeChapter}` : undefined}
           aria-haspopup="dialog"
           aria-expanded={drawerOpen}
           aria-controls="report-chapter-drawer"
           onClick={openDrawer}
         >
-          <span className="report-chapter-pill__label">
-            Chapter:<span className="report-chapter-pill__chapter">{activeChapter}</span>
-          </span>
+          {pillLabel}
           <span className="report-chapter-pill__chevron">
             <ChevronDownIcon />
           </span>
@@ -304,9 +312,7 @@ const ReportMobileNav: FC<Props> = ({
                 aria-label="Close chapter menu"
                 onClick={closeDrawer}
               >
-                <span className="report-chapter-pill__label">
-                  Chapter:<span className="report-chapter-pill__chapter">{activeChapter}</span>
-                </span>
+                {pillLabel}
                 <span className="report-chapter-pill__chevron report-chapter-pill__chevron--up">
                   <ChevronDownIcon />
                 </span>
@@ -354,6 +360,7 @@ const ReportMobileNav: FC<Props> = ({
                   </p>
                   {part.items.map((item, idx) => {
                     const isActive = activeSectionId === item.id;
+                    const access = accessById?.get(item.id) ?? "free";
                     // Cap stagger so the last items don't lag on a long list.
                     const delayIdx = Math.min(idx, 8);
                     return (
@@ -361,6 +368,8 @@ const ReportMobileNav: FC<Props> = ({
                         key={item.id}
                         href={`#${item.id}`}
                         aria-current={isActive ? "location" : undefined}
+                        // V4 sets the row's weight by its tier (961:333).
+                        data-access={isV4 ? access : undefined}
                         title={item.label}
                         className={[
                           "report-mobile-nav__link",
@@ -381,7 +390,7 @@ const ReportMobileNav: FC<Props> = ({
                         }}
                       >
                         <span className="report-mobile-nav__label">{item.label}</span>
-                        <ReportNavBadge access={accessById?.get(item.id) ?? "free"} />
+                        <ReportNavBadge access={access} />
                       </a>
                     );
                   })}

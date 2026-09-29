@@ -8207,6 +8207,41 @@ html {
   white-space: normal;
 }
 
+/* The finalised nav — Mark, 29.09 (1945094456, Figma 961:333), on the phone and the
+ * desktop alike: "Selected Chapter font changed to Bold and took out the "Chapter:"
+ * Parts now dont have a roman number and I introduced the unlocked icons with brand
+ * colors." The part lists and badges are ReportMobileNav's / ReportNavBadge's.
+ * - The pill names the chapter in Bold 14/20 #6b5b95 (I961:333;856:246); "Chapter:" is
+ *   for screen readers only now.
+ * - A row's weight is its tier's (Marcus's heavier weights for "the ones that are free
+ *   or partially unlocked"; Mark: "Amazing, i love it"): SemiBold for free and open
+ *   chapters, Light for locked ones.
+ * - The drawer's rows hold one line and end in an ellipsis ("A Snapshot …"); the
+ *   sidebar keeps its wrap. Both keep their active wash, dot and colour. report.css's
+ *   old pill-nav rule gives the rows `min-width: max-content`, which held the
+ *   Snapshot's row at its whole title (301px in the 277 column, its FREE chip past the
+ *   panel's edge), so the row takes the column instead. */
+.rv3.rv4 .report-chapter-pill__chapter {
+  font-weight: 700;
+  margin-left: 0;
+}
+.rv3.rv4 .report-mobile-nav__label,
+.rv3.rv4 .report-sidebar__item-label {
+  font-weight: 600;
+}
+.rv3.rv4 .report-mobile-nav__link[data-access="locked"] .report-mobile-nav__label,
+.rv3.rv4 .report-sidebar__item[data-access="locked"] .report-sidebar__item-label {
+  font-weight: 300;
+}
+.rv3.rv4 .report-chapter-panel__item {
+  min-width: 0;
+}
+.rv3.rv4 .report-chapter-panel__item .report-mobile-nav__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The science deck lays out on a grid from 700px (two across, three from 1024),
  * and V4 has seven cards, so the seventh sat alone at the left of its row. Centring
  * the last row keeps the block symmetric under the heading it hangs from. */

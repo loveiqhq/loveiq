@@ -6,6 +6,7 @@ import {
   REPORT_V3_NAV_PARTS,
   REPORT_V3_SECTION_ORDER,
   REPORT_V4_CHAPTERS,
+  REPORT_V4_NAV_IDS,
   REPORT_V4_NAV_PARTS,
   REPORT_V4_SECTION_ORDER,
 } from "@features/report/ui/v3/reportV3Nav";
@@ -125,17 +126,18 @@ describe("the V4 chapter order", () => {
     expect(label(REPORT_V3_NAV_PARTS)).toBe("Challenges in Partnership");
   });
 
-  it("numbers V4's drawer parts as the page does, and names the nudges' anchor", () => {
-    // The page opens on Part I "Welcome", which lists no chapters, so the drawer and
-    // sidebar start at Part II, as the part headings and the nudge chips count.
-    expect(REPORT_V4_NAV_PARTS.map((p) => p.part)).toEqual([
-      "Part II",
-      "Part III",
-      "Part IV",
-      "Part V",
-      "Part VI",
+  // Mark, 29.09 (1945094456): the finalised nav, 961:333 — "Parts now dont have a roman
+  // number", and Part 1 · Welcome is listed, with its two chapters.
+  it("numbers V4's drawer parts 1 to 6 as the page does, and names the nudges' anchor", () => {
+    expect(REPORT_V4_NAV_PARTS.map((p) => [p.part, p.label])).toEqual([
+      ["Part 1", "Welcome"],
+      ["Part 2", "Your constellation"],
+      ["Part 3", "How your archetype works"],
+      ["Part 4", "Your erotic engine"],
+      ["Part 5", "How you connect"],
+      ["Part 6", "Your edges"],
     ]);
-    expect(REPORT_V4_NAV_PARTS[0]!.items.find((i) => i.id === "snapshot")!.label).toBe(
+    expect(REPORT_V4_NAV_PARTS[1]!.items.find((i) => i.id === "snapshot")!.label).toBe(
       "A Snapshot of what you will learn"
     );
     // ?v3=1 keeps its own.
@@ -161,14 +163,28 @@ describe("the V4 chapter order", () => {
     ).toBe("3.1");
   });
 
+  it("opens the nav on Part 1 · Welcome: the Introduction and What shaped this report", () => {
+    expect(REPORT_V4_NAV_PARTS[0]!.items).toEqual([
+      { label: "Introduction", id: "introduction" },
+      { label: "What shaped this report", id: "what_shaped_this_report" },
+    ]);
+    // The scroll-spy walks V4's own list, the Welcome's anchors first.
+    expect(REPORT_V4_NAV_IDS).toEqual(REPORT_V4_NAV_PARTS.flatMap((p) => p.items.map((i) => i.id)));
+    expect(REPORT_V4_NAV_IDS.slice(0, 3)).toEqual([
+      "introduction",
+      "what_shaped_this_report",
+      "core_archetype",
+    ]);
+  });
+
   it("lists the nav in the same order as the body", () => {
-    expect(REPORT_V4_NAV_PARTS[1]!.items.map((i) => i.id)).toEqual([
+    expect(REPORT_V4_NAV_PARTS[2]!.items.map((i) => i.id)).toEqual([
       "typical_beliefs",
       "core_insecurities",
       "confidence_level",
       "power_orientation",
     ]);
-    expect(REPORT_V4_NAV_PARTS[2]!.items.slice(0, 2).map((i) => [i.id, i.label])).toEqual([
+    expect(REPORT_V4_NAV_PARTS[3]!.items.slice(0, 2).map((i) => [i.id, i.label])).toEqual([
       [AB, "Accelerators & Brakes"],
       ["libido_challenges_in_relationships", "Libido Challenges"],
     ]);

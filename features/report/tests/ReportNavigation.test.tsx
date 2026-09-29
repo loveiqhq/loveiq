@@ -3,8 +3,10 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ReactElement } from "react";
 import ReportDesktopSidebar from "@features/report/ui/ReportDesktopSidebar";
 import ReportMobileNav from "@features/report/ui/ReportMobileNav";
+import type { ReportNavAccess } from "@features/report/ui/ReportNavBadge";
 import { REPORT_NAV_IDS, REPORT_NAV_PARTS } from "@features/report/ui/reportNav";
 import { __resetBodyScrollLockForTests } from "@shared/ui/body-scroll-lock";
 
@@ -74,7 +76,9 @@ describe("scroll-spy source", () => {
   it("is what ReportPage measures, not the report-general section list", () => {
     const source = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
     const spy = source.slice(source.indexOf("function buildSectionTops()"));
-    expect(spy).toMatch(/REPORT_NAV_IDS\.map\(\(id\) =>/);
+    expect(spy).toMatch(/navIds\s*\.map\(\(id\) =>/);
+    // V4 walks its own list, which opens on Part 1's Welcome (961:333).
+    expect(source).toMatch(/const navIds = isV4 \? REPORT_V4_NAV_IDS : REPORT_NAV_IDS;/);
     // The list is also sorted by position, so the loop's early `break` cannot be
     // truncated by a future reorder of either the nav or the body.
     expect(spy).toMatch(/\.sort\(\(a, b\) => a\.top - b\.top\)/);
@@ -218,5 +222,171 @@ describe("ReportMobileNav — the chapter pill's label", () => {
     unmount();
     render(<ReportMobileNav activeSectionId="challenges_in_partnership" />);
     expect(pill()).toBe("Challenges in Partnership");
+  });
+});
+
+/**
+ * Report V4's finalised nav — Mark, 29.09 (1945094456, Figma 961:333): "Finalised Mobile
+ * Navigation. Please also use these changes for Desktop". His note with it: "Selected
+ * Chapter font changed to Bold and took out the "Chapter:" Parts now dont have a roman
+ * number and I introduced the unlocked icons with brand colors." The badges are the
+ * three tiers the 28.09 sync agreed on: free, open to this reader, locked.
+ */
+describe("V4 — the finalised nav (961:333)", () => {
+  const inV4 = async (ui: ReactElement) => {
+    const { V3ModeProvider, V4ModeProvider } = await import("@features/report/ui/v3/V3Chapter");
+    return render(
+      <V3ModeProvider>
+        <V4ModeProvider>{ui}</V4ModeProvider>
+      </V3ModeProvider>
+    );
+  };
+  const inV3 = async (ui: ReactElement) => {
+    const { V3ModeProvider } = await import("@features/report/ui/v3/V3Chapter");
+    return render(<V3ModeProvider>{ui}</V3ModeProvider>);
+  };
+  const ACCESS: ReadonlyMap<string, ReportNavAccess> = new Map<string, ReportNavAccess>([
+    ["core_archetype", "free"],
+    ["typical_beliefs", "unlocked"],
+    ["core_insecurities", "locked"],
+  ]);
+  const row = (id: string) => document.querySelector<HTMLElement>(`a[href="#${id}"]`)!;
+  const parts = () =>
+    [...document.querySelectorAll(".report-sidebar__part, .report-chapter-panel__part")].map(
+      (p) => p.textContent
+    );
+  /** The pill label's own text, outside its spans. */
+  const bareText = () =>
+    [...document.querySelector(".report-chapter-pill__label")!.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent)
+      .join("");
+
+  it("names the chapter alone in the pill, and still tells a screen reader it is the chapter", async () => {
+    await inV4(<ReportMobileNav activeSectionId="core_archetype" />);
+    const pill = screen.getByRole("button", { name: "Chapter: Core Archetype" });
+    expect(pill.querySelector(".report-chapter-pill__label")!.textContent).toBe("Core Archetype");
+    expect(bareText()).toBe("");
+
+    // The drawer's own pill is the same one (I961:333;856:245).
+    fireEvent.click(pill);
+    const inPanel = screen.getByRole("button", { name: /close chapter menu/i });
+    expect(inPanel.querySelector(".report-chapter-pill__label")!.textContent).toBe(
+      "Core Archetype"
+    );
+  });
+
+  it("keeps the visible 'Chapter:' for V3 and V1", async () => {
+    const { unmount } = await inV3(<ReportMobileNav activeSectionId="core_archetype" />);
+    expect(bareText()).toBe("Chapter:");
+    unmount();
+    render(<ReportMobileNav activeSectionId="core_archetype" />);
+    expect(bareText()).toBe("Chapter:");
+  });
+
+  it("opens both navs on Part 1 · Welcome, and numbers the parts 1 to 6", async () => {
+    const V4_PARTS = [
+      "Part 1 · Welcome",
+      "Part 2 · Your constellation",
+      "Part 3 · How your archetype works",
+      "Part 4 · Your erotic engine",
+      "Part 5 · How you connect",
+      "Part 6 · Your edges",
+    ];
+    const { unmount } = await inV4(<ReportDesktopSidebar activeSectionId="introduction" />);
+    expect(parts()).toEqual(V4_PARTS);
+    expect(row("introduction").textContent).toMatch(/^Introduction/);
+    expect(row("what_shaped_this_report").textContent).toMatch(/^What shaped this report/);
+    expect(row("introduction")).toHaveAttribute("aria-current", "location");
+    unmount();
+
+    await inV4(<ReportMobileNav activeSectionId="introduction" />);
+    fireEvent.click(screen.getByRole("button", { name: "Chapter: Introduction" }));
+    expect(parts()).toEqual(V4_PARTS);
+    expect(row("introduction")).toHaveAttribute("aria-current", "location");
+  });
+
+  it("draws the three tiers: the FREE chip, Figma's open padlock in the brand gradient, the grey padlock", async () => {
+    await inV4(<ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />);
+
+    expect(row("core_archetype").querySelector(".report-nav-badge--free")?.textContent).toBe(
+      "Free"
+    );
+    const open = row("typical_beliefs").querySelector(".report-nav-badge--unlocked")!;
+    expect(open).not.toBeNull();
+    // 961:333's own asset (I961:333;865:243), at its 14px.
+    const img = open.querySelector("img")!;
+    expect(img.getAttribute("src")).toBe("/report/v3/nav/badge-unlocked.svg");
+    expect(img.getAttribute("width")).toBe("14");
+    expect(img.getAttribute("height")).toBe("14");
+    expect(img.getAttribute("alt")).toBe("");
+    expect(open.querySelector(".sr-only")?.textContent).toBe("Unlocked chapter");
+    const shut = row("core_insecurities").querySelector(".report-nav-badge--locked")!;
+    expect(shut.querySelector("svg")).not.toBeNull();
+    expect(shut.querySelector(".sr-only")?.textContent).toBe("Locked chapter");
+  });
+
+  it("leaves V3's and V1's open chapters without a badge", async () => {
+    const { unmount } = await inV3(
+      <ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />
+    );
+    expect(row("typical_beliefs").querySelector(".report-nav-badge")).toBeNull();
+    unmount();
+    render(<ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />);
+    expect(row("typical_beliefs").querySelector(".report-nav-badge")).toBeNull();
+  });
+
+  it("tags each V4 row with its tier, for the weights", async () => {
+    const { unmount } = await inV4(
+      <ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />
+    );
+    expect(row("core_archetype").dataset.access).toBe("free");
+    expect(row("typical_beliefs").dataset.access).toBe("unlocked");
+    expect(row("core_insecurities").dataset.access).toBe("locked");
+    unmount();
+
+    await inV4(<ReportMobileNav activeSectionId="core_archetype" accessById={ACCESS} />);
+    fireEvent.click(screen.getByRole("button", { name: /^chapter:/i }));
+    expect(row("typical_beliefs").dataset.access).toBe("unlocked");
+    expect(row("core_insecurities").dataset.access).toBe("locked");
+    // An id the map does not list is free, as its badge is.
+    expect(row("introduction").dataset.access).toBe("free");
+  });
+
+  it("leaves V3's rows untagged", async () => {
+    await inV3(<ReportDesktopSidebar activeSectionId="core_archetype" accessById={ACCESS} />);
+    expect(row("typical_beliefs")).not.toHaveAttribute("data-access");
+  });
+
+  it("sets the bold pill, the weights and the one-line drawer rows on the live V4 page", () => {
+    const css = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
+    const rule = (selector: string) => {
+      const at = css.indexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThan(-1);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    // I961:333;856:246 — Plus Jakarta Sans Bold 14/20 #6b5b95, centred.
+    const pill = rule(".rv3.rv4 .report-chapter-pill__chapter");
+    expect(pill).toContain("font-weight: 700;");
+    expect(pill).toContain("margin-left: 0;");
+    // Free and open rows SemiBold, locked rows Light (Marcus's heavier weights for "the
+    // ones that are free or partially unlocked"; Mark: "Amazing, i love it").
+    expect(
+      rule(".rv3.rv4 .report-mobile-nav__label,\n.rv3.rv4 .report-sidebar__item-label")
+    ).toContain("font-weight: 600;");
+    expect(
+      rule(
+        '.rv3.rv4 .report-mobile-nav__link[data-access="locked"] .report-mobile-nav__label,\n.rv3.rv4 .report-sidebar__item[data-access="locked"] .report-sidebar__item-label'
+      )
+    ).toContain("font-weight: 300;");
+    // The drawer's rows hold one line ("A Snapshot …"); the sidebar keeps its wrap.
+    const drawer = rule(".rv3.rv4 .report-chapter-panel__item .report-mobile-nav__label");
+    expect(drawer).toContain("overflow: hidden;");
+    expect(drawer).toContain("text-overflow: ellipsis;");
+    expect(drawer).toContain("white-space: nowrap;");
+    // report.css's old pill-nav rule gives the rows `min-width: max-content`, which held
+    // the Snapshot's row at its whole title: 301px in the 277 column, the FREE chip past
+    // the panel's edge and the list scrolling sideways (measured at 393).
+    expect(rule(".rv3.rv4 .report-chapter-panel__item")).toContain("min-width: 0;");
   });
 });

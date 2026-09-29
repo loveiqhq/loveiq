@@ -98,7 +98,7 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { REPORT_V4_DESIGNED_CHAPTER_IDS } from "@/data/report3-archetype-page";
-import { REPORT_NAV_IDS } from "@features/report/ui/reportNav";
+import { REPORT_V4_NAV_IDS } from "@features/report/ui/v3/reportV3Nav";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
@@ -1564,6 +1564,64 @@ describe("ReportPage", () => {
       expect(container.querySelector(".is-locked")).toBeNull();
       expect(container.querySelector(`#${LIBIDO} .report-premium-overlay`)).not.toBeNull();
     });
+
+    // The nav's three tiers (28.09 sync; Mark's 961:333, 29.09): free, open to this
+    // reader — the gradient padlock — and locked. The sidebar is always in the DOM.
+    const tiers = (container: HTMLElement) =>
+      new Map(
+        [...container.querySelectorAll<HTMLElement>(".report-sidebar__item")].map((a) => [
+          a.getAttribute("href")!.slice(1),
+          a.dataset.access,
+        ])
+      );
+
+    it("badges the nav in three tiers for a reader with no plan, as 961:333 draws them", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
+
+      const { container } = render(<ReportPage />);
+      const tier = tiers(container);
+
+      for (const id of ["introduction", "what_shaped_this_report", "core_archetype", "snapshot"]) {
+        expect(tier.get(id), id).toBe("free");
+      }
+      // The four designed chapters open, in part, to every reader.
+      for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
+      for (const id of ["core_insecurities", LIBIDO, "biochemical_reward_system_dynamics"]) {
+        expect(tier.get(id), id).toBe("locked");
+      }
+      // Other Archetypes opens for everyone (above), so its badge says so.
+      expect(tier.get("constellation")).toBe("free");
+      // The chapters the nav calls locked are the ones the page locks.
+      const lockedInNav = [...tier].filter(([, t]) => t === "locked").map(([id]) => id);
+      expect(lockedIds(container).sort()).toEqual(lockedInNav.sort());
+    });
+
+    it("opens every gated chapter's badge for a full-report reader", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("full_report"));
+
+      const { container } = render(<ReportPage />);
+      const tier = tiers(container);
+
+      expect([...tier.values()]).not.toContain("locked");
+      expect(tier.get("core_insecurities")).toBe("unlocked");
+      expect(tier.get(LIBIDO)).toBe("unlocked");
+      expect(tier.get("introduction")).toBe("free");
+    });
+
+    it("opens what Essentials opens, and locks the rest", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("essentials"));
+
+      const { container } = render(<ReportPage />);
+      const tier = tiers(container);
+
+      expect(tier.get("core_insecurities")).toBe("unlocked");
+      expect(tier.get("attachment_style")).toBe("unlocked");
+      expect(tier.get(LIBIDO)).toBe("locked");
+      for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
+    });
   });
 
   // Review 24.09: "the top part is dark on my iPhone (the background to the time and
@@ -1803,11 +1861,11 @@ describe("ReportPage", () => {
       pivot = Infinity;
       frames = [];
       Object.defineProperty(window, "scrollY", { configurable: true, get: () => scrollY });
-      // Every nav anchor sits 1000px below the one before it.
+      // Every nav anchor sits 1000px below the one before it (V4's nav: these are V4's).
       rects = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
         this: Element
       ) {
-        const i = REPORT_NAV_IDS.indexOf(this.id);
+        const i = REPORT_V4_NAV_IDS.indexOf(this.id);
         const top = (i < 0 ? 0 : i * 1000 + (i > pivot ? grown : 0)) - scrollY;
         return {
           top,
@@ -1843,7 +1901,7 @@ describe("ReportPage", () => {
           .filter((link) => link.getAttribute("aria-current") === "location")
           .map((link) => link.getAttribute("href"));
       // A chapter halfway down that the page draws and the sidebar lists.
-      const listed = REPORT_NAV_IDS.filter(
+      const listed = REPORT_V4_NAV_IDS.filter(
         (id) => document.getElementById(id) && document.querySelector(`a[href="#${id}"]`)
       );
       expect(listed.length).toBeGreaterThan(6);
@@ -1852,7 +1910,7 @@ describe("ReportPage", () => {
 
       const before = v3ChapterRenders.count;
       expect(before).toBeGreaterThan(0);
-      scrollY = REPORT_NAV_IDS.indexOf(target) * 1000 + 50;
+      scrollY = REPORT_V4_NAV_IDS.indexOf(target) * 1000 + 50;
       act(() => {
         fireEvent.scroll(window);
         nextFrame();
@@ -1878,7 +1936,7 @@ describe("ReportPage", () => {
           .getAllByRole("link")
           .filter((link) => link.getAttribute("aria-current") === "location")
           .map((link) => link.getAttribute("href"));
-      const listed = REPORT_NAV_IDS.filter(
+      const listed = REPORT_V4_NAV_IDS.filter(
         (id) => document.getElementById(id) && document.querySelector(`a[href="#${id}"]`)
       );
       // Halfway down, with the next anchor on the page too: measured at mount, the
@@ -1886,20 +1944,47 @@ describe("ReportPage", () => {
       const target = listed.find(
         (id, k) =>
           k >= listed.length / 2 &&
-          document.getElementById(REPORT_NAV_IDS[REPORT_NAV_IDS.indexOf(id) + 1] ?? "")
+          document.getElementById(REPORT_V4_NAV_IDS[REPORT_V4_NAV_IDS.indexOf(id) + 1] ?? "")
       )!;
       expect(target).toBeDefined();
 
       // Everything past the second anchor moves 1759px down, with no resize to tell.
-      pivot = REPORT_NAV_IDS.indexOf(listed[1]!);
+      pivot = REPORT_V4_NAV_IDS.indexOf(listed[1]!);
       grown = 1759;
-      scrollY = REPORT_NAV_IDS.indexOf(target) * 1000 + grown + 50;
+      scrollY = REPORT_V4_NAV_IDS.indexOf(target) * 1000 + grown + 50;
       act(() => {
         fireEvent.scroll(window);
         nextFrame();
       });
 
       expect(current()).toEqual([`#${target}`]);
+    });
+
+    // Mark's 961:333 lists Part 1 · Welcome: at the top of the page the nav names the
+    // Introduction, not Core Archetype two chapters further down, and scrolling on
+    // lights "What shaped this report" as it passes.
+    it("lights the Introduction at the top of V4's page, then the Welcome's second chapter", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = "full_report";
+      mockUseReportData.mockReturnValue(response);
+      render(<ReportPage />);
+
+      const current = () =>
+        screen
+          .getAllByRole("link")
+          .filter((link) => link.getAttribute("aria-current") === "location")
+          .map((link) => link.getAttribute("href"));
+      expect(document.getElementById("introduction")).not.toBeNull();
+      expect(document.getElementById("what_shaped_this_report")).not.toBeNull();
+      expect(current()).toEqual(["#introduction"]);
+
+      scrollY = REPORT_V4_NAV_IDS.indexOf("what_shaped_this_report") * 1000 + 50;
+      act(() => {
+        fireEvent.scroll(window);
+        nextFrame();
+      });
+      expect(current()).toEqual(["#what_shaped_this_report"]);
     });
   });
 
