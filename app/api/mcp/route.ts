@@ -26,9 +26,16 @@ import { recordToolCall } from "@features/brain/server/log";
 import { resolveCaller, signInChallenge, type Caller } from "@features/brain/server/sign-in";
 import {
   DIMENSIONS as USER_DIMENSIONS,
+  MEASURES as USER_MEASURES,
+  findQuestion as findSurveyQuestion,
+  loadDeliveries,
   loadPeople,
+  renderAnswers,
+  renderEmails,
   renderTotals,
+  renderTraits,
   type Dimension as UserDimension,
+  type Measure as UserMeasure,
 } from "@features/brain/server/user-totals";
 import {
   adsForMonth,
@@ -1874,14 +1881,25 @@ export const TOOLS = [
     title: "Anonymous totals about our users",
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
-      "How many of our users finished the survey, paid, and what they paid, as totals by group: " +
-      "'how many women aged 25 to 34 finished', 'which archetype pays most', 'conversion by " +
-      "country'. Group by up to two of gender, age, orientation, relationship, country, " +
-      "archetype and month, and narrow with the same keys. Never a person: any group smaller " +
-      "than 5 is hidden, because a count that small can point to someone (decision of " +
-      "26 Sep 2026). Staff submissions are left out, and paid means a real sale above EUR 0, " +
-      "not a test and not a free coupon unlock. Each person counts once, however many times " +
-      "they finished. Each answer is protected on its own: two answers can still be " +
+      "What our users did, as totals by group, never a person. `measure` picks what is " +
+      "counted: people (default: how many finished the survey, paid, and what they paid), " +
+      "traits (the user graph: each group's average on the scoring engine's 21 traits, 0 to " +
+      "100), emails (the report reminders recorded for a group, and how many unsubscribed, " +
+      "from which of our emails, bounced, complained, invited or shared; Resend's own totals " +
+      "exist from 14 Sep 2026), or answers (how a group answered one survey question, by its " +
+      "id, e.g. 03011). 'which archetype pays most', 'how do Spark Seekers differ from " +
+      "everyone', 'who unsubscribes and from what', 'how did women aged 25 to 34 answer 16001'. " +
+      "Group by up to two of gender, age, orientation, relationship, country, archetype and " +
+      "month, and narrow with the same keys. Never a person: any group smaller than 5 is " +
+      "hidden, and every measure hides the same groups (decision of 26 Sep 2026). Inside a " +
+      "group, traits, emails and answers show a count or share only when both it and the rest " +
+      "of the group are 5 or more ('under 5' otherwise), and trait averages need 20 people; " +
+      "grouped, the All line gives only its size, and a share or an average is withheld when " +
+      "the rest would give back a hidden one. " +
+      "Staff submissions are left out, and paid means a real sale above EUR 0, not a test and " +
+      "not a free coupon unlock. Each person counts once, however many times they finished. " +
+      "Written-in answers are never read, and questions stored as text (the country question) " +
+      "are not summarised. Each answer is protected on its own: two answers can still be " +
       "subtracted (a day apart, one filter narrower), so never use it to find out about one " +
       "person. For one person's record, or for a table this does not cover, use " +
       "query_product_data.",
@@ -1902,6 +1920,18 @@ export const TOOLS = [
         },
         since: { type: "string", description: "First day of survey submissions, YYYY-MM-DD." },
         until: { type: "string", description: "Last day, YYYY-MM-DD." },
+        measure: {
+          type: "string",
+          enum: [...USER_MEASURES],
+          description:
+            "What to count: people (default), traits, emails, or answers (needs `question`).",
+        },
+        question: {
+          type: "string",
+          description:
+            "measure answers only: the survey question's id, e.g. 03011 or 16001. Free-text " +
+            "questions (name, email, written answers) are refused.",
+        },
       },
     },
   },
@@ -5556,7 +5586,38 @@ async function callTool(
     }
     const since = args.since as string | undefined;
     const until = args.until as string | undefined;
-    const people = await loadPeople(since, until);
+    const measure = (args.measure ?? "people") as UserMeasure;
+    if (!(USER_MEASURES as readonly unknown[]).includes(measure)) {
+      return textResult(`\`measure\` is one of ${USER_MEASURES.join(", ")}.`, true);
+    }
+    let question: Awaited<ReturnType<typeof findSurveyQuestion>> = null;
+    if (measure === "answers") {
+      if (typeof args.question !== "string" || !/^\d{5}$/.test(args.question.trim())) {
+        return textResult(
+          "measure answers needs `question`: a survey question id like 03011.",
+          true
+        );
+      }
+      try {
+        question = await findSurveyQuestion(args.question.trim());
+      } catch (err) {
+        logger.warn({ err }, "mcp: user_totals could not read the survey question");
+        return textResult(
+          "The survey questions could not be read right now. This is an outage, not a result.",
+          true
+        );
+      }
+      if (!question)
+        return textResult(`There is no survey question ${args.question.trim()}.`, true);
+      if (!["single", "multiple", "scale"].includes(question.type)) {
+        return textResult(
+          `${question.qid} is a ${question.type || "free-text"} question. Only questions with ` +
+            "options to pick are summarised; written answers are never read.",
+          true
+        );
+      }
+    }
+    const people = await loadPeople(since, until, { measure, questionId: question?.id });
     if (!people) {
       return textResult(
         "The survey data could not be read right now. This is an outage, not a result.",
@@ -5564,19 +5625,20 @@ async function callTool(
       );
     }
     stats.sourceCount = 1;
-    return textResult(
-      renderTotals(
-        {
-          groupBy: groupBy as UserDimension[],
-          filter: Object.fromEntries(
-            Object.entries(filter).map(([k, v]) => [k, String(v)])
-          ) as Partial<Record<UserDimension, string>>,
-          since,
-          until,
-        },
-        people
-      )
-    );
+    const req = {
+      groupBy: groupBy as UserDimension[],
+      filter: Object.fromEntries(Object.entries(filter).map(([k, v]) => [k, String(v)])) as Partial<
+        Record<UserDimension, string>
+      >,
+      since,
+      until,
+    };
+    if (measure === "traits") return textResult(renderTraits(req, people));
+    if (measure === "emails") {
+      return textResult(renderEmails(req, people, await loadDeliveries(since, until)));
+    }
+    if (measure === "answers" && question) return textResult(renderAnswers(req, people, question));
+    return textResult(renderTotals(req, people));
   }
 
   if (name === "cost_watch") {
@@ -6040,7 +6102,9 @@ export const MCP_INSTRUCTIONS =
   "and deciding metric, and records how it ended.\n\n" +
   "OUR USERS, as totals: user_totals counts who finished the survey, who paid and what they " +
   "paid, by gender, age, orientation, relationship, country, archetype or month, never a " +
-  "person, with any group under 5 hidden.\n\n" +
+  "person, with any group under 5 hidden. Its measure picks what is counted: people (who " +
+  "finished and paid), traits (the user graph: the 21 trait averages), emails (reminders sent, " +
+  "unsubscribes, bounces) or answers (how a group answered one survey question).\n\n" +
   "WHAT WE SPEND: cost_watch reads what we pay each month for tools and services from the " +
   "cost sheet, what moved, and which hand-typed lines may be stale.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +

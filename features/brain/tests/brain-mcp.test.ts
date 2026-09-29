@@ -4137,6 +4137,51 @@ describe("/api/mcp", () => {
       expect(path).toContain("select=user_id,");
     });
 
+    it("checks the measure and the question before reading anything", async () => {
+      for (const args of [
+        { measure: "salaries" },
+        { measure: "answers" },
+        { measure: "answers", question: "3011" },
+        { measure: "answers", question: "03011; drop" },
+      ]) {
+        const r = await call(args);
+        expect(r.isError, JSON.stringify(args)).toBe(true);
+      }
+      expect(toolCalls()).toHaveLength(0);
+    });
+
+    const questionRow = (row: Record<string, unknown> | null, ok = true) =>
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok:
+          String(path).includes("frontend_qid=eq.") && !String(path).includes("15003") ? ok : true,
+        status: ok ? 200 : 503,
+        headers: new Headers(),
+        json: async () =>
+          String(path).includes("frontend_qid=eq.15003")
+            ? [{ id: 41 }]
+            : String(path).startsWith("/rest/v1/survey_question")
+              ? row
+                ? [row]
+                : []
+              : [],
+        text: async () => "",
+      }));
+
+    it("says there is no such question, refuses a written-answer one, and calls a failed read an outage", async () => {
+      questionRow(null);
+      expect((await call({ measure: "answers", question: "09999" })).content[0]!.text).toBe(
+        "There is no survey question 09999."
+      );
+      questionRow({ id: 5, frontend_qid: "00000", type: "open", question: "What is your email?" });
+      const open = await call({ measure: "answers", question: "00000" });
+      expect(open.isError).toBe(true);
+      expect(open.content[0]!.text).toContain("written answers are never read");
+      questionRow(null, false);
+      const down = await call({ measure: "answers", question: "03011" });
+      expect(down.isError).toBe(true);
+      expect(down.content[0]!.text).toMatch(/outage/);
+    });
+
     it("calls an unreadable database an outage, not an empty answer", async () => {
       mockSupabaseFetch.mockResolvedValue({
         ok: false,
