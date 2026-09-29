@@ -4852,7 +4852,7 @@
  * The subheading and three paragraphs stay sharp; the next block ramps in over
  * four 25.6px lines (Mark: "have all paywall go through progression of 4 lines");
  * everything after sits under the full blur to the end of the chapter, with the
- * Premium card 87px in. The old uniform blur and two-line opacity mask are
+ * paywall card on it (below). The old uniform blur and two-line opacity mask are
  * switched off here. */
 .rv3 .rv4-tb__gated {
   filter: none;
@@ -4870,10 +4870,11 @@
 .rv3 .rv4-tb__blurred {
   filter: blur(var(--rv4-veil, 5px));
 }
-/* 1015:1004 (29.09) sits 45 into "The problem is not the preference…" (348:334), which
- * the page sets 339.1 into this gate at 393. */
+/* 1015:1004 (29.09) sits 45 into the paragraph 348:334, which the page sets 339.1 into
+ * this gate at 393. A gate is as tall as its copy, which shortens as the column widens,
+ * so every card sits where its frame sets it or as low as its gate still holds it. */
 .rv3 .rv4-tb__gate .rv4-premium {
-  top: 384px;
+  top: clamp(0px, 100% - 363px, 384px);
 }
 
 /* ══ "Try this & see what shifts" — 374:217 / 374:238 / 374:258 ═══════════════
@@ -5068,7 +5069,7 @@
   width: 126px;
 }
 /* 374:258 — the gated practice. The third paragraph ramps over its full height
- * (411:5690); the rest is under the full blur (375:220) with the card 88px in. */
+ * (411:5690); the rest is under the full blur (375:220) with the card on it (below). */
 .rv3 .rv4-try__gate {
   cursor: pointer;
   position: relative;
@@ -5086,9 +5087,10 @@
 .rv3 .rv4-try__blurred {
   filter: blur(var(--rv4-veil, 5px));
 }
-/* 1015:980 (29.09): 48.5 into the rest, 40 higher than the old card's 88.5. */
+/* 1015:980 (29.09): 48.5 into the rest, 40 higher than the old card's 88.5, and never
+ * past the rest's foot. */
 .rv3 .rv4-try__rest .rv4-premium {
-  top: 48.5px;
+  top: clamp(0px, 100% - 205px, 48.5px);
 }
 
 /* ── "Go deeper" inside this chapter ─────────────────────────────────────────── */
@@ -5288,7 +5290,7 @@
   --rv4-band: var(--rv4-try-band, 100%);
 }
 .rv3 .rv4-try__gate > .rv4-premium {
-  top: var(--rv4-try-premium-top, 148px);
+  top: clamp(0px, 100% - 205px, var(--rv4-try-premium-top, 148px));
 }
 .rv3 .rv4-try.is-open .rv4-try__body {
   padding-top: var(--rv4-try-open-pt, 4px);
@@ -5349,7 +5351,7 @@
 }
 /* 314:307 — the ramp fades in over two 25.6px lines; everything after sits under
  * the full blur (Figma radius 5; --rv4-veil since review 26.09) to the end of the
- * section, with the card 82px below the ramp's top (197 into the section). The
+ * section, with the paywall card on it (below). The
  * frame builds this from three stacked text nodes with spacer lines, which runs the
  * section to 1228; the open layout stays under the blur instead, so nothing moves
  * when the reader unlocks. */
@@ -5372,9 +5374,10 @@
   display: none;
 }
 /* 1015:1163 (29.09): 408 into 314:284, whose first line is the ramp's, where this gate
- * starts. */
+ * starts — or as low as the gate still holds it: from 700 its copy runs short of 771
+ * (515 from 1024), and the card ran under the practice card. */
 .rv3 .rv4-ab__gate .rv4-premium {
-  top: 408px;
+  top: clamp(0px, 100% - 363px, 408px);
 }
 /* 310:229's 16px continues to the practice card and the article. */
 .rv3 .rv4-ab + .rv4-try {
@@ -6075,7 +6078,7 @@ html {
 }
 /* 305:462 — the ramp fades in over ~105px (the progressive blur ends 5.2% down
  * 305:361's 2032px box, about four lines); the rest sits under the full blur at full
- * length, so nothing moves when the reader unlocks; the card floats 282px in. */
+ * length, so nothing moves when the reader unlocks; the card floats on it (below). */
 .rv3 .rv4-cip__gate {
   cursor: pointer;
   position: relative;
@@ -6087,9 +6090,9 @@ html {
 .rv3 .rv4-cip__blurred {
   filter: blur(var(--rv4-veil, 5px));
 }
-/* 1015:1257 (29.09): 303 into 305:462, where this gate starts. */
+/* 1015:1257 (29.09): 303 into 305:462, where this gate starts, and never past its foot. */
 .rv3 .rv4-cip__gate .rv4-premium {
-  top: 303px;
+  top: clamp(0px, 100% - 363px, 303px);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .rv3 .rv4-cip__ramp {
@@ -7106,7 +7109,7 @@ html {
 /* 305:228 — all of "Common challenges" under the full blur (Figma radius 5), at full
  * length so nothing moves on unlock. Mark, 25.09 (1941866053): "move this CTA down a
  * bit so that it isnt immediately following the drop down", with a separator after
- * it; 305:225 floats the card 103.3 into the copy (305:250), centred. 305:225 also
+ * it; the card floats on the copy, centred (below). 305:225 also
  * spaced the table, that separator and the copy 16 apart — 76 in all, which Mark read
  * as too wide on 27.09 ("Is that more than a separator element in figma?"), so the
  * paywalled body now keeps them flush like the open one (304:290): one 44px separator. */
@@ -7118,9 +7121,10 @@ html {
   filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
-/* 1015:1379 (29.09): 258.27 into 305:228, this gate — 155 lower than the old card. */
+/* 1015:1379 (29.09): 258.27 into 305:228, this gate — 155 lower than the old card —
+ * and never past its foot. */
 .rv3 .rv4-fvr__gate .rv4-premium {
-  top: 258.3px;
+  top: clamp(0px, 100% - 363px, 258.3px);
 }
 /* 441:6422 is 343 like every chapter's teaser card since the rehaul (28.09). */
 .rv3 .rv4-fvr + .rv4-try {
@@ -8329,6 +8333,8 @@ html {
  * down (the stroke inside). The bar is outside `.rv4`, so the page is matched with
  * :has(). The desktop card is unchanged. */
 body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4 {
+  /* The frame's Plus Jakarta Sans: outside `.rv3.rv4`, --font-sans is the site's Manrope. */
+  --font-sans: var(--font-jakarta);
   align-items: flex-start;
   border-top: 1px solid #e5e5e5;
   box-shadow: none;
@@ -8464,6 +8470,13 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
     padding: 0 16px;
     width: auto;
+  }
+}
+/* At 320 "14-day money-back" needs 106px of the badge: the pill gives up 6 more of its
+ * side padding so the line keeps them. */
+@media (max-width: 340px) {
+  body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
+    padding: 0 10px;
   }
 }
 

@@ -445,9 +445,9 @@ describe("reportV3.css — learn-more contracts", () => {
     expect(rule(".rv3 .rv4-learn .rv4-learn__body > :last-child {")).toContain("margin-bottom: 0");
   });
 
-  // 153:2280 sets the Premium card 67 into the gate (it read 90 when the card was
-  // built); 235:317, on the same shared gate, 88 — which the article carries.
-  it("floats the Premium card 67 into the shared gate, or where the article says", () => {
+  // 153:2280 sets the 29.09 card (1015:1138) 176.5 into the gate (the old one 67);
+  // 235:317, on the same shared gate, 78.5 (1015:1232) — which the article carries.
+  it("floats the paywall card 176.5 into the shared gate, or where the article says", () => {
     expect(rule(".rv3 .rv4-learn__gate > .rv4-premium {")).toContain(
       "top: var(--rv4-learn-premium-top, 176.5px)"
     );
