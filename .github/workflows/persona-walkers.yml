@@ -98,9 +98,14 @@ jobs:
               --device "$(jq -r .device <<<"$w")" \
               --plan "$(jq -r .plan <<<"$w")" \
               --report "$(jq -r '.report // "default"' <<<"$w")" </dev/null || rc=$?
-            # 1 is a walk that stopped early, which the judge reports. 2 is a walk we asked for
-            # wrongly: noted, judged with the rest, and it fails the job at the end.
-            if [ "$rc" -eq 2 ]; then touch "$WALK_OUT/.bad-request"; fi
+            # 2 is a walk we asked for wrongly: noted, judged with the rest, and it fails the
+            # job at the end. Anything else (1, or 124 from timeout) is a walk that stopped
+            # early: the judge reports it, and a walk-only run fails on it.
+            if [ "$rc" -eq 2 ]; then
+              touch "$WALK_OUT/.bad-request"
+            elif [ "$rc" -ne 0 ]; then
+              touch "$WALK_OUT/.walk-failed"
+            fi
           done < <(jq -c '.[]' <<<"$WALKS")
 
       # Pinned: the judge's folder-only rules (judgeArgs in judge.ts) were checked on this
@@ -142,13 +147,20 @@ jobs:
           fi
           exit $rc
 
-      - name: Fail on a walk that was asked for wrongly
+      - name: Fail on a walk asked for wrongly, or a stopped walk nobody judged
         if: ${{ !cancelled() }}
         env:
           WALK_OUT: ${{ runner.temp }}/walks
+          JUDGED: ${{ inputs.judge }}
         run: |
           if [ -f "$WALK_OUT/.bad-request" ]; then
             echo "::error::A walk was asked for with an unknown persona, device, plan or report"
+            exit 1
+          fi
+          # Judged, a stopped walk is in the night's message. Walk-only, nothing is posted, so
+          # this is the only place it shows.
+          if [ "$JUDGED" != "true" ] && [ -f "$WALK_OUT/.walk-failed" ]; then
+            echo "::error::A walk stopped before the end; the log above says where"
             exit 1
           fi
 

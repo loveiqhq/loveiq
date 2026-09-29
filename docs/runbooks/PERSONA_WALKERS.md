@@ -124,7 +124,8 @@ npx tsx scripts/walkers/walk.ts --persona "Spark Seeker" --device "Desktop Chrom
 - A laptop that sleeps mid-walk freezes it: a walk on 2026-09-29 lost 17 minutes and
   logged 48 "offline" errors. Keep the lid open, or use Actions.
 - From Actions: run "Persona walks on staging", optionally with a JSON list of walks. Turn
-  `judge` off to walk without posting.
+  `judge` off to walk without posting. Then a walk that stops fails the run, because
+  nothing is posted to say so.
 
 ## What it costs
 
