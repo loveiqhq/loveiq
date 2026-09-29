@@ -421,6 +421,29 @@ export interface FrictionReport {
   blind: string[];
 }
 
+/**
+ * Signals the scoreboard cannot see, printed under its table.
+ *
+ * Named, never silently dropped: a scoreboard that omits its blind spots reads as
+ * complete. Plain names only, because they are printed in the Slack message; why
+ * each one is missing lives in these comments. All three reach PostHog and never
+ * a row here.
+ */
+export const FRICTION_BLIND_SPOTS: string[] = [
+  // PostHog autocapture only; nothing writes a dead click to Postgres.
+  "dead clicks",
+  // Wired 2026-09-15 after sitting unused; it reaches PostHog but cannot reach a
+  // row here, because persisting needs a submission id and during the survey
+  // nothing has been submitted yet.
+  "form errors",
+  // Trust seeking. A real gap, not an absent interaction. The report renders the
+  // site footer (FooterSection in ReportExperienceV1 and ReportPage), so a reader
+  // CAN go looking for trust: Trust Center, privacy policy, medical disclaimer.
+  // Those visits reach PostHog as page views and never a row here. (The guarantee
+  // is static text and Trustpilot is off, so the footer is the only route.)
+  "visits to the trust pages",
+];
+
 export async function buildFrictionReport(
   sinceIso: string,
   untilIso: string,
@@ -437,21 +460,7 @@ export async function buildFrictionReport(
       ...(report ? buildReportSignals(report) : []),
     ],
     rowsRead: snap.total_rows + (report?.total_rows ?? 0),
-    // Named, never silently dropped: a scoreboard that omits its blind spots
-    // reads as complete.
-    blind: [
-      "dead clicks (PostHog only — 3,249 a week, writes nothing to Postgres)",
-      // Wired 2026-09-15 after sitting unused; it reaches PostHog but cannot
-      // reach a row here, because persisting needs a submission id and during
-      // the survey nothing has been submitted yet.
-      "form errors (PostHog only — no submission exists mid-survey to key a row to)",
-      // A real gap, not an absent interaction. The report renders the site footer
-      // (FooterSection in ReportExperienceV1 and ReportPage), so a reader CAN go
-      // looking for trust: Trust Center, privacy policy, medical disclaimer. Those
-      // visits reach PostHog as page views and never a row here. (The guarantee is
-      // static text and Trustpilot is off, so the footer is the only route.)
-      "trust seeking (PostHog only — report footer links to Trust Center, privacy policy, medical disclaimer)",
-    ],
+    blind: FRICTION_BLIND_SPOTS,
   };
 }
 
@@ -526,7 +535,9 @@ export function buildFrictionSection(report: FrictionReport, windowDays: number)
     // Blind spots are named. A board that quietly omits what it cannot see
     // reads as complete, and this one cannot see the largest friction signal
     // we collect.
-    report.blind.length > 0 ? `_Not measured here: ${report.blind.join("; ")}_` : "",
+    report.blind.length > 0
+      ? `_Not in this table: ${report.blind.join(", ")}. PostHog has them._`
+      : "",
   ]
     .filter(Boolean)
     .join("\n");

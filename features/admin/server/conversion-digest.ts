@@ -1478,9 +1478,7 @@ export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
    * the software and the freelancers — roughly EUR 3,000 a month that lives in a
    * spreadsheet and in no database we can read.
    */
-  lines.push(
-    "_Advertising only — team, software and freelance costs are in the Business Case sheet, not in any system this reads._"
-  );
+  lines.push("_Advertising only. Team, software and freelance costs are not included._");
 
   if (u.coveredDays < u.windowDays) {
     lines.push(
