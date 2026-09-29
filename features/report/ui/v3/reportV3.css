@@ -3560,8 +3560,9 @@
   max-height: 196px;
   overflow: hidden;
 }
-/* Copy that ends inside the box (the wide desktop column; useTeaserFade marks it)
- * keeps the proportional fade: greying three of its four lines reads as a mistake. */
+/* Copy that ends inside the box (useTeaserFade marks it `short`) keeps the proportional
+ * fade on the phone. From 700px Mark's desktop review asks for the copy's own last three
+ * lines instead (the desktop review block, from useTeaserFade's tail). */
 .rv3 .rv4-learn__teaser[data-fade="short"] {
   -webkit-mask-image: linear-gradient(
     180deg,
@@ -8803,15 +8804,16 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
    * over its line, the bar and the %, on one line and centred on it, at V2's type
    * clamps and bar width, a hairline between the plain rows. Three rows and no View
    * report, as V3TopThree already has it. Fatih (29.09) kept V4's #1 card, Sanjin's
-   * descriptions and the count-up. The rank and % tracks are fixed, not V2's auto:
-   * each row is its own grid, and auto tracks sized to each rank or to a % still
-   * counting up would set the icons and bars a few px apart, row to row. */
+   * descriptions and the count-up. The rank's track is V2's own (at least 24, else the
+   * number: its digits are tabular, so every row's is the same width, 31.2 at 1536); the
+   * %'s is fixed, not V2's auto, since each row is its own grid and an auto track sized
+   * to a % still counting up would set the bars a few px apart, row to row. */
   .rv3.rv4 .rv4-top3 .rv3-top3__row {
     column-gap: clamp(12px, 1.4vw, 16px);
     grid-template-areas:
       "rank icon name bar pct"
       "rank icon blurb bar pct";
-    grid-template-columns: 28px 24px minmax(0, 1fr) clamp(96px, 12vw, 160px) 52px;
+    grid-template-columns: minmax(24px, auto) 24px minmax(0, 1fr) clamp(96px, 12vw, 160px) 52px;
     grid-template-rows: auto auto;
     row-gap: 2px;
   }

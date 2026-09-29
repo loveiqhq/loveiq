@@ -37,9 +37,18 @@ describe("sciStops", () => {
     ]);
   });
 
-  it("folds a stop within 40px of the next into it, so no step is a nudge", () => {
+  it("folds only a stop within the tile's own padding of the next, so no step is a nudge", () => {
+    // 7px short of the end: only the last tile's padding is cut, so they are one stop.
+    expect(sciStops([0, 277, 554, 831, 1108, 1385, 1662], 1115).map((s) => s.left)).toEqual([
+      0, 277, 554, 831, 1115,
+    ]);
+  });
+
+  it("keeps a stop that still leaves the last tile cut, so the pager never claims the end early", () => {
+    // 31px short of the end (as a 1366 laptop's column parks it): the last tile's words
+    // are still cut there, so the end is a stop of its own.
     expect(sciStops([0, 277, 554, 831, 1108, 1385, 1662], 1139).map((s) => s.left)).toEqual([
-      0, 277, 554, 831, 1139,
+      0, 277, 554, 831, 1108, 1139,
     ]);
   });
 
@@ -180,16 +189,52 @@ describe("the desktop gallery's pager", () => {
     expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 1010, behavior: "auto" });
   });
 
-  it("steps on from where the last click is heading, not from where the deck still is", () => {
+  it("holds a click's stop while the deck glides, and steps on from it", () => {
     const { container } = render(<V3Methodology chrome="deck" />);
     const track = layOut(container);
     fireEvent.scroll(track);
     fireEvent.click(arrow(container, "Next card"));
+    expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 277, behavior: "smooth" });
+    // Mid-glide the deck reads 100, nearer the first stop: the dot stays on the target,
+    // and a second click goes on from it rather than from where the deck still is.
+    track.scrollLeft = 100;
+    fireEvent.scroll(track);
+    expect(current(container)).toBe(1);
     fireEvent.click(arrow(container, "Next card"));
+    expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 554, behavior: "smooth" });
     fireEvent.click(arrow(container, "Previous card"));
-    expect(vi.mocked(track.scrollTo).mock.calls.map(([o]) => (o as ScrollToOptions).left)).toEqual([
-      277, 554, 277,
-    ]);
+    expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 277, behavior: "smooth" });
+  });
+
+  it.each([
+    ["the glide ending", (track: HTMLElement) => fireEvent(track, new Event("scrollend"))],
+    ["the reader's wheel", (track: HTMLElement) => fireEvent.wheel(track)],
+  ])("lets go of a click's stop on %s, and follows the deck again", (_, letGo) => {
+    const { container } = render(<V3Methodology chrome="deck" />);
+    const track = layOut(container);
+    fireEvent.scroll(track);
+    fireEvent.click(arrow(container, "Next card"));
+    track.scrollLeft = 100;
+    letGo(track);
+    fireEvent.scroll(track);
+    expect(current(container)).toBe(0);
+    fireEvent.click(arrow(container, "Next card"));
+    expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 277, behavior: "smooth" });
+  });
+
+  it("does not claim the end while the last tile is still cut", () => {
+    // A 1366 laptop's column: the deck can rest 31px short of the end, the last tile's
+    // words still cut there; Next must still reach them.
+    const { container } = render(<V3Methodology chrome="deck" />);
+    const track = layOut(container, 788);
+    track.scrollLeft = 1108;
+    fireEvent.scroll(track);
+    expect(pips(container)).toHaveLength(6);
+    expect(current(container)).toBe(4);
+    const next = arrow(container, "Next card");
+    expect(next.hasAttribute("aria-disabled")).toBe(false);
+    fireEvent.click(next);
+    expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 1139, behavior: "smooth" });
   });
 
   it("follows the deck when the reader scrolls it, and stops at its ends", () => {
@@ -218,7 +263,10 @@ describe("the desktop gallery's pager", () => {
     layOut(container, 620);
     act(() => resize?.());
     expect(pips(container)).toHaveLength(6);
-    expect(track).toBeDefined();
+    // The 620 column's end stop, 1307, brings in the last tile.
+    expect(pips(container).at(-1)!.getAttribute("aria-label")).toBe("Show Therapy rooms");
+    fireEvent.click(pips(container).at(-1)!);
+    expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 1307, behavior: "smooth" });
   });
 
   it("reads a scroll before layout without failing", () => {

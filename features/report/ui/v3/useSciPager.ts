@@ -9,9 +9,12 @@ import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "
  * A stop is a scrollLeft the deck can rest on: a tile's snap position, clamped to the
  * scroll's end. With two to four tiles in view the last ones can only reach the end, so
  * they share its stop, as does a stop within MERGE_PX of it; the phone's geometry gives
- * one stop a tile, the seven its own dots show. Positions are bounding rects against the
- * snap edge, never offsetLeft, so they hold wherever the deck sits (V3Methodology's own
- * dot tracking says why).
+ * one stop a tile, the seven its own dots show. MERGE_PX is under the tile's own
+ * padding: folding a stop any further from the end would let a swipe park the deck
+ * there with the last tile's words still cut, while the pager said "end" (review,
+ * 29.09: 34px at 1200, 38px at 1366). Positions are bounding rects against the snap
+ * edge, never offsetLeft, so they hold wherever the deck sits (V3Methodology's own dot
+ * tracking says why).
  *
  * A click marks its stop at once and holds it while the deck glides, so a second click
  * goes on from there; the scroll ending, the reader taking over (wheel, pointer, key) or
@@ -24,7 +27,7 @@ export interface SciStop {
   card: number;
 }
 
-const MERGE_PX = 40;
+const MERGE_PX = 12;
 
 /** The deck's stops, from each tile's snap position and the scroll's end. */
 export const sciStops = (lefts: readonly number[], max: number): SciStop[] =>

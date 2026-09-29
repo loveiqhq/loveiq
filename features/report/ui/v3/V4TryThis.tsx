@@ -180,8 +180,9 @@ const V4TryThis: FC<Props> = ({
             <div className="rv4-try__teaser" ref={teaserRef}>
               <V4Prose blocks={practice.teaser ?? teaserOf(all)} />
             </div>
-            {/* 894:7594 "Show all pill" — "Read All", 126x32, at 298 of the card. The
-             * accessible name keeps what it opens; it contains the visible words. */}
+            {/* 894:7594 "Show all pill" — "Read All", 126x32, at 298 of the card on the
+             * phone; from 700px it follows the copy. The accessible name keeps what it
+             * opens; it contains the visible words. */}
             <button
               type="button"
               className="rv4-try__open"
