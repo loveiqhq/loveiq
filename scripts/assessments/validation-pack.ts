@@ -36,7 +36,8 @@ export function validationPack(def: InstrumentDefinition): string {
       (c) => `- ${c.text}${c.doi ? ` https://doi.org/${c.doi}` : ""}${c.url ? ` ${c.url}` : ""}`
     ),
     `- License: **${def.license.kind}**. ${def.license.terms} (${def.license.source})` +
-      (def.license.attribution ? ` Credit line: "${def.license.attribution}".` : ""),
+      (def.license.attribution ? ` Credit line: "${def.license.attribution}".` : "") +
+      (def.license.granted?.trim() ? ` Permission granted: ${def.license.granted}.` : ""),
     "",
     "## What a person sees (source)",
     "",

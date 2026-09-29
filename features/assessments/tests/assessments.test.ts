@@ -19,6 +19,7 @@ import {
 } from "@features/assessments/logic/score";
 import { standardSignOff } from "@features/assessments/logic/signoff";
 import type { InstrumentDefinition } from "@features/assessments/logic/types";
+import { validationPack } from "@/scripts/assessments/validation-pack";
 
 const def = (id: string) => instrument(id)!;
 
@@ -446,4 +447,34 @@ describe("scoring shapes the pilots do not use", () => {
     const r = scoreInstrument(d, { test_1: 1, test_2: 2, test_3: 2 });
     expect(r.ok && [r.total, r.band.label]).toEqual([1.67, "Low"]);
   });
+});
+
+/**
+ * A reviewer signs against the fingerprint, and the fingerprint covers the whole definition,
+ * so every word in it has to be in the pack they read. A field the pack leaves out would be
+ * signed unseen: a recorded permission grant was, until this test.
+ */
+describe("the validation pack", () => {
+  const strings = (v: unknown): string[] =>
+    typeof v === "string"
+      ? [v]
+      : Array.isArray(v)
+        ? v.flatMap(strings)
+        : v !== null && typeof v === "object"
+          ? Object.values(v).flatMap(strings)
+          : [];
+
+  it.each(INSTRUMENTS.map((d) => [d.id, d] as const))(
+    "shows every word %s's fingerprint covers",
+    (_, d) => {
+      const granted: InstrumentDefinition = {
+        ...d,
+        license: { ...d.license, kind: "permission", granted: "By the publisher, 2026-10-01" },
+      };
+      for (const def of [d, granted]) {
+        const pack = validationPack(def);
+        for (const s of strings(def)) expect(pack).toContain(s);
+      }
+    }
+  );
 });
