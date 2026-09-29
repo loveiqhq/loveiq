@@ -970,7 +970,9 @@ watch behave exactly as they did on Vercel.
 - **Whose seat.** The teamwork@ seat since 2026-09-26, moved from Eman's own seat at their
   request. Claude Code on Eman's laptop is signed in as teamwork@ too, so its sessions and
   these jobs share the seat's five-hour and weekly limits. The jobs take about fifteen short
-  calls a day, so a limit hit most likely means a heavy day of sessions. A hit is reported
+  calls a day, plus the persona walkers' two long judge passes at night
+  (`persona-walkers.yml`, docs/runbooks/PERSONA_WALKERS.md), so a limit hit most likely
+  means a heavy day of sessions. A hit is reported
   as `rate_limited`, the job stops for the day, and the #brain alert pings whoever looks
   after the seat (repository variable `CLAUDE_TOKEN_OWNER_SLACK_ID`, Eman). The limit resets
   on its own; run the job again from Actions once it has. On 2026-09-19 `generate-fix`

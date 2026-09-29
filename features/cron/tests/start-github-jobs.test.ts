@@ -112,6 +112,13 @@ describe("when each GitHub job is due", () => {
     expect(brain("2026-09-29T15:41:00Z")).toEqual([]);
   });
 
+  it("walks staging once a night, at 02:41, between the Night Shift and the brief", () => {
+    const hours = [...Array(24).keys()].filter((h) =>
+      workflows(`2026-09-29T${String(h).padStart(2, "0")}:41:00Z`).includes("persona-walkers.yml")
+    );
+    expect(hours).toEqual([2]);
+  });
+
   it("starts the digest audit after the digest in winter as well as summer", () => {
     // The digest posts at 08:17 UTC in winter; the audit's first start must be later.
     const hours = [...Array(24).keys()].filter((h) =>

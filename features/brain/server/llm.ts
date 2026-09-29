@@ -466,12 +466,18 @@ export function runClaude(
   args: string[],
   input: string,
   timeoutMs: number,
-  cwd: string
+  cwd: string,
+  /** The child's whole environment. Default: this process's, secrets and all. */
+  env?: NodeJS.ProcessEnv
 ): Promise<LlmResult> {
   return new Promise((resolve) => {
     // stderr ignored rather than piped: an unread pipe that fills up blocks the child, and
     // every failure is printed as JSON on stdout anyway.
-    const child = spawn(binary, args, { cwd, stdio: ["pipe", "pipe", "ignore"] });
+    const child = spawn(binary, args, {
+      cwd,
+      env: env ?? process.env,
+      stdio: ["pipe", "pipe", "ignore"],
+    });
     let stdout = "";
     // Resolves on the timer, not on the child's exit: Claude Code handles SIGTERM itself
     // (it exits 143 after running its SessionEnd hooks), so the exit can lag the kill.
