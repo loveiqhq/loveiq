@@ -15,9 +15,12 @@ import { useLayoutEffect, type RefObject } from "react";
  * at them, and falls back to the box's last three 22.4px lines until they are set.
  *
  * Only where the box cuts the copy off, as every frame does at 393. In the wide
- * desktop column a teaser's two blocks can end inside the box, and greying three
- * of its four lines would read as a mistake; that copy is marked `short` and keeps
- * the proportional fade it had before (#402).
+ * desktop column a teaser's two blocks can end inside the box; that copy is marked
+ * `short`, and on the phone keeps the proportional fade it had before (#402). Mark's
+ * desktop review (28.09) then asked for it on desktop too — "Lets have the last 3
+ * lines fade" — so short copy of four lines or more also gets `data-tail` and
+ * `--rv4-tail-1..3`: the same steps above the copy's OWN last three lines, which only
+ * the desktop rules read.
  *
  * Measured again when the box changes width, whenever a web font finishes loading
  * and whenever it comes on screen — the same three triggers as useRampFit, for the
@@ -44,6 +47,27 @@ export const teaserFadeSteps = (
   const [c1, c2, c3] = shown.slice(-3) as [number, number, number];
   const c0 = shown.length > 3 ? shown[shown.length - 4]! : c1 - (c2 - c1);
   return [round((c0 + c1) / 2), round((c1 + c2) / 2), round((c2 + c3) / 2)];
+};
+
+/**
+ * The same three steps for copy that ENDS inside its box: the boundaries above the
+ * copy's own last three lines, midway between each and the line before it. Null where
+ * the box cuts the copy (teaserFadeSteps has it), or under four lines, which would
+ * leave no line in full black.
+ */
+export const teaserTailSteps = (
+  centres: readonly number[],
+  boxHeight: number
+): [number, number, number] | null => {
+  if (centres.length < 4 || centres.some((c) => c >= boxHeight)) return null;
+  const [c0, c1, c2, c3] = centres.slice(-4) as [number, number, number, number];
+  return [round((c0 + c1) / 2), round((c1 + c2) / 2), round((c2 + c3) / 2)];
+};
+
+/** One step's custom property: set in px, or cleared. */
+const setStep = (box: HTMLElement, name: string, px: number | undefined) => {
+  if (px === undefined) box.style.removeProperty(name);
+  else box.style.setProperty(name, `${px}px`);
 };
 
 /** The centre of every line of text inside `box`, top to bottom, from its top. */
@@ -77,12 +101,17 @@ export function useTeaserFade(ref: RefObject<HTMLElement | null>, enabled = true
     let live = true;
     const fit = () => {
       if (!live) return;
-      const steps = teaserFadeSteps(lineCentres(box), box.getBoundingClientRect().height);
+      const centres = lineCentres(box);
+      const height = box.getBoundingClientRect().height;
+      const steps = teaserFadeSteps(centres, height);
+      // Short copy's own last three lines; only the desktop rules read them.
+      const tail = steps ? null : teaserTailSteps(centres, height);
       box.setAttribute("data-fade", steps ? "lines" : "short");
+      if (tail) box.setAttribute("data-tail", "3");
+      else box.removeAttribute("data-tail");
       [1, 2, 3].forEach((i) => {
-        const step = steps?.[i - 1];
-        if (step === undefined) box.style.removeProperty(`--rv4-fade-${i}`);
-        else box.style.setProperty(`--rv4-fade-${i}`, `${step}px`);
+        setStep(box, `--rv4-fade-${i}`, steps?.[i - 1]);
+        setStep(box, `--rv4-tail-${i}`, tail?.[i - 1]);
       });
     };
     fit();

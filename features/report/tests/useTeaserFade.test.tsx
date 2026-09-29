@@ -2,7 +2,11 @@
 import { useRef, type FC } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { teaserFadeSteps, useTeaserFade } from "@features/report/ui/v3/useTeaserFade";
+import {
+  teaserFadeSteps,
+  teaserTailSteps,
+  useTeaserFade,
+} from "@features/report/ui/v3/useTeaserFade";
 
 /**
  * Mark's rehaul (28.09): every closed "Try this" and "Learn more" frame greys the
@@ -42,8 +46,9 @@ describe("teaserFadeSteps", () => {
     expect(teaserFadeSteps(lines(12, 2), 196)).toEqual([128, 150.4, 172.8]);
   });
 
-  // In the wide desktop column the teaser's two blocks can end inside the box; greying
-  // three of its four lines would read as a mistake, so it keeps the proportional fade.
+  // In the wide desktop column the teaser's two blocks can end inside the box, which then
+  // cuts no line: teaserFadeSteps leaves it to the phone's proportional fade, and the
+  // desktop greys the copy's own last three lines instead (teaserTailSteps, below).
   it("leaves copy that ends inside its box to the proportional fade", () => {
     expect(teaserFadeSteps(lines(8, 2), 196)).toBeNull();
     expect(teaserFadeSteps(lines(4, 2), 196)).toBeNull();
@@ -51,6 +56,29 @@ describe("teaserFadeSteps", () => {
 
   it("gives up on a teaser shorter than three lines", () => {
     expect(teaserFadeSteps(lines(2), 196)).toBeNull();
+  });
+});
+
+// Mark's desktop review (28.09): "Lets have the last 3 lines fade". In the desktop column
+// the copy ends inside its box, so the box cuts no line; the copy's OWN last three lines
+// take the same steps, which only the desktop rules read.
+describe("teaserTailSteps", () => {
+  it("steps above the copy's own last three lines", () => {
+    expect(teaserTailSteps(lines(4, 2), 196)).toEqual([22.4, 52.8, 83.2]);
+    expect(teaserTailSteps(lines(8, 2), 196)).toEqual([128, 150.4, 172.8]);
+  });
+
+  it("follows a paragraph gap between the last lines", () => {
+    expect(teaserTailSteps(lines(6, 5), 196)).toEqual([67.2, 89.6, 120]);
+  });
+
+  it("leaves copy the box cuts off to teaserFadeSteps", () => {
+    expect(teaserTailSteps(lines(9, 2), 196)).toBeNull();
+  });
+
+  it("gives up under four lines, which would leave no line in full black", () => {
+    expect(teaserTailSteps(lines(3), 196)).toBeNull();
+    expect(teaserTailSteps([], 196)).toBeNull();
   });
 });
 
@@ -138,6 +166,12 @@ const steps = (container: HTMLElement) => {
 };
 const mode = (container: HTMLElement) =>
   container.querySelector<HTMLElement>(".teaser")!.getAttribute("data-fade");
+const tail = (container: HTMLElement) => {
+  const el = container.querySelector<HTMLElement>(".teaser")!;
+  return [1, 2, 3].map((i) => el.style.getPropertyValue(`--rv4-tail-${i}`));
+};
+const hasTail = (container: HTMLElement) =>
+  container.querySelector<HTMLElement>(".teaser")!.hasAttribute("data-tail");
 
 describe("useTeaserFade", () => {
   it("sets the three steps from the lines the teaser shows", () => {
@@ -163,6 +197,39 @@ describe("useTeaserFade", () => {
       .map((c) => rect(100 + c - 8.8));
     act(() => resize?.());
     expect(steps(container)).toEqual(["112px", "134.4px", "164.8px"]);
+  });
+
+  it("steps short copy's own last three lines for the desktop, leaving the phone's fade alone", () => {
+    fragments["More copy"] = at8(lines(4, 1).slice(1));
+    const { container } = render(<Teaser />);
+    expect(mode(container)).toBe("short");
+    expect(hasTail(container)).toBe(true);
+    expect(tail(container)).toEqual(["30.4px", "60.8px", "83.2px"]);
+    expect(steps(container)).toEqual(["", "", ""]);
+  });
+
+  it("sets no tail where the box cuts the copy", () => {
+    const { container } = render(<Teaser />);
+    expect(hasTail(container)).toBe(false);
+    expect(tail(container)).toEqual(["", "", ""]);
+  });
+
+  it("drops the tail when a narrower column makes the box cut the copy", () => {
+    fragments["More copy"] = at8(lines(4, 1).slice(1));
+    const { container } = render(<Teaser />);
+    fragments["More copy"] = at8(lines(9, 1).slice(1));
+    act(() => resize?.());
+    expect(mode(container)).toBe("lines");
+    expect(hasTail(container)).toBe(false);
+    expect(tail(container)).toEqual(["", "", ""]);
+    expect(steps(container)).toEqual(["128px", "150.4px", "172.8px"]);
+  });
+
+  it("sets no tail on short copy under four lines", () => {
+    fragments["More copy"] = at8(lines(3, 1).slice(1));
+    const { container } = render(<Teaser />);
+    expect(mode(container)).toBe("short");
+    expect(hasTail(container)).toBe(false);
   });
 
   it("leaves the stepped CSS fallback alone while the card is open", () => {
