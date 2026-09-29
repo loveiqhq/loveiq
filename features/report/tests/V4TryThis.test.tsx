@@ -354,7 +354,8 @@ describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () 
     expect(V3_CSS).not.toContain("228.5px)");
     expect(V3_CSS).not.toContain("padding-bottom: calc(257px - var(--rv4-try-teaser-h");
     expect(V3_CSS).toContain("--rv4-band: var(--rv4-try-band, 100%)");
-    expect(V3_CSS).toContain("top: var(--rv4-try-premium-top, 148px)");
+    // Held inside the gate since 29.09 (v4PremiumPlacement2909).
+    expect(V3_CSS).toContain("top: clamp(0px, 100% - 205px, var(--rv4-try-premium-top, 148px))");
     expect(V3_CSS).toContain("padding-top: var(--rv4-try-open-pt, 4px)");
   });
 });

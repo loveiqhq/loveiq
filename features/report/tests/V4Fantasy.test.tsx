@@ -178,11 +178,13 @@ describe("reportV3.css — Fantasy vs. Reality body contracts", () => {
   // Review 27.09, Mark (Divider.jpeg): "That space feels a bit wide. Is that more than a
   // separator element in figma?" It was — 305:225 spaces the table, its separator and the
   // blurred copy 16 apart, 76 in all. One 44px separator now, as the open body (304:290)
-  // has; the card keeps its 103.3 into the copy (305:250), still well clear of the
+  // has; the 29.09 card sits 258.3 into the copy (1015:1379), still further clear of the
   // dropdown Mark asked it to move off on 25.09 (1941866053).
   it("paywalled, leaves one 44px separator between the table and the blurred copy", () => {
     expect(V3_CSS).not.toMatch(/\.rv4-fvr\.is-locked > \.rv4-fvt \+ \.rv4-sep\s*\{/);
-    expect(ruleOf(".rv3 .rv4-fvr__gate .rv4-premium")).toContain("top: 258.3px");
+    expect(ruleOf(".rv3 .rv4-fvr__gate .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 363px, 258.3px)"
+    );
   });
 
   it("sets the body copy 16/25.6 in the copy grey, its bold runs in ink", () => {

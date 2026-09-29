@@ -31,15 +31,32 @@ const rule = (selector: string) => {
 };
 
 describe("the 29.09 paywall cards, where the frames set them", () => {
-  it("floats each chapter-body card on its paragraph", () => {
-    expect(rule(".rv3 .rv4-tb__gate .rv4-premium")).toContain("top: 384px;");
-    expect(rule(".rv3 .rv4-ab__gate .rv4-premium")).toContain("top: 408px;");
-    expect(rule(".rv3 .rv4-cip__gate .rv4-premium")).toContain("top: 303px;");
-    expect(rule(".rv3 .rv4-fvr__gate .rv4-premium")).toContain("top: 258.3px;");
+  // Final review, 29.09: a gate is as tall as its copy, which shortens as the column
+  // widens — A&B's is 1104px at 393 but 515 from 1024, so a card 408 down ran 256px past
+  // it and under the practice card, its pill out of reach. Each card now sits where its
+  // frame sets it, or as low as its gate still holds it.
+  it("floats each chapter-body card on its paragraph, never past the gate's foot", () => {
+    expect(rule(".rv3 .rv4-tb__gate .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 363px, 384px);"
+    );
+    expect(rule(".rv3 .rv4-ab__gate .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 363px, 408px);"
+    );
+    expect(rule(".rv3 .rv4-cip__gate .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 363px, 303px);"
+    );
+    expect(rule(".rv3 .rv4-fvr__gate .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 363px, 258.3px);"
+    );
   });
 
-  it("moves each practice card as far as its frame moved it", () => {
-    expect(rule(".rv3 .rv4-try__rest .rv4-premium")).toContain("top: 48.5px;");
+  it("moves each practice card as far as its frame moved it, never past the gate's foot", () => {
+    expect(rule(".rv3 .rv4-try__rest .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 205px, 48.5px);"
+    );
+    expect(rule(".rv3 .rv4-try__gate > .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 205px, var(--rv4-try-premium-top, 148px));"
+    );
     expect(src("V4Accelerators.tsx")).toContain("premiumTopPx={205.5}");
     expect(src("V4Partnership.tsx")).toContain("premiumTopPx={219.5}");
     expect(src("V4Fantasy.tsx")).toContain("premiumTopPx={167.3}");

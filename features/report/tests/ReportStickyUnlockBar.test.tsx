@@ -143,6 +143,9 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
       return css.slice(at, css.indexOf("}", at));
     };
     const bar = rule("body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4");
+    // The frame's Plus Jakarta Sans: outside `.rv3.rv4`, --font-sans is the site's
+    // Manrope (final review, 29.09).
+    expect(bar).toContain("--font-sans: var(--font-jakarta);");
     expect(bar).toContain("border-top: 1px solid #e5e5e5;");
     expect(bar).toContain("box-shadow: none;");
     // 12.5 from the bar's edge with Figma's stroke inside: 1 of hairline and 11.5.
@@ -166,5 +169,9 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     expect(rule("body:has(.rv3.rv4) .report-sticky-unlock__cta--v4::after")).toContain(
       "inset: -6px 0;"
     );
+    // At 320 "14-day money-back" needs 106px of the badge: the pill gives up 6 more of
+    // its padding below 341 so it keeps them (measured with the real font).
+    const narrow = css.slice(css.indexOf("@media (max-width: 340px)"));
+    expect(narrow.slice(0, narrow.indexOf("\n}\n"))).toContain("padding: 0 10px;");
   });
 });

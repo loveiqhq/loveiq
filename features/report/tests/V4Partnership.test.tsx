@@ -168,8 +168,8 @@ describe("the paywalled body — 305:358", () => {
     expect(text.getAttribute("aria-hidden")).toBe("true");
     const practice = container.querySelector<HTMLElement>(".rv4-cip + .rv4-try")!;
     // Since Mark's rehaul (28.09) 399:219 draws the shared 196px teaser box, so the
-    // card carries none of its own. 399:260's card, measured at 393 with the real
-    // fonts, 147.5px below the gate.
+    // card carries none of its own. 399:260's paywall card (1015:1302, 29.09) 219.5px
+    // below the gate — 72 lower than the old one's 147.5.
     expect(practice.style.getPropertyValue("--rv4-try-teaser-h")).toBe("");
     expect(practice.style.getPropertyValue("--rv4-try-premium-top")).toBe("219.5px");
     fireEvent.click(practice.querySelector(".rv4-try__button")!);
@@ -220,10 +220,12 @@ describe("the CSS contract", () => {
     }
   });
 
-  it("ramps the blur in over ~105px and floats the card 282px into the gate", () => {
+  it("ramps the blur in over ~105px and floats the card 303px into the gate", () => {
     expect(rule(".rv3 .rv4-cip__ramp")).toContain("--rv4-band: 105px");
     expect(rule(".rv3 .rv4-cip__blurred")).toContain("filter: blur(var(--rv4-veil, 5px))");
-    expect(rule(".rv3 .rv4-cip__gate .rv4-premium")).toContain("top: 303px");
+    expect(rule(".rv3 .rv4-cip__gate .rv4-premium")).toContain(
+      "top: clamp(0px, 100% - 363px, 303px)"
+    );
   });
 
   it("sets the practice list flush, 21px in and 8px above what follows (399:259)", () => {

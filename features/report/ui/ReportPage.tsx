@@ -2827,8 +2827,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // before it, so a reader meets the paywall earlier than the pop-up fires. Whichever
     // arrives first reports it; `notifyPaywallReached` is idempotent, so the pop-up
     // reporting it again later is a no-op.
-    // V4's in-flow "Premium content" card (.rv4-premium) counts too — whichever
-    // offer comes first in the page.
+    // V4's in-flow paywall card (.rv4-premium) counts too — whichever offer comes
+    // first in the page.
     const firstOfferCard = document.querySelector(".report-premium-overlay, .rv4-premium");
     let cardObserver: IntersectionObserver | null = null;
     if (firstOfferCard) {
