@@ -45,3 +45,12 @@ describe("the Try this and Learn more cards sit on the text column", () => {
     expect(card).toContain("width: 100%");
   });
 });
+
+// "We dont need the back to Top bottom on Desktop." V4BackToTop stays mounted for the
+// phone (V4LearnMore's DOM contract); from 700px it does not draw, so it can neither
+// cover the copy nor take focus.
+describe("no Back to top on desktop", () => {
+  it("does not draw the button from 700px", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-backtop")).toContain("display: none");
+  });
+});

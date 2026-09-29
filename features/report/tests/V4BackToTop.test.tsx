@@ -144,7 +144,6 @@ describe("reportV3.css — back-to-top contracts", () => {
         "min-width: 641px) and (max-width: 1024px",
         /16px \+ var\(--liq-consent-h, 0px\) \+ var\(--report-unlock-bar-h, 160px\) \+ 12px/,
       ],
-      ["min-width: 1025px", /12px \+ var\(--report-unlock-bar-h, 78px\) \+ 12px/],
     ] as const;
     const selector = ".rv3.rv4.report-experience--sticky-pad .rv4-backtop {";
     let from = 0;
@@ -155,6 +154,15 @@ describe("reportV3.css — back-to-top contracts", () => {
       expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toMatch(bottom);
       from = at + 1;
     }
+  });
+
+  // Mark's desktop review (28.09): "We dont need the back to Top bottom on Desktop." The
+  // button does not draw from 700px, so the desktop bar's offset went with it; 641-699
+  // still rides the tablet card.
+  it("keeps no offset for the desktop bar, where the button does not draw", () => {
+    expect(V3_CSS).not.toMatch(
+      /@media \(min-width: 1025px\) \{\s*\.rv3\.rv4\.report-experience--sticky-pad \.rv4-backtop/
+    );
   });
 
   it("borrows the Ignite panel's hairline so it reads as part of the report", () => {
