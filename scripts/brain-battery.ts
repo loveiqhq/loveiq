@@ -3390,6 +3390,41 @@ async function mcpProbes(): Promise<McpProbe[]> {
       args: {},
       check: contains("survey_submission"),
     },
+    // user_totals' measures (2026-09-29). Each read is live survey data, so the checks
+    // are the shape and the refusals, never a figure that changes by the day.
+    {
+      kind: "mcp-user-totals-traits",
+      tool: "user_totals",
+      args: { measure: "traits", group_by: ["archetype"] },
+      check: both(contains("Trait profile", "against everyone's average"), absent("@")),
+    },
+    {
+      kind: "mcp-user-totals-answers",
+      tool: "user_totals",
+      args: { measure: "answers", question: "03011" },
+      check: contains("Answers to 03011", "never read or shown"),
+    },
+    // Stored as text: must say so, never "fewer than 5 answered".
+    {
+      kind: "mcp-user-totals-text-question",
+      tool: "user_totals",
+      args: { measure: "answers", question: "15001" },
+      check: both(contains("stored as written text", "group by country"), absent("Fewer than 5")),
+    },
+    // An email address is a free-text answer: it must be refused, never counted.
+    {
+      kind: "mcp-user-totals-refuses-free-text",
+      tool: "user_totals",
+      args: { measure: "answers", question: "00000" },
+      check: both(contains("written answers are never read"), absent("@")),
+    },
+    {
+      kind: "mcp-user-totals-emails",
+      tool: "user_totals",
+      // From 1 Sep: Resend's record starts on the 14th, and the answer must say so.
+      args: { measure: "emails", since: "2026-09-01" },
+      check: both(contains("report reminders recorded", "its record starts on"), absent("@")),
+    },
     // THE SECURITY GUARD. `query_product_data` reads production tables directly, so
     // a column holding an email or a report token must come back masked. A regression
     // here leaks customer data into a chat transcript.
