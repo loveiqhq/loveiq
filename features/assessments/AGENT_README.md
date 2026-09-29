@@ -30,8 +30,9 @@ which one ships first. LoveIQ's own archetype survey stays in `features/scoring/
 **Rules:**
 
 - Never paraphrase the source's part, and copy it from one pinned published form (`form`).
-  A wording change is a validation question, not an edit: it changes `sourceHash`, fails
-  the pinned-fingerprint test, and voids a sign-off.
+  A wording change is a validation question, not an edit: it changes `reviewHash`, fails
+  the pinned-fingerprint test, and voids a sign-off. So does a change to our copy, a safety
+  message or a help line: a changed crisis message must be read again before it ships.
 - Screening, never diagnosis, in every line of our copy, the safety messages included.
 - A safety rule is never behind a paywall and never waits for the score. Its next step
   replaces the band's, and its help lines are by country with an `ANY` fallback.

@@ -99,26 +99,32 @@ export function helpFor(rule: SafetyRule, country: string | null | undefined): H
   );
 }
 
+/** Not signed for: they change when an instrument is signed, or say nothing a person reads. */
+const BOOKKEEPING = new Set(["status", "version", "signOff", "signedHash"]);
+
+/** Every object's keys in order, so reordering a definition file is not a change. */
+const canonical = (v: unknown): unknown =>
+  Array.isArray(v)
+    ? v.map(canonical)
+    : v !== null && typeof v === "object"
+      ? Object.fromEntries(
+          Object.keys(v)
+            .sort()
+            .map((k) => [k, canonical((v as Record<string, unknown>)[k])])
+        )
+      : v;
+
 /**
- * A fingerprint of everything a reviewer signs as faithful to the source: the form, the
- * instructions, every item's wording and answers, the scoring, and the band ranges and
- * labels. Our copy (summaries, next steps, safety wording) is not in it: rewording that is
- * reviewed on its own lines, and should not throw away the fidelity sign-off.
+ * A fingerprint of everything the sign-off covers: the form, the wording, the answers, the
+ * scoring, the bands and our copy for them, the safety routing, the license and the sources.
+ * It leaves out only the bookkeeping, so a field added later is covered without anyone
+ * remembering to add it. Our copy is in it on purpose: a changed crisis message must be read
+ * again before it reaches anyone, the same as a changed item.
  */
-export function sourceHash(def: InstrumentDefinition): string {
-  const source = {
-    form: def.form,
-    instructions: def.instructions,
-    scale: def.scale,
-    items: def.items.map((i) => ({
-      id: i.id,
-      text: i.text,
-      reverse: !!i.reverse,
-      unscored: !!i.unscored,
-      options: i.options ?? null,
-    })),
-    scoring: def.scoring,
-    bands: def.bands.map((b) => ({ min: b.min, max: b.max, label: b.label })),
-  };
-  return createHash("sha256").update(JSON.stringify(source)).digest("hex").slice(0, 16);
+export function reviewHash(def: InstrumentDefinition): string {
+  const reviewed = Object.fromEntries(Object.entries(def).filter(([k]) => !BOOKKEEPING.has(k)));
+  return createHash("sha256")
+    .update(JSON.stringify(canonical(reviewed)))
+    .digest("hex")
+    .slice(0, 16);
 }

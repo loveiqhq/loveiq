@@ -30,7 +30,7 @@ export interface Item {
   text: string;
   /** Scored in reverse (a higher answer means less of the construct). */
   reverse?: boolean;
-  /** Asked but not part of the total (GAD-7's and PHQ-9's difficulty question). */
+  /** Asked but not part of the total (PHQ-9's difficulty question). */
   unscored?: boolean;
   /** Its own options instead of the instrument's shared scale. */
   options?: ResponseOption[];
@@ -142,9 +142,9 @@ export interface InstrumentDefinition {
   /** Filled in by Mark and Sanjin; `validated` needs every line signed. */
   signOff: SignOff[];
   /**
-   * `sourceHash(def)` at the moment of sign-off. A change to anything a reviewer signed as
-   * faithful (instructions, items, answers, scoring, bands) changes the hash, and the gate
-   * then refuses `validated` until it is signed again.
+   * `reviewHash(def)` at the moment of sign-off. A change to anything the sign-off covers
+   * (the wording, answers, scoring, bands, our copy, the safety routing, the license)
+   * changes the hash, and the gate then refuses `validated` until it is signed again.
    */
   signedHash?: string;
 }

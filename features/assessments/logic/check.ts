@@ -1,6 +1,6 @@
 import { checkCopy, readingGrade } from "@features/brain/server/copy-gate";
 
-import { bandOf, itemValue, optionsOf, scoredItems, scoreRange, sourceHash } from "./score";
+import { bandOf, itemValue, optionsOf, reviewHash, scoredItems, scoreRange } from "./score";
 import { standardSignOff } from "./signoff";
 import type { InstrumentDefinition } from "./types";
 
@@ -11,7 +11,7 @@ import type { InstrumentDefinition } from "./types";
  * is right for someone who just scored "severe".
  *
  * An instrument with a problem here cannot be validated, and `validated` also needs every
- * standard sign-off line signed and dated against the current source (`signedHash`). The
+ * standard sign-off line signed and dated against what is there now (`signedHash`). The
  * test suite runs this over every instrument file, so a definition that breaks a rule fails
  * the build.
  */
@@ -181,8 +181,8 @@ export function checkInstrument(def: InstrumentDefinition): Problem[] {
     if (unsigned.length) {
       add("status", `validated, but ${unsigned.length} sign-off line(s) are unsigned or undated`);
     }
-    if (def.signedHash !== sourceHash(def)) {
-      add("status", "validated, but the source changed after it was signed: sign it again");
+    if (def.signedHash !== reviewHash(def)) {
+      add("status", "validated, but it changed after it was signed: sign it again");
     }
     if (def.license.kind === "permission" && !def.license.granted?.trim()) {
       add("status", "validated with a permission license, but nobody recorded the permission");
