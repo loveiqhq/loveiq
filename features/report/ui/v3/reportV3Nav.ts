@@ -235,8 +235,15 @@ const navPartsFrom = (
   {
     numerals = V3_PART_NUMERALS,
     snapshotLabel = "Your Snapshot",
-  }: { numerals?: Record<string, string>; snapshotLabel?: string } = {}
+    welcome,
+  }: {
+    numerals?: Record<string, string>;
+    snapshotLabel?: string;
+    /** A part listed ahead of the constellation's (V4's Part 1). */
+    welcome?: ReportV3NavPart;
+  } = {}
 ): readonly ReportV3NavPart[] => [
+  ...(welcome ? [welcome] : []),
   {
     part: `Part ${numerals["1"]}`,
     label: "Your constellation",
@@ -266,12 +273,28 @@ export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
 
 /**
  * The same nav in V4's body order, so the drawer lists the moved chapters first too.
- * Numbered as V4's page is: Part I is the Welcome, which lists no chapters, so the
- * drawer and sidebar start at Part II — the numbers the part headings and the chapter
- * nudges' chips show. The snapshot anchor is named after the heading over the nudges
- * (Figma 1:766), so the drawer and the chapter pill follow it when it changes.
+ *
+ * Mark's finalised nav, 961:333 (29.09, 1945094456, "Please also use these changes for
+ * Desktop"): it opens on Part 1 · Welcome, with the Introduction and "What shaped this
+ * report" (V4Part1, Figma 1:175 / 1:185), and numbers the parts 1 to 6 as the part
+ * headings do ("Parts now dont have a roman number"). The snapshot anchor is named
+ * after the heading over the nudges (Figma 1:766), so the drawer and the chapter pill
+ * follow it when it changes.
  */
 export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
-  numerals: { "1": "II", "2": "III", "3": "IV", "4": "V", "5": "VI" },
+  numerals: { "1": "2", "2": "3", "3": "4", "4": "5", "5": "6" },
   snapshotLabel: REPORT_V4_NUDGES_HEADING,
+  welcome: {
+    part: "Part 1",
+    label: "Welcome",
+    items: [
+      { label: "Introduction", id: "introduction" },
+      { label: "What shaped this report", id: "what_shaped_this_report" },
+    ],
+  },
 });
+
+/** V4's nav anchors in nav order: what the scroll-spy walks under `?v4=1`. */
+export const REPORT_V4_NAV_IDS: readonly string[] = REPORT_V4_NAV_PARTS.flatMap((part) =>
+  part.items.map((item) => item.id)
+);

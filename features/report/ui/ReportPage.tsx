@@ -68,6 +68,8 @@ import {
   REPORT_V3_NAV_PARTS,
   REPORT_V3_PART_DIVIDER_BY_SECTION,
   REPORT_V3_SECTION_ORDER,
+  REPORT_V4_NAV_IDS,
+  REPORT_V4_NAV_PARTS,
   REPORT_V4_SECTION_ORDER,
 } from "./v3/reportV3Nav";
 import ReportPricingModal from "./ReportPricingModal";
@@ -622,11 +624,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       onFeedback={(payload) => submitFeedback(sectionId, payload)}
     />
   );
+  // The anchors the navs list, in nav order. V4's open on Part 1's Welcome (961:333).
+  const navIds = isV4 ? REPORT_V4_NAV_IDS : REPORT_NAV_IDS;
   // The chapter the navs mark as current. A store, not state: only the navs read it,
   // and as state every change down the page rendered the whole report again.
-  const [activeSection] = useState(() =>
-    createActiveSectionStore(REPORT_NAV_IDS[0] ?? "core_archetype")
-  );
+  const [activeSection] = useState(() => createActiveSectionStore(navIds[0] ?? "core_archetype"));
   // Live full-report quote used by the locked premium cards' price/strike/save.
   // Same source the pricing modal and sticky bar read, so all three agree.
   const fullReportQuote = pricingQuotes?.full_report ?? null;
@@ -800,14 +802,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // `findings`), so scrolling Part I left the highlight a chapter behind:
     // "Core Archetype" stayed lit from 225px all the way to the Insight Map at
     // 3787px, and "Importance of Sexuality" stayed lit through Other Archetypes.
-    // See REPORT_NAV_IDS.
+    // See REPORT_NAV_IDS, and REPORT_V4_NAV_IDS for V4's.
     function buildSectionTops() {
       return (
-        REPORT_NAV_IDS.map((id) => {
-          const el = document.getElementById(id);
-          if (!el) return null;
-          return { id, top: el.getBoundingClientRect().top + window.scrollY };
-        })
+        navIds
+          .map((id) => {
+            const el = document.getElementById(id);
+            if (!el) return null;
+            return { id, top: el.getBoundingClientRect().top + window.scrollY };
+          })
           .filter((section): section is { id: string; top: number } => section !== null)
           // Sorted so the early `break` below is correct by construction: nav order
           // matches DOM order today, and a future reorder of either can't silently
@@ -826,7 +829,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       // the reader (27.09: at Attachment it lit Love Language). Once a frame at most.
       const sectionTops = buildSectionTops();
       const threshold = window.scrollY + ACTIVATION_LINE;
-      let activeId = sectionTops[0]?.id ?? REPORT_NAV_IDS[0] ?? "core_archetype";
+      let activeId = sectionTops[0]?.id ?? navIds[0] ?? "core_archetype";
       for (const section of sectionTops) {
         if (section.top <= threshold) {
           activeId = section.id;
@@ -854,10 +857,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       window.removeEventListener("resize", onScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-    // `REPORT_NAV_IDS` is a module constant; `resolvedSections` only matters
+    // `navIds` is one of two module constants; `resolvedSections` only matters
     // because the sections have to be in the DOM before the first update measures them.
     // `activeSection` never changes: it is created once.
-  }, [resolvedSections, activeSection]);
+  }, [resolvedSections, activeSection, navIds]);
 
   const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
 
@@ -869,26 +872,34 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // open padlock) rather than dropping out of the map. Nav ids with no matching
   // section (`snapshot`, `map`, `constellation` — the redesign-added anchors)
   // are free by construction.
+  //
+  // Under V4 these are the three tiers the team agreed on 28.09 and Mark drew in
+  // 961:333: free, open to this reader, locked. The four designed chapters open, in
+  // part, to every reader (they never lock outright, V4ChapterLock), so they read open
+  // whatever the plan.
   const navAccessById = useMemo(() => {
     const access = new Map<string, ReportNavAccess>();
-    for (const part of isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS) {
+    const parts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
+    for (const part of parts) {
       for (const item of part.items) {
         const section = resolvedSections.find((s) => s.id === (item.gateId ?? item.id));
         if (!section?.isPremium) {
           access.set(item.id, "free");
           continue;
         }
-        const unlocked = isSectionUnlockedForPlan({
-          accessPlan,
-          archetypeTier: viewArchetypeTier,
-          isPremium: section.isPremium,
-          sectionId: section.id,
-        });
+        const unlocked =
+          (isV4 && REPORT_V4_DESIGNED_CHAPTER_IDS.has(item.id)) ||
+          isSectionUnlockedForPlan({
+            accessPlan,
+            archetypeTier: viewArchetypeTier,
+            isPremium: section.isPremium,
+            sectionId: section.id,
+          });
         access.set(item.id, unlocked ? "unlocked" : "locked");
       }
     }
     return access;
-  }, [resolvedSections, accessPlan, viewArchetypeTier, isV3]);
+  }, [resolvedSections, accessPlan, viewArchetypeTier, isV3, isV4]);
 
   /**
    * Build-time, deliberately not a runtime flag or a query parameter. A reader on

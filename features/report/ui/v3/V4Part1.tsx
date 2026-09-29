@@ -32,8 +32,10 @@ const V4Part1: FC = () => (
     <V4PartHeading heading={REPORT_V4_PARTS[0]!} lead />
 
     {/* 1:175 — nothing in Part I collapses, so no toggle. Mark took its
-     * "Introduction" title out on 2026-09-24 (comment 1939924076); the copy stays. */}
-    <V4Chapter collapsible={false}>
+     * "Introduction" title out on 2026-09-24 (comment 1939924076); the copy stays. The
+     * nav still lists it as "Introduction" (961:333), so both chapters carry the
+     * anchors the nav links to and the scroll-spy measures. */}
+    <V4Chapter collapsible={false} sectionId="introduction">
       <div className="rv4-copy">
         {REPORT_V4_INTRODUCTION.map((runs, i) => (
           <p className="rv3-prose" key={i}>
@@ -44,7 +46,11 @@ const V4Part1: FC = () => (
     </V4Chapter>
 
     {/* 1:185 */}
-    <V4Chapter title="What shaped this report" collapsible={false}>
+    <V4Chapter
+      title="What shaped this report"
+      collapsible={false}
+      sectionId="what_shaped_this_report"
+    >
       <p className="rv3-prose">
         <V4Runs runs={REPORT_V4_WHAT_SHAPED} />
       </p>

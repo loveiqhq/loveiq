@@ -130,12 +130,15 @@ const ReportDesktopSidebar: FC<Props> = ({
               <div className="report-sidebar__nav-list">
                 {part.items.map((item) => {
                   const isActive = activeSectionId === item.id;
+                  const access = accessById?.get(item.id) ?? "free";
 
                   return (
                     <a
                       key={item.id}
                       href={`#${item.id}`}
                       aria-current={isActive ? "location" : undefined}
+                      // V4 sets the row's weight by its tier (961:333).
+                      data-access={isV4 ? access : undefined}
                       title={item.label}
                       onClick={() => {
                         trackSectionNavigated({
@@ -151,7 +154,7 @@ const ReportDesktopSidebar: FC<Props> = ({
                       <span className="report-sidebar__item-label">
                         <span>{item.label}</span>
                       </span>
-                      <ReportNavBadge access={accessById?.get(item.id) ?? "free"} />
+                      <ReportNavBadge access={access} />
                     </a>
                   );
                 })}
