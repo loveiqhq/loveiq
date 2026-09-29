@@ -288,7 +288,8 @@ const Category: FC<CategoryProps> = ({
 
         {hidden.length ? (
           <div className="rv4-fvt__lock" onClick={guardedUnlock(onUnlock)}>
-            {/* 639:2094 — the badge sits on the middle of the blurred rows. */}
+            {/* 979:588 / 979:600 / 979:612 — the compact tile on the middle of the
+             * blurred rows (Mark's 29.09 lock, 1945259495). */}
             <div className="rv4-fvt__lockrows">
               <div className="rv4-fvt__blurred" aria-hidden="true" inert>
                 {hidden.map((row, i) => (
@@ -299,7 +300,7 @@ const Category: FC<CategoryProps> = ({
                   />
                 ))}
               </div>
-              <V4LockBadge />
+              <V4LockBadge size="compact" />
             </div>
             {/* 639:2098 */}
             <div className="rv4-fvt__cta">

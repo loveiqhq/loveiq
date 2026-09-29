@@ -250,9 +250,7 @@ describe("V4PartnershipLoop — locked (612:862)", () => {
       expect(part.getAttribute("aria-hidden")).toBe("true");
       expect(part.hasAttribute("inert")).toBe(true);
     }
-    expect(screen.getByRole("button", { name: "Unlock the full report" })).toHaveClass(
-      "rv4-lockbadge"
-    );
+    expect(screen.getByRole("button", { name: "Unlock Report" })).toHaveClass("rv4-lockbadge");
     // Under the blur and hidden from assistive tech; since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
     expect(container.querySelector(".rv4-loop__viewport")!.textContent).toContain(
       OPEN.loop[1]!.underneath
@@ -264,7 +262,7 @@ describe("V4PartnershipLoop — locked (612:862)", () => {
     const { container } = renderLoop({ stages: LOCKED.loop, locked: true, onUnlock });
     fireEvent.click(container.querySelector(".rv4-loop__viewport")!);
     expect(onUnlock).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Unlock the full report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlock Report" }));
     expect(onUnlock).toHaveBeenCalledTimes(2);
   });
 

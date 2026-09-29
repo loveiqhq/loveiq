@@ -131,7 +131,7 @@ describe("the paywalled chapter — 314:211", () => {
       container.querySelector(".rv4-trig--brake .rv4-tb-lock")!,
       container.querySelector(".rv4-trig--accel .rv4-tb-lock")!,
       container.querySelector(".rv4-ab__gate")!,
-      screen.getAllByRole("button", { name: "Unlock the full report" })[0]!,
+      screen.getAllByRole("button", { name: "Unlock Report" })[0]!,
       screen.getAllByRole("button", { name: "Unlock full report" })[0]!,
     ];
     for (const surface of surfaces) {

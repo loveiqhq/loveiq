@@ -181,7 +181,7 @@ describe("V4TriggerCard — paywalled (386:416 / 386:444)", () => {
     fireEvent.click(container.querySelector(".rv4-tb-lock")!);
     expect(onUnlock).toHaveBeenCalledTimes(1);
     onUnlock.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Unlock the full report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlock Report" }));
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 });
@@ -341,7 +341,9 @@ describe("reportV3.css — trigger card contracts", () => {
     expect(rule(".rv3 .rv4-trig__row.is-locked.is-blurred {")).toContain(
       "filter: blur(var(--rv4-veil, 5px))"
     );
-    expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 124px");
-    expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock {")).toContain("--rv4-lock-top: 127px");
+    // 29.09 (1945259495): the 88px tiles, 979:507 137 into the brakes' blurred rows
+    // and 979:495 53 into the accelerators'.
+    expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 137px");
+    expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock {")).toContain("--rv4-lock-top: 53px");
   });
 });
