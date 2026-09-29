@@ -78,7 +78,8 @@ describe("the authored copy (read off 310:229 / 374:304 / 377:221)", () => {
   it("gives the closed practice card its own teaser: the first paragraph, re-broken as 377:221", () => {
     expect(SPARK.practiceTeaser).toHaveLength(1);
     const teaser = textOf(SPARK.practiceTeaser[0]!);
-    expect(teaser.startsWith("Notice the moment the state changes. \n\nInstead of judging")).toBe(
+    // 377:242 breaks after the lead with one line separator, no blank line.
+    expect(teaser.startsWith("Notice the moment the state changes. \nInstead of judging")).toBe(
       true
     );
     expect(teaser).toContain("immediately beforehand? \nA playful message");
