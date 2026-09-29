@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import V4FantasyTable from "@features/report/ui/v3/V4FantasyTable";
 import { buildFantasy } from "@/data/report3-fantasy";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
+import { installRevealObserver, mockRect, observerOf } from "./v4RevealTestKit";
 
 /**
  * The fantasy table — Figma 639:308 (open, "3 rows + fade") and 639:1905
@@ -384,5 +385,71 @@ describe("reportV3.css — fantasy table contracts", () => {
     for (const name of names) {
       expect(name).not.toMatch(/__(eyebrow|body|card|result|heading|details|learn-)/);
     }
+  });
+});
+
+/**
+ * Review 28.09, mobile: "Can we have animations in the Fantasy table. V2 had them i
+ * think." It did: V2's panel (PracticeTendenciesSection) fades each score in and rises
+ * it 8px over 520ms on cubic-bezier(0.22, 1, 0.36, 1), all at once, the first time the
+ * panel comes into view. The table takes that, as it was.
+ */
+describe("V4FantasyTable — its entrance, V2's", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("holds the scores back until the table is in view, then lets them in", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4FantasyTable table={OPEN} />);
+    const table = container.querySelector(".rv4-fvt")!;
+    expect(table).toHaveClass("is-pending");
+    // Only held back by the CSS: every score is on the page from the start.
+    expect(container.querySelectorAll(".rv4-fvt__num").length).toBeGreaterThan(0);
+    observerOf(table)!.fire(true);
+    expect(table).not.toHaveClass("is-pending");
+  });
+
+  it("comes in on the paywalled table too — its sharp rows are the reader's", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4FantasyTable table={LOCKED} onUnlock={() => {}} />);
+    expect(container.querySelector(".rv4-fvt")).toHaveClass("is-pending");
+  });
+});
+
+describe("reportV3.css — the table's entrance", () => {
+  const V2_EASE = "520ms cubic-bezier(0.22, 1, 0.36, 1)";
+  const ruleOf = (selector: string) => {
+    const at = V3_CSS.lastIndexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThan(0);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("fades each score in and rises it 8px, on V2's timing", () => {
+    const score = ruleOf(".rv3 .rv4-fvt__score");
+    expect(score).toContain(`opacity ${V2_EASE}`);
+    expect(score).toContain(`transform ${V2_EASE}`);
+    const pending = ruleOf(".rv3 .rv4-fvt.is-pending .rv4-fvt__score");
+    expect(pending).toContain("opacity: 0");
+    expect(pending).toContain("transform: translateY(8px)");
+  });
+
+  it("leaves the blurred rows under the paywall as they are", () => {
+    const blurred = ruleOf(".rv3 .rv4-fvt.is-pending .rv4-fvt__blurred .rv4-fvt__score");
+    expect(blurred).toContain("opacity: 1");
+    expect(blurred).toContain("transform: none");
+  });
+
+  it("shows the scores at once under reduced motion", () => {
+    const at = V3_CSS.indexOf(
+      "@media (prefers-reduced-motion: reduce) {\n  .rv3 .rv4-fvt.is-pending .rv4-fvt__score"
+    );
+    expect(at).toBeGreaterThan(-1);
+    const media = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
+    expect(media).toContain("opacity: 1");
+    expect(media).toContain("transition: none");
   });
 });
