@@ -593,7 +593,9 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
   const AB_PROBES = [
     "Low-energy, passive encounters",
     "Spontaneity and controlled unpredictability",
-    "A suggestive message on Wednesday",
+    // Common challenges past its ramp paragraph, which fades in whole and is sent as
+    // written since 314:284 (29.09): the probe sits in the paragraph after it.
+    "common brakes is sex that feels predictable",
     "Respect brakes that are protecting something real.",
   ];
 

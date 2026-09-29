@@ -90,9 +90,8 @@ export const gate = (
 /**
  * A ramp paragraph whose tail runs on under the FULL blur.
  *
- * The blur fades in over the ramp's first lines only — two in 314:307, four in
- * 375:221 — and everything after them in the same paragraph is only ever seen
- * fully blurred. This splits the paragraph after `realThrough` (the end of a sentence
+ * The blur fades in over the ramp's first lines only — four in 375:221 — and
+ * everything after them in the same paragraph is only ever seen fully blurred. This splits the paragraph after `realThrough` (the end of a sentence
  * chosen so the fade band covers it on every phone) and veils the rest in place, run
  * by run (veilText: as written, or scrambled in decoy mode), so it stays one
  * paragraph that wraps like the original. The tail runs are marked `veiled`: a wider

@@ -99,9 +99,10 @@ describe("the paywalled chapter — 314:211", () => {
     expect(gate.querySelector(".rv4-lockbadge")).toBeNull();
   });
 
-  it("caps the ramp's fade where its scrambled tail starts, so none of it shows lightly blurred", () => {
-    // Review 25.09: in the 588px desktop column the anchor sentence ends on the ramp's
-    // first line and the tail rose into the two-line band. useRampFit measures it.
+  it("fades the whole ramp paragraph in, with no veiled tail to cut the fade short", () => {
+    // 314:284 (29.09) runs the fade over the first gated paragraph, so none of it is
+    // marked for the full blur, and useRampFit, which ends a fade where a veiled tail
+    // starts, has nothing to do here.
     const box = (top: number) => ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0 });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement
@@ -117,8 +118,8 @@ describe("the paywalled chapter — 314:211", () => {
     try {
       const { container } = render(<V4Accelerators view={LOCKED} />);
       const ramp = container.querySelector<HTMLElement>(".rv4-ab__ramp")!;
-      expect(ramp.querySelector(".rv4-prose__veiled")).not.toBeNull();
-      expect(ramp.style.getPropertyValue("--rv4-band-fit")).toBe("28px");
+      expect(ramp.querySelector(".rv4-prose__veiled")).toBeNull();
+      expect(ramp.style.getPropertyValue("--rv4-band-fit")).toBe("");
     } finally {
       vi.restoreAllMocks();
     }
@@ -185,15 +186,24 @@ describe("reportV3.css — chapter body contracts", () => {
     expect(css).toContain("margin: 0 0 16.19px");
   });
 
-  // Mark, Figma 314:307 (28.09): "Please update how we blur this text section. Staging
-  // was too aggressive". 314:284 draws everything after the first paragraph under ONE
-  // layer blur of 2.5, with no ramp; matched on the render, that is CSS 1.75px.
-  it("blurs the gate evenly and lightly, as 314:284 draws it, and floats the card at 197", () => {
-    expect(rule(".rv3 .rv4-ab__gated {")).toContain(
-      "filter: blur(calc(var(--rv4-veil, 5px) * 0.35))"
+  // Mark (WhatsApp, 30.09): "This one here in accelerators and brakes doesn't blur
+  // sufficiently and I can read most of it" — the even 1.75px of 28.09. 314:284 (29.09)
+  // fades the gated copy in from sharp at its top to radius 5 at 20.8% of it, 234.5px
+  // down on the 393 frame: the first gated paragraph. Figma's 5 is the veil on every
+  // locked surface (review 26.09); the band ends at the paragraph's own foot, where the
+  // full blur takes over, so the two meet at every width.
+  it("fades the first gated paragraph into the veil, as 314:284 draws it, and floats the card at 408", () => {
+    expect(rule(".rv3 .rv4-ab__ramp {")).toContain("--rv4-band: 100%;");
+    expect(rule(".rv3 .rv4-ab__blurred {")).toContain("filter: blur(var(--rv4-veil, 5px));");
+    // The even light blur and the switched-off ramp of 28.09 are gone.
+    expect(V3_CSS).not.toContain(".rv3 .rv4-ab__gated {");
+    expect(V3_CSS).not.toContain(".rv3 .rv4-ab__ramp > .rv4-pblur");
+    // Without backdrop filters the ramp takes half the veil, as every other ramp does.
+    const fallback = V3_CSS.slice(
+      V3_CSS.indexOf("@supports not ((backdrop-filter: blur(1px))"),
+      V3_CSS.indexOf("filter: blur(calc(var(--rv4-veil, 5px) / 2));")
     );
-    expect(rule(".rv3 .rv4-ab__ramp > .rv4-pblur {")).toContain("display: none");
-    expect(V3_CSS).not.toMatch(/.rv3 .rv4-ab__blurred {[^}]*filter/);
+    expect(fallback).toContain(".rv3 .rv4-ab__ramp");
     // 29.09: 1015:1163 sits 408 into 314:284, where the gate opens — or as low as the
     // gate still holds it (v4PremiumPlacement2909).
     expect(rule(".rv3 .rv4-ab__gate .rv4-premium {")).toContain(

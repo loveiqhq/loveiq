@@ -1,12 +1,11 @@
 "use client";
 
-import { useRef, type FC } from "react";
+import type { FC } from "react";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
 import V4TriggerCard from "./V4TriggerCard";
 import V4TryThis from "./V4TryThis";
-import { useRampFit } from "./useRampFit";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
@@ -27,10 +26,10 @@ import { guardedUnlock } from "./v4Unlock";
  *
  * THE PAYWALLED STATE — 314:211. Both cards keep two rows sharp and lock the rest
  * behind a badge. "Common challenges" keeps its H2 and first paragraph sharp (Mark
- * moved the paywall "right after the first paragraph", 2026-09-22); the next
- * paragraph ramps in over two lines and everything after stays under the full blur,
- * with the chapter-body copy of the Premium card floating 84px in. That band owns
- * the click, which is why the card's own CTA carries no handler.
+ * moved the paywall "right after the first paragraph", 2026-09-22); the blur fades in
+ * over the whole next paragraph (314:284, 29.09) and everything after stays under the
+ * full blur, with the chapter-body Premium card floating on it. That band owns the
+ * click, which is why the card's own CTA carries no handler.
  */
 
 interface Props {
@@ -42,9 +41,6 @@ interface Props {
 const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
   const locked = view.lockedFrom !== null;
   const { free, ramp, rest } = view.challenges;
-  // The fade ends where the ramp's veiled tail starts, on a wide column too.
-  const rampRef = useRef<HTMLDivElement>(null);
-  useRampFit(rampRef, ramp !== null);
 
   return (
     <>
@@ -83,8 +79,8 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
           {ramp ? (
             <div className="rv4-ab__gate" onClick={guardedUnlock(onUnlock)}>
               <div className="rv4-ab__gated" aria-hidden="true" inert>
-                {/* 482:6455 — the blur fades in over the ramp's first two lines. */}
-                <div className="rv4-ab__ramp" ref={rampRef}>
+                {/* 314:284 — the blur fades in over the whole paragraph, sharp at its top. */}
+                <div className="rv4-ab__ramp">
                   <V4Prose blocks={[ramp]} />
                   <span className="rv4-pblur" aria-hidden="true">
                     <span />
