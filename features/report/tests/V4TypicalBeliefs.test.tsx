@@ -300,14 +300,14 @@ describe("the paywalled chapter — 348:213", () => {
     for (const group of container.querySelectorAll(".rv4-tb-lock")) {
       expect(group.hasAttribute("inert")).toBe(false);
     }
-    expect(screen.getAllByRole("button", { name: "Unlock the full report" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Unlock Report" })).toHaveLength(2);
   });
 
   it("opens the paywall once from every locked surface", () => {
     const onUnlock = vi.fn();
     const { container } = render(<V4TypicalBeliefs view={LOCKED} onUnlock={onUnlock} />);
     const targets = [
-      ...screen.getAllByRole("button", { name: "Unlock the full report" }),
+      ...screen.getAllByRole("button", { name: "Unlock Report" }),
       container.querySelector(".rv4-turn__lock")!,
       container.querySelector(".rv4-sun__lock")!,
       container.querySelector(".rv4-tb__gate")!,

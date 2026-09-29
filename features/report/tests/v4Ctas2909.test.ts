@@ -119,3 +119,107 @@ describe("keyboard focus on the pills that had none", () => {
     expect(ring).toContain("outline-offset: 2px");
   });
 });
+
+/*
+ * 1945259495, "We have updated the Unlock Report icons that sit on the visuals" — the
+ * 88x88 tile (979:507) on every visual, and a compact 73x70 on the fantasy table's
+ * categories (979:588 / 979:600 / 979:612). The 1px edge is a CSS border, so every
+ * position inside is the frame's less that pixel.
+ */
+describe("the Unlock Report tile — 1945259495", () => {
+  it("is an 88x88 white card with a #d4d4d4 edge, radius 8 and the frame's 2/2/4 shadow", () => {
+    const tile = rule(".rv3 .rv4-lockbadge");
+    expect(tile).toContain("width: 88px");
+    expect(tile).toContain("height: 88px");
+    expect(tile).toContain("background: #fff");
+    expect(tile).toContain("border: 1px solid #d4d4d4");
+    expect(tile).toContain("border-radius: 8px");
+    expect(tile).toContain("box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2)");
+    // Still centred on its visual by the transform, and placed by --rv4-lock-top.
+    expect(tile).toContain("transform: translateX(-50%)");
+    expect(tile).toContain("top: var(--rv4-lock-top");
+  });
+
+  it("sets the 38px gradient disc 25 in and 13 down, with its lock 10 in", () => {
+    const disc = rule(".rv3 .rv4-lockbadge__disc");
+    expect(disc).toContain("width: 38px");
+    expect(disc).toContain("height: 38px");
+    expect(disc).toContain("left: 24px");
+    expect(disc).toContain("top: 12px");
+    expect(disc).toContain(
+      "linear-gradient(135deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%)"
+    );
+    expect(disc).toContain("box-shadow: 0 3.294px 4.941px rgba(168, 90, 76, 0.3)");
+    expect(rule(".rv3 .rv4-lockbadge__disc img")).toContain("left: 10px");
+  });
+
+  it("sets 'Unlock Report' 10/12 bold #868686, 58 down and centred", () => {
+    const label = rule(".rv3 .rv4-lockbadge__label");
+    expect(label).toContain("font-size: 10px");
+    expect(label).toContain("line-height: 12px");
+    expect(label).toContain("font-weight: 700");
+    expect(label).toContain("color: #868686");
+    expect(label).toContain("top: 57px");
+    expect(label).toContain("text-align: center");
+  });
+
+  it("draws the table's compact tile 73x70, its 28px disc 23 in and its 8px label 47 down", () => {
+    const compact = rule(".rv3 .rv4-lockbadge--compact");
+    expect(compact).toContain("width: 73px");
+    expect(compact).toContain("height: 70px");
+    const disc = rule(".rv3 .rv4-lockbadge--compact .rv4-lockbadge__disc");
+    expect(disc).toContain("width: 28px");
+    expect(disc).toContain("left: 22px");
+    expect(disc).toContain("top: 12px");
+    expect(rule(".rv3 .rv4-lockbadge--compact .rv4-lockbadge__disc img")).toContain("left: 6.59px");
+    const label = rule(".rv3 .rv4-lockbadge--compact .rv4-lockbadge__label");
+    expect(label).toContain("font-size: 8px");
+    expect(label).toContain("top: 46px");
+  });
+
+  it("places each tile where its frame does", () => {
+    // Offsets from the top of the locked rows each group wraps (348:213, 314:211).
+    expect(rule(".rv3 .rv4-turn__lock")).toContain("--rv4-lock-top: 87px");
+    expect(rule(".rv3 .rv4-sun__lock")).toContain("--rv4-lock-top: 122px");
+    expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock")).toContain("--rv4-lock-top: 137px");
+    expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock")).toContain("--rv4-lock-top: 53px");
+    // 979:520: 41 above the orbit box's foot, which follows the orbit's size.
+    expect(rule(".rv3 .rv4-loop .rv4-lockbadge")).toContain(
+      "--rv4-lock-top: calc(clamp(180px, calc(100cqw - 169px), 224px) + 15px)"
+    );
+    // The map's plot (368:3495) and each category's two blurred rows: on the middle.
+    expect(rule(".rv3 .rv4-fvm__lock .rv4-lockbadge")).toContain(
+      "--rv4-lock-top: calc(50% - 44px)"
+    );
+    expect(rule(".rv3 .rv4-fvt__lockrows .rv4-lockbadge")).toContain(
+      "--rv4-lock-top: calc(50% - 35px)"
+    );
+  });
+});
+
+describe("the tile's hover — 1945270267", () => {
+  const hover = blocks(HOVER).join("\n");
+
+  it("lifts the tile under the pointer, on the tile or anywhere on the locked visual", () => {
+    for (const selector of [
+      ".rv4-lockbadge:hover",
+      ".rv4-tb-lock:hover .rv4-lockbadge",
+      ".rv4-loop.is-locked:hover .rv4-lockbadge",
+      ".rv4-fvm__lock:hover .rv4-lockbadge",
+      ".rv4-fvt__lock:hover .rv4-lockbadge",
+    ]) {
+      expect(hover, selector).toContain(selector);
+    }
+    expect(hover).toContain("translate: 0 -2px");
+    expect(hover).toContain("box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18)");
+    expect(hover).toContain("filter: brightness(1.06)");
+    expect(hover).not.toMatch(/\btransform:/);
+    expect(CSS).not.toMatch(/^\.rv3[^\n{]*\.rv4-lockbadge:hover/m);
+  });
+
+  it("keeps the tile still under reduced motion", () => {
+    const reduced = blocks(REDUCED).find((body) => body.includes(".rv4-lockbadge:hover"));
+    expect(reduced, "no reduced-motion block for the tile's hover").toBeDefined();
+    expect(reduced).toContain("translate: none");
+  });
+});
