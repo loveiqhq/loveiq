@@ -1462,7 +1462,7 @@ describe("conversion-digest handler", () => {
     let arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
     expect(flat).toContain("*Visits that reach the survey*");
-    expect(flat).toMatch(/, as a 7-day average/);
+    expect(flat).toMatch(/% over the last 7 days/);
 
     const img = arg.blocks.find((b) =>
       (b as { alt_text?: string }).alt_text?.startsWith("Site-wide share")
@@ -1495,7 +1495,7 @@ describe("conversion-digest handler", () => {
     // The image and the caption beside it must agree — they did not when the
     // image rounded 6.1 to "6" while the caption said 6.1%.
     const caption = flat.match(
-      /\*Visits that reach the survey\* {2}· {2}([\d.]+)%, as a 7-day average/
+      /\*Visits that reach the survey\* {2}· {2}([\d.]+)% over the last 7 days/
     );
     expect(caption).not.toBeNull();
     expect(payload.headline).toContain(`${caption![1]}%`);

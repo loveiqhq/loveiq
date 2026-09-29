@@ -869,19 +869,24 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
          */
         colorFirst: "#334155",
         headline: `${latest}% of visits reach the survey${direction}`,
-        footnote: "survey starts ÷ visits, 7-day average · a gap is a day with no visits",
+        footnote:
+          "survey starts ÷ visits, over the 7 days to each point · a gap is a day with no visits",
         emptyLabel: "Awaiting data — no visits recorded in this window yet.",
       });
       if (url) {
-        // "Visits", as the funnel's top row says, and "average", not "visit-days"
-        // and "trailing": the line that defined those two words is gone.
+        /**
+         * "Visits", as the funnel's top row says, not "visit-days": the line that
+         * defined that word is gone. And "over the last 7 days", not "7-day
+         * trailing" or "7-day average": each point pools seven days of starts
+         * over seven days of visits, which is not an average of seven daily rates.
+         */
         blocks.push(
-          section(`*Visits that reach the survey*  ·  ${latest}%, as a 7-day average${direction}.`)
+          section(`*Visits that reach the survey*  ·  ${latest}% over the last 7 days${direction}.`)
         );
         blocks.push({
           type: "image",
           image_url: url,
-          alt_text: `Site-wide share of visits that reach the survey, as a 7-day average. Currently ${latest}%, peak ${peak}%.`,
+          alt_text: `Site-wide share of visits that reach the survey, over the 7 days to each point. Currently ${latest}%, peak ${peak}%.`,
         });
       }
     }
