@@ -237,7 +237,8 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     const fillDuration = 500;
 
     const animateFill = (now: number) => {
-      const elapsed = now - startTime;
+      // A frame's timestamp is when the frame began, which can precede `startTime`.
+      const elapsed = Math.max(0, now - startTime);
       const t = Math.min(elapsed / fillDuration, 1);
       const pct = startPct + (100 - startPct) * t;
       setDisplayPercent(Math.floor(pct));
@@ -263,7 +264,8 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     let raf: number;
 
     const tick = (now: number) => {
-      const elapsed = now - startTimeRef.current;
+      // Same here: the first frame can be stamped before the start, so never go below 0%.
+      const elapsed = Math.max(0, now - startTimeRef.current);
       const floatPct = Math.min((elapsed / TOTAL_DURATION_MS) * MAX_PERCENT, MAX_PERCENT);
       const intPct = Math.floor(floatPct);
       currentPctRef.current = floatPct;
