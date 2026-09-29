@@ -109,7 +109,7 @@ const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
         practice={view.practice}
         onUnlock={onUnlock}
         nodeIds={{ closed: "399:219", open: "399:240", gated: "399:260" }}
-        premiumTopPx={147.5}
+        premiumTopPx={219.5}
       />
     </>
   );

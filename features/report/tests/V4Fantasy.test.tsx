@@ -78,7 +78,7 @@ describe("V4Fantasy — open (304:290)", () => {
     expect(card.getAttribute("data-node-id")).toBe("441:6422");
     expect(card.style.getPropertyValue("--rv4-try-band")).toBe("84.5px");
     expect(card.style.getPropertyValue("--rv4-try-gated-pt")).toBe("8px");
-    expect(card.style.getPropertyValue("--rv4-try-premium-top")).toBe("238px");
+    expect(card.style.getPropertyValue("--rv4-try-premium-top")).toBe("167.3px");
     // The frame's teaser draws Typical Beliefs' nine lines and fade: the default box.
     expect(card.style.getPropertyValue("--rv4-try-teaser-h")).toBe("");
     fireEvent.click(card.querySelector(".rv4-try__button")!);
@@ -182,7 +182,7 @@ describe("reportV3.css — Fantasy vs. Reality body contracts", () => {
   // dropdown Mark asked it to move off on 25.09 (1941866053).
   it("paywalled, leaves one 44px separator between the table and the blurred copy", () => {
     expect(V3_CSS).not.toMatch(/\.rv4-fvr\.is-locked > \.rv4-fvt \+ \.rv4-sep\s*\{/);
-    expect(ruleOf(".rv3 .rv4-fvr__gate .rv4-premium")).toContain("top: 103.3px");
+    expect(ruleOf(".rv3 .rv4-fvr__gate .rv4-premium")).toContain("top: 258.3px");
   });
 
   it("sets the body copy 16/25.6 in the copy grey, its bold runs in ink", () => {

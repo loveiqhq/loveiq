@@ -1415,8 +1415,9 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
       ),
     ],
     teaserHeightPx: 202,
-    // 235:317 sets its Premium card 88 into the shared gate; 153:2280's is at 67.
-    premiumTopPx: 88,
+    // 235:317 sets its paywall card 78.5 into the shared gate (1015:1232, 29.09);
+    // 153:2280's is at 176.5.
+    premiumTopPx: 78.5,
     blocks: ACCELERATOR_BRAKES_BLOCKS,
     // 240:240 opens on the heading "The patterns underneath desire".
     paywallAt: 17,
@@ -1434,12 +1435,12 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
     nodeIds: { closed: "368:5450", open: "244:258", gated: "482:6479" },
     // 482:6479, redrawn in the rehaul (28.09): the blur ramps in over the first 112px
     // (482:6499's progressive blur, five lines), the window runs 625px to the fade's
-    // foot, the card sits 161.5px in, "Show All" 4.3px under the window and the card's
-    // edge 45.5px under it.
+    // foot, the card sits 112.3px in (1015:1354, 29.09; the old one 161.5), "Show All"
+    // 4.3px under the window and the card's edge 45.5px under it.
     gate: {
       bandPx: 112,
       windowPx: 625,
-      premiumTopPx: 161.5,
+      premiumTopPx: 112.3,
       pillBottomPx: -35.3,
       footPx: 45.5,
       fade: true,

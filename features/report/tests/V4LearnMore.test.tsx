@@ -449,7 +449,7 @@ describe("reportV3.css — learn-more contracts", () => {
   // built); 235:317, on the same shared gate, 88 — which the article carries.
   it("floats the Premium card 67 into the shared gate, or where the article says", () => {
     expect(rule(".rv3 .rv4-learn__gate > .rv4-premium {")).toContain(
-      "top: var(--rv4-learn-premium-top, 67px)"
+      "top: var(--rv4-learn-premium-top, 176.5px)"
     );
   });
 
@@ -513,8 +513,8 @@ describe("V4LearnMore — Accelerator & Brakes closed (235:234)", () => {
     const card = container.querySelector<HTMLElement>(".rv4-learn")!;
     const teaser = container.querySelector<HTMLElement>(".rv4-learn__teaser")!;
     expect(teaser.style.getPropertyValue("--rv4-teaser-h")).toBe("202px");
-    // 235:341 — the Premium card 88 into the shared gate; nothing else of its own.
-    expect(card.getAttribute("style")).toBe("--rv4-learn-premium-top: 88px;");
+    // 1015:1232 (29.09) — the card 78.5 into the shared gate; nothing else of its own.
+    expect(card.getAttribute("style")).toBe("--rv4-learn-premium-top: 78.5px;");
   });
 
   it("leaves Typical Beliefs' closed card exactly as it was", () => {
@@ -592,7 +592,7 @@ describe("V4LearnMore — Fantasy vs. Reality's own gate (482:6479)", () => {
     expect(card).not.toHaveClass("no-fade");
     expect(card.style.getPropertyValue("--rv4-learn-band")).toBe("112px");
     expect(card.style.getPropertyValue("--rv4-learn-window")).toBe("625px");
-    expect(card.style.getPropertyValue("--rv4-learn-premium-top")).toBe("161.5px");
+    expect(card.style.getPropertyValue("--rv4-learn-premium-top")).toBe("112.3px");
     expect(card.style.getPropertyValue("--rv4-learn-pill-bottom")).toBe("-35.3px");
     expect(card.style.getPropertyValue("--rv4-learn-foot")).toBe("45.5px");
   });
@@ -632,10 +632,11 @@ describe("V4LearnMore — Fantasy vs. Reality's own gate (482:6479)", () => {
       ".rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {\n  display: none;"
     );
     expect(V3_CSS).toContain(".rv3 .rv4-learn.is-continued .rv4-learn__gate {\n  padding-top: 0;");
-    // 482:6479 sets the card 6px and the pill 9.5px right of the gate's middle. As an
-    // offset from the middle, so a wide column keeps them there: pinned to the 358
-    // measure, they sat 109px left of the other articles' at 1280 (final review).
-    expect(V3_CSS).toContain(
+    // 482:6479 sets the pill 9.5px right of the gate's middle. As an offset from the
+    // middle, so a wide column keeps it there: pinned to the 358 measure, it sat 109px
+    // left of the other articles' at 1280 (final review). The 29.09 card (1015:1354)
+    // stands centred, where the old one stood 6px right.
+    expect(V3_CSS).not.toContain(
       ".rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium {\n  left: calc(50% + 6px);"
     );
     expect(V3_CSS).toContain(

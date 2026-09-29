@@ -111,7 +111,7 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
         teaserHeightPx={202}
         rampBandPx={89.6}
         openPaddingTopPx={8}
-        premiumTopPx={155}
+        premiumTopPx={205.5}
       />
     </>
   );

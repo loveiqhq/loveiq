@@ -95,7 +95,8 @@ interface Props {
   /**
    * The Premium card's top, measured from the gate — for a ramp whose tail runs on
    * under the full blur in the same paragraph, where the rest starts too late to
-   * measure from. Omitted, the card sits in the rest, 88px in (Typical Beliefs).
+   * measure from. Omitted, the card sits in the rest, 48.5px in (Typical Beliefs'
+   * 1015:980, 29.09).
    */
   premiumTopPx?: number;
 }

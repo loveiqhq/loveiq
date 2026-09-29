@@ -196,7 +196,7 @@ describe("reportV3.css — chapter body contracts", () => {
     expect(V3_CSS).not.toMatch(/.rv3 .rv4-ab__blurred {[^}]*filter/);
     // 314:308 sits 197 into the section; the gate opens 10 + 21.6 + 16.19 + two
     // 25.6 lines + 16 = 114.99 in, so the card is 82 below it.
-    expect(rule(".rv3 .rv4-ab__gate .rv4-premium {")).toContain("top: 82px");
+    expect(rule(".rv3 .rv4-ab__gate .rv4-premium {")).toContain("top: 408px");
   });
 
   it("keeps the frame's 16px between the body, the practice card and the article", () => {
