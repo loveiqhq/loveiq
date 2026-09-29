@@ -14,6 +14,11 @@ import { useLayoutEffect, type RefObject } from "react";
  * grey line starts, then the second and the third. The mask in reportV3.css steps
  * at them, and falls back to the box's last three 22.4px lines until they are set.
  *
+ * Only where the box cuts the copy off, as every frame does at 393. In the wide
+ * desktop column a teaser's two blocks can end inside the box, and greying three
+ * of its four lines would read as a mistake; that copy is marked `short` and keeps
+ * the proportional fade it had before (#402).
+ *
  * Measured again when the box changes width, whenever a web font finishes loading
  * and whenever it comes on screen — the same three triggers as useRampFit, for the
  * same reasons.
@@ -27,14 +32,15 @@ const round = (px: number) => Math.round(px * 100) / 100;
 /**
  * The three steps for lines centred at `centres` (px from the box's top) in a box
  * `boxHeight` tall: each is the boundary above one of the last three lines the box
- * shows, midway between that line and the one before it. Null under three lines.
+ * shows, midway between that line and the one before it. Null when the copy ends
+ * inside the box, or under three lines.
  */
 export const teaserFadeSteps = (
   centres: readonly number[],
   boxHeight: number
 ): [number, number, number] | null => {
   const shown = centres.filter((c) => c < boxHeight);
-  if (shown.length < 3) return null;
+  if (shown.length === centres.length || shown.length < 3) return null;
   const [c1, c2, c3] = shown.slice(-3) as [number, number, number];
   const c0 = shown.length > 3 ? shown[shown.length - 4]! : c1 - (c2 - c1);
   return [round((c0 + c1) / 2), round((c1 + c2) / 2), round((c2 + c3) / 2)];
@@ -72,6 +78,7 @@ export function useTeaserFade(ref: RefObject<HTMLElement | null>, enabled = true
     const fit = () => {
       if (!live) return;
       const steps = teaserFadeSteps(lineCentres(box), box.getBoundingClientRect().height);
+      box.setAttribute("data-fade", steps ? "lines" : "short");
       [1, 2, 3].forEach((i) => {
         const step = steps?.[i - 1];
         if (step === undefined) box.style.removeProperty(`--rv4-fade-${i}`);

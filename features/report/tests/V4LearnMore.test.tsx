@@ -51,11 +51,11 @@ afterEach(() => {
 
 /**
  * jsdom has no layout, so the closed teaser's fade is measured against a stand-in:
- * every text node reports the same eight lines — two, a paragraph gap, six — in the
- * 196px box, which merge into one set of lines.
+ * every text node reports the same nine lines — two, a paragraph gap, seven, the last
+ * under the 196px box's foot — which merge into one set of lines.
  */
 const stubTeaserLayout = (teaserClass: string) => {
-  const tops = [11.2, 33.6, 72, 94.4, 116.8, 139.2, 161.6, 184].map((c) => c - 8.8);
+  const tops = [11.2, 33.6, 72, 94.4, 116.8, 139.2, 161.6, 184, 206.4].map((c) => c - 8.8);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement
   ) {
@@ -429,6 +429,10 @@ describe("reportV3.css — learn-more contracts", () => {
     ]) {
       expect(css).toContain(stop);
     }
+    // Copy that ends inside the box (the wide desktop column) keeps the proportional fade.
+    const short = rule('.rv3 .rv4-learn__teaser[data-fade="short"] {');
+    expect(short).toContain("#000 70%");
+    expect(short).toContain("rgba(0, 0, 0, 0.05) 100%");
   });
 
   // 153:2260, 235:254 and 244:258 all end 24.5 under the last line: the frame's 24

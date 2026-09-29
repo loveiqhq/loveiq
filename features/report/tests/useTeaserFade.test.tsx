@@ -20,25 +20,33 @@ const lines = (count: number, gapAfter?: number) =>
     (_, i) => 11.2 + i * 22.4 + (gapAfter !== undefined && i >= gapAfter ? 16 : 0)
   );
 
+// Every frame's copy runs on past its box (a ninth line under 196, a tenth under 202):
+// the greys are the last three lines the box SHOWS.
 describe("teaserFadeSteps", () => {
   it("steps at the tops of the last three lines when the gap is above them (368:5450)", () => {
-    // Two lines, the gap, six more: the greys fall on lines six to eight.
-    expect(teaserFadeSteps(lines(8, 2), 196)).toEqual([128, 150.4, 172.8]);
+    // Two lines, the gap, six more shown: the greys fall on lines six to eight.
+    expect(teaserFadeSteps(lines(9, 2), 196)).toEqual([128, 150.4, 172.8]);
   });
 
   it("follows a gap that falls between the last two lines (153:2240)", () => {
-    // Seven lines, the gap, one more: the greys start a line higher, and the last
-    // step sits in the gap.
-    expect(teaserFadeSteps(lines(8, 7), 196)).toEqual([112, 134.4, 164.8]);
+    // Seven lines, the gap, one more shown: the greys start a line higher, and the
+    // last step sits in the gap.
+    expect(teaserFadeSteps(lines(9, 7), 196)).toEqual([112, 134.4, 164.8]);
   });
 
   it("steps down a teaser with no gap at all, in its 202px box (235:234)", () => {
-    expect(teaserFadeSteps(lines(9), 202)).toEqual([134.4, 156.8, 179.2]);
+    expect(teaserFadeSteps(lines(10), 202)).toEqual([134.4, 156.8, 179.2]);
   });
 
   it("ignores lines the box clips away", () => {
-    // Line nine's centre is under the 196px foot: it is not one of the three.
-    expect(teaserFadeSteps(lines(10, 2), 196)).toEqual([128, 150.4, 172.8]);
+    expect(teaserFadeSteps(lines(12, 2), 196)).toEqual([128, 150.4, 172.8]);
+  });
+
+  // In the wide desktop column the teaser's two blocks can end inside the box; greying
+  // three of its four lines would read as a mistake, so it keeps the proportional fade.
+  it("leaves copy that ends inside its box to the proportional fade", () => {
+    expect(teaserFadeSteps(lines(8, 2), 196)).toBeNull();
+    expect(teaserFadeSteps(lines(4, 2), 196)).toBeNull();
   });
 
   it("gives up on a teaser shorter than three lines", () => {
@@ -75,16 +83,19 @@ const Teaser: FC<{ enabled?: boolean }> = ({ enabled = true }) => {
 let fragments: Record<string, DOMRect[]> = {};
 let resize: (() => void) | null = null;
 
+/** Fragments centred on `centres`, from the teaser's top at 100. */
+const at8 = (centres: number[]) => centres.map((c) => rect(100 + c - 8.8));
+
 beforeEach(() => {
   resize = null;
   // A content-area fragment sits 2.4px under its 22.4px line's top.
-  const at = (centres: number[]) => centres.map((c) => rect(100 + c - 8.8));
+  const at = at8;
   fragments = {
     "First line ": at([11.2]),
     "bold on the same line": at([11.2]),
     // Six lines after the paragraph gap, and a zero-width box WebKit reports at the
     // end of the line above a wrap.
-    "More copy": [rect(100 + 33.6 - 8.8, 0), ...at(lines(8, 1).slice(1))],
+    "More copy": [rect(100 + 33.6 - 8.8, 0), ...at(lines(9, 1).slice(1))],
   };
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement
@@ -125,32 +136,38 @@ const steps = (container: HTMLElement) => {
   const el = container.querySelector<HTMLElement>(".teaser")!;
   return [1, 2, 3].map((i) => el.style.getPropertyValue(`--rv4-fade-${i}`));
 };
+const mode = (container: HTMLElement) =>
+  container.querySelector<HTMLElement>(".teaser")!.getAttribute("data-fade");
 
 describe("useTeaserFade", () => {
   it("sets the three steps from the lines the teaser shows", () => {
     const { container } = render(<Teaser />);
-    // Lines at 11.2 (two fragments, one line), then 49.6 … 184 after the gap.
+    // Lines at 11.2 (two fragments, one line), then 49.6 … 184 after the gap, and a
+    // ninth under the box's foot.
     expect(steps(container)).toEqual(["128px", "150.4px", "172.8px"]);
+    expect(mode(container)).toBe("lines");
+  });
+
+  it("hands copy that ends inside the box back to the proportional fade", () => {
+    fragments["More copy"] = at8(lines(4, 1).slice(1));
+    const { container } = render(<Teaser />);
+    expect(steps(container)).toEqual(["", "", ""]);
+    expect(mode(container)).toBe("short");
   });
 
   it("measures again when the column's width changes", () => {
     const { container } = render(<Teaser />);
     // The wider column moves the gap between the last two lines, as 153:2240 has it.
-    fragments["More copy"] = lines(8, 7)
+    fragments["More copy"] = lines(9, 7)
       .slice(1)
       .map((c) => rect(100 + c - 8.8));
     act(() => resize?.());
     expect(steps(container)).toEqual(["112px", "134.4px", "164.8px"]);
   });
 
-  it("leaves the CSS fallback in place when there are fewer than three lines", () => {
-    fragments["More copy"] = [];
-    const { container } = render(<Teaser />);
-    expect(steps(container)).toEqual(["", "", ""]);
-  });
-
-  it("does nothing while the card is open", () => {
+  it("leaves the stepped CSS fallback alone while the card is open", () => {
     const { container } = render(<Teaser enabled={false} />);
     expect(steps(container)).toEqual(["", "", ""]);
+    expect(mode(container)).toBeNull();
   });
 });
