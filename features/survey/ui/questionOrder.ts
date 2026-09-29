@@ -1,3 +1,4 @@
+import { optionGroupsFor, type OptionGroup } from "@features/survey/optionGroups";
 import { isRandomised } from "@features/survey/questionFlags";
 import type { QuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
@@ -210,10 +211,63 @@ function mulberry32(seed: number): () => number {
 }
 
 /**
+ * `items` in a seeded random order: a copy, never the input.
+ *
+ * Fisher-Yates, descending, each index landing on a uniformly chosen remaining element,
+ * drawn from `mulberry32(hashSeed(seed))`. This is the exact loop `orderedOptions` always
+ * ran, lifted out so the categories and each category's topics can share it. The flat
+ * orders it produces are unchanged, which `orderedOptions.test.ts` pins.
+ */
+function shuffled<T>(items: readonly T[], seed: string): T[] {
+  const rand = mulberry32(hashSeed(seed));
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+/**
+ * The categories of a grouped question (see `optionGroups.ts`), in the order this session
+ * should see them, or `undefined` when the question has no categories.
+ *
+ * Two levels, each its own seeded stream: the category order from `sessionId:qId`, and
+ * each category's topics from `sessionId:qId:label`. Position bias does not go away when
+ * a list is folded into headings. The first heading is the one opened most, so its order
+ * is randomised as well as the order inside it. A seed per category keeps two
+ * equal-length categories from moving in lockstep.
+ *
+ * Without a session id, or for a question outside `RANDOMISE_QIDS`, both levels stay in
+ * authored order: shuffled if and only if recorded.
+ */
+export function orderedOptionGroups(
+  question: SurveyQuestion,
+  sessionId: string
+): OptionGroup[] | undefined {
+  const groups = optionGroupsFor(question);
+  if (!groups) return undefined;
+
+  if (!sessionId || !isRandomised(question.qId)) {
+    return groups.map((group) => ({ label: group.label, options: [...group.options] }));
+  }
+
+  return shuffled(groups, `${sessionId}:${question.qId}`).map((group) => ({
+    label: group.label,
+    options: shuffled(group.options, `${sessionId}:${question.qId}:${group.label}`),
+  }));
+}
+
+/**
  * The options of `question`, in the order this session should see them.
  *
  * Randomised only for questions in `RANDOMISE_QIDS`; everything else is returned
  * untouched, in authored order.
+ *
+ * A grouped question returns its categories' flattened order (`orderedOptionGroups`),
+ * category by category. That is the order its page shows from the top down, and it is
+ * what `buildOptionOrder` records at submit, so the stored order stays the one the
+ * respondent saw.
  *
  * Seeded from the session id AND the qId, never from `Math.random()`. Two reasons this
  * matters rather than being a style preference:
@@ -230,6 +284,9 @@ function mulberry32(seed: number): () => number {
  * duplicates — so callers can treat it as a reordering and nothing else.
  */
 export function orderedOptions(question: SurveyQuestion, sessionId: string): string[] {
+  const groups = orderedOptionGroups(question, sessionId);
+  if (groups) return groups.flatMap((group) => group.options);
+
   // No session id means storage is blocked (see `getSessionId`), and the submit path
   // records no order for that respondent. Shuffling anyway would show an order nothing
   // recorded — worse than not shuffling, because the resulting answer looks comparable
@@ -237,12 +294,5 @@ export function orderedOptions(question: SurveyQuestion, sessionId: string): str
   if (!sessionId) return question.options;
   if (!isRandomised(question.qId) || question.options.length < 2) return question.options;
 
-  const rand = mulberry32(hashSeed(`${sessionId}:${question.qId}`));
-  const out = [...question.options];
-  // Fisher-Yates, descending — each index lands on a uniformly chosen remaining element.
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rand() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
+  return shuffled(question.options, `${sessionId}:${question.qId}`);
 }

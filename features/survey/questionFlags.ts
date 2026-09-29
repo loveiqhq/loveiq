@@ -24,12 +24,12 @@
  * option receives inseparable from its position, so the ranking cannot be published.
  *
  * `16016` needs this more than the other three, not less: it offers 53 options against
- * their handful, and position bias grows with list length. It is also the only one the
- * engine cannot group — the teardown specified thirteen collapsible category headers,
- * and `SurveyQuestion.options` is a flat string array with no grouping concept — so
- * randomisation is the only defence its ranking has. Scale and open questions are excluded because they have
- * no option order to bias, and single-choice questions whose options are an ordered
- * scale must keep their sequence.
+ * their handful, and position bias grows with list length. It is shown under the thirteen
+ * collapsible category headings the teardown specified (`optionGroups.ts`), and both levels
+ * are randomised: the category order and the topics inside each category. Folding a list
+ * into headings does not remove position bias, it moves it to the first heading. Scale and
+ * open questions are excluded because they have no option order to bias, and single-choice
+ * questions whose options are an ordered scale must keep their sequence.
  *
  * Deliberately NOT randomised: any question whose options carry a fixed reading order —
  * price ladders, for instance, where a "none of these" opt-out has to stay last for the

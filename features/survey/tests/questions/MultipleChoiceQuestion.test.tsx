@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
@@ -28,6 +28,8 @@ vi.mock("@features/survey/ui/questions/ChoiceCard", () => ({
 
 import MultipleChoiceQuestion from "@features/survey/ui/questions/MultipleChoiceQuestion";
 import { makeAnswerOptionsExplained, makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
+import { surveyQuestions } from "@/data/survey-data";
+import { optionGroupsFor } from "@features/survey/optionGroups";
 
 afterEach(cleanup);
 
@@ -234,5 +236,141 @@ describe("MultipleChoiceQuestion", () => {
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent(/up to 3 options/i);
+  });
+});
+
+describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
+  const c9 = surveyQuestions.find((q) => q.qId === "16016")!;
+  const groups = optionGroupsFor(c9)!;
+  const topicsOf = (label: string) => [...groups.find((g) => g.label === label)!.options];
+  const header = (label: string) =>
+    screen.getByRole("button", { name: new RegExp(`^${label.replace(/[&,]/g, ".")}`) });
+
+  function ControlledC9({
+    initialValue = [],
+    onChangeSpy,
+  }: {
+    initialValue?: string[];
+    onChangeSpy?: (value: string[]) => void;
+  }) {
+    const [value, setValue] = useState<string[]>(initialValue);
+    return (
+      <MultipleChoiceQuestion
+        question={c9}
+        value={value}
+        onChange={(next) => {
+          onChangeSpy?.(next);
+          setValue(next);
+        }}
+      />
+    );
+  }
+
+  it("shows the thirteen categories as closed dropdowns and no topic until one is opened", () => {
+    render(<MultipleChoiceQuestion question={c9} value={[]} onChange={vi.fn()} />);
+    expect(screen.getAllByRole("button", { expanded: false })).toHaveLength(13);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("opening a category shows exactly that category's topics", async () => {
+    const user = userEvent.setup();
+    render(<ControlledC9 />);
+
+    await user.click(header("Sleep & Body"));
+
+    expect(header("Sleep & Body")).toHaveAttribute("aria-expanded", "true");
+    const shown = screen.getAllByRole("checkbox").map((el) => el.textContent);
+    expect(shown.sort()).toEqual(topicsOf("Sleep & Body").sort());
+  });
+
+  it("keeps one category open at a time, and closes it again on a second click", async () => {
+    const user = userEvent.setup();
+    render(<ControlledC9 />);
+
+    await user.click(header("Sleep & Body"));
+    await user.click(header("Work, Purpose & Money"));
+
+    expect(header("Sleep & Body")).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen
+        .getAllByRole("checkbox")
+        .map((el) => el.textContent)
+        .sort()
+    ).toEqual(topicsOf("Work, Purpose & Money").sort());
+
+    await user.click(header("Work, Purpose & Money"));
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("tells a collapsed category how many of its topics are picked", () => {
+    render(
+      <MultipleChoiceQuestion
+        question={c9}
+        value={["Poor or broken sleep", "Money worries", "Money conflict with a partner"]}
+        onChange={vi.fn()}
+      />
+    );
+    expect(header("Sleep & Body")).toHaveTextContent("1 selected");
+    expect(header("Work, Purpose & Money")).toHaveTextContent("2 selected");
+    expect(header("Mood & Energy")).not.toHaveTextContent(/selected/);
+  });
+
+  it("appends picks in click order across categories", async () => {
+    const user = userEvent.setup();
+    const onChangeSpy = vi.fn();
+    render(<ControlledC9 onChangeSpy={onChangeSpy} />);
+
+    await user.click(header("Work, Purpose & Money"));
+    await user.click(screen.getByRole("checkbox", { name: "Money worries" }));
+    await user.click(header("Sleep & Body"));
+    await user.click(screen.getByRole("checkbox", { name: "Poor or broken sleep" }));
+
+    expect(onChangeSpy).toHaveBeenLastCalledWith(["Money worries", "Poor or broken sleep"]);
+  });
+
+  it("still refuses a fourth pick when the three already chosen sit in other categories", async () => {
+    const user = userEvent.setup();
+    const onChangeSpy = vi.fn();
+    render(
+      <ControlledC9
+        initialValue={["Poor or broken sleep", "Money worries", "Grief & loss"]}
+        onChangeSpy={onChangeSpy}
+      />
+    );
+
+    await user.click(header("Mood & Energy"));
+    const fourth = screen.getByRole("checkbox", { name: "Low energy & motivation" });
+    await user.click(fourth);
+
+    expect(onChangeSpy).not.toHaveBeenCalled();
+    expect(fourth).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("alert")).toHaveTextContent(/up to 3 options/i);
+  });
+
+  it("keeps Enter on a category header away from the survey's Enter-for-Next shortcut", () => {
+    // SurveyEngine listens for Enter on window and moves to the next question. Opening a
+    // category from the keyboard must not also skip the question.
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    try {
+      render(<MultipleChoiceQuestion question={c9} value={["Money worries"]} onChange={vi.fn()} />);
+      fireEvent.keyDown(header("Sleep & Body"), { key: "Enter" });
+      expect(onWindowKey).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", onWindowKey);
+    }
+  });
+
+  it("labels each open panel as a group named after its category", async () => {
+    const user = userEvent.setup();
+    render(<ControlledC9 />);
+    await user.click(header("Intimacy & Desire"));
+    const panel = screen.getByRole("group", { name: "Intimacy & Desire" });
+    expect(
+      within(panel)
+        .getAllByRole("checkbox")
+        .map((el) => el.textContent)
+        .sort()
+    ).toEqual(topicsOf("Intimacy & Desire").sort());
   });
 });
