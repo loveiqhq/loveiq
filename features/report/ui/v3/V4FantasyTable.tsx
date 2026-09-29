@@ -7,6 +7,7 @@ import type {
   Report3FantasyTable,
 } from "@/data/report3-fantasy";
 import V4LockBadge from "./V4LockBadge";
+import useV4Reveal from "./useV4Reveal";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
@@ -31,6 +32,11 @@ import { guardedUnlock } from "./v4Unlock";
  * drawn here. One group owns the click over the blurred rows, the lock and the
  * "Unlock all N fantasies" pill, so any of them opens the paywall once (the badge
  * and the pill only bubble).
+ *
+ * ITS ENTRANCE (review 28.09, mobile: "Can we have animations in the Fantasy table.
+ * V2 had them i think."). V2's, as it was: every score fades in and rises 8px, all at
+ * once, the first time the table comes into view. The rows are drawn from the start;
+ * only the CSS holds them back (`is-pending`), and the blurred rows never move.
  *
  * No copy is quoted in these comments on purpose: production serves browser source
  * maps, so a client component's comments are public.
@@ -318,6 +324,7 @@ const Category: FC<CategoryProps> = ({
 const V4FantasyTable: FC<Props> = ({ table, onUnlock }) => {
   // One note open at a time across the table, as V2's section keeps it.
   const [openNote, setOpenNote] = useState<string | null>(null);
+  const [ref, inView] = useV4Reveal<HTMLDivElement>();
 
   useEffect(() => {
     if (openNote === null) return;
@@ -338,7 +345,11 @@ const V4FantasyTable: FC<Props> = ({ table, onUnlock }) => {
   }, [openNote]);
 
   return (
-    <div className="rv4-fvt" data-node-id={table.locked ? "639:1905" : "639:308"}>
+    <div
+      ref={ref}
+      className={`rv4-fvt${inView ? "" : " is-pending"}`}
+      data-node-id={table.locked ? "639:1905" : "639:308"}
+    >
       {table.categories.map((category, index) => (
         <Category
           key={category.title}

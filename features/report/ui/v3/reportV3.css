@@ -6752,6 +6752,32 @@ html {
   padding-bottom: 0.8px;
   white-space: nowrap;
 }
+/* The table comes in (review 28.09, mobile: "Can we have animations in the Fantasy
+ * table. V2 had them i think."). V2's, as it was (PracticeTendenciesSection,
+ * .report-practice-table__metric-content): every score fades in and rises 8px over
+ * 520ms, all at once, the first time the table comes into view. The blurred rows
+ * under the paywall stay as they are. */
+.rv3 .rv4-fvt__score {
+  transition:
+    opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rv3 .rv4-fvt.is-pending .rv4-fvt__score {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.rv3 .rv4-fvt.is-pending .rv4-fvt__blurred .rv4-fvt__score {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-fvt.is-pending .rv4-fvt__score,
+  .rv3 .rv4-fvt .rv4-fvt__score {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 /* The note a row's mark opens — Figma draws none; V2's name and note, in the table's
  * violet. */
 .rv3 .rv4-fvt__note-row {
