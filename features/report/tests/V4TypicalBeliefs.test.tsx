@@ -493,6 +493,21 @@ describe("reportV3.css — belief panel contracts", () => {
     expect(css).toContain("right: -22px");
     expect(css).not.toContain("left:");
   });
+
+  // Mark, 29.09 (1945265889, in Marcus's thread on the top-right gradient): "Decreased the
+  // gradient strength. Please adapt". Both blobs were at 34% of their hue on 28.09;
+  // 368:5483 now fills at 10% and 368:5624 at 15%. The layer's 62% and the 34 blur stay.
+  it("washes the two blobs as faintly as the frame now does", () => {
+    const coral = block(".rv3 .rv4-turn__blob {");
+    expect(coral).toContain("background: rgba(194, 84, 47, 0.1);");
+    const green = block(".rv3 .rv4-sun__blob {");
+    expect(green).toContain("background: rgba(46, 125, 91, 0.15);");
+    for (const css of [coral, green]) {
+      expect(css).toContain("opacity: 0.62");
+      expect(css).toContain("filter: blur(34px)");
+      expect(css).not.toContain("0.34)");
+    }
+  });
 });
 
 describe("reportV3.css — the sun tick draws in two steps (review 27.09)", () => {
