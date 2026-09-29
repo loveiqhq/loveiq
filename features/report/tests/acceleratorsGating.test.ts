@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ACCELERATORS_CHALLENGES_FREE_BLOCKS,
-  ACCELERATORS_CHALLENGES_RAMP_THROUGH,
   ACCELERATORS_FREE_ROWS,
   ACCELERATORS_PRACTICE_FREE_BLOCKS,
   ACCELERATORS_PRACTICE_RAMP_THROUGH,
@@ -20,8 +19,9 @@ vi.mock("@features/report/server/lockedBlurCopy", () => ({ LOCKED_BLUR_COPY: "de
  * 314:211 paywalled). The paywalled frame blurs rows 3-5 of both cards and most of
  * "Common challenges" and the practice at full length; a CSS blur is paint only,
  * so everything only ever seen under the full blur leaves the server scrambled
- * (Fatih's rule, 2026-09-23). The ramp paragraphs stay real only through the fade
- * band (splitRamp).
+ * (Fatih's rule, 2026-09-23). The practice's ramp paragraph stays real only through
+ * its fade band (splitRamp); Common challenges' fades in over the whole paragraph
+ * (314:284, 29.09), so it is sent as written.
  */
 
 const textOf = (block: Report3Block): string =>
@@ -148,15 +148,12 @@ describe("buildAccelerators — locked", () => {
     });
   });
 
-  it("keeps the challenges ramp real only through its fade band", () => {
-    const ramp = textOf(view.challenges.ramp!);
-    const authored = textOf(SPARK.challenges[1]!);
-    const cut = authored.indexOf(ACCELERATORS_CHALLENGES_RAMP_THROUGH);
-    expect(cut).toBeGreaterThan(0);
-    const end = cut + ACCELERATORS_CHALLENGES_RAMP_THROUGH.length;
-    expect(ramp.slice(0, end)).toBe(authored.slice(0, end));
-    expect(ramp.slice(end)).not.toBe(authored.slice(end));
-    expect(ramp).toHaveLength(authored.length);
+  // 314:284 (29.09) fades the blur in over the whole first gated paragraph, sharp at
+  // its top, so all of it is seen through the fade and none of it only under the full
+  // blur: it stays real in the decoy position too, as Typical Beliefs' ramp does. A
+  // stand-in there would show its made-up words through the fade's light end.
+  it("sends the challenges ramp as written: the fade runs over the whole paragraph", () => {
+    expect(view.challenges.ramp).toEqual(SPARK.challenges[1]);
   });
 
   it("splits the practice the same way: one clear paragraph, the ramp, the rest scrambled", () => {
@@ -187,9 +184,7 @@ describe("buildAccelerators — locked", () => {
       "Criticism, shame or judgment",
       "Confident signals of desire",
       "Spontaneity and controlled unpredictability",
-      // Common challenges past the fade band.
-      "A suggestive message on Wednesday",
-      "Wait until Friday",
+      // Common challenges past its ramp paragraph, which is sent as written (above).
       "common brakes is sex that feels predictable",
       "The meaning attached to the plan changed which system became louder.",
       "require any effort",

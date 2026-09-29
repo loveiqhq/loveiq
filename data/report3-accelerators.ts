@@ -309,6 +309,8 @@ export const ACCELERATORS_FREE_ROWS = 2;
 /**
  * 314:307 keeps the H2 and the first paragraph sharp — Mark asked for the paywall
  * "right after the first paragraph" (Figma, 2026-09-22) — and ramps into the second.
+ * Since 29.09 (314:284) the fade runs over the whole of that second paragraph, sharp
+ * at its top, so it is sent as written, as Typical Beliefs' ramp is.
  */
 export const ACCELERATORS_CHALLENGES_FREE_BLOCKS = 1;
 
@@ -316,12 +318,11 @@ export const ACCELERATORS_CHALLENGES_FREE_BLOCKS = 1;
 export const ACCELERATORS_PRACTICE_FREE_BLOCKS = 1;
 
 /**
- * Where each ramp paragraph stops being real (splitRamp). The fade runs over its
- * first two lines in 314:307 and its first four in 375:221; these sentence ends sit
- * past that on every phone from 320 to 430, so the band is always real copy and
- * everything after it is only ever seen fully blurred (veiled: lockedBlurCopy.ts).
+ * Where the practice's ramp paragraph stops being real (splitRamp). The fade runs over
+ * its first four lines in 375:221; this sentence end sits past that on every phone
+ * from 320 to 430, so the band is always real copy and everything after it is only
+ * ever seen fully blurred (veiled: lockedBlurCopy.ts).
  */
-export const ACCELERATORS_CHALLENGES_RAMP_THROUGH = "create days of tension.";
 export const ACCELERATORS_PRACTICE_RAMP_THROUGH = "harder to respond?”";
 
 /** A row under the lock: as written, or its decoy (lockedBlurCopy.ts). */
@@ -364,10 +365,7 @@ export function buildAccelerators(
     accelerators: rows(copy.accelerators),
     lockedFrom,
     challengesTitle: copy.challengesTitle,
-    challenges: rampOf(
-      gate(copy.challenges, ACCELERATORS_CHALLENGES_FREE_BLOCKS, locked),
-      ACCELERATORS_CHALLENGES_RAMP_THROUGH
-    ),
+    challenges: gate(copy.challenges, ACCELERATORS_CHALLENGES_FREE_BLOCKS, locked),
     practice: {
       eyebrow: copy.practiceEyebrow,
       title: copy.practiceTitle,

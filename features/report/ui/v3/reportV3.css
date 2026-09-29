@@ -4844,6 +4844,7 @@
   .rv3 .rv4-sun__row.is-ramp,
   .rv3 .rv4-trig__row.is-ramp,
   .rv3 .rv4-tb__ramp,
+  .rv3 .rv4-ab__ramp,
   .rv3 .rv4-try__ramp {
     filter: blur(calc(var(--rv4-veil, 5px) / 2));
   }
@@ -5350,29 +5351,26 @@
   line-height: 21.6px;
   margin: 0 0 16.19px;
 }
-/* 314:307 — the ramp fades in over two 25.6px lines; everything after sits under
- * the full blur (Figma radius 5; --rv4-veil since review 26.09) to the end of the
- * section, with the paywall card on it (below). The
- * frame builds this from three stacked text nodes with spacer lines, which runs the
- * section to 1228; the open layout stays under the blur instead, so nothing moves
- * when the reader unlocks. */
+/* 314:307 — the paywalled section, with the paywall card on its blur (below). The open
+ * layout stays under the blur, so nothing moves when the reader unlocks.
+ * Mark (WhatsApp, 30.09): "This one here in accelerators and brakes doesn't blur
+ * sufficiently and I can read most of it" — 28.09's even 1.75px ("Staging was too
+ * aggressive" of the two-line ramp before it). 314:284 (29.09) fades the gated copy in
+ * from sharp at its top to radius 5 at 20.8% of it, 234.5px down on the 393 frame: the
+ * first gated paragraph. Figma's 5 is the veil here as on every locked surface (review
+ * 26.09), so the band is that paragraph, and everything after it sits under the full
+ * blur to the end of the section. Ending the band at the paragraph's own foot keeps the
+ * fade meeting the full blur on a wide column, where the paragraph runs to fewer lines. */
 .rv3 .rv4-ab__gate {
   cursor: pointer;
   position: relative;
 }
 .rv3 .rv4-ab__ramp {
-  --rv4-band: 51.2px;
+  --rv4-band: 100%;
   position: relative;
 }
-/* Mark, 314:307 (28.09): "Please update how we blur this text section. Staging was
- * too aggressive." 314:284 now draws everything after the first paragraph under ONE
- * layer blur of 2.5, with no ramp: matched on the render, CSS 1.75px, a third of the
- * veil. The only locked surface lighter than the veil, on Mark's word. */
-.rv3 .rv4-ab__gated {
-  filter: blur(calc(var(--rv4-veil, 5px) * 0.35));
-}
-.rv3 .rv4-ab__ramp > .rv4-pblur {
-  display: none;
+.rv3 .rv4-ab__blurred {
+  filter: blur(var(--rv4-veil, 5px));
 }
 /* 1015:1163 (29.09): 408 into 314:284, whose first line is the ramp's, where this gate
  * starts — or as low as the gate still holds it: from 700 its copy runs short of 771

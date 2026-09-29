@@ -34,6 +34,9 @@ describe("V4 — one blur strength for every locked surface", () => {
     ".rv3 .rv4-fvr__blurred",
     ".rv3 .rv4-trig__row.is-locked.is-blurred",
     ".rv3 .rv4-tb__blurred",
+    // A&B's "Common challenges" past its ramp, back on the veil since Mark read it
+    // through 28.09's lighter 1.75px (WhatsApp, 30.09).
+    ".rv3 .rv4-ab__blurred",
     ".rv3 .rv4-try__blurred",
     ".rv3 .rv4-cip__blurred",
     ".rv3 .rv4-cip__closing.is-blurred",
@@ -46,6 +49,21 @@ describe("V4 — one blur strength for every locked surface", () => {
     expect(
       rule(".rv3 .rv4-turn__row.is-locked.is-blurred,\n.rv3 .rv4-sun__row.is-locked.is-blurred")
     ).toContain(`filter: ${VEIL};`);
+  });
+
+  it("scales it down only for the loop's pager and the no-backdrop fallbacks", () => {
+    // Mark read A&B's copy through 28.09's 0.35 (WhatsApp, 30.09: "doesn't blur
+    // sufficiently and I can read most of it"). Past the frozen V3 region the only
+    // lighter blurs are the pager's four fifths (612:982 draws it at 4 where the loop
+    // takes 5) and half the veil on the ramps where backdrop filters are missing.
+    const v4 = css.split("\n").slice(1884).join("\n");
+    const scaled = [
+      ...v4.matchAll(/^\s*filter: blur\(calc\(var\(--rv4-veil, 5px\) ([*/] [\d.]+)\)\);/gm),
+    ].map((m) => m[1]);
+    expect(new Set(scaled)).toEqual(new Set(["/ 2", "* 0.8"]));
+    expect(rule(".rv3 .rv4-loop.is-locked .rv4-loop__pager")).toContain(
+      "filter: blur(calc(var(--rv4-veil, 5px) * 0.8));"
+    );
   });
 
   it("leaves no weaker literal blur on a locked surface in V4's rules", () => {
