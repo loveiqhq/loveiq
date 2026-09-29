@@ -8286,23 +8286,11 @@ html {
   white-space: nowrap;
 }
 
-/* The science deck lays out on a grid from 700px (two across, three from 1024),
- * and V4 has seven cards, so the seventh sat alone at the left of its row. Centring
- * the last row keeps the block symmetric under the heading it hangs from. */
-@media (min-width: 700px) {
-  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__track {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
-    flex: 0 0 calc((100% - 12px) / 2);
-  }
-}
-@media (min-width: 1024px) {
-  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
-    flex-basis: calc((100% - 28px) / 3);
-  }
+/* The science deck's desktop pager (V3Methodology, Mark's desktop review 28.09). The
+ * phone and the 393 preview keep the dot row above it; from 700px the live page draws
+ * this instead (the desktop review block at the end of the file), and nothing else does. */
+.rv3 .rv3-method.is-v4 .rv3-sci__nav {
+  display: none;
 }
 
 /* The locked reader's sticky "Unlock full report" bar is centred on the WINDOW,
@@ -8645,11 +8633,12 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
  * 620–917px from 700 up, and a handful of V4 blocks kept their phone widths inside it,
  * each leaving half the column white beside it. Measured at 1536 (917 column): the
  * archetype card's match row and tagline at 323 and its motivation body at 281, the
- * fantasy map's plot at 300 and the fantasy table at 328, the science cards'
- * questions at 183 in 295px cards, and the Summary's copy centred 80px in from its own
- * heading (the top three's rows, then here too, now follow V2's desktop rows below). Each now takes the column the way the blocks around it do; copy keeps
- * production's 760 measure. The live page only (`.rv3.rv4`) and only from 700px, so the
- * phone and the 393 preview are exactly as before. */
+ * fantasy map's plot at 300 and the fantasy table at 328, and the Summary's copy
+ * centred 80px in from its own heading. Each now takes the column the way the blocks
+ * around it do; copy keeps production's 760 measure. (The top three's rows and the
+ * science deck were here too; Mark's desktop review sets them now, at the end of the
+ * file.) The live page only (`.rv3.rv4`) and only from 700px, so the phone and the 393
+ * preview are exactly as before. */
 @media (min-width: 700px) {
   /* 15:815 — the match row runs the card; the tagline and the motivation body read at
    * the copy measure rather than the phone's 323 and 281. The header and the panel
@@ -8682,11 +8671,6 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     width: auto;
   }
 
-  /* 493:7082 — the question uses its card (it wrapped at the phone's 183). */
-  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__q {
-    width: auto;
-  }
-
   /* Fantasy vs. Reality, at the chapter's 760 copy measure. The map's plot is the
    * phone's 300 at most, placed in percentages, so it scales as one piece: 520 here,
    * the figure centred under the copy; its labels keep their size and so crowd less.
@@ -8705,14 +8689,6 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   .rv3.rv4 .rv4-fvt__cols,
   .rv3.rv4 .rv4-fvt__row {
     grid-template-columns: minmax(0, 1fr) repeat(2, 140px);
-  }
-}
-/* The science deck four across where four 212px cards fit: the column is 903 at 1024
- * and 855+ from 1400, but 710 beside the sidebar at 1280, which keeps three. Seven
- * cards then set four and three, the last row centred (the rule above). */
-@media (min-width: 1000px) and (max-width: 1279px), (min-width: 1400px) {
-  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
-    flex-basis: calc((100% - 42px) / 4);
   }
 }
 
@@ -8880,5 +8856,167 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     font-size: clamp(0.875rem, 1.2vw, 1rem);
     grid-area: pct;
     line-height: 1.22;
+  }
+
+  /* "Should also be a tile gallery that you can click through. Maybe make them bigger so
+   * that you..." (the sentence stops there; Fatih, 29.09: build it now). The frozen
+   * desktop grid (1797, 1837) as one row flush with the column, snapping as the phone's
+   * does, so a trackpad or a swipe still moves it; the next tile is cut by the column's
+   * edge. Each tile is the phone's 212 x 248 at 1.25x, every length inside it scaled
+   * with it, so each question breaks where it does on the phone. Explicit sizes, not
+   * `zoom`: the pager measures the tiles, and engines still disagree on a zoomed box. */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__track {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 12px;
+    margin: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    padding: 6px 0;
+    scroll-padding-inline: 0;
+    scroll-snap-type: x mandatory;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
+    border-radius: 22.5px;
+    flex: 0 0 265px;
+    gap: 18.75px;
+    height: 310px;
+    min-height: 0;
+    padding: 19.92px 18.44px 20.9px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__head {
+    gap: 11.25px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__icon {
+    height: 43.72px;
+    width: 43.72px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__glyph {
+    height: 24.56px;
+    width: 24.56px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__title {
+    font-size: 20px;
+    letter-spacing: -0.21px;
+    line-height: 24px;
+  }
+  /* The phone's 183 question box at 1.25x, a hair past the padding as on the phone. */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__q {
+    font-size: 15px;
+    line-height: 24px;
+    margin-bottom: -2.5px;
+    width: 228.75px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__label {
+    font-size: 12.5px;
+    letter-spacing: 1.28px;
+    line-height: 20px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__list {
+    gap: 6.88px;
+    margin-top: -11.88px;
+    min-height: 88.75px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__list li {
+    font-size: 15.23px;
+    gap: 8.75px;
+    line-height: 19.04px;
+    min-height: 25px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__bullet {
+    height: 16.25px;
+    width: 16.25px;
+  }
+  /* The pager, 14 under the tiles (the phone's 11 at 1.25x): V4's 34px chapter disc
+   * either side of a dot per stop, the phone's dots at 1.25x, the current one its
+   * gradient pill. */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__nav {
+    align-items: center;
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    padding-top: 8px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow {
+    align-items: center;
+    background: rgba(121, 95, 200, 0.1);
+    border: 0;
+    border-radius: 50%;
+    color: var(--rv3-violet);
+    cursor: pointer;
+    display: flex;
+    flex: none;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+    width: 34px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow svg {
+    display: block;
+    height: 15px;
+    width: 15px;
+  }
+  /* aria-disabled, not disabled: a keyboard's focus stays on it at an end. */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow[aria-disabled="true"] {
+    cursor: default;
+    opacity: 0.35;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pips {
+    align-items: center;
+    display: flex;
+    gap: 7.5px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip {
+    background: rgba(22, 16, 33, 0.16);
+    border: 0;
+    border-radius: 9999px;
+    cursor: pointer;
+    flex: none;
+    height: 7.5px;
+    padding: 0;
+    position: relative;
+    transition:
+      background-color 200ms ease,
+      width 200ms ease;
+    width: 7.5px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip.is-active {
+    background: linear-gradient(to right, #fe6839, #c36ddf);
+    width: 20px;
+  }
+  /* A 15 x 24 target round each dot: the dots' own pitch, so no two overlap. */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip::after {
+    content: "";
+    inset: -8.25px -3.75px;
+    position: absolute;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:focus-visible,
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip:focus-visible {
+    outline: 2px solid var(--rv3-violet);
+    outline-offset: 2px;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow {
+    transition:
+      background-color 180ms ease,
+      translate 180ms ease;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:not([aria-disabled="true"]):hover {
+    background: rgba(121, 95, 200, 0.18);
+    translate: 0 -1px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip:not(.is-active):hover {
+    background: rgba(22, 16, 33, 0.32);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow,
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip {
+    transition: none;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:not([aria-disabled="true"]):hover {
+    translate: none;
   }
 }

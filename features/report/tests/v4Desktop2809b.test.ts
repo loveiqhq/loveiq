@@ -70,21 +70,12 @@ describe("the archetype card uses the column", () => {
   });
 });
 
-// The top three's rows moved to V2's desktop layout in Mark's desktop review (28.09,
-// Notion): v4DesktopReview2809.test.ts.
-describe("the Summary and the science deck", () => {
+// The top three (V2's desktop rows) and the science deck (a gallery) moved on in Mark's
+// desktop review, 28.09 (Notion): v4DesktopReview2809.test.ts.
+describe("the Summary", () => {
   it("sets the Summary's copy under its heading, not centred in the column", () => {
     expect(ruleIn(".rv3.rv4 .rv4-summary__body")).toContain("align-items: flex-start");
     expect(ruleIn(".rv3.rv4 .rv4-summary__copy")).toContain("width: auto");
-  });
-
-  it("lets a science card's question use the card, and lays four across where they fit", () => {
-    expect(ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__q")).toContain("width: auto");
-    // The column is 903 at 1024 and 855+ from 1400; beside the sidebar at 1280 it is 710.
-    const css = block();
-    expect(css).toMatch(
-      /@media \(min-width: 1000px\) and \(max-width: 1279px\), \(min-width: 1400px\) \{\s*\.rv3\.rv4 \.rv3-method\.is-v4 \.rv3-sci__card \{\s*flex-basis: calc\(\(100% - 42px\) \/ 4\);/
-    );
   });
 });
 
