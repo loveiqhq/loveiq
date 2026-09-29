@@ -464,7 +464,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Sign up for a program or course
 - Work with a professional (therapist, coach, etc.)
 - I usually only act once it becomes urgent",N/A,"This helps us decide whether your recommendations should feel more self-directed, relational, structured, or guided."
-16011,16,Next Steps & Preferences,Which of these have you actually paid for in the last 12 months?,Multiple choice,Select all that apply.,Only count what you actually paid for in the last year — not what you read about or were given for free.,"- Therapy, coaching, or counseling
+16011,16,Next Steps & Preferences,"For your Personal Development, which of these have you paid for in the last 12 months?",Multiple choice,Select all that apply.,Only count what you actually paid for in the last year — not what you read about or were given for free.,"- Therapy, coaching, or counseling
 - Books, courses, or programs
 - An app or subscription
 - A retreat, workshop, or group
@@ -562,7 +562,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Yes, and I got stuck
 - I've thought about it, but never really tried
 - No, this is new for me",N/A,Separates people who are stuck from people who have not started — the two need very different kinds of help.
-16018,16,Next Steps & Preferences,We're building more of these. Want first access to what you picked?,Single choice,Select one option.,Saying yes only means we let you know when it exists. Nothing is for sale here and no payment is taken.,"- Yes, tell me when it's ready
+16018,16,Next Steps & Preferences,"We're building more assessments, including one on the area you picked. Would you like first access when we launch?",Single choice,Select one option.,Saying yes only means we let you know when it exists. Nothing is for sale here and no payment is taken.,"- Yes, tell me when it's ready
 - No thanks",N/A,"The only behavioural signal in this block. What people say they want and what they sign up for usually differ, and the sign-up is the one to trust."
 16019,16,Next Steps & Preferences,What are the most interesting insights that you have come across around sexuality to date?,Open response,Optional. Share as much or as little as you like.,We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.,Free text,N/A,Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.
 16020,16,Next Steps & Preferences,"What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?",Open response,Optional. Share as much or as little as you like.,We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.,Free text,N/A,Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.

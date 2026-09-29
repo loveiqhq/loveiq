@@ -69,6 +69,27 @@ describe("the content asks — 16019 and 16020", () => {
   });
 });
 
+describe("Mark's two stems from the 25.09 review", () => {
+  it("16011 asks about personal development purchases", () => {
+    expect(find("16011")?.question).toBe(
+      "For your Personal Development, which of these have you paid for in the last 12 months?"
+    );
+  });
+
+  it("C12 (16018) says we are building more assessments in the picked area", () => {
+    // The tightened version of Mark's line (Fatih, 29.09): his verbatim wording ran to
+    // seven lines on a phone.
+    expect(find("16018")?.question).toBe(
+      "We're building more assessments, including one on the area you picked. Would you like first access when we launch?"
+    );
+  });
+
+  it("keep their options exactly as they were", () => {
+    expect(find("16011")!.options).toHaveLength(5);
+    expect(find("16018")!.options).toEqual(["Yes, tell me when it's ready", "No thanks"]);
+  });
+});
+
 describe("completion with the optional asks skipped", () => {
   const withEmail = (answers: Record<string, string>) => ({
     ...answers,
@@ -115,7 +136,7 @@ describe("dropBlankOptionalAnswers", () => {
   });
 });
 
-describe("the migration behind 16019 and 16020", () => {
+describe("the migration behind 16019, 16020 and the two stems", () => {
   /** Found by suffix: a migration applied through the MCP is renamed to its ledger version. */
   const dir = join(process.cwd(), "supabase/migrations");
   const file = readdirSync(dir).find((f) => f.endsWith("_survey_content_asks_16019_16020.sql"));
@@ -141,6 +162,14 @@ describe("the migration behind 16019 and 16020", () => {
     for (const qId of CONTENT_ASK_QIDS) {
       expect(sql, qId).toContain("survey_question " + qId + " already exists, skipping");
       expect(sql, qId).toContain("survey_question " + qId + " already exists with different text");
+    }
+  });
+
+  it("brings the database's copy of both stems in line with what the survey asks", () => {
+    for (const qId of ["16011", "16018"]) {
+      const text = quoted(find(qId)!.question);
+      expect(sql, qId).toContain("SET question          = " + text);
+      expect(sql, qId).toContain("AND question <> " + text);
     }
   });
 

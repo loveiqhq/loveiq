@@ -1340,7 +1340,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16011",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "Which of these have you actually paid for in the last 12 months?",
+    question:
+      "For your Personal Development, which of these have you paid for in the last 12 months?",
     answerType: "multiple",
     options: [
       "Therapy, coaching, or counseling",
@@ -1552,7 +1553,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16018",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "We're building more of these. Want first access to what you picked?",
+    question:
+      "We're building more assessments, including one on the area you picked. Would you like first access when we launch?",
     answerType: "single",
     options: ["Yes, tell me when it's ready", "No thanks"],
     required: true,

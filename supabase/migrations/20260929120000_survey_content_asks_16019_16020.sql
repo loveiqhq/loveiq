@@ -1,4 +1,5 @@
--- Database rows for Mark's two open-text content asks, 16019 and 16020.
+-- Database rows for Mark's two open-text content asks, 16019 and 16020, and the database's
+-- copy of two reworded stems, 16011 and 16018 (C12).
 --
 -- WHY THE ROWS. submit_survey resolves a question by survey_question.frontend_qid and,
 -- finding nothing, skips the answer with no error (see 20260918081040). Without these rows
@@ -18,10 +19,20 @@
 -- and in the database the survey-db-sync workflow checks, or a push to staging goes red
 -- (the rows it cannot find are CRITICAL).
 --
+-- THE STEMS. The survey now asks "For your Personal Development, which of these have you
+-- paid for in the last 12 months?" (16011) and "We're building more assessments, including
+-- one on the area you picked. Would you like first access when we launch?" (16018), from
+-- Mark's 25.09 review (16018 tightened by Fatih, 29.09). Neither changes what is measured: 16011 is
+-- still purchase history (every option is a personal-development purchase) and 16018 is
+-- still the waitlist opt-in, with the same options. Brought in line so admin views,
+-- exports and drift-detector.ts caption answers with the question actually asked. Cutover:
+-- the day this reaches the environment. The table comment on survey_submission_answer
+-- (the 16011 provenance note from 20260911200100) is deliberately left alone.
+--
 -- Idempotent. Each insert skips when its frontend_qid already holds the SAME question,
 -- and refuses outright when the id holds a different one: answers to a new question must
 -- never merge into an unrelated row under a shared id (the reason retired ids are never
--- reused, see features/survey/ui/questionOrder.ts).
+-- reused, see features/survey/ui/questionOrder.ts). The updates are guarded on the text.
 --
 -- display_order appends after the current maximum; the survey renders in qId order and
 -- this column only affects admin listings (20260911152724).
@@ -88,3 +99,16 @@ BEGIN
   INSERT INTO survey_question_mapping (survey_id, question_id) VALUES (v_survey_id, v_q_id);
 END $$;
 
+-- 16011 - "For your Personal Development, ..." (Mark, 25.09).
+UPDATE survey_question
+SET question          = 'For your Personal Development, which of these have you paid for in the last 12 months?',
+    updated_date_time = now()
+WHERE frontend_qid = '16011'
+  AND question <> 'For your Personal Development, which of these have you paid for in the last 12 months?';
+
+-- 16018 (C12) - "We're building more assessments ..." (Mark, 25.09; tightened by Fatih, 29.09).
+UPDATE survey_question
+SET question          = 'We''re building more assessments, including one on the area you picked. Would you like first access when we launch?',
+    updated_date_time = now()
+WHERE frontend_qid = '16018'
+  AND question <> 'We''re building more assessments, including one on the area you picked. Would you like first access when we launch?';
