@@ -33,7 +33,11 @@ function getRedis(): Redis | null {
 function logMissingKvOnce(): void {
   if (missingKvLogged) return;
   missingKvLogged = true;
-  if (process.env.NODE_ENV === "production") {
+  // A preview deployment (staging.loveiq.org is one) has no store of its own on purpose:
+  // the staging project's only Redis is production's, and sharing it would mix staging's
+  // counters and keys into production's. In-memory is the expected state there, not an
+  // incident; real production without a store still is one.
+  if (process.env.NODE_ENV === "production" && process.env.VERCEL_ENV !== "preview") {
     logger.error(
       "[ratelimit] KV_REST_API_URL / KV_REST_API_TOKEN missing in production — using in-memory fallback. Per-instance state will not coordinate across regions or warm containers, so rate limits may be under-enforced."
     );
