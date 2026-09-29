@@ -68,7 +68,9 @@ describe("V4TriggerCard — open: two rows, the third under a fade (713:6132 / 7
   });
 
   it("sets the pill in title case, no longer in capitals", () => {
-    const at = V3_CSS.indexOf(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill {");
+    const at = V3_CSS.indexOf(
+      ".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill {"
+    );
     const pill = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
     expect(pill).toContain("text-transform: capitalize");
     expect(pill).not.toContain("uppercase");
@@ -322,12 +324,19 @@ describe("reportV3.css — trigger card contracts", () => {
   });
 
   it("draws the pill with the fantasy table's rules — one pill, 713:6178 and 639:498", () => {
-    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill {");
-    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill::after,\n.rv3 .rv4-trig__pill::after {");
+    // The Summary's "Show all" (961:303, 29.09) is the same pill again.
     expect(V3_CSS).toContain(
-      ".rv3 .rv4-fvt__pill:focus-visible,\n.rv3 .rv4-trig__pill:focus-visible {"
+      ".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill {"
     );
-    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label {");
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-fvt__pill::after,\n.rv3 .rv4-trig__pill::after,\n.rv3 .rv4-summary__pill::after {"
+    );
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-fvt__pill:focus-visible,\n.rv3 .rv4-trig__pill:focus-visible,\n.rv3 .rv4-summary__pill:focus-visible {"
+    );
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label,\n.rv3 .rv4-summary__pill-label {"
+    );
   });
 
   // Final review, 25.09: the row the pill hands focus to hid its outline from keyboard
