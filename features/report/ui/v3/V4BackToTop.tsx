@@ -32,6 +32,9 @@ import { useCallback, useEffect, useState, type FC, type RefObject } from "react
  * section head was a screen above the fold, which, under the unlock bar, meant a
  * locked reader first met it at the article's end. It fades in on the frame after
  * mounting, so opening the article is what brings it up.
+ *
+ * NOT ON DESKTOP. Mark's desktop review (28.09): "We dont need the back to Top bottom on
+ * Desktop." It stays mounted, and reportV3.css stops drawing it from 700px.
  */
 
 /**
