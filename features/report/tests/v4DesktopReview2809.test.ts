@@ -141,3 +141,60 @@ describe("the article's paywall window follows its card on desktop", () => {
     }
   });
 });
+
+// "Lets have the last 3 lines fade and we dont need as much free space before the CTAs.
+// If easier, happy to design this for desktop specifically." In the desktop column a
+// closed teaser's copy ends inside its 196px box, so the stepped fade never engaged and
+// "Read all" stood at the phone's fixed place in the card, 85-130px under the words. The
+// copy's own last three lines take the phone's steps (useTeaserFade's tail, from four
+// lines), and the pill follows the copy by the phone's own gap under the box.
+describe("the closed teasers fade their last three lines and keep the pill close", () => {
+  it("steps the copy's own last three lines, as the phone steps the box's", () => {
+    const mask = flat(
+      ruleIn(
+        '.rv3.rv4 .rv4-try__teaser[data-fade="short"][data-tail],\n  .rv3.rv4 .rv4-learn__teaser[data-fade="short"][data-tail]'
+      )
+    );
+    for (const stop of [
+      "#000var(--rv4-tail-1,calc(100%-68px))",
+      "rgba(0,0,0,0.5)var(--rv4-tail-1,calc(100%-68px))",
+      "rgba(0,0,0,0.5)var(--rv4-tail-2,calc(100%-45.6px))",
+      "rgba(0,0,0,0.29)var(--rv4-tail-2,calc(100%-45.6px))",
+      "rgba(0,0,0,0.29)var(--rv4-tail-3,calc(100%-23.2px))",
+      "rgba(0,0,0,0.1)var(--rv4-tail-3,calc(100%-23.2px))",
+    ]) {
+      expect(mask).toContain(stop);
+    }
+    expect(mask).toContain("-webkit-mask-image:");
+  });
+
+  it("lets the pill follow the copy by the phone's own gap under the box", () => {
+    // On the phone the Try box ends at 196 in its closed block, the pill at 212.5; the
+    // Learn box at 4 + 196 in its body, the pill at 210.5.
+    const tryTop = px(firstRule(".rv3 .rv4-try__open"), "top");
+    const learnTop = px(firstRule(".rv3 .rv4-learn__open"), "top");
+    const learnLead = px(firstRule(".rv3 .rv4-learn__body"), "padding-top");
+    expect(tryTop - 196).toBe(16.5);
+    expect(learnTop - learnLead - 196).toBe(10.5);
+    const tryPill = ruleIn(".rv3.rv4 .rv4-try__open");
+    const learnPill = ruleIn(".rv3.rv4 .rv4-learn__open");
+    expect(tryPill).toContain("margin: 16.5px auto 0");
+    expect(learnPill).toContain("margin: 10.5px auto 0");
+    for (const pill of [tryPill, learnPill]) {
+      expect(pill).toContain("left: auto");
+      expect(pill).toContain("position: relative");
+      expect(pill).toContain("top: auto");
+      expect(pill).toContain("transform: none");
+    }
+  });
+
+  it("reserves no band for the phone's fixed pill, and keeps the last block's margin out of the box", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-try__closed")).toContain("min-height: 0");
+    expect(ruleIn(".rv3.rv4 .rv4-learn:not(.is-open) .rv4-learn__body")).toContain("min-height: 0");
+    expect(
+      ruleIn(
+        ".rv3.rv4 .rv4-try__teaser > :last-child,\n  .rv3.rv4 .rv4-learn__teaser > :last-child"
+      )
+    ).toContain("margin-bottom: 0");
+  });
+});

@@ -8772,4 +8772,59 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   .rv3.rv4 .rv4-learn .rv4-learn__gate > .rv4-learn__blur {
     height: calc(var(--rv4-learn-window-wide) + var(--rv4-learn-foot));
   }
+
+  /* "Lets have the last 3 lines fade and we dont need as much free space before the
+   * CTAs. If easier, happy to design this for desktop specifically." Here a closed
+   * teaser's copy ends inside its 196px box (three to eight lines), so the stepped fade
+   * never engaged and "Read all" stood at the phone's fixed place in the card, 85-130px
+   * under the words. The copy's own last three lines take the phone's steps
+   * (useTeaserFade's tail, from four lines; shorter copy keeps its proportional fade),
+   * and the pill follows the copy by the phone's own gap under the box: 212.5 - 196 on
+   * the practice, 210.5 - 4 - 196 on the article. The last block's 16px margin sat
+   * inside the clipped box and would have doubled that gap. */
+  .rv3.rv4 .rv4-try__teaser > :last-child,
+  .rv3.rv4 .rv4-learn__teaser > :last-child {
+    margin-bottom: 0;
+  }
+  .rv3.rv4 .rv4-try__teaser[data-fade="short"][data-tail],
+  .rv3.rv4 .rv4-learn__teaser[data-fade="short"][data-tail] {
+    -webkit-mask-image: linear-gradient(
+      180deg,
+      #000 var(--rv4-tail-1, calc(100% - 68px)),
+      rgba(0, 0, 0, 0.5) var(--rv4-tail-1, calc(100% - 68px)),
+      rgba(0, 0, 0, 0.5) var(--rv4-tail-2, calc(100% - 45.6px)),
+      rgba(0, 0, 0, 0.29) var(--rv4-tail-2, calc(100% - 45.6px)),
+      rgba(0, 0, 0, 0.29) var(--rv4-tail-3, calc(100% - 23.2px)),
+      rgba(0, 0, 0, 0.1) var(--rv4-tail-3, calc(100% - 23.2px))
+    );
+    mask-image: linear-gradient(
+      180deg,
+      #000 var(--rv4-tail-1, calc(100% - 68px)),
+      rgba(0, 0, 0, 0.5) var(--rv4-tail-1, calc(100% - 68px)),
+      rgba(0, 0, 0, 0.5) var(--rv4-tail-2, calc(100% - 45.6px)),
+      rgba(0, 0, 0, 0.29) var(--rv4-tail-2, calc(100% - 45.6px)),
+      rgba(0, 0, 0, 0.29) var(--rv4-tail-3, calc(100% - 23.2px)),
+      rgba(0, 0, 0, 0.1) var(--rv4-tail-3, calc(100% - 23.2px))
+    );
+  }
+  .rv3.rv4 .rv4-try__closed {
+    min-height: 0;
+  }
+  .rv3.rv4 .rv4-learn:not(.is-open) .rv4-learn__body {
+    min-height: 0;
+  }
+  .rv3.rv4 .rv4-try__open {
+    left: auto;
+    margin: 16.5px auto 0;
+    position: relative;
+    top: auto;
+    transform: none;
+  }
+  .rv3.rv4 .rv4-learn__open {
+    left: auto;
+    margin: 10.5px auto 0;
+    position: relative;
+    top: auto;
+    transform: none;
+  }
 }
