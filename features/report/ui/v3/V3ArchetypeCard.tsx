@@ -28,7 +28,8 @@ import useV4Reveal from "./useV4Reveal";
  * animates its match strength alone: the bar widens as the % counts up, over 1800ms.
  * That plays when the header is in view; the tagline and the core motivation panel rise
  * in behind it, and the meters, far lower, fill segment by segment when they are
- * reached. The timings are in reportV3.css; the deck keeps its own cross-fade.
+ * reached — at half the first pace since the 28.09 mobile review asked for the scales
+ * to be slower. The timings are in reportV3.css; the deck keeps its own cross-fade.
  */
 
 /** Three-step meters fill one segment per step. */

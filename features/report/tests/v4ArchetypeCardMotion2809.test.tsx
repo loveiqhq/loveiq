@@ -148,10 +148,12 @@ describe("reportV3.css — the archetype card's entrance", () => {
     expect(pending).toMatch(/transform: translateY\(8px\)/);
   });
 
-  it("fills each lit segment from the left, 110ms after the one before", () => {
+  // Review 28.09, mobile: "Animation of Risk orientation and typical confidence scales can
+  // be slower". Twice the 28.09 pace: each segment 560ms (was 280), 220ms apart (110).
+  it("fills each lit segment from the left, 220ms after the one before", () => {
     const lit = rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__seg.is-on::after");
     expect(lit).toMatch(/transform-origin: left center/);
-    expect(lit).toContain("transform 280ms ease-out calc(var(--rv4-seg-i, 0) * 110ms)");
+    expect(lit).toContain("transform 560ms ease-out calc(var(--rv4-seg-i, 0) * 220ms)");
     expect(
       rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__meters.is-pending .rv3-arch__seg.is-on::after")
     ).toMatch(/transform: scaleX\(0\)/);
@@ -162,8 +164,9 @@ describe("reportV3.css — the archetype card's entrance", () => {
   });
 
   it("lights each meter's reached label as its last segment lands", () => {
+    // The colour takes 600ms (was 300), starting as that last segment lands.
     expect(rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__stop.is-current")).toContain(
-      "color 300ms ease-out calc(var(--rv4-stop-i, 0) * 110ms + 280ms)"
+      "color 600ms ease-out calc(var(--rv4-stop-i, 0) * 220ms + 560ms)"
     );
     expect(
       rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__meters.is-pending .rv3-arch__stop.is-current")
