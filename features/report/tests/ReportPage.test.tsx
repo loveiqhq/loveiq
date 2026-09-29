@@ -1129,14 +1129,14 @@ describe("ReportPage", () => {
     const precedes = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-    it("renders it once, under the Part V heading and above Attachment Style", () => {
+    it("renders it once, under the Part 5 heading and above Attachment Style", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
 
       const { container } = render(<ReportPage />);
 
       const heading = [...container.querySelectorAll(".rv4-part")].find(
-        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part V"
+        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part 5"
       )!;
       const partnership = container.querySelector("#challenges_in_partnership")!;
       const attachment = container.querySelector("#attachment_style")!;
@@ -1211,7 +1211,7 @@ describe("ReportPage", () => {
       // 38:1516 — the 44px between the Part V heading and its first chapter.
       expect(chapter.previousElementSibling?.getAttribute("data-node-id")).toBe("38:1516");
       const heading = [...container.querySelectorAll(".rv4-part")].find(
-        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part V"
+        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part 5"
       )!;
       expect(precedes(heading, chapter)).toBe(true);
       expect(precedes(chapter, container.querySelector("#attachment_style")!)).toBe(true);
@@ -1338,7 +1338,7 @@ describe("ReportPage", () => {
       return response;
     };
 
-    it("draws the Report 3.0 chapter, open, under the Part VI heading", () => {
+    it("draws the Report 3.0 chapter, open, under the Part 6 heading", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(withChapter(false));
 
@@ -1357,7 +1357,7 @@ describe("ReportPage", () => {
       // 1:1146 — the 44px between the Part VI heading and its first chapter.
       expect(chapter.previousElementSibling?.getAttribute("data-node-id")).toBe("1:1146");
       const heading = [...container.querySelectorAll(".rv4-part")].find(
-        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part VI"
+        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part 6"
       )!;
       expect(precedes(heading, chapter)).toBe(true);
     });

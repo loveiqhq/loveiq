@@ -50,10 +50,10 @@ describe("V4ChapterNudges — 663:1089", () => {
     const rows = [...container.querySelectorAll(".rv4-nudges__row")];
     expect(rows).toHaveLength(4);
     expect(rows.map((r) => r.querySelector(".rv4-nudges__part")!.textContent)).toEqual([
-      "Part III",
-      "Part IV",
-      "Part V",
-      "Part VI",
+      "Part 3",
+      "Part 4",
+      "Part 5",
+      "Part 6",
     ]);
     expect(rows.map((r) => r.querySelector(".rv4-nudges__title")!.textContent)).toEqual([
       "Typical Beliefs",

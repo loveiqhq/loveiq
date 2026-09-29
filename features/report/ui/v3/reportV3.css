@@ -2468,26 +2468,48 @@
   top: 0;
   transform: translateX(-50%);
 }
+/* Mark's 29.09 rework (1945090190): "Part" in 14/19.2 SemiBold #6b5b95 tracked 1.85,
+ * no longer in capitals, and its number beside it (below). The two sit as one group
+ * centred on the stage, as every part's frame centres it. The frames set the row
+ * 26 / 26 / 23 / 22 / 16 / 19px above the headline; "standardise the padding to the
+ * headline" — all six take Part 3's (1:852, where the comment is pinned) 23. */
 .rv3 .rv4-part__eyebrow {
+  align-items: baseline;
   color: var(--rv3-violet-ink);
-  font-size: 12px;
+  display: inline-flex;
+  font-size: 14px;
   font-weight: 600;
-  /* 178.66 of 361, as an offset from the centre (see the glow above). */
-  left: calc(50% - 1.84px);
-  letter-spacing: 2.6px;
+  left: 50%;
+  letter-spacing: 1.85px;
   line-height: 19.2px;
   margin: 0;
   position: absolute;
-  text-align: center;
-  text-transform: uppercase;
-  top: 48px;
+  top: 57px;
   transform: translateX(-50%);
   white-space: nowrap;
 }
+/* 855:7072 — the number in Lora Bold 14 in the brand gradient (175.03deg, the frames'
+ * own stops), on the word's baseline. The frames set it 7 / 4 / 7 / 7 / 6 / 5px after
+ * the word's box, which ends on its tracking: 7, as Parts 1, 3 and 4 do. */
+.rv3 .rv4-part__num {
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-image: linear-gradient(175.03deg, #fb683e 17.123%, #e88c8c 44.722%, #ac88ed 108.39%);
+  color: transparent;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 12px;
+  margin-left: 7px;
+}
+/* 1:857 — Lora 28/24 since the rework (it was 20). Part 3's is 338 wide at 28, so on a
+ * phone narrower than Figma's 393 it scales with the column rather than being clipped
+ * by the stage: 28px in a 361 column (344 of it), 23.4 at 320. */
 .rv3 .rv4-part__title {
   color: var(--rv3-ink);
   font-family: var(--font-serif);
-  font-size: 20px;
+  font-size: min(28px, calc((100vw - 32px) * 28 / 344));
   font-weight: 400;
   /* 180.45 of 361, as an offset from the centre. */
   left: calc(50% - 0.05px);
@@ -2508,9 +2530,13 @@
 .rv3 .rv4-part__title > span.is-italic {
   font-style: italic;
 }
-/* 1:174 — Part I's accent is near-black, not violet. */
+/* 1:174 — Part 1's accent is near-black, not violet, and upright: "Welcome" in Lora
+ * Regular. */
 .rv3 .rv4-part__title.is-ink > span:last-child {
   color: #191a1b;
+}
+.rv3 .rv4-part__title.is-upright > span:last-child {
+  font-style: normal;
 }
 .rv3 .rv4-part__intro {
   margin: 0;

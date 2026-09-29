@@ -20,33 +20,41 @@ export const TEASER_PLACEHOLDER = "[Teaser Text]";
 export const PART_INTRO_PLACEHOLDER = "[Part Introductory Text]";
 
 export interface Report3PartHeading {
-  /** "Part I" … "Part VI" — 1:173 / 1:856. */
-  eyebrow: string;
-  /** Upright serif segment. Empty when the whole title is the accent (Part I). */
-  lead: string;
-  /** Italic segment. Violet on the part+intro blocks, near-black on Part I. */
-  accent: string;
-  /** Part I renders its accent in near-black rather than violet — 1:174. */
-  tone?: "violet" | "ink";
   /**
-   * Set the lead in italic as well. Only Part II does this: 1:486 draws "Your" in
-   * italic ink beside the violet "Constellation", where Part III's 1:852 keeps "How
+   * "Part 1" … "Part 6" — the part as the Snapshot's chips name it. Arabic since Mark's
+   * 29.09 rework (1945090190; "Parts now dont have a roman number"), as the nav's.
+   */
+  eyebrow: string;
+  /** The number the heading sets beside "Part", in Lora Bold and the brand gradient. */
+  number: string;
+  /** Upright serif segment. Empty when the whole title is the accent (Part 1). */
+  lead: string;
+  /** Italic segment. Violet on the part+intro blocks, near-black on Part 1. */
+  accent: string;
+  /** Part 1 renders its accent in near-black rather than violet — 1:174. */
+  tone?: "violet" | "ink";
+  /** Part 1's is upright too: 1:174 sets "Welcome" in Lora Regular. */
+  upright?: true;
+  /**
+   * Set the lead in italic as well. Only Part 2 does this: 1:486 draws "Your" in
+   * italic ink beside the violet "Constellation", where Part 3's 1:852 keeps "How
    * your archetype" upright.
    */
   leadItalic?: true;
 }
 
 export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
-  // 1:169 — no introduction paragraph, and the accent is near-black, not violet.
-  { eyebrow: "Part I", lead: "", accent: "Welcome", tone: "ink" },
+  // 1:169 — no introduction paragraph; "Welcome" upright and near-black, not violet.
+  { eyebrow: "Part 1", number: "1", lead: "", accent: "Welcome", tone: "ink", upright: true },
   // 1:486
-  { eyebrow: "Part II", lead: "Your ", accent: "Constellation", leadItalic: true },
-  // 1:856 / 1:857
-  { eyebrow: "Part III", lead: "How your archetype ", accent: "works" },
+  { eyebrow: "Part 2", number: "2", lead: "Your ", accent: "Constellation", leadItalic: true },
+  // 1:852
+  { eyebrow: "Part 3", number: "3", lead: "How your archetype ", accent: "works" },
   // 1:990 — "Your " upright in ink, "erotic engine" in the accent, lower-case.
-  { eyebrow: "Part IV", lead: "Your ", accent: "erotic engine" },
-  { eyebrow: "Part V", lead: "How You ", accent: "connect" },
-  { eyebrow: "Part VI", lead: "Your ", accent: "edges" },
+  { eyebrow: "Part 4", number: "4", lead: "Your ", accent: "erotic engine" },
+  // 38:1515 — "How you connect", lower-case.
+  { eyebrow: "Part 5", number: "5", lead: "How you ", accent: "connect" },
+  { eyebrow: "Part 6", number: "6", lead: "Your ", accent: "edges" },
 ];
 
 /**

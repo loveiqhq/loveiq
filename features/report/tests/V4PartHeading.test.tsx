@@ -34,7 +34,9 @@ describe("reportV3.css — the part heading stays centred on every phone", () =>
   });
 
   it("places the eyebrow and the title from the centre (1:173 / 1:174)", () => {
-    expect(rule(".rv3 .rv4-part__eyebrow {")).toContain("left: calc(50% - 1.84px)");
+    // "Part" and its number are one group now, centred on the stage as every part's
+    // frame centres it (29.09).
+    expect(rule(".rv3 .rv4-part__eyebrow {")).toContain("left: 50%");
     expect(rule(".rv3 .rv4-part__title {")).toContain("left: calc(50% - 0.05px)");
   });
 
@@ -67,7 +69,12 @@ describe("V4PartHeading — the glow blooms in when the heading reaches the scre
     vi.unstubAllGlobals();
   });
 
-  const HEADING: Report3PartHeading = { eyebrow: "Part V", lead: "How You", accent: "connect" };
+  const HEADING: Report3PartHeading = {
+    eyebrow: "Part 5",
+    number: "5",
+    lead: "How you ",
+    accent: "connect",
+  };
   const part = (root: ParentNode) => root.querySelector(".rv4-part")!;
 
   it("holds the glow back until the heading is in view", () => {
@@ -102,6 +109,93 @@ describe("V4PartHeading — the glow blooms in when the heading reaches the scre
     });
     expect(errors).not.toHaveBeenCalled();
     host.remove();
+  });
+});
+
+/**
+ * Mark, 29.09 (1945090190): "We reworked how we show the Part. Fonts have increased and
+ * the font and color of the number has changed. Can you please standardise the padding
+ * to the headline and space between "Part" and the number". Every part frame now sets
+ * "Part" in 14px SemiBold #6b5b95 (Part 2's still 12), the number beside it in Lora Bold
+ * in the brand gradient, and the headline in Lora 28/24. The frames place them apart
+ * by 26 / 26 / 23 / 22 / 16 / 19px and 7 / 4 / 7 / 7 / 6 / 5px; one rule serves all six:
+ * Part 3's (1:852, where the comment is pinned) 23 above the headline, 7 between.
+ */
+describe("V4PartHeading — 'Part' and its number (29.09)", () => {
+  afterEach(cleanup);
+
+  it("sets the word and the number as two runs, read as one", async () => {
+    const { REPORT_V4_PARTS } = await import("@/data/report3-archetype-page");
+    const { container } = render(<V4PartHeading heading={REPORT_V4_PARTS[2]!} intro="x" />);
+    const eyebrow = container.querySelector(".rv4-part__eyebrow")!;
+    expect(eyebrow.querySelector(".rv4-part__word")!.textContent).toBe("Part");
+    expect(eyebrow.querySelector(".rv4-part__num")!.textContent).toBe("3");
+    expect(eyebrow.textContent).toBe("Part 3");
+  });
+
+  it("numbers the six parts 1 to 6, as the frames and the nav do", async () => {
+    const { REPORT_V4_PARTS } = await import("@/data/report3-archetype-page");
+    expect(REPORT_V4_PARTS.map((p) => p.number)).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(REPORT_V4_PARTS.map((p) => p.eyebrow)).toEqual([
+      "Part 1",
+      "Part 2",
+      "Part 3",
+      "Part 4",
+      "Part 5",
+      "Part 6",
+    ]);
+    // 38:1515 — "How you connect", in lower case.
+    expect(REPORT_V4_PARTS[4]!.lead).toBe("How you ");
+  });
+
+  it("sets Part 1's Welcome upright, in the near-black ink (1:174)", async () => {
+    const { REPORT_V4_PARTS } = await import("@/data/report3-archetype-page");
+    const { container } = render(<V4PartHeading heading={REPORT_V4_PARTS[0]!} lead />);
+    expect(container.querySelector(".rv4-part__title")).toHaveClass("is-ink", "is-upright");
+  });
+});
+
+describe("reportV3.css — the reworked Part (29.09)", () => {
+  it("sets 'Part' 14/19.2 SemiBold #6b5b95, tracked 1.85, not in capitals", () => {
+    const eyebrow = rule(".rv3 .rv4-part__eyebrow {");
+    expect(eyebrow).toContain("color: var(--rv3-violet-ink)");
+    expect(eyebrow).toContain("font-size: 14px");
+    expect(eyebrow).toContain("font-weight: 600");
+    expect(eyebrow).toContain("letter-spacing: 1.85px");
+    expect(eyebrow).toContain("line-height: 19.2px");
+    expect(eyebrow).not.toContain("uppercase");
+    // The number sits on the word's baseline.
+    expect(eyebrow).toContain("align-items: baseline");
+  });
+
+  it("sets the number in Lora Bold 14, in the brand gradient, 7px after the word", () => {
+    const num = rule(".rv3 .rv4-part__num {");
+    expect(num).toContain("font-family: var(--font-serif)");
+    expect(num).toContain("font-weight: 700");
+    expect(num).toContain("font-size: 14px");
+    expect(num).toContain("margin-left: 7px");
+    expect(num).toContain(
+      "linear-gradient(175.03deg, #fb683e 17.123%, #e88c8c 44.722%, #ac88ed 108.39%)"
+    );
+    expect(num).toContain("background-clip: text");
+    expect(num).toContain("color: transparent");
+  });
+
+  it("sets the headline in Lora 28/24 at -0.47, 23 under the Part row", () => {
+    const title = rule(".rv3 .rv4-part__title {");
+    expect(title).toContain("line-height: 24px");
+    expect(title).toContain("letter-spacing: -0.47px");
+    expect(title).toContain("top: 80px");
+    expect(rule(".rv3 .rv4-part__eyebrow {")).toContain("top: 57px");
+    // 28px wherever it fits; Part 3's is 338 wide at 28, so a phone narrower than
+    // Figma's 393 scales it with the column rather than clipping it.
+    expect(title).toContain("font-size: min(28px, calc((100vw - 32px) * 28 / 344))");
+  });
+
+  it("keeps Part 1's Welcome upright", () => {
+    expect(rule(".rv3 .rv4-part__title.is-upright > span:last-child {")).toContain(
+      "font-style: normal"
+    );
   });
 });
 
