@@ -666,6 +666,26 @@ describe("conversion-digest handler", () => {
     }
   });
 
+  it("prints a quiet day's zero with no dash beside it", async () => {
+    // No sale yesterday and none in the week before: 0 against 0 has no change to
+    // state. It printed "Paid 0 _(—)_" and "Revenue EUR 0.00 _(—)_", a second dash
+    // in the block where "—" alone means the day is missing from the data.
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      daily: base.daily.map((row) => ({ ...row, paid: 0, charges: 0, revenue: 0 })),
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const fields = (arg.blocks as Array<{ fields?: Array<{ text: string }> }>)
+      .flatMap((b) => b.fields ?? [])
+      .map((f) => f.text);
+    expect(fields).toContain("*Paid*\n0");
+    expect(fields).toContain("*Revenue*\nEUR 0.00");
+    // Visits still carries its comparison, so the parenthetical is not simply gone.
+    expect(fields.find((t) => t.startsWith("*Visits*"))).toMatch(/_\([+-]?\d+%\)_/);
+  });
+
   it("puts the survey-start row in the message, not just in the builder", async () => {
     /**
      * The builder having the row proves nothing about the digest showing it — the

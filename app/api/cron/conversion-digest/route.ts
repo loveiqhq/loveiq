@@ -557,8 +557,15 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     );
   }
 
-  /** "914  _(+136%)_", or just "914" when there is nothing worth comparing to. */
-  const withDelta = (value: string, d: string) => (d ? `${value}  _(${d})_` : value);
+  /**
+   * "914  _(+136%)_", or just "914" when there is nothing worth comparing to.
+   *
+   * That includes `delta`'s "—" for 0 against 0. Its other callers need a word
+   * there ("— vs prev week"), but here it printed "Paid 0 _(—)_" on every day
+   * without a sale, a second dash in a block where "—" alone means "not in the
+   * data".
+   */
+  const withDelta = (value: string, d: string) => (d && d !== "—" ? `${value}  _(${d})_` : value);
 
   // ---- Yesterday vs the usual ----
   let yesterday = { visitors: 0, completions: 0, paid: 0 };
