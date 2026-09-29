@@ -8744,4 +8744,32 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   .rv3.rv4 .rv4-backtop {
     display: none;
   }
+
+  /* "...and there is a lot of empty space behind the Paywall CTA." The server trims a
+   * locked article's paid copy to fill the PHONE's window (656, and Fantasy vs. Reality's
+   * own 625), so in this column the copy ended about halfway down its gate and the blur
+   * ran on empty to "Show all". The window now ends where its card needs it: the card's
+   * top, its 205, 24 clear and the 31px pill, plus the pill's hang past the gate (the
+   * shared gate's -0.5, Fantasy vs. Reality's -35.3 under it), less the gate's 16px lead
+   * where the window does not run straight on from the free copy. Still min = max, so a
+   * payload with its copy stripped keeps the same window, and shorter than the phone's,
+   * so it shows less of what the server sends, never more. The fade, the pill and the
+   * card follow the gate's foot. */
+  .rv3.rv4 .rv4-learn__gate {
+    --rv4-learn-window-wide: calc(
+      var(--rv4-learn-premium-top, 176.5px) + 244px + var(--rv4-learn-pill-bottom, -0.5px)
+    );
+  }
+  .rv3.rv4 .rv4-learn.is-continued .rv4-learn__gate {
+    --rv4-learn-window-wide: calc(
+      var(--rv4-learn-premium-top, 176.5px) + 260px + var(--rv4-learn-pill-bottom, -0.5px)
+    );
+  }
+  .rv3.rv4 .rv4-learn .rv4-learn__gate > .rv4-learn__gated {
+    max-height: var(--rv4-learn-window-wide);
+    min-height: var(--rv4-learn-window-wide);
+  }
+  .rv3.rv4 .rv4-learn .rv4-learn__gate > .rv4-learn__blur {
+    height: calc(var(--rv4-learn-window-wide) + var(--rv4-learn-foot));
+  }
 }
