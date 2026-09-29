@@ -34,6 +34,7 @@ const REDUCED = "@media (prefers-reduced-motion: reduce) {";
 
 const PILLS = [
   ".rv4-trig__pill",
+  ".rv4-summary__pill",
   ".rv4-fvt__pill",
   ".rv4-learn__showmore",
   ".rv4-try__open",
@@ -42,7 +43,9 @@ const PILLS = [
 
 describe("the expand CTAs' labels — 1945260099", () => {
   it("sets the A&B and fantasy-table pills' label in solid #575757, not the outline's gradient", () => {
-    const label = rule(".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label");
+    const label = rule(
+      ".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label,\n.rv3 .rv4-summary__pill-label"
+    );
     expect(label).toContain("color: #575757");
     expect(label).not.toContain("background-clip");
     expect(label).not.toContain("transparent");
@@ -58,11 +61,13 @@ describe("the expand CTAs' labels — 1945260099", () => {
   it("draws the A&B and table 'Show all' 86 wide, as 979:567 does", () => {
     // The label's glyphs are 40.6 wide in the frame and here; Figma's text box carries
     // a trailing space (42), which is what makes its pill 86 rather than 84.6.
-    expect(rule(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill")).toContain("min-width: 86px");
+    expect(rule(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill")).toContain(
+      "min-width: 86px"
+    );
   });
 
   it("keeps the gradient outline on both", () => {
-    expect(rule(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill")).toContain(
+    expect(rule(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill")).toContain(
       "linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%) border-box"
     );
     const learn = CSS.slice(CSS.lastIndexOf(".rv3 .rv4-learn__showmore {"));

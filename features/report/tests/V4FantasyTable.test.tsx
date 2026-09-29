@@ -332,13 +332,16 @@ describe("reportV3.css — fantasy table contracts", () => {
   // The hit area is laid from the padding box, inside the 1.5px outline: -6.5px there
   // reached 5px past the drawn pill, 41 tall in all. -8px makes it 31 + 2 x 6.5 = 44.
   it("gives the pill a 44px hit area, counted from inside its outline", () => {
-    expect(ruleOf(".rv3 .rv4-trig__pill::after")).toContain("inset: -8px 0");
+    // One rule for the table's, the A&B cards' and the Summary's pills; it ends on the last.
+    expect(ruleOf(".rv3 .rv4-summary__pill::after")).toContain("inset: -8px 0");
   });
 
   // The A&B cards' "Show all" is the same pill (713:6178), so the rule is shared.
   it("holds the pill at 31 however the browser rounds its 1.5px outline", () => {
-    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill {");
-    expect(ruleOf(".rv3 .rv4-trig__pill")).toContain("height: 31px");
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill,\n.rv3 .rv4-summary__pill {"
+    );
+    expect(ruleOf(".rv3 .rv4-summary__pill")).toContain("height: 31px");
   });
 
   // 639:335 and its siblings: the 14.39px button 5.6 after the last word, 3.2 down from

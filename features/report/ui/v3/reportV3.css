@@ -3046,6 +3046,73 @@
   height: 20px;
   width: 100%;
 }
+/* 882:7539 — the fold (Mark, 29.09, 1945263585: "Lets have the Summary text fade + CTA
+ * please"). Folded, the copy shows 24 lines, 614.4 — the frame's truncated copy runs
+ * exactly that — in 882:7543's 635 under the body's 18; its last 96px fade to white as
+ * the fantasy table's and the A&B cards' do, and the 86x31 "Show All" (961:303) sits at
+ * 592, centred, the other expand pills' own pill (see .rv4-fvt__pill). Open, the copy
+ * runs its length and the fade and pill are gone. */
+/* Its own max-width: the copy's (the narrow-phone rule below) resolves against it now,
+ * so on a 320 phone both keep to the column. */
+.rv3 .rv4-summary__fold {
+  max-width: 100%;
+  position: relative;
+}
+.rv3 .rv4-summary.is-collapsed .rv4-summary__fold {
+  height: 635px;
+}
+.rv3 .rv4-summary.is-collapsed .rv4-summary__closer {
+  display: none;
+}
+.rv3 .rv4-summary.is-collapsed .rv4-summary__copy {
+  max-height: 614.4px;
+  overflow: hidden;
+}
+.rv3 .rv4-summary__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.7) 40%,
+    #fff 85%
+  );
+  height: 96px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 518.4px;
+}
+/* From inside the fold, as the peeks place theirs: it outranks the shared rule's
+ * position: relative, which comes later in the file. */
+.rv3 .rv4-summary__fold .rv4-summary__pill {
+  left: 50%;
+  position: absolute;
+  top: 592px;
+  transform: translateX(-50%);
+}
+/* Focus lands on the copy when the fold opens; the ring stays for the keyboard only. */
+.rv3 .rv4-summary__copy:focus:not(:focus-visible) {
+  outline: none;
+}
+/* The frame is a phone's. From 700 up the copy runs a 620-917 column — the 760 measure
+ * sets it 691 tall — where the fold would hide a line or four, so it stays unfolded,
+ * as it was. */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv4-summary.is-collapsed .rv4-summary__fold {
+    height: auto;
+  }
+  .rv3.rv4 .rv4-summary.is-collapsed .rv4-summary__copy {
+    max-height: none;
+    overflow: visible;
+  }
+  .rv3.rv4 .rv4-summary__fade,
+  .rv3.rv4 .rv4-summary__fold .rv4-summary__pill {
+    display: none;
+  }
+  .rv3.rv4 .rv4-summary.is-collapsed .rv4-summary__closer {
+    display: block;
+  }
+}
 
 /* ── Top-three section wrapper — 1:493 ───────────────────────────── */
 .rv3 .rv4-top3 {
@@ -6729,7 +6796,8 @@ html {
  * would take a pixel off it. The hit area is 44 tall. The A&B cards' "Show all"
  * (713:6178 / 713:6226, now 979:567 / 979:573) is the same pill. */
 .rv3 .rv4-fvt__pill,
-.rv3 .rv4-trig__pill {
+.rv3 .rv4-trig__pill,
+.rv3 .rv4-summary__pill {
   align-items: center;
   background:
     linear-gradient(#fff, #fff) padding-box,
@@ -6757,13 +6825,15 @@ html {
 /* Laid from the padding box, inside the 1.5px outline: -8px reaches 6.5 past the
  * drawn pill, 31 + 2 x 6.5 = 44 (at -6.5 it came to 41). */
 .rv3 .rv4-fvt__pill::after,
-.rv3 .rv4-trig__pill::after {
+.rv3 .rv4-trig__pill::after,
+.rv3 .rv4-summary__pill::after {
   content: "";
   inset: -8px 0;
   position: absolute;
 }
 .rv3 .rv4-fvt__pill:focus-visible,
-.rv3 .rv4-trig__pill:focus-visible {
+.rv3 .rv4-trig__pill:focus-visible,
+.rv3 .rv4-summary__pill:focus-visible {
   outline: 2px solid var(--rv3-violet);
   outline-offset: 2px;
 }
@@ -6771,7 +6841,8 @@ html {
  * — the label is solid #575757 now, no longer the outline's gradient (979:568, 639:2265;
  * Marcus's grey "for better readability and contrast", 1944661166). */
 .rv3 .rv4-fvt__pill-label,
-.rv3 .rv4-trig__pill-label {
+.rv3 .rv4-trig__pill-label,
+.rv3 .rv4-summary__pill-label {
   color: #575757;
 }
 /* 639:498 — Mark's 28.09 update (1944175761) sets it centred in the table (x 121 + 43
@@ -6796,6 +6867,7 @@ html {
 @media (hover: hover) and (pointer: fine) {
   .rv3 .rv4-trig__pill,
   .rv3 .rv4-fvt__pill,
+  .rv3 .rv4-summary__pill,
   .rv3 .rv4-learn__showmore,
   .rv3 .rv4-try__open,
   .rv3 .rv4-learn__open {
@@ -6806,6 +6878,7 @@ html {
   }
   .rv3 .rv4-trig__pill:hover,
   .rv3 .rv4-fvt__pill:hover,
+  .rv3 .rv4-summary__pill:hover,
   .rv3 .rv4-learn__showmore:hover,
   .rv3 .rv4-try__open:hover,
   .rv3 .rv4-learn__open:hover {
@@ -6813,7 +6886,8 @@ html {
     translate: 0 -1px;
   }
   .rv3 .rv4-trig__pill:hover,
-  .rv3 .rv4-fvt__pill:hover {
+  .rv3 .rv4-fvt__pill:hover,
+  .rv3 .rv4-summary__pill:hover {
     background:
       linear-gradient(#faf7ff, #faf7ff) padding-box,
       linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%) border-box;
@@ -6825,6 +6899,7 @@ html {
   }
   .rv3 .rv4-trig__pill:hover .rv4-trig__pill-label,
   .rv3 .rv4-fvt__pill:hover .rv4-fvt__pill-label,
+  .rv3 .rv4-summary__pill:hover .rv4-summary__pill-label,
   .rv3 .rv4-learn__showmore:hover .rv4-learn__showmore-label {
     color: #3f3a4d;
   }
@@ -6837,6 +6912,7 @@ html {
   }
   .rv3 .rv4-trig__pill:active,
   .rv3 .rv4-fvt__pill:active,
+  .rv3 .rv4-summary__pill:active,
   .rv3 .rv4-learn__showmore:active,
   .rv3 .rv4-try__open:active,
   .rv3 .rv4-learn__open:active {
@@ -6847,6 +6923,7 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .rv3 .rv4-trig__pill:hover,
   .rv3 .rv4-fvt__pill:hover,
+  .rv3 .rv4-summary__pill:hover,
   .rv3 .rv4-learn__showmore:hover,
   .rv3 .rv4-try__open:hover,
   .rv3 .rv4-learn__open:hover {
