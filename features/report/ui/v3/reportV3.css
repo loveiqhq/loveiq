@@ -7562,24 +7562,79 @@ html {
 /* ══ Locked chapters — review 26.09 ═══════════════════════════════════════════════
  * WhatsApp: Mark's "current vs. fully locked" mock, agreed by Marcus. A chapter the
  * reader has no access to keeps its head and teaser, as a closed chapter draws them,
- * and the chevron's 34px disc (1:867) is filled as 441:5956's "Lock / Gradient Brand"
- * badge is, its shadow and its 22px padlock scaled by 34/48. */
+ * and the lock sits where the chevron was. Since 29.09 (1945269177, "Updated Lock icon
+ * + Text.") it is 982:379: a 56x46 group — a 28px disc in the brand gradient with the
+ * frame's 14px lock 6.59 into it, and "Unlock Report" in 8/12 bold #868686 34 under
+ * the disc's top, the two centred on each other. The row is flex-start, so the group
+ * tops out with the title, which now wraps in 297 (361 - 8 - 56). */
 .rv3.rv4 .rv4-chapter__lock {
-  align-items: center;
-  background: linear-gradient(135deg, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);
-  border-radius: 17px;
-  box-shadow: 0 2.83px 8.5px rgba(168, 90, 76, 0.3);
-  color: #fff;
-  display: flex;
-  flex-shrink: 0;
-  height: 34px;
-  justify-content: center;
-  width: 34px;
-}
-.rv3.rv4 .rv4-chapter__lock svg {
   display: block;
-  height: 15.6px;
-  width: 15.6px;
+  flex-shrink: 0;
+  height: 46px;
+  position: relative;
+  width: 56px;
+}
+.rv3.rv4 .rv4-chapter__lock-disc {
+  background: linear-gradient(135deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%);
+  border-radius: 50%;
+  box-shadow: 0 3.294px 4.941px rgba(168, 90, 76, 0.3);
+  height: 28px;
+  left: 14px;
+  position: absolute;
+  top: 0;
+  width: 28px;
+}
+.rv3.rv4 .rv4-chapter__lock-disc img {
+  display: block;
+  left: 6.59px;
+  position: absolute;
+  top: 6.59px;
+}
+/* Centred on the group by its own width, so a face that sets it a pixel wider than
+ * the frame's 56 still sits under the disc's middle. */
+.rv3.rv4 .rv4-chapter__lock-label {
+  color: #868686;
+  font-family: var(--font-sans);
+  font-size: 8px;
+  font-weight: 700;
+  left: 50%;
+  line-height: 12px;
+  position: absolute;
+  top: 34px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+/* The head's hover — the same Unlock Report CTA as the visuals' (1945270267), so the
+ * same answer: while the pointer is anywhere on the head, which is the button, the disc
+ * rises a pixel and brightens and the label darkens. Fine pointers only. */
+@media (hover: hover) and (pointer: fine) {
+  .rv3.rv4 .rv4-chapter.is-locked .rv4-chapter__lock-disc {
+    transition:
+      filter 180ms ease,
+      translate 180ms ease;
+  }
+  .rv3.rv4 .rv4-chapter.is-locked .rv4-chapter__lock-label {
+    transition: color 180ms ease;
+  }
+  .rv3.rv4 .rv4-chapter.is-locked .rv4-chapter__button:hover .rv4-chapter__lock-disc {
+    filter: brightness(1.06);
+    translate: 0 -1px;
+  }
+  .rv3.rv4 .rv4-chapter.is-locked .rv4-chapter__button:hover .rv4-chapter__lock-label {
+    color: #575757;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3.rv4 .rv4-chapter.is-locked .rv4-chapter__button:hover .rv4-chapter__lock-disc {
+    transition: none;
+    translate: none;
+  }
+}
+/* Keyboard focus on a chapter head, which had none — the ring the other V4 CTAs use. */
+.rv3 .rv4-chapter__button:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 2px;
 }
 
 /* ══ Fixed text widths on a narrow phone — review 26.09 sweep ══════════════════════

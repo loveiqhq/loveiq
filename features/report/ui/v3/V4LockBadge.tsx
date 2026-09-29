@@ -22,28 +22,6 @@ import type { FC } from "react";
  * V4PremiumCard avoids the same way. Its name is the words it shows.
  */
 
-/** 441:5957 — the 22px padlock, white strokes at 1.83. A locked chapter's disc. */
-export const V4Padlock: FC = () => (
-  <svg viewBox="0 0 22 22" fill="none" aria-hidden="true">
-    <rect
-      x="2.75"
-      y="10.083"
-      width="16.5"
-      height="10.083"
-      rx="1.833"
-      stroke="currentColor"
-      strokeWidth="1.833"
-    />
-    <path
-      d="M6.417 10.083V6.417a4.583 4.583 0 0 1 9.166 0v3.666"
-      stroke="currentColor"
-      strokeWidth="1.833"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 const TILES = {
   tile: { node: "979:507", lock: "/report/v3/locks/lock-17.svg", px: 17 },
   compact: { node: "979:588", lock: "/report/v3/locks/lock-14.svg", px: 14 },

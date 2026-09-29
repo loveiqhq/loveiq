@@ -223,3 +223,29 @@ describe("the tile's hover — 1945270267", () => {
     expect(reduced).toContain("translate: none");
   });
 });
+
+/*
+ * 1945269177, "Updated Lock icon + Text." on the locked chapter heads — the same
+ * Unlock Report CTA, so the same hover: the whole head is the button.
+ */
+describe("the locked chapter's lock — hover and focus", () => {
+  const hover = blocks(HOVER).join("\n");
+
+  it("lifts the disc and darkens 'Unlock Report' when the head is hovered", () => {
+    expect(hover).toContain(
+      ".rv4-chapter.is-locked .rv4-chapter__button:hover .rv4-chapter__lock-disc"
+    );
+    expect(hover).toContain(
+      ".rv4-chapter.is-locked .rv4-chapter__button:hover .rv4-chapter__lock-label"
+    );
+    expect(CSS).not.toMatch(/^\.rv3[^\n{]*\.rv4-chapter__button:hover/m);
+    const reduced = blocks(REDUCED).find((body) => body.includes(".rv4-chapter__button:hover"));
+    expect(reduced, "no reduced-motion block for the chapter lock's hover").toBeDefined();
+    expect(reduced).toContain("translate: none");
+  });
+
+  it("rings the chapter head for the keyboard, which had no focus style", () => {
+    const ring = ruleNaming(".rv3 .rv4-chapter__button:focus-visible");
+    expect(ring).toContain("outline: 2px solid var(--rv3-violet)");
+  });
+});
