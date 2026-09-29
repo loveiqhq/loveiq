@@ -21,6 +21,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
 import PaywallTestimonials from "./PaywallTestimonials";
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
+import { ARCHETYPES_COMPARED, QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
   trackPaywallDismissed,
@@ -474,11 +475,11 @@ const ReportPricingModal: FC<Props> = ({
                 {!isShare ? (
                   <div className="report-pricing-modal__stats" aria-hidden="true">
                     <span className="report-pricing-modal__stat">
-                      <strong>59</strong> questions answered
+                      <strong>{QUESTIONS_ASKED}</strong> questions answered
                     </span>
                     <span className="report-pricing-modal__stat-dot" />
                     <span className="report-pricing-modal__stat">
-                      <strong>14</strong> archetypes
+                      <strong>{ARCHETYPES_COMPARED}</strong> archetypes
                     </span>
                     <span className="report-pricing-modal__stat-dot" />
                     <span className="report-pricing-modal__stat">

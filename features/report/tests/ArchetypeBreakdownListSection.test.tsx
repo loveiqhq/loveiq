@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ArchetypeBreakdownListSection, {
-  computeReferenceSample,
   countDrivingDimensions,
 } from "@features/report/ui/sections/ArchetypeBreakdownListSection";
 
@@ -398,41 +397,48 @@ describe("ArchetypeBreakdownListSection", () => {
   });
 });
 
-describe("computeReferenceSample", () => {
-  const BASE = 124_638;
-  const RANGE = 600;
-
-  it("is deterministic for the same seed", () => {
-    expect(computeReferenceSample("submission-42")).toBe(computeReferenceSample("submission-42"));
-    expect(computeReferenceSample(42)).toBe(computeReferenceSample(42));
+describe("the methodology box", () => {
+  beforeEach(() => {
+    stubObservers();
   });
 
-  it("returns different values for different seeds", () => {
-    const a = computeReferenceSample("alpha");
-    const b = computeReferenceSample("bravo");
-    const c = computeReferenceSample("charlie");
-    // At least two of three must differ — collisions are theoretically
-    // possible but vanishingly rare for short seeds with FNV-1a.
-    expect(new Set([a, b, c]).size).toBeGreaterThanOrEqual(2);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
   });
 
-  it("stays inside the [BASE - RANGE, BASE + RANGE] window", () => {
-    const seeds: Array<string | number> = ["a", "z", 0, 1, 999, "submission-42", "rpt_abc123xyz"];
-    for (const s of seeds) {
-      const n = computeReferenceSample(s);
-      expect(n).toBeGreaterThanOrEqual(BASE - RANGE);
-      expect(n).toBeLessThanOrEqual(BASE + RANGE);
-    }
+  const renderWith = (diagnostics?: { uDimensions?: Record<string, number> } | null) =>
+    render(
+      <ArchetypeBreakdownListSection
+        percentages={basePercentages}
+        primaryArchetype="Authority Conductor"
+        ranking={baseRanking}
+        unlockedArchetypes={new Set()}
+        accessPlan={null}
+        onUnlock={vi.fn()}
+        onPurchaseFullReport={vi.fn()}
+        diagnostics={diagnostics}
+      />
+    );
+
+  it("states only numbers that are true of this reader's answers", () => {
+    renderWith({ uDimensions: { a: 0.9, b: 0.1, c: 0.52, d: 0.5 } });
+    const box = within(screen.getByRole("complementary", { name: "Methodology" }));
+    expect(box.getByText("57")).toBeInTheDocument();
+    expect(box.getByText("14")).toBeInTheDocument();
+    expect(box.getByText("2 of 4")).toBeInTheDocument();
   });
 
-  it("falls back to the base when seed is null / undefined / empty string", () => {
-    expect(computeReferenceSample(null)).toBe(BASE);
-    expect(computeReferenceSample(undefined)).toBe(BASE);
-    expect(computeReferenceSample("")).toBe(BASE);
+  it("never claims a sample, a reliability or a retest that was never measured", () => {
+    renderWith({ uDimensions: { a: 0.9 } });
+    const text = screen.getByRole("complementary", { name: "Methodology" }).textContent ?? "";
+    expect(text).not.toMatch(/reference sample|reliability|retest|n =|0\.94|0\.87/i);
   });
 
-  it("treats numeric and stringified-numeric seeds as equivalent", () => {
-    expect(computeReferenceSample(123)).toBe(computeReferenceSample("123"));
+  it("leaves the trait count out when there are no diagnostics, rather than inventing one", () => {
+    renderWith(null);
+    const text = screen.getByRole("complementary", { name: "Methodology" }).textContent ?? "";
+    expect(text).not.toMatch(/stand-out|of 28|of 21/i);
   });
 });
 

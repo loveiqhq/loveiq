@@ -73,7 +73,6 @@ export interface ReportExperienceV1Props {
   archetypeTiers: Record<string, "essentials" | "full_report">;
   devParam: string | null;
   diagnostics: Record<string, unknown> | null;
-  submissionSeed: string | number | null;
   /** Needed so mount-time persisted analytics can be attributed. */
   submissionId: number | null;
   feedbacks: Record<string, "up" | "down" | null>;
@@ -123,7 +122,6 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   archetypeTiers,
   devParam,
   diagnostics,
-  submissionSeed,
   submissionId,
   feedbacks,
   isPricingModalOpen,
@@ -522,7 +520,6 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
                         unlockedArchetypes={unlockedArchetypes}
                         accessPlan={accessPlan}
                         diagnostics={diagnostics as { uDimensions?: Record<string, number> } | null}
-                        submissionSeed={submissionSeed}
                       />
                     </ReportSection>
                   );
