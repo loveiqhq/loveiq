@@ -3991,9 +3991,11 @@
   box-shadow: 0 6px 14px -8px rgba(46, 125, 91, 0.34);
 }
 /* 368:5483 — a 132px coral ellipse blurred to 34 and bled off the top-right
- * corner. The panel clips it, which is where its crescent shape comes from. */
+ * corner. The panel clips it, which is where its crescent shape comes from. Its fill
+ * is 10% of the hue since Mark's 29.09 pass (1945265889: "Decreased the gradient
+ * strength"); it was 34%. */
 .rv3 .rv4-turn__blob {
-  background: rgba(194, 84, 47, 0.34);
+  background: rgba(194, 84, 47, 0.1);
   border-radius: 50%;
   filter: blur(34px);
   height: 132px;
@@ -4305,12 +4307,13 @@
 .rv3 .rv4-tb .rv4-sun {
   max-width: none;
 }
-/* 368:5624 — the green panel has its own blurred blob, the twin of 368:5483. */
+/* 368:5624 — the green panel has its own blurred blob, the twin of 368:5483, at 15% of
+ * its hue since 29.09 (was 34%). */
 .rv3 .rv4-sun {
   position: relative;
 }
 .rv3 .rv4-sun__blob {
-  background: rgba(46, 125, 91, 0.34);
+  background: rgba(46, 125, 91, 0.15);
   border-radius: 50%;
   filter: blur(34px);
   height: 132px;
