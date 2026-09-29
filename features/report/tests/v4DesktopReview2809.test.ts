@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { LOCKED_ARTICLE_WINDOW_PX } from "@features/report/server/contentGating";
 
 /**
  * Mark's desktop review, Notion "Review Round 28.09 – Desktop" (29.09, 08:23: "Finished my
@@ -17,6 +19,30 @@ const block = () => {
   const at = v3.indexOf(MARK);
   expect(at, "the desktop review block").toBeGreaterThan(-1);
   return v3.slice(v3.lastIndexOf("/*", at)).replace(/\/\*[\s\S]*?\*\//g, "");
+};
+
+/** A declaration list with its whitespace dropped, so a re-wrapped calc() still reads. */
+const flat = (css: string) => css.replace(/\s+/g, "");
+
+/** The body of `selector`'s LAST rule anywhere in the file (the phone rules this reads). */
+const lastRule = (selector: string) => {
+  const at = v3.lastIndexOf(`${selector} {`);
+  expect(at, selector).toBeGreaterThan(-1);
+  return v3.slice(at, v3.indexOf("}", at));
+};
+
+/** The body of `selector`'s FIRST rule anywhere in the file (a component's own rule). */
+const firstRule = (selector: string) => {
+  const at = v3.indexOf(`${selector} {`);
+  expect(at, selector).toBeGreaterThan(-1);
+  return v3.slice(at, v3.indexOf("}", at));
+};
+
+/** A px value a rule sets, as a number. */
+const px = (rule: string, property: string) => {
+  const m = rule.match(new RegExp("(?:^|[\\s;{])" + property + ":\\s*(-?[\\d.]+)px"));
+  expect(m, property).not.toBeNull();
+  return Number(m![1]);
 };
 
 /** The body of `selector`'s first rule inside this round's block. */
@@ -52,5 +78,66 @@ describe("the Try this and Learn more cards sit on the text column", () => {
 describe("no Back to top on desktop", () => {
   it("does not draw the button from 700px", () => {
     expect(ruleIn(".rv3.rv4 .rv4-backtop")).toContain("display: none");
+  });
+});
+
+// "...and there is a lot of empty space behind the Paywall CTA." The server trims a locked
+// article's copy to fill the PHONE's window (656, and Fantasy vs. Reality's own 625), so
+// in the desktop column that copy ended about halfway down its gate and the blur ran on
+// empty to "Show all". The window now ends where its card needs it, the card's foot 24px
+// above the pill. Still min = max, so a payload with its copy stripped keeps the same
+// window, and shorter than the phone's, so it shows less of what the server sends.
+describe("the article's paywall window follows its card on desktop", () => {
+  it("derives the window from the card's top, less the gate's lead where there is one", () => {
+    expect(flat(ruleIn(".rv3.rv4 .rv4-learn__gate"))).toContain(
+      flat(
+        "--rv4-learn-window-wide: calc(var(--rv4-learn-premium-top, 176.5px) + 244px + var(--rv4-learn-pill-bottom, -0.5px))"
+      )
+    );
+    expect(flat(ruleIn(".rv3.rv4 .rv4-learn.is-continued .rv4-learn__gate"))).toContain(
+      flat(
+        "--rv4-learn-window-wide: calc(var(--rv4-learn-premium-top, 176.5px) + 260px + var(--rv4-learn-pill-bottom, -0.5px))"
+      )
+    );
+  });
+
+  it("holds the window at that height, min = max, and runs the blur to it", () => {
+    const gated = ruleIn(".rv3.rv4 .rv4-learn .rv4-learn__gate > .rv4-learn__gated");
+    expect(gated).toContain("max-height: var(--rv4-learn-window-wide)");
+    expect(gated).toContain("min-height: var(--rv4-learn-window-wide)");
+    expect(flat(ruleIn(".rv3.rv4 .rv4-learn .rv4-learn__gate > .rv4-learn__blur"))).toContain(
+      flat("height: calc(var(--rv4-learn-window-wide) + var(--rv4-learn-foot))")
+    );
+    // The phone keeps its window, which is what the server trims to.
+    expect(firstRule(".rv3 .rv4-learn__gated")).toContain(
+      `max-height: ${LOCKED_ARTICLE_WINDOW_PX}px`
+    );
+  });
+
+  it("sets every article's card 24px above its pill, in a window shorter than the phone's", () => {
+    // The pieces the formula stands on, read back from the phone rules.
+    const card = px(firstRule(".rv3 .rv4-premium"), "height");
+    const pill = lastRule(".rv3 .rv4-learn__showmore");
+    const pillH = px(pill, "height");
+    const sharedPillBottom = px(pill, "bottom");
+    const lead = px(lastRule(".rv3 .rv4-learn__gate"), "padding-top");
+    const defaultTop = Number(
+      lastRule(".rv3 .rv4-learn__gate > .rv4-premium").match(/premium-top, ([\d.]+)px/)![1]
+    );
+    const shared = Number(flat(ruleIn(".rv3.rv4 .rv4-learn__gate")).match(/\+([\d.]+)px\+/)![1]);
+    const continued = Number(
+      flat(ruleIn(".rv3.rv4 .rv4-learn.is-continued .rv4-learn__gate")).match(/\+([\d.]+)px\+/)![1]
+    );
+    expect(card).toBe(205);
+    expect(pillH).toBe(31);
+    for (const [id, article] of Object.entries(REPORT_V4_LEARN_MORE)) {
+      const top = article.gate?.premiumTopPx ?? article.premiumTopPx ?? defaultTop;
+      const pillBottom = article.gate?.pillBottomPx ?? sharedPillBottom;
+      const gateLead = article.paywallCharOffset !== undefined ? 0 : lead;
+      const window = top + (gateLead ? shared : continued) + pillBottom;
+      const pillTop = gateLead + window - pillBottom - pillH;
+      expect(pillTop - (top + card), id).toBeCloseTo(24, 5);
+      expect(window, id).toBeLessThan(article.gate?.windowPx ?? LOCKED_ARTICLE_WINDOW_PX);
+    }
   });
 });
