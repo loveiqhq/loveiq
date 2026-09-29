@@ -111,9 +111,11 @@ const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
  * How long a closed pricing dialog may take to leave the DOM. waitFor's default 1s
  * holds alone, but under the full suite's parallel load (the pre-push hook) the close
  * has taken longer: "locks background scroll…" and "shows the pricing modal on report
- * open…" each failed there once on 2026-09-26 and passed alone every time.
+ * open…" each failed there once on 2026-09-26 and passed alone every time. On 2026-09-29
+ * "shows the pricing modal on report open…" ran past 5s twice in a row under the hook
+ * (8.4s and 8.6s in all) and took 1.1s alone, so the wait is 10s, inside the 60s test.
  */
-const DIALOG_CLOSED = { timeout: 5_000 };
+const DIALOG_CLOSED = { timeout: 10_000 };
 const mockScrollTo = vi.fn();
 
 describe("ReportPage", () => {
