@@ -68,6 +68,21 @@ instrument ships first is their decision too.
 | PHQ-9      | depression | in validation | free with the credit line; item 9 routes to crisis help      |
 | UCLA-3     | loneliness | draft         | the source gives no cutoffs, and commercial use is unchecked |
 
+## What it works on next
+
+1. **Sign GAD-7 and PHQ-9.** Mark and Sanjin sign every line of the validation pack, and an
+   engineer then records the signatures (step 7). Whether a line needs one signature or
+   both is theirs to decide.
+2. **UCLA-3's license.** Someone checks commercial digital use with the rights holder.
+   Until then it stays a draft and its lines wait, because settling the license changes
+   its fingerprint.
+3. **Which assessments come next** is Mark's roadmap of 10 to 20 assessments. What people
+   most want to understand next will come from the survey's demand question once it ships,
+   and Jarvis's `user_totals` (`measure: "answers"`) counts the answers.
+4. **After the first validation:** step 8.
+
+Jarvis holds the status and the owners as a recorded decision (topic `assessments`).
+
 ## Beyond LoveIQ
 
 Each instrument has a place in the Humangraph (affect, anxiety, attachment, desire, meaning,
