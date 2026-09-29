@@ -16,7 +16,43 @@ const V3_CSS = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "
 const OPEN = buildTypicalBeliefs("Spark Seeker")!.practice;
 const LOCKED = buildTypicalBeliefs("Spark Seeker", { locked: true })!.practice;
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+/**
+ * jsdom has no layout, so the closed teaser's fade is measured against a stand-in:
+ * every text node reports the same eight lines — two, a paragraph gap, six — in the
+ * 196px box, which merge into one set of lines.
+ */
+const stubTeaserLayout = (teaserClass: string) => {
+  const tops = [11.2, 33.6, 72, 94.4, 116.8, 139.2, 161.6, 184].map((c) => c - 8.8);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement
+  ) {
+    const height = this.classList.contains(teaserClass) ? 196 : 0;
+    return {
+      top: 0,
+      bottom: height,
+      left: 0,
+      right: 346,
+      width: 346,
+      height,
+      x: 0,
+      y: 0,
+    } as DOMRect;
+  });
+  vi.spyOn(document, "createRange").mockImplementation(
+    () =>
+      ({
+        selectNodeContents: () => {},
+        getClientRects: () =>
+          tops.map((top) => ({ top, bottom: top + 17.6, width: 100, height: 17.6 })),
+        detach: () => {},
+      }) as unknown as Range
+  );
+};
 
 describe("V4TryThis — closed (374:217)", () => {
   it("draws the eyebrow, the Lora title and the pill", () => {
@@ -41,6 +77,19 @@ describe("V4TryThis — closed (374:217)", () => {
       "false"
     );
     expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("374:217");
+  });
+
+  // 375:270 greys the last three lines of the box, one colour a line; the steps are
+  // measured (useTeaserFade), so they land on lines whatever the wrap.
+  it("hands the teaser's fade the lines it shows", () => {
+    stubTeaserLayout("rv4-try__teaser");
+    const { container } = render(<V4TryThis practice={OPEN} />);
+    const teaser = container.querySelector<HTMLElement>(".rv4-try__teaser")!;
+    expect([1, 2, 3].map((i) => teaser.style.getPropertyValue(`--rv4-fade-${i}`))).toEqual([
+      "128px",
+      "150.4px",
+      "172.8px",
+    ]);
   });
 
   it("runs the second and third paragraphs together in the teaser, as 375:270 does", () => {
@@ -152,6 +201,10 @@ describe("reportV3.css — practice card contracts", () => {
     // The rehaul's lighter wash: 7% of the gold, fading out (it was 14% to 3%).
     expect(css).toContain("rgba(230, 182, 92, 0.07) 0%");
     expect(css).toContain("rgba(230, 182, 92, 0) 100%");
+    // On white, as the page is: a paywall's backdrop blur inside the card samples the
+    // card, and over a see-through wash each of its three layers stacked another copy
+    // of the gold into a band (CiP and FvR drew it at 29.09).
+    expect(css).toMatch(/background:\s*linear-gradient\([^;]*\),\s*#fff;/);
     // 18.5 from the card's edge to the eyebrow: the 1px border and 17.5.
     expect(css).toContain("padding: 17.5px 22px 20px");
     expect(css).toContain("border: 1px solid rgba(230, 182, 92, 0.6)");
@@ -161,6 +214,22 @@ describe("reportV3.css — practice card contracts", () => {
 
   // The rehaul (894:7574 and every chapter's instance): a 196px teaser, and "Read All"
   // in a 126x32 pill at 298 of the 343 card, whatever the teaser's box.
+  it("greys the teaser's last three lines, one step a line, as 375:270 colours them", () => {
+    const css = rule(".rv3 .rv4-try__teaser {");
+    // #7e7e7e / #b5b5b5 / #e5e5e5 are black at 50% / 29% / 10%. Before the lines are
+    // measured the steps sit on the last three 22.4px lines of the box.
+    for (const stop of [
+      "#000 var(--rv4-fade-1, calc(100% - 68px))",
+      "rgba(0, 0, 0, 0.5) var(--rv4-fade-1, calc(100% - 68px))",
+      "rgba(0, 0, 0, 0.5) var(--rv4-fade-2, calc(100% - 45.6px))",
+      "rgba(0, 0, 0, 0.29) var(--rv4-fade-2, calc(100% - 45.6px))",
+      "rgba(0, 0, 0, 0.29) var(--rv4-fade-3, calc(100% - 23.2px))",
+      "rgba(0, 0, 0, 0.1) var(--rv4-fade-3, calc(100% - 23.2px))",
+    ]) {
+      expect(css).toContain(stop);
+    }
+  });
+
   it("clamps the teaser to 196px and sets the 126x32 'Read All' pill at 298", () => {
     expect(rule(".rv3 .rv4-try__teaser {")).toContain("max-height: 196px");
     const pill = rule(".rv3 .rv4-try__open {");
@@ -186,8 +255,12 @@ describe("reportV3.css — practice card contracts", () => {
     expect(rule(".rv3 .rv4-try__label {")).toContain("font-weight: 400");
     expect(rule(".rv3 .rv4-try__lead {")).toContain("font-weight: 700");
     expect(V3_CSS).not.toContain(".rv3 .rv4-try__chip");
-    // 894:7589 — the closed disc at 18% of the gold.
-    expect(rule(".rv3 .rv4-try__chev {")).toContain("background: rgba(178, 138, 60, 0.18)");
+    // The Report's four closed cards (374:232, 377:236, 399:234, 441:6437) keep the
+    // disc at 10% of the gold; only the master 894:7589 has 18%, as it did before the
+    // rehaul, and Mark's comment says "see Report".
+    expect(rule(".rv3 .rv4-try__chev {")).toContain("background: rgba(178, 138, 60, 0.1)");
+    // Figma sets the eyebrow's space in Light, with the label: the value alone is Bold.
+    expect(rule(".rv3 .rv4-try__eyebrow {")).toContain("font-weight: 300");
   });
 
   it("lets the heading row grow instead of overlapping the copy on a narrow phone", () => {
@@ -206,7 +279,7 @@ describe("reportV3.css — practice card contracts", () => {
 
 /**
  * The same card closing Accelerator & Brakes — 377:221 closed, 374:304 open, 375:221
- * open & gated. Its teaser box is 224 (377:242, against Typical Beliefs' 218) in the
+ * open & gated. Its teaser box is 202 (377:242, against the others' 196) in the
  * same 343 card, and its ramp fades in over four lines. Both open frames set the copy
  * 8px under the button where the closed teaser (and all of Typical Beliefs) sits 4px
  * under it. The Premium card sits 171.4px under the clear first paragraph, as 375:243
@@ -229,8 +302,9 @@ describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () 
     const open = render(<V4TryThis practice={AB_OPEN} {...AB} />).container;
     const teaser = open.querySelectorAll(".rv4-try__teaser .rv4-prose__p");
     expect(teaser).toHaveLength(1);
-    // A blank line after the lead, and a fresh line before "A playful message".
-    expect(teaser[0]!.querySelectorAll("br")).toHaveLength(3);
+    // A fresh line after the lead and another before "A playful message": 377:242
+    // breaks each with one line separator, no blank line (the lead once had one here).
+    expect(teaser[0]!.querySelectorAll("br")).toHaveLength(2);
     expect(open.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("377:221");
     const unlocked = snapshot(open);
     cleanup();

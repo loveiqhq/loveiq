@@ -43,7 +43,7 @@ export interface Report3ArticleGate {
   bandPx: number;
   /** The blurred window, band included (173:230: 656). The server trims to it. */
   windowPx: number;
-  /** The Premium card's top, from the gate's (173:230: 90). */
+  /** The Premium card's top, from the gate's (173:230: 67). */
   premiumTopPx: number;
   /** The "Show All" pill's bottom, over the window's foot (153:2280: -0.5). */
   pillBottomPx: number;
@@ -87,6 +87,8 @@ export interface Report3LearnMoreArticle {
   nodeIds?: Report3ArticleNodes;
   /** This article's own gate, where its gated frame sets one. */
   gate?: Report3ArticleGate;
+  /** The Premium card's top in the shared gate, where the frame sets its own (235:341: 88). */
+  premiumTopPx?: number;
   /**
    * The WHOLE article, exactly as the expanded frame draws it.
    *
@@ -117,6 +119,7 @@ export interface Report3LearnMoreView {
   teaser?: readonly Report3Block[];
   nodeIds?: Report3ArticleNodes;
   gate?: Report3ArticleGate;
+  premiumTopPx?: number;
   /** Set when the wall falls inside a paragraph: the window runs straight on. */
   continued?: true;
   free: readonly Report3Block[];
@@ -1412,6 +1415,8 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
       ),
     ],
     teaserHeightPx: 202,
+    // 235:317 sets its Premium card 88 into the shared gate; 153:2280's is at 67.
+    premiumTopPx: 88,
     blocks: ACCELERATOR_BRAKES_BLOCKS,
     // 240:240 opens on the heading "The patterns underneath desire".
     paywallAt: 17,

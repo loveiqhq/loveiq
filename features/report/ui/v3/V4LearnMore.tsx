@@ -6,6 +6,7 @@ import type { Report3Block, Report3LearnMoreView } from "@/data/report3-learn-mo
 import V4BackToTop from "./V4BackToTop";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
+import { useTeaserFade } from "./useTeaserFade";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
@@ -106,6 +107,9 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement>(null);
+  // The closed teaser greys its last three lines, wherever they fall.
+  const teaserRef = useRef<HTMLDivElement>(null);
+  useTeaserFade(teaserRef, !isOpen);
   const [eyebrowLabel, eyebrowValue] = splitEyebrow(article.eyebrow);
   const [titleLead, titleRest] = splitTitle(article.label);
 
@@ -113,7 +117,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
   // card must not open the paywall — see v4Unlock.ts.
   const openPaywall = guardedUnlock(onUnlock);
   // 482:6479 — an article's own gate. The other articles keep 173:230's in CSS, so
-  // their cards carry no inline style.
+  // their cards carry no inline style — but for 235:317's Premium card, 88 into it.
   const closedGeometry: Record<string, string> = article.gate
     ? {
         "--rv4-learn-band": `${article.gate.bandPx}px`,
@@ -124,7 +128,9 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
           ? { "--rv4-learn-foot": `${article.gate.footPx}px` }
           : {}),
       }
-    : {};
+    : article.premiumTopPx !== undefined
+      ? { "--rv4-learn-premium-top": `${article.premiumTopPx}px` }
+      : {};
   const nodes = article.nodeIds ?? { closed: "153:2240", open: "153:2260", gated: "153:2280" };
   const marks = [
     ...(article.gate ? ["has-own-gate"] : []),
@@ -178,6 +184,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
           <>
             <div
               className="rv4-learn__teaser"
+              ref={teaserRef}
               style={
                 article.teaserHeightPx
                   ? ({ "--rv4-teaser-h": `${article.teaserHeightPx}px` } as CSSProperties)

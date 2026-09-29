@@ -523,6 +523,7 @@ export function splitArticleForReader(
     // The frames and the gate, when the article has its own (482:6479).
     ...(article.nodeIds ? { nodeIds: article.nodeIds } : {}),
     ...(article.gate ? { gate: article.gate } : {}),
+    ...(article.premiumTopPx !== undefined ? { premiumTopPx: article.premiumTopPx } : {}),
     ...(article.paywallCharOffset !== undefined ? { continued: true as const } : {}),
     free,
     gated,

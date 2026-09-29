@@ -44,7 +44,43 @@ const textOf = (block: Report3Block): string =>
 /** The whole gated remainder, as a locked reader must never receive it. */
 const GATED_PROBE = textOf(ARTICLE.gated![ARTICLE.gated!.length - 1]!).slice(0, 60);
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+/**
+ * jsdom has no layout, so the closed teaser's fade is measured against a stand-in:
+ * every text node reports the same eight lines — two, a paragraph gap, six — in the
+ * 196px box, which merge into one set of lines.
+ */
+const stubTeaserLayout = (teaserClass: string) => {
+  const tops = [11.2, 33.6, 72, 94.4, 116.8, 139.2, 161.6, 184].map((c) => c - 8.8);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement
+  ) {
+    const height = this.classList.contains(teaserClass) ? 196 : 0;
+    return {
+      top: 0,
+      bottom: height,
+      left: 0,
+      right: 346,
+      width: 346,
+      height,
+      x: 0,
+      y: 0,
+    } as DOMRect;
+  });
+  vi.spyOn(document, "createRange").mockImplementation(
+    () =>
+      ({
+        selectNodeContents: () => {},
+        getClientRects: () =>
+          tops.map((top) => ({ top, bottom: top + 17.6, width: 100, height: 17.6 })),
+        detach: () => {},
+      }) as unknown as Range
+  );
+};
 
 describe("V4LearnMore — closed (153:2240)", () => {
   it("draws the eyebrow, the Lora label and the read link", () => {
@@ -72,6 +108,19 @@ describe("V4LearnMore — closed (153:2240)", () => {
     expect(container.querySelector(".rv4-learn")!.getAttribute("data-name")).toBe(
       "Learn more & go deeper"
     );
+  });
+
+  // 153:2240 greys the last three lines of the box, one colour a line; the steps are
+  // measured (useTeaserFade), so they land on lines wherever the paragraph gap falls.
+  it("hands the teaser's fade the lines it shows", () => {
+    stubTeaserLayout("rv4-learn__teaser");
+    const { container } = render(<V4LearnMore article={ARTICLE} />);
+    const teaser = container.querySelector<HTMLElement>(".rv4-learn__teaser")!;
+    expect([1, 2, 3].map((i) => teaser.style.getPropertyValue(`--rv4-fade-${i}`))).toEqual([
+      "128px",
+      "150.4px",
+      "172.8px",
+    ]);
   });
 
   it("shows only the opening blocks, not the article", () => {
@@ -363,10 +412,46 @@ describe("reportV3.css — learn-more contracts", () => {
     const css = rule(".rv3 .rv4-learn {");
     expect(css).toContain("rgba(157, 138, 215, 0.07) 0%");
     expect(css).toContain("rgba(157, 138, 215, 0) 100%");
+    // On white, as the page is, so the gate's backdrop blur has a solid backdrop.
+    expect(css).toMatch(/background:\s*linear-gradient\([^;]*\),\s*#fff;/);
     expect(css).toContain("padding: 17.5px 22.5px 20.5px");
   });
 
+  it("greys the teaser's last three lines, one step a line, as 153:2240 colours them", () => {
+    const css = rule(".rv3 .rv4-learn__teaser {");
+    for (const stop of [
+      "#000 var(--rv4-fade-1, calc(100% - 68px))",
+      "rgba(0, 0, 0, 0.5) var(--rv4-fade-1, calc(100% - 68px))",
+      "rgba(0, 0, 0, 0.5) var(--rv4-fade-2, calc(100% - 45.6px))",
+      "rgba(0, 0, 0, 0.29) var(--rv4-fade-2, calc(100% - 45.6px))",
+      "rgba(0, 0, 0, 0.29) var(--rv4-fade-3, calc(100% - 23.2px))",
+      "rgba(0, 0, 0, 0.1) var(--rv4-fade-3, calc(100% - 23.2px))",
+    ]) {
+      expect(css).toContain(stop);
+    }
+  });
+
+  // 153:2260, 235:254 and 244:258 all end 24.5 under the last line: the frame's 24
+  // and half the stroke. A closing list's own 8px must not add to it.
+  it("ends the unlocked article 24.5 under its last line, a list included", () => {
+    expect(rule(".rv3 .rv4-learn.is-open {")).toContain("padding-bottom: 23.5px");
+    expect(rule(".rv3 .rv4-learn .rv4-learn__body > :last-child {")).toContain("margin-bottom: 0");
+  });
+
+  // 153:2280 sets the Premium card 67 into the gate (it read 90 when the card was
+  // built); 235:317, on the same shared gate, 88 — which the article carries.
+  it("floats the Premium card 67 into the shared gate, or where the article says", () => {
+    expect(rule(".rv3 .rv4-learn__gate > .rv4-premium {")).toContain(
+      "top: var(--rv4-learn-premium-top, 67px)"
+    );
+  });
+
   it("sets the rehaul's eyebrow and title type, the title centred on the disc", () => {
+    // Figma sets the eyebrow's space in Light, with the label: the value alone is Bold.
+    expect(rule(".rv3 .rv4-learn__eyebrow {")).toContain("font-weight: 300");
+    expect(rule(".rv3 .rv3-chapter .rv4-learn .rv4-learn__eyebrow {")).toContain(
+      "font-weight: 300"
+    );
     const eyebrow = rule(".rv3 .rv4-learn__eyebrow {");
     expect(eyebrow).toContain("font-size: 12px");
     expect(eyebrow).toContain("height: 12px");
@@ -421,7 +506,8 @@ describe("V4LearnMore — Accelerator & Brakes closed (235:234)", () => {
     const card = container.querySelector<HTMLElement>(".rv4-learn")!;
     const teaser = container.querySelector<HTMLElement>(".rv4-learn__teaser")!;
     expect(teaser.style.getPropertyValue("--rv4-teaser-h")).toBe("202px");
-    expect(card.hasAttribute("style")).toBe(false);
+    // 235:341 — the Premium card 88 into the shared gate; nothing else of its own.
+    expect(card.getAttribute("style")).toBe("--rv4-learn-premium-top: 88px;");
   });
 
   it("leaves Typical Beliefs' closed card exactly as it was", () => {
