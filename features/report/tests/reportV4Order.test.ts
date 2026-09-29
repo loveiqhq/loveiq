@@ -186,9 +186,9 @@ describe("the V4 chapter order", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  it("sets Part IV's heading as 1:990 does: 'Your' upright, 'erotic engine' in the accent", () => {
+  it("sets Part 4's heading as 1:990 does: 'Your' upright, 'erotic engine' in the accent", () => {
     expect(REPORT_V4_PARTS[3]).toMatchObject({
-      eyebrow: "Part IV",
+      eyebrow: "Part 4",
       lead: "Your ",
       accent: "erotic engine",
     });

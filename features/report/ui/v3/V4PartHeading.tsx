@@ -24,6 +24,13 @@ import useV4Reveal from "./useV4Reveal";
  * "maybe you also have some good ideas"): the glow holds back (`is-pending`) until
  * the heading reaches the screen, then opens on Report 2.0's own part-divider
  * timings. Only the glow moves; the words are there from the start.
+ *
+ * THE REWORK (Mark, 29.09, 1945090190: "We reworked how we show the Part. Fonts have
+ * increased and the font and color of the number has changed. Can you please
+ * standardise the padding to the headline and space between "Part" and the number").
+ * "Part" in 14px SemiBold, its number beside it in Lora Bold in the brand gradient, the
+ * headline in Lora 28. The frames space them six ways; the CSS spaces all six as Part
+ * 3's (1:852, where the comment is pinned) does.
  */
 
 interface Props {
@@ -42,7 +49,7 @@ interface Props {
 }
 
 const V4PartHeading: FC<Props> = ({ heading, intro, lead: hasLead = false }) => {
-  const { eyebrow, lead, accent, tone, leadItalic } = heading;
+  const { number, lead, accent, tone, upright, leadItalic } = heading;
   const withIntro = intro !== undefined;
   const [ref, inView] = useV4Reveal<HTMLDivElement>();
 
@@ -57,12 +64,21 @@ const V4PartHeading: FC<Props> = ({ heading, intro, lead: hasLead = false }) => 
     >
       <div className="rv4-part__stage">
         <div className="rv4-part__glow" aria-hidden="true" />
-        {/* 1:173 / 1:856 */}
-        <p className="rv4-part__eyebrow">{eyebrow}</p>
+        {/* 855:7071 / 855:7072 — "Part", then its number. The space is for assistive
+         * tech: the flex row sets the gap. */}
+        <p className="rv4-part__eyebrow">
+          <span className="rv4-part__word">Part</span>{" "}
+          <span className="rv4-part__num">{number}</span>
+        </p>
         {/* 1:174 / 1:857 — the lead is upright, the accent italic. The split is the
          * designer's and is not simply the last word ("Your " + "Constellation").
-         * Part II (1:486) is the exception: its lead is italic too. */}
-        <h2 className={`rv4-part__title${tone === "ink" ? " is-ink" : ""}`}>
+         * Part 2 (1:486) sets its lead italic too; Part 1 (1:174) sets "Welcome"
+         * upright. */}
+        <h2
+          className={`rv4-part__title${tone === "ink" ? " is-ink" : ""}${
+            upright ? " is-upright" : ""
+          }`}
+        >
           {lead ? <span className={leadItalic ? "is-italic" : undefined}>{lead}</span> : null}
           <span>{accent}</span>
         </h2>

@@ -38,7 +38,7 @@ afterEach(cleanup);
 describe("V4Part1", () => {
   it("renders the part heading, both chapters and the science section", () => {
     const { container } = render(<V4Part1 />);
-    expect(screen.getByText("Part I")).toBeInTheDocument();
+    expect(container.querySelector(".rv4-part__eyebrow")!.textContent).toBe("Part 1");
     // "We took the 'Introduction' out" (Mark, 2026-09-24, comment 1939924076): the
     // chapter keeps its copy and loses only its title.
     expect(screen.queryByRole("heading", { name: "Introduction" })).toBeNull();
@@ -111,7 +111,7 @@ describe("V4Part2", () => {
   it("renders every block the frame lists, in order", () => {
     const { container } = renderPart2();
     expect(container.querySelector(".rv4-rule")).toBeInTheDocument();
-    expect(screen.getByText("Part II")).toBeInTheDocument();
+    expect(container.querySelector(".rv4-part__eyebrow")!.textContent).toBe("Part 2");
     expect(container.querySelector(".rv4-top3")).toBeInTheDocument();
     expect(container.querySelector(".rv4-corehead")).toBeInTheDocument();
     expect(container.querySelector(".rv3-arch")).toBeInTheDocument();
@@ -175,7 +175,7 @@ describe("V4ChapterPart", () => {
       />
     );
     expect(container.querySelectorAll(".rv4-chapter")).toHaveLength(1);
-    expect(screen.getByText("Part V")).toBeInTheDocument();
+    expect(container.querySelector(".rv4-part__eyebrow")!.textContent).toBe("Part 5");
   });
 
   it("keeps Part III's chapter list in frame order", () => {
@@ -299,9 +299,15 @@ describe("Report V4 copy", () => {
     expect(TEASER_PLACEHOLDER).toBe("[Teaser Text]");
   });
 
-  it("carries six parts, with only Part I's accent in ink rather than violet", () => {
+  it("carries six parts, with only Part 1's accent in ink rather than violet", () => {
     expect(REPORT_V4_PARTS).toHaveLength(6);
-    expect(REPORT_V4_PARTS[0]).toMatchObject({ eyebrow: "Part I", accent: "Welcome", tone: "ink" });
+    expect(REPORT_V4_PARTS[0]).toMatchObject({
+      eyebrow: "Part 1",
+      number: "1",
+      accent: "Welcome",
+      tone: "ink",
+      upright: true,
+    });
     expect(REPORT_V4_PARTS.filter((p) => p.tone === "ink")).toHaveLength(1);
   });
 });
