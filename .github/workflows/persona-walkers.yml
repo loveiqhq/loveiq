@@ -40,7 +40,10 @@ concurrency:
 
 jobs:
   walk:
-    runs-on: ubuntu-latest
+    # macOS, for the phone walks: WebKit on Linux cannot load Stripe's checkout ("Something
+    # went wrong" after a blank form, on every run of 2026-09-29), while the same walks pay
+    # on macOS. Free here, like every GitHub-hosted runner on a public repository.
+    runs-on: macos-latest
     # What the job allows its own parts, added up: four walks of up to 20 minutes, two judge
     # passes of up to 25, and about 15 to install. A walk takes about eight minutes.
     timeout-minutes: 150
@@ -90,17 +93,18 @@ jobs:
             exit 1
           fi
           # One at a time: the survey allows three submissions a minute from one address. Each
-          # walk has 20 minutes; one that runs over writes its own record and stops.
+          # walk has 20 minutes (walk.ts keeps the time); one that runs over writes its own
+          # record and stops.
           while read -r w; do
             rc=0
-            timeout 20m npx tsx scripts/walkers/walk.ts \
+            npx tsx scripts/walkers/walk.ts \
               --persona "$(jq -r .persona <<<"$w")" \
               --device "$(jq -r .device <<<"$w")" \
               --plan "$(jq -r .plan <<<"$w")" \
               --report "$(jq -r '.report // "default"' <<<"$w")" </dev/null || rc=$?
             # 2 is a walk we asked for wrongly: noted, judged with the rest, and it fails the
-            # job at the end. Anything else (1, or 124 from timeout) is a walk that stopped
-            # early: the judge reports it, and a walk-only run fails on it.
+            # job at the end. Anything else (1) is a walk that stopped early: the judge
+            # reports it, and a walk-only run fails on it.
             if [ "$rc" -eq 2 ]; then
               touch "$WALK_OUT/.bad-request"
             elif [ "$rc" -ne 0 ]; then
