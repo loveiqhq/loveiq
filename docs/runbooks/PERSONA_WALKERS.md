@@ -144,6 +144,12 @@ npx tsx scripts/walkers/walk.ts --persona "Spark Seeker" --device "Desktop Chrom
 - **Scrolling on a phone is by script.** WebKit has no touch swipe, so a phone walk scrolls
   with `scrollBy`. That works even where a finger cannot. The walk therefore checks the
   page for `overflow: hidden` and reports a lock a person would hit.
+- **Stripe on the runner.** The job runs on macOS. On Linux, WebKit cannot load Stripe's
+  checkout: every phone walk on 2026-09-29 got a blank form, then "Something went wrong".
+  Real iPhones pay (GA4 counted 16 iOS Safari purchases in the 30 days before), and the
+  same walks pay on macOS. The runners are in the US, where Stripe's Link offers to save
+  the card with its box ticked and then requires a phone number; the walk unticks it, as a
+  buyer who only wants to pay would.
 - **Staging asks for its password after Stripe.** Its password cookie is `SameSite=Strict`,
   so the browser leaves it off Stripe's redirect back. The gate keeps the page it was
   protecting in `next`, and the walk goes there, as a tester would after typing the

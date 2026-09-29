@@ -301,6 +301,18 @@ async function main(argv: string[]): Promise<number> {
     slowRequests: [],
   };
   const t0 = Date.now();
+  // Stopped at its time limit, or killed: say so in the record rather than vanish.
+  process.once("SIGTERM", () => {
+    walk.stoppedAt ??= "stopped at its time limit";
+    walk.durationMs = Date.now() - t0;
+    writeFileSync(join(dir, "walk.json"), JSON.stringify(walk, null, 2) + "\n");
+    process.exit(1);
+  });
+  // Its own limit rather than the shell's, so it holds on any runner (macOS has no
+  // `timeout`): 20 minutes, or WALK_TIME_LIMIT_MIN. Set before the browser starts, so a
+  // launch that hangs is stopped and recorded too.
+  const limitMin = Number(process.env.WALK_TIME_LIMIT_MIN) || 20;
+  setTimeout(() => process.kill(process.pid, "SIGTERM"), limitMin * 60_000).unref();
   const engine = device.defaultBrowserType === "webkit" ? webkit : chromium;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...device, locale: "en-US", timezoneId: "Europe/Berlin" });
@@ -310,13 +322,6 @@ async function main(argv: string[]): Promise<number> {
   await ctx.route(/^https:\/\/(www\.)?loveiq\.org\//, (r) => r.abort());
   const page = await ctx.newPage();
   await page.route(ANALYTICS, (r) => r.abort());
-  // Killed at the job's per-walk time limit: say so in the record rather than vanish.
-  process.once("SIGTERM", () => {
-    walk.stoppedAt ??= "stopped at its time limit";
-    walk.durationMs = Date.now() - t0;
-    writeFileSync(join(dir, "walk.json"), JSON.stringify(walk, null, 2) + "\n");
-    process.exit(1);
-  });
 
   const mark = (what: string) => walk.timeline.push(`${Date.now() - t0}ms ${what}`);
   page.on("framenavigated", (f) => {
@@ -850,6 +855,14 @@ async function payWithTestCard(page: Page, email: string): Promise<void> {
   await box(/cvc/i).fill("123");
   await fillIfShown(/cardholder name|name on card/i, "Walker Test");
   await fillIfShown(/zip|postal/i, "10967");
+  // Link's "Save my information for faster checkout" comes ticked on some sessions (US
+  // ones, which is where GitHub's runners are) and then requires a phone number. A buyer
+  // who only wants to pay unticks it, and so does the walk. If it cannot, the walk stops
+  // here and says why, rather than pressing Pay and waiting two minutes for nothing.
+  const save = page.getByRole("checkbox", { name: /save my info/i }).first();
+  if ((await save.count()) && (await save.isChecked())) {
+    await save.uncheck({ timeout: 10_000 });
+  }
   await page
     .getByRole("button", { name: /^pay/i })
     .filter({ visible: true })
