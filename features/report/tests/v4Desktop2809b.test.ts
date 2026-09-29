@@ -70,13 +70,9 @@ describe("the archetype card uses the column", () => {
   });
 });
 
-describe("the top three, the Summary and the science deck", () => {
-  it("sizes each top-three row to its description, not the phone's 100px track", () => {
-    expect(ruleIn(".rv3.rv4 .rv4-top3 .rv3-top3__row")).toContain(
-      "grid-template-rows: 26px auto 17.08px"
-    );
-  });
-
+// The top three's rows moved to V2's desktop layout in Mark's desktop review (28.09,
+// Notion): v4DesktopReview2809.test.ts.
+describe("the Summary and the science deck", () => {
   it("sets the Summary's copy under its heading, not centred in the column", () => {
     expect(ruleIn(".rv3.rv4 .rv4-summary__body")).toContain("align-items: flex-start");
     expect(ruleIn(".rv3.rv4 .rv4-summary__copy")).toContain("width: auto");
