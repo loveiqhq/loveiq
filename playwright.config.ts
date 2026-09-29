@@ -104,7 +104,12 @@ export default defineConfig({
   },
   use: {
     baseURL,
-    trace: "on-first-retry",
+    // Every run is recorded; a failed attempt and every retry keep theirs. `on-first-retry`
+    // kept only the retry, so a first attempt that failed and a retry that passed left
+    // nothing to read: Desktop Safari lost the intro's first "Continue" that way on
+    // 2026-09-23. Measured 2026-09-29 on the 102 Mobile Safari tests: 311s of test time
+    // without recording, 317s with it (+2%), wall time unchanged.
+    trace: "retain-on-failure-and-retries",
     screenshot: "only-on-failure",
     video: "on-first-retry",
     // See `startingCookies` above: the landing-arm pin (local only) plus the
