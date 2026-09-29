@@ -64,8 +64,8 @@ instrument ships first is their decision too.
 
 | Instrument | Measures   | Status        | Why                                                          |
 | ---------- | ---------- | ------------- | ------------------------------------------------------------ |
-| GAD-7      | anxiety    | in validation | public domain; our copy needs review                         |
-| PHQ-9      | depression | in validation | public domain; item 9 routes to crisis help at once          |
+| GAD-7      | anxiety    | in validation | free with the credit line; our copy needs review             |
+| PHQ-9      | depression | in validation | free with the credit line; item 9 routes to crisis help      |
 | UCLA-3     | loneliness | draft         | the source gives no cutoffs, and commercial use is unchecked |
 
 ## Beyond LoveIQ

@@ -30,7 +30,7 @@ export interface Item {
   text: string;
   /** Scored in reverse (a higher answer means less of the construct). */
   reverse?: boolean;
-  /** Asked but not part of the total (GAD-7's and PHQ-9's difficulty question). */
+  /** Asked but not part of the total (PHQ-9's difficulty question). */
   unscored?: boolean;
   /** Its own options instead of the instrument's shared scale. */
   options?: ResponseOption[];
