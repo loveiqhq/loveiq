@@ -7958,9 +7958,11 @@ html {
  * width rather than a scale so the three-stop gradient stretches as it grows, as V2's
  * does. From there: the tagline rises in at 500ms and the core motivation panel at
  * 800ms, 8px and a 600ms fade each, while the bar is still travelling. The meters sit
- * ~700px lower and have their own reveal: each lit segment fills from the left, 280ms,
- * 110ms after the one before across both meters (--rv4-seg-i), and each meter's reached
- * label takes its colour as its last segment lands (--rv4-stop-i). A lit segment is the
+ * ~700px lower and have their own reveal: each lit segment fills from the left, 560ms,
+ * 220ms after the one before across both meters (--rv4-seg-i), and each meter's reached
+ * label takes its colour, over 600ms, as its last segment lands (--rv4-stop-i). Twice
+ * the 28.09 pace since the mobile review of that day: "Animation of Risk orientation and
+ * typical confidence scales can be slower". A lit segment is the
  * unlit track with its gradient on ::after, so the fill has a track to grow along; the
  * finished segment looks as it did. The deck keeps its own cross-fade. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__bar-fill {
@@ -7996,10 +7998,10 @@ html {
   inset: 0;
   position: absolute;
   transform-origin: left center;
-  transition: transform 280ms ease-out calc(var(--rv4-seg-i, 0) * 110ms);
+  transition: transform 560ms ease-out calc(var(--rv4-seg-i, 0) * 220ms);
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__stop.is-current {
-  transition: color 300ms ease-out calc(var(--rv4-stop-i, 0) * 110ms + 280ms);
+  transition: color 600ms ease-out calc(var(--rv4-stop-i, 0) * 220ms + 560ms);
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__meters.is-pending .rv3-arch__seg.is-on::after {
   transform: scaleX(0);
