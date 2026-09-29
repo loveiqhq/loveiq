@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, type FC } from "react";
 
 import { trackStickyUnlockClicked } from "@features/analytics/client";
@@ -10,6 +11,11 @@ interface Props {
   onCheckout: () => void;
   hidden?: boolean;
   archetype?: string | null;
+  /**
+   * Report V4's mobile footer (Mark, 29.09, 1945950396: 1005:411). The bar renders
+   * outside the V4 providers, so the page says so.
+   */
+  v4?: boolean;
 }
 
 const ArrowRight: FC = () => (
@@ -27,7 +33,13 @@ const ArrowRight: FC = () => (
   </svg>
 );
 
-const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, archetype }) => {
+const ReportStickyUnlockBar: FC<Props> = ({
+  quote,
+  onCheckout,
+  hidden = false,
+  archetype,
+  v4 = false,
+}) => {
   const mobileRef = useRef<HTMLDivElement>(null);
   const desktopRef = useRef<HTMLDivElement>(null);
 
@@ -65,24 +77,67 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, a
 
   return (
     <>
-      {/* ── Mobile sticky bar (Figma 7635:13896) ──────────────────────────── */}
+      {/* ── Mobile sticky bar (Figma 7635:13896; V4: 1005:411) ─────────────── */}
       <div
         ref={mobileRef}
-        className="report-sticky-unlock report-sticky-unlock--mobile"
+        className={`report-sticky-unlock report-sticky-unlock--mobile${v4 ? " is-v4" : ""}`}
         aria-hidden={hidden || undefined}
         inert={hidden}
       >
-        <p className="report-sticky-unlock__guarantee">14-day money-back guarantee</p>
-        <button
-          type="button"
-          className="report-sticky-unlock__cta report-sticky-unlock__cta--mobile rpm-cta"
-          onClick={handleClick("mobile")}
-          aria-label="Unlock full report"
-        >
-          <span className="rpm-cta__wash" aria-hidden="true" />
-          <span className="rpm-cta__reveal" aria-hidden="true" />
-          <span className="report-sticky-unlock__cta-label rpm-cta__label">Unlock full report</span>
-        </button>
+        {v4 ? (
+          /* 1005:397 — the paywall card's guarantee box at 0.68. The frame says
+           * "7-day"; Fatih, 29.09: the 14 days every surface promises. */
+          <div className="report-sticky-unlock__badge" data-node-id="1005:397">
+            <span className="report-sticky-unlock__shield" aria-hidden="true">
+              <Image
+                src="/report/v3/premium/footer-shield.svg"
+                alt=""
+                width={20}
+                height={20}
+                unoptimized
+              />
+              <Image
+                src="/report/v3/premium/footer-tick.svg"
+                alt=""
+                width={9}
+                height={11}
+                unoptimized
+              />
+            </span>
+            <span className="report-sticky-unlock__badge-text">
+              <span className="report-sticky-unlock__badge-head">14-day money-back</span>
+              <span className="report-sticky-unlock__badge-sub">
+                Guaranteed, no questions asked.
+              </span>
+            </span>
+          </div>
+        ) : (
+          <p className="report-sticky-unlock__guarantee">14-day money-back guarantee</p>
+        )}
+        {v4 ? (
+          /* 1005:394 — the paywall card's pill, "Unlock Full Report →". */
+          <button
+            type="button"
+            className="report-sticky-unlock__cta--v4"
+            onClick={handleClick("mobile")}
+            aria-label="Unlock full report"
+          >
+            Unlock Full Report<span aria-hidden="true">{" →"}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="report-sticky-unlock__cta report-sticky-unlock__cta--mobile rpm-cta"
+            onClick={handleClick("mobile")}
+            aria-label="Unlock full report"
+          >
+            <span className="rpm-cta__wash" aria-hidden="true" />
+            <span className="rpm-cta__reveal" aria-hidden="true" />
+            <span className="report-sticky-unlock__cta-label rpm-cta__label">
+              Unlock full report
+            </span>
+          </button>
+        )}
       </div>
 
       {/* ── Desktop sticky CTA (Figma 7635:13901) ─────────────────────────── */}

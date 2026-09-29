@@ -8315,6 +8315,152 @@ html {
   }
 }
 
+/* ══ V4's mobile footer — Mark, 29.09 (1945950396, 8:1786) ══════════════════════════
+ * "Please update the mobile footer with this" — 1005:411: the paywall card's guarantee
+ * box at 0.68 beside its gradient pill, "Unlock Full Report →", on a white bar under a
+ * #e5e5e5 hairline. The frame draws the bar 401 wide for a 393 screen, so only its top
+ * edge shows; the badge sits 15 from the left and the pill 15 from the right, both 12.5
+ * down (the stroke inside). The bar is outside `.rv4`, so the page is matched with
+ * :has(). The desktop card is unchanged. */
+body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4 {
+  align-items: flex-start;
+  border-top: 1px solid #e5e5e5;
+  box-shadow: none;
+  gap: 8px;
+  padding: 11.5px 15px max(10.3px, env(safe-area-inset-bottom));
+}
+/* 1005:397 — 180.6 x 30.77, its copy 14.206 in (less the stroke), 27 tall and centred. */
+body:has(.rv3.rv4) .report-sticky-unlock__badge {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.01);
+  border: 0.49px solid rgba(0, 0, 0, 0.08);
+  border-radius: 9.797px;
+  display: flex;
+  flex: 0 1 180.593px;
+  gap: 7.838px;
+  height: 30.769px;
+  min-width: 0;
+  padding: 0 13.716px;
+}
+/* 1005:404 / 1005:401 — the files keep the strokes' overhang. */
+body:has(.rv3.rv4) .report-sticky-unlock__shield {
+  flex: none;
+  height: 19.595px;
+  position: relative;
+  width: 19.595px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__shield > img:first-child {
+  display: block;
+  height: 20.084px;
+  margin: -0.245px;
+  width: 20.084px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__shield > img:last-child {
+  height: 10.933px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 9.445px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__badge-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* 1005:406 / 1005:407 */
+body:has(.rv3.rv4) .report-sticky-unlock__badge-head {
+  color: #009148;
+  font-family: var(--font-sans);
+  font-size: 9.532px;
+  font-weight: 700;
+  line-height: 15.251px;
+  min-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__badge-sub {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 6.809px;
+  font-weight: 400;
+  line-height: 10.894px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 1005:394 — the paywall card's pill; a 44px target around its 32, as the bar's button
+ * always has had. */
+body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
+  align-items: center;
+  background: linear-gradient(168.893deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(168, 90, 76, 0.3);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  height: 32px;
+  justify-content: center;
+  line-height: 12px;
+  padding: 0 22px;
+  position: relative;
+  white-space: nowrap;
+  width: 163px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__cta--v4::after {
+  content: "";
+  inset: -6px 0;
+  position: absolute;
+}
+body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
+  outline: 2px solid #795fc8;
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
+    transition:
+      box-shadow 180ms ease,
+      filter 180ms ease,
+      translate 180ms ease;
+  }
+  body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:hover {
+    box-shadow: 0 6px 14px rgba(168, 90, 76, 0.4);
+    filter: brightness(1.04);
+    translate: 0 -1px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body:has(.rv3.rv4) .report-sticky-unlock__cta--v4,
+  body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:hover {
+    transition: none;
+    translate: none;
+  }
+}
+/* Below 382 the two no longer fit side by side at the frame's sizes: the margins come
+ * in to 12, the pill's side padding to 16 and the badge's to 8, and the badge's lines
+ * end in an ellipsis before anything wraps. */
+@media (max-width: 381px) {
+  body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4 {
+    gap: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  body:has(.rv3.rv4) .report-sticky-unlock__badge {
+    gap: 6px;
+    padding: 0 8px;
+  }
+  body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
+    padding: 0 16px;
+    width: auto;
+  }
+}
+
 /* ════════════════════════════════════════════════════════════════════════════════
  * REVIEW 28.09
  * ════════════════════════════════════════════════════════════════════════════════ */

@@ -3420,6 +3420,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
           hidden={isPricingModalOpen || isShareModalOpen}
           archetype={effectiveViewArchetype}
+          v4={isV4}
         />
       )}
     </>
