@@ -6,10 +6,11 @@ import { nearestSciStop, sciStops } from "@features/report/ui/v3/useSciPager";
 
 /**
  * Mark's desktop review (Notion, 28.09): "Should also be a tile gallery that you can click
- * through. Maybe make them bigger so that you…" Fatih (29.09): build it now. From 700px the
- * seven science tiles run in one row at 1.25x, the next one cut by the column's edge, with
- * Previous / Next and a dot per stop under them. The phone keeps its swipe deck and its dot
- * row, which only reports.
+ * through. Maybe make them bigger so that you only see 2,5 similarly to the archetype card"
+ * (his full sentence, via Fatih, 30.09). From 700px the seven science tiles run in one row
+ * sized so two and a half are in view, never under 1.25x the phone's, the third cut by the
+ * column's edge, with Previous / Next and a dot per stop under them. The phone keeps its
+ * swipe deck and its dot row, which only reports.
  *
  * A stop is a scrollLeft the deck can rest on: a tile's snap position, clamped to the end.
  * With two to four tiles in view the last ones can only reach the end, so they share its

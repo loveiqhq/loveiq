@@ -8859,13 +8859,21 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   }
 
   /* "Should also be a tile gallery that you can click through. Maybe make them bigger so
-   * that you..." (the sentence stops there; Fatih, 29.09: build it now). The frozen
-   * desktop grid (1797, 1837) as one row flush with the column, snapping as the phone's
-   * does, so a trackpad or a swipe still moves it; the next tile is cut by the column's
-   * edge. Each tile is the phone's 212 x 248 at 1.25x, every length inside it scaled
-   * with it, so each question breaks where it does on the phone. Explicit sizes, not
-   * `zoom`: the pager measures the tiles, and engines still disagree on a zoomed box. */
+   * that you only see 2,5 similarly to the archetype card" (Mark's full sentence, via
+   * Fatih, 30.09). The frozen desktop grid (1797, 1837) as one row flush with the
+   * column, snapping as the phone's does, so a trackpad or a swipe still moves it; the
+   * third tile is cut in half by the column's edge, as the archetype card's deck cuts
+   * its next card. The track is a size container, so a tile reads the column: two
+   * tiles, their two gaps and half a third fill it. --rv3-sci-u is one of the phone
+   * tile's 212 x 248 pixels at that size, and every length inside the tile is a
+   * multiple of it, so each question breaks where it does on the phone. A tile is as
+   * wide as its question box (183), a hair past the padding either side (14.752) as on
+   * the phone, and its 1px border: 212.504 of those and 2px. From 700 to 768 that would
+   * be under the 1.25x of 29.09, which the tiles keep there. Lengths, not `zoom`: the
+   * pager measures the tiles, and engines still disagree on a zoomed box. */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__track {
+    --rv3-sci-u: max(1.25px, calc(((100cqw - 24px) / 2.5 - 2px) / 212.504));
+    container-type: inline-size;
     display: flex;
     flex-wrap: nowrap;
     gap: 12px;
@@ -8878,58 +8886,59 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     scroll-snap-type: x mandatory;
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
-    border-radius: 22.5px;
-    flex: 0 0 265px;
-    gap: 18.75px;
-    height: 310px;
+    border-radius: calc(var(--rv3-sci-u) * 18);
+    flex: 0 0 calc(var(--rv3-sci-u) * 212);
+    gap: calc(var(--rv3-sci-u) * 15);
+    height: calc(var(--rv3-sci-u) * 248);
     min-height: 0;
-    padding: 19.92px 18.44px 20.9px;
+    padding: calc(var(--rv3-sci-u) * 15.936) calc(var(--rv3-sci-u) * 14.752)
+      calc(var(--rv3-sci-u) * 16.72);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__head {
-    gap: 11.25px;
+    gap: calc(var(--rv3-sci-u) * 9);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__icon {
-    height: 43.72px;
-    width: 43.72px;
+    height: calc(var(--rv3-sci-u) * 34.976);
+    width: calc(var(--rv3-sci-u) * 34.976);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__glyph {
-    height: 24.56px;
-    width: 24.56px;
+    height: calc(var(--rv3-sci-u) * 19.648);
+    width: calc(var(--rv3-sci-u) * 19.648);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__title {
-    font-size: 20px;
-    letter-spacing: -0.21px;
-    line-height: 24px;
+    font-size: calc(var(--rv3-sci-u) * 16);
+    letter-spacing: calc(var(--rv3-sci-u) * -0.168);
+    line-height: calc(var(--rv3-sci-u) * 19.2);
   }
-  /* The phone's 183 question box at 1.25x, a hair past the padding as on the phone. */
+  /* The phone's 183 question box, a hair past the padding as on the phone. */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__q {
-    font-size: 15px;
-    line-height: 24px;
-    margin-bottom: -2.5px;
-    width: 228.75px;
+    font-size: calc(var(--rv3-sci-u) * 12);
+    line-height: calc(var(--rv3-sci-u) * 19.2);
+    margin-bottom: calc(var(--rv3-sci-u) * -2);
+    width: calc(var(--rv3-sci-u) * 183);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__label {
-    font-size: 12.5px;
-    letter-spacing: 1.28px;
-    line-height: 20px;
+    font-size: calc(var(--rv3-sci-u) * 10);
+    letter-spacing: calc(var(--rv3-sci-u) * 1.024);
+    line-height: calc(var(--rv3-sci-u) * 16);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__list {
-    gap: 6.88px;
-    margin-top: -11.88px;
-    min-height: 88.75px;
+    gap: calc(var(--rv3-sci-u) * 5.504);
+    margin-top: calc(var(--rv3-sci-u) * -9.504);
+    min-height: calc(var(--rv3-sci-u) * 71);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__list li {
-    font-size: 15.23px;
-    gap: 8.75px;
-    line-height: 19.04px;
-    min-height: 25px;
+    font-size: calc(var(--rv3-sci-u) * 12.184);
+    gap: calc(var(--rv3-sci-u) * 7);
+    line-height: calc(var(--rv3-sci-u) * 15.232);
+    min-height: calc(var(--rv3-sci-u) * 20);
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__bullet {
-    height: 16.25px;
-    width: 16.25px;
+    height: calc(var(--rv3-sci-u) * 13);
+    width: calc(var(--rv3-sci-u) * 13);
   }
-  /* The pager, 14 under the tiles (the phone's 11 at 1.25x): V4's 34px chapter disc
-   * either side of a dot per stop, the phone's dots at 1.25x, the current one its
+  /* The pager, 14 under the tiles (the phone's 11 at 29.09's 1.25x): V4's 34px chapter
+   * disc either side of a dot per stop, the phone's dots at 1.25x, the current one its
    * gradient pill. */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__nav {
     align-items: center;

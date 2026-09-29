@@ -13,7 +13,8 @@ import V4Runs from "./V4Runs";
  * the chapters it feeds), a pagination dot row, and three source cards.
  *
  * From 700px V4's deck is a gallery (Mark's desktop review, 28.09): one row of tiles
- * at 1.25x, the next one cut by the column's edge, and a pager under it (useSciPager).
+ * sized so two and a half are in view (never under 1.25x the phone's), the third cut by
+ * the column's edge, and a pager under it (useSciPager).
  * The phone keeps its dot row, which only reports; the pager is drawn nowhere else.
  */
 
