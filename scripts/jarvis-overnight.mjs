@@ -12,6 +12,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+/** How long to wait for Jarvis: the setting when it is sensible, five seconds otherwise. */
+const waitMs = (setting) => {
+  const ms = Number(setting);
+  return Number.isFinite(ms) && ms > 0 && ms <= 60_000 ? ms : 5000;
+};
+
 const dir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 function token() {
   if (process.env.LOVEIQ_MCP_TOKEN) return process.env.LOVEIQ_MCP_TOKEN.trim();
@@ -41,7 +47,8 @@ async function main() {
       params: { name: "whats_new", arguments: {} },
     }),
     // Five seconds is what a session start can wait; a test on a loaded machine sets more.
-    signal: AbortSignal.timeout(Number(process.env.JARVIS_OVERNIGHT_TIMEOUT_MS) || 5000),
+    // Anything outside a minute (negative throws, past 2^31 ms fires at once) means five.
+    signal: AbortSignal.timeout(waitMs(process.env.JARVIS_OVERNIGHT_TIMEOUT_MS)),
   });
   if (!res.ok) return;
   const body = await res.json();

@@ -77,6 +77,22 @@ describe("jarvis-overnight session hook", () => {
     expect(out.hookSpecificOutput.additionalContext).toContain("not from the user");
   });
 
+  it("waits its usual five seconds when the wait setting makes no sense, rather than never asking", async () => {
+    // A negative wait makes AbortSignal.timeout throw, and one past 2^31 ms fires at once:
+    // either way the hook would print nothing, the same as having no news.
+    const url = await serve(() =>
+      result("New since 2026-09-24 00:00 UTC, newest first:\n- x (notice/n1)")
+    );
+    for (const wait of ["-5", "4000000000", "soon"]) {
+      const out = await run({
+        BRAIN_MCP_URL: url,
+        LOVEIQ_MCP_TOKEN: "t0ken",
+        JARVIS_OVERNIGHT_TIMEOUT_MS: wait,
+      });
+      expect(JSON.parse(out).systemMessage, wait).toContain("Jarvis, since yesterday");
+    }
+  });
+
   it("sends nothing and prints nothing without a token, even when there is news", async () => {
     let requests = 0;
     const url = await serve(() => {
