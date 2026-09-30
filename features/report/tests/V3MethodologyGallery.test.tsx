@@ -13,8 +13,9 @@ import { nearestSciStop, sciStops } from "@features/report/ui/v3/useSciPager";
  * swipe deck and its dot row, which only reports.
  *
  * A stop is a scrollLeft the deck can rest on: a tile's snap position, clamped to the end.
- * With two to four tiles in view the last ones can only reach the end, so they share its
- * stop; seven per-tile dots would include dots that could never light up.
+ * With two and a half tiles in view the last two can only reach the end, so they share its
+ * stop; seven per-tile dots would include one that could never light up. The helpers below
+ * lay 29.09's fixed 265px tiles out, which exercise the same rules at other counts.
  */
 
 const V4_TITLES = [
@@ -50,6 +51,18 @@ describe("sciStops", () => {
     // are still cut there, so the end is a stop of its own.
     expect(sciStops([0, 277, 554, 831, 1108, 1385, 1662], 1139).map((s) => s.left)).toEqual([
       0, 277, 554, 831, 1108, 1139,
+    ]);
+  });
+
+  it("gives the gallery's two and a half tiles six stops, the last two tiles sharing the end", () => {
+    // 1536: 357px tiles 12 apart in the 917 column, half of the third one in view.
+    expect(sciStops([0, 369, 738, 1107, 1476, 1845, 2214], 1654)).toEqual([
+      { left: 0, card: 0 },
+      { left: 369, card: 1 },
+      { left: 738, card: 2 },
+      { left: 1107, card: 3 },
+      { left: 1476, card: 4 },
+      { left: 1654, card: 6 },
     ]);
   });
 

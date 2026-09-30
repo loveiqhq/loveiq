@@ -7,9 +7,9 @@ import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "
  * also be a tile gallery that you can click through." Previous, Next and a dot per stop.
  *
  * A stop is a scrollLeft the deck can rest on: a tile's snap position, clamped to the
- * scroll's end. With two to four tiles in view the last ones can only reach the end, so
- * they share its stop, as does a stop within MERGE_PX of it; the phone's geometry gives
- * one stop a tile, the seven its own dots show. MERGE_PX is under the tile's own
+ * scroll's end. With two and a half tiles in view (Mark, 30.09: "only see 2,5") the last
+ * two can only reach the end, so they share its stop, as does a stop within MERGE_PX of
+ * it; the phone's geometry gives one stop a tile, the seven its own dots show. MERGE_PX is under the tile's own
  * padding: folding a stop any further from the end would let a swipe park the deck
  * there with the last tile's words still cut, while the pager said "end" (review,
  * 29.09: 34px at 1200, 38px at 1366). Positions are bounding rects against the snap

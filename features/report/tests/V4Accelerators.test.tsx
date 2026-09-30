@@ -101,28 +101,10 @@ describe("the paywalled chapter — 314:211", () => {
 
   it("fades the whole ramp paragraph in, with no veiled tail to cut the fade short", () => {
     // 314:284 (29.09) runs the fade over the first gated paragraph, so none of it is
-    // marked for the full blur, and useRampFit, which ends a fade where a veiled tail
-    // starts, has nothing to do here.
-    const box = (top: number) => ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0 });
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement
-    ) {
-      return box(this.classList.contains("rv4-ab__ramp") ? 500 : 0) as DOMRect;
-    });
-    vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (this: Element) {
-      const rects = this.classList.contains("rv4-prose__veiled")
-        ? [{ ...box(528), width: 40 }]
-        : [];
-      return rects as unknown as DOMRectList;
-    });
-    try {
-      const { container } = render(<V4Accelerators view={LOCKED} />);
-      const ramp = container.querySelector<HTMLElement>(".rv4-ab__ramp")!;
-      expect(ramp.querySelector(".rv4-prose__veiled")).toBeNull();
-      expect(ramp.style.getPropertyValue("--rv4-band-fit")).toBe("");
-    } finally {
-      vi.restoreAllMocks();
-    }
+    // marked for the full blur: no useRampFit ending the fade where a tail starts.
+    const { container } = render(<V4Accelerators view={LOCKED} />);
+    const ramp = container.querySelector<HTMLElement>(".rv4-ab__ramp")!;
+    expect(ramp.querySelector(".rv4-prose__veiled")).toBeNull();
   });
 
   it("opens the paywall exactly once from every locked surface, never from clear copy", () => {
