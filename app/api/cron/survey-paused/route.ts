@@ -10,7 +10,7 @@
  *     — skip anything newer to give users time to return on their own
  *   - Must have email captured (answers["00000"])
  *   - Must have no matching survey_submission by session_id
- *   - Deduped per session via checkCooldown (30-day cooldown)
+ *   - Deduped per session AND per email address via checkCooldown (30-day cooldown)
  */
 
 import { timingSafeEqual } from "crypto";
@@ -178,8 +178,14 @@ export async function GET(request: Request) {
         continue;
       }
 
+      // Per draft AND per address. The draft key stops the hourly run re-sending
+      // one draft; the address key stops two drafts from one person (two tabs, a
+      // restart) each getting the same email, seconds apart in one run.
       const cooldown = await checkCooldown(row.session_id, "survey-paused-email", COOLDOWN_MS);
-      if (!cooldown.allowed) {
+      const perAddress = cooldown.allowed
+        ? await checkCooldown(email, "survey-paused-address", COOLDOWN_MS)
+        : cooldown;
+      if (!perAddress.allowed) {
         summary.skippedCooldown++;
         continue;
       }
