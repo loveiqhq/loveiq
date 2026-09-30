@@ -14,6 +14,14 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+const { mockContactsRemove } = vi.hoisted(() => ({ mockContactsRemove: vi.fn() }));
+vi.mock("resend", () => ({
+  Resend: class {
+    contacts = { remove: mockContactsRemove };
+  },
+}));
+
+import logger from "@shared/observability/logger";
 import {
   normalizeEmail,
   emailHash,
@@ -187,5 +195,52 @@ describe("DSAR delete branches (F-01 / P-02)", () => {
     expect(hardDeletedAppUser).toBe(true);
     expect(patchedAppUser).toBe(false);
     expect(result.rowsAffected.app_user_pseudonymized).toBeUndefined();
+  });
+});
+
+describe("DSAR delete also erases the Resend contact (Art. 17)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "k";
+    process.env.RESEND_API_KEY = "re_test";
+    // No app_user: the email-keyed tier alone must still reach Resend.
+    mockSupabaseFetch.mockImplementation(() => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-range": "*/0" }),
+      json: async () => [],
+      text: async () => "",
+    }));
+  });
+
+  it("deletes the contact by email, with or without a marketing list configured", async () => {
+    delete process.env.RESEND_AUDIENCE_ID;
+    mockContactsRemove.mockResolvedValue({ data: { deleted: true }, error: null });
+    const result = await deleteDataSubject("a@x.com");
+    expect(mockContactsRemove).toHaveBeenCalledWith({ email: "a@x.com" });
+    expect(result.warnings.join(" ")).not.toMatch(/Resend/);
+  });
+
+  it("treats not_found as done: they were never a contact", async () => {
+    mockContactsRemove.mockResolvedValue({
+      data: null,
+      error: { name: "not_found", message: "Contact not found", statusCode: 404 },
+    });
+    const result = await deleteDataSubject("a@x.com");
+    expect(result.warnings.join(" ")).not.toMatch(/Resend/);
+  });
+
+  it("tells the admin to delete by hand when Resend fails", async () => {
+    mockContactsRemove.mockResolvedValue({
+      data: null,
+      error: { name: "application_error", message: "boom", statusCode: 500 },
+    });
+    const result = await deleteDataSubject("a@x.com");
+    expect(result.warnings.join(" ")).toMatch(/Resend contact not deleted \(boom\)/);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "application_error", statusCode: 500 }),
+      "DSR: Resend contact delete failed"
+    );
   });
 });

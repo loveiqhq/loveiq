@@ -9,7 +9,15 @@ vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
+const { mockContactsUpdate } = vi.hoisted(() => ({ mockContactsUpdate: vi.fn() }));
+vi.mock("resend", () => ({
+  Resend: class {
+    contacts = { update: mockContactsUpdate };
+  },
+}));
+
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 
 const mockFetch = vi.mocked(fetchWithTimeout);
 
@@ -22,6 +30,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   process.env.SUPABASE_URL = ENV.SUPABASE_URL;
   process.env.SUPABASE_SERVICE_ROLE_KEY = ENV.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_AUDIENCE_ID;
 });
 
 describe("isEmailSuppressed", () => {
@@ -147,5 +157,54 @@ describe("addToSuppression", () => {
   it("logs error but does not throw on fetch failure", async () => {
     mockFetch.mockRejectedValueOnce(new Error("db down"));
     await expect(addToSuppression("x@example.com", "unsubscribed")).resolves.toBeUndefined();
+  });
+});
+
+describe("addToSuppression → Resend (R-05)", () => {
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.RESEND_AUDIENCE_ID = "aud_test";
+    mockFetch.mockResolvedValue({ ok: true } as Response);
+  });
+
+  it("marks the contact unsubscribed, which covers every list", async () => {
+    mockContactsUpdate.mockResolvedValue({ data: { id: "c1" }, error: null });
+    await addToSuppression("u@example.com", "unsubscribed");
+    expect(mockContactsUpdate).toHaveBeenCalledWith({ email: "u@example.com", unsubscribed: true });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when the address was never a contact", async () => {
+    mockContactsUpdate.mockResolvedValue({
+      data: null,
+      error: { name: "not_found", message: "Contact not found", statusCode: 404 },
+    });
+    await addToSuppression("u@example.com", "hard_bounce");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs any other error, which the SDK returns instead of throwing", async () => {
+    mockContactsUpdate.mockResolvedValue({
+      data: null,
+      error: { name: "application_error", message: "boom", statusCode: 500 },
+    });
+    await addToSuppression("u@example.com", "complaint");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.objectContaining({ name: "application_error" }) }),
+      "Failed to unsubscribe email in Resend"
+    );
+  });
+
+  it("still unsubscribes when no marketing list is configured: a contact outlives the config", async () => {
+    delete process.env.RESEND_AUDIENCE_ID;
+    mockContactsUpdate.mockResolvedValue({ data: { id: "c1" }, error: null });
+    await addToSuppression("u@example.com", "unsubscribed");
+    expect(mockContactsUpdate).toHaveBeenCalledWith({ email: "u@example.com", unsubscribed: true });
+  });
+
+  it("does nothing in Resend without an API key", async () => {
+    delete process.env.RESEND_API_KEY;
+    await addToSuppression("u@example.com", "unsubscribed");
+    expect(mockContactsUpdate).not.toHaveBeenCalled();
   });
 });
