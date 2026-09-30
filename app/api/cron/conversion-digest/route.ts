@@ -55,7 +55,7 @@ import { computeRate, fetchFunnelCvrSparklines } from "@features/admin/server/di
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
   buildFrictionReport,
-  buildFrictionSection,
+  buildFrictionWatchList,
   surveyQuestionNames,
   type FrictionReport,
 } from "@features/admin/server/friction-metrics";
@@ -187,8 +187,10 @@ function deployStamp(): string {
  * was abandoned because a 6% rate and a 0.6% rate drew byte-identical plots on it.
  * Two comments contradicting each other with a dead union type between them.
  */
-async function signedChartUrl(payload: Record<string, unknown>): Promise<string | null> {
-  const kind = "conversion-by-arm";
+async function signedChartUrl(
+  payload: Record<string, unknown>,
+  kind: "conversion-by-arm" | "funnel-steps" = "conversion-by-arm"
+): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL;
   if (!base) {
     logger.warn("conversion-digest: NEXT_PUBLIC_SITE_URL unset; skipping chart");
@@ -224,15 +226,6 @@ function shortDay(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return day;
   return `${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
-}
-
-/**
- * Step names carry an "…of those," prefix so each row states what its number
- * actually is, but that reads badly inside a sentence — "Biggest drop: …of
- * those, opened their report → …of those, started checkout".
- */
-function shortStep(step: string): string {
-  return step.replace(/^…of those,\s*/, "");
 }
 
 function money(amount: number): string {
@@ -534,7 +527,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    * bounding them to the window gives a day-29 finisher one day to buy against
    * thirty for a day-1 one, and the funnel would sag whenever traffic grows.
    */
-  const blocks: SlackBlock[] = [header(`📈 Conversion — ${dayKey}`)];
+  const blocks: SlackBlock[] = [header(`📈 Conversion · ${dayKey}`)];
 
   /**
    * "Where the tests stand" used to sit here: a 30-day, paid-based verdict per
@@ -658,129 +651,133 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       midway ? { reached: midway.overall.reached, index: midway.midwayIndex } : null,
       paywall?.hits ?? null
     );
-    // Skip the visits -> finished step. It is the largest drop by construction
-    // (most visitors never start a survey) and would be the headline every single
-    // day, which is how a digest becomes wallpaper. The full funnel is printed
-    // right below, so nothing is hidden — only the HEADLINE moves to a step
-    // someone can act on.
+    // Skip the visits -> started step when naming the biggest drop. It is the
+    // largest drop by construction (most visitors never start a survey) and would
+    // be the headline every single day, which is how a digest becomes wallpaper.
+    // The chart still draws it; only the HEADLINE moves to a step someone can act on.
     const leak = biggestLeak(steps.slice(1));
+    // `leak.index` counts within the slice; +1 puts it back on `steps`.
+    const worstIndex = leak ? leak.index + 1 : -1;
     blocks.push(divider());
     /**
-     * A non-zero count whose share rounds to nothing prints "<0.1", never "0".
-     * With 5 payments against 12,308 visits the share is 0.04%, and a column
-     * reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
-     * that nobody paid — while the count beside it says five. Same rule the
-     * charts already follow: zero and nearly-zero are different facts.
-     */
-    /**
-     * The share of `of`, as the table prints it. NOT `computeRate`.
+     * The share of `of`, as the funnel prints it. NOT `computeRate`.
      *
-     * `computeRate` is right for a chart and wrong for this table, in two ways
-     * that both produce a confident wrong number:
+     * `computeRate` is right for a trend chart and wrong here, in two ways that
+     * both produce a confident wrong number:
      *
-     *   * it CLAMPS to 100. buildFunnel deliberately leaves the last three steps
+     *   * it CLAMPS to 100. buildFunnel deliberately leaves the last steps
      *     unclamped, because a promo one-tap or an admin-granted unlock sets
-     *     purchased_at without a checkout — so paid CAN exceed checkout truthfully.
-     *     6 paid from 5 checkouts printed "100%" and hid a real 120%, in the one
-     *     column that exists to say what happened between two steps.
-     *   * it returns 0 for a zero denominator, which this table then rendered as
-     *     "<0.1%" — a vanishing ratio, for a ratio that does not exist. Reachable
-     *     by the same promo path: 0 checkouts, 1 paid.
+     *     purchased_at without a checkout, so unlocks CAN exceed checkouts
+     *     truthfully. 6 from 5 printed "100%" and hid a real 120%.
+     *   * it returns 0 for a zero denominator, which printed "<0.1%": a vanishing
+     *     ratio, for a ratio that does not exist.
      *
-     * A number over 100 is shown as it is. It means the two rows are not a subset
-     * of each other, which is a fact about the funnel worth seeing rather than
-     * rounding away.
+     * A non-zero count whose share rounds to nothing prints "<0.1%", never "0".
+     * With 5 payments against 12,308 visits the share is 0.04%, and a bare "0"
+     * beside a count of five says that nobody paid.
      */
     const share = (count: number, of: number): string => {
       if (of <= 0) return "—";
       const raw = (count / of) * 100;
-      // A non-zero count whose share rounds to nothing prints "<0.1%", never "0".
-      // With 5 payments against 12,308 visits the share is 0.04%, and a column
-      // reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
-      // that nobody paid — while the count beside it says five.
       if (raw > 0 && raw < 0.05) return "<0.1%";
       return `${Math.round(raw * 10) / 10}%`;
     };
     /**
-     * BOTH percentages, on every row, each one named — asked for on the 2026-09-16
-     * sync ("consistent percentage labels across all visual graphs", and funnel
-     * steps stating either the step-by-step or the cumulative conversion).
-     *
-     * The table used to print the cumulative share bare and the step figure as a
-     * "▼ 45%" suffix, and named neither. That is precisely how a 96.5% turned up in
-     * a meeting with nobody able to say 96.5% of WHAT: it was the drop from all
-     * visits to a finished survey, sitting in a column of numbers measured against
-     * a different base. Two named columns cost one context line and remove the
-     * whole class of question.
-     *
-     * The step column is a CONVERSION, not a drop — "65.5% carried on", not "34.5%
-     * left" — because that is the direction the rest of the report, the framework
-     * sheet and the meeting all speak in. It is computed from the counts rather
-     * than as 100 minus the rounded drop, so the two columns cannot disagree by a
-     * rounding step.
-     */
-    /**
-     * Says so when the paywall row covers less of the window than the rows above
-     * it. Only when it actually does: once the instrument is older than the
+     * Says so when the paywall step covers less of the window than the steps
+     * above it. Only when it actually does: once the instrument is older than the
      * window this line disappears on its own rather than becoming furniture.
      */
     const paywallNote = (() => {
-      if (!paywall?.firstRowDay || !steps.some((x) => x.step.includes("hit the paywall"))) {
+      if (!paywall?.firstRowDay || !steps.some((x) => x.key === "paywall")) {
         return null;
       }
-      // The digest's own reporting day, not wall-clock — the same boundary the
+      // The digest's own reporting day, not wall-clock: the same boundary the
       // window is cut on, so the two cannot disagree across a DST change.
       const windowEnd = reportingDayStart(reportingDay(now)).getTime();
       const first = new Date(`${paywall.firstRowDay}T00:00:00Z`).getTime();
       if (!Number.isFinite(first) || first <= windowEnd - WINDOW_DAYS * 86_400_000) return null;
       const days = Math.max(1, Math.round((windowEnd - first) / 86_400_000));
-      return `_The paywall row covers ${days} days, not ${WINDOW_DAYS} — that signal only started on ${escapeSlack(paywall.firstRowDay)}._`;
+      return `_The paywall step covers ${days} days, not ${WINDOW_DAYS}: we only started counting it on ${escapeSlack(paywall.firstRowDay)}._`;
     })();
 
     /**
-     * ONE percentage, not two.
-     *
-     * The table used to carry both conventions side by side — % of the step
-     * before AND % of all visits — because the KPI doc asked for both to be
-     * stated and named. In practice two percentage columns on one row is what
-     * people kept reading wrong: the 2026-09-19 review said plainly that it was
-     * causing the confusion it was meant to remove, which is the same complaint
-     * that produced the unsourceable "96.5%" in the first place.
-     *
-     * The one that survives is % OF THE STEP BEFORE, because it answers the
-     * question the table is read for — where are we losing people — and because
-     * the header line already names the single biggest drop from it. The
-     * overall conversion is not lost: the last row's count against the first
-     * row's count is the whole funnel, both are on screen, and the break-even
-     * block below states revenue per visit in money.
+     * The biggest drop as one sentence with both counts: "of 32 who started
+     * checkout, 2 unlocked the report (6.3%)". A percentage on its own is how an
+     * unsourceable 96.5% reached a meeting; two counts and the share between
+     * them cannot be misread.
      */
-    const rows = steps.map((s, i) => {
-      const prev = i === 0 ? null : steps[i - 1]!;
-      const stepPct = prev ? share(s.count, prev.count) : "—";
-      return `\`${String(s.count).padStart(6)}  ${stepPct.padStart(6)}\`  ${escapeSlack(s.step)}`;
-    });
-    // Heading, headline and table in ONE block. Split across two, Slack put a
-    // paragraph gap between the title and the numbers it titles.
-    blocks.push(
-      section(
-        [
-          `*The funnel — ${WINDOW_DAYS} days*${
-            leak
-              ? `  ·  biggest drop ${escapeSlack(shortStep(leak.from))} → ${escapeSlack(shortStep(leak.to))}, losing ${leak.pct}%`
-              : ""
-          }`,
-          rows.join("\n"),
-          "_people  ·  % of the step above them_",
-          /**
-           * The paywall step's instrument is younger than the window, and a row
-           * measured over 14 days sitting in a table headed "30 days" is the
-           * quiet kind of wrong. `firstRowDay` existed for exactly this and was
-           * fetched, typed and read by nothing until an audit noticed.
-           */
-          ...(paywallNote ? [paywallNote] : []),
-        ].join("\n")
-      )
+    const count = (n: number) => n.toLocaleString("en-US");
+    const headline = (() => {
+      if (worstIndex < 1) return null;
+      // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
+      const to = steps[worstIndex]!;
+      const from = steps[worstIndex - 1]!;
+      return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${share(to.count, from.count)}).`;
+    })();
+
+    /**
+     * The funnel as a picture. Asked for on the 2026-09-16 sync: Mark's step
+     * names, a white background, and one percentage that means the same thing on
+     * every row. That percentage is % OF THE STEP ABOVE, because it answers the
+     * question the funnel is read for (where are we losing people), and the
+     * chart's red bar is the step the headline names.
+     *
+     * The share is sent unrounded and uncapped: over 100 is real (see `share`)
+     * and the renderer prints it as it is. A zero denominator is null, a blank,
+     * never a "0%".
+     */
+    const stepPct = (i: number): number | null => {
+      if (i === 0) return null;
+      const of = steps[i - 1]!.count;
+      // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
+      return of > 0 ? (steps[i]!.count / of) * 100 : null;
+    };
+    const funnelTitle = `The funnel, last ${WINDOW_DAYS} days`;
+    const chartUrl = await signedChartUrl(
+      {
+        windowLabel: `${WINDOW_DAYS} days to ${shortDay(dayKey)}`,
+        title: "The funnel",
+        steps: steps.map((s, i) => ({ label: s.step, count: s.count, pct: stepPct(i) })),
+        worst: worstIndex,
+      },
+      "funnel-steps"
     );
+    // Heading, headline and caveat in ONE block, above the picture. Split across
+    // two, Slack puts a paragraph gap between a title and what it titles; and
+    // fitBlocks drops from the tail, so a cut can lose the picture but never the
+    // numbers in the headline.
+    const caption = [
+      `*${funnelTitle}*`,
+      ...(headline ? [headline] : []),
+      ...(paywallNote ? [paywallNote] : []),
+    ];
+    if (chartUrl) {
+      blocks.push(section(caption.join("\n")));
+      blocks.push({
+        type: "image",
+        image_url: chartUrl,
+        // Every step with its count, so a failed image load or a screen reader
+        // still gets the whole funnel.
+        alt_text: `${funnelTitle}: ${steps
+          .map(
+            (s, i) =>
+              `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${share(s.count, steps[i - 1]!.count)} of the step above)`}`
+          )
+          .join("; ")}.`,
+      });
+    } else {
+      /**
+       * No picture (signing failed, or the URL ran over Slack's cap): the same
+       * funnel as a monospace table, so the message never loses its numbers.
+       */
+      const rows = steps.map((s, i) => {
+        const stepShare = i === 0 ? "—" : share(s.count, steps[i - 1]!.count);
+        return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
+      });
+      blocks.push(
+        section([...caption, rows.join("\n"), "_people  ·  % of the step above them_"].join("\n"))
+      );
+    }
   }
 
   /**
@@ -794,22 +791,22 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   if (unitEconomics) {
     blocks.push(
       section(
-        [`*Break-even — ${WINDOW_DAYS} days*`, ...buildUnitEconomicsLines(unitEconomics)].join("\n")
+        [`*Break-even, last ${WINDOW_DAYS} days*`, ...buildUnitEconomicsLines(unitEconomics)].join(
+          "\n"
+        )
       )
     );
   }
 
   /**
-   * The friction scoreboard, directly under the funnel it explains.
+   * Where people get stuck, directly under the funnel it explains.
    *
-   * The funnel table says WHERE people are lost between steps; this says what
-   * they were doing when it happened. Kept to one section and one fenced table
-   * on purpose: `funnel-digest` was unscheduled for being a rail of charts with
-   * no decision attached, and fifteen pictures would repeat that with a new
-   * name.
+   * The funnel says WHERE people are lost between steps; this says what they
+   * were doing when it happened. Only the signals that need a look, as plain
+   * sentences: the full 11-row table read "normal" on most rows every day.
    */
   if (input.friction && input.friction.signals.length > 0) {
-    blocks.push(section(buildFrictionSection(input.friction, WINDOW_DAYS)));
+    blocks.push(section(buildFrictionWatchList(input.friction, WINDOW_DAYS)));
   }
 
   /**
@@ -939,8 +936,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    * message both withheld and asserted the same figure. Reading the rendered
    * steps rather than recomputing the condition keeps them from drifting apart.
    */
-  const midwayRowShown =
-    !!midway && steps.some((step) => step.step === `Reached question ${midway.midwayIndex}`);
+  const midwayRowShown = !!midway && steps.some((step) => step.key === "midway");
   /**
    * The per-landing-page blocks exist only while the landing test is live.
    *
@@ -1281,7 +1277,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      */
     const emailLines = emailExperiments ? buildEmailExperimentLines(emailExperiments) : [];
     if (emailLines.length > 0) {
-      blocks.push(section(`*Email tests — click rate per arm*\n${emailLines.join("\n")}`));
+      blocks.push(section(`*Email tests (clicks per email delivered)*\n${emailLines.join("\n")}`));
     } else if (emailExperiments && emailExperiments.length === 0) {
       // Counting starts when the tags ship. Saying so is not the same as saying
       // the emails got no clicks.
@@ -1344,12 +1340,12 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const spentClause = typeof input.adSpend === "number" ? `, ${money(input.adSpend)} spent` : "";
   const text =
     funnel === null
-      ? `:chart_with_upwards_trend: Conversion ${dayKey} — data unavailable (could not read the funnel)`
+      ? `:chart_with_upwards_trend: Conversion ${dayKey}: data unavailable (could not read the funnel)`
       : // `paidTotal` is the funnel's last row, which counts UNLOCKS — so it is
         // named "unlocked" here too. `yesterday.paid` is `charges`, real sales.
         // This string is the push-notification preview and the dead-letter text,
         // so it is the one place a reader gets no surrounding context at all.
-        `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid${spentClause} yesterday; ${paidTotal} ever unlocked from ${WINDOW_DAYS} days of finishers`;
+        `:chart_with_upwards_trend: Conversion ${dayKey}: ${yesterday.completions} finished, ${yesterday.paid} paid${spentClause} yesterday; ${paidTotal} unlocked from ${WINDOW_DAYS} days of finishers`;
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed };

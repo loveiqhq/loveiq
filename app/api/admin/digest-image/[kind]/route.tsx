@@ -79,6 +79,8 @@ const COLORS = {
   // disappears there even though it survives on a monitor.
   gridline: "#e6e6e6",
   baseline: "#d6d6d6",
+  // The empty part of a funnel bar, so each bar reads as a share of 100%.
+  track: "#f1f2f4",
   // The one status step anything draws: the worst drop-out bars and their labels.
   // 6.47:1 on white. The dark set's #f87171 is 2.5:1 there and unreadable.
   //
@@ -104,6 +106,7 @@ const VALID_KINDS = new Set([
   "conversion-by-arm",
   "metric-trend",
   "reactivation-email",
+  "funnel-steps",
 ]);
 
 /**
@@ -230,8 +233,27 @@ interface DropoutByArmPayload {
   colorLast?: string;
 }
 
+/**
+ * The daily conversion funnel, one row per step in Mark's order and wording
+ * (2026-09-16 sync). `pct` is the share of the step ABOVE that got this far, the
+ * one percentage the funnel carries; null on the first row, which has nothing
+ * above it. `worst` is the row the message names as the biggest drop, so the red
+ * bar and the caption cannot disagree.
+ */
+interface FunnelStepsPayload {
+  kind: "funnel-steps";
+  windowLabel?: string;
+  title?: string;
+  steps: Array<{ label: string; count: number; pct: number | null }>;
+  worst?: number;
+}
+
 type AnyPayload =
-  LongitudinalPayload | StageConversionPayload | DropoutPayload | DropoutByArmPayload;
+  | LongitudinalPayload
+  | StageConversionPayload
+  | DropoutPayload
+  | DropoutByArmPayload
+  | FunnelStepsPayload;
 
 /**
  * Titles in the words the reader uses, not ours.
@@ -1615,6 +1637,149 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
   return { element, height: DROPOUT_ARM_HEIGHT };
 }
 
+// -----------------------------------------------------------------------------
+// Funnel steps (the daily conversion digest)
+// -----------------------------------------------------------------------------
+
+const FUNNEL_ROW_H = 40;
+const FUNNEL_ROW_GAP = 6;
+const FUNNEL_LABEL_W = 230;
+const FUNNEL_COUNT_W = 86;
+const FUNNEL_PCT_W = 70;
+const FUNNEL_BAR_H = 18;
+const FUNNEL_GAP = 14;
+const FUNNEL_FOOT_H = 44;
+
+/** "8.2%", "<0.1%" for a real but tiny share, never a bare "0%" beside a count. */
+function funnelPct(pct: number): string {
+  if (pct > 0 && pct < 0.05) return "<0.1%";
+  return `${Math.round(pct * 10) / 10}%`;
+}
+
+/**
+ * The funnel as a picture, replacing the monospace table that sat under the
+ * header. Asked for on the 2026-09-16 sync: Mark's step order and names, a white
+ * background, and one percentage label that means the same thing on every row.
+ *
+ * Each bar is the share of the step above, not of all visits. On a funnel that
+ * runs from 12,916 visits to 2 unlocks, bars against the top step are invisible
+ * slivers below the second row; against the step above they show where people
+ * are lost, which is the question the message is read for. The grey track behind
+ * each bar is 100%, so a short bar reads as "most people stopped here".
+ *
+ * Exported for the test that the red bar is exactly the named drop.
+ */
+export function renderFunnelSteps(p: FunnelStepsPayload): {
+  element: React.ReactElement;
+  height: number;
+} {
+  const title = typeof p.title === "string" && p.title ? p.title : "The funnel";
+  const steps = (Array.isArray(p.steps) ? p.steps : [])
+    .filter((s) => s && typeof s.label === "string")
+    .map((s) => ({
+      label: s.label,
+      count: Math.max(0, Number(s.count) || 0),
+      pct: s.pct == null || !Number.isFinite(Number(s.pct)) ? null : Math.max(0, Number(s.pct)),
+    }));
+  if (steps.length === 0) {
+    return {
+      element: chartShell(
+        title,
+        p.windowLabel ?? "",
+        <div style={{ display: "flex", color: COLORS.textMuted, fontSize: 18, padding: 24 }}>
+          Awaiting data: no visits recorded in this window yet.
+        </div>
+      ),
+      height: HEIGHT,
+    };
+  }
+  const worst = typeof p.worst === "number" ? p.worst : -1;
+  // 28 = chartShell's padding, both sides; three gaps between the four columns.
+  const trackW = WIDTH - 2 * 28 - FUNNEL_LABEL_W - FUNNEL_COUNT_W - FUNNEL_PCT_W - 3 * FUNNEL_GAP;
+  const height = BODY_OVERHEAD + steps.length * (FUNNEL_ROW_H + FUNNEL_ROW_GAP) + FUNNEL_FOOT_H;
+
+  const element = chartShell(
+    title,
+    p.windowLabel ?? "",
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {steps.map((s, i) => {
+        const isWorst = i === worst && s.pct !== null;
+        // A share over 100% is real here (a promo unlock needs no checkout), so
+        // the label prints it as it is and only the bar stops at the track's end.
+        const barW =
+          s.pct === null ? 0 : Math.max(3, Math.round((Math.min(s.pct, 100) / 100) * trackW));
+        return (
+          <div
+            key={`step-${i}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              height: FUNNEL_ROW_H,
+              marginBottom: FUNNEL_ROW_GAP,
+              gap: FUNNEL_GAP,
+            }}
+          >
+            <div
+              style={{ display: "flex", width: FUNNEL_LABEL_W, fontSize: 18, color: COLORS.text }}
+            >
+              {s.label}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: FUNNEL_COUNT_W,
+                justifyContent: "flex-end",
+                fontSize: 18,
+                fontWeight: 700,
+                color: COLORS.text,
+              }}
+            >
+              {s.count.toLocaleString("en-US")}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: trackW,
+                height: FUNNEL_BAR_H,
+                borderRadius: 4,
+                background: s.pct === null ? COLORS.bg : COLORS.track,
+              }}
+            >
+              {s.pct !== null && (
+                <div
+                  style={{
+                    width: barW,
+                    height: FUNNEL_BAR_H,
+                    borderRadius: 4,
+                    background: isWorst ? COLORS.danger : COLORS.neutral,
+                  }}
+                />
+              )}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: FUNNEL_PCT_W,
+                justifyContent: "flex-end",
+                fontSize: 17,
+                fontWeight: isWorst ? 700 : 400,
+                color: isWorst ? COLORS.danger : COLORS.textMuted,
+              }}
+            >
+              {s.pct === null ? "" : funnelPct(s.pct)}
+            </div>
+          </div>
+        );
+      })}
+      <div style={{ display: "flex", marginTop: 6, fontSize: 14, color: COLORS.textMuted }}>
+        Each bar: the share of the step above that got this far. Red: the biggest drop.
+      </div>
+    </div>,
+    height
+  );
+  return { element, height };
+}
+
 function renderForKind(
   kind: string,
   payload: AnyPayload
@@ -1635,6 +1800,8 @@ function renderForKind(
       return renderDropoutByArm(payload as DropoutByArmPayload);
     case "reactivation-email":
       return renderStageConversion(payload as StageConversionPayload);
+    case "funnel-steps":
+      return renderFunnelSteps(payload as FunnelStepsPayload);
     default:
       return {
         element: chartShell("Unknown chart kind", kind, <div>—</div>),

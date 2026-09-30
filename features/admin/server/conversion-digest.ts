@@ -606,8 +606,16 @@ export function buildArmVerdict(
   };
 }
 
+export type FunnelKey =
+  "visits" | "started" | "midway" | "completed" | "opened" | "paywall" | "checkout" | "unlocked";
+
 export interface FunnelStep {
+  /** What the step IS, for code. Labels are for people and change; keys do not. */
+  key: FunnelKey;
+  /** The row's name, in Mark's funnel wording (2026-09-16 sync). */
   step: string;
+  /** The same step as a verb phrase, for sentences: "of 32 who started checkout". */
+  did: string;
   count: number;
   pctOfTop: number;
   dropFromPrev: number;
@@ -723,54 +731,79 @@ export function buildFunnel(
     Number.isFinite(midway.reached) &&
     midway.reached > 0 &&
     midway.reached >= completions;
-  // Labels say what each number IS. Everything below the first row is cohort:
-  // "of the people who finished in this window, how many ever got this far",
-  // which is NOT the same as "this many happened during the window" — a purchase
-  // two weeks later still counts, and an in-window sale by someone who finished
-  // earlier does not. Calling the last row a bare "Paid" under a "30 days"
-  // heading invited exactly the wrong reading.
-  const raw: Array<{ step: string; count: number }> = [
-    { step: "Visits to the site", count: visitors },
-    // Deliberately NOT relabelled "…of those, finished it". Starts are event-day
-    // counts and finishers are a cohort, so one is not strictly a subset of the
-    // other across a window boundary; claiming it in the label would be a claim
-    // the data does not support.
-    ...(hasStarts ? [{ step: "Started the survey", count: starts as number }] : []),
-    /**
-     * The step Mark named on 2026-09-16 and the framework called "needs
-     * building". The label carries the THRESHOLD rather than saying "midway",
-     * because "midway" is the definition and the question number is the fact —
-     * and an unnamed percentage in this table is precisely what put a 96.5%
-     * nobody could source into a meeting.
-     */
-    ...(hasMidway ? [{ step: `Reached question ${midway!.index}`, count: midway!.reached }] : []),
-    { step: "Finished the survey", count: completions },
-    { step: "…of those, opened their report", count: sum((r) => r.reportOpens) },
-    /**
-     * Between the report and checkout, which is where Mark put it. "Hit the
-     * paywall" and "started checkout" are different decisions and the drop
-     * between them is the one worth acting on.
-     */
-    ...(hasPaywall ? [{ step: "…of those, hit the paywall", count: paywallCount }] : []),
-    { step: "…of those, started checkout", count: sum((r) => r.checkout) },
-    /**
-     * UNLOCKED, not "ever paid".
-     *
-     * This counts `report_price_quote.purchased_at`, which fulfillment sets
-     * whenever a report unlocks — including a 100%-off coupon. The break-even
-     * block below counts SALES (succeeded, non-test, amount > 0) and names the
-     * free unlocks separately, per the definition recorded 2026-09-19. Both were
-     * labelled "paid", so one message answered "how many paid" with two
-     * different numbers — 4 here and 3 there, four lines apart — which is the
-     * class of unsourceable figure this whole rewrite exists to remove.
-     *
-     * The count is not wrong for what it measures, so the LABEL moved rather
-     * than the number: the funnel asks "did they get the report", break-even
-     * asks "did we get money". Reconciling them into one figure needs a
-     * cohort-scoped charge count, which the arm RPC does not return — it has
-     * `charges` on the daily rows but not on the cohort totals.
-     */
-    { step: "…of those, ever unlocked it", count: sum((r) => r.paid) },
+  /**
+   * Mark's sequence and names from the 2026-09-16 sync: Visits, Survey started,
+   * Midway, Survey completed, Report opened, Paywall, Purchase. Two departures,
+   * both for a number that would otherwise be wrong:
+   *
+   *   * "Midway (question 30)" carries the threshold, because the question number
+   *     is the fact and "midway" alone is an unsourced definition.
+   *   * the last step is "Report unlocked", not "Purchase". It counts
+   *     `report_price_quote.purchased_at`, which fulfillment also sets on a
+   *     100%-off coupon. Break-even counts SALES and names free unlocks beside
+   *     them, per the definition recorded 2026-09-19; calling both "paid" had one
+   *     message give two answers four lines apart. Reconciling them needs a
+   *     cohort-scoped charge count, which the arm RPC does not return.
+   *
+   * Everything from "Report opened" down follows the people who finished in this
+   * window forward, so a purchase two weeks later still counts. The rows above it
+   * count the window. Starts are event-day counts and finishers a cohort, so one
+   * is not strictly a subset of the other across a window boundary.
+   *
+   * "Checkout started" is kept between the paywall and the unlock, where the
+   * largest drop in the funnel sits and where the checkout redesign is aimed.
+   */
+  const raw: Array<{ key: FunnelKey; step: string; did: string; count: number }> = [
+    { key: "visits", step: "Visits", did: "visited", count: visitors },
+    ...(hasStarts
+      ? [
+          {
+            key: "started" as const,
+            step: "Survey started",
+            did: "started the survey",
+            count: starts as number,
+          },
+        ]
+      : []),
+    ...(hasMidway
+      ? [
+          {
+            key: "midway" as const,
+            step: `Midway (question ${midway!.index})`,
+            did: `reached question ${midway!.index}`,
+            count: midway!.reached,
+          },
+        ]
+      : []),
+    { key: "completed", step: "Survey completed", did: "finished the survey", count: completions },
+    {
+      key: "opened",
+      step: "Report opened",
+      did: "opened their report",
+      count: sum((r) => r.reportOpens),
+    },
+    ...(hasPaywall
+      ? [
+          {
+            key: "paywall" as const,
+            step: "Paywall reached",
+            did: "reached the paywall",
+            count: paywallCount as number,
+          },
+        ]
+      : []),
+    {
+      key: "checkout",
+      step: "Checkout started",
+      did: "started checkout",
+      count: sum((r) => r.checkout),
+    },
+    {
+      key: "unlocked",
+      step: "Report unlocked",
+      did: "unlocked the report",
+      count: sum((r) => r.paid),
+    },
   ];
 
   const top = raw[0]?.count ?? 0;
@@ -818,7 +851,9 @@ export function buildFunnel(
     const count = i < CLAMPED_STEPS ? Math.min(entry.count, ceiling) : entry.count;
     const prev = i === 0 ? count : steps[i - 1]!.count;
     steps.push({
+      key: entry.key,
       step: entry.step,
+      did: entry.did,
       count,
       pctOfTop: computeRate(count, top),
       dropFromPrev: i === 0 ? 0 : computeRate(Math.max(0, prev - count), prev),
@@ -829,14 +864,17 @@ export function buildFunnel(
 }
 
 /** The step with the largest proportional loss, for the headline. Null if flat. */
-export function biggestLeak(steps: FunnelStep[]): { from: string; to: string; pct: number } | null {
-  let worst: { from: string; to: string; pct: number } | null = null;
+/** `index` is the losing step's position in the array passed in. */
+export function biggestLeak(
+  steps: FunnelStep[]
+): { from: string; to: string; pct: number; index: number } | null {
+  let worst: { from: string; to: string; pct: number; index: number } | null = null;
   for (let i = 1; i < steps.length; i += 1) {
     // eslint-disable-next-line security/detect-object-injection -- numeric loop index over a local array.
     const step = steps[i]!;
     if (step.dropFromPrev <= 0) continue;
     if (!worst || step.dropFromPrev > worst.pct) {
-      worst = { from: steps[i - 1]!.step, to: step.step, pct: step.dropFromPrev };
+      worst = { from: steps[i - 1]!.step, to: step.step, pct: step.dropFromPrev, index: i };
     }
   }
   return worst;
@@ -1128,22 +1166,22 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
       const clicks = arms.reduce((t, a) => t + a.clicked, 0);
       lines.push(
         clicks > 0
-          ? `• *${escapeSlack(experiment)}* — ${clicks} click(s) recorded but no deliveries; the delivered webhook is not arriving, so no rate can be computed`
-          : `• *${escapeSlack(experiment)}* — nothing recorded yet`
+          ? `• *${escapeSlack(experiment)}*: ${clicks} click(s) recorded but no deliveries, so no rate can be worked out yet. The delivered webhook is not arriving.`
+          : `• *${escapeSlack(experiment)}*: nothing recorded yet.`
       );
       continue;
     }
 
     const rate = (a: EmailExperimentRow) => computeRate(a.clicked, a.delivered);
     const parts = live.map(
-      (a) => `${a.arm.toUpperCase()} ${rate(a)}% (${a.clicked}/${a.delivered})`
+      (a) => `${a.arm.toUpperCase()} ${rate(a)}% (${a.clicked} of ${a.delivered})`
     );
 
     if (live.length === 1) {
       // One arm with traffic is not a comparison. Say so rather than printing a
       // lone rate that reads as a result.
       lines.push(
-        `• *${escapeSlack(experiment)}* — ${parts[0]}, only one arm has data yet` +
+        `• *${escapeSlack(experiment)}*: ${parts[0]}. Only one version has data yet.` +
           (clicksWithoutDeliveries.length > 0
             ? ` (${clicksWithoutDeliveries.map((a) => a.arm.toUpperCase()).join(", ")} has clicks but no recorded deliveries)`
             : "")
@@ -1185,7 +1223,7 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
     const overCounted = live.some((a) => a.clicked > a.delivered);
     if (overCounted) {
       lines.push(
-        `• *${escapeSlack(experiment)}* — ${parts.join(" · ")} — not comparable: some readers clicked more than once, so the rate is not a share of recipients`
+        `• *${escapeSlack(experiment)}*: ${parts.join(" · ")}. Not comparable: some readers clicked more than once, so the rate is not a share of recipients.`
       );
       continue;
     }
@@ -1198,7 +1236,7 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
      */
     const verdict =
       signal.significance === "insufficient-data"
-        ? `not enough clicks yet to compare — each arm needs at least ${MIN_CELL_COUNT}`
+        ? `Not enough clicks yet to compare. Each version needs at least ${MIN_CELL_COUNT}.`
         : /**
            * A dead heat is not a lead, but it is not "level" either until there
            * is enough data to say so — which is why this sits BELOW the
@@ -1208,11 +1246,11 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
            * equal numbers.
            */
           raw(lead) === raw(next)
-          ? `level so far — the arms are identical on this measure`
+          ? `Level so far: both versions are exactly the same.`
           : signal.significance === "inconclusive"
-            ? `no clear winner yet — ${lead.arm.toUpperCase()} is ahead but the gap could still be chance (${formatSignalSummary(signal)})`
+            ? `No clear winner yet: ${lead.arm.toUpperCase()} is ahead, but the gap could still be chance.`
             : signal.significance === "significant-lift"
-              ? `${lead.arm.toUpperCase()} is genuinely ahead (${formatSignalSummary(signal)})`
+              ? `${lead.arm.toUpperCase()} is genuinely ahead: the gap is too big to be chance.`
               : /**
                  * `significant-regression` is the fourth member of the enum and used
                  * to fall through to "genuinely ahead" — printing the exact opposite
@@ -1220,7 +1258,7 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
                  * raw proportion, so saying so out loud beats asserting a direction
                  * the numbers contradict.
                  */
-                `the arms disagree with their own ranking — not reporting a winner (${formatSignalSummary(signal)})`;
+                `The numbers disagree with their own ranking, so no winner is named.`;
     /**
      * Complaints, when there are any. An arm that wins on clicks while being
      * marked as spam twice as often has not won — and the counters have always
@@ -1229,9 +1267,11 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
     const complaints = live.filter((a) => a.complained > 0);
     const spam =
       complaints.length > 0
-        ? ` · spam: ${complaints.map((a) => `${a.arm.toUpperCase()} ${a.complained}`).join(", ")}`
+        ? ` Marked as spam: ${complaints.map((a) => `${a.arm.toUpperCase()} ${a.complained}`).join(", ")}.`
         : "";
-    lines.push(`• *${escapeSlack(experiment)}* — ${parts.join(" · ")} — ${verdict}${spam}`);
+    // No confidence interval on the line: "+5.68pp · 95% CI -8.84 to +20.2pp" is
+    // the reasoning, and the verdict in words is the result a reader acts on.
+    lines.push(`• *${escapeSlack(experiment)}*: ${parts.join(" · ")}. ${verdict}${spam}`);
   }
   return lines;
 }
@@ -1423,7 +1463,7 @@ export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
 
   if (u.paidReports === 0) {
     // Not "EUR 0.00 per report" — dividing by nothing is not a cost of nothing.
-    lines.push(`• *Per paid report* — no paid reports in this window, so there is no cost per one`);
+    lines.push(`• *Per paid report:* no paid reports in this window, so there is no cost per one`);
   } else if (u.adSpend === 0) {
     /**
      * The guard used to be on `paidReports` alone, so a window with sales and no
@@ -1432,14 +1472,14 @@ export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
      * whenever ads are paused, or GA4's ad report has not landed.
      */
     lines.push(
-      `• *Per paid report* — ${eur(u.revenue / u.paidReports)} earned; no ad spend recorded in this window, so there is no cost to compare it to`
+      `• *Per paid report:* ${eur(u.revenue / u.paidReports)} earned, and no ad spend recorded in this window to compare it to`
     );
   } else {
     const cppr = u.adSpend / u.paidReports;
     const arpp = u.revenue / u.paidReports;
     const margin = arpp - cppr;
     lines.push(
-      `• *Per paid report* — ${eur(cppr)} to acquire, ${eur(arpp)} earned; ` +
+      `• *Per paid report:* ${eur(cppr)} in ads, ${eur(arpp)} earned, so ` +
         // There was no profitable branch at all: `cppr - arpp` printed "each one
         // costs us EUR -15.00" the moment the product started making money — on
         // the line whose whole job is to announce that.
@@ -1464,9 +1504,9 @@ export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
            * direction this file warns about everywhere else.
            */
           (roas > 1
-            ? " — above break-even"
+            ? ", above break-even"
             : roas === 1
-              ? " — exactly break-even"
+              ? ", exactly break-even"
               : roas === 0
                 ? ", and nothing came back at all"
                 : `, so ${Math.round(1 / roas).toLocaleString("en-US")}x short of break-even`))

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  FRICTION_BLIND_SPOTS,
-  TABLE_W,
-  buildFrictionSection,
+  WATCH_LIST_MAX,
+  buildFrictionWatchList,
   buildReportSignals,
   buildSurveySignals,
   type FrictionQuestion,
@@ -204,82 +203,83 @@ describe("buildReportSignals", () => {
   });
 });
 
-describe("buildFrictionSection", () => {
+describe("buildFrictionWatchList", () => {
   /**
-   * Slack does not scroll a fenced block sideways on a phone — it folds it, and
-   * a folded fixed-width table is unreadable in a way the desktop preview never
-   * shows you. The first version of this board ran to 102 columns because all
-   * three widths were taken from the data with no ceiling on the total.
+   * The daily message names what needs a look, in words, and counts the rest.
+   * It used to print the whole scoreboard as an 11-row monospace table, most of
+   * it "normal" every day. Mark, 2026-09-21: "Not easy to consume at all."
    */
-  it("never emits a row wider than a phone can show", () => {
-    const section = buildFrictionSection(
-      {
-        signals: [
-          ...buildSurveySignals(
-            snap(
-              [
-                q({ question_index: 0 }),
-                q({ question_index: 47, median_ms: 40_000, backs: 30 }),
-                q({ question_index: 57, abandons: 40 }),
-              ],
-              { median_ms: 9000 }
-            )
-          ),
-          ...buildReportSignals(reportSnap()),
+  const names = new Map([
+    ["q57", "What is your email?"],
+    ["q47", "Which changes would actually help?"],
+  ]);
+  const signals = () => [
+    ...buildSurveySignals(
+      snap(
+        [
+          q({ question_index: 0 }),
+          q({ question_index: 47, median_ms: 40_000, backs: 30 }),
+          q({ question_index: 57, abandons: 40 }),
         ],
-        blind: [],
-      },
-      30
-    );
-    const rows = section.split("\n").filter((l) => l.startsWith("●") || l.startsWith("·"));
-    expect(rows.length).toBeGreaterThan(8);
-    for (const row of rows) {
-      expect(row.length, `too wide for Slack on a phone:\n${row}`).toBeLessThanOrEqual(TABLE_W);
+        { median_ms: 9000 }
+      ),
+      names
+    ),
+    ...buildReportSignals(reportSnap()),
+  ];
+
+  it("lists only the signals that need a look, one plain sentence each", () => {
+    const all = signals();
+    const watch = all.filter((s) => s.status === "watch");
+    // Enough flagged and enough quiet that both halves of the rule are exercised.
+    expect(watch.length).toBeGreaterThan(1);
+    expect(all.length - watch.length).toBeGreaterThan(1);
+
+    const text = buildFrictionWatchList({ signals: all, rowsRead: 0 }, 30);
+    const lines = text.split("\n");
+    expect(lines[0]).toBe("*Where people get stuck*");
+    const bullets = lines.filter((l) => l.startsWith("• "));
+    expect(bullets).toHaveLength(Math.min(watch.length, WATCH_LIST_MAX));
+    for (const s of watch.slice(0, WATCH_LIST_MAX)) expect(text).toContain(s.sentence!);
+    // The quiet ones are counted, not listed.
+    for (const s of all.filter((x) => x.status !== "watch")) {
+      expect(text).not.toContain(s.label);
     }
+    expect(text).toContain(`_The other ${all.length - watch.length} signals look normal._`);
+    // Words, not a table.
+    expect(text).not.toContain("```");
+    expect(text).not.toContain("—");
   });
 
-  it("shortens the free-text column rather than dropping a number", () => {
-    // Whatever has to give, it is never the measurement.
-    const section = buildFrictionSection(
-      {
-        signals: [
-          {
-            label: "A label",
-            group: "Survey",
-            // Deliberately longer than a bare percentage: a value short enough to
-            // survive being sliced cannot prove the value is never sliced.
-            value: "25.8s (2.8x)",
-            n: 100,
-            status: "watch",
-            where: "Q58 — a question long enough that it cannot possibly fit in the row",
-          },
-        ],
-        blind: [],
-      },
-      30
+  it("names the question in words, not just its number", () => {
+    const text = buildFrictionWatchList({ signals: signals(), rowsRead: 0 }, 30);
+    // Of the sessions that reach the question, which is what the rate divides by.
+    expect(text).toContain("40% of sessions that reach Q58 (What is your email?) end there.");
+    expect(text).toContain(
+      "People take 40.0s on Q48 (Which changes would actually help?), 4.4x the usual time."
     );
-    const row = section.split("\n").find((l) => l.startsWith("●"))!;
-    expect(row.length).toBeLessThanOrEqual(TABLE_W);
-    expect(row).toContain("25.8s (2.8x)");
-    expect(row).toContain("…");
   });
 
-  it("names what the table cannot see in plain words", () => {
-    /**
-     * Mark, 2026-09-21, on the daily message's fine print: "Not easy to consume
-     * at all." This line read "dead clicks (PostHog only — 3,249 a week, writes
-     * nothing to Postgres); form errors (PostHog only — no submission exists
-     * mid-survey to key a row to); …", with a weekly count frozen into the code.
-     * The reasons now live beside the list, not in the message.
-     */
-    const section = buildFrictionSection(
-      { signals: buildReportSignals(reportSnap()), rowsRead: 0, blind: FRICTION_BLIND_SPOTS },
-      30
+  it("says so in one line when nothing stands out", () => {
+    const quiet = signals().map((s) => ({ ...s, status: "quiet" as const }));
+    expect(buildFrictionWatchList({ signals: quiet, rowsRead: 0 }, 30)).toBe(
+      "*Where people get stuck*\nNothing stands out in the last 30 days."
     );
-    const line = section.split("\n").at(-1)!;
-    expect(line).toMatch(/^_Not in this table: .+\. PostHog has them\._$/);
-    for (const name of FRICTION_BLIND_SPOTS) expect(line).toContain(name);
-    expect(line, "no count frozen into the copy").not.toMatch(/\d/);
-    expect(line).not.toMatch(/Postgres|\(|—/);
+  });
+
+  it("counts what it cannot fit instead of growing into a table again", () => {
+    const many = Array.from({ length: WATCH_LIST_MAX + 3 }, (_, i) => ({
+      label: `Signal ${i}`,
+      group: "Survey" as const,
+      value: "1%",
+      n: 100,
+      status: "watch" as const,
+      sentence: `Sentence ${i}.`,
+    }));
+    const text = buildFrictionWatchList({ signals: many, rowsRead: 0 }, 30);
+    expect(text.split("\n").filter((l) => l.startsWith("• "))).toHaveLength(WATCH_LIST_MAX);
+    // Flagged but cut are not "normal": they are counted as still needing a look.
+    expect(text).toContain("_3 more need a look._");
+    expect(text).not.toContain("look normal");
   });
 });
