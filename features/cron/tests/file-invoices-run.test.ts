@@ -377,33 +377,37 @@ describe("a complete filing run", () => {
     expect(slackText()).toContain("Vercel 2026/09: (blank) → -10.00");
   });
 
-  it("carries a changed month into the next one, even where that month's own total matched", async () => {
-    // September moves to EUR 12 (a 10 and a 2 proration) and October stays EUR 10. The sheet
-    // read before the batch said -10 in October, so October was skipped and kept the -12
-    // just carried into it.
-    inbox = { "ec@loveiq.org": ["sep10", "sep2", "oct10"] };
+  it("enters the closed month and carries it forward, and holds the month in progress", async () => {
+    // September moves to EUR 12 (a 10 and a 2 proration). October's first invoice, dated the
+    // 2nd, is the month in progress: filed, and entered next month once October is complete,
+    // so the forecast comes from September's whole month rather than two days of October.
+    inbox = { "ec@loveiq.org": ["sep10", "sep2", "oct2"] };
     more = {
       sep10: { day: Date.UTC(2026, 8, 10, 12), text: "Total €10.00 EUR" },
       sep2: { day: Date.UTC(2026, 8, 12, 12), text: "Total €2.00 EUR" },
-      oct10: { day: Date.UTC(2026, 9, 2, 12), text: "Total €10.00 EUR" },
+      oct2: { day: Date.UTC(2026, 9, 2, 12), text: "Total €3.00 EUR" },
     };
     sheet = [HEADER, vercelRow(HEADER).map((c, i) => (i >= 18 ? -10 : c))];
     await run();
     expect(sheetWrites[0]?.data).toEqual([
       { range: "Costs!S2:X2", values: [[-12, -12, -12, -12, -12, -12]] },
-      { range: "Costs!T2:X2", values: [[-10, -10, -10, -10, -10]] },
     ]);
+    expect(slackText()).toContain("entered next month once the month is complete: Vercel 2026/10");
+    expect(slackText()).not.toContain("already matched");
   });
 
-  it("reports the month in progress when it has no column, without failing the run", async () => {
-    // On the 3rd the month holds the invoices of the 1st and 2nd. Failing the run for it
-    // told cost_watch that the whole run had settled nothing.
+  it("holds the month in progress for the next run, even with no column yet, without failing", async () => {
+    // On the 3rd the month holds the invoices of the 1st and 2nd. It is not entered at all
+    // until it closes, so a missing column is next month's question, and failing the run for
+    // it would tell cost_watch that the whole run had settled nothing.
     inbox = { "ec@loveiq.org": ["oct10"] };
     more = { oct10: { day: Date.UTC(2026, 9, 2, 12), text: "Total €10.00 EUR" } };
     const noOctober = HEADER.map((c, i) => (i === 19 ? "Oct" : c));
     sheet = [noOctober, vercelRow(noOctober)];
     await run();
-    expect(slackText()).toContain("nothing written for:* Vercel 2026/10");
+    expect(sheetWrites).toEqual([]);
+    expect(slackText()).toContain("entered next month once the month is complete: Vercel 2026/10");
+    expect(slackText()).not.toContain("nothing written for");
     expect(mockRecord).toHaveBeenCalledWith(
       "file-invoices",
       expect.any(Number),
