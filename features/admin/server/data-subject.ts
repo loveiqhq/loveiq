@@ -265,6 +265,10 @@ async function deleteResendContact(emailNorm: string, result: DsrResult): Promis
     // The SDK returns API errors instead of throwing.
     const { error } = await new Resend(apiKey).contacts.remove({ email: emailNorm });
     if (error && error.name !== "not_found") {
+      logger.warn(
+        { name: error.name, statusCode: error.statusCode },
+        "DSR: Resend contact delete failed"
+      );
       result.warnings.push(`Resend contact not deleted (${error.message}): ${manual}`);
     }
   } catch (err) {

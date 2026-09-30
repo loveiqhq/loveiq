@@ -21,6 +21,7 @@ vi.mock("resend", () => ({
   },
 }));
 
+import logger from "@shared/observability/logger";
 import {
   normalizeEmail,
   emailHash,
@@ -237,5 +238,9 @@ describe("DSAR delete also erases the Resend contact (Art. 17)", () => {
     });
     const result = await deleteDataSubject("a@x.com");
     expect(result.warnings.join(" ")).toMatch(/Resend contact not deleted \(boom\)/);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "application_error", statusCode: 500 }),
+      "DSR: Resend contact delete failed"
+    );
   });
 });

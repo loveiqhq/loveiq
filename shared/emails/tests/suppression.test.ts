@@ -195,8 +195,15 @@ describe("addToSuppression → Resend (R-05)", () => {
     );
   });
 
-  it("does nothing in Resend when no marketing list is configured", async () => {
+  it("still unsubscribes when no marketing list is configured: a contact outlives the config", async () => {
     delete process.env.RESEND_AUDIENCE_ID;
+    mockContactsUpdate.mockResolvedValue({ data: { id: "c1" }, error: null });
+    await addToSuppression("u@example.com", "unsubscribed");
+    expect(mockContactsUpdate).toHaveBeenCalledWith({ email: "u@example.com", unsubscribed: true });
+  });
+
+  it("does nothing in Resend without an API key", async () => {
+    delete process.env.RESEND_API_KEY;
     await addToSuppression("u@example.com", "unsubscribed");
     expect(mockContactsUpdate).not.toHaveBeenCalled();
   });

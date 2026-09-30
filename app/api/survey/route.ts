@@ -16,7 +16,7 @@ import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
-import { isEmailSuppressed } from "@shared/emails/suppression";
+import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression";
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
@@ -326,8 +326,9 @@ export async function POST(request: Request) {
         scheduleAfterResponse("resend-audience-subscribe", async () => {
           try {
             // Creating a contact re-subscribes one Resend has as unsubscribed,
-            // so an address on our do-not-send list is never added back.
-            if (await isEmailSuppressed(normalizedEmail)) return;
+            // so only an address confirmed NOT on our do-not-send list is added.
+            // A failed lookup skips: a missed push is safer than a re-subscribe.
+            if ((await suppressionState(normalizedEmail)) !== "clear") return;
             const { error } = await resendClient.contacts.create({
               email: normalizedEmail,
               firstName: normalizedFirstName,

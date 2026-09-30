@@ -628,6 +628,25 @@ describe("POST /api/survey", () => {
     expect(mockResendContactsCreate).not.toHaveBeenCalled();
   });
 
+  it("Q16015 = Yes when the do-not-send lookup fails → no Resend push", async () => {
+    // "Could not tell" must stop a marketing subscription: a missed push is
+    // recoverable, re-subscribing someone who unsubscribed is not.
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+    mockFetchWithTimeout.mockImplementation(async (url: string) =>
+      url.includes("/rest/v1/email_suppression")
+        ? { ok: false, status: 503, json: async () => ({}) }
+        : { ok: true, json: async () => [] }
+    );
+
+    await POST(optInYes());
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockResendContactsCreate).not.toHaveBeenCalled();
+  });
+
   it("logs a failed Resend push, which the SDK returns instead of throwing", async () => {
     allowCsrf();
     allowRateLimit();

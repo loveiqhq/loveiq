@@ -7,12 +7,11 @@ import logger from "@shared/observability/logger";
  * skip it whichever list they go to. Removing it from the one list, as this used
  * to, left the contact subscribed, and the survey's opt-in push re-subscribes
  * on create. Best-effort: a failure here doesn't break the suppression write.
- * Skipped when no marketing list is configured.
+ * Tried whether or not a list is configured: a contact outlives a config change.
  */
 async function unsubscribeInResend(email: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  const audienceId = process.env.RESEND_AUDIENCE_ID;
-  if (!apiKey || !audienceId) return;
+  if (!apiKey) return;
   try {
     const { error } = await new Resend(apiKey).contacts.update({ email, unsubscribed: true });
     // The SDK returns API errors instead of throwing. not_found = never a contact.
