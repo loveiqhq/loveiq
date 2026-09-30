@@ -5,6 +5,7 @@ import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyHeader from "./SurveyHeader";
+import SurveyJumpMenu from "./SurveyJumpMenu";
 import SurveyNav from "./SurveyNav";
 import GuidancePanel from "./GuidancePanel";
 import OpenResponseQuestion from "./questions/OpenResponseQuestion";
@@ -38,6 +39,7 @@ import { useAutoAdvance } from "./hooks/useAutoAdvance";
 import { clearPersistedSurveyState } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { readCookie } from "@shared/observability/cookie";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
@@ -548,6 +550,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
             autoAdvance={autoAdvance}
             onToggleAutoAdvance={toggleAutoAdvance}
           />
+
+          {/* Staging, previews and dev only (Mark, 30.09): jump straight to any question. */}
+          {isNonProdDeploy() ? (
+            <SurveyJumpMenu
+              questions={orderedQuestions}
+              currentIndex={currentIndex}
+              onJump={goTo}
+            />
+          ) : null}
 
           {/* Question with animation */}
           <div
