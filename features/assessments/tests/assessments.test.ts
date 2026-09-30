@@ -201,7 +201,9 @@ describe("PHQ-9's item 9", () => {
   });
 });
 
-describe("the gate catches a broken definition", () => {
+// Each case runs the whole gate on a copy of an instrument, the Copy Gate over every line of
+// our copy included, so a case takes seconds and a busy machine pushed one past 15 s.
+describe("the gate catches a broken definition", { timeout: 60_000 }, () => {
   // One defect at a time, on a copy that is not validated: the defect is what is tested, not
   // the sign-off it would void (the sign-off tests below validate their copy themselves).
   const broken = (change: (d: InstrumentDefinition) => void, base = def("gad7")) => {
