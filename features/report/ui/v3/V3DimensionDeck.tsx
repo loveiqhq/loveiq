@@ -18,9 +18,9 @@ import type { Report3Dimension } from "@/data/report3-archetype-card";
  * scrolling costs the wrap at Power — a scroller stops at its end — which is worth
  * raising with Mark, but it is the behaviour every other deck here already has.
  *
- * The card geometry is unchanged: a 268px slot, 12px gap, and the focused card
- * resting 22px from the viewport's left edge, exactly where each variant frame draws
- * it (`left: -280px x index`, 280 = 268 + 12).
+ * The step is unchanged: since Mark's rebuild of 30.09 (1116:1425) a 266px card and a
+ * 14px gap (268 + 12 before), and the focused card resting 22px from the viewport's
+ * left edge, exactly where each frame draws it (`left: -280px x index`, 280 = 266 + 14).
  *
  * THE SWIPE (review 24.09: "the swipe is lagging, from communication - initiation -
  * attachment - power"). Focus used to move only once a swipe had SETTLED —
@@ -40,7 +40,7 @@ import type { Report3Dimension } from "@/data/report3-archetype-card";
  */
 const SWITCH_AT = 0.6;
 
-/** One card slot: 268 card + 12 gap. Every frame offset is a multiple of this. */
+/** One card slot: 266 card + 14 gap (1116:1425). Every frame offset is a multiple of this. */
 const STEP = 280;
 
 interface Props {
@@ -170,7 +170,7 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
                 aria-roledescription="slide"
                 aria-label={`${d.title}: ${d.value}`}
                 style={
-                  { "--rv3-deck-glyph": `url(/report/v3/dimensions/${d.key}.svg)` } as CSSProperties
+                  { "--rv3-deck-glyph": `url(/report/v4/dimensions/${d.key}.svg)` } as CSSProperties
                 }
               >
                 {/* Both designs, always laid out; the slot's state cross-fades them.

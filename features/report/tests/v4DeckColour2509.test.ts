@@ -8,11 +8,14 @@ import { describe, expect, it } from "vitest";
  * changes color as right now it feels quite abrupt… just a thought/idea."
  *
  * Each slot stacks two designs of its card and cross-fades them in 180ms when focus
- * moves (the fix for 24.09's "the swipe is lagging"), and each design carries its own
- * chip — solid accent with a white glyph when focused, an 11% tint with an accent
- * glyph when peeking. So the icon's colour flipped with the cross-fade. Now each
- * copy's chip follows the SLOT's state instead and eases over 600ms: the card still
- * arrives in 180ms, and its icon keeps warming (or cooling) after it lands. V4 only.
+ * moves (the fix for 24.09's "the swipe is lagging"). Until 30.09 each design carried
+ * its own chip, solid accent with a white glyph when focused and an 11% tint when
+ * peeking, so each copy's chip followed the SLOT's state and eased over 600ms.
+ *
+ * Mark's rebuild of 30.09 (1116:1425) has no chip in either design and draws the same
+ * accent outline in both, so there is nothing left to swap: those rules are gone (a
+ * white glyph on the bare card would have vanished mid cross-fade). The page indicator
+ * keeps the slow clock. V4 only.
  */
 
 const V3_CSS = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
@@ -32,35 +35,19 @@ const rule = (selector: string) => {
   return MAIN_CSS.slice(at, MAIN_CSS.indexOf("}", at));
 };
 
-describe("reportV3.css — the deck's icon changes colour slowly (V4)", () => {
-  it("colours each copy's chip by the slot, not by the copy", () => {
-    // While its slot peeks, the (hidden) focused copy already wears the peeking tint,
-    // so when the slot takes focus the chip starts from there and warms up.
-    expect(
-      rule(`${V4} .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused .rv3-deck__chip {`)
-    ).toMatch(
-      /background-color:\s*color-mix\(in srgb, var\(--rv3-deck-accent\) 11%, transparent\)/
-    );
-    expect(
-      rule(`${V4} .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused .rv3-deck__glyph {`)
-    ).toMatch(/background-color:\s*var\(--rv3-deck-accent\)/);
-    // And the other way: the peeking copy of a focused slot still wears the accent,
-    // so a card losing focus cools down rather than flipping.
-    expect(
-      rule(`${V4} .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking .rv3-deck__chip {`)
-    ).toMatch(/background-color:\s*var\(--rv3-deck-accent\)/);
-    expect(
-      rule(`${V4} .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking .rv3-deck__glyph {`)
-    ).toMatch(/background-color:\s*#fff/);
+describe("reportV3.css — the deck's icon no longer changes colour (V4, 30.09)", () => {
+  it("keeps no slot-driven colour swap for a chip the deck no longer draws", () => {
+    for (const copy of [
+      `${V4} .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused`,
+      `${V4} .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking`,
+    ]) {
+      expect(V3_CSS).not.toContain(`${copy} .rv3-deck__chip`);
+      expect(V3_CSS).not.toContain(`${copy} .rv3-deck__glyph`);
+    }
+    expect(V3_CSS).not.toContain(`${V4} .rv3-deck__chip,`);
   });
 
-  it("eases the chip and its glyph over 600ms", () => {
-    const eased = rule(`${V4} .rv3-deck__chip,`);
-    expect(eased).toContain(`${V4} .rv3-deck__glyph {`);
-    expect(eased).toMatch(/transition:\s*background-color 600ms ease-in-out/);
-  });
-
-  it("moves the page indicator on the same clock", () => {
+  it("moves the page indicator on the slow 600ms clock", () => {
     expect(rule(`${V4} .rv3-deck__dot {`)).toMatch(/transition:\s*background 600ms ease-in-out/);
   });
 
@@ -72,15 +59,10 @@ describe("reportV3.css — the deck's icon changes colour slowly (V4)", () => {
     );
   });
 
-  it("stops all of it for reduced motion", () => {
+  it("stops the indicator for reduced motion", () => {
     const blocks = V3_CSS.split("@media (prefers-reduced-motion: reduce)").slice(1);
-    const v4Block = blocks.find((b) =>
-      b.slice(0, b.indexOf("}")).includes(`${V4} .rv3-deck__chip`)
-    );
-    expect(v4Block, "no V4 reduced-motion block for the deck chip").toBeDefined();
-    const head = v4Block!.slice(0, v4Block!.indexOf("}"));
-    expect(head).toContain(`${V4} .rv3-deck__glyph`);
-    expect(head).toContain(`${V4} .rv3-deck__dot`);
-    expect(head).toContain("transition: none");
+    const v4Block = blocks.find((b) => b.slice(0, b.indexOf("}")).includes(`${V4} .rv3-deck__dot`));
+    expect(v4Block, "no V4 reduced-motion block for the deck indicator").toBeDefined();
+    expect(v4Block!.slice(0, v4Block!.indexOf("}"))).toContain("transition: none");
   });
 });
