@@ -25,4 +25,5 @@ Code half is `.claude/skills/` in this repo.
 ## Change one
 
 Edit its `SKILL.md` here, run `npm test` (a test checks that every Jarvis tool a skill
-names exists), then upload the new zip. claude.ai keeps the old version until you do.
+names exists), then `npm run skills:pack` to rebuild the zips, and upload the new one.
+The zip is not rebuilt by anything else, and claude.ai keeps the old version until you do.

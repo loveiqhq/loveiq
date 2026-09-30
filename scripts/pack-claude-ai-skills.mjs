@@ -14,6 +14,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:f
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parse } from "yaml";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 export const ALLOWED_KEYS = new Set([
@@ -25,25 +27,37 @@ export const ALLOWED_KEYS = new Set([
   "allowed-tools",
 ]);
 
-/** Top-level front matter keys and their one-line values. Enough for SKILL.md files. */
+/**
+ * The front matter as YAML reads it: an object, `{ yamlError }` when it does not parse, or
+ * null when there is none. Parsed, not matched line by line: claude.ai and Claude Code
+ * read it as YAML, and a line match passes what they refuse (`description: "unterminated`)
+ * and keeps the quotes of a quoted value as part of it.
+ */
 export function frontMatter(text) {
   const m = /^---\n([\s\S]*?)\n---\n/.exec(text);
   if (!m) return null;
-  const out = {};
-  for (const line of m[1].split("\n")) {
-    const kv = /^([A-Za-z_][\w-]*):\s?(.*)$/.exec(line);
-    if (kv) out[kv[1]] = kv[2].trim();
+  try {
+    const out = parse(m[1]);
+    return out && typeof out === "object" && !Array.isArray(out)
+      ? out
+      : { yamlError: "not a mapping" };
+  } catch (err) {
+    return { yamlError: String(err?.message ?? err).split("\n")[0] };
   }
-  return out;
 }
 
 /** Why claude.ai would refuse this skill, or [] when it would accept it. */
 export function skillProblems(dir, text) {
   const fm = frontMatter(text);
   if (!fm) return ["SKILL.md has no front matter"];
+  if (fm.yamlError) return [`front matter is not valid YAML: ${fm.yamlError}`];
   const problems = [];
   for (const key of Object.keys(fm)) {
     if (!ALLOWED_KEYS.has(key)) problems.push(`front matter key "${key}" is not allowed`);
+  }
+  if (typeof fm.name !== "string") problems.push("name must be text");
+  if (fm.description !== undefined && typeof fm.description !== "string") {
+    problems.push("description must be text");
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(fm.name ?? "") || (fm.name ?? "").length > 64) {
     problems.push(`name "${fm.name ?? ""}" must be lowercase words and hyphens, 64 at most`);

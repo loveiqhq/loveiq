@@ -1,6 +1,6 @@
 ---
 name: accessibility-reviewer
-description: Reviews LoveIQ pages and components for WCAG 2.1 AA problems: contrast, focus, labels, keyboard use, motion and the Safari/WebKit quirks this site has hit. Use after a UI change, or before a PR that touches features/**/ui or app/**/page.tsx.
+description: "Reviews LoveIQ pages and components for WCAG 2.1 AA problems: contrast, focus, labels, keyboard use, motion and the Safari/WebKit quirks this site has hit. Use after a UI change, or before a PR that touches features/**/ui or app/**/page.tsx."
 tools: Read, Glob, Grep, Bash
 ---
 

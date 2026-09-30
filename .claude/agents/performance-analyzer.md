@@ -1,6 +1,6 @@
 ---
 name: performance-analyzer
-description: Finds performance problems in LoveIQ pages and API routes: bundle size, rendering and hydration, images and fonts, caching, slow outbound calls. Use when a page is slow, or before shipping a heavy UI change.
+description: "Finds performance problems in LoveIQ pages and API routes: bundle size, rendering and hydration, images and fonts, caching, slow outbound calls. Use when a page is slow, or before shipping a heavy UI change."
 tools: Read, Glob, Grep, Bash
 ---
 

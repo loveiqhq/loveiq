@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Reviews changed LoveIQ code for correctness and the repo's conventions: App Router patterns, the API route order (CSRF, rate limit, Zod, logic), design tokens, landing section patterns. Use before opening a PR.
+description: "Reviews changed LoveIQ code for correctness and the repo's conventions: App Router patterns, the API route order (CSRF, rate limit, Zod, logic), design tokens, landing section patterns. Use before opening a PR."
 tools: Read, Glob, Grep, Bash
 ---
 

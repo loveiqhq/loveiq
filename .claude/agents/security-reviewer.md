@@ -1,6 +1,6 @@
 ---
 name: security-reviewer
-description: Checks LoveIQ API routes, proxy.ts and client code for security gaps: CSRF, rate limits, Zod validation, generic errors, secrets in client code, CSP. Use before a PR that touches app/api, proxy.ts, auth or dependencies.
+description: "Checks LoveIQ API routes, proxy.ts and client code for security gaps: CSRF, rate limits, Zod validation, generic errors, secrets in client code, CSP. Use before a PR that touches app/api, proxy.ts, auth or dependencies."
 tools: Read, Glob, Grep, Bash
 ---
 
@@ -28,7 +28,9 @@ You are a security-focused code reviewer for the LoveIQ marketing website (Next.
 ### Environment Variables
 
 - **Server-only secrets**: `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY` must never appear in client code
-- **Client-safe only**: Only `NEXT_PUBLIC_*` vars in client components and pages
+- **Client-safe only**: Only `NEXT_PUBLIC_*` vars in Client Components (`"use client"`).
+  Server Components, pages and routes may read server-only vars, but must never pass a
+  secret down to client code
 - **No hardcoded secrets**: No API keys, tokens, or passwords in source code
 
 ### Client Components (`features/**/ui/**/*.tsx`, `shared/ui/**/*.tsx`)

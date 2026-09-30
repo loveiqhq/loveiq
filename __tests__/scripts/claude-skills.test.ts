@@ -135,6 +135,22 @@ describe("the claude.ai skills upload", () => {
       "description is 1025 characters, over 1,024",
     ]);
     expect(skillProblems("a-b", "# no front matter\n")).toEqual(["SKILL.md has no front matter"]);
+    // YAML claude.ai cannot read, which a line-by-line match used to pass.
+    expect(skillProblems("a-b", skill('name: a-b\ndescription: "unterminated'))[0]).toMatch(
+      /^front matter is not valid YAML/
+    );
+    expect(skillProblems("a-b", skill("name: a-b\ndescription: use for: this"))[0]).toMatch(
+      /^front matter is not valid YAML/
+    );
+    // A quoted value is the text inside the quotes, as YAML means it.
+    expect(skillProblems("a-b", skill('name: "a-b"\ndescription: "fine"'))).toEqual([]);
+    expect(skillProblems("a-b", skill("name: a-b\ndescription: [a list]"))).toContain(
+      "description must be text"
+    );
+    // YAML reads 123 as a number, in a folder called "123" too.
+    expect(skillProblems("123", skill("name: 123\ndescription: ok"))).toContain(
+      "name must be text"
+    );
     expect(ALLOWED_KEYS.size).toBe(6);
   });
 });
