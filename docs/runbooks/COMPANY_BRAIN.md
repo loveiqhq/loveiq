@@ -146,15 +146,17 @@ a transcript. Filter on `surface` to tell the two apart.
 
 ### What feeds it
 
-| Source                                                                          | Where from                                                             | When                    |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs                                                                       | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| GA4, call notes, funnel numbers, Slack                                          | `/api/cron/brain-fast`                                                 | every 15 min            |
-| Notion (board + pages)                                                          | `/api/cron/brain-notion`                                               | hourly, at :41          |
-| Gmail (every mailbox on the domain)                                             | `/api/cron/brain-gmail`                                                | hourly, at :11          |
-| Search Console                                                                  | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
-| Shipped report copy, the chapter method, the glossary/survey/scoring vocabulary | `/api/cron/brain-fast`                                                 | every 15 min            |
-| Books on love, desire and sex (eleven, whole; searched only when asked for)     | `npm run brain:books` → `scripts/brain-books.ts`                       | by hand, once           |
+| Source                                                                                | Where from                                                             | When                    |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs                                                                             | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| GA4, call notes, funnel numbers, Slack                                                | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Notion (board + pages)                                                                | `/api/cron/brain-notion`                                               | hourly, at :41          |
+| Gmail (every mailbox on the domain)                                                   | `/api/cron/brain-gmail`                                                | hourly, at :11          |
+| Search Console                                                                        | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Shipped report copy, the chapter method, the glossary/survey/scoring vocabulary       | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Books on love, desire and sex (eleven, whole; searched only when asked for)           | `npm run brain:books` → `scripts/brain-books.ts`                       | by hand, once           |
+| Research citation cards, one per construct (`evidence`)                               | `/api/cron/brain-evidence`                                             | daily, 04:20 UTC        |
+| Open-access papers, whole (`paper`; CC BY and CC0 only; searched only when asked for) | `/api/cron/brain-papers`                                               | daily, 04:50 UTC        |
 
 Jira is **not** a source. Notion is the system of record for the team's work
 (decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
@@ -176,6 +178,19 @@ pages in the product's own vocabulary would otherwise crowd company answers out 
 semantic top-120 before any demotion applied. Every part says whose work it is. The
 three other books in that folder (leadership, habits, persuasion) stay out, and the
 Drive walk still skips all fourteen.
+
+Papers are a source, and opt-in for the same reason (decision 2026-09-30). `brain-papers`
+takes the day's slice of constructs (the same thirtieth of the glossary `brain-evidence`
+looks at), asks Europe PMC for their best open-access papers, and stores the full text of
+up to 12 new ones a run as `paper`, one part per 2,400 characters. **Only CC BY and CC0**
+(Eman, 2026-09-30): the search must say so AND the article's own license statement must,
+with no NC, ND or SA anywhere in it, or the paper is skipped. Only the abstract and the
+body are kept; the references, tables, figures and formulas are not, and a citation that
+names its source ("Smith et al., 2019") stays while a bare "[12]" goes. Every part opens by
+naming the paper, its authors and its license and saying it is not LoveIQ's claim, and the
+authors are filed as `meta.first_author`, never `meta.author`, which is matched against
+colleagues. A retracted paper is never stored. The run alerts #brain when every search
+fails or when it crashes, and records what it skipped and why in `cron_run`.
 
 A document that is rewritten SHORTER does not wait for the sweep: `upsertChunks`
 deletes the parts its new version no longer has in the same write (`leftoverParts`,

@@ -45,7 +45,7 @@ const SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
  * Europe PMC asks for a contact in the agent string so they can reach someone about a
  * misbehaving client rather than just blocking it.
  */
-const AGENT = "loveiq-brain/1.0 (+https://www.loveiq.org; hello@loveiq.org)";
+export const EUROPE_PMC_AGENT = "loveiq-brain/1.0 (+https://www.loveiq.org; hello@loveiq.org)";
 
 /**
  * Our field, in words that are UNAMBIGUOUS in it.
@@ -251,7 +251,7 @@ export async function searchEvidence(construct: string): Promise<EvidenceResult 
     `&format=json&pageSize=${PAPERS_PER_CONSTRUCT}&resultType=core`;
   try {
     const res = await fetchWithTimeout(url, {
-      headers: { "User-Agent": AGENT },
+      headers: { "User-Agent": EUROPE_PMC_AGENT },
       timeoutMs: 20_000,
     });
     if (!res.ok) {
@@ -263,11 +263,15 @@ export async function searchEvidence(construct: string): Promise<EvidenceResult 
       resultList?: { result?: unknown };
     };
     const hitCount = Number(json.hitCount);
-    const rows = Array.isArray(json.resultList?.result)
-      ? (json.resultList.result as Array<Record<string, unknown>>)
-      : [];
+    // A 200 without a count or a result list is a changed or broken API. Read as zero it
+    // would count as "the literature is thin" and alert nobody, so it is a failure.
+    if (!Number.isFinite(hitCount) || !Array.isArray(json.resultList?.result)) {
+      logger.warn({ construct }, "evidence: Europe PMC answered without a count or results");
+      return null;
+    }
+    const rows = json.resultList.result as Array<Record<string, unknown>>;
     return {
-      hitCount: Number.isFinite(hitCount) ? hitCount : 0,
+      hitCount,
       papers: rows.map(toPaper).filter((p): p is Paper => p !== null),
     };
   } catch (err) {

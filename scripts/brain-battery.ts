@@ -1020,6 +1020,23 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       noSource("book", 12)
     ),
     /**
+     * THE PAPERS ARE OPT-IN TOO (20260930210000), for the same reason, and both sides are
+     * asserted the same way. Named, the source must answer a question in its own field
+     * (it fails while brain-papers has loaded nothing, which is the signal); unnamed, a
+     * question on the papers' own topic must return none of them.
+     */
+    P(
+      "paper-named",
+      "what did studies find about sexual desire and emotional intimacy in couples",
+      topSource("paper", 3),
+      { sources: ["paper"] }
+    ),
+    P(
+      "paper-opt-in",
+      "what does the research say about sexual desire and emotional intimacy",
+      noSource("paper", 12)
+    ),
+    /**
      * THE SHIPPED COPY ADDED ON 2026-09-21, probed for the same reason the evidence
      * base is: a source with nothing asserting it can be demoted into invisibility and
      * the battery would score exactly the same. All three were measured absent before
