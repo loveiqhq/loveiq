@@ -9,21 +9,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * CVR per experiment" could only ever have shown the one landing test and
  * silently omitted five others.
  */
-const {
-  mockFetch,
-  mockVerify,
-  mockNotifySlack,
-  mockAddToSuppression,
-  mockIsEmailSuppressed,
-  mockWarn,
-} = vi.hoisted(() => ({
-  mockFetch: vi.fn(),
-  mockVerify: vi.fn(),
-  mockNotifySlack: vi.fn(),
-  mockAddToSuppression: vi.fn(),
-  mockIsEmailSuppressed: vi.fn(),
-  mockWarn: vi.fn(),
-}));
+const { mockFetch, mockVerify, mockNotifySlack, mockAddToSuppression, mockWarn } = vi.hoisted(
+  () => ({
+    mockFetch: vi.fn(),
+    mockVerify: vi.fn(),
+    mockNotifySlack: vi.fn(),
+    mockAddToSuppression: vi.fn(),
+    mockWarn: vi.fn(),
+  })
+);
 
 vi.mock("svix", () => ({
   Webhook: class {
@@ -46,7 +40,6 @@ vi.mock("@shared/observability/slack", () => ({
 }));
 vi.mock("@shared/emails/suppression", () => ({
   addToSuppression: (...args: unknown[]) => mockAddToSuppression(...args),
-  isEmailSuppressed: (...args: unknown[]) => mockIsEmailSuppressed(...args),
 }));
 
 import { POST } from "@/app/api/resend/webhook/route";
@@ -352,18 +345,13 @@ describe("resend webhook: a send Resend suppressed", () => {
     });
   });
 
-  it("records the address as undeliverable, without a Slack ping", async () => {
-    mockIsEmailSuppressed.mockResolvedValue(false);
+  it("records the address as undeliverable, only if absent, without a Slack ping", async () => {
     const res = await POST(request());
     expect(res.status).toBe(200);
-    expect(mockAddToSuppression).toHaveBeenCalledWith("fake@example.com", "hard_bounce");
+    // ifAbsent: an address already recorded as a complaint keeps that label.
+    expect(mockAddToSuppression).toHaveBeenCalledWith("fake@example.com", "hard_bounce", {
+      ifAbsent: true,
+    });
     expect(mockNotifySlack).not.toHaveBeenCalled();
-  });
-
-  it("leaves an address already recorded alone, so a complaint keeps its label", async () => {
-    mockIsEmailSuppressed.mockResolvedValue(true);
-    const res = await POST(request());
-    expect(res.status).toBe(200);
-    expect(mockAddToSuppression).not.toHaveBeenCalled();
   });
 });

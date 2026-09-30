@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { Redis } from "@upstash/redis";
-import { addToSuppression, isEmailSuppressed } from "@shared/emails/suppression";
+import { addToSuppression } from "@shared/emails/suppression";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
@@ -261,12 +261,10 @@ export async function POST(request: Request) {
     // Resend refused the send because the address is on its account-level
     // suppression list (an earlier bounce or complaint, some from before our
     // table existed). Without this our own senders kept retrying it. No Slack
-    // ping: Resend already blocked it, so there is nothing to act on. Skipped
-    // when already recorded, since the upsert would relabel a complaint.
-    if (!(await isEmailSuppressed(email))) {
-      logger.info({ email }, "Resend suppressed a send — suppressing email address");
-      await addToSuppression(email, "hard_bounce");
-    }
+    // ping: Resend already blocked it, so there is nothing to act on. Insert
+    // only if absent, so an address recorded as a complaint keeps that label.
+    logger.info({ email }, "Resend suppressed a send — suppressing email address");
+    await addToSuppression(email, "hard_bounce", { ifAbsent: true });
   } else if (payload.type === "email.failed") {
     // B3: Resend rejected the send before delivery attempt (different from
     // hard bounce). Rare. Often a misconfigured From address or invalid

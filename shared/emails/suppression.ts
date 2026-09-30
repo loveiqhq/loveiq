@@ -68,7 +68,9 @@ export async function addToSuppression(
   // insert upserts with `resolution=merge-duplicates` (ON CONFLICT DO UPDATE
   // over the columns sent), an omitted field never overwrites an existing one —
   // so a later bounce can't wipe the campaign recorded on an earlier unsubscribe.
-  opts?: { campaign?: string; channel?: "footer" | "one-click" }
+  // `ifAbsent` inserts only when the address has no row yet (ON CONFLICT DO
+  // NOTHING, in one statement), for a caller that must not relabel a reason.
+  opts?: { campaign?: string; channel?: "footer" | "one-click"; ifAbsent?: boolean }
 ): Promise<void> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -85,7 +87,7 @@ export async function addToSuppression(
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
         "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
+        Prefer: opts?.ifAbsent ? "resolution=ignore-duplicates" : "resolution=merge-duplicates",
       },
       body: JSON.stringify(row),
       timeoutMs: 5_000,
