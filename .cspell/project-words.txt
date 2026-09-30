@@ -148,3 +148,5 @@ Helgeson
 Neff
 RSES
 subscales
+Perel
+Nagoski
