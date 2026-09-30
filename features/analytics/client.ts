@@ -37,6 +37,11 @@ declare global {
     __loveiqSurveyVariant?: "white" | "dark" | null;
     /** Dev-only: tracks event_types we've already warned about for missing context. */
     __loveiqPersistSkipWarned?: Set<string>;
+    /**
+     * Set only by a persona walk's own browser (scripts/walkers/walk.ts). A visitor's page
+     * never has it, so for them `track()` is unchanged.
+     */
+    __loveiqEventTap?: (name: string, params: Record<string, unknown>) => void;
   }
 }
 
@@ -393,6 +398,15 @@ export const track = (name: string, params?: Record<string, unknown>) => {
   // for visitors who declined analytics while PostHog autocapture kept
   // recording them. Placed here rather than at the ~33 call sites so a new
   // trackX() helper is mirrored automatically and can never be forgotten.
+  //
+  // A persona walk listens on the same call, so the behaviour signals it checks are
+  // measured from exactly what PostHog is sent (features/ux-signals). Guarded: a listener
+  // must never be able to stop the event reaching PostHog.
+  try {
+    window.__loveiqEventTap?.(name, params ?? {});
+  } catch {
+    // The walk loses one event; the visitor loses nothing.
+  }
   posthog.capture(name, params);
 
   /**
