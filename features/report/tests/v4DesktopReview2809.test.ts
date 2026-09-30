@@ -309,14 +309,28 @@ describe("the science tiles run as a gallery on desktop", () => {
     // The column is the track: a size container, so a tile reads its width. Two tiles,
     // their two 12px gaps and half a third fill it. A tile is as wide as its question
     // box (183), the padding either side (14.752) and its 1px border: 212.504 of the
-    // phone's pixels and 2px. From 700 to 768 that would be under the 1.25x of 29.09,
-    // which the tiles keep there.
+    // phone's pixels and 2px. From 700 to about 800 that would be under the 1.25x of
+    // 29.09, which the tiles keep there. The unit is the tile's own, below the
+    // container it measures.
     const track = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__track");
     expect(track).toContain("container-type: inline-size");
     expect(track).toContain("gap: 12px");
-    expect(track).toContain(
+    expect(track).not.toContain("--rv3-sci-u");
+    expect(ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card")).toContain(
       "--rv3-sci-u: max(1.25px, calc(((100cqw - 24px) / 2.5 - 2px) / 212.504));"
     );
+  });
+
+  it("keeps 29.09's 1.25x tiles where container queries are missing", () => {
+    // There every var(--rv3-sci-u) length would be invalid and fall back to nothing:
+    // tiles without padding or height, icons at 0 (iPadOS 15 is 700px wide and more).
+    // After the tile's own rule, so it wins there on order.
+    const at = v3.indexOf("@supports not (container-type: inline-size) {");
+    expect(at).toBeGreaterThan(v3.indexOf(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {"));
+    const fallback = v3.slice(at);
+    const rule = fallback.slice(0, fallback.indexOf("}"));
+    expect(rule).toContain(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {");
+    expect(rule).toContain("--rv3-sci-u: 1.25px;");
   });
 
   it("scales every length in the tile with it, from the phone's 212 x 248", () => {

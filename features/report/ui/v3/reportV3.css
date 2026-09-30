@@ -8864,15 +8864,16 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
    * column, snapping as the phone's does, so a trackpad or a swipe still moves it; the
    * third tile is cut in half by the column's edge, as the archetype card's deck cuts
    * its next card. The track is a size container, so a tile reads the column: two
-   * tiles, their two gaps and half a third fill it. --rv3-sci-u is one of the phone
-   * tile's 212 x 248 pixels at that size, and every length inside the tile is a
-   * multiple of it, so each question breaks where it does on the phone. A tile is as
-   * wide as its question box (183), a hair past the padding either side (14.752) as on
-   * the phone, and its 1px border: 212.504 of those and 2px. From 700 to 768 that would
-   * be under the 1.25x of 29.09, which the tiles keep there. Lengths, not `zoom`: the
-   * pager measures the tiles, and engines still disagree on a zoomed box. */
+   * tiles, their two gaps and half a third fill it. --rv3-sci-u, the tile's own, below
+   * the container it measures, is one of the phone tile's 212 x 248 pixels at that
+   * size, and every length inside the tile is a multiple of it, so each question breaks
+   * where it does on the phone. A tile is as wide as its question box (183), a hair past
+   * the padding either side (14.752) as on the phone, and its 1px border: 212.504 of
+   * those and 2px. From 700 to about 800 that would be under the 1.25x of 29.09, which
+   * the tiles keep there; so do browsers without container queries (the end of this
+   * file). Lengths, not `zoom`: the pager measures the tiles, and engines still disagree
+   * on a zoomed box. */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__track {
-    --rv3-sci-u: max(1.25px, calc(((100cqw - 24px) / 2.5 - 2px) / 212.504));
     container-type: inline-size;
     display: flex;
     flex-wrap: nowrap;
@@ -8886,6 +8887,7 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     scroll-snap-type: x mandatory;
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
+    --rv3-sci-u: max(1.25px, calc(((100cqw - 24px) / 2.5 - 2px) / 212.504));
     border-radius: calc(var(--rv3-sci-u) * 18);
     flex: 0 0 calc(var(--rv3-sci-u) * 212);
     gap: calc(var(--rv3-sci-u) * 15);
@@ -9027,5 +9029,13 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:not([aria-disabled="true"]):hover {
     translate: none;
+  }
+}
+/* Without container queries every length the science tile reads off its column would
+ * be invalid, and fall back to nothing: no padding or height, icons at 0. There the
+ * tiles keep 29.09's 1.25x (iPadOS 15 is 700px wide and more). */
+@supports not (container-type: inline-size) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
+    --rv3-sci-u: 1.25px;
   }
 }

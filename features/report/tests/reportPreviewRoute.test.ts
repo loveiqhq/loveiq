@@ -13,7 +13,9 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
 const AB_PROBES = [
   "Low-energy, passive encounters",
   "Spontaneity and controlled unpredictability",
-  "A suggestive message on Wednesday",
+  // Past Common challenges' ramp paragraph, which fades in whole and is sent as written
+  // since 314:284 (29.09), as in report-handler.test.ts.
+  "common brakes is sex that feels predictable",
   "Respect brakes that are protecting something real.",
 ];
 
