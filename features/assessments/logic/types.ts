@@ -10,7 +10,14 @@
 
 /** Where an instrument sits in the Humangraph (Applied Psychometrics, "Mapping the human mind"). */
 export type HumangraphDimension =
-  "affect" | "anxiety" | "attachment" | "desire" | "meaning" | "regulation";
+  | "affect"
+  | "anxiety"
+  | "attachment"
+  | "desire"
+  | "meaning"
+  | "regulation"
+  /** How a person sees and treats themselves: self-esteem, self-compassion, the inner critic. */
+  | "self";
 
 /**
  * draft: being assembled; in-validation: with its validators; validated: signed off and
