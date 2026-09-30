@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS public.ux_walk_record (
   UNIQUE (run_id, walk)
 );
 
+-- migration-lint: ignore. A plain index, not CONCURRENTLY: the table is created empty just
+-- above, so there is nothing to lock, and CONCURRENTLY cannot run in this migration's
+-- transaction.
 CREATE INDEX IF NOT EXISTS ux_walk_record_walked_at_idx
   ON public.ux_walk_record (walked_at DESC);
 
