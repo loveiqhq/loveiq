@@ -28,12 +28,12 @@ import logger from "@shared/observability/logger";
 import { surveyQuestions } from "@/data/survey-data";
 
 /**
- * q_id -> a short human question, so a row can say "Q58 — What is your email?"
+ * q_id -> a short human question, so a line can say "Q58 (What is your email?)"
  * instead of "Q58". Without it the most valuable finding on the board is a
- * number with no subject. Truncated because the scoreboard is a fixed-width
- * table and one long question would push every other column sideways.
+ * number with no subject. Truncated so one long question cannot turn a
+ * one-line sentence into a paragraph.
  */
-export function surveyQuestionNames(maxLen = 30): Map<string, string> {
+export function surveyQuestionNames(maxLen = 60): Map<string, string> {
   const m = new Map<string, string>();
   for (const q of surveyQuestions) {
     if (!q.qId || !q.question) continue;
@@ -53,6 +53,12 @@ export interface FrictionSignal {
   where?: string;
   /** How many observations the number rests on. */
   n: number;
+  /**
+   * The signal as one plain sentence, for the daily message: "22% of survey
+   * sessions stop at Q58 (What is your email?)". Built next to the raw numbers,
+   * so it never has to be parsed back out of `value`.
+   */
+  sentence?: string;
   /**
    * Status. `quiet` is the honest default: weekly volume at the later
    * questions is 50-110 people, so most of these will not move meaningfully in
@@ -124,6 +130,12 @@ function qLabel(index: number, qId: string, names: Map<string, string>): string 
   return name ? `Q${index + 1} — ${name}` : `Q${index + 1}`;
 }
 
+/** The same question for a sentence: "Q58 (What is your email?)". */
+function qPlain(index: number, qId: string, names: Map<string, string>): string {
+  const name = names.get(qId);
+  return name ? `Q${index + 1} (${name})` : `Q${index + 1}`;
+}
+
 /** Seconds, to one decimal under a minute and whole above it. */
 function secs(ms: number): string {
   const s = ms / 1000;
@@ -149,6 +161,7 @@ export function buildSurveySignals(
   const FLOOR = 20;
   const ranked = qs.filter((q) => q.visits >= FLOOR);
   const label = (q: FrictionQuestion) => qLabel(q.question_index, q.q_id, questionNames);
+  const plain = (q: FrictionQuestion) => qPlain(q.question_index, q.q_id, questionNames);
 
   // --- Drop-off / exit point -------------------------------------------------
   const worstDrop = ranked
@@ -175,6 +188,7 @@ export function buildSurveySignals(
       where: label(worstDrop.q),
       n: worstDrop.q.visits,
       status: worstDrop.pct >= 10 ? "watch" : "quiet",
+      sentence: `${Math.round(worstDrop.pct)}% of survey sessions stop at ${plain(worstDrop.q)}.`,
     });
   }
 
@@ -190,6 +204,7 @@ export function buildSurveySignals(
       where: label(worstBack.q),
       n: worstBack.q.visits,
       status: worstBack.pct >= 10 ? "watch" : "quiet",
+      sentence: `${Math.round(worstBack.pct)}% of people go back a step at ${plain(worstBack.q)}.`,
     });
   }
 
@@ -207,6 +222,7 @@ export function buildSurveySignals(
       where: label(slowest),
       n: slowest.timed,
       status: ratio >= 2 ? "watch" : "quiet",
+      sentence: `People take ${secs(slowest.median_ms)} on ${plain(slowest)}, ${ratio.toFixed(1)}x the usual time.`,
     });
   }
   if (typical > 0) {
@@ -340,6 +356,7 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
     value: `${toEnd.toFixed(0)}%`,
     n: viewers,
     status: toEnd < 20 ? "watch" : "quiet",
+    sentence: `Only ${toEnd.toFixed(0)}% read to the end of their report.`,
   });
 
   // --- Value discovery before paywall ---------------------------------------
@@ -352,6 +369,7 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
       value: `${discovered.toFixed(0)}%`,
       n: snap.paywall_opened,
       status: discovered < 50 ? "watch" : "quiet",
+      sentence: `Only ${discovered.toFixed(0)}% of people at the paywall had read half their report first.`,
     });
   }
 
@@ -365,6 +383,8 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
       where: snap.dwell_median_ms < 5000 ? "immediate rejection" : "genuine consideration",
       n: snap.dwell_n,
       status: snap.dwell_median_ms < 5000 ? "watch" : "quiet",
+      // The median, said as what it means: half of them left faster than this.
+      sentence: `Half of the people who see the paywall leave it within ${dwell(snap.dwell_median_ms)}.`,
     });
   }
 
@@ -411,38 +431,24 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   return out;
 }
 
-/** Everything the scoreboard can say today, plus what it cannot. */
+/**
+ * Everything the scoreboard can say today.
+ *
+ * Three of Marcus's 22 signals are not on it, and cannot be from here: dead
+ * clicks (PostHog autocapture only; nothing writes one to Postgres), form errors
+ * (wired 2026-09-15, but persisting needs a submission id and nothing has been
+ * submitted mid-survey) and trust seeking (the report footer links to the Trust
+ * Center, privacy policy and medical disclaimer, and those visits reach PostHog
+ * as page views, never a row here). The daily message used to list them under
+ * its table every morning; it now names only what needs a look, so they live
+ * here instead.
+ */
 export interface FrictionReport {
   signals: FrictionSignal[];
   /** How many raw rows the aggregate actually saw. Printed so a truncation
    *  like the PostgREST one can never hide again. */
   rowsRead: number;
-  /** Signals we know we are blind to, named rather than omitted. */
-  blind: string[];
 }
-
-/**
- * Signals the scoreboard cannot see, printed under its table.
- *
- * Named, never silently dropped: a scoreboard that omits its blind spots reads as
- * complete. Plain names only, because they are printed in the Slack message; why
- * each one is missing lives in these comments. All three reach PostHog and never
- * a row here.
- */
-export const FRICTION_BLIND_SPOTS: string[] = [
-  // PostHog autocapture only; nothing writes a dead click to Postgres.
-  "dead clicks",
-  // Wired 2026-09-15 after sitting unused; it reaches PostHog but cannot reach a
-  // row here, because persisting needs a submission id and during the survey
-  // nothing has been submitted yet.
-  "form errors",
-  // Trust seeking. A real gap, not an absent interaction. The report renders the
-  // site footer (FooterSection in ReportExperienceV1 and ReportPage), so a reader
-  // CAN go looking for trust: Trust Center, privacy policy, medical disclaimer.
-  // Those visits reach PostHog as page views and never a row here. (The guarantee
-  // is static text and Trustpilot is off, so the footer is the only route.)
-  "visits to the trust pages",
-];
 
 export async function buildFrictionReport(
   sinceIso: string,
@@ -460,85 +466,43 @@ export async function buildFrictionReport(
       ...(report ? buildReportSignals(report) : []),
     ],
     rowsRead: snap.total_rows + (report?.total_rows ?? 0),
-    blind: FRICTION_BLIND_SPOTS,
   };
 }
 
-/**
- * The scoreboard, as ONE Slack section.
- *
- * Marcus asked for all 22 signals, and this is a 15-row table rather than 15
- * charts — which is deliberate. `funnel-digest` was switched off for being a
- * rail of pictures with no decision attached, and 15 pictures would be the same
- * mistake with a new name. Numbers read fine as rows; they read badly as
- * pictures.
- *
- * Heading, headline and table go in ONE block because Slack inserts a paragraph
- * gap between two, which the funnel table above already learned the hard way.
- * The dot column is first because a non-technical reader scans shape before
- * digits: ● is worth a look, ○ is normal.
- */
-/**
- * Widest a scoreboard row may be. Slack's fenced block is monospace but not
- * scrollable on mobile, so anything wider folds.
- */
-export const TABLE_W = 78;
+/** The most the daily message lists. Past that it is a table again. */
+export const WATCH_LIST_MAX = 5;
 
-export function buildFrictionSection(report: FrictionReport, windowDays: number): string {
+/**
+ * Where people get stuck, as ONE Slack section of plain sentences.
+ *
+ * It used to be the whole scoreboard as an 11-row monospace table, most rows
+ * reading "normal" every day, under a footnote about what it could not measure.
+ * Mark (2026-09-21) on the message's small print: "Not easy to consume at all.
+ * Take out or simplify heavily". The Design Agreements approved on 2026-09-29
+ * say the same in general: remove anything that adds no new meaning. So the
+ * message now says only what needs a look, in words, and counts the rest.
+ *
+ * Heading and lines go in ONE block because Slack inserts a paragraph gap
+ * between two.
+ */
+export function buildFrictionWatchList(report: FrictionReport, windowDays: number): string {
+  const heading = "*Where people get stuck*";
   const watch = report.signals.filter((s) => s.status === "watch");
-  const worst = watch[0];
-
-  const headline = worst
-    ? `  ·  worst: ${worst.where ? `${worst.where} — ` : ""}${worst.value}`
-    : "  ·  nothing above its threshold";
-
-  /**
-   * A fenced block, not mrkdwn rows. Slack renders normal text in a
-   * proportional font, so padded columns do not line up in it — the first
-   * version produced "Value discovery before paywall20%", because that label is
-   * exactly the pad width and proportional spacing hid the rest. Monospace is
-   * the only way 15 rows read as a table.
-   *
-   * Widths come from the data, not from a guess, so the longest label sets the
-   * column and nothing collides.
-   */
-  const labelW = Math.max(...report.signals.map((s) => s.label.length)) + 2;
-  const valueW = Math.max(...report.signals.map((s) => s.value.length)) + 2;
-
-  /**
-   * Slack wraps a fenced block past roughly 80 columns on a phone, and a
-   * wrapped fixed-width table is worse than no table — every row after the
-   * first folds into the next one's column. The first version ran to 102
-   * columns because all three widths were taken from the data with no ceiling.
-   *
-   * The two data-driven columns stay data-driven; the free-text "where" column
-   * absorbs whatever is left. It is the only one that can be shortened without
-   * losing a number.
-   */
-  const whereW = Math.max(0, TABLE_W - 2 - labelW - valueW);
-
-  const rows = report.signals.map((s) => {
-    const dot = s.status === "watch" ? "●" : "·";
-    const where = !s.where
-      ? ""
-      : s.where.length > whereW
-        ? `${s.where.slice(0, Math.max(1, whereW - 1))}…`
-        : s.where;
-    return `${dot} ${s.label.padEnd(labelW)}${s.value.padEnd(valueW)}${where}`.trimEnd();
-  });
-
+  if (watch.length === 0) {
+    return `${heading}\nNothing stands out in the last ${windowDays} days.`;
+  }
+  const shown = watch.slice(0, WATCH_LIST_MAX);
+  // Flagged past the cap are NOT normal, so they are counted as what they are.
+  const moreFlagged = watch.length - shown.length;
+  const normal = report.signals.length - watch.length;
   return [
-    `*Inside the funnel — ${windowDays} days*${headline}`,
-    "```",
-    rows.join("\n"),
-    "```",
-    // Blind spots are named. A board that quietly omits what it cannot see
-    // reads as complete, and this one cannot see the largest friction signal
-    // we collect.
-    report.blind.length > 0
-      ? `_Not in this table: ${report.blind.join(", ")}. PostHog has them._`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+    heading,
+    ...shown.map((s) => `• ${s.sentence ?? `${s.label}: ${s.value}`}`),
+    ...(moreFlagged > 0
+      ? [`_${moreFlagged} more need${moreFlagged === 1 ? "s" : ""} a look._`]
+      : []),
+    ...(normal > 0
+      ? [`_The other ${normal} signal${normal === 1 ? " looks" : "s look"} normal._`]
+      : []),
+  ].join("\n");
 }

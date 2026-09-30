@@ -206,6 +206,42 @@ function blockText(blocks: SlackBlock[]): string {
   return JSON.stringify(blocks);
 }
 
+const isFunnelChart = (b: SlackBlock) =>
+  String((b as { image_url?: string }).image_url ?? "").includes("/digest-image/funnel-steps");
+
+/** Every image except the funnel chart, which is in every message with a funnel. */
+function trendImages(blocks: SlackBlock[]): SlackBlock[] {
+  return blocks.filter((b) => (b as { type?: string }).type === "image" && !isFunnelChart(b));
+}
+
+interface FunnelChartPayload {
+  kind: string;
+  title: string;
+  windowLabel: string;
+  steps: Array<{ label: string; count: number; pct: number | null }>;
+  worst: number;
+}
+
+/** The funnel chart's signed payload, decoded: what the picture will draw. */
+function funnelChart(blocks: SlackBlock[]): FunnelChartPayload | undefined {
+  const img = blocks.find(isFunnelChart) as { image_url: string } | undefined;
+  if (!img) return undefined;
+  const d = new URL(img.image_url).searchParams.get("d")!;
+  return JSON.parse(Buffer.from(d, "base64").toString("utf8")) as FunnelChartPayload;
+}
+
+/** The funnel's caption: its heading, the named drop and any caveat. */
+function funnelCaption(blocks: SlackBlock[]): string | undefined {
+  return blocks
+    .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+    .find((t) => t.includes("*The funnel, last"));
+}
+
+/** The funnel chart's alt text, which lists every step with its count and share. */
+function funnelAlt(blocks: SlackBlock[]): string {
+  return String((blocks.find(isFunnelChart) as { alt_text?: string } | undefined)?.alt_text ?? "");
+}
+
 /** Every signed chart payload in a message whose two legends name landing arms. */
 function landingChartPayloads(blocks: SlackBlock[]): Array<{
   legendFirst?: string;
@@ -378,8 +414,7 @@ describe("conversion-digest handler", () => {
 
   it("embeds a signed chart URL for the arm comparison", async () => {
     const blocks = await landingLiveBlocks();
-    const image = blocks.find((b) => (b as { type?: string }).type === "image") as
-      { image_url?: string } | undefined;
+    const image = trendImages(blocks)[0] as { image_url?: string } | undefined;
     expect(image?.image_url).toMatch(
       /^https:\/\/www\.loveiq\.org\/api\/admin\/digest-image\/conversion-by-arm\?d=[\w-]+&s=[\w-]+$/
     );
@@ -476,7 +511,7 @@ describe("conversion-digest handler", () => {
     // "survived four wizard slides plus consent" for the other. Until the
     // instrumentation is symmetric the chart must not read as a verdict.
     const blocks = await landingLiveBlocks();
-    const images = blocks.filter((b) => (b as { type?: string }).type === "image");
+    const images = trendImages(blocks);
     // One: reached-survey. The survey-theme chart went with the concluded
     // experiment (2026-08-25), and the landing axis's own purchases chart was
     // removed earlier — the per-axis section is the only place landing is charted.
@@ -526,8 +561,8 @@ describe("conversion-digest handler", () => {
     // No images left at all once this source is the one that failed: the fixture's
     // only other chart was the survey theme's, which retired with the experiment.
     // The rest of the digest must still ship — that is what this asserts.
-    expect(blockText(arg.blocks)).toContain("*The funnel");
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
+    expect(funnelChart(arg.blocks), "the funnel still ships").toBeDefined();
+    expect(trendImages(arg.blocks)).toHaveLength(0);
   });
 
   it("says nothing at all about the reached-survey chart when it has no data", async () => {
@@ -544,7 +579,7 @@ describe("conversion-digest handler", () => {
     expect(flat).not.toContain("arm-comparable");
     // The rest of the digest still ships — one missing source takes nothing else.
     expect(flat).toContain("*The tests*");
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
+    expect(trendImages(arg.blocks)).toHaveLength(0);
   });
 
   it("gaps the site-wide trend's warm-up instead of plotting a partial window", () => {
@@ -612,17 +647,16 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnelBlock = arg.blocks.find((b) => JSON.stringify(b).includes("Visits to the site")) as
-      { text: { text: string } } | undefined;
-    expect(funnelBlock).toBeDefined();
-    const text = funnelBlock!.text.text;
-
-    expect(text).toContain("<0.1%");
-    // And never a bare 0% on a row whose count is not zero.
-    for (const row of text.split("\n").filter((l) => l.startsWith("`"))) {
-      const count = Number(row.replace(/`/g, "").trim().split(/\s+/)[0]);
-      if (count > 0) expect(row, `bare 0% beside ${count}`).not.toMatch(/\s0%/);
-    }
+    const checkout = funnelChart(arg.blocks)!.steps.find((s) => s.label === "Checkout started")!;
+    expect(checkout.count).toBe(5);
+    // The picture gets the real share, not a rounded zero; its renderer prints
+    // anything under 0.05 as "<0.1%" (digest-image-funnel.test.ts).
+    expect(checkout.pct!).toBeGreaterThan(0);
+    expect(checkout.pct!).toBeLessThan(0.05);
+    // And the words beside it say the same.
+    const alt = funnelAlt(arg.blocks);
+    expect(alt).toContain("Checkout started 5 (<0.1% of the step above)");
+    expect(alt, "a bare 0% beside a real count").not.toMatch(/ [1-9][\d,]* \(0% /);
   });
 
   it("reads in plain words, with no engineering fine print", async () => {
@@ -655,7 +689,7 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
 
-    expect(flat).toContain("Visits to the site");
+    expect(funnelCaption(arg.blocks)).toContain("Biggest drop: of ");
     expect(flat).toContain("*Visits that reach the survey*");
     expect(flat).toContain("Break-even");
     expect(flat).toContain("Landing page test concluded");
@@ -664,6 +698,68 @@ describe("conversion-digest handler", () => {
     for (const jargon of ["visitor-days", "visit-days", "no end date", "trailing", "per-arm"]) {
       expect(flat, `"${jargon}" is back in the daily message`).not.toContain(jargon);
     }
+  });
+
+  it("draws the funnel as a picture, in Mark's words, red on the drop it names", async () => {
+    /**
+     * 2026-09-16 sync: Mark's step order and names, a white background, one
+     * percentage that means the same thing on every row. The table it replaces
+     * was monospace text under a definitions line nobody could read.
+     */
+    mockFetchFunnelCvrSparklines.mockResolvedValue({
+      days: Array.from({ length: 10 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
+        visitors: 400,
+        starts: 90,
+      })),
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const chart = funnelChart(arg.blocks);
+    expect(chart, "the funnel chart").toBeDefined();
+    expect(chart!.kind).toBe("funnel-steps");
+    expect(chart!.title).toBe("The funnel");
+    expect(chart!.windowLabel).toBe("30 days to 23 Aug");
+    expect(chart!.steps.map((s) => s.label)).toEqual([
+      "Visits",
+      "Survey started",
+      "Survey completed",
+      "Report opened",
+      "Checkout started",
+      "Report unlocked",
+    ]);
+
+    // The red bar is the step the headline names, both counts in the sentence.
+    const worst = chart!.steps[chart!.worst]!;
+    const above = chart!.steps[chart!.worst - 1]!;
+    const caption = funnelCaption(arg.blocks)!;
+    expect(caption).toContain(`Biggest drop: of ${above.count.toLocaleString("en-US")} who`);
+    expect(caption).toContain(` ${worst.count.toLocaleString("en-US")} `);
+    // The first step is never the named drop: it is the largest by construction.
+    expect(chart!.worst).toBeGreaterThan(1);
+
+    // Caption above the picture, and no table left in it.
+    const at = arg.blocks.findIndex((b) => JSON.stringify(b).includes("*The funnel, last"));
+    expect(isFunnelChart(arg.blocks[at + 1]!)).toBe(true);
+    expect(caption).not.toContain("`");
+  });
+
+  it("falls back to the table when the picture cannot be made", async () => {
+    // A missing site URL means no signed chart. The numbers must survive it.
+    const saved = process.env.NEXT_PUBLIC_SITE_URL;
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+    try {
+      await GET(request());
+    } finally {
+      process.env.NEXT_PUBLIC_SITE_URL = saved;
+    }
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(funnelChart(arg.blocks)).toBeUndefined();
+    const caption = funnelCaption(arg.blocks)!;
+    expect(caption).toContain("Biggest drop:");
+    const rows = caption.split("\n").filter((l) => l.startsWith("`"));
+    expect(rows.length).toBeGreaterThan(3);
+    expect(rows[0]).toContain("Visits");
   });
 
   it("prints a quiet day's zero with no dash beside it", async () => {
@@ -704,23 +800,13 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    /**
-     * Scoped to the funnel BLOCK, not the whole message. Searching the flattened
-     * text found "Finished the survey" in the definition line above the numbers and
-     * compared positions across two different blocks.
-     */
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"));
-    expect(funnel, "the funnel block must be in the message at all").toBeDefined();
-    expect(funnel!).toContain("Started the survey");
+    // Scoped to the funnel's own steps, not the whole message, so a step name in
+    // a headline or a caption cannot stand in for the row.
+    const labels = funnelChart(arg.blocks)?.steps.map((s) => s.label) ?? [];
+    expect(labels, "the funnel must be in the message at all").toContain("Survey started");
     // Between the two rows it was asked to sit between, not appended somewhere.
-    expect(funnel!.indexOf("Visits to the site")).toBeLessThan(
-      funnel!.indexOf("Started the survey")
-    );
-    expect(funnel!.indexOf("Started the survey")).toBeLessThan(
-      funnel!.indexOf("Finished the survey")
-    );
+    expect(labels.indexOf("Visits")).toBeLessThan(labels.indexOf("Survey started"));
+    expect(labels.indexOf("Survey started")).toBeLessThan(labels.indexOf("Survey completed"));
   });
 
   it("draws each landing arm in ITS OWN colour, in every chart of one message", async () => {
@@ -854,18 +940,11 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"));
-    expect(funnel, "the funnel block must be in the message at all").toBeDefined();
-    expect(funnel!).toContain("Reached question 30");
+    const labels = funnelChart(arg.blocks)?.steps.map((s) => s.label) ?? [];
+    expect(labels, "the funnel must be in the message at all").toContain("Midway (question 30)");
     // Between the two rows it belongs between, not appended somewhere.
-    expect(funnel!.indexOf("Started the survey")).toBeLessThan(
-      funnel!.indexOf("Reached question 30")
-    );
-    expect(funnel!.indexOf("Reached question 30")).toBeLessThan(
-      funnel!.indexOf("Finished the survey")
-    );
+    expect(labels.indexOf("Survey started")).toBeLessThan(labels.indexOf("Midway (question 30)"));
+    expect(labels.indexOf("Midway (question 30)")).toBeLessThan(labels.indexOf("Survey completed"));
   });
 
   it("omits the midway row entirely when the RPC is unavailable", async () => {
@@ -893,11 +972,10 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
-    expect(flat).not.toContain("Reached question");
+    const steps = funnelChart(arg.blocks)!.steps;
+    expect(steps.some((s) => s.label.startsWith("Midway"))).toBe(false);
     // And the finisher count was NOT dragged down to 3 by a clamp.
-    expect(flat).toContain("Finished the survey");
-    expect(flat).not.toMatch(/`\s*3\s+[\d.<%—]+\s+[\d.<%—]+`\s+Finished the survey/);
+    expect(steps.find((s) => s.label === "Survey completed")!.count).toBeGreaterThan(3);
   });
 
   it("splits midway progress by landing page once both arms have drafts", async () => {
@@ -1104,7 +1182,7 @@ describe("conversion-digest handler", () => {
       );
     expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
     // The whole-population row is unaffected and still present.
-    expect(flat).toContain("Reached question 30");
+    expect(flat).toContain("Midway (question 30)");
   });
 
   it("shows a real over-100% step instead of clamping it to 100", async () => {
@@ -1124,13 +1202,10 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"));
-    expect(funnel).toBeDefined();
-    const paidRow = funnel!.split("\n").find((l) => l.includes("ever unlocked it"))!;
-    expect(paidRow).toContain("120%");
-    expect(paidRow).not.toMatch(/\s100%\s/);
+    const unlocked = funnelChart(arg.blocks)!.steps.find((s) => s.label === "Report unlocked")!;
+    // Sent uncapped, so the picture can say 120%; the renderer only stops the bar.
+    expect(unlocked.pct).toBeCloseTo(120, 5);
+    expect(funnelAlt(arg.blocks)).toContain("Report unlocked 6 (120% of the step above)");
   });
 
   it("prints an em dash, not <0.1%, when the step before is zero", async () => {
@@ -1148,12 +1223,11 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"));
-    const paidRow = funnel!.split("\n").find((l) => l.includes("ever unlocked it"))!;
-    expect(paidRow).toContain("—");
-    expect(paidRow).not.toContain("<0.1%");
+    const unlocked = funnelChart(arg.blocks)!.steps.find((s) => s.label === "Report unlocked")!;
+    // No share of nothing: a blank in the picture, a dash in the words.
+    expect(unlocked.pct).toBeNull();
+    expect(funnelAlt(arg.blocks)).toContain("Report unlocked 1 (— of the step above)");
+    expect(funnelAlt(arg.blocks)).not.toContain("Report unlocked 1 (<0.1%");
   });
 
   /**
@@ -1245,8 +1319,8 @@ describe("conversion-digest handler", () => {
     // Window is 30 Berlin days ending 2026-09-14, so a signal that started on
     // the 5th covers 9 of them.
     const fired = await noteFrom("2026-09-05");
-    expect(fired).toContain("The paywall row covers 9 days, not 30");
-    expect(fired).toContain("that signal only started on 2026-09-05");
+    expect(fired).toContain("The paywall step covers 9 days, not 30");
+    expect(fired).toContain("we only started counting it on 2026-09-05");
 
     // Self-expiring: once the instrument predates the window there is nothing to
     // caveat, and the line must disappear rather than become furniture. This is
@@ -1270,27 +1344,14 @@ describe("conversion-digest handler", () => {
     mockFetchPaywallHits.mockResolvedValue({ hits: 300, firstRowDay: "2026-09-05" });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"));
-    expect(funnel, "the funnel block must be in the message").toBeDefined();
-    /**
-     * Positions compared among the ROWS, not across the whole block.
-     * `indexOf` on the block finds these step names in the HEADLINE first —
-     * "biggest drop hit the paywall → started checkout" — and compares two
-     * offsets that are not rows at all. The sibling test above this file already
-     * documents the same trap one level up, where a step name in the definition
-     * line was compared against one in the table.
-     */
-    const rowNames = funnel!
-      .split("\n")
-      .filter((l) => l.startsWith("`"))
-      .map((l) => l.replace(/^`[^`]*`\s*/, ""));
+    // Positions compared among the funnel's STEPS, not across a text block, where
+    // the headline names steps too and an indexOf would compare the wrong offsets.
+    const rowNames = funnelChart(arg.blocks)!.steps.map((s) => s.label);
     expect(rowNames.length).toBeGreaterThan(3);
-    const at = (name: string) => rowNames.findIndex((r) => r.includes(name));
-    expect(at("hit the paywall"), "the paywall row must exist").toBeGreaterThan(-1);
-    expect(at("opened their report")).toBeLessThan(at("hit the paywall"));
-    expect(at("hit the paywall")).toBeLessThan(at("started checkout"));
+    const at = (name: string) => rowNames.indexOf(name);
+    expect(at("Paywall reached"), "the paywall row must exist").toBeGreaterThan(-1);
+    expect(at("Report opened")).toBeLessThan(at("Paywall reached"));
+    expect(at("Paywall reached")).toBeLessThan(at("Checkout started"));
   });
 
   it("omits the paywall row rather than printing a zero", async () => {
@@ -1326,15 +1387,12 @@ describe("conversion-digest handler", () => {
     mockFetchPaywallHits.mockResolvedValue({ hits: 106, firstRowDay: "2026-09-05" });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"))!;
-    const paywallRow = funnel.split("\n").find((l) => l.includes("hit the paywall"))!;
-    // The count is the one we were given — not clamped to the row above.
-    expect(paywallRow).toMatch(/`\s*106\s/);
+    const paywallStep = funnelChart(arg.blocks)!.steps.find((s) => s.label === "Paywall reached")!;
+    // The count is the one we were given, not clamped to the row above.
+    expect(paywallStep.count).toBe(106);
     // And its step share is a real fraction, not a clamped 100%.
-    expect(paywallRow).not.toContain("100%");
-    expect(paywallRow).toContain("25.7%");
+    expect(paywallStep.pct).toBeCloseTo((106 / 412) * 100, 5);
+    expect(funnelAlt(arg.blocks)).toContain("Paywall reached 106 (25.7% of the step above)");
   });
 
   it("omits the paywall row when it exceeds report opens, rather than clamping it", async () => {
@@ -1364,21 +1422,15 @@ describe("conversion-digest handler", () => {
     mockFetchPaywallHits.mockResolvedValue({ hits: 500, firstRowDay: "2026-09-05" });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"))!;
-
-    expect(funnel).not.toContain("hit the paywall");
-    // And above all: no row BELOW the first claims a clamped 100%. The first row
-    // is "Visits to the site", legitimately 100% of all visits — every row under
-    // it reaching 100% would mean nobody was lost at that step.
-    const rows = funnel.split("\n").filter((l) => l.startsWith("`"));
-    expect(rows.length).toBeGreaterThan(3);
-    expect(rows.slice(1).filter((r) => r.includes("100%"))).toHaveLength(0);
+    const steps = funnelChart(arg.blocks)!.steps;
+    expect(steps.map((s) => s.label)).not.toContain("Paywall reached");
+    // And above all: no step below the first claims a clamped 100%, which would
+    // mean nobody was lost at that step.
+    expect(steps.length).toBeGreaterThan(3);
+    expect(steps.slice(1).filter((s) => s.pct === 100)).toHaveLength(0);
     // The rest of the funnel is untouched and still monotonic.
-    const counts = rows.map((l) => parseInt(l.replace(/^`\s*/, ""), 10));
-    for (let i = 1; i < counts.length; i += 1) {
-      expect(counts[i]!).toBeLessThanOrEqual(counts[i - 1]!);
+    for (let i = 1; i < steps.length; i += 1) {
+      expect(steps[i]!.count).toBeLessThanOrEqual(steps[i - 1]!.count);
     }
   });
 
@@ -1403,8 +1455,8 @@ describe("conversion-digest handler", () => {
      * from this fixture — an indexOf of -1 would have made the comparison pass
      * or fail for the wrong reason.
      */
-    expect(flat.indexOf("The funnel —")).toBeGreaterThan(-1);
-    expect(flat.indexOf("The funnel —")).toBeLessThan(flat.indexOf("Break-even"));
+    expect(flat.indexOf("*The funnel, last")).toBeGreaterThan(-1);
+    expect(flat.indexOf("*The funnel, last")).toBeLessThan(flat.indexOf("Break-even"));
   });
 
   it("omits the section entirely when the figures are unavailable", async () => {
@@ -1426,25 +1478,26 @@ describe("conversion-digest handler", () => {
      */
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnelBlock = arg.blocks.find((b) => JSON.stringify(b).includes("Visits to the site")) as
-      { text: { text: string } } | undefined;
-    expect(funnelBlock, "the funnel block").toBeDefined();
-    const text = funnelBlock!.text.text;
-
-    expect(text).toContain("% of the step above them");
-    expect(text, "the second convention is gone").not.toContain("% of all visits");
-
-    // Every data row carries exactly one percentage in its number columns.
-    const dataRows = text.split("\n").filter((l) => l.startsWith("`"));
-    expect(dataRows.length, "the funnel rows").toBeGreaterThan(2);
-    for (const row of dataRows) {
-      const numbers = row.slice(0, row.lastIndexOf("`") + 1);
-      expect((numbers.match(/%/g) ?? []).length, `one percentage in: ${row}`).toBeLessThanOrEqual(
-        1
-      );
+    const chart = funnelChart(arg.blocks);
+    expect(chart, "the funnel chart").toBeDefined();
+    expect(chart!.steps.length, "the funnel steps").toBeGreaterThan(2);
+    // Every step carries ONE share, of the step above; the top step has nothing
+    // above it, so none rather than a 100%.
+    expect(chart!.steps[0]!.pct).toBeNull();
+    for (const step of chart!.steps.slice(1)) {
+      expect(Object.keys(step).sort(), `one percentage on: ${step.label}`).toEqual([
+        "count",
+        "label",
+        "pct",
+      ]);
     }
-    // The top row has no predecessor, so it shows a dash rather than 100%.
-    expect(dataRows[0]).toContain("—");
+    // And the words name it, once per step, with the second convention gone.
+    const alt = funnelAlt(arg.blocks);
+    expect((alt.match(/of the step above/g) ?? []).length).toBe(chart!.steps.length - 1);
+    expect(alt, "the second convention is gone").not.toContain("of all visits");
+    expect(funnelCaption(arg.blocks), "the second convention is gone").not.toContain(
+      "of all visits"
+    );
   });
 
   it("draws the site-wide survey-reach trend through the AUDITED renderer", async () => {
@@ -1550,8 +1603,8 @@ describe("conversion-digest handler", () => {
     expect(text).toContain("80 visit-days → 13 started the survey");
     expect(text).toContain("64 visit-days → 10 started the survey");
     expect(text).toContain("Not a like-for-like comparison");
-    // No image while it cannot honestly draw one.
-    expect(blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
+    // No trend image while it cannot honestly draw one.
+    expect(trendImages(blocks)).toHaveLength(0);
   });
 
   it("puts a too-young test's numbers in a full-size section, not a footnote", async () => {
@@ -1704,11 +1757,15 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { text: string; blocks: SlackBlock[] };
     const blockTexts = arg.blocks.map((b) => JSON.stringify(b));
 
-    // The funnel counts UNLOCKS and says so. It must not say "paid" at all.
-    const funnelBlock = blockTexts.find((t) => t.includes("Visits to the site"))!;
-    expect(funnelBlock, "the funnel block").toBeDefined();
-    expect(funnelBlock).toContain("ever unlocked it");
-    expect(funnelBlock).not.toMatch(/\bpaid\b/i);
+    // The funnel counts UNLOCKS and says so. It must not say "paid" at all, in
+    // its steps, its caption or the words behind its picture.
+    const funnelWords = [
+      ...funnelChart(arg.blocks)!.steps.map((s) => s.label),
+      funnelCaption(arg.blocks) ?? "",
+      funnelAlt(arg.blocks),
+    ].join("\n");
+    expect(funnelWords).toContain("Report unlocked");
+    expect(funnelWords).not.toMatch(/\bpaid\b/i);
 
     // Yesterday's "Paid" counts SALES, so it agrees with the Revenue beside it.
     const fieldsBlock = blockTexts.find((t) => t.includes("Finished survey"))!;
@@ -1726,7 +1783,7 @@ describe("conversion-digest handler", () => {
     // The notification preview gets no surrounding context, so it must be
     // unambiguous on its own.
     expect(arg.text).toContain("1 paid");
-    expect(arg.text).toContain("ever unlocked");
+    expect(arg.text).toContain("2 unlocked");
     expect(arg.text).not.toContain("ever paid");
   });
 
@@ -1776,7 +1833,7 @@ describe("conversion-digest handler", () => {
 
     // Midway by landing page goes with it. The funnel's own midway row stays:
     // that is the number, and it was never split by arm.
-    expect(json).toContain("Reached question 30");
+    expect(json).toContain("Midway (question 30)");
     expect(json).not.toContain("Midway progress");
     expect(json).not.toContain("no landing page recorded");
     expect(json).not.toContain("drafts reached question");
@@ -1808,14 +1865,25 @@ describe("buildFunnel: the midway row and the clamp that moves with it", () => {
 
   it("slots the row in and names the threshold on it", () => {
     const steps = buildFunnel(cohort, 12308, 1025, { reached: 700, index: 30 });
+    // Mark's step names from the 2026-09-16 sync, the threshold on the midway row.
     expect(steps.map((x) => x.step)).toEqual([
-      "Visits to the site",
-      "Started the survey",
-      "Reached question 30",
-      "Finished the survey",
-      "…of those, opened their report",
-      "…of those, started checkout",
-      "…of those, ever unlocked it",
+      "Visits",
+      "Survey started",
+      "Midway (question 30)",
+      "Survey completed",
+      "Report opened",
+      "Checkout started",
+      "Report unlocked",
+    ]);
+    // Keys for code, so logic never matches on a label people will reword.
+    expect(steps.map((x) => x.key)).toEqual([
+      "visits",
+      "started",
+      "midway",
+      "completed",
+      "opened",
+      "checkout",
+      "unlocked",
     ]);
     expect(steps.map((x) => x.count)).toEqual([12308, 1025, 700, 425, 425, 33, 5]);
   });
@@ -1840,7 +1908,7 @@ describe("buildFunnel: the midway row and the clamp that moves with it", () => {
       ).toBeLessThanOrEqual(steps[i - 1]!.count);
     }
     // Specifically: opens clamped down to the 425 finishers, not left at 500.
-    expect(steps.find((x) => x.step.includes("opened their report"))!.count).toBe(425);
+    expect(steps.find((x) => x.key === "opened")!.count).toBe(425);
   });
 
   it("still clamps correctly with no midway row, and with no starts row either", () => {
@@ -1852,7 +1920,7 @@ describe("buildFunnel: the midway row and the clamp that moves with it", () => {
       [null, null],
     ] as const) {
       const steps = buildFunnel(cohort, 12308, starts, midway);
-      const opened = steps.findIndex((x) => x.step.includes("opened their report"));
+      const opened = steps.findIndex((x) => x.key === "opened");
       expect(opened).toBeGreaterThan(0);
       expect(
         steps[opened]!.count,
@@ -1889,10 +1957,13 @@ describe("email A/B tests in the digest", () => {
     ]);
     expect(lines).toHaveLength(1);
     expect(lines[0]!).toContain("survey-complete");
-    expect(lines[0]!).toContain("A 10% (90/900)");
-    expect(lines[0]!).toContain("B 15.6% (140/900)");
+    expect(lines[0]!).toContain("A 10% (90 of 900)");
+    expect(lines[0]!).toContain("B 15.6% (140 of 900)");
     expect(lines[0]!).toContain("genuinely ahead");
-    expect(lines[0]!).toContain("95% CI");
+    // The confidence in words, not as an interval nobody on the channel reads.
+    expect(lines[0]!).toContain("the gap is too big to be chance");
+    expect(lines[0]!).not.toContain("95% CI");
+    expect(lines[0]!).not.toMatch(/\dpp\b/);
   });
 
   it("measures clicks, not opens", () => {
@@ -1908,8 +1979,8 @@ describe("email A/B tests in the digest", () => {
       { experiment: "invite", arm: "a", delivered: 500, complained: 0, bounced: 0, clicked: 100 },
       { experiment: "invite", arm: "b", delivered: 500, complained: 0, bounced: 0, clicked: 20 },
     ]);
-    expect(lines[0]!).toContain("A 20% (100/500)");
-    expect(lines[0]!).toContain("B 4% (20/500)");
+    expect(lines[0]!).toContain("A 20% (100 of 500)");
+    expect(lines[0]!).toContain("B 4% (20 of 500)");
     // The leader named is A, the click winner.
     expect(lines[0]!).toMatch(/A is genuinely ahead/);
   });
@@ -1936,8 +2007,8 @@ describe("email A/B tests in the digest", () => {
         clicked: 2,
       },
     ]);
-    expect(lines[0]!).toContain("not enough clicks yet");
-    expect(lines[0]!).not.toContain("no clear winner");
+    expect(lines[0]!).toContain("Not enough clicks yet");
+    expect(lines[0]!).not.toMatch(/no clear winner/i);
   });
 
   it("does not present a single arm as a result", () => {
@@ -1960,7 +2031,7 @@ describe("email A/B tests in the digest", () => {
         clicked: 0,
       },
     ]);
-    expect(lines[0]!).toContain("only one arm has data yet");
+    expect(lines[0]!).toContain("Only one version has data yet");
     expect(lines[0]!).not.toContain("ahead");
   });
 
@@ -2010,12 +2081,11 @@ describe("email A/B tests in the digest", () => {
       { experiment: "invite", arm: "a", delivered: 2000, complained: 0, bounced: 0, clicked: 12 },
       { experiment: "invite", arm: "b", delivered: 2100, complained: 0, bounced: 0, clicked: 13 },
     ]);
-    // B is genuinely the higher rate, so B must be the one named.
-    expect(lines[0]!).not.toMatch(/A is ahead/);
-    // And no line may claim a direction while printing the opposite sign.
-    const claimsA = /\bA is (ahead|genuinely ahead)/.test(lines[0]!);
-    const negativeDelta = /\(-\d/.test(lines[0]!);
-    expect(claimsA && negativeDelta, `self-contradicting line: ${lines[0]}`).toBe(false);
+    // B is genuinely the higher rate, so B must be the one named. The line no
+    // longer prints a signed delta beside the name, so the only way to
+    // contradict itself is to name the wrong leader, which this pins.
+    expect(lines[0]!).not.toMatch(/A is (ahead|genuinely ahead)/);
+    expect(lines[0]!).toMatch(/B is (ahead|genuinely ahead)/);
   });
 
   it("calls a dead heat level, not a lead", () => {
@@ -2025,7 +2095,7 @@ describe("email A/B tests in the digest", () => {
       { experiment: "invite", arm: "a", delivered: 1000, complained: 0, bounced: 0, clicked: 100 },
       { experiment: "invite", arm: "b", delivered: 1000, complained: 0, bounced: 0, clicked: 100 },
     ]);
-    expect(lines[0]!).toContain("level so far");
+    expect(lines[0]!).toContain("Level so far");
     expect(lines[0]!).not.toContain("ahead");
   });
 
@@ -2035,8 +2105,8 @@ describe("email A/B tests in the digest", () => {
       { experiment: "invite", arm: "a", delivered: 40, complained: 0, bounced: 0, clicked: 2 },
       { experiment: "invite", arm: "b", delivered: 40, complained: 0, bounced: 0, clicked: 2 },
     ]);
-    expect(lines[0]!).toContain("not enough clicks yet");
-    expect(lines[0]!).not.toContain("level so far");
+    expect(lines[0]!).toContain("Not enough clicks yet");
+    expect(lines[0]!).not.toMatch(/level so far/i);
   });
 
   it("survives more clicks than deliveries, and says it capped them", () => {
@@ -2065,11 +2135,11 @@ describe("email A/B tests in the digest", () => {
         clicked: 10,
       },
     ]);
-    expect(lines[0]!).not.toContain("not enough clicks yet");
+    expect(lines[0]!).not.toMatch(/not enough clicks yet/i);
     // The raw counts are still shown, and the verdict is declined with a reason
     // rather than manufactured from a capped 100% rate.
-    expect(lines[0]!).toContain("45/40");
-    expect(lines[0]!).toContain("not comparable");
+    expect(lines[0]!).toContain("45 of 40");
+    expect(lines[0]!).toContain("Not comparable");
     expect(lines[0]!).not.toContain("genuinely ahead");
   });
 
@@ -2111,7 +2181,7 @@ describe("email A/B tests in the digest", () => {
       { experiment: "invite", arm: "a", delivered: 300, clicked: 30, complained: 0, bounced: 0 },
       { experiment: "invite", arm: "b", delivered: 0, clicked: 7, complained: 0, bounced: 0 },
     ]);
-    expect(lines[0]!).toContain("only one arm has data yet");
+    expect(lines[0]!).toContain("Only one version has data yet");
     expect(lines[0]!).toContain("B has clicks but no recorded deliveries");
   });
 
@@ -2523,12 +2593,12 @@ describe("conversion-digest funnel", () => {
       1025
     );
     expect(steps.map((x) => x.step)).toEqual([
-      "Visits to the site",
-      "Started the survey",
-      "Finished the survey",
-      "…of those, opened their report",
-      "…of those, started checkout",
-      "…of those, ever unlocked it",
+      "Visits",
+      "Survey started",
+      "Survey completed",
+      "Report opened",
+      "Checkout started",
+      "Report unlocked",
     ]);
     expect(steps.map((x) => x.count)).toEqual([12308, 1025, 425, 414, 33, 5]);
     // The point of the row: the old single 96.5% becomes 91.7% then 58.5%, and the
@@ -2552,7 +2622,7 @@ describe("conversion-digest funnel", () => {
       29630,
       1038
     );
-    expect(steps.map((x) => x.step)).not.toContain("Started the survey");
+    expect(steps.map((x) => x.key)).not.toContain("started");
     // The finisher count survives intact — that is the whole point.
     expect(steps[1]!.count).toBe(1673);
   });
@@ -2566,7 +2636,7 @@ describe("conversion-digest funnel", () => {
         12308,
         starts
       );
-      expect(steps.map((x) => x.step)).not.toContain("Started the survey");
+      expect(steps.map((x) => x.key)).not.toContain("started");
       expect(steps).toHaveLength(5);
     }
   });
@@ -2592,8 +2662,8 @@ describe("conversion-digest funnel", () => {
       1000
     );
     const leak = biggestLeak(steps);
-    // 1000 -> 100 is a 90% loss, the worst step.
-    expect(leak).toMatchObject({ from: "Visits to the site", to: "Finished the survey", pct: 90 });
+    // 1000 -> 100 is a 90% loss, the worst step, and `index` points at it.
+    expect(leak).toMatchObject({ from: "Visits", to: "Survey completed", pct: 90, index: 1 });
   });
 
   it("returns no leak for a flat funnel", () => {
