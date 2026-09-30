@@ -483,6 +483,7 @@ describe("the validation pack", () => {
         // Everything but signedHash, which is what was signed: the pack shows the fingerprint
         // as it is now, and the gate names the difference when there is one.
         const { signedHash: _signed, ...shown } = def;
+        expect(pack).toContain(`**${reviewHash(def)}**`);
         for (const s of strings(shown)) expect(pack).toContain(s);
       }
     }

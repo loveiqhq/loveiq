@@ -51,7 +51,9 @@ instrument ships first is their decision too.
    - the safety routing, with the help lines by country;
    - the gate's result;
    - the lines to sign, and the fingerprint they sign against.
-7. **Record the sign-off.** Fill each `signOff` line's `by` and `on` (YYYY-MM-DD). Set
+7. **Record the sign-off.** Fill each `signOff` line's `by` and `on` (YYYY-MM-DD) with the
+   person who actually signed it: Mark and Sanjin by default, or whoever the team decides
+   approves instead, never a name that did not sign (GAD-7 and PHQ-9: Eman, 2026-09-30). Set
    `signedHash` to the pack's fingerprint, and `status: "validated"`. A later change to
    anything the lines cover changes the fingerprint, and the gate then refuses `validated`
    until it is signed again: the wording, answers, scoring and bands, and also our copy, the
