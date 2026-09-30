@@ -1277,9 +1277,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      */
     const emailLines = emailExperiments ? buildEmailExperimentLines(emailExperiments) : [];
     if (emailLines.length > 0) {
-      blocks.push(
-        section(`*Email tests (share of readers who clicked)*\n${emailLines.join("\n")}`)
-      );
+      blocks.push(section(`*Email tests (clicks per email delivered)*\n${emailLines.join("\n")}`));
     } else if (emailExperiments && emailExperiments.length === 0) {
       // Counting starts when the tags ship. Saying so is not the same as saying
       // the emails got no clicks.

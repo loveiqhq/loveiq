@@ -253,7 +253,8 @@ describe("buildFrictionWatchList", () => {
 
   it("names the question in words, not just its number", () => {
     const text = buildFrictionWatchList({ signals: signals(), rowsRead: 0 }, 30);
-    expect(text).toContain("40% of survey sessions stop at Q58 (What is your email?).");
+    // Of the sessions that reach the question, which is what the rate divides by.
+    expect(text).toContain("40% of sessions that reach Q58 (What is your email?) end there.");
     expect(text).toContain(
       "People take 40.0s on Q48 (Which changes would actually help?), 4.4x the usual time."
     );

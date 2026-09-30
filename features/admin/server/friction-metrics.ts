@@ -188,7 +188,8 @@ export function buildSurveySignals(
       where: label(worstDrop.q),
       n: worstDrop.q.visits,
       status: worstDrop.pct >= 10 ? "watch" : "quiet",
-      sentence: `${Math.round(worstDrop.pct)}% of survey sessions stop at ${plain(worstDrop.q)}.`,
+      // Of the sessions that REACH it: the rate divides by visits to this question.
+      sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${plain(worstDrop.q)} end there.`,
     });
   }
 
@@ -204,7 +205,7 @@ export function buildSurveySignals(
       where: label(worstBack.q),
       n: worstBack.q.visits,
       status: worstBack.pct >= 10 ? "watch" : "quiet",
-      sentence: `${Math.round(worstBack.pct)}% of people go back a step at ${plain(worstBack.q)}.`,
+      sentence: `${Math.round(worstBack.pct)}% of sessions that reach ${plain(worstBack.q)} go back a step there.`,
     });
   }
 
@@ -420,8 +421,8 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   /**
    * REMOVED 2026-09-19: "Readers reaching checkout".
    *
-   * The funnel table four lines above this block already carries "…of those,
-   * started checkout" with its own count and percentage, against the same
+   * The funnel above this block already carries "Checkout started" with its own
+   * count and percentage, against the same
    * population. Repeating it here as a friction signal made one number look
    * like two measurements, and the two were computed from different fetchers so
    * they could disagree by a rounding step and start an argument about which
