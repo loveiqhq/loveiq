@@ -7464,6 +7464,12 @@ html {
   position: absolute;
   top: 6.59px;
 }
+/* 979:507's 17px lock, which the head draws from 700px (the 30.09 desktop review block
+ * at the end of the file); the phone and every narrower width keep the 14px one. Through
+ * the disc, to outweigh the rule above, which shows every img in it. */
+.rv3.rv4 .rv4-chapter__lock-disc .rv4-chapter__lock-17 {
+  display: none;
+}
 /* Centred on the group by its own width, so a face that sets it a pixel wider than
  * the frame's 56 still sits under the disc's middle. */
 .rv3.rv4 .rv4-chapter__lock-label {
@@ -8836,6 +8842,33 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   .rv3.rv4 .rv3-deck__arrow:focus-visible {
     outline: 2px solid var(--rv3-violet);
     outline-offset: 2px;
+  }
+
+  /* A locked chapter's lock (Mark: "I would likely scale up the Locked icon and the
+   * Text"), in the proportions he drew for the visuals' badge (979:507): the 38px disc
+   * with the 17px lock 10 into it, and "Unlock Report" at 10/12, 7 under the disc as
+   * there. The group is the label's width at 10px (69.5), centred on the disc as on the
+   * phone; it still tops out with the title. */
+  .rv3.rv4 .rv4-chapter__lock {
+    height: 57px;
+    width: 70px;
+  }
+  .rv3.rv4 .rv4-chapter__lock-disc {
+    height: 38px;
+    left: 16px;
+    width: 38px;
+  }
+  .rv3.rv4 .rv4-chapter__lock-disc img {
+    display: none;
+  }
+  .rv3.rv4 .rv4-chapter__lock-disc .rv4-chapter__lock-17 {
+    display: block;
+    left: 10px;
+    top: 10px;
+  }
+  .rv3.rv4 .rv4-chapter__lock-label {
+    font-size: 10px;
+    top: 45px;
   }
 }
 /* From 700px too: below it the dots are the phone's lines. */

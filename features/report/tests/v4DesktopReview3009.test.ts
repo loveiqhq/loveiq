@@ -120,3 +120,59 @@ describe("the archetype deck pages on desktop", () => {
     );
   });
 });
+
+// Mark: "I would likely scale up the Locked icon and the Text" ("Locked Icon.png"). From
+// 700px a locked chapter's head takes the proportions he drew for the visuals' badge
+// (979:507): a 38px disc with the 17px lock 10 into it, and "Unlock Report" at 10/12, 7
+// under the disc. The group is the label's 69.5 at 10px, so 70 x 57. The phone keeps
+// 982:379's 56 x 46.
+describe("the locked chapter head's lock, at the visuals' scale", () => {
+  /** [classes, elements] of a selector of classes, elements and descendant combinators. */
+  const specificity = (selector: string) => {
+    const parts = selector.trim().split(/\s+/);
+    const classes = parts.reduce((n, p) => n + (p.match(/\./g)?.length ?? 0), 0);
+    const elements = parts.filter((p) => /^[a-z]/.test(p)).length;
+    return [classes, elements] as const;
+  };
+  const outweighs = (a: string, b: string) => {
+    const [ac, ae] = specificity(a);
+    const [bc, be] = specificity(b);
+    return ac > bc || (ac === bc && ae > be);
+  };
+
+  it("hides the 17px lock everywhere the desktop block does not draw it", () => {
+    const hide = ".rv3.rv4 .rv4-chapter__lock-disc .rv4-chapter__lock-17";
+    const at = v3.indexOf(`${hide} {`);
+    expect(at).toBeGreaterThan(-1);
+    expect(v3.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+    expect(at).toBeLessThan(v3.indexOf("Desktop touch-up — 28.09 (c)"));
+    expect(v3.slice(at, v3.indexOf("}", at))).toContain("display: none");
+    // Heavier than the phone's own glyph rule, which shows every img in the disc: a
+    // lighter one lost to it, and the phone drew both locks.
+    expect(outweighs(hide, ".rv3.rv4 .rv4-chapter__lock-disc img")).toBe(true);
+  });
+
+  it("sets the group at 70 x 57 round a 38px disc", () => {
+    const group = ruleIn(".rv3.rv4 .rv4-chapter__lock");
+    expect(group).toContain("height: 57px");
+    expect(group).toContain("width: 70px");
+    const disc = ruleIn(".rv3.rv4 .rv4-chapter__lock-disc");
+    expect(disc).toContain("height: 38px");
+    expect(disc).toContain("width: 38px");
+    expect(disc).toContain("left: 16px");
+  });
+
+  it("swaps the 14px lock for 979:507's 17px one, 10 into the disc", () => {
+    expect(ruleIn(".rv3.rv4 .rv4-chapter__lock-disc img")).toContain("display: none");
+    const lock = ruleIn(".rv3.rv4 .rv4-chapter__lock-disc .rv4-chapter__lock-17");
+    expect(lock).toContain("display: block");
+    expect(lock).toContain("left: 10px");
+    expect(lock).toContain("top: 10px");
+  });
+
+  it("sets 'Unlock Report' at 10/12, 7 under the disc", () => {
+    const label = ruleIn(".rv3.rv4 .rv4-chapter__lock-label");
+    expect(label).toContain("font-size: 10px");
+    expect(label).toContain("top: 45px");
+  });
+});

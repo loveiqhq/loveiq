@@ -55,11 +55,24 @@ export const V4ChapterChevron: FC = () => (
  * with the frame's 14px lock, and "Unlock Report" under it — the visuals' CTA
  * (V4LockBadge) at the head's size. A span, not V4LockBadge's button: it sits inside
  * the chapter's own button, whose name its words finish.
+ *
+ * From 700px (Mark, desktop review 30.09: "scale up the Locked icon and the Text") it
+ * takes the badge's own proportions, 979:507's 38px disc and 17px lock, so both glyphs
+ * are here and the stylesheet shows one: each is the frame's own drawing at its size,
+ * not one scaled.
  */
 export const V4ChapterLockDisc: FC = () => (
   <span className="rv4-chapter__lock" data-node-id="982:379">
     <span className="rv4-chapter__lock-disc" aria-hidden="true">
       <Image src="/report/v3/locks/lock-14.svg" alt="" width={14} height={14} unoptimized />
+      <Image
+        className="rv4-chapter__lock-17"
+        src="/report/v3/locks/lock-17.svg"
+        alt=""
+        width={17}
+        height={17}
+        unoptimized
+      />
     </span>
     <span className="rv4-chapter__lock-label">Unlock Report</span>
   </span>

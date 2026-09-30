@@ -367,6 +367,15 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     );
     expect(lock.querySelector(".rv4-chapter__lock-disc")!.getAttribute("aria-hidden")).toBe("true");
     expect(lock.querySelector(".rv4-chapter__lock-label")!.textContent).toBe("Unlock Report");
+    // Desktop review 30.09 (Mark: "scale up the Locked icon and the Text"): from 700px the
+    // disc takes 979:507's 17px lock, drawn beside the phone's and shown by the CSS.
+    const glyphs = lock.querySelectorAll(".rv4-chapter__lock-disc img");
+    expect(Array.from(glyphs, (img) => img.getAttribute("src"))).toEqual([
+      "/report/v3/locks/lock-14.svg",
+      "/report/v3/locks/lock-17.svg",
+    ]);
+    expect(glyphs[1]).toHaveClass("rv4-chapter__lock-17");
+    expect(Array.from(glyphs, (img) => img.getAttribute("alt"))).toEqual(["", ""]);
     expect(section.querySelector(".rv4-chapter__chev")).toBeNull();
     const tease = section.querySelector(".rv4-chapter__tease")!;
     expect(tease.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.core_insecurities);
