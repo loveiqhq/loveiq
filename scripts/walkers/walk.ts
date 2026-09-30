@@ -648,10 +648,19 @@ async function main(argv: string[]): Promise<number> {
       if (!walk.paywallOpenedBy) await page.waitForTimeout(500);
     }
     if (!walk.paywallOpenedBy) throw new Error("no way to the paywall on the report");
-    await Promise.race([
-      page.waitForURL(/checkout\.stripe\.com/, { timeout: 45_000 }),
-      button(PLAN_CTA[plan]).waitFor({ state: "visible", timeout: 45_000 }),
-    ]).catch(() => {});
+    // The default plan's ways in buy straight away, so wait for Stripe rather than race the
+    // picker, which the report can open by itself in the same moment: on 2026-09-30 a walk
+    // saw the picker appear, Stripe then took the page, and it pressed a button that was no
+    // longer there. Only if no checkout opens does the walk look for the picker.
+    const direct = plan === "full_report" && walk.paywallOpenedBy !== "the report, by itself";
+    if (direct) {
+      await page.waitForURL(/checkout\.stripe\.com/, { timeout: 45_000 }).catch(() => {});
+    } else {
+      await Promise.race([
+        page.waitForURL(/checkout\.stripe\.com/, { timeout: 45_000 }),
+        button(PLAN_CTA[plan]).waitFor({ state: "visible", timeout: 45_000 }),
+      ]).catch(() => {});
+    }
     if (!toStripe()) {
       await button(PLAN_CTA[plan]).waitFor({ state: "visible", timeout: 5_000 });
       await page.waitForTimeout(1_500); // the live quote replaces the fallback price
@@ -668,9 +677,12 @@ async function main(argv: string[]): Promise<number> {
         walk.finished = true;
         return 0;
       }
-      mark(`clicked the ${plan} plan's button`);
-      await button(PLAN_CTA[plan]).click();
-      await page.waitForURL(/checkout\.stripe\.com/, { timeout: 60_000 });
+      // Stripe may have taken the page while the prices were read.
+      if (!toStripe()) {
+        mark(`clicked the ${plan} plan's button`);
+        await button(PLAN_CTA[plan]).click();
+        await page.waitForURL(/checkout\.stripe\.com/, { timeout: 60_000 });
+      }
     }
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2_500);
