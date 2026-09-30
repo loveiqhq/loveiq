@@ -710,6 +710,11 @@ export async function GET(request: Request) {
 
     const changes: string[] = [];
     const skippedPartial: string[] = [];
+    // Only a closed month is entered. On the 3rd the month in progress holds only the invoices
+    // of the 1st and 2nd, and a proration dated then was carried into every forecast month
+    // until the next run corrected it (Eman left this call to us, 2026-09-30). Its PDFs are
+    // filed as usual; the next run enters the whole month.
+    const inProgress: string[] = [];
     const noColumn: string[] = [];
     const noRow: string[] = [];
     // A closed month with no column fails the run. The month in progress does not: on the 3rd
@@ -735,6 +740,10 @@ export async function GET(request: Request) {
       const y = Number(ym[0]);
       const m = Number(ym[1]);
       if (!Number.isFinite(y) || !Number.isFinite(m)) continue;
+      if (monthKey >= thisMonth) {
+        inProgress.push(`${vendorName} ${monthKey}`);
+        continue;
+      }
       const row = rowOf(vendorName);
       if (row === 0) {
         // Listed apart from the changes: counted among them, it read "Cost sheet updated (1)".
@@ -819,7 +828,8 @@ export async function GET(request: Request) {
             noColumn.length ||
             noRow.length ||
             foreignCurrency.length ||
-            skippedPartial.length
+            skippedPartial.length ||
+            inProgress.length
           ? "" // it cannot say every invoice matched; the lines below say which did not
           : charged.size
             ? ":white_check_mark: Cost sheet already matched every invoice."
@@ -839,6 +849,9 @@ export async function GET(request: Request) {
         : "",
       skippedPartial.length
         ? `_Filed but not reconciled (month only partly inside the ${LOOKBACK_DAYS}-day window): ${escapeSlack(skippedPartial.join(", "))}._`
+        : "",
+      inProgress.length
+        ? `_Filed, and entered next month once the month is complete: ${escapeSlack(inProgress.join(", "))}._`
         : "",
       "",
       `_No invoice expected by email from: ${NEVER_ATTACHES.map((n) => `${n.sheetName} (${n.why})`).join("; ")}._`,
