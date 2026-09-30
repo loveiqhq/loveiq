@@ -13,7 +13,7 @@ const definition: Omit<InstrumentDefinition, "signOff"> = {
   name: "Generalized Anxiety Disorder 7-item scale",
   shortName: "GAD-7",
   version: "1.0.0",
-  status: "in-validation",
+  status: "validated",
   construct: "anxiety",
   humangraph: "anxiety",
   purpose: "screening",
@@ -94,7 +94,18 @@ const definition: Omit<InstrumentDefinition, "signOff"> = {
   safety,
 };
 
+/**
+ * Approved by Eman Cickusic on 2026-09-30, who chose not to wait for Mark and Sanjin's
+ * line-by-line review (decision:2026-09-30-f201cff6e0). A change to anything these lines
+ * cover changes the fingerprint, and the gate then refuses `validated` until it is signed
+ * again.
+ */
 export const gad7: InstrumentDefinition = {
   ...definition,
-  signOff: standardSignOff(definition),
+  signOff: standardSignOff(definition).map((s) => ({
+    ...s,
+    by: "Eman Cickusic",
+    on: "2026-09-30",
+  })),
+  signedHash: "ca077e97a4a2d2b7",
 };

@@ -202,8 +202,11 @@ describe("PHQ-9's item 9", () => {
 });
 
 describe("the gate catches a broken definition", () => {
+  // One defect at a time, on a copy that is not validated: the defect is what is tested, not
+  // the sign-off it would void (the sign-off tests below validate their copy themselves).
   const broken = (change: (d: InstrumentDefinition) => void, base = def("gad7")) => {
     const d = structuredClone(base) as InstrumentDefinition;
+    d.status = "in-validation";
     change(d);
     return checkInstrument(d).map((p) => `${p.area}: ${p.message}`);
   };
@@ -322,7 +325,11 @@ describe("the gate catches a broken definition", () => {
   });
 
   it("an unchecked license anywhere past draft", () => {
-    expect(broken((d) => void (d.license = { ...d.license, kind: "unknown" }))).toContain(
+    const unchecked = (d: InstrumentDefinition) => {
+      d.status = "in-validation";
+      d.license = { ...d.license, kind: "unknown" };
+    };
+    expect(broken(unchecked)).toContain(
       "license: the license is unchecked, so it must stay a draft (it is in-validation)"
     );
   });
@@ -473,7 +480,10 @@ describe("the validation pack", () => {
       };
       for (const def of [d, granted]) {
         const pack = validationPack(def);
-        for (const s of strings(def)) expect(pack).toContain(s);
+        // Everything but signedHash, which is what was signed: the pack shows the fingerprint
+        // as it is now, and the gate names the difference when there is one.
+        const { signedHash: _signed, ...shown } = def;
+        for (const s of strings(shown)) expect(pack).toContain(s);
       }
     }
   );

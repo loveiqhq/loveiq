@@ -62,17 +62,17 @@ instrument ships first is their decision too.
 
 ## What is in it now
 
-| Instrument | Measures   | Status        | Why                                                          |
-| ---------- | ---------- | ------------- | ------------------------------------------------------------ |
-| GAD-7      | anxiety    | in validation | free with the credit line; our copy needs review             |
-| PHQ-9      | depression | in validation | free with the credit line; item 9 routes to crisis help      |
-| UCLA-3     | loneliness | draft         | the source gives no cutoffs, and commercial use is unchecked |
+| Instrument | Measures   | Status    | Why                                                          |
+| ---------- | ---------- | --------- | ------------------------------------------------------------ |
+| GAD-7      | anxiety    | validated | approved by Eman on 2026-09-30; free with the credit line    |
+| PHQ-9      | depression | validated | approved by Eman on 2026-09-30; item 9 routes to crisis help |
+| UCLA-3     | loneliness | draft     | the source gives no cutoffs, and commercial use is unchecked |
 
 ## What it works on next
 
-1. **Sign GAD-7 and PHQ-9.** Mark and Sanjin sign every line of the validation pack, and an
-   engineer then records the signatures (step 7). Whether a line needs one signature or
-   both is theirs to decide.
+1. **GAD-7 and PHQ-9 are validated.** Eman approved them on 2026-09-30 without waiting for
+   Mark and Sanjin's line-by-line review, and the sign-off lines name him. Mark and Sanjin
+   can still review them in the validation pack; a change they ask for is a new sign-off.
 2. **UCLA-3's license.** Someone checks commercial digital use with the rights holder.
    Until then it stays a draft and its lines wait, because settling the license changes
    its fingerprint.
