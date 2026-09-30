@@ -77,12 +77,24 @@ function detectInputType(options, question) {
   return "text";
 }
 
+// ─── Placeholder authored inside "Answer options" ───────────────────────────────
+// The V3 sheet has no "Default input / placeholder" column, so the grey text in an open
+// question's box is written after the answer type: "Free text - Think of something…"
+// (Marcus, 30.09, for 16019 and 16020). Returns that text, or null when there is none.
+const FREE_TEXT_PLACEHOLDER = /^free text\s*[-–—:]\s*(.+)$/is;
+function parseFreeTextPlaceholder(options) {
+  const match = (options || "").trim().match(FREE_TEXT_PLACEHOLDER);
+  return match ? match[1].trim() : null;
+}
+
 // ─── Detect placeholder for open response ───────────────────────────────────────
 function detectPlaceholder(defaultInput, options, question) {
   // Use "Default input / placeholder" column if provided and not N/A
   if (defaultInput && defaultInput.trim() !== "" && defaultInput.trim().toLowerCase() !== "n/a") {
     return defaultInput.trim();
   }
+  const authored = parseFreeTextPlaceholder(options);
+  if (authored) return authored;
   // Fallback to old detection logic
   const lower = (options || "").toLowerCase();
   if (lower.includes("email")) return "your@email.com";
@@ -300,7 +312,12 @@ function main() {
       question,
       answerType,
       options:
-        answerType === "scale" || answerType === "country" ? [] : parseOptions(answerOptions),
+        answerType === "scale" || answerType === "country"
+          ? []
+          : // The placeholder after "Free text - " is shown in the box, not stored as an option.
+            answerType === "open" && parseFreeTextPlaceholder(answerOptions)
+            ? ["Free text"]
+            : parseOptions(answerOptions),
       required,
       guide: supportAndGuidance,
       supportAndGuidance,
@@ -452,4 +469,7 @@ export const surveyQuestions: SurveyQuestion[] = [\n`;
   console.log(`  ${questions.length} questions`);
 }
 
-main();
+// Run as a script; required (by the parser tests), it only exports.
+if (require.main === module) main();
+
+module.exports = { parseFreeTextPlaceholder };

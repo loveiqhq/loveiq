@@ -116,15 +116,15 @@ takes.
 
 The last seven questions are asked in this order, in both C13 arms:
 
-| Asked | qId     | Question                                         | Notes                                                                 |
-| ----- | ------- | ------------------------------------------------ | --------------------------------------------------------------------- |
-| 1     | `16019` | Most interesting insights about sexuality        | Optional, multi-line. Feeds the report's Learn and Practice sections. |
-| 2     | `16020` | Best books, articles, blogs or YouTube channels  | Optional, multi-line. Same purpose.                                   |
-| 3     | `16016` | C9 — "Beyond sex, which of these…" (up to three) | Thirteen collapsible categories, 53 topics.                           |
-| 4     | `16017` | C10 — "Thinking about what you just picked…"     | Refers back to C9, so it always follows it.                           |
-| 5     | `16018` | C12 — first access to the area picked            | The waitlist opt-in.                                                  |
-| 6     | `00000` | Email                                            | Asked last but one since the email-position test (2026-08-16).        |
-| 7     | `16015` | Marketing opt-in                                 | Always the final question.                                            |
+| Asked | qId     | Question                                               | Notes                                                                 |
+| ----- | ------- | ------------------------------------------------------ | --------------------------------------------------------------------- |
+| 1     | `16019` | A learning or insight that changed your sexuality      | Optional, multi-line. Feeds the report's Learn and Practice sections. |
+| 2     | `16020` | Books, articles, blogs or YouTube channels that helped | Optional, multi-line. Same purpose.                                   |
+| 3     | `16016` | C9 — "Beyond sex, which of these…" (up to three)       | Thirteen collapsible categories, 53 topics.                           |
+| 4     | `16017` | C10 — "Thinking about what you just picked…"           | Refers back to C9, so it always follows it.                           |
+| 5     | `16018` | C12 — first access to the area picked                  | The waitlist opt-in.                                                  |
+| 6     | `00000` | Email                                                  | Asked last but one since the email-position test (2026-08-16).        |
+| 7     | `16015` | Marketing opt-in                                       | Always the final question.                                            |
 
 All five survey-content ids sit above `16015`, because every free id below it is live or
 retired-but-still-holding-answers. The generator sorts by qId, so the order above exists only

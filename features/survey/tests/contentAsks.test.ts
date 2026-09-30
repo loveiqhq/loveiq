@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -12,19 +13,28 @@ import {
 } from "@features/survey/server/utils";
 import { CONTENT_ASK_QIDS } from "@features/survey/ui/questionOrder";
 
-/** Mark's copy (Slack, 29.09), shown in the GuidancePanel under both questions. */
-const INFO =
-  "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.";
-
+/**
+ * Marcus's 30.09 wording in the Assessment Questions sheet. Each question's hint sits in
+ * two places, as the sheet has it: the grey placeholder inside the box ("Free text - …" in
+ * Answer options) and the GuidancePanel's Info and guidance.
+ */
 const INSIGHTS_Q =
-  "What are the most interesting insights that you have come across around sexuality to date?";
+  "Was there a learning or insight that profoundly changed or improved your sexuality?";
+const INSIGHTS_HINT =
+  "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?";
 const SOURCES_Q =
-  "What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?";
+  "What are books, articles, blogs or YouTube channels around sexuality that helped you?";
+const SOURCES_HINT = "Post any links or names that reference to the helpful content";
+const HINTS: Record<string, string> = { "16019": INSIGHTS_HINT, "16020": SOURCES_HINT };
+
+const { parseFreeTextPlaceholder } = createRequire(import.meta.url)(
+  "../../../scripts/update-survey.js"
+) as { parseFreeTextPlaceholder: (options: string) => string | null };
 
 const find = (qId: string) => surveyQuestions.find((entry) => entry.qId === qId);
 
 describe("the content asks — 16019 and 16020", () => {
-  it("asks both of Mark's questions, word for word", () => {
+  it("asks both questions in Marcus's wording, word for word", () => {
     expect(find("16019")?.question).toBe(INSIGHTS_Q);
     expect(find("16020")?.question).toBe(SOURCES_Q);
   });
@@ -49,8 +59,15 @@ describe("the content asks — 16019 and 16020", () => {
     }
   });
 
-  it("carry Mark's line as their info and guidance", () => {
-    for (const qId of CONTENT_ASK_QIDS) expect(find(qId)!.supportAndGuidance, qId).toBe(INFO);
+  it("show Marcus's hint in grey inside the box, and as their info and guidance", () => {
+    // "Key is that this text is in grey in the input field, as this might lead the user to
+    // give a great answer" (Marcus, WhatsApp, 30.09).
+    for (const qId of CONTENT_ASK_QIDS) {
+      const entry = find(qId)!;
+      expect(entry.placeholder, qId).toBe(HINTS[qId]);
+      expect(entry.supportAndGuidance, qId).toBe(HINTS[qId]);
+      expect(entry.options, qId).toEqual(["Free text"]);
+    }
   });
 
   it("are the only optional questions — nothing else flipped with the new rule", () => {
@@ -119,6 +136,20 @@ describe("completion with the optional asks skipped", () => {
   });
 });
 
+describe('the placeholder written after "Free text - " in the sheet', () => {
+  it("is read out of Answer options", () => {
+    expect(parseFreeTextPlaceholder("Free text - Post any links")).toBe("Post any links");
+    expect(parseFreeTextPlaceholder("free text: Name a book")).toBe("Name a book");
+    expect(parseFreeTextPlaceholder("Free text — A dash")).toBe("A dash");
+  });
+
+  it('is absent for a bare "Free text", so the default placeholder stays', () => {
+    expect(parseFreeTextPlaceholder("Free text")).toBeNull();
+    expect(parseFreeTextPlaceholder("")).toBeNull();
+    expect(find("00001")?.placeholder).toBe("Type your answer…");
+  });
+});
+
 describe("dropBlankOptionalAnswers", () => {
   it("drops an optional answer that is empty or only whitespace", () => {
     expect(dropBlankOptionalAnswers({ "16019": "", "16020": "   \n " })).toEqual({});
@@ -152,7 +183,9 @@ describe("the migration behind 16019, 16020 and the two stems", () => {
   it("inserts both questions as open, optional and active, with the survey's exact text", () => {
     for (const qId of CONTENT_ASK_QIDS) {
       const entry = find(qId)!;
-      expect(sql, qId).toContain("'open', " + quoted(entry.question) + ", " + quoted(INFO));
+      expect(sql, qId).toContain(
+        "'open', " + quoted(entry.question) + ", " + quoted(entry.supportAndGuidance ?? "")
+      );
       expect(sql, qId).toContain("false, '" + qId + "', 'active')");
     }
     expect(sql.match(/INSERT INTO survey_question_mapping/g)).toHaveLength(2);

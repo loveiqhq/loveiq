@@ -1572,17 +1572,17 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16019",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question:
-      "What are the most interesting insights that you have come across around sexuality to date?",
+    question: "Was there a learning or insight that profoundly changed or improved your sexuality?",
     answerType: "open",
     options: ["Free text"],
     required: false,
     guide:
-      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
     supportAndGuidance:
-      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
     inputType: "text",
-    placeholder: "Type your answer…",
+    placeholder:
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
     comment:
       "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
     howAnswerIsUsed:
@@ -1594,16 +1594,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     cId: 16,
     chapter: "Next Steps & Preferences",
     question:
-      "What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?",
+      "What are books, articles, blogs or YouTube channels around sexuality that helped you?",
     answerType: "open",
     options: ["Free text"],
     required: false,
-    guide:
-      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
-    supportAndGuidance:
-      "We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.",
+    guide: "Post any links or names that reference to the helpful content",
+    supportAndGuidance: "Post any links or names that reference to the helpful content",
     inputType: "text",
-    placeholder: "Type your answer…",
+    placeholder: "Post any links or names that reference to the helpful content",
     comment:
       "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
     howAnswerIsUsed:

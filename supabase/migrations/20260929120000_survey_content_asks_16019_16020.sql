@@ -1,5 +1,7 @@
 -- Database rows for Mark's two open-text content asks, 16019 and 16020, and the database's
--- copy of two reworded stems, 16011 and 16018 (C12).
+-- copy of two reworded stems, 16011 and 16018 (C12). The wording of 16019 and 16020, and the
+-- subinfo (the survey's "Info and guidance"), are Marcus's 30.09 refinement in the
+-- Assessment Questions sheet.
 --
 -- WHY THE ROWS. submit_survey resolves a question by survey_question.frontend_qid and,
 -- finding nothing, skips the answer with no error (see 20260918081040). Without these rows
@@ -37,7 +39,7 @@
 -- display_order appends after the current maximum; the survey renders in qId order and
 -- this column only affects admin listings (20260911152724).
 
--- 16019 - the most interesting insights about sexuality someone has come across.
+-- 16019 - a learning or insight that changed or improved someone's sexuality.
 DO $$
 DECLARE
   v_survey_id BIGINT;
@@ -47,7 +49,7 @@ DECLARE
 BEGIN
   SELECT question INTO v_existing FROM survey_question WHERE frontend_qid = '16019';
   IF FOUND THEN
-    IF v_existing = 'What are the most interesting insights that you have come across around sexuality to date?' THEN
+    IF v_existing = 'Was there a learning or insight that profoundly changed or improved your sexuality?' THEN
       RAISE NOTICE 'survey_question 16019 already exists, skipping';
       RETURN;
     END IF;
@@ -62,13 +64,13 @@ BEGIN
   SELECT COALESCE(MAX(display_order), 0) + 1 INTO v_order FROM survey_question;
 
   INSERT INTO survey_question (type, question, subinfo, display_order, required, frontend_qid, status)
-  VALUES ('open', 'What are the most interesting insights that you have come across around sexuality to date?', 'We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.', v_order, false, '16019', 'active')
+  VALUES ('open', 'Was there a learning or insight that profoundly changed or improved your sexuality?', 'Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?', v_order, false, '16019', 'active')
   RETURNING id INTO v_q_id;
 
   INSERT INTO survey_question_mapping (survey_id, question_id) VALUES (v_survey_id, v_q_id);
 END $$;
 
--- 16020 - the best books, articles, blogs or YouTube channels about sexuality someone knows.
+-- 16020 - the books, articles, blogs or YouTube channels about sexuality that helped someone.
 DO $$
 DECLARE
   v_survey_id BIGINT;
@@ -78,7 +80,7 @@ DECLARE
 BEGIN
   SELECT question INTO v_existing FROM survey_question WHERE frontend_qid = '16020';
   IF FOUND THEN
-    IF v_existing = 'What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?' THEN
+    IF v_existing = 'What are books, articles, blogs or YouTube channels around sexuality that helped you?' THEN
       RAISE NOTICE 'survey_question 16020 already exists, skipping';
       RETURN;
     END IF;
@@ -93,7 +95,7 @@ BEGIN
   SELECT COALESCE(MAX(display_order), 0) + 1 INTO v_order FROM survey_question;
 
   INSERT INTO survey_question (type, question, subinfo, display_order, required, frontend_qid, status)
-  VALUES ('open', 'What are the best books, articles, blogs or YouTube channels around sexuality that you are aware of?', 'We are always striving to include the very best content for our learn & practice sections in our report and are always open for your input.', v_order, false, '16020', 'active')
+  VALUES ('open', 'What are books, articles, blogs or YouTube channels around sexuality that helped you?', 'Post any links or names that reference to the helpful content', v_order, false, '16020', 'active')
   RETURNING id INTO v_q_id;
 
   INSERT INTO survey_question_mapping (survey_id, question_id) VALUES (v_survey_id, v_q_id);

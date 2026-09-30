@@ -77,9 +77,9 @@ export function orderDemandBlockBeforeEmail(questions: SurveyQuestion[]): Survey
 }
 
 /**
- * Mark's two open-text content asks (29.09): the most interesting insights about sexuality
- * someone has come across, and the best books, articles, blogs or YouTube channels they
- * know. Both are optional, and both feed the report's Learn and Practice sections rather
+ * Mark's two open-text content asks (29.09, worded by Marcus 30.09): a learning or insight
+ * that changed or improved someone's sexuality, and the books, articles, blogs or YouTube
+ * channels that helped them. Both are optional, and both feed the report's Learn and Practice sections rather
  * than the archetype.
  */
 export const CONTENT_ASK_QIDS: readonly string[] = ["16019", "16020"];

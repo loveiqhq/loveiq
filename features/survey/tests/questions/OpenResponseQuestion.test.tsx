@@ -79,8 +79,9 @@ describe("OpenResponseQuestion", () => {
 describe("OpenResponseQuestion — multi-line content asks (16019, 16020)", () => {
   const insights = makeOpenQuestion({
     qId: "16019",
-    question: "What are the most interesting insights you have come across?",
+    question: "Was there a learning or insight that profoundly changed or improved your sexuality?",
     required: false,
+    placeholder: "Think of something you wish you had understood about your sexuality earlier",
   });
 
   function ControlledInsights() {
@@ -91,6 +92,14 @@ describe("OpenResponseQuestion — multi-line content asks (16019, 16020)", () =
   it("answers in a multi-line box rather than a single line", () => {
     render(<OpenResponseQuestion question={insights} value={null} onChange={vi.fn()} />);
     expect(screen.getByRole("textbox").tagName).toBe("TEXTAREA");
+  });
+
+  it("shows the question's own hint as the grey placeholder in the box", () => {
+    render(<OpenResponseQuestion question={insights} value={null} onChange={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveAttribute(
+      "placeholder",
+      "Think of something you wish you had understood about your sexuality earlier"
+    );
   });
 
   it("allows 1,000 characters, the server's cap, and counts them", () => {
