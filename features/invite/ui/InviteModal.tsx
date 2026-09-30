@@ -1059,7 +1059,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                           onChange={(e) => setPersonalMessage(e.target.value.slice(0, 1500))}
                           disabled={state === "sending"}
                           maxLength={1500}
-                          className="w-full resize-y max-h-[40dvh] sm:max-h-none rounded-2xl border border-white/10 bg-[#130b1c] py-[15px] px-[25px] font-sans text-[15px] sm:text-[16px] leading-[22px] sm:leading-[24px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#a855f7]/60 disabled:opacity-50"
+                          className="w-full resize-y max-h-[40dvh] sm:max-h-none rounded-2xl border border-white/10 bg-[#130b1c] py-[15px] px-[25px] font-sans text-[16px] leading-[22px] sm:leading-[24px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#a855f7]/60 disabled:opacity-50"
                         />
                       </div>
 

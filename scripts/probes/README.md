@@ -37,6 +37,7 @@ DEVICE="iPhone SE" node scripts/probes/audit-paywall-layout.mjs
 | `verify-reaches-bottom.mjs`     | Whether a finger can actually reach the end of the report.                                                                                    |
 | `device-matrix.mjs`             | The full locked-report → paywall → checkout walk across every phone.                                                                          |
 | `console-audit.mjs`             | Every console error and failed request, unfiltered.                                                                                           |
+| `verify-no-sideways.mjs`        | Sideways pan on a phone: boxes wider than the screen (page clips off, as an iPhone pans past them) and text boxes under 16px.                 |
 
 ## Lessons paid for already — don't relearn them
 
