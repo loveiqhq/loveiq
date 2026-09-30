@@ -31,7 +31,7 @@ export default function PrivacyPolicyPage() {
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">1. Controller</h2>
               <p className="mb-4">
-                Applied Psychometrics UG (in formation) (haftungsbeschraenkt)
+                Applied Psychometrics UG (haftungsbeschränkt)
                 <br />
                 Hasenheide 62
                 <br />
@@ -40,7 +40,7 @@ export default function PrivacyPolicyPage() {
                 Germany
               </p>
               <p className="mb-4">
-                Managing Director: Marcus Barner
+                Managing Director: Marcus Börner
                 <br />
                 Email:{" "}
                 <a

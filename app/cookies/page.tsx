@@ -34,7 +34,7 @@ export default function CookiesPage() {
 
             <p>
               <span className="font-semibold text-gray-900">
-                Applied Psychometrics UG (in formation) (haftungsbeschränkt)
+                Applied Psychometrics UG (haftungsbeschränkt)
               </span>
               <br />
               Hasenheide 62
