@@ -54,7 +54,7 @@ const definition: Omit<InstrumentDefinition, "signOff"> = {
   name: "Patient Health Questionnaire-9",
   shortName: "PHQ-9",
   version: "1.0.0",
-  status: "in-validation",
+  status: "validated",
   construct: "depression",
   humangraph: "affect",
   purpose: "screening",
@@ -173,7 +173,18 @@ const definition: Omit<InstrumentDefinition, "signOff"> = {
   safety,
 };
 
+/**
+ * Approved by Eman Cickusic on 2026-09-30, who chose not to wait for Mark and Sanjin's
+ * line-by-line review (decision:2026-09-30-f201cff6e0). A change to anything these lines
+ * cover changes the fingerprint, and the gate then refuses `validated` until it is signed
+ * again.
+ */
 export const phq9: InstrumentDefinition = {
   ...definition,
-  signOff: standardSignOff(definition),
+  signOff: standardSignOff(definition).map((s) => ({
+    ...s,
+    by: "Eman Cickusic",
+    on: "2026-09-30",
+  })),
+  signedHash: "a38a3e3655c255a1",
 };

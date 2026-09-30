@@ -1,8 +1,8 @@
 # Assessment Factory
 
 How a new psychometric instrument goes from a paper to something a person can safely take.
-The code is in `features/assessments/`. The people who validate are Mark and Sanjin; which
-instrument ships first is their decision too.
+The code is in `features/assessments/`. Mark and Sanjin validate by default, and the team can
+decide someone else approves instead (step 7); which instrument ships first is their decision.
 
 ## The steps
 
@@ -51,7 +51,9 @@ instrument ships first is their decision too.
    - the safety routing, with the help lines by country;
    - the gate's result;
    - the lines to sign, and the fingerprint they sign against.
-7. **Record the sign-off.** Fill each `signOff` line's `by` and `on` (YYYY-MM-DD). Set
+7. **Record the sign-off.** Fill each `signOff` line's `by` and `on` (YYYY-MM-DD) with the
+   person who actually signed it: Mark and Sanjin by default, or whoever the team decides
+   approves instead, never a name that did not sign (GAD-7 and PHQ-9: Eman, 2026-09-30). Set
    `signedHash` to the pack's fingerprint, and `status: "validated"`. A later change to
    anything the lines cover changes the fingerprint, and the gate then refuses `validated`
    until it is signed again: the wording, answers, scoring and bands, and also our copy, the
@@ -62,17 +64,17 @@ instrument ships first is their decision too.
 
 ## What is in it now
 
-| Instrument | Measures   | Status        | Why                                                          |
-| ---------- | ---------- | ------------- | ------------------------------------------------------------ |
-| GAD-7      | anxiety    | in validation | free with the credit line; our copy needs review             |
-| PHQ-9      | depression | in validation | free with the credit line; item 9 routes to crisis help      |
-| UCLA-3     | loneliness | draft         | the source gives no cutoffs, and commercial use is unchecked |
+| Instrument | Measures   | Status    | Why                                                          |
+| ---------- | ---------- | --------- | ------------------------------------------------------------ |
+| GAD-7      | anxiety    | validated | approved by Eman on 2026-09-30; free with the credit line    |
+| PHQ-9      | depression | validated | approved by Eman on 2026-09-30; item 9 routes to crisis help |
+| UCLA-3     | loneliness | draft     | the source gives no cutoffs, and commercial use is unchecked |
 
 ## What it works on next
 
-1. **Sign GAD-7 and PHQ-9.** Mark and Sanjin sign every line of the validation pack, and an
-   engineer then records the signatures (step 7). Whether a line needs one signature or
-   both is theirs to decide.
+1. **GAD-7 and PHQ-9 are validated.** Eman approved them on 2026-09-30 without waiting for
+   Mark and Sanjin's line-by-line review, and the sign-off lines name him. Mark and Sanjin
+   can still review them in the validation pack; a change they ask for is a new sign-off.
 2. **UCLA-3's license.** Someone checks commercial digital use with the rights holder.
    Until then it stays a draft and its lines wait, because settling the license changes
    its fingerprint.
