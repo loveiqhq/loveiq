@@ -737,6 +737,12 @@ describe("conversion-digest handler", () => {
     expect(caption).toContain(` ${worst.count.toLocaleString("en-US")} `);
     // The first step is never the named drop: it is the largest by construction.
     expect(chart!.worst).toBeGreaterThan(1);
+    // And it IS the biggest drop after that, worked out here from the counts, so a
+    // chart and headline that agreed with each other on the wrong step still fail.
+    const shares = chart!.steps.map((s, i) =>
+      i < 2 ? Number.POSITIVE_INFINITY : s.count / chart!.steps[i - 1]!.count
+    );
+    expect(chart!.worst).toBe(shares.indexOf(Math.min(...shares)));
 
     // Caption above the picture, and no table left in it.
     const at = arg.blocks.findIndex((b) => JSON.stringify(b).includes("*The funnel, last"));
