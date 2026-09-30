@@ -699,10 +699,10 @@ async function main(argv: string[]): Promise<number> {
     walk.paid = true;
     await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
     await record("after-payment");
-    // Staging's password cookie is SameSite=Strict, so the browser leaves it off Stripe's
-    // redirect back and staging asks for its password again (loveiq.org has no gate). The
-    // gate keeps the page it was protecting in `next`; go there as a tester would once the
-    // password is typed.
+    // Staging's password cookie is Lax since 2026-09-30, so Stripe's redirect back keeps it.
+    // Until then it was Strict and staging asked for its password again here (loveiq.org has
+    // no gate). If that comes back, the gate keeps the page it was protecting in `next`: go
+    // there as a tester would once the password is typed, and say so in the timeline.
     const back = new URL(page.url());
     const next = back.pathname === "/login" ? back.searchParams.get("next") : null;
     if (next?.startsWith("/") && !next.startsWith("//")) {
