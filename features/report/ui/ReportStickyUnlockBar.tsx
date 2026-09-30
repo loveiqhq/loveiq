@@ -33,6 +33,24 @@ const ArrowRight: FC = () => (
   </svg>
 );
 
+/**
+ * V4's guarantee box: the paywall card's (1015:1218), which the mobile footer draws at
+ * 0.68 (1005:397) and the desktop card at its own scale. The frames say "7-day";
+ * Fatih, 29.09: the 14 days every surface promises.
+ */
+const GuaranteeBadge: FC<{ nodeId: string }> = ({ nodeId }) => (
+  <div className="report-sticky-unlock__badge" data-node-id={nodeId}>
+    <span className="report-sticky-unlock__shield" aria-hidden="true">
+      <Image src="/report/v3/premium/footer-shield.svg" alt="" width={20} height={20} unoptimized />
+      <Image src="/report/v3/premium/footer-tick.svg" alt="" width={9} height={11} unoptimized />
+    </span>
+    <span className="report-sticky-unlock__badge-text">
+      <span className="report-sticky-unlock__badge-head">14-day money-back</span>
+      <span className="report-sticky-unlock__badge-sub">Guaranteed, no questions asked.</span>
+    </span>
+  </div>
+);
+
 const ReportStickyUnlockBar: FC<Props> = ({
   quote,
   onCheckout,
@@ -85,32 +103,8 @@ const ReportStickyUnlockBar: FC<Props> = ({
         inert={hidden}
       >
         {v4 ? (
-          /* 1005:397 — the paywall card's guarantee box at 0.68. The frame says
-           * "7-day"; Fatih, 29.09: the 14 days every surface promises. */
-          <div className="report-sticky-unlock__badge" data-node-id="1005:397">
-            <span className="report-sticky-unlock__shield" aria-hidden="true">
-              <Image
-                src="/report/v3/premium/footer-shield.svg"
-                alt=""
-                width={20}
-                height={20}
-                unoptimized
-              />
-              <Image
-                src="/report/v3/premium/footer-tick.svg"
-                alt=""
-                width={9}
-                height={11}
-                unoptimized
-              />
-            </span>
-            <span className="report-sticky-unlock__badge-text">
-              <span className="report-sticky-unlock__badge-head">14-day money-back</span>
-              <span className="report-sticky-unlock__badge-sub">
-                Guaranteed, no questions asked.
-              </span>
-            </span>
-          </div>
+          /* 1005:397 — the paywall card's guarantee box at 0.68. */
+          <GuaranteeBadge nodeId="1005:397" />
         ) : (
           <p className="report-sticky-unlock__guarantee">14-day money-back guarantee</p>
         )}
@@ -143,32 +137,51 @@ const ReportStickyUnlockBar: FC<Props> = ({
       {/* ── Desktop sticky CTA (Figma 7635:13901) ─────────────────────────── */}
       <div
         ref={desktopRef}
-        className="report-sticky-unlock report-sticky-unlock--desktop"
+        className={`report-sticky-unlock report-sticky-unlock--desktop${v4 ? " is-v4" : ""}`}
         aria-hidden={hidden || undefined}
         inert={hidden}
       >
-        <div className="report-sticky-unlock__desktop-inner">
-          <div className="report-sticky-unlock__desktop-copy">
-            <h3 className="report-sticky-unlock__heading">Ready to meet yourself?</h3>
-            <p className="report-sticky-unlock__guarantee-line">
-              <span className="report-sticky-unlock__guarantee-strong">14-day money-back</span>{" "}
-              <span className="report-sticky-unlock__guarantee-tail">if it doesn&rsquo;t land</span>
-            </p>
+        {v4 ? (
+          /* Sanjin, 30.09: "too much, too many different fonts". No desktop frame
+           * exists, so the card carries the mobile footer's pieces (1005:411): the
+           * guarantee box at the paywall card's own scale, and the gradient pill. */
+          <div className="report-sticky-unlock__desktop-inner">
+            <GuaranteeBadge nodeId="1015:1218" />
+            <button
+              type="button"
+              className="report-sticky-unlock__cta--v4"
+              onClick={handleClick("desktop")}
+              aria-label="Unlock full report"
+            >
+              Unlock Full Report<span aria-hidden="true">{" →"}</span>
+            </button>
           </div>
-          <button
-            type="button"
-            className="report-sticky-unlock__cta report-sticky-unlock__cta--desktop rpm-cta"
-            onClick={handleClick("desktop")}
-            aria-label="Unlock full report"
-          >
-            <span className="rpm-cta__wash" aria-hidden="true" />
-            <span className="rpm-cta__reveal" aria-hidden="true" />
-            <span className="report-sticky-unlock__cta-label rpm-cta__label">
-              Unlock full report
-            </span>
-            <ArrowRight />
-          </button>
-        </div>
+        ) : (
+          <div className="report-sticky-unlock__desktop-inner">
+            <div className="report-sticky-unlock__desktop-copy">
+              <h3 className="report-sticky-unlock__heading">Ready to meet yourself?</h3>
+              <p className="report-sticky-unlock__guarantee-line">
+                <span className="report-sticky-unlock__guarantee-strong">14-day money-back</span>{" "}
+                <span className="report-sticky-unlock__guarantee-tail">
+                  if it doesn&rsquo;t land
+                </span>
+              </p>
+            </div>
+            <button
+              type="button"
+              className="report-sticky-unlock__cta report-sticky-unlock__cta--desktop rpm-cta"
+              onClick={handleClick("desktop")}
+              aria-label="Unlock full report"
+            >
+              <span className="rpm-cta__wash" aria-hidden="true" />
+              <span className="rpm-cta__reveal" aria-hidden="true" />
+              <span className="report-sticky-unlock__cta-label rpm-cta__label">
+                Unlock full report
+              </span>
+              <ArrowRight />
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

@@ -8118,6 +8118,64 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   }
 }
 
+/* ══ V4's desktop card — Sanjin, desktop review 30.09 (banner.png) ═══════════════════
+ * "Too much, too many different fonts, gradient edges on the round button": a Lora
+ * heading, Manrope in three weights and a white-bordered button in an orange halo. No
+ * desktop frame exists, so the card takes V4's own pieces from Mark's mobile footer
+ * (1005:411): the guarantee box, here at the paywall card's own scale (1015:1218; the
+ * footer draws it at 0.68), beside the same gradient pill, in Plus Jakarta Sans only,
+ * one row at every desktop width. The card itself (report.css) is unchanged. */
+body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 {
+  --font-sans: var(--font-jakarta);
+  font-family: var(--font-sans);
+}
+body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__desktop-inner {
+  align-items: center;
+  flex-direction: row;
+  gap: 24px;
+  justify-content: center;
+  padding: 14px 20px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__badge {
+  border-radius: 14.39px;
+  border-width: 0.719px;
+  flex: 0 1 265.6px;
+  gap: 11.512px;
+  height: 45.25px;
+  padding: 0 20.146px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__shield {
+  height: 28.779px;
+  width: 28.779px;
+}
+/* 1015:1181 / 1015:1222 — the files keep the strokes' overhang. */
+body:has(.rv3.rv4)
+  .report-sticky-unlock--desktop.is-v4
+  .report-sticky-unlock__shield
+  > img:first-child {
+  height: 29.499px;
+  margin: -0.36px;
+  width: 29.499px;
+}
+body:has(.rv3.rv4)
+  .report-sticky-unlock--desktop.is-v4
+  .report-sticky-unlock__shield
+  > img:last-child {
+  height: 15.812px;
+  width: 12.872px;
+}
+/* 1015:1227 / 1015:1228 */
+body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__badge-head {
+  font-size: 14px;
+  line-height: 22.4px;
+  min-height: 23px;
+}
+body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__badge-sub {
+  color: #505253;
+  font-size: 10px;
+  line-height: 16px;
+}
+
 /* ════════════════════════════════════════════════════════════════════════════════
  * REVIEW 28.09
  * ════════════════════════════════════════════════════════════════════════════════ */
