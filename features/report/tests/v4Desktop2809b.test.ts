@@ -48,11 +48,13 @@ describe("V4 desktop touch-up — scoped to the live page from 700px", () => {
 });
 
 describe("the archetype card uses the column", () => {
-  it("runs the match row across the card and gives the tagline the copy measure", () => {
+  // Since 30.09 (Mark: "Text width should go all the way to the border") neither the
+  // tagline nor the motivation body stops at production's 760 copy measure.
+  it("runs the match row and the tagline across the card", () => {
     expect(ruleIn(".rv3.rv4 .rv3-arch__match")).toContain("width: 100%");
     const tagline = ruleIn(".rv3.rv4 .rv3-arch__tagline");
     expect(tagline).toContain("width: 100%");
-    expect(tagline).toContain("max-width: 760px");
+    expect(tagline).not.toContain("max-width");
   });
 
   // The phone's fixed 191 header and 197 panel left white under a one-line tagline and
@@ -63,10 +65,10 @@ describe("the archetype card uses the column", () => {
     expect(ruleIn(".rv3.rv4 .rv3-arch__tagline")).toContain("min-height: 0");
   });
 
-  it("lets the motivation body run to the copy measure, not the phone's 281", () => {
+  it("lets the motivation body run across the card, not the phone's 281", () => {
     const body = ruleIn(".rv3.rv4 .rv3-arch__motive-body");
     expect(body).toContain("width: auto");
-    expect(body).toContain("max-width: 760px");
+    expect(body).not.toContain("max-width");
   });
 });
 
@@ -74,17 +76,21 @@ describe("the archetype card uses the column", () => {
 // desktop review, 28.09 (Notion): v4DesktopReview2809.test.ts.
 describe("the Summary", () => {
   it("sets the Summary's copy under its heading, not centred in the column", () => {
-    expect(ruleIn(".rv3.rv4 .rv4-summary__body")).toContain("align-items: flex-start");
+    const body = ruleIn(".rv3.rv4 .rv4-summary__body");
+    expect(body).toContain("align-items: flex-start");
     expect(ruleIn(".rv3.rv4 .rv4-summary__copy")).toContain("width: auto");
+    // Flush with it too (Mark, 30.09, "Text width.png"): not the phone's 5.5px in.
+    expect(body).toContain("padding-left: 0");
   });
 });
 
 describe("Fantasy vs. Reality uses the column", () => {
-  // Both keep to the chapter's 760 copy measure: the table at the full 917 set its names
-  // 600px from their scores, and the map centres under the copy, not the column.
-  it("grows the map's plot to 520, centred under the copy measure", () => {
+  // The table keeps its own 760: at the full 917 it set its names 600px from their
+  // scores. The map keeps its own 548 and centres in the column, which the copy runs
+  // since 30.09.
+  it("grows the map's plot to 520, centred in the column", () => {
     const map = ruleIn(".rv3.rv4 .rv4-fvm");
-    expect(map).toContain("margin-left: max(0px, (min(760px, 100%) - 548px) / 2)");
+    expect(map).toContain("margin-left: max(0px, (100% - 548px) / 2)");
     expect(map).toContain("width: min(548px, 100%)");
     expect(ruleIn(".rv3.rv4 .rv4-fvm__img")).toContain("--fvm-plot: min(520px, 100cqi - 28px)");
   });

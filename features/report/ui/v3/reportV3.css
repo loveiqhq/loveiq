@@ -7829,37 +7829,34 @@ html {
  * track (at most 1024) padded clamp(1.5rem, 3.5vw, 4rem) — 855px of content at
  * 1440; on a tablet it is the full width inside 16 + 24px margins. V3 had clamped
  * it to 680, which left V4 a strip with ~200px of white on either side.
- * Copy keeps production's 760 measure while cards and charts take the column. */
+ *
+ * Mark's desktop review, 30.09: "We should define the width of the page and then use
+ * it". The page is 896 wide, the column production gives at 1920 (1024 less 2 x 64),
+ * and never wider: it had run to 1148 at 1279 and 917 at 1536. Below that the column
+ * is what each layout leaves (620 at 700, 710 at 1280). Copy, cards and charts all take
+ * it: the 760 copy measure went the same day ("Text width should go all the way to the
+ * border"). */
+.rv3.rv4 {
+  --rv4-page: 896px;
+}
 @media (min-width: 700px) and (max-width: 1279px) {
   .rv3.rv4 .report-shell {
     padding-inline: 1.5rem;
   }
   .rv3.rv4 .report-content {
-    max-width: none;
-    padding-inline: clamp(1rem, 2vw, 4rem);
+    --rv4-content-pad: clamp(1rem, 2vw, 4rem);
+    max-width: calc(var(--rv4-page) + 2 * var(--rv4-content-pad));
+    padding-inline: var(--rv4-content-pad);
   }
 }
 @media (min-width: 1280px) {
   .rv3.rv4 .report-content {
-    max-width: 1024px;
-    padding-inline: clamp(1.5rem, 3.5vw, 4rem);
+    --rv4-content-pad: clamp(1.5rem, 3.5vw, 4rem);
+    max-width: calc(var(--rv4-page) + 2 * var(--rv4-content-pad));
+    padding-inline: var(--rv4-content-pad);
   }
 }
 @media (min-width: 700px) {
-  /* `.report-content` for weight: the narrow-phone rule further down is an :is()
-   * list, which takes the specificity of its heaviest entry. */
-  .rv3.rv4 .report-content .rv4-part__intro,
-  .rv3.rv4 .report-content .rv4-chapter__body > .rv3-prose,
-  .rv3.rv4 .report-content .rv4-chapter__teaser,
-  .rv3.rv4 .report-content .rv4-copy,
-  .rv3.rv4 .report-content .rv4-summary__copy,
-  .rv3.rv4 .report-content .rv4-summary__closer,
-  .rv3.rv4 .report-content .rv4-top3__lede,
-  .rv3.rv4 .report-content .rv3-method .rv3-prose,
-  .rv3.rv4 .report-content .report-means__body {
-    max-width: 760px;
-  }
-
   /* Headings at production's scale. Its section titles are 40px beside the
    * sidebar; V4's are the phone's 24, which read as a zoomed-out page in a
    * 900px column. V4's own hierarchy is kept, lifted by a third. */
@@ -8360,15 +8357,16 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
  * archetype card's match row and tagline at 323 and its motivation body at 281, the
  * fantasy map's plot at 300 and the fantasy table at 328, and the Summary's copy
  * centred 80px in from its own heading. Each now takes the column the way the blocks
- * around it do; copy keeps production's 760 measure. (The top three's rows and the
- * science deck were here too; Mark's desktop review sets them now, at the end of the
- * file.) The live page only (`.rv3.rv4`) and only from 700px, so the phone and the 393
- * preview are exactly as before. */
+ * around it do. Copy kept production's 760 measure until Mark's desktop review of 30.09
+ * ("Text width should go all the way to the border"); now it runs the column too. (The
+ * top three's rows and the science deck were here too; Mark's desktop review sets them
+ * now, at the end of the file.) The live page only (`.rv3.rv4`) and only from 700px, so
+ * the phone and the 393 preview are exactly as before. */
 @media (min-width: 700px) {
-  /* 15:815 — the match row runs the card; the tagline and the motivation body read at
-   * the copy measure rather than the phone's 323 and 281. The header and the panel
-   * size to their content: the phone frame's fixed 191 and 197 (and the 70 under the
-   * tagline) left white under a one-line tagline and a one-line body here. */
+  /* 15:815 — the match row, the tagline and the motivation body run the card rather
+   * than the phone's 323 and 281. The header and the panel size to their content: the
+   * phone frame's fixed 191 and 197 (and the 70 under the tagline) left white under a
+   * one-line tagline and a one-line body here. */
   .rv3.rv4 .rv3-arch__head {
     min-height: 0;
   }
@@ -8376,7 +8374,6 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     width: 100%;
   }
   .rv3.rv4 .rv3-arch__tagline {
-    max-width: 760px;
     min-height: 0;
     width: 100%;
   }
@@ -8384,25 +8381,27 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     min-height: 0;
   }
   .rv3.rv4 .rv3-arch__motive-body {
-    max-width: 760px;
     width: auto;
   }
 
-  /* 1:736 — the copy under its heading's left edge, not centred in the column. */
+  /* 1:736 — the copy under its heading's left edge, not centred in the column, and flush
+   * with it: the phone's 5.5px inset read as a stray indent here (Mark, 30.09, "Text
+   * width.png"). */
   .rv3.rv4 .rv4-summary__body {
     align-items: flex-start;
+    padding-left: 0;
   }
   .rv3.rv4 .rv4-summary__copy {
     width: auto;
   }
 
-  /* Fantasy vs. Reality, at the chapter's 760 copy measure. The map's plot is the
-   * phone's 300 at most, placed in percentages, so it scales as one piece: 520 here,
-   * the figure centred under the copy; its labels keep their size and so crowd less.
-   * The table runs the measure (at the full 917 its names sat 600px from their
-   * scores), its score columns 140 so a fantasy's name sits on one line. */
+  /* Fantasy vs. Reality. The map's plot is the phone's 300 at most, placed in
+   * percentages, so it scales as one piece: 520 here, the figure centred in the column,
+   * which the copy runs; its labels keep their size and so crowd less. The table keeps
+   * a 760 of its own (at the full 917 its names sat 600px from their scores), its score
+   * columns 140 so a fantasy's name sits on one line. */
   .rv3.rv4 .rv4-fvm {
-    margin-left: max(0px, (min(760px, 100%) - 548px) / 2);
+    margin-left: max(0px, (100% - 548px) / 2);
     width: min(548px, 100%);
   }
   .rv3.rv4 .rv4-fvm__img {
