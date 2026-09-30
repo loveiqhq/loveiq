@@ -2715,7 +2715,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           accessPlan={data.accessPlan}
           archetypeTiers={data.archetypeTiers ?? {}}
           diagnostics={data.diagnostics ?? null}
-          submissionSeed={data.submissionId ?? token ?? null}
           submissionId={data.submissionId ?? null}
           feedbacks={feedbacks}
           isPricingModalOpen={isPricingModalOpen}
