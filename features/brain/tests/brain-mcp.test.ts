@@ -128,6 +128,7 @@ import {
 import { atomsIn } from "@features/brain/server/check-answer";
 import { citesSources } from "@features/brain/server/night-shift";
 import { BOOKS, partHead } from "@/scripts/brain-books";
+import { partHead as paperPartHead } from "@features/brain/server/ingest/papers";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
@@ -1270,6 +1271,43 @@ describe("/api/mcp", () => {
         );
         // Its digits are an id, not two more figures.
         expect(r.content[0]!.text).toContain("Checked 1 figure and 1 quote");
+      });
+
+      it("checks a paper against the part cited, without the head every part opens with", async () => {
+        // The head carries the year and "Part 7 of 19": left in, a made-up "19%" would be found.
+        const paper = {
+          pmcid: "PMC8255964",
+          title: "Intimacy and Sexual Desire",
+          firstAuthor: "van Lankveld JJDM",
+          authorCount: 4,
+          journal: null,
+          year: "2021",
+          doi: null,
+          license: "cc by" as const,
+        };
+        const id = "paper:PMC8255964#7";
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.paper") &&
+            path.includes(`source_id=eq.${encodeURIComponent(id)}`)
+              ? [
+                  {
+                    body: `${paperPartHead(paper, 7, 19)}\nIntimacy predicted desire in 312 couples.`,
+                  },
+                ]
+              : [],
+        }));
+        const r = await call({
+          answer: `In 312 couples, 19% lost desire (paper/${id}).`,
+          sources: [`paper/${id}`],
+        });
+        expect(r.content[0]!.text).toContain("Checked 2 figures");
+        // 312 is in the paper's text; 19 is only in the head ("Part 7 of 19"), which is ours.
+        expect(r.content[0]!.text).toContain(`19% is not in paper/${id}`);
+        expect(r.content[0]!.text).not.toMatch(/: 312 (?:\(nearest|is not in)/);
       });
 
       it("checks a long document's part alone, not the document it belongs to", async () => {
@@ -3128,6 +3166,18 @@ describe("/api/mcp", () => {
       expect(other.content[0].text).not.toContain("Books are left out");
     });
 
+    it("says papers are opt-in when a paper filter comes back empty", async () => {
+      wire([]);
+      const r = await call({ meta: { kind: "paper" } });
+      expect(r.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+      wire([]);
+      const byId = await call({ meta: { pmcid: "PMC8255964" } });
+      expect(byId.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+      wire([]);
+      const named = await call({ sources: ["paper"], meta: { kind: "paper" } });
+      expect(named.content[0].text).not.toContain("Papers are left out");
+    });
+
     it("gives a plain total when nothing is grouped", async () => {
       wire([{ bucket: "(all)", n: 91, total: 91 }]);
       const r = await call({ sources: ["calendar"] });
@@ -3390,6 +3440,12 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toContain('Books are left out unless `sources` names "book".');
     });
 
+    it("says papers are opt-in when a paper filter lists nothing", async () => {
+      wire([], 0);
+      const r = await call({ meta: { kind: "paper" } });
+      expect(r.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+    });
+
     it("marks a replaced decision on its line, and as it stood on `until`", async () => {
       wire(
         [
@@ -3580,6 +3636,23 @@ describe("/api/mcp", () => {
       wire([row(1)], 1);
       await call({ sources: ["book"] });
       expect(urlOf()).not.toContain("neq.book");
+    });
+
+    it("lists papers only when they are named, like books", async () => {
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.paper");
+      wire([row(1)], 1);
+      await call({ sources: ["paper"] });
+      expect(urlOf()).not.toContain("neq.paper");
+      // Naming one opt-in source does not let the other in.
+      expect(urlOf()).toContain("source=neq.book");
     });
 
     it("orders by when the brain learned it, and shows that date", async () => {

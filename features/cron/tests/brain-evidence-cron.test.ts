@@ -63,7 +63,7 @@ describe("brain-evidence cron", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("does nothing on staging, which shares this database", async () => {
+  it("does nothing outside production", async () => {
     prodHost = false;
     expect((await (await GET(req())).json()).skipped).toBe(true);
     expect(calls).toHaveLength(0);
@@ -129,12 +129,15 @@ describe("brain-evidence cron", () => {
     expect(recorded[0]!.status).toBe("success");
   });
 
-  it("survives a throw and still records the run", async () => {
+  it("survives a throw, records the run, and says so in #brain", async () => {
     throws = true;
     const res = await GET(req());
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(false);
     expect(recorded[0]!.status).toBe("error");
     expect(recorded[0]!.error).toContain("europe pmc exploded");
+    // Until 2026-09-30 a crash posted nothing: the only alert was for every search failing.
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.text).toContain("stopped with an error: europe pmc exploded");
   });
 });

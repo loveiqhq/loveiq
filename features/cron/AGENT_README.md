@@ -4,21 +4,25 @@
 
 **Entry:** Routes inline at `app/api/cron/<job>/route.ts`. Tests in `tests/`.
 
-**`vercel.json` is the source of truth for WHICH of them run** — a route on disk is not a
-scheduled job, and the difference has hidden a dead job before. 28 routes exist; 22 are
-scheduled:
+**`vercel.json` and `brain-daily.yml` are the source of truth for WHICH of them run** — a
+route on disk is not a scheduled job, and the difference has hidden a dead job before. 34
+routes exist: 23 are scheduled in `vercel.json`, 5 run in GitHub Actions, and 6 do not run
+at all (a test in `tests/cron-stall.test.ts` keeps these lists true):
 
 - _Product & ops_ — invite-reminders, survey-paused, nurture-sequence,
   payment-fulfillment-sweep, anomaly-watcher, security-storm-detector, conversion-digest,
-  funnel-digest, file-invoices, journey-backfill, ux-review
+  funnel-digest, file-invoices, journey-backfill, ux-review, start-github-jobs
 - _Company brain_ — brain-fast, brain-ingest, brain-drive, brain-gmail, brain-notion,
-  brain-calendar, brain-mine, brain-brief, brain-clarity, brain-evidence, brain-reconcile
+  brain-calendar, brain-clarity, brain-crm, brain-evidence, brain-papers, brain-reconcile
+- _Company brain, in GitHub Actions_ (`brain-daily.yml` runs them through
+  `scripts/brain-cron.ts`, because they need the `claude` binary) — brain-brief,
+  brain-mine, brain-radar, brain-night-shift, brain-health
 
-**Six routes exist but are NOT scheduled**, and none of them is a fault: `purge-old-data`
-is deliberately off (see CLAUDE.md, "Postponed / TODO"), and `chapter-nudge`,
-`deep-engagement-alert`, `product-digest`, `tech-digest` and `table-size-digest` were
-retired without deleting the code. Check `vercel.json` before assuming one of these runs;
-`cron_run` shows their last real execution was July 2026.
+**The routes that do not run are not faults**: `purge-old-data` is deliberately off (see
+CLAUDE.md, "Postponed / TODO"), and `chapter-nudge`, `deep-engagement-alert`,
+`product-digest`, `tech-digest` and `table-size-digest` were retired without deleting the
+code. Check `vercel.json` before assuming one of these runs; `cron_run` shows their last
+real execution was July 2026.
 
 **GitHub Actions jobs are started by Vercel's clock, and watched.** GitHub's own schedule
 starts this repo's jobs 4.5 to 5.5 hours late and drops the slots that fall due meanwhile

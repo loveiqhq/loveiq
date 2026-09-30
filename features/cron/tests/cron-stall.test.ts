@@ -201,6 +201,52 @@ describe("the watch list must not drift from what is scheduled", () => {
   });
 });
 
+describe("features/cron/AGENT_README.md says truly what runs", () => {
+  /**
+   * Its counts said 28 and 22 for weeks after both had moved, and its list named two brain
+   * jobs Vercel no longer runs while missing one it does. A reader checking "is this job
+   * scheduled?" against it would have been told the wrong thing.
+   */
+  it("counts every route, and lists each one under how it runs", async () => {
+    const fs = await import("node:fs");
+    const readme = fs.readFileSync("features/cron/AGENT_README.md", "utf8");
+    const onDisk = fs
+      .readdirSync("app/api/cron")
+      .filter((d) => fs.existsSync(`app/api/cron/${d}/route.ts`));
+    const vercel = new Set(
+      (
+        JSON.parse(fs.readFileSync("vercel.json", "utf8")) as { crons: Array<{ path: string }> }
+      ).crons.map((c) => c.path.replace("/api/cron/", ""))
+    );
+    // The two batteries also record under brain-daily's schedule, but are not routes.
+    const github = new Set(Object.keys(brainDailySchedules()).filter((j) => onDisk.includes(j)));
+    const idle = onDisk.filter((d) => !vercel.has(d) && !github.has(d));
+
+    const counts =
+      /(\d+)\s+routes exist: (\d+) are scheduled in `vercel\.json`, (\d+) run in GitHub\s+Actions, and (\d+) do not run\s+at all/.exec(
+        readme
+      );
+    expect(counts?.slice(1).map(Number)).toEqual([
+      onDisk.length,
+      vercel.size,
+      github.size,
+      idle.length,
+    ]);
+
+    /** The routes a bullet (or paragraph) names, matched whole: ux-review is not ux-review-verify. */
+    const named = (block: RegExp) => {
+      const text = block.exec(readme)?.[0] ?? "";
+      return onDisk.filter((d) => new RegExp(`(?<![\\w-])${d}(?![\\w-])`).test(text)).sort();
+    };
+    const bullet = (label: string) => new RegExp(`^- _${label}_[^\\n]*(?:\\n  [^\\n]*)*`, "m");
+    expect([...named(bullet("Product & ops")), ...named(bullet("Company brain"))].sort()).toEqual(
+      [...vercel].sort()
+    );
+    expect(named(bullet("Company brain, in GitHub Actions"))).toEqual([...github].sort());
+    expect(named(/^\*\*The routes that do not run[\s\S]*?\n\n/m)).toEqual(idle.sort());
+  });
+});
+
 describe("the watchdog must not be able to break the cron it rides on", () => {
   /**
    * The first wiring put `findStalledCrons()` inline in anomaly-watcher's try
