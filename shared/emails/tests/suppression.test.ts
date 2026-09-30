@@ -118,6 +118,26 @@ describe("addToSuppression", () => {
     expect(body.source_channel).toBe("footer");
   });
 
+  it("ifAbsent inserts without touching an existing row", async () => {
+    // One statement (ON CONFLICT DO NOTHING), so a refused send recorded as a
+    // bounce can never relabel a complaint, even when both land at once.
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
+    await addToSuppression("c@example.com", "hard_bounce", { ifAbsent: true });
+    const [, init] = mockFetch.mock.calls[0];
+    expect((init?.headers as Record<string, string>).Prefer).toBe("resolution=ignore-duplicates");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      email: "c@example.com",
+      reason: "hard_bounce",
+    });
+  });
+
+  it("without ifAbsent, a later write still merges into the existing row", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
+    await addToSuppression("c@example.com", "hard_bounce");
+    const [, init] = mockFetch.mock.calls[0];
+    expect((init?.headers as Record<string, string>).Prefer).toBe("resolution=merge-duplicates");
+  });
+
   it("does nothing when env vars are missing", async () => {
     delete process.env.SUPABASE_URL;
     await addToSuppression("x@example.com", "complaint");
