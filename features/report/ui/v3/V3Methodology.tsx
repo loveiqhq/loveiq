@@ -139,21 +139,18 @@ const CARDS_V4: readonly ScienceCard[] = V4_ORDER.map((title) =>
 );
 
 /** 10392:18700 — the three source cards under the deck. */
-const SOURCES: readonly { title: string; body: string; icon: string }[] = [
+const SOURCES: readonly { title: string; body: string }[] = [
   {
     title: "Hundreds of papers",
     body: "peer reviewed from a variety of scientific fields",
-    icon: "papers",
   },
   {
     title: "Clinical models",
     body: "what therapists rely on and their practical pointers",
-    icon: "models",
   },
   {
     title: "Foundational books",
     body: "the texts experts return to and their main insights",
-    icon: "books",
   },
 ];
 
@@ -331,25 +328,18 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
         ) : null}
       </div>
 
-      <div className="rv3-src" data-node-id="10392:18700">
-        {SOURCES.map((s) => (
-          <div key={s.title} className="rv3-src__card">
-            {/* 1:426 — V4 adds a 29.87px gradient tile above the title. */}
-            {chrome === "deck" ? (
-              <span className="rv3-src__icon" aria-hidden="true">
-                <span
-                  className="rv3-src__glyph"
-                  style={
-                    { "--rv3-glyph": `url(/report/v3/sources/${s.icon}.svg)` } as CSSProperties
-                  }
-                />
-              </span>
-            ) : null}
-            <p className="rv3-src__title">{s.title}</p>
-            <p className="rv3-src__body">{s.body}</p>
-          </div>
-        ))}
-      </div>
+      {/* V4 draws no source tiles: since 30.09 they are the pre-report wizard's first
+       * slide (Figma 1049:1191), and 1:195 hides its own (1:450). */}
+      {chrome === "full" ? (
+        <div className="rv3-src" data-node-id="10392:18700">
+          {SOURCES.map((s) => (
+            <div key={s.title} className="rv3-src__card">
+              <p className="rv3-src__title">{s.title}</p>
+              <p className="rv3-src__body">{s.body}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {/* 10392:18726 / V4 1:480. V4 carries its own wording and bold runs now
        * (REPORT_V4_CLOSING); the V3 outro below is the live `?v3=1` copy. */}

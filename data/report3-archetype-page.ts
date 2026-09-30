@@ -12,7 +12,6 @@
  */
 
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
-import { REPORT_DEEP_DIVES, type ReportDeepDive } from "./report-deep-dives";
 
 /** The frame's own placeholder for the 17 unwritten chapter teasers (e.g. 1:871). */
 export const TEASER_PLACEHOLDER = "[Teaser Text]";
@@ -271,28 +270,6 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
   { weight: 700, text: "core archetype " },
   { text: "- the highest probability match of all 14. " },
 ];
-
-/**
- * Part II · "A Snapshot of what you will learn" — Figma 1:763 (the frame is named
- * "Snapshot" since 26.09): the H2 1:766 over the chapter nudges panel 663:1089, which
- * replaced the Snapshot's five claims (316:250). Review 26.09: "The headline changed
- * to 'A Snapshot of what you will learn'"; it was "What you will discover".
- *
- * One row per chapter the report leads with, in the frame's order. The copy is the
- * same for every archetype — each row is a way into a chapter, not a finding — so it
- * renders for all fourteen. The questions and support lines are Sanjin's (review
- * round 25.09, the all-open panel 712:243: 712:260/262, 282/321, 298/332,
- * 314/343), set in Mark's final panel (1:847). Two stray double spaces in the frame
- * are single here. Challenges' line is Sanjin's polish of 26.09 (Mark 1942399260);
- * 712:332 drops its final period and it keeps one here, as every other line has. Each row's part and title come from V4's chapter order
- * (V4ChapterNudges), so they follow it if it moves.
- */
-export type Report3Nudge = Pick<ReportDeepDive, "id" | "question" | "support">;
-
-export const REPORT_V4_NUDGES_HEADING = "A Snapshot of what you will learn";
-
-/** The four deep dives, since 30.09 kept in `data/report-deep-dives.ts` (the wizard's map reads them too). */
-export const REPORT_V4_NUDGES: readonly Report3Nudge[] = REPORT_DEEP_DIVES;
 
 /**
  * Part II · the three highest-scoring archetypes — 1:493.

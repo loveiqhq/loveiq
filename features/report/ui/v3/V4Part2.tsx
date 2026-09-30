@@ -5,8 +5,6 @@ import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import V3ArchetypeCard from "./V3ArchetypeCard";
 import V4CoreArchetypeHeading from "./V4CoreArchetypeHeading";
 import V4PartHeading from "./V4PartHeading";
-import V4Rating from "./V4Rating";
-import V4ChapterNudges from "./V4ChapterNudges";
 import V4TopThreeSection from "./V4TopThreeSection";
 import V4SummaryChapter from "./V4SummaryChapter";
 
@@ -15,8 +13,9 @@ import V4SummaryChapter from "./V4SummaryChapter";
  *
  * Order and node ids: rule 1:484 · heading 1:486 · separator 1:491 · the three
  * highest-scoring archetypes 1:493 · the Core Archetype heading 1:576 · the
- * archetype card 15:815 · separator 1:734 · Summary 1:736 · Snapshot 1:763 ·
- * rating 1:833.
+ * archetype card 15:815 · separator 1:734 · Summary 1:736, which ends on its own rating
+ * (1:747). The Snapshot (1:763) and its rating (1:833) are gone: since 30.09 its four
+ * chapters are the pre-report wizard's map (Figma 1071:2092).
  *
  * `V3TopThree` is reused unchanged — it already renders 1:493's ranked list from a
  * percentages map, which is exactly the shape the frame's 43.4 / 39.5 / 36.2 take.
@@ -71,12 +70,6 @@ const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex =
 
       {/* 1:736 — omitted rather than faked for an archetype Mark has not written. */}
       {summary ? <V4SummaryChapter archetype={archetype} summary={summary} /> : null}
-
-      {/* 1:763 — "A Snapshot of what you will learn" over the chapter nudges (663:1089). */}
-      <V4ChapterNudges />
-
-      {/* 1:833 */}
-      <V4Rating label={`Part II — Your Constellation`} />
     </section>
   );
 };

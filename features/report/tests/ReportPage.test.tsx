@@ -988,26 +988,25 @@ describe("ReportPage", () => {
     });
   });
 
-  // Review 26.09: "The headline changed to 'A Snapshot of what you will learn'" (1:766).
-  describe("V4 — the Snapshot's heading names its rating", () => {
+  // 30.09: the Snapshot's four deep dives moved into the pre-report wizard's map (Figma
+  // 1071:2092), and Part 2 now runs the Archetype card into the Summary (1:483).
+  describe("V4 — the Snapshot left the report for the wizard", () => {
     afterEach(() => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
     });
 
-    it("names the Snapshot's feedback buttons after the new heading under ?v4=1", () => {
+    it("renders no Snapshot, nudges or 'How you compare' under ?v4=1", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
 
       const { container } = render(<ReportPage />);
 
-      expect(
-        container.querySelector(
-          '#snapshot [aria-label="This resonates: A Snapshot of what you will learn"]'
-        )
-      ).not.toBeNull();
+      expect(container.querySelector("#snapshot")).toBeNull();
+      expect(container.querySelector(".rv4-nudges")).toBeNull();
+      expect(container.querySelector(".rv3-snap")).toBeNull();
     });
 
-    it("leaves ?v3=1 on its own label", () => {
+    it("keeps ?v3=1's own Snapshot and its label", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
 
@@ -1583,7 +1582,7 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
       const tier = tiers(container);
 
-      for (const id of ["introduction", "what_shaped_this_report", "core_archetype", "snapshot"]) {
+      for (const id of ["introduction", "what_shaped_this_report", "core_archetype"]) {
         expect(tier.get(id), id).toBe("free");
       }
       // The four designed chapters open, in part, to every reader.
