@@ -15,7 +15,8 @@ import { join } from "node:path";
 /** How long to wait for Jarvis: the setting when it is sensible, five seconds otherwise. */
 const waitMs = (setting) => {
   const ms = Number(setting);
-  return Number.isFinite(ms) && ms > 0 && ms <= 60_000 ? ms : 5000;
+  // Whole milliseconds only: AbortSignal.timeout throws on 0.5 as it does on -5.
+  return Number.isInteger(ms) && ms > 0 && ms <= 60_000 ? ms : 5000;
 };
 
 const dir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
@@ -47,7 +48,8 @@ async function main() {
       params: { name: "whats_new", arguments: {} },
     }),
     // Five seconds is what a session start can wait; a test on a loaded machine sets more.
-    // Anything outside a minute (negative throws, past 2^31 ms fires at once) means five.
+    // Anything but whole milliseconds up to a minute (negative or fractional throws, past
+    // 2^31 ms fires at once) means five.
     signal: AbortSignal.timeout(waitMs(process.env.JARVIS_OVERNIGHT_TIMEOUT_MS)),
   });
   if (!res.ok) return;

@@ -83,7 +83,7 @@ describe("jarvis-overnight session hook", () => {
     const url = await serve(() =>
       result("New since 2026-09-24 00:00 UTC, newest first:\n- x (notice/n1)")
     );
-    for (const wait of ["-5", "4000000000", "soon"]) {
+    for (const wait of ["-5", "4000000000", "soon", "0.5", "1500.5"]) {
       const out = await run({
         BRAIN_MCP_URL: url,
         LOVEIQ_MCP_TOKEN: "t0ken",
