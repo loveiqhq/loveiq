@@ -37,8 +37,11 @@
   ],
   "ignoreRegExpList": ["/`[^`]+`/", "/```[\\s\\S]*?```/", "HexValues", "Urls", "EmailAddresses"],
   "words": [
+    "Amtsgericht",
+    "appliedpsychometrics",
     "Baileys",
     "ChatStorage",
+    "haftungsbeschränkt",
     "halfvec",
     "iCalUID",
     "IVFFlat",
