@@ -75,7 +75,7 @@ export default function StagingLoginForm() {
               placeholder="Enter staging password"
               required
               autoFocus
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none transition focus:border-white/20 focus:ring-1 focus:ring-white/20"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-text-primary placeholder:text-text-muted sm:text-sm outline-none transition focus:border-white/20 focus:ring-1 focus:ring-white/20"
             />
           </div>
 
