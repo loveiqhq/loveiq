@@ -1479,7 +1479,7 @@ export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
     const arpp = u.revenue / u.paidReports;
     const margin = arpp - cppr;
     lines.push(
-      `• *Per paid report:* ${eur(cppr)} in ads to win it, ${eur(arpp)} earned, so ` +
+      `• *Per paid report:* ${eur(cppr)} in ads, ${eur(arpp)} earned, so ` +
         // There was no profitable branch at all: `cppr - arpp` printed "each one
         // costs us EUR -15.00" the moment the product started making money — on
         // the line whose whole job is to announce that.

@@ -789,7 +789,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   if (unitEconomics) {
     blocks.push(
       section(
-        [`*Break-even — ${WINDOW_DAYS} days*`, ...buildUnitEconomicsLines(unitEconomics)].join("\n")
+        [`*Break-even, last ${WINDOW_DAYS} days*`, ...buildUnitEconomicsLines(unitEconomics)].join(
+          "\n"
+        )
       )
     );
   }
