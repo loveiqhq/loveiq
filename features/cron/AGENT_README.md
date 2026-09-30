@@ -12,7 +12,8 @@ scheduled:
   payment-fulfillment-sweep, anomaly-watcher, security-storm-detector, conversion-digest,
   funnel-digest, file-invoices, journey-backfill, ux-review
 - _Company brain_ — brain-fast, brain-ingest, brain-drive, brain-gmail, brain-notion,
-  brain-calendar, brain-mine, brain-brief, brain-clarity, brain-evidence, brain-reconcile
+  brain-calendar, brain-mine, brain-brief, brain-clarity, brain-evidence, brain-papers,
+  brain-reconcile
 
 **Six routes exist but are NOT scheduled**, and none of them is a fault: `purge-old-data`
 is deliberately off (see CLAUDE.md, "Postponed / TODO"), and `chapter-nudge`,
