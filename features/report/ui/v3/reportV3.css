@@ -6173,6 +6173,13 @@ html {
 .rv3 .rv4-nudges__row + .rv4-nudges__row {
   border-top: 1px solid rgba(22, 16, 33, 0.14);
 }
+/* Sanjin's review, 30.09, on an iPhone: Safari does not clip a blurred child to an
+ * ancestor's rounded corners, so the open first row's lavender wash (below) tinted the
+ * square corner outside the panel's border. The first row takes the panel's top
+ * corners itself; a clip-path clips the blur in every engine. */
+.rv3 .rv4-nudges__row:first-child {
+  clip-path: inset(0 round 27px 27px 0 0);
+}
 /* The open row's two soft washes: lavender top-left, rose bottom-right. */
 .rv3 .rv4-nudges__wash {
   border-radius: 50%;
