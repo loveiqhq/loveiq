@@ -230,6 +230,16 @@ describe("V4ChapterNudges — CSS contract", () => {
     expect(rule(".rv3 .rv4-nudges__row")).toContain("padding: 18px 22px");
   });
 
+  // Sanjin's review, 30.09 ("Little detail with the snapshots", circled at the first
+  // card's top-left corner, iPhone): Safari let the open row's blurred lavender wash out
+  // past the panel's rounded clip, tinting the square corner behind the border.
+  it("clips the first row to the panel's own top corners, so the blurred wash stays inside them", () => {
+    expect(rule(".rv3 .rv4-nudges__row:first-child")).toContain(
+      "clip-path: inset(0 round 27px 27px 0 0);"
+    );
+    expect(rule(".rv3 .rv4-nudges__wash")).toContain("filter: blur(40px)");
+  });
+
   it("sets the part in its own glow, the question and the text link as drawn", () => {
     const part = rule(".rv3 .rv4-nudges__part");
     expect(part).toContain("height: 24px");
