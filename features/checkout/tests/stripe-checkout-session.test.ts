@@ -346,6 +346,35 @@ describe("POST /api/stripe/checkout-session", () => {
     );
   });
 
+  it("names the line item after the archetype only for the one-archetype plan", async () => {
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_names_789",
+      url: "https://checkout.stripe.com/c/pay/cs_test_names_789",
+    });
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: createSession } },
+    } as never);
+    const nameFor = async (body: Record<string, string>) => {
+      createSession.mockClear();
+      const res = await POST(
+        makeRequest({ reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848", ...body })
+      );
+      expect(res.status).toBe(200);
+      return createSession.mock.calls[0]![0].line_items[0].price_data.product_data.name;
+    };
+
+    expect(await nameFor({ plan: "full_report", archetype: "Spark Seeker" })).toBe(
+      "LoveIQ Spark Seeker report"
+    );
+    // The bundle carries the archetype for its return URL, but it is not that archetype's report.
+    expect(await nameFor({ plan: "core", archetype: "Spark Seeker" })).toBe(
+      "LoveIQ All your core archetypes"
+    );
+    expect(await nameFor({ plan: "all_reports" })).toBe("LoveIQ For you & your partner");
+  });
+
   it("charges chargedPriceCents, never the base currentPriceCents", async () => {
     // The number Stripe receives has to be the one the report showed. `chargedPriceCents`
     // is that number; `currentPriceCents` is the base it was built from. They are equal
