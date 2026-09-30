@@ -67,7 +67,8 @@ export async function GET(request: Request) {
       `${result.written} of up to ${MAX_PAPERS_PER_RUN} papers written (${result.parts} parts) ` +
       `from ${result.searches} of ${result.constructs} constructs searched; skipped ` +
       `${s.stored} already stored, ${s.license} on the license, ${s.noText} with no full ` +
-      `text, ${s.tooLong} too long, ${s.unread} unreadable; ${result.failedSearches} ` +
+      `text, ${s.tooLong} too long, ${s.unread} unreadable, ${s.withheld} withheld for a ` +
+      `credential; ${result.failedSearches} ` +
       `searches failed`;
 
     // Thin open literature is a finding; every search failing is Europe PMC being down.

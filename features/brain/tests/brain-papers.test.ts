@@ -262,6 +262,8 @@ describe("ingestPapers", () => {
     articles?: Record<string, string | null>;
     stored?: string[];
     outOfTime?: () => boolean;
+    /** What upsert says became searchable; all of it unless a test says otherwise. */
+    indexed?: (rows: BrainRow[]) => number;
   }) => {
     const written: BrainRow[][] = [];
     const constructs = Object.keys(opts.found ?? { A: [] });
@@ -272,7 +274,7 @@ describe("ingestPapers", () => {
       article: async (id) => (opts.articles && id in opts.articles ? opts.articles[id]! : good(id)),
       upsert: async (rows) => {
         written.push(rows);
-        return rows.length;
+        return opts.indexed ? opts.indexed(rows) : rows.length;
       },
       pause: async () => {},
     });
@@ -289,6 +291,23 @@ describe("ingestPapers", () => {
     expect(result.skipped.stored).toBe(1);
     expect(written).toHaveLength(1);
     expect(written[0]!.every((r) => r.source_id.startsWith("paper:PMC1"))).toBe(true);
+  });
+
+  it("counts only what became searchable, so a paper that is all markers is not added", async () => {
+    const { result, written } = await run({
+      found: { A: [meta({ pmcid: "PMC1" }), meta({ pmcid: "PMC2" }), meta({ pmcid: "PMC3" })] },
+      // PMC1: every part held a credential. PMC2: one part did. PMC3: none.
+      indexed: (rows) =>
+        rows[0]!.source_id.startsWith("paper:PMC1")
+          ? 0
+          : rows[0]!.source_id.startsWith("paper:PMC2")
+            ? rows.length - 1
+            : rows.length,
+    });
+    expect(written).toHaveLength(3);
+    expect(result.written).toBe(2);
+    expect(result.skipped.withheld).toBe(1);
+    expect(result.parts).toBe(written[1]!.length - 1 + written[2]!.length);
   });
 
   it("skips a paper whose article refuses the license, has no text, or is too short", async () => {

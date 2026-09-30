@@ -288,7 +288,15 @@ export interface IngestPapersResult {
   failedSearches: number;
   written: number;
   parts: number;
-  skipped: { stored: number; license: number; noText: number; tooLong: number; unread: number };
+  skipped: {
+    stored: number;
+    license: number;
+    noText: number;
+    tooLong: number;
+    unread: number;
+    /** Every part refused by upsert's credential check: stored as markers, nothing searchable. */
+    withheld: number;
+  };
 }
 
 interface Deps {
@@ -329,7 +337,7 @@ export async function ingestPapers(
     failedSearches: 0,
     written: 0,
     parts: 0,
-    skipped: { stored: 0, license: 0, noText: 0, tooLong: 0, unread: 0 },
+    skipped: { stored: 0, license: 0, noText: 0, tooLong: 0, unread: 0, withheld: 0 },
   };
   const full = () => result.written >= MAX_PAPERS_PER_RUN || isOutOfTime();
 
@@ -377,10 +385,16 @@ export async function ingestPapers(
         construct,
         stampedAt
       );
-      await deps.upsert(rows);
+      // What upsert returns is what became searchable: a part holding a credential is
+      // stored as a marker instead, and a paper that is all markers was not added.
+      const indexed = await deps.upsert(rows);
       stored.add(paper.pmcid);
+      if (indexed === 0) {
+        result.skipped.withheld += 1;
+        continue;
+      }
       result.written += 1;
-      result.parts += rows.length;
+      result.parts += indexed;
     }
   }
   return result;

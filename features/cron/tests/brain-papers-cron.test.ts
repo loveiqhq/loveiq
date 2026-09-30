@@ -10,7 +10,7 @@ const ok = () => ({
   failedSearches: 0,
   written: 3,
   parts: 95,
-  skipped: { stored: 2, license: 1, noText: 1, tooLong: 0, unread: 0 },
+  skipped: { stored: 2, license: 1, noText: 1, tooLong: 0, unread: 0, withheld: 1 },
 });
 let result = ok();
 let throws = false;
@@ -89,6 +89,7 @@ describe("brain-papers cron", () => {
     expect(recorded[0]!.error).toContain("3 of up to 12 papers written (95 parts)");
     expect(recorded[0]!.error).toContain("1 on the license");
     expect(recorded[0]!.error).toContain("2 already stored");
+    expect(recorded[0]!.error).toContain("1 withheld for a credential");
     expect(posted).toHaveLength(0);
   });
 
