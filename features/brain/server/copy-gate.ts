@@ -166,20 +166,17 @@ function keyOf(sentence: string, names: string[]): string {
     .trim();
 }
 
-export function checkCopy(
-  input: { text: string; chapter?: string; archetype?: string },
-  content: Content = SHIPPED
-): CopyReport {
-  const text = toText(input.text);
-  const sents = sentencesOf(text);
-  const words = wordsOf(text).length;
-  const grade = Math.round(readingGrade(text) * 10) / 10;
-  const findings: CopyFinding[] = [];
-  const chapter = input.chapter && content[input.chapter] ? input.chapter : undefined;
-  const names = chapter
-    ? Object.keys(content[chapter]!)
-    : Object.keys(Object.values(content)[0] ?? {});
+/**
+ * The sentence-level rules, which apply to copy of any length: no dashes, no machine
+ * phrasing, no absolute claims. They need no shipped chapter, so short copy (the Assessment
+ * Factory's band text, say) is checked without re-reading every chapter we ship.
+ */
+export function phrasingFindings(text: string): CopyFinding[] {
+  return phrasing(sentencesOf(toText(text)));
+}
 
+function phrasing(sents: string[]): CopyFinding[] {
+  const findings: CopyFinding[] = [];
   const dashed = sents.filter((s) => DASH.test(s));
   if (dashed.length) {
     findings.push({
@@ -218,6 +215,23 @@ export function checkCopy(
       evidence: absolute.slice(0, MAX_EVIDENCE).map(clip),
     });
   }
+
+  return findings;
+}
+
+export function checkCopy(
+  input: { text: string; chapter?: string; archetype?: string },
+  content: Content = SHIPPED
+): CopyReport {
+  const text = toText(input.text);
+  const sents = sentencesOf(text);
+  const words = wordsOf(text).length;
+  const grade = Math.round(readingGrade(text) * 10) / 10;
+  const findings: CopyFinding[] = phrasing(sents);
+  const chapter = input.chapter && content[input.chapter] ? input.chapter : undefined;
+  const names = chapter
+    ? Object.keys(content[chapter]!)
+    : Object.keys(Object.values(content)[0] ?? {});
 
   let shippedGrade: number | null = null;
   let shippedMedianWords: number | null = null;

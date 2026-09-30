@@ -12,6 +12,7 @@ import { INSTRUMENTS, instrument } from "@features/assessments/instruments";
 import { checkInstrument, reachableTotals } from "@features/assessments/logic/check";
 import {
   helpFor,
+  optionsOf,
   scoreInstrument,
   reviewHash,
   scoreRange,
@@ -69,12 +70,18 @@ describe("every instrument in the factory", () => {
    * Sanjin to sign again. Dropping "in some way" from PHQ-9's item 9, or a digit from a
    * crisis line, would otherwise pass every other test.
    */
-  it.each([
-    ["gad7", "ca077e97a4a2d2b7"],
-    ["phq9", "a38a3e3655c255a1"],
-    ["ucla3", "e012a9c769e9dbaa"],
-  ])("%s has the fingerprint it was checked at", (id, hash) => {
+  const PINNED: Record<string, string> = {
+    gad7: "dcb5bb60cf682a9d",
+    phq9: "a7ed0e7b7b72ac6b",
+    ucla3: "8c19de851b6d79ae",
+  };
+
+  it.each(Object.entries(PINNED))("%s has the fingerprint it was checked at", (id, hash) => {
     expect(reviewHash(def(id))).toBe(hash);
+  });
+
+  it("pins every instrument: one added without a pin could change unseen", () => {
+    expect(Object.keys(PINNED).sort()).toEqual(INSTRUMENTS.map((d) => d.id).sort());
   });
 });
 
@@ -187,6 +194,8 @@ describe("PHQ-9's item 9", () => {
 
   it("stays quiet at 'Not at all', and the band's own next step stands", () => {
     const r = scoreInstrument(def("phq9"), withItem9(0));
+    // Without this, a refused sheet passes too: false equals false below.
+    expect(r.ok).toBe(true);
     expect(r.safety).toEqual([]);
     expect(r.ok && r.nextStep).toBe(r.ok && r.band.nextStep);
   });
@@ -201,9 +210,7 @@ describe("PHQ-9's item 9", () => {
   });
 });
 
-// Each case runs the whole gate on a copy of an instrument, the Copy Gate over every line of
-// our copy included, so a case takes seconds and a busy machine pushed one past 15 s.
-describe("the gate catches a broken definition", { timeout: 60_000 }, () => {
+describe("the gate catches a broken definition", () => {
   // One defect at a time, on a copy that is not validated: the defect is what is tested, not
   // the sign-off it would void (the sign-off tests below validate their copy themselves).
   const broken = (change: (d: InstrumentDefinition) => void, base = def("gad7")) => {
@@ -267,6 +274,45 @@ describe("the gate catches a broken definition", { timeout: 60_000 }, () => {
     expect(broken((d) => void (d.safety = [rule({ message: "Get help — now." })]))).toEqual([
       expect.stringMatching(/^safety: the safety message on gad7_1: .*dash/),
     ]);
+  });
+
+  it("help lines that can never be found, or say nothing", () => {
+    const withHelp = (resources: Array<{ region: string; lines: string[] }>) =>
+      broken((d) => void (d.safety = [rule({ resources })]));
+    // The reader's country is upper-cased before the lookup, so "gb" is never matched.
+    expect(
+      withHelp([
+        { region: "ANY", lines: ["Your local emergency number"] },
+        { region: "gb", lines: ["999"] },
+      ])
+    ).toContain(
+      'safety: the safety rule on gad7_1 lists help for "gb", which is not ANY or a two-letter country code in capitals'
+    );
+    expect(
+      withHelp([
+        { region: "ANY", lines: ["Your local emergency number"] },
+        { region: "GB", lines: ["999"] },
+        { region: "GB", lines: ["111"] },
+      ])
+    ).toContain("safety: the safety rule on gad7_1 lists GB more than once");
+    expect(withHelp([{ region: "ANY", lines: [" "] }])).toContain(
+      "safety: the safety rule on gad7_1 has an empty help line for ANY"
+    );
+  });
+
+  it("empty instructions, license terms, form title or citation", () => {
+    expect(broken((d) => void (d.instructions = " "))).toContain(
+      "items: the instructions are empty"
+    );
+    expect(broken((d) => void (d.license = { ...d.license, terms: "" }))).toContain(
+      "license: the license terms are empty"
+    );
+    expect(broken((d) => void (d.form = { ...d.form, title: "" }))).toContain(
+      "license: the published form has no title"
+    );
+    expect(broken((d) => void (d.citations = [{ text: " " }]))).toContain(
+      "license: a citation has no text"
+    );
   });
 
   it("copy that diagnoses, but not the disclaimers", () => {
@@ -408,6 +454,23 @@ describe("the gate catches a broken definition", { timeout: 60_000 }, () => {
       expect(reviewHash(reversed(d) as InstrumentDefinition)).toBe(reviewHash(d));
     });
 
+    it("refuses a reworded sign-off line, even one rewritten in code for every instrument", () => {
+      // The lines come from standardSignOff(), so rewording one there rewords it under every
+      // signature at once. The fingerprint covers the wording, so each of those goes stale.
+      const d = def("gad7");
+      const reworded: InstrumentDefinition = {
+        ...d,
+        signOff: d.signOff.map((s, i) => (i === 0 ? { ...s, check: `${s.check} Roughly.` } : s)),
+      };
+      expect(reviewHash(reworded)).not.toBe(reviewHash(d));
+      // Who signed, and when, is not part of what was signed.
+      const resigned: InstrumentDefinition = {
+        ...d,
+        signOff: d.signOff.map((s) => ({ ...s, by: "Someone else", on: "2027-01-01" })),
+      };
+      expect(reviewHash(resigned)).toBe(reviewHash(d));
+    });
+
     it("refuses a permission license with no record of the permission", () => {
       expect(statusOf((d) => void (d.license = { ...d.license, kind: "permission" }))).toContain(
         "status: validated with a permission license, but nobody recorded the permission"
@@ -425,6 +488,14 @@ describe("scoring shapes the pilots do not use", () => {
       { id: "test_2", text: "Two", reverse: true },
     ],
     ...over,
+  });
+
+  it("marks a reversed item as reversed in the validation pack, where it is signed", () => {
+    const pack = validationPack(
+      custom({ bands: [{ min: 2, max: 6, label: "All", summary: "Ok.", nextStep: "Ok." }] })
+    );
+    expect(pack).toContain("| test_2 | Two | yes, reversed |");
+    expect(pack).toContain("| test_1 | One | yes |");
   });
 
   it("flips a reversed item on its own scale, in the scorer and in the gate", () => {
@@ -472,6 +543,26 @@ describe("the validation pack", () => {
         : v !== null && typeof v === "object"
           ? Object.values(v).flatMap(strings)
           : [];
+
+  // The numbers are signed too: a cutoff, an answer's value or a trigger printed wrong would be
+  // signed wrong. The word check above cannot see them.
+  it.each(INSTRUMENTS.map((d) => [d.id, d] as const))(
+    "shows every number %s's reviewer signs",
+    (_, d) => {
+      const pack = validationPack(d);
+      const [lo, hi] = scoreRange(d);
+      expect(pack).toContain(`The ${d.scoring.method} of the scored items, from ${lo} to ${hi}.`);
+      for (const b of d.bands) expect(pack).toContain(`| ${b.min} to ${b.max} | ${b.label} |`);
+      for (const i of d.items) {
+        const scored = i.unscored ? "no" : i.reverse ? "yes, reversed" : "yes";
+        expect(pack).toMatch(new RegExp(`\\| ${i.id} \\| .+ \\| ${scored} \\|`));
+        for (const o of optionsOf(d, i)) expect(pack).toContain(`${o.value} = ${o.label}`);
+      }
+      for (const r of d.safety ?? []) {
+        expect(pack).toContain(`When ${r.item} is answered ${r.atLeast} or higher`);
+      }
+    }
+  );
 
   it.each(INSTRUMENTS.map((d) => [d.id, d] as const))(
     "shows every word %s's fingerprint covers",

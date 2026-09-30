@@ -107,5 +107,7 @@ export const gad7: InstrumentDefinition = {
     by: "Eman Cickusic",
     on: "2026-09-30",
   })),
-  signedHash: "ca077e97a4a2d2b7",
+  // Re-expressed on 2026-09-30, when the fingerprint began to cover the sign-off lines' own
+  // wording. The old fingerprint, ca077e97a4a2d2b7, still matched, so what was approved is unchanged.
+  signedHash: "dcb5bb60cf682a9d",
 };
