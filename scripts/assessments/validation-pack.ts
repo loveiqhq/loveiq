@@ -1,6 +1,6 @@
 /**
  * The validation pack: one instrument laid out for the people who sign it off (Mark and
- * Sanjin), with the source's words and ours kept apart, what the automated gate already
+ * Sanjin unless the team names someone else), with the source's words and ours kept apart, what the automated gate already
  * checked, and the lines they sign.
  *
  *   npx tsx scripts/assessments/validation-pack.ts gad7          # one instrument, to stdout
@@ -93,7 +93,7 @@ export function validationPack(def: InstrumentDefinition): string {
       ? `**Open problems (${problems.length}):**\n\n${problems.map((p) => `- ${p.area}: ${p.message}`).join("\n")}`
       : "**Result: all checks pass.**",
     "",
-    "## Sign-off (Mark and Sanjin)",
+    "## Sign-off",
     "",
     "Tick each line, with your name and the date (YYYY-MM-DD). The instrument can only be " +
       "marked validated when every line is signed, and when `signedHash` in its definition " +

@@ -99,7 +99,11 @@ export function helpFor(rule: SafetyRule, country: string | null | undefined): H
   );
 }
 
-/** Not signed for: they change when an instrument is signed, or say nothing a person reads. */
+/**
+ * Not signed for: they change when an instrument is signed, or say nothing a person reads.
+ * `signOff` is left out for who signed and when; the wording of its lines is added back in
+ * `reviewHash`, because what a reviewer confirms is part of what they signed.
+ */
 const BOOKKEEPING = new Set(["status", "version", "signOff", "signedHash"]);
 
 /** Every object's keys in order, so reordering a definition file is not a change. */
@@ -116,15 +120,19 @@ const canonical = (v: unknown): unknown =>
 
 /**
  * A fingerprint of everything the sign-off covers: the form, the wording, the answers, the
- * scoring, the bands and our copy for them, the safety routing, the license and the sources.
+ * scoring, the bands and our copy for them, the safety routing, the license, the sources and
+ * the wording of the sign-off lines themselves.
  * It leaves out only the bookkeeping, so a field added later is covered without anyone
  * remembering to add it. Our copy is in it on purpose: a changed crisis message must be read
  * again before it reaches anyone, the same as a changed item.
  */
 export function reviewHash(def: InstrumentDefinition): string {
   const reviewed = Object.fromEntries(Object.entries(def).filter(([k]) => !BOOKKEEPING.has(k)));
+  // The lines as worded, never who signed them: signing must not change the fingerprint, and
+  // a reworded line (even one generated in code) must void the signatures under it.
+  const signOffChecks = def.signOff.map((s) => s.check);
   return createHash("sha256")
-    .update(JSON.stringify(canonical(reviewed)))
+    .update(JSON.stringify(canonical({ ...reviewed, signOffChecks })))
     .digest("hex")
     .slice(0, 16);
 }

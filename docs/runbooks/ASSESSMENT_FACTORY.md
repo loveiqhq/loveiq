@@ -27,7 +27,8 @@ decide someone else approves instead (step 7); which instrument ships first is t
    - help lines for each country our readers are in, and an `ANY` fallback.
 
    Plain words, screening language, no dashes, and a school reading grade of 8 or less.
-   Jarvis's `check_copy` runs the same rules.
+   Jarvis's `check_copy` runs the dash, phrasing and absolute-claim part of these rules. The
+   diagnosis wording and the grade-8 limit at any length are the gate's own.
 
 5. **Run the gate:** `npx vitest run features/assessments`. It fails the build when:
    - a reachable total falls in no band, or in two;
@@ -35,13 +36,19 @@ decide someone else approves instead (step 7); which instrument ships first is t
    - a reversed item's answers are uneven;
    - a safety rule points at no item, can never trigger, triggers on every answer, or has no
      fallback help;
-   - the source, license, credit line or published form is missing;
+   - a help line is empty, or is filed under a region that is not `ANY` or a two-letter
+     country code in capitals, or under the same region twice (the reader's country is
+     matched in capitals, so `gb` would never be found);
+   - the instructions, the source, the license terms, the credit line or the published form
+     is missing or empty;
    - our copy (bands and safety messages) breaks the Copy Gate or reads as a diagnosis;
    - `validated` is set without the standard sign-off lines, each signed and dated, against
      what is there now.
 
-   The test also pins each instrument's fingerprint (`reviewHash`), so any change to what
-   the sign-off covers fails the build until the test is updated on purpose.
+   The test also pins every instrument's fingerprint (`reviewHash`), and fails when an
+   instrument has no pin, so any change to what the sign-off covers fails the build until
+   the test is updated on purpose. The fingerprint covers the wording of the sign-off lines
+   too: rewording a line in `signoff.ts` voids every signature under it.
 
 6. **Send the validation pack:** `npx tsx scripts/assessments/validation-pack.ts <id>`
    prints the review document. It shows:

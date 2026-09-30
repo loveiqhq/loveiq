@@ -24,7 +24,7 @@ library ("Proven instruments, applied faithfully").
 **Belongs:** instrument definitions, scoring, the gate, the review pack.
 
 **Does NOT belong (yet):** a UI to take an instrument, storing results, or the Humangraph.
-Those come once an instrument is validated and the product decision (Mark and Sanjin) says
+Those come once an instrument is validated and the product decision (Mark's roadmap) says
 which one ships first. LoveIQ's own archetype survey stays in `features/scoring/`.
 
 **Rules:**
