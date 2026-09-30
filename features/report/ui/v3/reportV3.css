@@ -6033,13 +6033,13 @@ html {
  *
  * The card: a 1px inside stroke insets the children by 1px, so the border alone does
  * it; the V3 card's `padding: 19px 1px` counted the stroke twice. The frame is a
- * fixed 1031, which leaves 31px under the meters (30 + the stroke) since the core
- * motivation panel grew to 197 on 28.09; it left 50 before.
+ * fixed 1031, which leaves 8px under the meters (7 + the stroke) since the core
+ * motivation panel grew to 220 on 30.09 (31 at 28.09's 197; 50 before that).
  *
  * Scoped to both V4 roots: `.rv4` is the live report under `?v4=1`, `.rv4-doc` the
  * standalone /report-v4-preview, which takes the design's own updates too. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch {
-  padding: 18px 0 30px;
+  padding: 18px 0 7px;
 }
 /* 15:816 is a fixed 191: the match row (15:819) grows into the slack and the tagline
  * sits in a fixed 70px box (15:828), so the core motivation panel starts at y=210.
@@ -6064,22 +6064,52 @@ html {
   min-height: 70px;
   width: min(323px, calc(100% + 8px));
 }
-/* Mark, 28.09 — 1943978820: "Changed font size here" and "Also added the 'What drives
- * your desire'"; 1943982885: "Width of text box was changed". 15:831 is now a 197px
- * column, 10 apart: the 45px head (15:832), the value (15:843) on a row of its own at
- * Lora 18/24, and the body (15:845). The head's labels (15:839) fill its 45px from
- * the top: "Core motivation" in a 23px box (Figma rounds the 22.4 line up) over the
- * 12/19.2 sub-label. The body is 281 wide, 2px past the panel's padding at 393, as
- * drawn; it narrows with the panel below that. */
+/* Mark, 30.09 (1947975917): "We have update the Core Motivation card". 870:7166 is a
+ * 220px panel on a 165.7° wash, 10 apart: the head (1107:2431), the value (870:7178) on
+ * a row of its own at Lora 18/24, and the body (870:7180). The head's labels (1107:2436)
+ * fill its 45px from the top: "Core motivation" in a 23px box (Figma rounds the 22.4
+ * line up), now Plus Jakarta Medium in grey/44, over the 12/19.2 sub-label. The body is
+ * 281 wide, 2px past the panel's padding at 393, as drawn; it narrows with the panel
+ * below that. (28.09 had a 197px column and ExtraLight labels.) */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive {
+  background: linear-gradient(
+    165.7374deg,
+    rgba(255, 106, 61, 0.11) 8.4861%,
+    rgba(255, 106, 61, 0.05) 91.514%
+  );
   gap: 10px;
   height: auto;
-  min-height: 197px;
+  min-height: 220px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-head {
+  gap: 10px;
+}
+/* 1107:2432 — the solid chip is gone: a 32x45 box around the 26px target outline
+ * (1107:2430), whose stroke runs 0.67 past it (the 27.35 export). Mark's glyph is a
+ * new drawing, not the old one scaled, and it is painted through a mask so it takes
+ * the archetype's accent, as the chip did; the frame nudges it 0.5 left. */
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-chip {
+  background: none;
+  border-radius: 0;
+  height: 45px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-glyph {
+  background: var(--rv3-arch-accent);
+  height: 27.3458px;
+  mask: url("/report/v4/dimensions/core-motivation.svg") center / contain no-repeat;
+  -webkit-mask: url("/report/v4/dimensions/core-motivation.svg") center / contain no-repeat;
+  transform: translate(-0.5px, -0.08px);
+  width: 27.3458px;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-labels {
   align-self: stretch;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label {
+  color: var(--rv3-muted);
+  font-weight: 500;
   min-height: 23px;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-sub {
@@ -6104,9 +6134,15 @@ html {
   width: 100%;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__viewport {
+  height: 360px;
   width: 100%;
 }
+/* 1116:1025 clips at 360, under the indicator (1116:1120, from 345), so the focused
+ * card's shadow fades out behind the bars. The track runs to 360 and the bars sit over
+ * its last 15px; a 345px track cut the shadow 15px higher. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__dots {
+  margin-top: -15px;
+  position: relative;
   width: 100%;
 }
 /* 15:926 lays the two meters on fixed 57px rows, 20 apart, so they step 77px and the
@@ -6123,33 +6159,108 @@ html {
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__seg {
   height: 4px;
 }
-/* The deck's headline in a fixed 29px box under the 8px pad (instance 15:847,
- * I15:847;11070:796), so the body keeps its place. The peeking card draws the same box
- * at 0.94. Mark, 28.09 (1943979946): "Changed font size" — Lora 18/24 (was 20) in both
- * designs, the box unchanged. */
+/* The deck's headline in a fixed 29px box under the 8px pad (1116:1037), so the body
+ * keeps its place. Mark, 28.09 (1943979946): "Changed font size" — Lora 18/24 (was 20). */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__value {
   font-size: 18px;
   line-height: 24px;
 }
-/* Mark, 28.09 (1943979283): "Left Aligned now with Gap to the icon". The focused card's
- * two labels start 10px after the chip (I15:847;11070:787) instead of sitting against
- * the card's right edge. The peeking design keeps its right-aligned labels, as drawn. */
+/* Mark, 30.09 (1947975917): "The other Tiles (Communication, Initiation etc.)". The deck
+ * is rebuilt from them (1116:1425): four 266x324 cards 14px apart (the same 280px step
+ * as before), the peeking ones peach at 62% and now at full scale, set in the focused
+ * card's type (the old 0.94 copy set its labels in 10px capitals). Every chip is gone:
+ * the focused icon sits in a bare 26x45 box (1116:1029), the peeking ones stand alone,
+ * all of them Mark's new outlines, painted in the accent. The labels start 10px after
+ * the icon, Medium 14 over ExtraLight 12, left aligned, in both designs (1116:1034 /
+ * 1116:1057). */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__track {
+  gap: 14px;
+  height: 360px;
+  padding-bottom: 22px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot {
+  height: 324px;
+  width: 266px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__inner {
+  background: var(--rv3-peach);
+  border: 1px solid rgba(22, 16, 33, 0.1);
+  border-radius: 18px;
+  gap: 5px;
+  height: 100%;
+  left: 0;
+  min-height: 236px;
+  opacity: 0.62;
+  padding: 18px;
+  top: 0;
+  width: 266px;
+}
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__head {
+  gap: 10px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__head {
   gap: 10px;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__labels {
   align-items: flex-start;
 }
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__labels {
+  align-items: flex-start;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__chip {
+  background: none;
+  border-radius: 0;
+  height: 45px;
+  justify-content: center;
+  padding: 0;
+  width: 26px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__chip {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__glyph {
+  background: var(--rv3-deck-accent);
+  height: 23px;
+  width: 23px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__title {
+  color: var(--rv3-muted);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 22.4px;
+  text-transform: capitalize;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__sub {
+  color: var(--rv3-copy);
+  font-size: 12px;
+  font-weight: 200;
+  letter-spacing: 0;
+  line-height: 19.2px;
+  text-transform: none;
+}
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__value {
   padding-bottom: 5px;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__value {
-  padding-bottom: 3.26px;
+  letter-spacing: -0.5px;
+  padding: 8px 0 5px;
 }
-/* "How desire gets spoken": the focused card's second line opens with a capital. The
- * copy stays lower-case, as the peeking card sets it in capitals anyway; the span is a
- * flex item, so blockified, which ::first-letter needs. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__body {
+  font-size: 14px;
+  line-height: 22.4px;
+  padding: 11px 0 13.5px;
+  width: 230px;
+}
+/* "How desire gets spoken": the second line opens with a capital in both designs. The
+ * copy stays lower-case; the span is a flex item, so blockified, which ::first-letter
+ * needs. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__sub::first-letter {
+  text-transform: uppercase;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__sub::first-letter {
   text-transform: uppercase;
 }
 
@@ -7259,37 +7370,16 @@ html {
   line-height: 19.2px;
 }
 
-/* ── Dimension deck — the icon changes colour slowly (Mark, review 25.09) ─────────
- * "A timed animation where the icon slowly changes color, as right now it feels
- * quite abrupt." Each slot stacks two designs of its card and cross-fades them in
- * 180ms (the 24.09 fix for the lagging swipe), and each design has its own chip, so
- * the icon flipped with the cross-fade. Here each copy's chip takes its colour from
- * the SLOT's state and eases over 600ms: a card arriving in focus shows the
- * peeking tint for an instant and warms to the solid accent; a card leaving focus
- * cools the other way. The cards keep their 180ms, so the swipe itself is as quick
- * as before; the page indicator moves on the icon's clock. */
-.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused .rv3-deck__chip {
-  background-color: color-mix(in srgb, var(--rv3-deck-accent) 11%, transparent);
-}
-.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused .rv3-deck__glyph {
-  background-color: var(--rv3-deck-accent);
-}
-.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking .rv3-deck__chip {
-  background-color: var(--rv3-deck-accent);
-}
-.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking .rv3-deck__glyph {
-  background-color: #fff;
-}
-.rv3:is(.rv4, .rv4-doc) .rv3-deck__chip,
-.rv3:is(.rv4, .rv4-doc) .rv3-deck__glyph {
-  transition: background-color 600ms ease-in-out;
-}
+/* ── Dimension deck — the page indicator moves slowly (Mark, review 25.09) ─────────
+ * "A timed animation where the icon slowly changes color, as right now it feels quite
+ * abrupt." Until 30.09 each card's chip warmed from the peeking tint to the solid
+ * accent over 600ms. The rebuilt deck (1116:1425) has no chip and draws the same
+ * accent outline in both designs, so only the indicator keeps the slow clock; the
+ * cards cross-fade in their 180ms as before. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__dot {
   transition: background 600ms ease-in-out;
 }
 @media (prefers-reduced-motion: reduce) {
-  .rv3:is(.rv4, .rv4-doc) .rv3-deck__chip,
-  .rv3:is(.rv4, .rv4-doc) .rv3-deck__glyph,
   .rv3:is(.rv4, .rv4-doc) .rv3-deck__dot {
     transition: none;
   }

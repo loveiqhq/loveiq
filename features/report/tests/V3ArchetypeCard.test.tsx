@@ -303,14 +303,14 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     const value = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__value");
     expect(value).toMatch(/font-size: 18px/);
     expect(value).toMatch(/line-height: 24px/);
-    // I15:847;11070:796 is a fixed 29px under an 8px pad: 24px of line and 5 below.
-    // The peeking card draws the same box at 0.94.
+    // 1116:1037 is a fixed 29px under an 8px pad: 24px of line and 5 below. Since 30.09
+    // the peeking cards draw the same box, at full scale.
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__value")).toMatch(
       /padding-bottom: 5px/
     );
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__value")).toMatch(
-      /padding-bottom: 3\.26px/
-    );
+    const peekValue = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__value");
+    expect(peekValue).toMatch(/padding: 8px 0 5px/);
+    expect(peekValue).toMatch(/letter-spacing: -0\.5px/);
   });
 
   // Mark, 28.09 (1943979283): "Left Aligned now with Gap to the icon". The focused card's
@@ -322,9 +322,72 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__labels")).toMatch(
       /align-items: flex-start/
     );
-    expect(V3_CSS).not.toContain(
-      ".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__labels"
+  });
+
+  // Mark, 30.09 (1947975917): "The other Tiles (Communication, Initiation etc.)". The deck
+  // was rebuilt from them (1116:1425): four 266x324 cards 14px apart (the same 280px
+  // step), the peeking ones peach at 62% and at full scale, every chip gone for the bare
+  // outline in the accent.
+  it("rebuilds the deck from 1116:1425's tiles", () => {
+    const slot = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__slot");
+    expect(slot).toMatch(/height: 324px/);
+    expect(slot).toMatch(/width: 266px/);
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__track")).toMatch(/gap: 14px/);
+    const peek = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__inner");
+    for (const want of [
+      /background: var\(--rv3-peach\)/,
+      /border: 1px solid rgba\(22, 16, 33, 0\.1\)/,
+      /border-radius: 18px/,
+      /gap: 5px/,
+      /height: 100%/,
+      /left: 0/,
+      /opacity: 0\.62/,
+      /padding: 18px/,
+      /top: 0/,
+      /width: 266px/,
+    ]) {
+      expect(peek).toMatch(want);
+    }
+    // 1116:1029 — a 26x45 box and no fill; the peeking cards set the icon bare.
+    const chip = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__chip");
+    expect(chip).toMatch(/background: none/);
+    expect(chip).toMatch(/height: 45px/);
+    expect(chip).toMatch(/width: 26px/);
+    expect(chip).toMatch(/padding: 0/);
+    const peekChip = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__chip");
+    expect(peekChip).toMatch(/background: none/);
+    expect(peekChip).toMatch(/padding: 0/);
+    const glyph = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__glyph");
+    expect(glyph).toMatch(/background: var\(--rv3-deck-accent\)/);
+    expect(glyph).toMatch(/height: 23px/);
+    expect(glyph).toMatch(/width: 23px/);
+    // The 25.09 colour swap (a white glyph on the solid chip) has nothing left to swap.
+    expect(V3_CSS).not.toMatch(
+      /\.rv3:is\(\.rv4, \.rv4-doc\) \.rv3-deck__[^{]*\{\s*background-color: #fff/
     );
+  });
+
+  it("sets both designs' labels as 1116:1034 / 1116:1057: Medium 14 over ExtraLight 12, left", () => {
+    const title = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__title");
+    expect(title).toMatch(/font-size: 14px/);
+    expect(title).toMatch(/font-weight: 500/);
+    expect(title).toMatch(/letter-spacing: 0/);
+    expect(title).toMatch(/text-transform: capitalize/);
+    const sub = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__sub");
+    expect(sub).toMatch(/font-size: 12px/);
+    expect(sub).toMatch(/font-weight: 200/);
+    expect(sub).toMatch(/text-transform: none/);
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__head")).toMatch(
+      /gap: 10px/
+    );
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__labels")).toMatch(
+      /align-items: flex-start/
+    );
+    const body = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__body");
+    expect(body).toMatch(/font-size: 14px/);
+    expect(body).toMatch(/line-height: 22\.4px/);
+    expect(body).toMatch(/padding: 11px 0 13\.5px/);
+    expect(body).toMatch(/width: 230px/);
   });
 
   it("opens the focused card's sub-label with a capital, as 15:847 writes it", () => {
@@ -349,18 +412,24 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     expect(tagline).toMatch(/letter-spacing: 0/);
   });
 
-  // Mark, 28.09 (1943978820, "Changed font size here" / "Also added the 'What drives
-  // your desire'"; 1943982885, "Width of text box was changed"). 15:831 is a 197px
-  // column, 10 apart: the 45px head (label over sub-label), the value, the body.
-  it("lays the core motivation panel out as 15:831's 197px column, 10px apart", () => {
+  // Mark, 30.09 (1947975917): "We have update the Core Motivation card". 870:7166 is a
+  // 220px panel, 10 apart: the head (the icon, with no chip now, 10px before its labels),
+  // the value and the body.
+  it("lays the core motivation panel out as 870:7166's 220px panel, 10px apart", () => {
     const panel = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive");
     expect(panel).toMatch(/gap: 10px/);
     expect(panel).toMatch(/height: auto/);
-    expect(panel).toMatch(/min-height: 197px/);
+    expect(panel).toMatch(/min-height: 220px/);
+    expect(panel).toMatch(/165\.7374deg/);
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-head")).toMatch(/gap: 10px/);
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-labels")).toMatch(
       /align-self: stretch/
     );
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label")).toMatch(/min-height: 23px/);
+    const label = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label");
+    expect(label).toMatch(/min-height: 23px/);
+    // 1107:2437 — Plus Jakarta Medium in grey/44, where it was ExtraLight.
+    expect(label).toMatch(/font-weight: 500/);
+    expect(label).toMatch(/color: var\(--rv3-muted\)/);
     const sub = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-sub");
     expect(sub).toMatch(/font-size: 12px/);
     expect(sub).toMatch(/line-height: 19\.2px/);
@@ -369,12 +438,40 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     expect(value).toMatch(/padding-top: 0/);
     const body = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-body");
     expect(body).toMatch(/margin: 0/);
-    // 15:845 is 281 wide, 2px past the panel's padding at 393; it narrows below that.
+    // 870:7180 is 281 wide, 2px past the panel's padding at 393; it narrows below that.
     expect(body).toMatch(/width: min\(281px, calc\(100% \+ 2px\)\)/);
   });
 
+  // 1107:2432 — the chip is gone: a 32x45 box holding the 26px target outline (1107:2430),
+  // drawn in the archetype's accent through a mask of Mark's own glyph.
+  it("draws the core motivation icon as the bare outline, in the accent", () => {
+    const chip = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-chip");
+    expect(chip).toMatch(/background: none/);
+    expect(chip).toMatch(/height: 45px/);
+    expect(chip).toMatch(/width: 32px/);
+    expect(chip).toMatch(/padding: 0/);
+    const glyph = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-glyph");
+    expect(glyph).toMatch(/background: var\(--rv3-arch-accent\)/);
+    expect(glyph).toMatch(/\/report\/v4\/dimensions\/core-motivation\.svg/);
+    expect(glyph).toMatch(/width: 27\.3458px/);
+  });
+
   it("keeps the card at 15:815's 1031, the taller panel taken out of the bottom room", () => {
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 30px/);
+    // 30.09: the 220px panel (23 more than 28.09's) comes out of the room under the
+    // meters, which 15:815 now ends 8px above its foot.
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 7px/);
+  });
+
+  // 1116:1025 clips at 360, under the page indicator (1116:1120 at 345), so the focused
+  // card's shadow fades out behind the bars; a 345px track cut it 15px higher.
+  it("lets the focused card's shadow run under the page indicator, as 1116:1025 clips it", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__viewport")).toMatch(/height: 360px/);
+    const track = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__track");
+    expect(track).toMatch(/height: 360px/);
+    expect(track).toMatch(/padding-bottom: 22px/);
+    const dots = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__dots");
+    expect(dots).toMatch(/margin-top: -15px/);
+    expect(dots).toMatch(/position: relative/);
   });
 
   it("keeps the frame's widths at 393 but narrows instead of clipping on smaller phones", () => {
