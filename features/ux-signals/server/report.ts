@@ -72,7 +72,7 @@ export function renderUxSignals(r: UxSignalsReport): string {
   out.push(
     r.visits === null
       ? `Real visits: PostHog could not be read (${r.visitsWhy}). This is an outage, not a result, so no signal is shown.`
-      : `Real visits: ${r.visits.toLocaleString("en-US")} production sessions, ${r.events!.toLocaleString("en-US")} events. Our own probes and staging are not in them.`
+      : `Real visits: ${r.visits.toLocaleString("en-US")} production sessions, ${r.events!.toLocaleString("en-US")} events. Staging is never in them; our own probes are kept out from 2026-10-01, so a window reaching back past that still holds a few of their report visits.`
   );
   out.push(
     r.walks === null
