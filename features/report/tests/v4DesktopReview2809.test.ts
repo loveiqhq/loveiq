@@ -284,53 +284,66 @@ describe("the top three take V2's desktop rows", () => {
   });
 });
 
-// "Should also be a tile gallery that you can click through. Maybe make them bigger so that
-// you only see 2,5 similarly to the archetype card" (Mark's full sentence, via Fatih,
-// 30.09). One snapping row of tiles sized so two and a half are in view, never under
-// 1.25x the phone's tile, a pager under it (V3Methodology / useSciPager).
+// "Should also be a tile gallery that you can click through" (Mark, via Fatih, 30.09),
+// then his desktop review of 30.09 (Notion): the tiles scaled to the column were "too
+// much like mobile scaled", with "a white cut off on the right", and "if you place the
+// entire thing in a border like the Archetype Card, it would also work" (Fatih's pick).
+// One snapping row of 29.09's 1.25x tiles in the Archetype card's frame, cut by its
+// border, a pager under them inside it (V3Methodology / useSciPager).
 describe("the science tiles run as a gallery on desktop", () => {
-  it("runs the deck as one snapping row, flush with the column", () => {
+  /** The declarations of the first rule for `selector` anywhere, whitespace squeezed. */
+  const squeezed = (selector: string) => firstRule(selector).replace(/\s+/g, " ");
+
+  it("frames the gallery in the Archetype card's own border, radius and shadow", () => {
+    const frame = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci").replace(/\s+/g, " ");
+    const card = squeezed(".rv3 .rv3-arch");
+    for (const property of ["border", "border-radius", "box-shadow"]) {
+      const own = card.match(new RegExp(`(?:^|[{;] )${property}: ([^;]+);`));
+      expect(own, property).not.toBeNull();
+      expect(frame, property).toContain(`${property}: ${own![1]};`);
+    }
+    expect(frame).toContain("background: #fff");
+    // Clipped at its border, so the cut tile ends there and not in white page space.
+    expect(frame).toContain("overflow: clip");
+    expect(frame).toContain("padding: 0 0 22px");
+  });
+
+  it("runs the deck as one snapping row, 22px in from the frame", () => {
     const track = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__track");
     for (const declaration of [
       "display: flex",
       "flex-wrap: nowrap",
+      "gap: 12px",
       "margin: 0",
       "overflow-x: auto",
       "overscroll-behavior-x: contain",
-      "padding: 6px 0",
-      "scroll-padding-inline: 0",
+      "scroll-padding-inline: 22px",
       "scroll-snap-type: x mandatory",
     ]) {
       expect(track).toContain(declaration);
     }
   });
 
-  it("sizes each tile so two and a half are in view, never under 1.25x the phone's", () => {
-    // The column is the track: a size container, so a tile reads its width. Two tiles,
-    // their two 12px gaps and half a third fill it. A tile is as wide as its question
-    // box (183), the padding either side (14.752) and its 1px border: 212.504 of the
-    // phone's pixels and 2px. From 700 to about 800 that would be under the 1.25x of
-    // 29.09, which the tiles keep there. The unit is the tile's own, below the
-    // container it measures.
+  it("leaves the tiles' shadow room to fade before the track clips it", () => {
+    // Each tile casts 0 12px 32px (at 5%): it reaches 20px over the tile and 44 under.
+    // The 6px the track had cut it to a visible edge; 30 under leaves its faint tail.
     const track = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__track");
-    expect(track).toContain("container-type: inline-size");
-    expect(track).toContain("gap: 12px");
-    expect(track).not.toContain("--rv3-sci-u");
-    expect(ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card")).toContain(
-      "--rv3-sci-u: max(1.25px, calc(((100cqw - 24px) / 2.5 - 2px) / 212.504));"
-    );
+    expect(track).toContain("padding: 22px 22px 30px");
+    // The pager keeps its 14 under the tiles, over that room.
+    const nav = ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__nav");
+    expect(nav).toContain("margin-top: -16px");
+    expect(nav).toContain("padding-top: 0");
+    expect(nav).toContain("position: relative");
   });
 
-  it("keeps 29.09's 1.25x tiles where container queries are missing", () => {
-    // There every var(--rv3-sci-u) length would be invalid and fall back to nothing:
-    // tiles without padding or height, icons at 0 (iPadOS 15 is 700px wide and more).
-    // After the tile's own rule, so it wins there on order.
-    const at = v3.indexOf("@supports not (container-type: inline-size) {");
-    expect(at).toBeGreaterThan(v3.indexOf(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {"));
-    const fallback = v3.slice(at);
-    const rule = fallback.slice(0, fallback.indexOf("}"));
-    expect(rule).toContain(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {");
-    expect(rule).toContain("--rv3-sci-u: 1.25px;");
+  it("sets the tiles at 29.09's fixed 1.25x, not scaled to the column", () => {
+    // 265 x 310, the questions 15px, at every desktop width: no size container is
+    // needed, nor a fallback for browsers without one.
+    expect(ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card")).toContain("--rv3-sci-u: 1.25px;");
+    expect(ruleIn(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__track")).not.toContain("container-type");
+    const gallery = block().slice(block().indexOf(".rv3.rv4 .rv3-method.is-v4 .rv3-sci {"));
+    expect(gallery.slice(0, gallery.indexOf(".rv3-sci__nav {"))).not.toMatch(/cq[wi]/);
+    expect(v3).not.toContain("@supports not (container-type: inline-size)");
   });
 
   it("scales every length in the tile with it, from the phone's 212 x 248", () => {
@@ -360,11 +373,11 @@ describe("the science tiles run as a gallery on desktop", () => {
     for (const [part, declaration] of scaled) {
       expect(ruleIn(`.rv3.rv4 .rv3-method.is-v4 ${part}`), part).toContain(declaration);
     }
-    // No fixed 1.25x length is left behind.
+    // No fixed length is left behind but the unit itself.
     const gallery = v3.slice(v3.indexOf(".rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {"));
-    expect(gallery.slice(0, gallery.indexOf(".rv3-sci__nav {"))).not.toMatch(
-      /:\s*-?\d+(\.\d+)?px;/
-    );
+    const tiles = gallery.slice(0, gallery.indexOf(".rv3-sci__nav {"));
+    expect(tiles.match(/--rv3-sci-u: [^;]+;/g)).toEqual(["--rv3-sci-u: 1.25px;"]);
+    expect(tiles.replace("--rv3-sci-u: 1.25px;", "")).not.toMatch(/:\s*-?\d+(\.\d+)?px;/);
   });
 
   it("draws the pager on the live desktop page only", () => {

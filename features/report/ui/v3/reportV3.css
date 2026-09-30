@@ -8584,23 +8584,32 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     line-height: 1.22;
   }
 
-  /* "Should also be a tile gallery that you can click through. Maybe make them bigger so
-   * that you only see 2,5 similarly to the archetype card" (Mark's full sentence, via
-   * Fatih, 30.09). The frozen desktop grid (1797, 1837) as one row flush with the
-   * column, snapping as the phone's does, so a trackpad or a swipe still moves it; the
-   * third tile is cut in half by the column's edge, as the archetype card's deck cuts
-   * its next card. The track is a size container, so a tile reads the column: two
-   * tiles, their two gaps and half a third fill it. --rv3-sci-u, the tile's own, below
-   * the container it measures, is one of the phone tile's 212 x 248 pixels at that
-   * size, and every length inside the tile is a multiple of it, so each question breaks
-   * where it does on the phone. A tile is as wide as its question box (183), a hair past
-   * the padding either side (14.752) as on the phone, and its 1px border: 212.504 of
-   * those and 2px. From 700 to about 800 that would be under the 1.25x of 29.09, which
-   * the tiles keep there; so do browsers without container queries (the end of this
-   * file). Lengths, not `zoom`: the pager measures the tiles, and engines still disagree
-   * on a zoomed box. */
+  /* "Should also be a tile gallery that you can click through" (Mark, via Fatih, 30.09).
+   * The frozen desktop grid (1797, 1837) as one row, snapping as the phone's does, so a
+   * trackpad or a swipe still moves it, with a pager under it. Mark's desktop review of
+   * 30.09 (Notion): tiles scaled to the column were "too much like mobile scaled", with
+   * "a white cut off on the right", and "if you place the entire thing in a border like
+   * the Archetype Card, it would also work" (Fatih's pick). So the row and its pager sit
+   * in the Archetype card's frame (1916), its border, radius and shadow, clipped at the
+   * border, where the next tile is cut as the card's deck cuts its next card. The tiles
+   * are 29.09's 1.25x of the phone's at every width: --rv3-sci-u is one of the phone
+   * tile's 212 x 248 pixels, and every length inside the tile is a multiple of it, so
+   * each question breaks where it does on the phone. The row starts 22 in, as the
+   * card's deck does, and leaves each tile's shadow (0 12px 32px, 44px under it) 30px to
+   * fade in before the scroller clips it; the 6px it had cut it to an edge. Lengths,
+   * not `zoom`: the pager measures the tiles, and engines still disagree on a zoomed
+   * box. */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci {
+    background: #fff;
+    border: 1px solid rgba(255, 106, 61, 0.45);
+    border-radius: 24px;
+    box-shadow:
+      0 20px 80px -24px rgba(255, 106, 61, 0.28),
+      inset 0 1px 0 0 rgba(255, 106, 61, 0.14);
+    overflow: clip;
+    padding: 0 0 22px;
+  }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__track {
-    container-type: inline-size;
     display: flex;
     flex-wrap: nowrap;
     gap: 12px;
@@ -8608,12 +8617,12 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
-    padding: 6px 0;
-    scroll-padding-inline: 0;
+    padding: 22px 22px 30px;
+    scroll-padding-inline: 22px;
     scroll-snap-type: x mandatory;
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
-    --rv3-sci-u: max(1.25px, calc(((100cqw - 24px) / 2.5 - 2px) / 212.504));
+    --rv3-sci-u: 1.25px;
     border-radius: calc(var(--rv3-sci-u) * 18);
     flex: 0 0 calc(var(--rv3-sci-u) * 212);
     gap: calc(var(--rv3-sci-u) * 15);
@@ -8665,15 +8674,17 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     height: calc(var(--rv3-sci-u) * 13);
     width: calc(var(--rv3-sci-u) * 13);
   }
-  /* The pager, 14 under the tiles (the phone's 11 at 29.09's 1.25x): V4's 34px chapter
-   * disc either side of a dot per stop, the phone's dots at 1.25x, the current one its
-   * gradient pill. */
+  /* The pager, 14 under the tiles (the phone's 11 at 29.09's 1.25x), over the room left
+   * for their shadow, and 22 over the frame's foot: V4's 34px chapter disc either side of
+   * a dot per stop, the phone's dots at 1.25x, the current one its gradient pill. */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__nav {
     align-items: center;
     display: flex;
     gap: 16px;
     justify-content: center;
-    padding-top: 8px;
+    margin-top: -16px;
+    padding-top: 0;
+    position: relative;
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow {
     align-items: center;
@@ -8755,14 +8766,6 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:not([aria-disabled="true"]):hover {
     translate: none;
-  }
-}
-/* Without container queries every length the science tile reads off its column would
- * be invalid, and fall back to nothing: no padding or height, icons at 0. There the
- * tiles keep 29.09's 1.25x (iPadOS 15 is 700px wide and more). */
-@supports not (container-type: inline-size) {
-  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
-    --rv3-sci-u: 1.25px;
   }
 }
 
