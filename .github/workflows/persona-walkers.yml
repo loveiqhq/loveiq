@@ -112,12 +112,13 @@ jobs:
             fi
           done < <(jq -c '.[]' <<<"$WALKS")
 
-      # Pinned: the judge's folder-only rules (judgeArgs in judge.ts) were checked on this
-      # version, with reads, globs and greps outside the three folders refused. Bump it on
-      # purpose, and check that again (docs/runbooks/PERSONA_WALKERS.md).
+      # The latest release on every run, like the brain's other jobs (Eman's call, 2026-09-30).
+      # The version goes in the log, so a night that behaves differently can be traced to it.
       - name: Install Claude Code
         if: ${{ !cancelled() && inputs.judge }}
-        run: npm install -g @anthropic-ai/claude-code@2.1.284
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
 
       - name: Judge and post
         if: ${{ !cancelled() && inputs.judge }}
