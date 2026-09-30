@@ -29,8 +29,8 @@ export const maxDuration = 120;
  *
  * A thirtieth of the glossary a day, so every construct is refreshed monthly — far faster
  * than the literature on one actually moves, and small enough that a run is seconds. The
- * slice is taken from the day of the year, so the rotation needs no cursor and a run that
- * dies loses that day rather than losing its place.
+ * slice is taken from the days since the epoch, so the rotation needs no cursor and a run
+ * that dies loses that day rather than losing its place.
  *
  * 04:20 UTC, off every other job's lane: brain-fast is on the quarter hours, gmail at :11,
  * calendar at :26, notion at :41, drive at :52, clarity at 05:40 and the brief at 06:41.
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
-  // Staging shares this database; without the gate both projects would write the same rows.
+  // Only production writes the brain; a staging build must not run the same job.
   if (!isProdCronHost()) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
@@ -103,8 +103,21 @@ export async function GET(request: Request) {
     status = "error";
     errorMessage = err instanceof Error ? err.message : String(err);
     // `slack: false` so the generic api_5xx mirror does not post a second message for the
-    // same failure — the dedicated alert above is the one to read.
+    // same failure. The alert below is the one to read: until 2026-09-30 a run that threw
+    // (a failed write, say) posted nothing at all, because the only alert was for every
+    // search failing, and a crash never gets that far.
     logger.error({ err, slack: false }, "brain-evidence failed");
+    const key = "brain_evidence_threw";
+    if (await tryClaimSlackAlert(key, "day", dayKey)) {
+      await notifySlack({
+        channel: "brain",
+        kind: "brain_ingest_failed",
+        text:
+          `:brain: brain-evidence stopped with an error: ${escapeSlack(errorMessage.slice(0, 300))}. ` +
+          `The research cards are not being refreshed until it runs clean.`,
+      });
+      await markSlackAlertDelivered(key, "day", dayKey);
+    }
     return NextResponse.json({ ok: false, error: "Ingest failed." });
   } finally {
     await checkSlow();
