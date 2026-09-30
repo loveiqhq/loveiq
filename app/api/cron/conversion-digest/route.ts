@@ -709,6 +709,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const count = (n: number) => n.toLocaleString("en-US");
     const headline = (() => {
       if (worstIndex < 1) return null;
+      // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
       const to = steps[worstIndex]!;
       const from = steps[worstIndex - 1]!;
       return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${share(to.count, from.count)}).`;
@@ -728,6 +729,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const stepPct = (i: number): number | null => {
       if (i === 0) return null;
       const of = steps[i - 1]!.count;
+      // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
       return of > 0 ? (steps[i]!.count / of) * 100 : null;
     };
     const funnelTitle = `The funnel, last ${WINDOW_DAYS} days`;
