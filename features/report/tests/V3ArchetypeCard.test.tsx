@@ -143,7 +143,8 @@ describe("V3DimensionDeck", () => {
       vi.stubGlobal("cancelAnimationFrame", () => {});
       const view = renderCard();
       const viewport = view.container.querySelector<HTMLElement>(".rv3-deck__viewport")!;
-      // 22 + 4 x 268 + 3 x 12 + 69 = 1199 of track in a 359 viewport.
+      // 22 + 4 x 266 + 3 x 14 + 71 = 1199 of track in a 359 viewport (the trailing space
+      // is 359 - 288, so Power reaches the snap edge at 840).
       Object.defineProperty(viewport, "scrollWidth", { value: 1199, configurable: true });
       Object.defineProperty(viewport, "clientWidth", { value: 359, configurable: true });
       const scrollTo = (left: number) => {
@@ -210,6 +211,141 @@ describe("V3DimensionDeck", () => {
     expect(container.querySelectorAll(".rv3-deck__dot.is-active")).toHaveLength(1);
     expect(dots[1]?.className).toContain("is-active");
     expect(screen.getByRole("button", { name: "Show Power" })).toBeInTheDocument();
+  });
+});
+
+// Sanjin, desktop review 30.09 (Notion): Attachment "jumps over", the deck is hard to
+// flip, and "the lines" are hard to click. From about 720px the phone's 69px of trailing
+// space left Attachment's snap past the end of the scroll, so its line's scrollTo clamped
+// to Power; at 1536 Initiation went too. Every card reaches the snap edge now, and from
+// 700px the indicator is the science gallery's pager: Previous and Next either side of
+// the four bars, drawn as dots (useSciPager, measured off the deck's slots).
+describe("V3DimensionDeck — the pager (desktop review 30.09)", () => {
+  /** A desktop deck `width` wide whose smooth scroll never lands: a glide in flight. */
+  const setup = (width = 853) => {
+    // Synchronous frames, as above; one asked for from inside a frame is dropped.
+    let inFrame = false;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      if (inFrame) return 1;
+      inFrame = true;
+      try {
+        cb(0);
+      } finally {
+        inFrame = false;
+      }
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const view = renderCard();
+    const viewport = view.container.querySelector<HTMLElement>(".rv3-deck__viewport")!;
+    // Every card reaches the snap edge, so the scroll runs 840 past the viewport.
+    Object.defineProperty(viewport, "clientWidth", { value: width, configurable: true });
+    Object.defineProperty(viewport, "scrollWidth", { value: width + 840, configurable: true });
+    // Slot i sits 280 x i along the track. jsdom reads no stylesheet, so the snap edge
+    // is the viewport's own left edge here, not 22px in.
+    view.container.querySelectorAll<HTMLElement>(".rv3-deck__slot").forEach((slot, i) => {
+      slot.getBoundingClientRect = () =>
+        ({ left: 280 * i - viewport.scrollLeft, width: 266 }) as DOMRect;
+    });
+    const glides: number[] = [];
+    viewport.scrollTo = ((options: ScrollToOptions) => {
+      glides.push(options.left ?? Number.NaN);
+    }) as typeof viewport.scrollTo;
+    const scrollTo = (left: number) => {
+      viewport.scrollLeft = left;
+      fireEvent.scroll(viewport);
+    };
+    const focused = () =>
+      view.container.querySelector(".rv3-deck__slot.is-focused")?.getAttribute("data-dimension");
+    const activeDot = () =>
+      Array.from(view.container.querySelectorAll(".rv3-deck__dot")).findIndex((dot) =>
+        dot.classList.contains("is-active")
+      );
+    const previous = () => screen.getByRole("button", { name: "Previous dimension" });
+    const next = () => screen.getByRole("button", { name: "Next dimension" });
+    return { viewport, glides, scrollTo, focused, activeDot, previous, next };
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("draws Previous and Next either side of the four bars, in one labelled group", () => {
+    const { previous, next } = setup();
+    const group = screen.getByRole("group", { name: "Dimension cards" });
+    expect(group.getAttribute("data-node-id")).toBe("15:1231");
+    const buttons = Array.from(group.querySelectorAll("button"));
+    expect(buttons).toHaveLength(6);
+    expect(buttons[0]).toBe(previous());
+    expect(buttons[5]).toBe(next());
+    expect(buttons.slice(1, 5).every((b) => b.classList.contains("rv3-deck__dot"))).toBe(true);
+    // Both name the scroller they move.
+    const id = document.querySelector(".rv3-deck__viewport")!.id;
+    expect(id).not.toBe("");
+    expect(previous().getAttribute("aria-controls")).toBe(id);
+    expect(next().getAttribute("aria-controls")).toBe(id);
+  });
+
+  it("steps one card on Next and focuses it at once, before the glide lands", () => {
+    const { glides, focused, activeDot, next } = setup();
+    fireEvent.click(next());
+    expect(glides).toEqual([280]);
+    expect(focused()).toBe("initiation");
+    expect(activeDot()).toBe(1);
+  });
+
+  it("goes on from the card it is gliding to, so two quick clicks move two cards", () => {
+    const { glides, focused, next } = setup();
+    fireEvent.click(next());
+    fireEvent.click(next());
+    expect(glides).toEqual([280, 560]);
+    expect(focused()).toBe("attachment");
+  });
+
+  it("reaches Attachment and Power, however wide the deck", () => {
+    for (const width of [618, 853, 915]) {
+      const { glides, focused, next } = setup(width);
+      fireEvent.click(next());
+      fireEvent.click(next());
+      fireEvent.click(next());
+      expect(glides, `at ${width}`).toEqual([280, 560, 840]);
+      expect(focused(), `at ${width}`).toBe("power");
+      cleanup();
+    }
+  });
+
+  it("holds a clicked bar's card in focus while the deck glides past the others", () => {
+    const { glides, scrollTo, focused, activeDot } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Show Power" }));
+    expect(glides).toEqual([840]);
+    expect(focused()).toBe("power");
+    scrollTo(300); // passing Initiation
+    expect(focused()).toBe("power");
+    expect(activeDot()).toBe(3);
+    scrollTo(840); // landed: the swipe's own reading takes over, and agrees
+    expect(focused()).toBe("power");
+  });
+
+  it("lets focus follow the deck again once the reader takes over", () => {
+    const { viewport, scrollTo, focused, next } = setup();
+    fireEvent.click(next());
+    expect(focused()).toBe("initiation");
+    fireEvent.wheel(viewport);
+    scrollTo(0);
+    expect(focused()).toBe("communication");
+  });
+
+  it("marks Previous inert on the first card and Next on the last", () => {
+    const { glides, previous, next } = setup();
+    expect(previous().getAttribute("aria-disabled")).toBe("true");
+    expect(next().getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(previous());
+    expect(glides).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Show Power" }));
+    expect(next().getAttribute("aria-disabled")).toBe("true");
+    expect(previous().getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(next());
+    expect(glides).toEqual([840]);
   });
 });
 
@@ -365,6 +501,29 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     expect(V3_CSS).not.toMatch(
       /\.rv3:is\(\.rv4, \.rv4-doc\) \.rv3-deck__[^{]*\{\s*background-color: #fff/
     );
+  });
+
+  // Desktop review 30.09 (Sanjin: Attachment "jumps over"). Power's snap is 3 x 280 = 840,
+  // and the track's content without its trailing space is 22 + 4 x 266 + 3 x 14 = 1128,
+  // so the trailing space must be at least the viewport less 288 for the scroll to run to
+  // 840. The phone's 69 was that for the old 268 card at 359; this is 71 there.
+  it("lets every card reach the snap edge, however wide the deck", () => {
+    const track = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__track");
+    expect(track).toMatch(/padding-right: max\(69px, 100% - 288px\)/);
+    for (const width of [300, 359, 618, 853, 915, 1200]) {
+      const trailing = Math.max(69, width - 288);
+      expect(22 + 4 * 266 + 3 * 14 + trailing - width, `at ${width}`).toBeGreaterThanOrEqual(840);
+    }
+  });
+
+  // The pager's arrows exist on every width, for one set of indicator buttons; the phone
+  // and the 393 preview keep the four lines and never draw them.
+  it("hides the arrows everywhere the desktop block does not draw them", () => {
+    const at = V3_CSS.indexOf(".rv3 .rv3-deck__arrow {");
+    expect(at).toBeGreaterThan(-1);
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+    expect(at).toBeLessThan(V3_CSS.indexOf("Desktop touch-up — 28.09 (c)"));
+    expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toMatch(/display: none/);
   });
 
   it("sets both designs' labels as 1116:1034 / 1116:1057: Medium 14 over ExtraLight 12, left", () => {

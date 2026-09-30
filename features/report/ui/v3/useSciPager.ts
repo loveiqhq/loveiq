@@ -18,7 +18,11 @@ import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "
  *
  * A click marks its stop at once and holds it while the deck glides, so a second click
  * goes on from there; the scroll ending, the reader taking over (wheel, pointer, key) or
- * a resize lets the pager follow the deck again.
+ * a resize lets the pager follow the deck again. `held` says which stop is held, for a
+ * deck whose own focus should follow the click (V3DimensionDeck, desktop review 30.09).
+ *
+ * The archetype card's dimension deck pages with it too, so what a stop is measured from
+ * is a parameter: the science tiles by default, the deck's slots there.
  */
 export interface SciStop {
   /** The scrollLeft that lands on it. */
@@ -51,8 +55,8 @@ export const nearestSciStop = (stops: readonly SciStop[], x: number): number =>
   );
 
 /** Null before layout (jsdom, a deck not drawn); empty when every tile fits. */
-const measure = (track: HTMLElement): SciStop[] | null => {
-  const cards = track.querySelectorAll<HTMLElement>(".rv3-sci__card");
+const measure = (track: HTMLElement, items: string): SciStop[] | null => {
+  const cards = track.querySelectorAll<HTMLElement>(items);
   if (cards.length < 2 || track.clientWidth === 0) return null;
   const max = track.scrollWidth - track.clientWidth;
   if (max <= 0) return [];
@@ -74,20 +78,24 @@ const sameStops = (a: readonly SciStop[] | null, b: readonly SciStop[] | null) =
 export default function useSciPager(
   trackRef: RefObject<HTMLElement | null>,
   count: number,
-  enabled: boolean
+  enabled: boolean,
+  /** The items a stop is measured from: each one that snaps. */
+  items = ".rv3-sci__card"
 ) {
   const [stops, setStops] = useState<SciStop[] | null>(null);
   const [at, setAt] = useState(0);
   const stopsRef = useRef<SciStop[] | null>(null);
-  // The stop a click is gliding to, until the deck arrives or the reader takes over.
+  // The stop a click is gliding to, until the deck arrives or the reader takes over;
+  // `held` is the same, for the render.
   const pendingRef = useRef<number | null>(null);
+  const [held, setHeld] = useState<number | null>(null);
 
   const remeasure = useCallback(() => {
-    const next = trackRef.current ? measure(trackRef.current) : null;
+    const next = trackRef.current ? measure(trackRef.current, items) : null;
     stopsRef.current = next;
     setStops((prev) => (sameStops(prev, next) ? prev : next));
     return next;
-  }, [trackRef]);
+  }, [items, trackRef]);
 
   useLayoutEffect(() => {
     const track = trackRef.current;
@@ -103,6 +111,7 @@ export default function useSciPager(
         const target = list[pending]?.left;
         if (target !== undefined && Math.abs(track.scrollLeft - target) > 2) return;
         pendingRef.current = null;
+        setHeld(null);
       }
       setAt(nearestSciStop(list, track.scrollLeft));
     };
@@ -113,7 +122,9 @@ export default function useSciPager(
       frame = requestAnimationFrame(read);
     };
     const release = () => {
+      if (pendingRef.current === null) return;
       pendingRef.current = null;
+      setHeld(null);
     };
     const settle = () => {
       release();
@@ -164,6 +175,7 @@ export default function useSciPager(
     setAt(k);
     if (Math.abs(track.scrollLeft - left) <= 2) return;
     pendingRef.current = k;
+    setHeld(k);
     const reduce =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -179,5 +191,5 @@ export default function useSciPager(
     if (to >= 0 && to <= shown.length - 1) goTo(to);
   };
 
-  return { stops: shown, at, goTo, step };
+  return { stops: shown, at, held, goTo, step };
 }
