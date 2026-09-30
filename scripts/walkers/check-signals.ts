@@ -51,7 +51,9 @@ export function rowsIn(dir: string, runId: string | null): WalkRow[] {
     rows.push({
       walked_at: walk.startedAt,
       walk: d.name,
-      run_id: runId,
+      // A hand run has no GitHub run; its start time keeps a second store from adding it
+      // again (UNIQUE treats two NULLs as different, so a null here would never collide).
+      run_id: runId ?? `hand:${walk.startedAt}`,
       origin: walk.origin,
       events: JSON.parse(readFileSync(at("events.json"), "utf8")) as UxEvent[],
       truth: JSON.parse(readFileSync(at("truth.json"), "utf8")) as Record<string, SignalValue>,

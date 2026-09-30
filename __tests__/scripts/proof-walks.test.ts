@@ -77,6 +77,14 @@ describe("what a proof walk plants", () => {
     expect(tonight.filter((w) => w.quit)).toHaveLength(1);
     const quits = new Set([0, 1, 2, 3].map((d) => day(d).find((w) => w.quit)!.quit));
     expect(quits).toEqual(new Set(["survey", "report", "paywall", "checkout"]));
+    // Every way of leaving meets both devices within eight nights.
+    const seen = new Set(
+      [0, 1, 2, 3, 4, 5, 6, 7].map((d) => {
+        const w = day(d).find((x) => x.quit)!;
+        return `${w.quit} on ${w.device}`;
+      })
+    );
+    expect(seen.size).toBe(8);
   });
 });
 
@@ -301,6 +309,8 @@ describe("storing the proof walks", () => {
         "truth.json": { "Rage clicks / repeated taps": 1 },
       });
       walk("stopped--iphone-15-pro", { "walk.json": { startedAt: "x", origin: "y" } });
+      // A walk run by hand gets a key from its start, so storing it twice adds it once.
+      expect(rowsIn(dir, null)[0]!.run_id).toBe("hand:2026-10-01T02:41:00Z");
       const rows = rowsIn(dir, "123");
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({

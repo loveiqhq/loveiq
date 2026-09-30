@@ -486,6 +486,8 @@ async function main(argv: string[]): Promise<number> {
   let last = t0;
   /** A proof walk that left early, as planned: finished, not failed. */
   let quitEarly = false;
+  /** When a paywall the walk could not close first appeared, for the press that follows. */
+  let paywallLeftOpenAt: number | null = null;
   const record = async (kind: string, extra: Partial<Step> = {}, shoot = true) => {
     n += 1;
     const s = await readScreen(page);
@@ -1022,7 +1024,16 @@ async function main(argv: string[]): Promise<number> {
         how = "close_button";
         closedAt = Date.now();
         await close(how);
-        await gone();
+        if (!(await gone())) {
+          // Still open: no close happened, so none is recorded, and the plan's press is timed
+          // from this opening, the one the site's price_shown marked.
+          walk.plantFailures = [
+            ...walk.plantFailures,
+            "closing the paywall with close_button left it open",
+          ];
+          paywallLeftOpenAt = openedAt;
+          return;
+        }
       }
       log.firstClose = { how, afterMs: closedAt - openedAt };
       planted.push(
@@ -1172,7 +1183,7 @@ async function main(argv: string[]): Promise<number> {
     let planShownAt = 0;
     if (!toStripe()) {
       await button(PLAN_CTA[plan]).waitFor({ state: "visible", timeout: 5_000 });
-      planShownAt = Date.now();
+      planShownAt = paywallLeftOpenAt ?? Date.now();
       if (plants) await notePrices();
       await page.waitForTimeout(1_500); // the live quote replaces the fallback price
       walk.prices = await page

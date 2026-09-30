@@ -103,7 +103,9 @@ export function proofWalksFor(at: Date, personas = personasFile.personas.map((p)
     device: k % 2 === 0 ? "iPhone 15 Pro" : "Desktop Chrome",
     plan: PLANS[(day + k) % PLANS.length]!,
   }));
-  walks[day % 4]!.quit = quits[day % quits.length];
+  // The slot moves on by one more every four days, so each way of leaving meets a phone and
+  // a desktop within eight nights; the same index for both kept survey quits on a phone.
+  walks[(day + Math.floor(day / quits.length)) % 4]!.quit = quits[day % quits.length];
   return walks;
 }
 

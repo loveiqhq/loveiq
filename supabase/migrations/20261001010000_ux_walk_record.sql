@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS public.ux_walk_record (
   -- persona--device, e.g. `spark-seeker--iphone-15-pro`
   walk       text NOT NULL,
   -- The GitHub Actions run, so a night's walks are found together and a rerun of the same
-  -- run does not add them twice. Null for a walk run by hand.
+  -- run does not add them twice. `hand:<startedAt>` for a walk run by hand, for the same
+  -- reason (UNIQUE treats two NULLs as different).
   run_id     text,
   origin     text NOT NULL,
   -- What track() sent, as the walk's browser heard it: [{t, event, props}].
