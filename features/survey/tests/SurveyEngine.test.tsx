@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 const mockSetAnswer = vi.fn();
@@ -13,6 +13,13 @@ let mockProgress = 0;
 let mockSubmitStatus = "idle";
 // qIds answered on the landing page — SurveyEngine drops these from the flow.
 let mockPrefilled: string[] = [];
+
+// Staging, previews and dev (true) or the live site (false): the jump menu's gate.
+let mockNonProd = true;
+vi.mock("@shared/env/is-non-prod-deploy", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/env/is-non-prod-deploy")>()),
+  isNonProdDeploy: () => mockNonProd,
+}));
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
   useSurveyState: () => ({
@@ -152,6 +159,7 @@ beforeEach(() => {
   mockProgress = 0;
   mockSubmitStatus = "idle";
   mockPrefilled = [];
+  mockNonProd = true;
   mockSetAnswer.mockClear();
   mockGetAnswer.mockClear().mockReturnValue(null);
   mockSetCurrentIndex.mockClear();
@@ -340,5 +348,28 @@ describe("SurveyEngine completion phases", () => {
 
     expect(screen.getByText("Submission Interrupted")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+  });
+});
+
+// Mark, 30.09: "Is there a way that I can jump to specific questions rather than having
+// to go through the entire survey?" Staging only (SurveyJumpMenu.test.tsx has the menu).
+describe("SurveyEngine — the staging jump menu", () => {
+  it("offers every asked question off production, and moves the engine to the one picked", () => {
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    const menu = screen.getByRole("combobox", { name: "Jump to question" });
+    expect(
+      within(menu)
+        .getAllByRole("option")
+        .map((o) => o.textContent)
+    ).toEqual(["1. q1 · Q1?", "2. q2 · Q2?", "3. q3 · Q3?", "4. q4 · Q4?"]);
+    fireEvent.change(menu, { target: { value: "2" } });
+    expect(mockSetCurrentIndex).toHaveBeenLastCalledWith(2);
+  });
+
+  it("leaves the live site's survey without it", () => {
+    mockNonProd = false;
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    expect(screen.queryByRole("combobox", { name: "Jump to question" })).toBeNull();
+    expect(screen.queryByText(/Jump to question/)).toBeNull();
   });
 });
