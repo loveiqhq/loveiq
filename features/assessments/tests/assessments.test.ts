@@ -75,7 +75,7 @@ describe("every instrument in the factory", () => {
     phq9: "a7ed0e7b7b72ac6b",
     ucla3: "8c19de851b6d79ae",
     scssf: "13fdc47561cd9b82",
-    rses: "36ef013c1fc0c732",
+    rses: "c55bdca4f8734090",
     bfne: "0cdef0f074ae3297",
     ucs: "cf67657c3a267e9a",
   };

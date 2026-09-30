@@ -77,7 +77,7 @@ decide someone else approves instead (step 7); which instrument ships first is t
 | PHQ-9      | depression                  | validated     | approved by Eman on 2026-09-30; item 9 routes to crisis help                              |
 | UCLA-3     | loneliness                  | draft         | the source gives no cutoffs, and commercial use is unchecked                              |
 | SCS-SF     | self-compassion             | in-validation | Inner Critic backbone; Neff grants use "for any purpose whatsoever"; bands are her rubric |
-| RSES       | self-esteem                 | draft         | Inner Critic backbone; permission covers research only; bands are ours (15 and 25)        |
+| RSES       | self-esteem                 | in-validation | Inner Critic backbone; public domain on UMD's notice; bands are ours (15 and 25)          |
 | BFNE       | fear of negative evaluation | draft         | Boundaries backbone; a catalogue says "no restrictions", the rights holder was not asked  |
 | UCS        | unmitigated communion       | draft         | Boundaries backbone; no terms of use, and the scoring key is inferred until checked       |
 
@@ -86,16 +86,17 @@ decide someone else approves instead (step 7); which instrument ships first is t
 1. **GAD-7 and PHQ-9 are validated.** Eman approved them on 2026-09-30 without waiting for
    Mark and Sanjin's line-by-line review, and the sign-off lines name him. Mark and Sanjin
    can still review them in the validation pack; a change they ask for is a new sign-off.
-2. **Four licenses to ask about.** UCLA-3 (Daniel Russell), RSES (the Rosenberg family,
-   through the University of Maryland), BFNE (Mark Leary, and Sage) and UCS (Vicki
-   Helgeson). The question for each is the same: may a paid product show the scale to people
-   who take it on their own, with the credit line? Until then each stays a draft, and its
-   lines wait, because settling the license changes its fingerprint. UCS also needs its
-   scoring key checked against Fritz and Helgeson (1998): item 2 reversed and a mean are
-   inferred from the wording, not read from the source.
-3. **SCS-SF is ready for its validators.** It is the first instrument whose license allows
-   commercial use outright and that has reversed items, so its sign-off also checks the
-   engine's reversing against Neff's key.
+2. **Three licenses to ask about.** UCLA-3 (Daniel Russell), BFNE (Mark Leary, and Sage)
+   and UCS (Vicki Helgeson). The question for each is the same: may a paid product show the
+   scale to people who take it on their own, with the credit line? Until then each stays a
+   draft, and its lines wait, because settling the license changes its fingerprint. UCS also
+   needs its scoring key checked against Fritz and Helgeson (1998): item 2 reversed and a
+   mean are inferred from the wording, not read from the source.
+3. **SCS-SF and RSES are ready for their validators.** Their licenses allow commercial use
+   outright (Neff's "for any purpose whatsoever"; the University of Maryland's
+   public-domain notice), and both have reversed items, so their sign-off also checks the
+   engine's reversing against each source's key. RSES's bands are ours, so its sign-off
+   includes whether the split at 15 and 25 is acceptable.
 4. **Which assessments come next** is Mark's roadmap of 10 to 20 assessments. His portfolio
    matrix of 18 Sep ranks "The Inner Critic" first and "Boundaries & People-Pleasing"
    second; the four above are their backbones that fit the factory as it is. The others

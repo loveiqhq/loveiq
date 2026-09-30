@@ -7,9 +7,10 @@ const safety = undefined;
  * Rosenberg Self-Esteem Scale, the self-esteem backbone of Mark's "The Inner Critic". Wording,
  * answers and scoring as the University of Maryland's Department of Sociology prints them.
  *
- * A draft until permission is asked: the Rosenberg family's permission, as the department
- * relays it, covers "educational and professional research", not a paid product. Some
- * websites call the scale public domain; its own source does not, so neither do we.
+ * Public domain, on the department's own notice (the banner at the top of its scale pages,
+ * which is an image, so a text-only read misses it; CodeRabbit caught that on #437). Its
+ * older FAQ still says the family's permission covers "educational and professional
+ * research", and the notice is the later word.
  *
  * The department gives no cutoffs ("To obtain norms for a sample similar to your own, you
  * must search the academic literature"). The bands split at 15 and 25, a split often used in
@@ -20,15 +21,17 @@ const definition: Omit<InstrumentDefinition, "signOff"> = {
   name: "Rosenberg Self-Esteem Scale",
   shortName: "RSES",
   version: "0.1.0",
-  status: "draft",
+  status: "in-validation",
   construct: "self-esteem",
   humangraph: "self",
   purpose: "screening",
   license: {
-    kind: "unknown",
+    kind: "public-domain",
     terms:
-      'The University of Maryland says Dr. Florence Rosenberg "has given permission to use the Self-Esteem Scale for educational and professional research. There is no charge associated with the use of this scale in your professional research." That covers research, not a paid product. Commercial digital use has not been asked about.',
-    source: "https://socy.umd.edu/rosenberg-scale-faq",
+      'The University of Maryland\'s notice: "The Rosenberg Self-Esteem Scale is now in the public domain, meaning you may use it without charge and without notifying the Sociology Department. This permission extends to making translations or adaptations as you see fit, consistent with traditional scholarly attribution practices."',
+    source: "https://socy.umd.edu/about-us/rosenberg-self-esteem-scale",
+    attribution:
+      "Rosenberg, M. (1965). Society and the Adolescent Self-Image. Princeton, NJ: Princeton University Press.",
   },
   form: {
     title: "Rosenberg Self-Esteem Scale, University of Maryland Department of Sociology",
