@@ -252,7 +252,12 @@ export async function POST(request: Request) {
     const plan = getReportPurchasePlan(parsed.data.plan);
     const archetypeName = parsed.data.archetype ?? null;
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
-    const planTitle = archetypeName ? `${archetypeName} report` : plan.title;
+    // Only the single-archetype plans are one archetype's report ("LoveIQ Spark Seeker
+    // report"). `core` carries an archetype too, for the return URL, but it is the
+    // three-archetype bundle: named after one archetype, Stripe's page and the receipt read
+    // like the wrong purchase (persona walks, 2026-09-30).
+    const oneArchetype = parsed.data.plan === "full_report" || parsed.data.plan === "essentials";
+    const planTitle = archetypeName && oneArchetype ? `${archetypeName} report` : plan.title;
 
     // White-landing A/B arm, read from the sticky cookie, so revenue is
     // attributable to the landing variant the buyer first saw. Defaults to
