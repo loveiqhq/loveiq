@@ -12,6 +12,7 @@
  */
 
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { REPORT_DEEP_DIVES, type ReportDeepDive } from "./report-deep-dives";
 
 /** The frame's own placeholder for the 17 unwritten chapter teasers (e.g. 1:871). */
 export const TEASER_PLACEHOLDER = "[Teaser Text]";
@@ -286,43 +287,12 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
  * 712:332 drops its final period and it keeps one here, as every other line has. Each row's part and title come from V4's chapter order
  * (V4ChapterNudges), so they follow it if it moves.
  */
-export interface Report3Nudge {
-  /** The chapter it opens — an id in REPORT_V4_CHAPTERS. */
-  id: string;
-  /** Lora Medium 18.5/26.5, shown open or closed. */
-  question: string;
-  /** Plus Jakarta 14/22.4, shown with "Read full chapter" when the row is open. */
-  support: string;
-}
+export type Report3Nudge = Pick<ReportDeepDive, "id" | "question" | "support">;
 
 export const REPORT_V4_NUDGES_HEADING = "A Snapshot of what you will learn";
 
-export const REPORT_V4_NUDGES: readonly Report3Nudge[] = [
-  {
-    id: "typical_beliefs",
-    question: "Which rules about sex did you never actually agree to?",
-    support:
-      "Discover the beliefs that are quietly shaping what sex means to you, and how they can influence your desire, behaviour, and relationships.",
-  },
-  {
-    id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
-    question: "What turns your desire on, and what shuts you down?",
-    support:
-      "Understand what fuels your desire, what gets in the way, and how to better work with both.",
-  },
-  {
-    id: "challenges_in_partnership",
-    question: "What do your partners hear that you never said?",
-    support:
-      "Understand where your needs and habits can be misread by a partner, and how to navigate those differences with less friction and greater understanding.",
-  },
-  {
-    id: "typical_sexual_fantasy_amp_practice_tendencies",
-    question: "What does your fantasy really say about what you want?",
-    support:
-      "Learn what makes a fantasy appealing, which parts should stay imaginary, and what may be worth exploring in real life.",
-  },
-];
+/** The four deep dives, since 30.09 kept in `data/report-deep-dives.ts` (the wizard's map reads them too). */
+export const REPORT_V4_NUDGES: readonly Report3Nudge[] = REPORT_DEEP_DIVES;
 
 /**
  * Part II · the three highest-scoring archetypes — 1:493.

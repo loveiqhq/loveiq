@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act, within } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 vi.mock("next/image", () => ({
@@ -13,18 +13,56 @@ vi.mock("next/image", () => ({
   ),
 }));
 
-import PreReportWizard from "@features/survey/ui/PreReportWizard";
+const analytics = vi.hoisted(() => ({
+  trackWizardSlideAdvanced: vi.fn(),
+  trackWizardMapStep: vi.fn(),
+}));
+vi.mock("@features/analytics/client", () => analytics);
 
-/** Click a button and flush the 200ms leave-animation timer. */
-function clickAndFlush(button: HTMLElement) {
-  fireEvent.click(button);
+import PreReportWizard from "@features/survey/ui/PreReportWizard";
+import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
+import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
+import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
+
+/**
+ * The 30.09 wizard — Figma 1071:2092, "Pre Report Wizard — Mobile (production, 393)".
+ * Six slides, the second of them the report map, whose overview opens onto four
+ * deep-dive tiles (Figma drew those as a seventh "Slide NEW"; they stay inside slide 2
+ * so wizard_slide_advanced keeps counting 0-5 for the digests).
+ */
+const HEADINGS = [
+  "A note before you explore your report.",
+  "6 Parts, 20 Chapters",
+  "Unlocking your report is fully risk free.",
+  "Take only what resonates.",
+  "Rate each report section.",
+  "Invite your friends to grow.",
+];
+
+const heading = () => screen.getByRole("heading", { level: 2 }).textContent?.replace(/\s+/g, " ");
+const continueButton = () =>
+  screen.getByRole("button", { name: /continue to next slide|view your report/i });
+const backButton = () => screen.queryByRole("button", { name: /go to previous slide/i });
+const nextDeepDive = () => screen.getByRole("button", { name: /next deep dive/i });
+const previousDeepDive = () => screen.getByRole("button", { name: /previous deep dive/i });
+const activeTile = () => document.querySelector("[data-deep-dive][aria-current='step']");
+const markedRow = () => document.querySelector("[data-wizard-row][data-marked='active']");
+
+/** Let a slide's 250ms leave animation finish. */
+const flush = (ms = 260) =>
   act(() => {
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(ms);
   });
+
+function press(button: HTMLElement) {
+  fireEvent.click(button);
+  flush();
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
+  analytics.trackWizardSlideAdvanced.mockClear();
+  analytics.trackWizardMapStep.mockClear();
 });
 
 afterEach(() => {
@@ -32,117 +70,229 @@ afterEach(() => {
   cleanup();
 });
 
-describe("PreReportWizard", () => {
-  it("renders first slide heading on mount", () => {
+describe("PreReportWizard — slides", () => {
+  it("opens on the note, with the three research tiles, 1 / 6 and no Back button", () => {
     render(<PreReportWizard onComplete={vi.fn()} />);
-    expect(screen.getByText("A note before you explore your report.")).toBeInTheDocument();
-  });
-
-  it("back button is hidden on first slide", () => {
-    render(<PreReportWizard onComplete={vi.fn()} />);
-    const backButton = screen.getByRole("button", { name: /previous slide/i });
-    expect(backButton.parentElement).toHaveClass("pointer-events-none");
-    expect(backButton.parentElement).toHaveClass("opacity-0");
-  });
-
-  it("continue button advances to next slide", () => {
-    render(<PreReportWizard onComplete={vi.fn()} />);
-
-    clickAndFlush(screen.getByRole("button", { name: /continue to next slide/i }));
-
-    expect(screen.getByText("Take only what resonates.")).toBeInTheDocument();
-  });
-
-  it("shows correct heading for each of the 6 slides", () => {
-    render(<PreReportWizard onComplete={vi.fn()} />);
-
-    const headings = [
-      "A note before you explore your report.",
-      "Take only what resonates.",
-      "Rate each report section.",
-      "Share your report with someone you care about.",
-      "Invite your friends to grow.",
-      "Your personalised report is waiting for you.",
-    ];
-
-    expect(screen.getByText(headings[0])).toBeInTheDocument();
-
-    for (let i = 1; i < headings.length; i++) {
-      clickAndFlush(screen.getByRole("button", { name: /continue/i }));
-      expect(screen.getByText(headings[i])).toBeInTheDocument();
+    expect(heading()).toBe(HEADINGS[0]);
+    for (const title of ["100+ research papers", "Clinical models", "Foundational books"]) {
+      expect(screen.getByText(title)).toBeInTheDocument();
     }
-  });
-
-  it("skip button calls onComplete", () => {
-    const onComplete = vi.fn();
-    render(<PreReportWizard onComplete={onComplete} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
-    // Exit animation delay (600ms) before onComplete fires
-    act(() => {
-      vi.advanceTimersByTime(650);
-    });
-    expect(onComplete).toHaveBeenCalledTimes(1);
-  });
-
-  it("continue on last slide calls onComplete", () => {
-    const onComplete = vi.fn();
-    render(<PreReportWizard onComplete={onComplete} />);
-
-    // Navigate to last slide (index 5)
-    for (let i = 0; i < 5; i++) {
-      clickAndFlush(screen.getByRole("button", { name: /continue/i }));
-    }
-
-    expect(screen.getByText("Your personalised report is waiting for you.")).toBeInTheDocument();
-
-    // Click continue on last slide — 250ms leave animation + 600ms exit fade
-    clickAndFlush(screen.getByRole("button", { name: /view your report/i }));
-    act(() => {
-      vi.advanceTimersByTime(650);
-    });
-    expect(onComplete).toHaveBeenCalledTimes(1);
-  });
-
-  it("progress bar shows correct step count", () => {
-    render(<PreReportWizard onComplete={vi.fn()} />);
-
     expect(screen.getByText("1 / 6")).toBeInTheDocument();
-
-    clickAndFlush(screen.getByRole("button", { name: /continue/i }));
-
-    expect(screen.getByText("2 / 6")).toBeInTheDocument();
+    // Slide 1 draws CONTINUE alone, at the left (Figma 1049:1161): no Back at all.
+    expect(backButton()).toBeNull();
   });
 
-  it("back button becomes visible after advancing past first slide", () => {
+  it("walks the six slides in Figma's order, the counter and the bar following", () => {
     render(<PreReportWizard onComplete={vi.fn()} />);
+    const filled = () =>
+      document.querySelectorAll("[data-wizard-segment][data-filled='true']").length;
 
-    clickAndFlush(screen.getByRole("button", { name: /continue/i }));
+    expect(filled()).toBe(1);
+    press(continueButton());
+    expect(heading()).toBe(HEADINGS[1]);
+    expect(screen.getByText("2 / 6")).toBeInTheDocument();
+    expect(filled()).toBe(2);
 
-    const backButton = screen.getByRole("button", { name: /previous slide/i });
-    expect(backButton.parentElement).not.toHaveClass("pointer-events-none");
-    expect(backButton.parentElement).toHaveClass("opacity-100");
+    // The map's overview continues into its deep dives, still slide 2 of 6.
+    press(continueButton());
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[0]!.id);
+    expect(screen.getByText("2 / 6")).toBeInTheDocument();
+
+    for (let i = 2; i < HEADINGS.length; i++) {
+      press(continueButton());
+      expect(heading()).toBe(HEADINGS[i]);
+      expect(screen.getByText(`${i + 1} / 6`)).toBeInTheDocument();
+      expect(filled()).toBe(i + 1);
+    }
+  });
+
+  it("drops the old slides the design no longer has", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    for (let i = 0; i < 6; i++) press(continueButton());
+    expect(screen.queryByText("Share your report with someone you care about.")).toBeNull();
+    expect(screen.queryByText("Your personalised report is waiting for you.")).toBeNull();
+  });
+
+  it("CONTINUE on the last slide calls onComplete after the exit fade", () => {
+    const onComplete = vi.fn();
+    render(<PreReportWizard onComplete={onComplete} />);
+    for (let i = 0; i < 6; i++) press(continueButton());
+    expect(heading()).toBe(HEADINGS[5]);
+    fireEvent.click(continueButton());
+    flush(260);
+    expect(onComplete).not.toHaveBeenCalled();
+    flush(650);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("SKIP INTRO calls onComplete after the exit fade", () => {
+    const onComplete = vi.fn();
+    render(<PreReportWizard onComplete={onComplete} />);
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    flush(650);
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });
 
-/**
- * The wizard used to have two endings: a neutral "Let's open your report." for
- * the control arm and this must-pay one for the forced-paywall treatment arm,
- * swapped in by report token. The A/B was removed on 2026-08-31 and the must-pay
- * copy kept as the single ending, so the wizard no longer branches at all.
- */
-describe("PreReportWizard — single ending", () => {
-  it("always ends on the must-pay slide, with or without a report token", () => {
-    for (const props of [{}, { reportToken: "rpt_wizard_test_001" }]) {
-      render(<PreReportWizard onComplete={vi.fn()} {...props} />);
-      expect(screen.getByText("1 / 6")).toBeInTheDocument();
-      for (let i = 0; i < 5; i++) {
-        clickAndFlush(screen.getAllByRole("button", { name: /continue/i })[0]!);
-      }
-      expect(screen.getByText("Your personalised report is waiting for you.")).toBeInTheDocument();
-      // The neutral ending is gone entirely — it is not reachable by any path.
-      expect(screen.queryByText("Let's open your report.")).not.toBeInTheDocument();
-      cleanup();
+describe("PreReportWizard — the report map (slide 2)", () => {
+  const openMap = () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton());
+  };
+
+  it("opens on the overview: the pitch copy, ▲ off and ▼ on, nothing marked yet", () => {
+    openMap();
+    expect(screen.getByText("your free chapters")).toBeInTheDocument();
+    expect(previousDeepDive()).toBeDisabled();
+    expect(nextDeepDive()).toBeEnabled();
+    expect(activeTile()).toBeNull();
+    expect(markedRow()).toBeNull();
+  });
+
+  it("▼ and ▲ step through the four deep dives, marking each chapter in the drawer", () => {
+    openMap();
+    const ids = REPORT_DEEP_DIVES.map((d) => d.id);
+
+    fireEvent.click(nextDeepDive());
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(ids[0]);
+    expect(markedRow()?.getAttribute("data-wizard-row")).toBe(ids[0]);
+    // The first tile has nothing above it (Figma 1049:1979).
+    expect(previousDeepDive()).toBeDisabled();
+
+    for (let i = 1; i < ids.length; i++) {
+      fireEvent.click(nextDeepDive());
+      expect(activeTile()?.getAttribute("data-deep-dive")).toBe(ids[i]);
+      expect(markedRow()?.getAttribute("data-wizard-row")).toBe(ids[i]);
     }
+    // The last has nothing below it (Figma 1049:2322).
+    expect(nextDeepDive()).toBeDisabled();
+    expect(previousDeepDive()).toBeEnabled();
+
+    fireEvent.click(previousDeepDive());
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(ids[2]);
+  });
+
+  it("each tile carries its chapter's question and the line under it", () => {
+    openMap();
+    fireEvent.click(nextDeepDive());
+    for (const dive of REPORT_DEEP_DIVES) {
+      const tile = document.querySelector(`[data-deep-dive="${dive.id}"]`) as HTMLElement;
+      expect(within(tile).getByText(dive.title)).toBeInTheDocument();
+      expect(within(tile).getByText(dive.question)).toBeInTheDocument();
+      expect(within(tile).getByText(dive.support)).toBeInTheDocument();
+    }
+  });
+
+  it("Back from the deep dives returns to the overview, and from there to slide 1", () => {
+    openMap();
+    fireEvent.click(nextDeepDive());
+    fireEvent.click(nextDeepDive());
+    press(backButton()!);
+    expect(heading()).toBe(HEADINGS[1]);
+    expect(activeTile()).toBeNull();
+    press(backButton()!);
+    expect(heading()).toBe(HEADINGS[0]);
+  });
+
+  it("coming back from slide 3 lands on the deep dive last shown", () => {
+    openMap();
+    fireEvent.click(nextDeepDive());
+    fireEvent.click(nextDeepDive());
+    press(continueButton());
+    expect(heading()).toBe(HEADINGS[2]);
+    press(backButton()!);
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[1]!.id);
+  });
+
+  it("the drawer mirrors the report's V4 nav, less the Snapshot that left the report", () => {
+    expect(
+      WIZARD_DRAWER.map((p) => ({
+        part: p.part,
+        label: p.label,
+        rows: p.rows.map((r) => ({ id: r.id, label: r.label })),
+      }))
+    ).toEqual(
+      REPORT_V4_NAV_PARTS.map((p) => ({
+        part: p.part,
+        label: p.label,
+        rows: p.items.filter((i) => i.id !== "snapshot").map((i) => ({ id: i.id, label: i.label })),
+      }))
+    );
+  });
+
+  it("the drawer badges the free chapters FREE and opens the four deep dives' locks", () => {
+    const badges = Object.fromEntries(
+      WIZARD_DRAWER.flatMap((p) => p.rows.map((r) => [r.id, r.badge]))
+    );
+    expect(
+      Object.entries(badges)
+        .filter(([, b]) => b === "free")
+        .map(([id]) => id)
+    ).toEqual(["introduction", "what_shaped_this_report", "core_archetype"]);
+    expect(
+      Object.entries(badges)
+        .filter(([, b]) => b === "open")
+        .map(([id]) => id)
+    ).toEqual(REPORT_DEEP_DIVES.map((d) => d.id));
+  });
+});
+
+describe("PreReportWizard — keys, swipes and analytics", () => {
+  it("ArrowRight and Enter continue, ArrowLeft goes back, ArrowDown and ArrowUp step the map", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    flush();
+    expect(heading()).toBe(HEADINGS[1]);
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[1]!.id);
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[0]!.id);
+    fireEvent.keyDown(window, { key: "Enter" });
+    flush();
+    expect(heading()).toBe(HEADINGS[2]);
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    flush();
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[0]!.id);
+  });
+
+  it("Enter on a focused button moves once, not twice", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const button = continueButton();
+    button.focus();
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.click(button);
+    flush();
+    expect(heading()).toBe(HEADINGS[1]);
+  });
+
+  it("a swipe left continues and a swipe right goes back", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const stage = screen.getByRole("main");
+    fireEvent.touchStart(stage, { touches: [{ clientX: 300, clientY: 400 }] });
+    fireEvent.touchEnd(stage, { changedTouches: [{ clientX: 180, clientY: 410 }] });
+    flush();
+    expect(heading()).toBe(HEADINGS[1]);
+    fireEvent.touchStart(stage, { touches: [{ clientX: 100, clientY: 400 }] });
+    fireEvent.touchEnd(stage, { changedTouches: [{ clientX: 240, clientY: 395 }] });
+    flush();
+    expect(heading()).toBe(HEADINGS[0]);
+  });
+
+  it("slide moves report 0-5 as wizard_slide_advanced; map steps report as wizard_map_step", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton()); // 0 -> 1
+    press(continueButton()); // overview -> deep dive 1
+    fireEvent.click(nextDeepDive()); // 1 -> 2
+    press(continueButton()); // 1 -> 2 (slide)
+
+    expect(analytics.trackWizardSlideAdvanced.mock.calls.map(([p]) => p)).toEqual([
+      { from_slide: 0, to_slide: 1, direction: "next" },
+      { from_slide: 1, to_slide: 2, direction: "next" },
+    ]);
+    expect(analytics.trackWizardMapStep.mock.calls.map(([p]) => p)).toEqual([
+      { from_step: 0, to_step: 1, control: "continue" },
+      { from_step: 1, to_step: 2, control: "next" },
+    ]);
   });
 });

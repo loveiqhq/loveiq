@@ -216,3 +216,28 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
     }
   );
 });
+
+describe("POST /api/analytics-event — the wizard's report map (30.09)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(42);
+  });
+
+  it("persists wizard_map_step against the survey, beside wizard_slide_advanced", async () => {
+    const res = await POST(
+      makeRequest({
+        event_type: "wizard_map_step",
+        submission_id: 42,
+        metadata: { from_step: 0, to_step: 1, control: "continue" },
+      })
+    );
+    expect(res.status).toBe(204);
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    const body = JSON.parse(String(insert?.[1]?.body));
+    expect(body).toMatchObject({
+      event_type: "wizard_map_step",
+      entity_type: "survey",
+      metadata: { from_step: 0, to_step: 1, control: "continue" },
+    });
+  });
+});

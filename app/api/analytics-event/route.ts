@@ -47,6 +47,8 @@ const ALLOWED_EVENTS = [
   "chapter_feedback_submitted",
   // Survey + wizard funnel slot (Phase B.2)
   "wizard_slide_advanced",
+  // The wizard's report map stepping through its deep dives (30.09)
+  "wizard_map_step",
   // eslint-disable-next-line no-secrets/no-secrets -- not a secret, analytics event name
   "survey_confirmation_cta_clicked",
   // Invite (Phase B.4)
@@ -97,6 +99,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "checkout_abandoned_return":
       return "checkout";
     case "wizard_slide_advanced":
+    case "wizard_map_step":
     // eslint-disable-next-line no-secrets/no-secrets -- not a secret, analytics event name
     case "survey_confirmation_cta_clicked":
       return "survey";

@@ -62,6 +62,8 @@ const PERSISTED_EVENTS = new Set([
   "chapter_feedback_submitted",
   // Survey + wizard funnel slot (Phase B.2)
   "wizard_slide_advanced",
+  // The wizard's report map stepping through its deep dives (30.09)
+  "wizard_map_step",
   "survey_confirmation_cta_clicked",
   // Invite (Phase B.4)
   "invite_modal_dismissed",
@@ -1093,6 +1095,20 @@ export const trackWizardSlideAdvanced = (params: {
 }) => {
   track("wizard_slide_advanced", params);
   persistAnalyticsEvent("wizard_slide_advanced", params);
+};
+
+/**
+ * The wizard's report map (slide 2) moving between its overview (step 0) and its four
+ * deep-dive tiles (steps 1-4). Its own event so wizard_slide_advanced keeps meaning
+ * "the wizard moved to another slide", 0-5, as the digests read it.
+ */
+export const trackWizardMapStep = (params: {
+  from_step: number;
+  to_step: number;
+  control: "next" | "previous" | "continue" | "back";
+}) => {
+  track("wizard_map_step", params);
+  persistAnalyticsEvent("wizard_map_step", params);
 };
 
 export const trackSurveyConfirmationCtaClicked = (params: {
