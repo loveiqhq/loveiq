@@ -71,29 +71,44 @@ decide someone else approves instead (step 7); which instrument ships first is t
 
 ## What is in it now
 
-| Instrument | Measures   | Status    | Why                                                          |
-| ---------- | ---------- | --------- | ------------------------------------------------------------ |
-| GAD-7      | anxiety    | validated | approved by Eman on 2026-09-30; free with the credit line    |
-| PHQ-9      | depression | validated | approved by Eman on 2026-09-30; item 9 routes to crisis help |
-| UCLA-3     | loneliness | draft     | the source gives no cutoffs, and commercial use is unchecked |
+| Instrument | Measures                    | Status        | Why                                                                                       |
+| ---------- | --------------------------- | ------------- | ----------------------------------------------------------------------------------------- |
+| GAD-7      | anxiety                     | validated     | approved by Eman on 2026-09-30; free with the credit line                                 |
+| PHQ-9      | depression                  | validated     | approved by Eman on 2026-09-30; item 9 routes to crisis help                              |
+| UCLA-3     | loneliness                  | draft         | the source gives no cutoffs, and commercial use is unchecked                              |
+| SCS-SF     | self-compassion             | in-validation | Inner Critic backbone; Neff grants use "for any purpose whatsoever"; bands are her rubric |
+| RSES       | self-esteem                 | draft         | Inner Critic backbone; permission covers research only; bands are ours (15 and 25)        |
+| BFNE       | fear of negative evaluation | draft         | Boundaries backbone; a catalogue says "no restrictions", the rights holder was not asked  |
+| UCS        | unmitigated communion       | draft         | Boundaries backbone; no terms of use, and the scoring key is inferred until checked       |
 
 ## What it works on next
 
 1. **GAD-7 and PHQ-9 are validated.** Eman approved them on 2026-09-30 without waiting for
    Mark and Sanjin's line-by-line review, and the sign-off lines name him. Mark and Sanjin
    can still review them in the validation pack; a change they ask for is a new sign-off.
-2. **UCLA-3's license.** Someone checks commercial digital use with the rights holder.
-   Until then it stays a draft and its lines wait, because settling the license changes
-   its fingerprint.
-3. **Which assessments come next** is Mark's roadmap of 10 to 20 assessments. What people
+2. **Four licenses to ask about.** UCLA-3 (Daniel Russell), RSES (the Rosenberg family,
+   through the University of Maryland), BFNE (Mark Leary, and Sage) and UCS (Vicki
+   Helgeson). The question for each is the same: may a paid product show the scale to people
+   who take it on their own, with the credit line? Until then each stays a draft, and its
+   lines wait, because settling the license changes its fingerprint. UCS also needs its
+   scoring key checked against Fritz and Helgeson (1998): item 2 reversed and a mean are
+   inferred from the wording, not read from the source.
+3. **SCS-SF is ready for its validators.** It is the first instrument whose license allows
+   commercial use outright and that has reversed items, so its sign-off also checks the
+   engine's reversing against Neff's key.
+4. **Which assessments come next** is Mark's roadmap of 10 to 20 assessments. His portfolio
+   matrix of 18 Sep ranks "The Inner Critic" first and "Boundaries & People-Pleasing"
+   second; the four above are their backbones that fit the factory as it is. The others
+   named there (FSCRS, GASP, the Silencing the Self Scale) report several subscales, which
+   the engine does not score yet. What people
    most want to understand next will come from the survey's demand question once it ships,
    and Jarvis's `user_totals` (`measure: "answers"`) counts the answers.
-4. **After the first validation:** step 8.
+5. **After the first validation:** step 8.
 
 Jarvis holds the status and the owners as a recorded decision (topic `assessments`).
 
 ## Beyond LoveIQ
 
 Each instrument has a place in the Humangraph (affect, anxiety, attachment, desire, meaning,
-regulation). Once results are stored, Jarvis's `user_totals` reports them as one more
+regulation, self). Once results are stored, Jarvis's `user_totals` reports them as one more
 measure: totals by group, never a person, with the same smallest-group rule.

@@ -1,7 +1,7 @@
 # features/assessments
 
 **Purpose:** the Assessment Factory. Validated psychometric instruments (GAD-7, PHQ-9,
-UCLA-3 so far) held exactly as their sources publish them, scored by one generic engine,
+UCLA-3, SCS-SF, RSES, BFNE and UCS so far) held exactly as their sources publish them, scored by one generic engine,
 checked by an automated gate, and signed off by people (Mark and Sanjin by default, or
 whoever the team decides approves instead, by their own name) before anyone takes them. The first building block of the Applied Psychometrics platform's instrument
 library ("Proven instruments, applied faithfully").

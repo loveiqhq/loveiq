@@ -74,6 +74,10 @@ describe("every instrument in the factory", () => {
     gad7: "dcb5bb60cf682a9d",
     phq9: "a7ed0e7b7b72ac6b",
     ucla3: "8c19de851b6d79ae",
+    scssf: "13fdc47561cd9b82",
+    rses: "36ef013c1fc0c732",
+    bfne: "0cdef0f074ae3297",
+    ucs: "cf67657c3a267e9a",
   };
 
   it.each(Object.entries(PINNED))("%s has the fingerprint it was checked at", (id, hash) => {
@@ -166,6 +170,114 @@ describe("scores as the manuals say", () => {
       ok: false,
       invalid: ["phq9_22"],
     });
+  });
+});
+
+/**
+ * Scored as each source's own key says, reversed items included: the first real instruments
+ * with reversed items, so a flipped key would otherwise pass every other test.
+ */
+describe("the scoring keys of the Inner Critic and Boundaries instruments", () => {
+  const all = (d: InstrumentDefinition, value: (id: string) => number): Answers =>
+    Object.fromEntries(d.items.map((i) => [i.id, value(i.id)]));
+  const reversed = (d: InstrumentDefinition) =>
+    new Set(d.items.filter((i) => i.reverse).map((i) => i.id));
+
+  it("SCS-SF: the engine's mean of twelve is Neff's average of six subscale means", () => {
+    const d = def("scssf");
+    // Neff's key: two items each, the negative three reversed (1=5 ... 5=1).
+    const key: Array<[number[], boolean]> = [
+      [[2, 6], false],
+      [[11, 12], true],
+      [[5, 10], false],
+      [[4, 8], true],
+      [[3, 7], false],
+      [[1, 9], true],
+    ];
+    expect([...reversed(d)].sort()).toEqual(
+      key.flatMap(([items, rev]) => (rev ? items.map((n) => `scssf_${n}`) : [])).sort()
+    );
+    for (const seed of [1, 7, 42]) {
+      const answers = all(d, (id) => ((Number(id.split("_")[1]) * seed) % 5) + 1);
+      const subscaleMeans = key.map(
+        ([items, rev]) =>
+          items
+            .map((n) => answers[`scssf_${n}`]!)
+            .map((v) => (rev ? 6 - v : v))
+            .reduce((a, b) => a + b, 0) / items.length
+      );
+      const neff = subscaleMeans.reduce((a, b) => a + b, 0) / subscaleMeans.length;
+      const r = scoreInstrument(d, answers);
+      expect(r.ok).toBe(true);
+      expect(r.ok && r.total).toBeCloseTo(neff, 2);
+    }
+    // The rubric's edges, on reachable means (twelfths): 29 is low, 30 and 42 moderate, 43 high.
+    const totalling = (sum: number) => {
+      // The first items score 3 after reversing, the rest 2, adding up to `sum`.
+      const threes = sum - 24;
+      return all(d, (id) => {
+        const target = Number(id.split("_")[1]) <= threes ? 3 : 2;
+        return reversed(d).has(id) ? 6 - target : target;
+      });
+    };
+    const withFours = (sum: number) =>
+      all(d, (id) => {
+        const target = Number(id.split("_")[1]) <= sum - 36 ? 4 : 3;
+        return reversed(d).has(id) ? 6 - target : target;
+      });
+    const band = (answers: Answers) => {
+      const r = scoreInstrument(d, answers);
+      return r.ok ? r.band.label : "refused";
+    };
+    expect([
+      band(totalling(29)),
+      band(totalling(30)),
+      band(withFours(42)),
+      band(withFours(43)),
+    ]).toEqual(["Low", "Moderate", "Moderate", "High"]);
+  });
+
+  it("RSES: 0 to 30, items 3, 5, 8, 9 and 10 reversed", () => {
+    const d = def("rses");
+    expect([...reversed(d)].sort()).toEqual(["rses_10", "rses_3", "rses_5", "rses_8", "rses_9"]);
+    const best = scoreInstrument(
+      d,
+      all(d, (id) => (reversed(d).has(id) ? 0 : 3))
+    );
+    const worst = scoreInstrument(
+      d,
+      all(d, (id) => (reversed(d).has(id) ? 3 : 0))
+    );
+    expect([best.ok && best.total, worst.ok && worst.total]).toEqual([30, 0]);
+    // Agreeing with everything is the middle of the scale, not the top.
+    const agreeAll = scoreInstrument(
+      d,
+      all(d, () => 3)
+    );
+    expect(agreeAll.ok && [agreeAll.total, agreeAll.band.label]).toEqual([15, "Middle range"]);
+  });
+
+  it("BFNE: 12 to 60, the four absence-of-worry items reversed", () => {
+    const d = def("bfne");
+    expect([...reversed(d)].sort()).toEqual(["bfne_10", "bfne_2", "bfne_4", "bfne_7"]);
+    const most = scoreInstrument(
+      d,
+      all(d, (id) => (reversed(d).has(id) ? 1 : 5))
+    );
+    expect(most.ok && [most.total, most.band.label]).toEqual([
+      60,
+      "A lot of worry about being judged",
+    ]);
+  });
+
+  it("UCS: a mean from 1 to 5, item 2 reversed", () => {
+    const d = def("ucs");
+    expect([...reversed(d)]).toEqual(["ucs_2"]);
+    const r = scoreInstrument(
+      d,
+      all(d, (id) => (id === "ucs_2" ? 1 : 5))
+    );
+    expect(r.ok && [r.total, r.band.label]).toEqual([5, "Others first, often"]);
   });
 });
 
