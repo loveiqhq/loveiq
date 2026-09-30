@@ -251,7 +251,7 @@ describe("V3Chapter under V4 — the teaser while closed (1:862)", () => {
       REPORT_V4_CHAPTER_TEASERS.biochemical_reward_system_dynamics
     );
     expect(REPORT_V4_CHAPTER_TEASERS.biochemical_reward_system_dynamics).toMatch(
-      /^Sexual desire is shaped not only by what feels good/
+      /^This chapter helps you understand how your reward system/
     );
   });
 });
