@@ -126,7 +126,7 @@ export function useSurveyState() {
   }, []);
 
   const clearState = useCallback(() => {
-    // Starting over drops the landing prefill too, so all 59 questions return.
+    // Starting over drops the landing prefill too, so every question returns.
     answersRef.current = {};
     setState({
       answers: {},

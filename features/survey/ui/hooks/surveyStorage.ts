@@ -27,7 +27,7 @@ export interface PendingSurveyCompletion {
  * The one question the landing page asks up front (the hero / closing-CTA card
  * in features/landing/ui/white/WQuestionCard.tsx). Answering it there stores a
  * real answer and marks the qId as "prefilled", so SurveyEngine drops it from
- * the flow — 59 questions total, 58 of them inside /survey.
+ * the flow; every other question is asked inside /survey.
  */
 export const LANDING_PREFILL_QID = "01002";
 

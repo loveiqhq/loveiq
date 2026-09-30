@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore, type FC } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
+import { QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 import {
   LANDING_PREFILL_QID,
   SURVEY_STATE_KEY,
@@ -15,7 +16,8 @@ import {
  *
  * This is the real thing, not a demo: answering stores the answer against
  * `LANDING_PREFILL_QID` and marks it prefilled, so SurveyEngine drops it from
- * the flow. 59 questions in total — 1 here, 58 inside /survey — and the answer
+ * the flow. QUESTIONS_ASKED in total (reportFacts.ts, checked against the survey): 1 here,
+ * the rest inside /survey. The answer
  * submits and scores exactly like any other.
  *
  * Answering deliberately does NOT navigate. The answer is saved straight away
@@ -25,13 +27,12 @@ import {
  *
  * Copy is duplicated from `data/survey-data.ts` on purpose; importing that 80 KB
  * module into the landing bundle for three strings is not worth it. Keep it in
- * sync if Q01002 is reworded (and TOTAL_QUESTIONS if items are added/removed).
+ * sync if Q01002 is reworded.
  */
 
 const QUESTION_TEXT = "Right now, I feel satisfied with my sex life.";
 const GUIDE_SHORT = "Think about the last one to two months overall, not your best or worst day.";
 const GUIDE_LONG = `${GUIDE_SHORT} If you are not having sex right now, rate how you feel about that.`;
-const TOTAL_QUESTIONS = 59;
 
 /** Ring / dot diameters per scale point (Figma "scale" asset, 1→7). */
 const SCALE = [
@@ -123,7 +124,7 @@ const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, classN
       {/* Head */}
       <div className="flex items-center justify-between gap-3">
         <span className="text-[10px] font-bold tracking-[0.5px] text-[#605b6d]">
-          QUESTION 1 OF {TOTAL_QUESTIONS}
+          QUESTION 1 OF {QUESTIONS_ASKED}
         </span>
         <span className="shrink-0 rounded-full bg-[rgba(107,91,149,0.09)] px-2.5 py-[5px] text-[10px] font-semibold text-[#6b5b95]">
           {answered ? "Tap again to change" : "Tap a dot to answer"}
@@ -273,7 +274,7 @@ const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, classN
             </svg>
           </Link>
           <p className="mt-2 text-center text-[11.5px] text-[#605b6d]">
-            Answer saved · {TOTAL_QUESTIONS - 1} questions left
+            Answer saved · {QUESTIONS_ASKED - 1} questions left
           </p>
         </div>
       </div>
