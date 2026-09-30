@@ -40,7 +40,8 @@ async function main() {
       method: "tools/call",
       params: { name: "whats_new", arguments: {} },
     }),
-    signal: AbortSignal.timeout(5000),
+    // Five seconds is what a session start can wait; a test on a loaded machine sets more.
+    signal: AbortSignal.timeout(Number(process.env.JARVIS_OVERNIGHT_TIMEOUT_MS) || 5000),
   });
   if (!res.ok) return;
   const body = await res.json();

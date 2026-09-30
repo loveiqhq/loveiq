@@ -32,7 +32,14 @@ function run(env: Record<string, string>): Promise<string> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ["scripts/jarvis-overnight.mjs"], {
       // A directory with no .env.local, so only the environment can supply a token.
-      env: { PATH: process.env.PATH ?? "", CLAUDE_PROJECT_DIR: "/nonexistent", ...env },
+      // A generous wait: under the full suite the spawn alone took over the hook's own five
+      // seconds, it printed nothing, and the test read that as a broken hook.
+      env: {
+        PATH: process.env.PATH ?? "",
+        CLAUDE_PROJECT_DIR: "/nonexistent",
+        JARVIS_OVERNIGHT_TIMEOUT_MS: "12000", // under vitest's own 15 s
+        ...env,
+      },
     });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
