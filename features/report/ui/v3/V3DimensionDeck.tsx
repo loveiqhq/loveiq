@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
 import type { Report3Dimension } from "@/data/report3-archetype-card";
+import PagerChevron from "./PagerChevron";
+import useSciPager from "./useSciPager";
 
 /**
  * Archetype dimension deck — the four-card swipe deck inside the archetype card.
@@ -31,6 +33,17 @@ import type { Report3Dimension } from "@/data/report3-archetype-card";
  * which the compositor runs on its own, glow included. And focus follows the swipe
  * while it travels, read from `scrollLeft` once a frame, so the arriving card is
  * already the focused one when it lands.
+ *
+ * DESKTOP (Sanjin, review 30.09: Attachment "jumps over", "hard to flip", "the lines"
+ * hard to click). The track's trailing space was the phone's, so from about 720px the
+ * scroll ended before Attachment's snap and its bar's scroll clamped to Power. The
+ * trailing space now grows with the viewport, so every card reaches the snap edge at
+ * any width, and from 700px the four bars are the science gallery's pager: dots, with
+ * Previous and Next either side (reportV3.css; the phone keeps its lines). The bars and
+ * the arrows page through useSciPager's stops, one a card: a click focuses its card at
+ * once and holds it while the deck glides past the others, so a second click goes on
+ * from there; the swipe's own reading takes over when the deck lands or the reader
+ * scrolls.
  */
 
 /**
@@ -76,7 +89,18 @@ const DeckFace: FC<{ d: Report3Dimension }> = ({ d }) => (
 
 const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) => {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const viewportId = useId();
   const [active, setActive] = useState(initialIndex);
+  const pager = useSciPager(viewportRef, dimensions.length, true, ".rv3-deck__slot");
+  // The card a click is gliding to wins over the swipe's reading until it lands.
+  const heldCard = pager.held === null ? undefined : pager.stops[pager.held]?.card;
+  const focus = heldCard ?? active;
+  const last = dimensions.length - 1;
+  /** Glide to the stop that brings `card` to the snap edge — its own, one a card. */
+  const show = (card: number) => {
+    const k = pager.stops.findIndex((stop) => stop.card >= card);
+    pager.goTo(k < 0 ? pager.stops.length - 1 : k);
+  };
 
   // Which card the swipe is on, read while it moves. Every card sits a whole STEP
   // from the one before it and snaps to the same 22px inset, so the scroll offset
@@ -94,9 +118,9 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
     const measure = () => {
       queued = false;
       if (!count) return;
-      // At maximum scroll the last card cannot reach the snap edge — the track's
-      // trailing padding is smaller than the gap it would need — so being at the
-      // end IS being on the last card, whatever the offset says.
+      // Being at the end IS being on the last card, whatever the offset says. Since
+      // 30.09 the trailing space lets the last card reach the snap edge at any width,
+      // so this only rounds a scroll that stops a pixel or two short of it.
       if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 2) {
         setActive(count - 1);
         return;
@@ -130,18 +154,6 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
     el.scrollLeft = initialIndex * STEP;
   }, [initialIndex]);
 
-  const goTo = useCallback((index: number) => {
-    const el = viewportRef.current;
-    if (!el) return;
-    const left = index * STEP;
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    if (!reduced && typeof el.scrollTo === "function") {
-      el.scrollTo({ left, behavior: "smooth" });
-    } else {
-      el.scrollLeft = left;
-    }
-  }, []);
-
   return (
     <div
       className="rv3-deck"
@@ -152,6 +164,7 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
       <div
         className="rv3-deck__viewport"
         ref={viewportRef}
+        id={viewportId}
         role="group"
         aria-roledescription="carousel"
         aria-label="Your four dimensions"
@@ -160,7 +173,7 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
         {/* 15:1137 — the track. Cards snap 22px in, as every variant frame draws. */}
         <div className="rv3-deck__track" data-node-id="15:1137" data-name="Track">
           {dimensions.map((d, i) => {
-            const isFocused = i === active;
+            const isFocused = i === focus;
             return (
               <article
                 key={d.key}
@@ -187,19 +200,52 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
         </div>
       </div>
 
-      {/* 15:1231 — four bars, the active one in the archetype's accent. */}
-      <div className="rv3-deck__dots" data-node-id="15:1231" data-name="Page indicator">
+      {/* 15:1231 — four bars, the active one in the archetype's accent. From 700px they
+       * are dots between Previous and Next, which the phone never draws. The arrows stay
+       * focusable at the ends (aria-disabled), so a keyboard keeps its place. */}
+      <div
+        className="rv3-deck__dots"
+        data-node-id="15:1231"
+        data-name="Page indicator"
+        role="group"
+        aria-label="Dimension cards"
+      >
+        <button
+          type="button"
+          className="rv3-deck__arrow"
+          aria-label="Previous dimension"
+          aria-controls={viewportId}
+          aria-disabled={focus <= 0 || undefined}
+          onClick={() => {
+            if (focus > 0) show(focus - 1);
+          }}
+        >
+          <PagerChevron back />
+        </button>
         {dimensions.map((d, i) => (
           <button
             key={d.key}
             type="button"
-            className={`rv3-deck__dot${i === active ? " is-active" : ""}`}
-            aria-current={i === active}
-            onClick={() => goTo(i)}
+            className={`rv3-deck__dot${i === focus ? " is-active" : ""}`}
+            aria-current={i === focus}
+            aria-controls={viewportId}
+            onClick={() => show(i)}
           >
             <span className="rv3-sr">Show {d.title}</span>
           </button>
         ))}
+        <button
+          type="button"
+          className="rv3-deck__arrow"
+          aria-label="Next dimension"
+          aria-controls={viewportId}
+          aria-disabled={focus >= last || undefined}
+          onClick={() => {
+            if (focus < last) show(focus + 1);
+          }}
+        >
+          <PagerChevron />
+        </button>
       </div>
     </div>
   );

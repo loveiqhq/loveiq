@@ -6172,11 +6172,18 @@ html {
  * the focused icon sits in a bare 26x45 box (1116:1029), the peeking ones stand alone,
  * all of them Mark's new outlines, painted in the accent. The labels start 10px after
  * the icon, Medium 14 over ExtraLight 12, left aligned, in both designs (1116:1034 /
- * 1116:1057). */
+ * 1116:1057).
+ *
+ * The trailing space lets the last card reach the 22px snap edge at any width: the
+ * track's content is 22 + 4 x 266 + 3 x 14 = 1128 without it, and Power's snap is
+ * 3 x 280 = 840, so it is the viewport less 288 (71 at 359; the phone's 69 was that for
+ * the old 268 card). At a desktop width the phone's 69 ended the scroll before
+ * Attachment's snap (desktop review 30.09, Sanjin: Attachment "jumps over"). */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__track {
   gap: 14px;
   height: 360px;
   padding-bottom: 22px;
+  padding-right: max(69px, 100% - 288px);
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__slot {
   height: 324px;
@@ -6262,6 +6269,12 @@ html {
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__sub::first-letter {
   text-transform: uppercase;
+}
+/* The pager's Previous and Next either side of the bars (V3DimensionDeck). The phone and
+ * the 393 preview keep the four lines alone; from 700px the live page draws them (the
+ * 30.09 desktop review block at the end of the file), and nothing else does. */
+.rv3 .rv3-deck__arrow {
+  display: none;
 }
 
 /* ── The fade ends where a ramp's veiled tail starts — review 25.09 ───────────────
@@ -8750,5 +8763,102 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 @supports not (container-type: inline-size) {
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
     --rv3-sci-u: 1.25px;
+  }
+}
+
+/* ══ Desktop review — 30.09 (Notion) ═══════════════════════════════════════════════
+ * Sanjin and Mark, "Review Round 30.09 – Desktop". The live page only (`.rv3.rv4`) and
+ * only from 700px, as the two reviews above, so the phone and the 393 preview are
+ * exactly as before. */
+@media (min-width: 700px) {
+  /* The archetype deck (Sanjin: "hard to flip", "the lines" hard to click). The four 3px
+   * lines are the science gallery's pager: 7.5px dots with a 15 x 24 target each, the
+   * current one a 20px pill in the archetype's accent, as its line was, and V4's 34px disc
+   * either side, 16 from the dots. The row sits 14 under the cards, as the gallery's does
+   * under its tiles, over the foot of the viewport the focused card's shadow runs into;
+   * the deck grows round it, where the phone's fixed 360 holds the lines inside. */
+  .rv3.rv4 .rv3-deck {
+    height: auto;
+  }
+  .rv3.rv4 .rv3-deck__dots {
+    gap: 7.5px;
+    height: auto;
+    justify-content: center;
+    margin-top: -8px;
+    padding: 0;
+  }
+  .rv3.rv4 .rv3-deck__dot {
+    background: rgba(22, 16, 33, 0.16);
+    flex: none;
+    height: 7.5px;
+    position: relative;
+    transition:
+      background 600ms ease-in-out,
+      width 200ms ease;
+    width: 7.5px;
+  }
+  .rv3.rv4 .rv3-deck__dot.is-active {
+    background: var(--rv3-deck-accent);
+    width: 20px;
+  }
+  .rv3.rv4 .rv3-deck__dot::after {
+    content: "";
+    inset: -8.25px -3.75px;
+    position: absolute;
+  }
+  .rv3.rv4 .rv3-deck__arrow {
+    align-items: center;
+    background: rgba(121, 95, 200, 0.1);
+    border: 0;
+    border-radius: 50%;
+    color: var(--rv3-violet);
+    cursor: pointer;
+    display: flex;
+    flex: none;
+    height: 34px;
+    justify-content: center;
+    margin-inline: 8.5px;
+    padding: 0;
+    width: 34px;
+  }
+  .rv3.rv4 .rv3-deck__arrow svg {
+    display: block;
+    height: 15px;
+    width: 15px;
+  }
+  /* aria-disabled, not disabled: a keyboard's focus stays on it at an end. */
+  .rv3.rv4 .rv3-deck__arrow[aria-disabled="true"] {
+    cursor: default;
+    opacity: 0.35;
+  }
+  .rv3.rv4 .rv3-deck__arrow:focus-visible {
+    outline: 2px solid var(--rv3-violet);
+    outline-offset: 2px;
+  }
+}
+/* From 700px too: below it the dots are the phone's lines. */
+@media (min-width: 700px) and (hover: hover) and (pointer: fine) {
+  .rv3.rv4 .rv3-deck__arrow {
+    transition:
+      background-color 180ms ease,
+      translate 180ms ease;
+  }
+  .rv3.rv4 .rv3-deck__arrow:not([aria-disabled="true"]):hover {
+    background: rgba(121, 95, 200, 0.18);
+    translate: 0 -1px;
+  }
+  .rv3.rv4 .rv3-deck__dot:not(.is-active):hover {
+    background: rgba(22, 16, 33, 0.32);
+  }
+}
+/* After the rules above, which would otherwise win over the deck's own reduced-motion
+ * rule on order. */
+@media (prefers-reduced-motion: reduce) {
+  .rv3.rv4 .rv3-deck__dot,
+  .rv3.rv4 .rv3-deck__arrow {
+    transition: none;
+  }
+  .rv3.rv4 .rv3-deck__arrow:not([aria-disabled="true"]):hover {
+    translate: none;
   }
 }

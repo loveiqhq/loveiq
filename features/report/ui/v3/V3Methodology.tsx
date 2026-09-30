@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type FC } from "react";
 import { REPORT_V4_CLOSING } from "@/data/report3-archetype-page";
+import PagerChevron from "./PagerChevron";
 import useSciPager from "./useSciPager";
 import V4Runs from "./V4Runs";
 
@@ -17,23 +18,6 @@ import V4Runs from "./V4Runs";
  * the column's edge, and a pager under it (useSciPager).
  * The phone keeps its dot row, which only reports; the pager is drawn nowhere else.
  */
-
-/** 304:263's 15px chevron, stroke 3, turned to point back or on. */
-const Chevron: FC<{ back?: boolean }> = ({ back = false }) => (
-  <svg viewBox="0 0 15 15" fill="none" aria-hidden="true">
-    <path
-      d={
-        back
-          ? "M9.375 3.28125L5.15625 7.5L9.375 11.7188"
-          : "M5.625 3.28125L9.84375 7.5L5.625 11.7188"
-      }
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 interface ScienceCard {
   /** Accent, taken from the stroke baked into each card's exported icon —
@@ -299,7 +283,7 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
               aria-disabled={pager.at <= 0 || undefined}
               onClick={() => pager.step(-1)}
             >
-              <Chevron back />
+              <PagerChevron back />
             </button>
             <div className="rv3-sci__pips">
               {pager.stops.map((stop, k) => (
@@ -322,7 +306,7 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
               aria-disabled={pager.at >= pager.stops.length - 1 || undefined}
               onClick={() => pager.step(1)}
             >
-              <Chevron />
+              <PagerChevron />
             </button>
           </div>
         ) : null}
