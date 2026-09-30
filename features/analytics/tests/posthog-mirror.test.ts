@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Hoisted so the vi.mock factory below can close over the same spies.
 const ph = vi.hoisted(() => ({
@@ -32,6 +32,12 @@ beforeEach(async () => {
 });
 
 describe("the persona walks' tap", () => {
+  // Here, not at each test's end: a failed expect would skip that line and leak the tap
+  // into the next test, the "visitor has no tap" one included.
+  afterEach(() => {
+    delete window.__loveiqEventTap;
+  });
+
   it("hears every event PostHog is sent, with the same params, before PostHog does", () => {
     // How many PostHog calls had happened when the tap heard each event. Recorded, not
     // asserted in here: track() swallows whatever the tap throws, an expect() included.
@@ -46,7 +52,6 @@ describe("the persona walks' tap", () => {
       ["report_viewed", {}, 1],
     ]);
     expect(ph.capture).toHaveBeenCalledTimes(2);
-    delete window.__loveiqEventTap;
   });
 
   it("cannot stop an event reaching PostHog when it throws", () => {
@@ -55,7 +60,6 @@ describe("the persona walks' tap", () => {
     };
     expect(() => track("begin_checkout", { plan: "core" })).not.toThrow();
     expect(ph.capture).toHaveBeenCalledWith("begin_checkout", { plan: "core" });
-    delete window.__loveiqEventTap;
   });
 
   it("changes nothing for a visitor, whose page has no tap", () => {
