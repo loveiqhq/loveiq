@@ -122,6 +122,29 @@ describe("plans pop-up trigger", () => {
     expect(notifyIdx).toBeLessThan(timerIdx);
   });
 
+  it("runs the pop-up test on V4 only", () => {
+    // Marcus's 50/50 (2026-09-29). V1 and V2 readers are never bucketed.
+    expect(SOURCE).toMatch(
+      /const popupArm = isV4\s*\?\s*\(resolvePopupArmOverride\(searchParams\.get\("popup"\)\) \?\? assignPopupArm\(data\?\.submissionId\)\)\s*:\s*null;/
+    );
+  });
+
+  it("marks the pop-up point in both arms, then stops before the pop-up in no_popup", () => {
+    // The exposure is the like-for-like denominator: in `no_popup` it is where the
+    // pop-up would have opened. It must fire before the early return, and the
+    // return must come before the timer, or `no_popup` still gets the pop-up.
+    const openPlans = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
+    const exposureIdx = openPlans.indexOf("trackExperimentExposure(");
+    const returnIdx = openPlans.indexOf('if (popupArm === "no_popup") return;');
+    const timerIdx = openPlans.indexOf("scrollTeaserTimerRef.current = setTimeout");
+    expect(exposureIdx, "openPlans no longer marks the pop-up point").toBeGreaterThan(-1);
+    expect(returnIdx, "no_popup no longer skips the pop-up").toBeGreaterThan(exposureIdx);
+    expect(timerIdx).toBeGreaterThan(returnIdx);
+    // The reach ping still goes out for both arms: the no-pop-up reader reached
+    // the paywall's cards all the same.
+    expect(openPlans.indexOf("notifyPaywallReached()")).toBeLessThan(returnIdx);
+  });
+
   it("also reports it for every other route to the paywall", () => {
     // ?offer=1 deep-link, 24h ladder auto-open, manual "Unlock" CTAs — one effect
     // covers them all, so no open path goes uncounted.

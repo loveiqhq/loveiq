@@ -69,6 +69,7 @@ vi.mock("@features/analytics/client", () => ({
   trackSectionNavigated: vi.fn(),
   trackChapterFeedbackSubmitted: vi.fn(),
   trackLockedCardPriceShown: vi.fn(),
+  trackExperimentExposure: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
@@ -2024,6 +2025,84 @@ describe("ReportPage", () => {
         expect(themeColor(), qs || "default").toBeNull();
         unmount();
       }
+    });
+  });
+  // Marcus's 50/50 (shared/experiments/popupArm.ts). jsdom lays every element out
+  // at the top, so the trigger counts as reached on mount; discountStep 0 keeps
+  // the 24h ladder's own auto-open out of the way.
+  describe("V4 — the pay pop-up test", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    function lockedV4(query: string, submissionId: number | null = 2063) {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(`v4=1${query}`));
+      const response = buildSuccessResponse();
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue({ ...response, data: { ...response.data, submissionId } });
+    }
+
+    const exposure = () => vi.mocked(analytics.trackExperimentExposure);
+
+    it("marks the pop-up point and opens nothing for no_popup", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      lockedV4("&popup=off");
+
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(3000));
+
+      expect(exposure()).toHaveBeenCalledTimes(1);
+      expect(exposure()).toHaveBeenCalledWith({
+        experiment: "report_popup_2026_10",
+        variant: "no_popup",
+        surface: "challenges_in_partnership",
+      });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("marks the same point and opens the pop-up for popup", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      lockedV4("&popup=on");
+
+      render(<ReportPage />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1700));
+
+      expect(exposure()).toHaveBeenCalledWith(expect.objectContaining({ variant: "popup" }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("leaves a reader with no submission out of it, pop-up as built", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      lockedV4("", null);
+
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(1700));
+
+      expect(exposure()).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("never buckets a V2 reader", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1&popup=off"));
+      const response = buildSuccessResponse();
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue({
+        ...response,
+        data: { ...response.data, submissionId: 2063 },
+      });
+
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(1700));
+
+      expect(exposure()).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
   });
 });

@@ -14,6 +14,11 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
+import {
+  assignPopupArm,
+  POPUP_EXPERIMENT,
+  resolvePopupArmOverride,
+} from "@shared/experiments/popupArm";
 import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -163,6 +168,7 @@ import {
   setReportSubmissionContext,
   trackLockedCardPriceShown,
   trackBeginCheckout,
+  trackExperimentExposure,
   trackLockIconClicked,
   trackPaywallInitiated,
   trackReferFriendOpened,
@@ -2681,6 +2687,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // dev_session) viewers still resolve to their own report.
   const resolvedReportToken = token ?? data?.ownerToken ?? null;
 
+  // The pay pop-up test, V4 only (see shared/experiments/popupArm.ts). Null means
+  // this reader is not in it and gets the pop-up as built.
+  const popupArm = isV4
+    ? (resolvePopupArmOverride(searchParams.get("popup")) ?? assignPopupArm(data?.submissionId))
+    : null;
+
   /**
    * The prices the page loaded with. Nothing moves them mid-session any more: the
    * +2 EUR urgency surcharge — the only thing that ever re-priced a live report —
@@ -2797,6 +2809,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // Report the paywall on ARRIVAL, not after the 1.6s settle beat — the reader
       // has reached it whether or not they wait for the pop-up to fade in.
       notifyPaywallReached();
+      // Both arms of the pop-up test mark this moment, so readers who got this far
+      // are compared like for like; `no_popup` then stops before the pop-up.
+      if (popupArm) {
+        trackExperimentExposure({
+          experiment: POPUP_EXPERIMENT,
+          variant: popupArm,
+          surface: trigger?.id ?? "first_scroll",
+        });
+      }
+      if (popupArm === "no_popup") return;
       scrollTeaserTimerRef.current = setTimeout(() => {
         if (!isPricingModalOpenRef.current) {
           // Pricing 2.0: the scroll pop-up shows the NEW 3-tier plans modal
@@ -2930,7 +2952,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant, isV4]);
+  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant, isV4, popupArm]);
 
   // Every other route to the paywall reports it too: an ?offer=1 email deep-link,
   // the 24h ladder auto-open, and every manual "Unlock" CTA. Whichever comes first
