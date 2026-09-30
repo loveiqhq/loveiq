@@ -112,8 +112,8 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     expect(onCheckout).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps V1–V3's bar, and the desktop card everywhere", () => {
-    const { unmount } = render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} />);
+  it("keeps V1–V3's bar and desktop card", () => {
+    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} />);
     expect(mobile()).not.toHaveClass("is-v4");
     expect(mobile().querySelector(".report-sticky-unlock__guarantee")!.textContent).toBe(
       "14-day money-back guarantee"
@@ -121,9 +121,8 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     expect(within(mobile()).getByRole("button", { name: "Unlock full report" })).toHaveClass(
       "rpm-cta"
     );
-    unmount();
-    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} v4 />);
     const desktop = document.querySelector(".report-sticky-unlock--desktop")!;
+    expect(desktop).not.toHaveClass("is-v4");
     expect(desktop.querySelector(".report-sticky-unlock__heading")!.textContent).toBe(
       "Ready to meet yourself?"
     );
@@ -173,5 +172,67 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     // its padding below 341 so it keeps them (measured with the real font).
     const narrow = css.slice(css.indexOf("@media (max-width: 340px)"));
     expect(narrow.slice(0, narrow.indexOf("\n}\n"))).toContain("padding: 0 10px;");
+  });
+});
+
+/**
+ * Sanjin, desktop review 30.09 (banner.png): "too much, too many different fonts,
+ * gradient edges on the round button" — Lora for the heading, Manrope in three weights,
+ * a white-bordered button in an orange halo. No desktop frame exists, so V4's card
+ * takes the mobile footer's pieces (1005:411): the guarantee box, here at the paywall
+ * card's own scale (1015:1218), and the same gradient pill, in Plus Jakarta Sans only.
+ */
+describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
+  const desktop = () => document.querySelector<HTMLElement>(".report-sticky-unlock--desktop")!;
+
+  it("sets the guarantee box and the gradient pill, and nothing else", () => {
+    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} v4 />);
+    const bar = desktop();
+    expect(bar).toHaveClass("is-v4");
+    const badge = bar.querySelector(".report-sticky-unlock__badge")!;
+    expect(badge.getAttribute("data-node-id")).toBe("1015:1218");
+    expect(badge.querySelector(".report-sticky-unlock__badge-head")!.textContent).toBe(
+      "14-day money-back"
+    );
+    expect(bar.querySelector(".report-sticky-unlock__heading")).toBeNull();
+    expect(bar.textContent).not.toMatch(/Ready to meet yourself|doesn.t land/);
+    const cta = within(bar).getByRole("button", { name: "Unlock full report" });
+    expect(cta).toHaveClass("report-sticky-unlock__cta--v4");
+    expect(cta).not.toHaveClass("rpm-cta");
+    expect(cta.textContent).toBe("Unlock Full Report →");
+  });
+
+  it("opens checkout from the pill and counts it as the desktop bar", async () => {
+    const { trackStickyUnlockClicked } = await import("@features/analytics/client");
+    const onCheckout = vi.fn();
+    render(
+      <ReportStickyUnlockBar quote={null} onCheckout={onCheckout} v4 archetype="Spark Seeker" />
+    );
+    fireEvent.click(within(desktop()).getByRole("button", { name: "Unlock full report" }));
+    expect(onCheckout).toHaveBeenCalledTimes(1);
+    expect(trackStickyUnlockClicked).toHaveBeenCalledWith({
+      variant: "desktop",
+      archetype: "Spark Seeker",
+    });
+  });
+
+  it("styles it through the page, in Plus Jakarta, the box at the card's own scale", () => {
+    const css = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
+    const rule = (selector: string) => {
+      const at = css.indexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThan(-1);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    const D = "body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4";
+    expect(rule(D)).toContain("--font-sans: var(--font-jakarta);");
+    const row = rule(`${D} .report-sticky-unlock__desktop-inner`);
+    expect(row).toContain("flex-direction: row;");
+    expect(row).toContain("justify-content: center;");
+    // 1015:1218 — the footer draws this box at 0.68; the card's is 265.6 x 45.25.
+    const badge = rule(`${D} .report-sticky-unlock__badge`);
+    expect(badge).toContain("flex: 0 1 265.6px;");
+    expect(badge).toContain("height: 45.25px;");
+    expect(rule(`${D} .report-sticky-unlock__badge-head`)).toContain("font-size: 14px;");
+    expect(rule(`${D} .report-sticky-unlock__badge-sub`)).toContain("font-size: 10px;");
   });
 });
