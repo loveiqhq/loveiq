@@ -368,6 +368,10 @@ describe("POST /api/stripe/checkout-session", () => {
     expect(await nameFor({ plan: "full_report", archetype: "Spark Seeker" })).toBe(
       "LoveIQ Spark Seeker report"
     );
+    // Retired, but still accepted, and still one archetype's report.
+    expect(await nameFor({ plan: "essentials", archetype: "Spark Seeker" })).toBe(
+      "LoveIQ Spark Seeker report"
+    );
     // The bundle carries the archetype for its return URL, but it is not that archetype's report.
     expect(await nameFor({ plan: "core", archetype: "Spark Seeker" })).toBe(
       "LoveIQ All your core archetypes"
