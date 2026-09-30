@@ -51,6 +51,23 @@ to know which tool answers what: **Catch me up**, **KPI check**, **Review this c
 `prompts/get`. Each one ends with the house rules (short, plain, every fact linked),
 and a test fails if a prompt names a tool that does not exist.
 
+### Skills: the house way of doing a job
+
+Skills teach Claude how LoveIQ does a job, step by step, with Jarvis's tools.
+
+- **In claude.ai** (for everyone): `loveiq-copy-gate`, `loveiq-chapter-writer`,
+  `loveiq-numbers` and `loveiq-research`, in `docs/claude-ai-skills/`. Build the zips with
+  `npm run skills:pack`, then upload each in claude.ai under Settings, Capabilities, Skills.
+  `PROJECT_INSTRUCTIONS.md` beside them is the text for a claude.ai Project called LoveIQ.
+- **In Claude Code** (for engineers, in this repo): `/copy-gate`, `/report-chapter`,
+  `/assessment-factory` and `/jarvis-brief`, in `.claude/skills/`, with the five review
+  agents in `.claude/agents/`.
+
+A test fails when a skill names a Jarvis tool or prompt that does not exist, when a claude.ai
+skill has front matter claude.ai would refuse, or when an agent lacks the front matter
+Claude Code needs to load it. Until 2026-09-30 none of the five agents had it, so none ever
+loaded.
+
 ### Attachments and files, and where the edges are
 
 Added 2026-09-19, after a spreadsheet that was indexed, counted and reconciled
