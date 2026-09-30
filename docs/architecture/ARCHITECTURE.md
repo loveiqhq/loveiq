@@ -99,8 +99,8 @@
 9. Notify Slack webhook (after response)
 10. Return success response
 11. Client shows success animation (3s)
-12. Auto-transitions to PreReportWizard (5 educational slides)
-13. User completes wizard → returns to confirmation with "Return to LoveIQ" CTA
+12. Auto-transitions to PreReportWizard (6 slides; the second is the report map)
+13. User completes wizard → opens the report (`/report/<token>`, with `?v4=1` off production)
 
 **State Management:**
 

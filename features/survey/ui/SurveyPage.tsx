@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef, type FC, type ReactNode } fro
 import Image from "next/image";
 import Link from "next/link";
 import SurveyEngine from "./SurveyEngine";
+import { reportUrlAfterSurvey } from "./reportUrlAfterSurvey";
 import {
   ANSWERS_STORAGE_KEY,
   SURVEY_STEP_KEY,
@@ -1221,11 +1222,7 @@ const SurveyPage: FC = () => {
     } catch {
       /* ignore */
     }
-    if (clearAnswers && reportToken) {
-      window.location.href = `/report/${reportToken}`;
-    } else {
-      window.location.href = clearAnswers ? "/report" : "/";
-    }
+    window.location.href = clearAnswers ? reportUrlAfterSurvey(reportToken) : "/";
   }, []);
 
   const handleAgree = useCallback(() => {
