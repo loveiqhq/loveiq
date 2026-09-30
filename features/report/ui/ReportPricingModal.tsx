@@ -423,7 +423,20 @@ const ReportPricingModal: FC<Props> = ({
         }}
       />
 
-      <div className="report-pricing-modal__viewport">
+      {/* A tap outside the dialog closes it, as the backdrop's handler above intends. The
+          viewport covers the backdrop edge to edge (it is later in the page and positioned),
+          so that tap lands HERE and never reached the backdrop: measured on production on
+          2026-10-01, a tap beside the dialog hit this div and left the paywall open, on a
+          desktop and an iPhone, and none of 171 closes in 30 days came from a tap outside.
+          Only a tap on the viewport itself: one inside the dialog bubbles up to here too. */}
+      <div
+        className="report-pricing-modal__viewport"
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          dismissReasonRef.current = "backdrop";
+          onClose();
+        }}
+      >
         <div
           ref={dialogRef}
           role={open ? "dialog" : undefined}
