@@ -1,8 +1,8 @@
 # Assessment Factory
 
 How a new psychometric instrument goes from a paper to something a person can safely take.
-The code is in `features/assessments/`. The people who validate are Mark and Sanjin; which
-instrument ships first is their decision too.
+The code is in `features/assessments/`. Mark and Sanjin validate by default, and the team can
+decide someone else approves instead (step 7); which instrument ships first is their decision.
 
 ## The steps
 
