@@ -66,6 +66,7 @@ process.env.RESEND_API_KEY = "re_test_key";
 process.env.RESEND_AUDIENCE_ID = "aud_test_id";
 
 import { POST } from "@/app/api/survey/route";
+import logger from "@shared/observability/logger";
 import { __resetSurveyStatusCacheForTests } from "@features/survey/server/server";
 
 // --- Helpers ---
@@ -600,5 +601,50 @@ describe("POST /api/survey", () => {
 
     await new Promise((r) => setTimeout(r, 10));
     expect(mockResendContactsCreate).not.toHaveBeenCalled();
+  });
+
+  const optInYes = () =>
+    makeRequest({
+      ...validBody(),
+      answers: { ...validBody().answers, "16015": "Yes, I want to keep learning about myself." },
+    });
+
+  it("Q16015 = Yes from an address on the do-not-send list → no Resend push", async () => {
+    // Creating a contact re-subscribes one Resend has as unsubscribed, so an
+    // address that unsubscribed, bounced or complained is never pushed back.
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+    mockFetchWithTimeout.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        url.includes("/rest/v1/email_suppression") ? [{ email: "alice@example.com" }] : [],
+    }));
+
+    await POST(optInYes());
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockResendContactsCreate).not.toHaveBeenCalled();
+  });
+
+  it("logs a failed Resend push, which the SDK returns instead of throwing", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+    mockResendContactsCreate.mockResolvedValue({
+      data: null,
+      error: { name: "validation_error", message: "Invalid audience", statusCode: 422 },
+    });
+
+    await POST(optInYes());
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.objectContaining({ name: "validation_error" }) }),
+        "marketing-opt-in: Resend contact create failed"
+      )
+    );
   });
 });

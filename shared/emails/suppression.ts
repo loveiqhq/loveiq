@@ -3,21 +3,24 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 
 /**
- * R-05: remove an email from the Resend Audience so they stop receiving
- * marketing campaigns shipped via the audience export. Best-effort: a
- * failure here doesn't break the suppression write; the daily tech-digest
- * surfaces sustained issues. Skipped silently when no Audience is configured.
+ * R-05: mark the address unsubscribed in Resend, so campaigns sent from Resend
+ * skip it whichever list they go to. Removing it from the one list, as this used
+ * to, left the contact subscribed, and the survey's opt-in push re-subscribes
+ * on create. Best-effort: a failure here doesn't break the suppression write.
+ * Skipped when no marketing list is configured.
  */
-async function removeFromResendAudience(email: string): Promise<void> {
+async function unsubscribeInResend(email: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   const audienceId = process.env.RESEND_AUDIENCE_ID;
   if (!apiKey || !audienceId) return;
   try {
-    const resend = new Resend(apiKey);
-    // Resend supports removal by email (not just by contact id).
-    await resend.contacts.remove({ audienceId, email });
+    const { error } = await new Resend(apiKey).contacts.update({ email, unsubscribed: true });
+    // The SDK returns API errors instead of throwing. not_found = never a contact.
+    if (error && error.name !== "not_found") {
+      logger.warn({ error, email }, "Failed to unsubscribe email in Resend");
+    }
   } catch (err) {
-    logger.warn({ err, email }, "Failed to remove email from Resend Audience");
+    logger.warn({ err, email }, "Failed to unsubscribe email in Resend");
   }
 }
 
@@ -100,10 +103,9 @@ export async function addToSuppression(
     logger.warn({ err, email, reason }, "Failed to add email to suppression list");
   }
 
-  // R-05: ALSO remove from Resend Audience so the next marketing export
-  // doesn't ship them. The suppression_list gate alone doesn't protect
-  // recipients on bulk Audience sends because those are dispatched server-side
-  // by Resend, not through our `sendEmail` helper. Best-effort: failure here
-  // doesn't undo the suppression write above.
-  await removeFromResendAudience(email);
+  // R-05: ALSO unsubscribe them in Resend. The suppression_list gate alone
+  // doesn't protect recipients of campaigns sent from Resend, because those are
+  // dispatched server-side by Resend, not through our senders. Best-effort:
+  // failure here doesn't undo the suppression write above.
+  await unsubscribeInResend(email);
 }

@@ -325,16 +325,26 @@ export async function POST(request: Request) {
       if (audienceId && resendClient) {
         scheduleAfterResponse("resend-audience-subscribe", async () => {
           try {
-            await resendClient.contacts.create({
+            // Creating a contact re-subscribes one Resend has as unsubscribed,
+            // so an address on our do-not-send list is never added back.
+            if (await isEmailSuppressed(normalizedEmail)) return;
+            const { error } = await resendClient.contacts.create({
               email: normalizedEmail,
               firstName: normalizedFirstName,
               audienceId,
               unsubscribed: false,
             });
+            // The SDK returns API errors instead of throwing, so this is the only
+            // trace of a failed push. A repeat sign-up is not an error: Resend
+            // returns the existing contact.
+            if (error) {
+              logger.warn(
+                { error, submissionId },
+                "marketing-opt-in: Resend contact create failed"
+              );
+            }
           } catch (err) {
-            // Resend returns 422 for duplicate email — that's the common
-            // case (re-submission with the same email) and is fine. Log
-            // anything else for visibility; never escalates to the user.
+            // Network failure or timeout; never escalates to the user.
             logger.warn(
               { err, submissionId },
               "marketing-opt-in: Resend contact create non-fatal failure"
