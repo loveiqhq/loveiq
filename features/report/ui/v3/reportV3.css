@@ -2795,21 +2795,19 @@
   gap: 5.502px;
 }
 /* 1:195's own geometry, measured from the frame at 2x: the first card starts 18.5
- * into the section, the pager sits 11 below the cards (58 until 28.09), the source
- * tiles 29 below the pager, and the closing paragraph 23 below the tiles. V3's spacing left the
- * deck 38 down — its 32px margin is for the "WHERE THIS COMES FROM" header that
- * deck mode drops — and the pager crowded the cards. */
+ * into the section and the pager sits 11 below the cards (58 until 28.09). V3's
+ * spacing left the deck 38 down — its 32px margin is for the "WHERE THIS COMES FROM"
+ * header that deck mode drops — and the pager crowded the cards. Since 30.09 the
+ * source tiles are the pre-report wizard's (1:450 hidden), so the closing paragraph
+ * 1:479 follows the pager: 37.2 from the dots (1453.8) to its first line (1491). */
 .rv3 .rv3-method.is-v4 .rv3-sci {
   margin-top: 12.5px;
 }
-.rv3 .rv3-method.is-v4 .rv3-src {
-  padding-top: 29px;
-}
 .rv3 .rv3-method.is-v4 .rv3-method__outro {
-  padding-top: 23px;
+  padding-top: 37.2px;
 }
-/* 1:195's pager: 6px dots on a 12px pitch, the active one a 16px pill in the
- * coral→orchid wash the source-card tiles carry. V3's is 4px dots and a solid
+/* 1:195's pager: 6px dots on a 12px pitch, the active one a 16px pill in a
+ * coral→orchid wash. V3's is 4px dots and a solid
  * coral pill. Mark, 28.09 (1943962703): "There was too much space between the tiles
  * and the navigational element". 1:197 sets it 11px under the cards, which is the
  * track's 6px bottom padding and 5 more. */
@@ -2824,80 +2822,6 @@
 .rv3 .rv3-method.is-v4 .rv3-sci__dots span.is-active {
   background: linear-gradient(to right, #fe6839, #c36ddf);
   width: 16px;
-}
-
-/* 1:425 — three equal 115px tiles. Plain `1fr` is minmax(auto, 1fr), so an
- * unbreakable word ("Foundational") widened its own column and left the third
- * tile wider than the other two. */
-.rv3 .rv3-method.is-v4 .rv3-src {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-/* 1:425 — source card: white, hairline border, 14px radius, centred title. */
-.rv3 .rv3-method.is-v4 .rv3-src__card {
-  align-items: center;
-  background: #fff;
-  border: 1px solid rgba(22, 16, 33, 0.09);
-  border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  padding: 12.71px 11.5px 9.5px;
-}
-/* 1:426 — a 29.87px tile carrying the coral→orchid wash. */
-.rv3 .rv3-method.is-v4 .rv3-src__icon {
-  align-items: center;
-  background: linear-gradient(to right, rgba(254, 104, 57, 0.1), rgba(195, 109, 223, 0.12));
-  border: 1px solid rgba(195, 109, 223, 0.22);
-  border-radius: 8px;
-  display: flex;
-  flex-shrink: 0;
-  height: 29.867px;
-  justify-content: center;
-  margin-bottom: 15.13px;
-  padding: 1px;
-  width: 29.867px;
-}
-/* The exported glyph hardcodes stroke #C9683F, so it is painted through a mask
- * for the same reason .rv3-sci__glyph is. */
-.rv3 .rv3-method.is-v4 .rv3-src__glyph {
-  background: #c9683f;
-  display: block;
-  height: 17px;
-  mask: var(--rv3-glyph) center / contain no-repeat;
-  -webkit-mask: var(--rv3-glyph) center / contain no-repeat;
-  width: 17px;
-}
-/* 1:433 — centred; 1:434 — left aligned beneath it. */
-.rv3 .rv3-method.is-v4 .rv3-src__title {
-  color: var(--rv3-ink);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 19.2px;
-  margin: 0 0 7.33px;
-  /* Two lines reserved, as 1:195 lays them out: "Clinical models" fits on one
-   * line where the other two titles wrap, and without the reserve its body starts
-   * a line higher than theirs — which is what made the middle tile read as out of
-   * line with the rest. */
-  min-height: 38.4px;
-  text-align: center;
-  /* 91px is the text width Figma measured inside a 115px card. The card here is
-   * a grid cell, so on any phone narrower than the frame the fixed width
-   * overflows and the three tiles stop agreeing. 100% centres in whatever the
-   * cell actually is, which is the same result at 393 and holds as it shrinks. */
-  width: 100%;
-}
-/* 1:434 — LEFT under the CENTRED title, as the frame draws it. With the tiles
- * equal and the titles reserving two lines, the three bodies share one top edge
- * and one inset. Size stays at 12 rather than the frame's 10: Mark found 10px
- * illegible on his phone, and the 2026-09-23 sync agreed 10px is too small
- * across every design. */
-.rv3 .rv3-method.is-v4 .rv3-src__body {
-  color: var(--rv3-muted);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 19.2px;
-  margin: 0;
-  text-align: left;
-  width: 100%;
 }
 
 /* 1:202 — V4's Article is 212x230 against V3's 212.22x276. Figma still fixes the
@@ -3226,9 +3150,6 @@
 }
 .rv3.rv4-doc .rv3-sci__dots {
   display: flex;
-}
-.rv3.rv4-doc .rv3-src {
-  gap: 8px;
 }
 .rv3.rv4-doc .rv3-prose {
   font-size: 16px;
@@ -5534,30 +5455,6 @@
   }
 }
 
-/* ══ The three source tiles — review 24.09 ══════════════════════════════════════
- * "The supportive text underneath the headlines 'Clinical models' render weird in
- * staging. Probably because the elements dont have enough space." 1:434 sets it at
- * 10/16 in a 91px column; at the agreed 12/19.2 (10px was found illegible) that
- * column broke it into ragged four-line blocks at 393 and six at 320, left-aligned
- * under a centred title, and "Foundational" ran into the card's edge at 320.
- * So the text takes more of the tile — 7px a side at 320 (the least that clears
- * "Foundational", 76px wide), the frame's 11.5 from 523px up — and sets centred and
- * balanced under its title. The two lines every title reserves stay, so the three
- * bodies keep one top edge; a one-line title now sits in the middle of them rather
- * than leaving a band under itself. Live report only; the preview keeps the frame. */
-.rv3.rv4 .rv3-method.is-v4 .rv3-src__card {
-  padding-inline: clamp(7px, 2.2vw, 11.5px);
-}
-.rv3.rv4 .rv3-method.is-v4 .rv3-src__title {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
-.rv3.rv4 .rv3-method.is-v4 .rv3-src__body {
-  text-align: center;
-  text-wrap: balance;
-}
-
 /* ══ V4 science cards — the chapter list pinned to the foot · review 24.09 ════════
  * "Also update the alignment and spacing of the 'Read more in chapter' + the
  * chapters" (Mark, 1939904226). 493:7082 draws each card 248 tall, space-between:
@@ -6125,302 +6022,6 @@ html {
 .rv3.rv4 .rv4-chapter.is-open .report-curiosity__fit-dot {
   opacity: 1;
   transform: scale(1);
-}
-
-/* ── Part II · "What you will discover" — the chapter nudges, Figma 1:763 / 1:847 ──
- * The H2 keeps the Snapshot heading's metrics (1:766, Lora Medium 18/21.6). Mark's
- * final panel (25.09, 696:2647) sits in the column — 361 in the 361 frame, a 27px
- * radius and a soft violet shadow — with its hairline drawn over the rows, 1px rules
- * between them, and a closing line (713:6231) under the last. */
-.rv3 .rv4-nudges {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-.rv3 .rv4-nudges__head {
-  color: var(--rv3-ink);
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 21.6px;
-  margin: 0;
-  max-width: 360.781px;
-  padding: 10px 0 20px 5.502px;
-  width: 100%;
-}
-.rv3 .rv4-nudges__panel {
-  background: #fff;
-  border-radius: 27px;
-  box-shadow: 0 20.19px 50.47px 5px rgba(103, 60, 120, 0.08);
-  overflow: clip;
-  position: relative;
-  width: 100%;
-}
-.rv3 .rv4-nudges__panel::after {
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  border-radius: inherit;
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
-}
-.rv3 .rv4-nudges__row {
-  overflow: clip;
-  padding: 18px 22px;
-  position: relative;
-}
-.rv3 .rv4-nudges__row + .rv4-nudges__row {
-  border-top: 1px solid rgba(22, 16, 33, 0.14);
-}
-/* Sanjin's review, 30.09, on an iPhone: Safari does not clip a blurred child to an
- * ancestor's rounded corners, so the open first row's lavender wash (below) tinted the
- * square corner outside the panel's border. The first row takes the panel's top
- * corners itself; a clip-path clips the blur in every engine. */
-.rv3 .rv4-nudges__row:first-child {
-  clip-path: inset(0 round 27px 27px 0 0);
-}
-/* The open row's two soft washes: lavender top-left, rose bottom-right. */
-.rv3 .rv4-nudges__wash {
-  border-radius: 50%;
-  filter: blur(40px);
-  height: 256px;
-  pointer-events: none;
-  position: absolute;
-  width: 306px;
-}
-.rv3 .rv4-nudges__wash--lavender {
-  background: rgba(157, 138, 215, 0.136);
-  left: -98px;
-  top: -116px;
-}
-.rv3 .rv4-nudges__wash--rose {
-  background: rgba(208, 89, 118, 0.088);
-  left: 179px;
-  top: 154px;
-}
-.rv3 .rv4-nudges__toggle {
-  align-items: flex-start;
-  background: none;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  gap: 14px;
-  padding: 0;
-  position: relative;
-  text-align: left;
-  width: 100%;
-}
-.rv3 .rv4-nudges__toggle:focus-visible,
-.rv3 .rv4-nudges__read:focus-visible {
-  border-radius: 8px;
-  outline: 2px solid var(--rv3-violet);
-  outline-offset: 3px;
-}
-.rv3 .rv4-nudges__content {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 9px;
-  min-width: 0;
-}
-/* The part in its own glow (696:2655): "PART III" centred in a 100x24 box under two
- * soft radial washes, lavender and rose — no chip, no "Learn in", no number. The
- * frame's boxes run 95-102 wide by hand; 100 is the one they share. */
-.rv3 .rv4-nudges__part {
-  align-self: flex-start;
-  background:
-    radial-gradient(
-      42.75px 12.48px at 50% 50%,
-      rgba(157, 138, 215, 0.24),
-      rgba(157, 138, 215, 0) 71%
-    ),
-    radial-gradient(37.05px 11.04px at 53% 47%, rgba(208, 89, 118, 0.14), rgba(208, 89, 118, 0) 73%);
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 700;
-  height: 24px;
-  letter-spacing: 2.6px;
-  line-height: 19.2px;
-  padding-top: 2px;
-  text-align: center;
-  text-transform: uppercase;
-  white-space: nowrap;
-  width: 100px;
-}
-/* 696:2658 / 696:2667: Figma rounds the 19.2px lines' boxes up to 20. */
-.rv3 .rv4-nudges__chapter {
-  align-items: flex-start;
-  display: flex;
-  gap: 9px;
-  min-height: 20px;
-}
-.rv3 .rv4-nudges__book {
-  color: var(--rv3-violet);
-  flex: none;
-  height: 16px;
-  margin-top: 2px;
-  width: 16px;
-}
-.rv3 .rv4-nudges__title {
-  color: var(--rv3-ink);
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 19.2px;
-}
-.rv3 .rv4-nudges__question {
-  color: var(--rv3-ink);
-  display: block;
-  font-family: var(--font-serif);
-  font-size: 18.5px;
-  font-weight: 500;
-  letter-spacing: -0.3px;
-  line-height: 26.5px;
-  padding-top: 4px;
-}
-/* "Control / Disc" — lavender and chevron down when closed; white with a violet ring
- * and the chevron up when open, as the chapter heads draw it. */
-.rv3 .rv4-nudges__disc {
-  align-items: center;
-  background: rgba(121, 95, 200, 0.1);
-  border-radius: 50%;
-  color: var(--rv3-violet);
-  display: flex;
-  flex: none;
-  height: 34px;
-  justify-content: center;
-  width: 34px;
-}
-.rv3 .rv4-nudges__disc svg {
-  display: block;
-  height: 18px;
-  transition: transform 260ms ease;
-  width: 18px;
-}
-.rv3 .rv4-nudges__row.is-open .rv4-nudges__disc {
-  background: #fff;
-  box-shadow: inset 0 0 0 1.5px var(--rv3-violet);
-}
-.rv3 .rv4-nudges__row.is-open .rv4-nudges__disc svg {
-  transform: rotate(180deg);
-}
-/* In the frame the open copy sits inside the content column, so it gets that
- * column's 9px gap and its own 12px padding: 21 under the question. */
-.rv3 .rv4-nudges__more {
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  padding-top: 21px;
-  position: relative;
-}
-.rv3 .rv4-nudges__more[hidden] {
-  display: none;
-}
-.rv3 .rv4-nudges__support {
-  color: var(--rv3-copy);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 22.4px;
-  margin: 0;
-  /* 696:2665: the 269 column less its 48px right padding. */
-  max-width: 221px;
-}
-/* Mark's text CTA component (1941261886, 696:2667): Plus Jakarta Medium 12/19.2 in
- * the brand violet, the arrow 6px after it. */
-.rv3 .rv4-nudges__read {
-  align-items: center;
-  align-self: flex-start;
-  background: none;
-  border: 0;
-  color: var(--rv3-violet);
-  cursor: pointer;
-  display: inline-flex;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  gap: 6px;
-  letter-spacing: 0;
-  line-height: 19.2px;
-  min-height: 20px;
-  padding: 0;
-}
-.rv3 .rv4-nudges__read svg {
-  display: block;
-  height: 13px;
-  width: 13px;
-}
-/* 713:6231 — the closing line, 30 under the last rule and 42 above the panel's
- * foot, centred in its 311x50 glow (the frame sets the glow 10px left of centre; it
- * is centred here, as the rows are). */
-.rv3 .rv4-nudges__coda {
-  border-top: 1px solid rgba(22, 16, 33, 0.14);
-  display: flex;
-  justify-content: center;
-  padding: 30px 0 42px;
-  position: relative;
-}
-.rv3 .rv4-nudges__tally {
-  align-items: center;
-  color: #6b5b95;
-  display: flex;
-  flex-direction: column;
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 700;
-  height: 50px;
-  justify-content: center;
-  letter-spacing: 0.8px;
-  line-height: 16px;
-  margin: 0;
-  max-width: 100%;
-  position: relative;
-  text-align: center;
-  text-transform: uppercase;
-  width: 311px;
-}
-.rv3 .rv4-nudges__tally::before {
-  background:
-    radial-gradient(
-      139.95px 26px at 50% 50%,
-      rgba(157, 138, 215, 0.24),
-      rgba(157, 138, 215, 0) 71%
-    ),
-    radial-gradient(121.29px 23px at 53% 47%, rgba(208, 89, 118, 0.14), rgba(208, 89, 118, 0) 73%);
-  content: "";
-  inset: 0;
-  opacity: 0.8;
-  pointer-events: none;
-  position: absolute;
-}
-.rv3 .rv4-nudges__tally-line {
-  display: block;
-  position: relative;
-}
-.rv3 .rv4-nudges__tally-n {
-  -webkit-background-clip: text;
-  background-clip: text;
-  background-image: linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed);
-  color: transparent;
-  font-size: 14px;
-  letter-spacing: 0;
-  line-height: 12px;
-}
-.rv3 .rv4-nudges__tally-book {
-  display: inline-block;
-  height: 16px;
-  margin-top: -3px;
-  vertical-align: middle;
-  width: 16px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rv3 .rv4-nudges__disc svg {
-    transition: none;
-  }
 }
 
 /* ── Archetype card, V4 — Figma 15:815 as it is drawn today ──────────────────────
@@ -7701,22 +7302,13 @@ html {
  * 44px separator apart. V2's section rhythm (48px between sections, 20px above the
  * Snapshot and its rating, a 28px header row) ran over it here. V4 only. */
 
-/* 1:747 → 1:763: after the V4 Summary its rating's 44px tail is the whole gap to the
- * Snapshot heading (it was 44 + 48 + 20 = 112). The thirteen archetypes still on V2
- * end on #means_for_you's rating row, which has no tail, so there the Snapshot takes
- * the 44px separator itself (final review 26.09: a 0 set its heading flush under
- * that row). */
-.rv3.rv4 #snapshot {
-  margin-top: 44px;
-  padding-top: 0;
-}
-.rv3.rv4 #summary + #snapshot {
-  margin-top: 0;
-}
-/* 1:848 → 1:833: the rating 44 under the panel, where its shadow has faded (the
- * panel's own 44px separator), then its 44px tail before Part III's hairline. */
-.rv3.rv4 #snapshot .rv3-chapter__feedback {
-  padding: 0 0 44px;
+/* 1:747: every V4 rating is a 26px row over a 44px tail, and Part III's hairline follows
+ * it. Spark Seeker's V4 Summary carries its own tail. The thirteen archetypes still on
+ * V2 end Part 2 on #means_for_you's bare rating row, which the Snapshot's 44px used to
+ * follow; since 30.09 the Snapshot is the pre-report wizard's map (Figma 1071:2092), so
+ * the tail is given here. */
+.rv3.rv4 #means_for_you {
+  padding-bottom: 44px;
 }
 /* 1:734: one 44px separator from the archetype card to the Summary, whose heading
  * is its own (V4SummaryChapter) — V2's empty header row goes. */
@@ -8030,33 +7622,6 @@ html {
   }
 }
 
-/* ── Extra: the Snapshot's rows fade up one by one (ours, review 27.09) ────────────
- * The panel's four rows, then its "+ N other chapters" line, rise 10px into place one
- * after another, 90ms apart, as the panel comes into view (`--rv4-nudge-i` is each
- * one's turn). The rows keep their own clip; nothing else about them moves. */
-.rv3 .rv4-nudges__panel > .rv4-nudges__row,
-.rv3 .rv4-nudges__panel > .rv4-nudges__coda {
-  transition:
-    opacity 420ms ease,
-    transform 560ms cubic-bezier(0.16, 1, 0.3, 1);
-  transition-delay: calc(var(--rv4-nudge-i, 0) * 90ms);
-}
-.rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__row,
-.rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__coda {
-  opacity: 0;
-  transform: translateY(10px);
-}
-@media (prefers-reduced-motion: reduce) {
-  .rv3 .rv4-nudges__panel > .rv4-nudges__row,
-  .rv3 .rv4-nudges__panel > .rv4-nudges__coda,
-  .rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__row,
-  .rv3 .rv4-nudges__panel.is-pending > .rv4-nudges__coda {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-}
-
 /* ════════════════════════════════════════════════════════════════════════════════
  * THE REPORT 2.0 CHAPTERS IN V4 — review 27.09
  *
@@ -8150,14 +7715,8 @@ html {
   }
   /* A ceiling for a phone narrower than 393, not a design width. */
   .rv3.rv4 .rv4-turn,
-  .rv3.rv4 .rv4-sun,
-  .rv3.rv4 .rv4-nudges__head {
+  .rv3.rv4 .rv4-sun {
     max-width: none;
-  }
-  /* The Snapshot rows' blurb is held to the phone's 221px so it clears the row's
-   * chevron; at the wider panel that is a sliver, so it takes most of the row. */
-  .rv3.rv4 .rv4-nudges__support {
-    max-width: 480px;
   }
 }
 
@@ -8220,8 +7779,7 @@ html {
     letter-spacing: -0.9px;
     line-height: 33.6px;
   }
-  .rv3.rv4 .rv4-summary__heading,
-  .rv3.rv4 .rv4-nudges__head {
+  .rv3.rv4 .rv4-summary__heading {
     font-size: 24px;
     line-height: 28.8px;
   }
@@ -8266,10 +7824,10 @@ html {
  * - A row's weight is its tier's (Marcus's heavier weights for "the ones that are free
  *   or partially unlocked"; Mark: "Amazing, i love it"): SemiBold for free and open
  *   chapters, Light for locked ones.
- * - The drawer's rows hold one line and end in an ellipsis ("A Snapshot …"); the
- *   sidebar keeps its wrap. Both keep their active wash, dot and colour. report.css's
- *   old pill-nav rule gives the rows `min-width: max-content`, which held the
- *   Snapshot's row at its whole title (301px in the 277 column, its FREE chip past the
+ * - The drawer's rows hold one line and end in an ellipsis; the sidebar keeps its
+ *   wrap. Both keep their active wash, dot and colour. report.css's old pill-nav rule
+ *   gives the rows `min-width: max-content`, which held the Snapshot's row (in the nav
+ *   until 30.09) at its whole title (301px in the 277 column, its FREE chip past the
  *   panel's edge), so the row takes the column instead. */
 .rv3.rv4 .report-chapter-pill__chapter {
   font-weight: 700;

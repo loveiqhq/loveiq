@@ -69,6 +69,14 @@ describe("plans pop-up trigger", () => {
     expect(fallback).toMatch(/addEventListener\("scroll"/);
   });
 
+  it("falls back, on V4, to the Summary that preceded the Snapshot (30.09)", () => {
+    // V4 has no Snapshot now; the Summary (or V2's "What this means for you") sits where
+    // it began, so the pop-up keeps its place in the page.
+    expect(SOURCE).toMatch(
+      /getElementById\("snapshot"\) \?\?[\s\S]{0,200}?getElementById\("summary"\) \?\?\s*document\.getElementById\("means_for_you"\)/
+    );
+  });
+
   it("waits a beat after arrival instead of firing on the same frame", () => {
     // Landing the modal the instant the chapter appears reads as an ambush.
     const delay = SOURCE.match(/setIsPricingModalOpen\(true\);[\s\S]{0,80}?\}, (\d+)\);/);

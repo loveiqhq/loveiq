@@ -85,14 +85,6 @@ describe("V3Methodology chrome", () => {
     expect(screen.queryByText("More in chapter")).toBeNull();
   });
 
-  it("adds the source-card icons that V4 introduced, and only in V4", () => {
-    const v4 = render(<V3Methodology chrome="deck" />);
-    expect(v4.container.querySelectorAll(".rv3-src__icon")).toHaveLength(3);
-    cleanup();
-    const v3 = render(<V3Methodology />);
-    expect(v3.container.querySelectorAll(".rv3-src__icon")).toHaveLength(0);
-  });
-
   it("uses V4's shortened questions only in V4", () => {
     render(<V3Methodology chrome="deck" />);
     expect(
@@ -116,18 +108,18 @@ describe("V4Part2", () => {
     expect(container.querySelector(".rv4-corehead")).toBeInTheDocument();
     expect(container.querySelector(".rv3-arch")).toBeInTheDocument();
     expect(container.querySelector(".rv4-summary")).toBeInTheDocument();
-    // 1:763 — "A Snapshot of what you will learn" over the chapter nudges, where the Snapshot was.
-    expect(container.querySelector(".rv4-nudges")).toBeInTheDocument();
+    // 30.09: the Snapshot's chapter nudges moved into the pre-report wizard; 1:483 runs
+    // the card into the Summary and ends there.
+    expect(container.querySelector(".rv4-nudges")).toBeNull();
     expect(container.querySelector(".rv4-snap")).toBeNull();
   });
 
-  it("omits the summary for an archetype Mark has not written, but keeps the nudges", () => {
+  it("omits the summary for an archetype Mark has not written", () => {
     const { container } = render(
       <V4Part2 archetype="Quiet Withdrawer" matchStrength={12} card={card} />
     );
     expect(container.querySelector(".rv4-summary")).toBeNull();
-    // The nudges are ways into chapters, the same for every archetype.
-    expect(container.querySelectorAll(".rv4-nudges__row")).toHaveLength(4);
+    expect(container.querySelector(".rv4-nudges")).toBeNull();
   });
 });
 
@@ -352,36 +344,24 @@ describe("reportV3.css — V4 contracts", () => {
   });
 });
 
-// Review 24.09: "The supportive text underneath the headlines 'Clinical models' render
-// weird in staging. Probably because the elements dont have enough space. Can you see
-// if you can make it look nicer." The frame sets that text at 10px in a 91px column;
-// at the agreed 12px the same column breaks it into ragged four-to-six line blocks,
-// left-aligned under a centred title.
-describe("V3Methodology source tiles in the live report (review 24.09)", () => {
-  const last = (selector: string) => {
-    const at = V3_CSS.lastIndexOf(selector);
-    expect(at, `${selector} missing`).toBeGreaterThan(-1);
-    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
-  };
-
-  it("centres and balances the support text under its centred title", () => {
-    const body = last(".rv3.rv4 .rv3-method.is-v4 .rv3-src__body {");
-    expect(body).toContain("text-align: center");
-    expect(body).toContain("text-wrap: balance");
+// 30.09: the three source tiles moved into the pre-report wizard's first slide (Figma
+// 1049:1191), and 1:195 hides them (1:450), so the V4 deck goes straight on to its
+// closing paragraph. ?v3=1 keeps its tiles.
+describe("V3Methodology source tiles leave V4 for the wizard (30.09)", () => {
+  it("draws no source tiles in V4's deck", () => {
+    const { container } = render(<V3Methodology chrome="deck" />);
+    expect(container.querySelector(".rv3-src")).toBeNull();
+    expect(container.querySelector(".rv3-method__outro")).toBeInTheDocument();
   });
 
-  it("gives the text more of the tile, down to a 320px phone", () => {
-    // "Foundational" is 76px at 12/600; a 320px phone's tile is 90.7 wide.
-    expect(last(".rv3.rv4 .rv3-method.is-v4 .rv3-src__card {")).toMatch(
-      /padding-inline:\s*clamp\(7px, 2\.2vw, 11\.5px\)/
-    );
+  it("keeps V3's three", () => {
+    const { container } = render(<V3Methodology />);
+    expect(container.querySelectorAll(".rv3-src__card")).toHaveLength(3);
   });
 
-  it("centres a one-line title in the two lines every title reserves", () => {
-    const title = last(".rv3.rv4 .rv3-method.is-v4 .rv3-src__title {");
-    expect(title).toContain("display: flex");
-    expect(title).toContain("align-items: center");
-    expect(title).toContain("justify-content: center");
+  it("drops V4's tile styling with them", () => {
+    expect(V3_CSS).not.toMatch(/\.rv3-method\.is-v4 \.rv3-src/);
+    expect(V3_CSS).not.toMatch(/\.rv3\.rv4-doc \.rv3-src/);
   });
 });
 

@@ -204,7 +204,7 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[1]!.id);
   });
 
-  it("the drawer mirrors the report's V4 nav, less the Snapshot that left the report", () => {
+  it("the drawer mirrors the report's V4 nav, row for row", () => {
     expect(
       WIZARD_DRAWER.map((p) => ({
         part: p.part,
@@ -215,7 +215,7 @@ describe("PreReportWizard — the report map (slide 2)", () => {
       REPORT_V4_NAV_PARTS.map((p) => ({
         part: p.part,
         label: p.label,
-        rows: p.items.filter((i) => i.id !== "snapshot").map((i) => ({ id: i.id, label: i.label })),
+        rows: p.items.map((i) => ({ id: i.id, label: i.label })),
       }))
     );
   });

@@ -51,14 +51,12 @@ import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
 import V4CoreArchetypeHeading from "./v3/V4CoreArchetypeHeading";
 import V4PartHeading from "./v3/V4PartHeading";
-import V4ChapterNudges from "./v3/V4ChapterNudges";
 import V4SummaryChapter from "./v3/V4SummaryChapter";
 import V4TopThreeSection from "./v3/V4TopThreeSection";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
   REPORT_V4_DESIGNED_CHAPTER_IDS,
-  REPORT_V4_NUDGES_HEADING,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
   REPORT_V4_PART_FRAME_BY_SECTION,
   REPORT_V4_SUMMARY,
@@ -1219,30 +1217,23 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         {/* The wrapper carries V1's `report-section is-visible`
                           classes so the shared chart-reveal CSS that
                           SnapshotCompare depends on still resolves outside a
-                          ReportSection. */}
-                        {isV3 ? (
+                          ReportSection. V4 has no Snapshot: since 30.09 its four
+                          chapter nudges are the pre-report wizard's map (Figma
+                          1071:2092), and Part 2 runs the Archetype card into the
+                          Summary (1:483). */}
+                        {isV3 && !isV4 ? (
                           <section
                             id="snapshot"
                             data-report-section="true"
                             className="report-section is-visible rv3-snap"
                           >
-                            {/* V4 draws Figma 1:763's "A Snapshot of what you will learn" over
-                             * the chapter nudges (663:1089), which replaced the
-                             * Snapshot for every archetype — the rows are ways into
-                             * chapters, not findings — and bring their own heading.
-                             * V3 keeps its heading and Ignite accordion. */}
-                            {isV4 ? null : (
-                              <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
-                                Snapshot &mdash; of the {viewArchetype}
-                              </h2>
-                            )}
-                            {isV4 ? <V4ChapterNudges /> : <V3SnapshotIgnite copy={findingsCopy} />}
+                            <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
+                              Snapshot &mdash; of the {viewArchetype}
+                            </h2>
+                            <V3SnapshotIgnite copy={findingsCopy} />
                             <SnapshotCompare copy={snapshotCopy} thirdRowViz="dots" />
                             <div className="rv3-chapter__feedback">
-                              {renderFeedback(
-                                "findings",
-                                isV4 ? REPORT_V4_NUDGES_HEADING : "Five things this report found"
-                              )}
+                              {renderFeedback("findings", "Five things this report found")}
                             </div>
                           </section>
                         ) : null}
@@ -2841,7 +2832,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       (isV4 ? document.getElementById("challenges_in_partnership") : null) ??
       document.getElementById("attachment_style") ??
       document.getElementById("typical_beliefs") ??
-      document.getElementById("snapshot");
+      document.getElementById("snapshot") ??
+      // V4 has no Snapshot (30.09): the Summary it followed holds its place.
+      document.getElementById("summary") ??
+      document.getElementById("means_for_you");
 
     // COUNT THE PAYWALL FROM THE FIRST OFFER THE READER ACTUALLY SEES.
     //

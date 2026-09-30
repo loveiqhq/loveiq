@@ -379,7 +379,7 @@ describe("V4 — the finalised nav (961:333)", () => {
         '.rv3.rv4 .report-mobile-nav__link[data-access="locked"] .report-mobile-nav__label,\n.rv3.rv4 .report-sidebar__item[data-access="locked"] .report-sidebar__item-label'
       )
     ).toContain("font-weight: 300;");
-    // The drawer's rows hold one line ("A Snapshot …"); the sidebar keeps its wrap.
+    // The drawer's rows hold one line, ending in an ellipsis; the sidebar keeps its wrap.
     const drawer = rule(".rv3.rv4 .report-chapter-panel__item .report-mobile-nav__label");
     expect(drawer).toContain("overflow: hidden;");
     expect(drawer).toContain("text-overflow: ellipsis;");

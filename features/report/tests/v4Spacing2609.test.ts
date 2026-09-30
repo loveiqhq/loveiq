@@ -35,24 +35,20 @@ const rule = (selector: string) => {
 const lineOf = (selector: string) =>
   V3_CSS.slice(0, V3_CSS.indexOf(`${selector} {`)).split("\n").length;
 
-describe("V4 spacing — the Snapshot sits 44 under Summary's rating and 44 above its own", () => {
-  it("gives #snapshot one 44px separator in place of V2's 48 + 20", () => {
-    const css = rule(".rv3.rv4 #snapshot");
-    expect(css).toMatch(/margin-top:\s*44px;/);
-    expect(css).toMatch(/padding-top:\s*0;/);
-    expect(lineOf(".rv3.rv4 #snapshot")).toBeGreaterThan(1884);
+// 30.09: the Snapshot left the report for the pre-report wizard (Figma 1071:2092); 1:483
+// runs the card into the Summary, whose rating's 44px tail meets Part III's hairline.
+describe("V4 spacing — Part 2 ends on the Summary, 44 above Part III", () => {
+  it("keeps no V4 rules for the Snapshot", () => {
+    expect(V3_CSS).not.toMatch(/\.rv3\.rv4 #snapshot|#summary \+ #snapshot/);
   });
 
-  // Final review 26.09: only Spark Seeker's V4 Summary ends on a 44px tail. The
-  // thirteen archetypes still on V2 end on #means_for_you's bare rating row, where a
-  // 0 had put the Snapshot heading flush under it.
-  it("lets the V4 Summary's own 44px tail be the whole gap, and only there", () => {
-    expect(rule(".rv3.rv4 #summary + #snapshot")).toMatch(/margin-top:\s*0;/);
-  });
-
-  it("sets the Snapshot's rating 44 under the panel (1:848) with its own 44px tail (1:833)", () => {
-    const css = rule(".rv3.rv4 #snapshot .rv3-chapter__feedback");
-    expect(css).toMatch(/padding:\s*0 0 44px;/);
+  // Spark Seeker's V4 Summary ends on its own 44px tail (1:747). The thirteen archetypes
+  // still on V2 end on #means_for_you's bare rating row, which the Snapshot's 44px used
+  // to follow; now Part III's hairline would sit flush under it.
+  it("gives #means_for_you the 44px tail a V4 rating carries", () => {
+    const css = rule(".rv3.rv4 #means_for_you");
+    expect(css).toMatch(/padding-bottom:\s*44px;/);
+    expect(lineOf(".rv3.rv4 #means_for_you")).toBeGreaterThan(1884);
   });
 });
 
@@ -82,5 +78,14 @@ describe("V4 spacing — the part rule fades out like Figma's hairline (1:485, 1
     expect(rule(".rv3 .rv4-rule::before")).toMatch(
       /background:\s*linear-gradient\(90deg, rgba\(22, 16, 33, 0\.1\), rgba\(22, 16, 33, 0\)\);/
     );
+  });
+});
+
+// 30.09: with the source tiles gone from V4 (1:450 hidden), 1:195's pager (dots at the top
+// of the 17px row 1:415, ending at 1453.8) runs straight on to the closing paragraph
+// 1:479 at 1491: 37.2 from the dots to its first line.
+describe("V4 spacing — the deck's dots to its closing paragraph is 37.2 (1:415 → 1:479)", () => {
+  it("sets the paragraph 37.2 under the pager", () => {
+    expect(rule(".rv3 .rv3-method.is-v4 .rv3-method__outro")).toMatch(/padding-top:\s*37\.2px;/);
   });
 });

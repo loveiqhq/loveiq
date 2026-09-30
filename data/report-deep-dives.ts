@@ -2,8 +2,8 @@
  * The four deep dives — the chapters Report V4 has built out, each as the question it
  * answers and the line under it.
  *
- * The report showed them as its Snapshot (Figma 1:766, "A Snapshot of what you will
- * learn"). Since 30.09 the pre-report wizard shows them as its map's tiles (Figma
+ * Until 30.09 the V4 report showed them as its Snapshot (Figma 1:766, "A Snapshot of
+ * what you will learn"). Now the pre-report wizard shows them as its map's tiles (Figma
  * 1049:1979 / 2092 / 2207 / 2322), so they live here, with no imports, where the
  * survey's bundle can read them without pulling in the report's page copy.
  *

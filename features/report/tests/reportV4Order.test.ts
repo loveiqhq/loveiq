@@ -128,7 +128,7 @@ describe("the V4 chapter order", () => {
 
   // Mark, 29.09 (1945094456): the finalised nav, 961:333 — "Parts now dont have a roman
   // number", and Part 1 · Welcome is listed, with its two chapters.
-  it("numbers V4's drawer parts 1 to 6 as the page does, and names the nudges' anchor", () => {
+  it("numbers V4's drawer parts 1 to 6 as the page does, with no Snapshot row", () => {
     expect(REPORT_V4_NAV_PARTS.map((p) => [p.part, p.label])).toEqual([
       ["Part 1", "Welcome"],
       ["Part 2", "Your constellation"],
@@ -137,9 +137,10 @@ describe("the V4 chapter order", () => {
       ["Part 5", "How you connect"],
       ["Part 6", "Your edges"],
     ]);
-    expect(REPORT_V4_NAV_PARTS[1]!.items.find((i) => i.id === "snapshot")!.label).toBe(
-      "A Snapshot of what you will learn"
-    );
+    // 30.09: the Snapshot's four chapters moved into the pre-report wizard's map, so
+    // Part 2 lists Core Archetype alone (Figma 1:483 runs the card into the Summary).
+    expect(REPORT_V4_NAV_PARTS[1]!.items.map((i) => i.id)).toEqual(["core_archetype"]);
+    expect(REPORT_V4_NAV_IDS).not.toContain("snapshot");
     // ?v3=1 keeps its own.
     expect(REPORT_V3_NAV_PARTS.map((p) => p.part)).toEqual([
       "Part I",

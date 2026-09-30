@@ -18,8 +18,6 @@
  * render in the eyebrow above each chapter title.
  */
 
-import { REPORT_V4_NUDGES_HEADING } from "@/data/report3-archetype-page";
-
 export interface ReportV3Chapter {
   /** Section id in `data/report-general.ts` (the DOM anchor). */
   id: string;
@@ -238,7 +236,8 @@ const navPartsFrom = (
     welcome,
   }: {
     numerals?: Record<string, string>;
-    snapshotLabel?: string;
+    /** The Snapshot row's label, or null for a report without a Snapshot (V4). */
+    snapshotLabel?: string | null;
     /** A part listed ahead of the constellation's (V4's Part 1). */
     welcome?: ReportV3NavPart;
   } = {}
@@ -249,7 +248,9 @@ const navPartsFrom = (
     label: "Your constellation",
     items: [
       { label: "Core Archetype", id: "core_archetype" },
-      { label: snapshotLabel, id: "snapshot", gateId: "core_archetype" },
+      ...(snapshotLabel === null
+        ? []
+        : [{ label: snapshotLabel, id: "snapshot", gateId: "core_archetype" }]),
     ],
   },
   ...["2", "3", "4", "5"].map((p) => ({
@@ -277,13 +278,13 @@ export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
  * Mark's finalised nav, 961:333 (29.09, 1945094456, "Please also use these changes for
  * Desktop"): it opens on Part 1 · Welcome, with the Introduction and "What shaped this
  * report" (V4Part1, Figma 1:175 / 1:185), and numbers the parts 1 to 6 as the part
- * headings do ("Parts now dont have a roman number"). The snapshot anchor is named
- * after the heading over the nudges (Figma 1:766), so the drawer and the chapter pill
- * follow it when it changes.
+ * headings do ("Parts now dont have a roman number"). It lists no Snapshot: since 30.09
+ * its four chapters are the pre-report wizard's map (Figma 1071:2092), and Part 2 runs
+ * the Archetype card into the Summary (1:483).
  */
 export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
   numerals: { "1": "2", "2": "3", "3": "4", "4": "5", "5": "6" },
-  snapshotLabel: REPORT_V4_NUDGES_HEADING,
+  snapshotLabel: null,
   welcome: {
     part: "Part 1",
     label: "Welcome",
