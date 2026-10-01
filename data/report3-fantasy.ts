@@ -59,7 +59,7 @@ export interface Report3FantasyCopy {
 const SPARK_INTRO: readonly Report3Block[] = [
   p(
     t(
-      "A sexual fantasy can feel like evidence. If a scene is intensely arousing or keeps returning, it is easy to assume it must reveal something you secretly want. However, "
+      "A sexual fantasy can feel like evidence. If a scene is intensely arousing or keeps returning, it is easy to assume it must reveal something you secretly want. But "
     ),
     b("fantasy and real-world desire are not the same psychological experience"),
     t(".")
