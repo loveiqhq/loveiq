@@ -937,13 +937,22 @@ async function main(argv: string[]): Promise<number> {
       if (!plants) return;
       if (!(await pricesOpen())) {
         for (const opener of [
+          // A V4 locked chapter's row first: a closed V4 chapter's Unlock your report is inert.
+          button(/^.+ unlock report$/i),
           button(/^unlock your report$/i),
           button(/^unlock (?!your |the |full )(?:[\w -]+ )?report$/i),
         ]) {
           if (await opener.isVisible().catch(() => false)) {
-            await opener.scrollIntoViewIfNeeded().catch(() => {});
-            await opener.click().catch(() => {});
-            break;
+            // Centred, not just into view: clear of a phone's sticky unlock bar.
+            await opener.evaluate((el) => el.scrollIntoView({ block: "center" })).catch(() => {});
+            await page.waitForTimeout(400);
+            if (
+              await opener.click({ timeout: 10_000 }).then(
+                () => true,
+                () => false
+              )
+            )
+              break;
           }
         }
       }
@@ -1006,25 +1015,32 @@ async function main(argv: string[]): Promise<number> {
           );
         }
       };
+      /**
+       * When the paywall was seen to close, or null when it did not. Timed by what the page
+       * shows, as the site times it (open to close, by its own effect), not from before the
+       * tap: a tap on a phone took a second once, and the dwell came out a second short.
+       */
       const gone = () =>
         page
           .locator(".report-pricing-modal.is-visible")
           .waitFor({ state: "hidden", timeout: 3_000 })
           .then(
-            () => true,
-            () => false
+            () => Date.now(),
+            () => null
           );
-      let closedAt = Date.now();
-      await close(how);
-      if (!(await gone())) {
+      // A close that throws (a covered button, a Back that timed out) is one that may have
+      // left it open, so it takes the same fallback: thrown past it, the paywall stayed open
+      // unrecorded, and the plan's press was timed from the wrong opening.
+      const closeAndTime = (way: Escape) => close(way).then(gone, gone);
+      let closedAt = await closeAndTime(how);
+      if (closedAt === null) {
         walk.plantFailures = [
           ...(walk.plantFailures ?? []),
           `closing the paywall with ${how} left it open`,
         ];
         how = "close_button";
-        closedAt = Date.now();
-        await close(how);
-        if (!(await gone())) {
+        closedAt = await closeAndTime(how);
+        if (closedAt === null) {
           // Still open: no close happened, so none is recorded, and the plan's press is timed
           // from this opening, the one the site's price_shown marked.
           walk.plantFailures = [
@@ -1116,9 +1132,11 @@ async function main(argv: string[]): Promise<number> {
     // Whichever comes first: the picker (the report can open it on a timer or on scroll), or
     // a way in. For the default plan, the sticky bar or the "Unlock the full report" button
     // under the archetype list, both of which go straight to Stripe. For the others, the
-    // picker: an archetype row's "Unlock report", or a padlock on a locked chart. The padlock
+    // picker: an archetype row's "Unlock report", a padlock on a locked chart, or (V4) a
+    // locked chapter's row, "Core Insecurities of the Spark Seeker Unlock Report". The padlock
     // and that button share the name "Unlock the full report" but not the behaviour, so the
-    // padlock is found by its class.
+    // padlock is found by its class. A V4 chapter that is closed keeps its "Unlock your
+    // report" in an inert body, which is why the chapter row is tried before it.
     const ways: Array<[() => ReturnType<typeof button>, string]> =
       plan === "full_report"
         ? [
@@ -1135,9 +1153,14 @@ async function main(argv: string[]): Promise<number> {
               () => page.locator("button.rv4-lockbadge").filter({ visible: true }).first(),
               "a padlock on a locked chart",
             ],
+            [() => button(/^.+ unlock report$/i), "a locked chapter's row"],
             [() => button(/^unlock your report$/i), "a chapter's Unlock your report"],
           ];
-    for (let waited = 0; waited < 20_000 && !walk.paywallOpenedBy; waited += 500) {
+    // By the clock, not by the waits: a tap that fails takes its own ten seconds, so the
+    // budget leaves room to try each of the ways in.
+    const findBy = Date.now() + 45_000;
+    const untappable = new Set<string>();
+    while (Date.now() < findBy && !walk.paywallOpenedBy) {
       if (
         await button(PLAN_CTA[plan])
           .isVisible()
@@ -1148,17 +1171,37 @@ async function main(argv: string[]): Promise<number> {
       }
       for (const [way, how] of ways) {
         if (
-          await way()
+          !untappable.has(how) &&
+          (await way()
             .isVisible()
-            .catch(() => false)
+            .catch(() => false))
         ) {
-          mark(`clicked ${how}`);
           // The first price a direct way shows is Stripe's: note how far the reader had read.
           if (plants) {
             await readScroll();
             log.scrollBeforePaywallPct ??= log.reportScrollPct;
           }
-          await way().click();
+          // Centred first, as a reader would bring it up, clear of a phone's sticky unlock bar.
+          // A way that still cannot be tapped is passed over for the next one rather than
+          // ending the walk: on 2026-10-01 two of four walks waited on a closed V4 chapter's
+          // "Unlock your report", which is inert, until they stopped.
+          await way()
+            .evaluate((el) => el.scrollIntoView({ block: "center" }))
+            .catch(() => {});
+          await page.waitForTimeout(400);
+          if (
+            !(await way()
+              .click({ timeout: 10_000 })
+              .then(
+                () => true,
+                () => false
+              ))
+          ) {
+            mark(`could not tap ${how}; trying another way in`);
+            untappable.add(how);
+            continue;
+          }
+          mark(`clicked ${how}`);
           walk.paywallOpenedBy = how;
           break;
         }
