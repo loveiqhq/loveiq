@@ -8,11 +8,13 @@
  */
 import { ANALYTICAL_SEXUALIST } from "./analytical-sexualist";
 import { AUTHORITY_CONDUCTOR } from "./authority-conductor";
+import { CURIOUS_APPRENTICE } from "./curious-apprentice";
 import type { Report3ArchetypeCopy } from "./types";
 
 export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCopy>> = {
   "Analytical Sexualist": ANALYTICAL_SEXUALIST,
   "Authority Conductor": AUTHORITY_CONDUCTOR,
+  "Curious Apprentice": CURIOUS_APPRENTICE,
 };
 
 /** One chapter of every archetype here, by display name. */
