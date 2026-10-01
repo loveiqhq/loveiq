@@ -32,6 +32,12 @@ blockers.
      the behaviour happened and those where it did not. Otherwise a measure that always
      says "nothing" would pass.
 
+**A measure that reads a new event** must say when that event reached production, as
+`recordedSince` in `logic/signals.ts`. Real visits begun before then are left out, and the
+finding says so. Without it, every older visit reads as not doing what the event records:
+before `cta_seen` existed, every locked report read "not seen". Only CTA visibility needs it
+so far. Every other signal's events and properties have been recorded since 2026-08-28.
+
 **Entry:** `server/report.ts` (`buildUxSignalsReport`, `renderUxSignals`), called by
 `app/api/mcp/route.ts` for `ux_signals`.
 

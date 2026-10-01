@@ -15,6 +15,7 @@ import {
   type UxEvent,
   type UxVisit,
 } from "@features/ux-signals/logic/signals";
+import { summarize } from "@features/ux-signals/logic/summary";
 
 const S = 1000;
 const ev = (t: number, event: string, props: Record<string, unknown> = {}): UxEvent => ({
@@ -392,5 +393,33 @@ describe("each measure", () => {
     expect(Object.keys(out)).toEqual(SIGNALS.map((s) => s.name));
     expect(out["Backtracking"]).toBe(0);
     expect(out["Paywall dwell time"]).toBeNull();
+  });
+});
+
+describe("what production recorded", () => {
+  it("leaves out real visits from before the site recorded what a measure reads", () => {
+    const def = SIGNALS.find((x) => x.name === "CTA visibility")!;
+    const at = Date.parse(def.recordedSince!);
+    const locked = (t: number, seen: boolean): UxVisit => [
+      ev(t, "locked_card_price_shown"),
+      ...(seen ? [ev(t + S, "cta_seen", { cta: "locked_chapter" })] : []),
+    ];
+    // Before the release no visit could send cta_seen, so it would read "not seen". One
+    // begun a minute before it is left out whole, even with events after it.
+    const r = summarize(def, [
+      locked(at - 86_400_000, false),
+      [...locked(at - 60_000, false), ev(at + 60_000, "report_engagement_1min")],
+      locked(at, true),
+    ]);
+    expect(r.n).toBe(1);
+    expect(r.sentence).toBe(
+      "Of 1 visits: seen 100%. Only visits from 2026-10-01 on, when the site began recording it."
+    );
+  });
+
+  it("is declared only where a measure's events reached production inside the window", () => {
+    // Every other signal's events and properties were recorded from 2026-08-28 (PostHog,
+    // checked 2026-10-01), before any 28-day window can begin.
+    expect(SIGNALS.filter((x) => x.recordedSince).map((x) => x.name)).toEqual(["CTA visibility"]);
   });
 });
