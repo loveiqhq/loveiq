@@ -189,3 +189,144 @@ describe("useSectionFeedback — one row per section, the rating first (01.10)",
     expect(result.current.feedbacks.typical_beliefs).toBe("up");
   });
 });
+
+/**
+ * Final review, 01.10: a rating switched within a post's round trip. Posts for a section
+ * go out one after the other, in click order, so the row ends on the last click; a post
+ * that fails after a newer click changes nothing on screen; and a refused latest rating
+ * goes back to the last one the server confirmed, not to whatever the click replaced.
+ */
+describe("useSectionFeedback — a rating switched before the first one lands", () => {
+  const ok = (status = 200) => ({ ok: status < 400, status });
+  /** A fetch whose answers the test releases one by one. */
+  const held = () => {
+    const releases: ((value: { ok: boolean; status: number }) => void)[] = [];
+    const fetchMock = vi.fn(
+      () => new Promise<{ ok: boolean; status: number }>((resolve) => releases.push(resolve))
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return { fetchMock, releases };
+  };
+  const sent = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls.map((call) => JSON.parse((call[1] as { body: string }).body).feedback);
+
+  it("posts in click order: the second waits for the first", async () => {
+    const { fetchMock, releases } = held();
+    const { result } = renderHook(() => useSectionFeedback(null, "rpt_abcdefghijklmnopqrst"));
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.rateSection("typical_beliefs", "up");
+      second = result.current.rateSection("typical_beliefs", "down");
+    });
+    await act(async () => {});
+    expect(sent(fetchMock)).toEqual(["up"]);
+    await act(async () => {
+      releases[0]!(ok());
+      await first;
+    });
+    expect(sent(fetchMock)).toEqual(["up", "down"]);
+    await act(async () => {
+      releases[1]!(ok());
+      await second;
+    });
+    expect(result.current.feedbacks.typical_beliefs).toBe("down");
+  });
+
+  it("lets a failure behind a newer click change nothing", async () => {
+    const { releases } = held();
+    const { result } = renderHook(() => useSectionFeedback(null, "rpt_abcdefghijklmnopqrst"));
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.rateSection("typical_beliefs", "up");
+      second = result.current.rateSection("typical_beliefs", "down");
+    });
+    // The queue starts the first post on the next tick.
+    await act(async () => {});
+    let firstSaved: boolean | undefined;
+    await act(async () => {
+      releases[0]!(ok(500));
+      firstSaved = await first;
+    });
+    // Superseded: nothing to take back, no failure to show.
+    expect(firstSaved).toBe(true);
+    expect(result.current.feedbacks.typical_beliefs).toBe("down");
+    await act(async () => {
+      releases[1]!(ok());
+      expect(await second).toBe(true);
+    });
+    expect(result.current.feedbacks.typical_beliefs).toBe("down");
+  });
+
+  it("takes a refused latest rating back to the last one stored", async () => {
+    const { releases } = held();
+    const { result } = renderHook(() => useSectionFeedback(null, "rpt_abcdefghijklmnopqrst"));
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.rateSection("typical_beliefs", "up");
+      second = result.current.rateSection("typical_beliefs", "down");
+    });
+    await act(async () => {});
+    await act(async () => {
+      releases[0]!(ok(500));
+      await first;
+    });
+    await act(async () => {
+      releases[1]!(ok(500));
+      expect(await second).toBe(false);
+    });
+    // Neither was stored: back to nothing, not to the "up" that also failed.
+    expect(result.current.feedbacks.typical_beliefs).toBeNull();
+  });
+
+  it("queues Send behind a rating still in flight", async () => {
+    const { fetchMock, releases } = held();
+    const { result } = renderHook(() => useSectionFeedback(null, "rpt_abcdefghijklmnopqrst"));
+    let rating!: Promise<boolean>;
+    let message!: Promise<boolean>;
+    act(() => {
+      rating = result.current.rateSection("typical_beliefs", "down");
+      message = result.current.submitFeedback("typical_beliefs", {
+        feedback: "down",
+        issue: "unclear",
+      });
+    });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      releases[0]!(ok());
+      await rating;
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      releases[1]!(ok());
+      expect(await message).toBe(true);
+    });
+  });
+});
+
+describe("SectionFeedback — a result that arrives after a newer click", () => {
+  it("is ignored: no failure, the newer choice and its box stay", async () => {
+    const resolvers: ((value: boolean) => void)[] = [];
+    const onRate = vi.fn(() => new Promise<boolean>((resolve) => resolvers.push(resolve)));
+    render(
+      <SectionFeedback
+        sectionTitle="Typical Beliefs"
+        value={null}
+        isSent={false}
+        onRate={onRate}
+        onFeedback={vi.fn().mockResolvedValue(true)}
+      />
+    );
+    await act(async () => fireEvent.click(up()));
+    await act(async () => fireEvent.click(down()));
+    await act(async () => resolvers[0]!(false));
+    expect(screen.queryByText("Couldn’t save that")).toBeNull();
+    expect(down()).toHaveClass("is-selected");
+    expect(screen.getByText("Select an issue...")).toBeInTheDocument();
+    await act(async () => resolvers[1]!(true));
+    expect(down()).toHaveClass("is-selected");
+  });
+});
