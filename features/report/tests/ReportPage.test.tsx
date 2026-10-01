@@ -2092,12 +2092,8 @@ describe("ReportPage", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
-    // Mark, desktop review 01.10: "Take out the Paywall Pop up that currently triggers at
-    // Challenges in Partnerships". Fatih: desktop only, from 700px; phones keep it. With
-    // no pop-up there is nothing to expose, so desktop readers leave the 50/50 too.
-    it("opens nothing and exposes no arm on a desktop, from 700px", () => {
-      vi.useFakeTimers();
-      exposure().mockClear();
+    /** A window from 700px wide. */
+    const stubDesktop = () =>
       vi.stubGlobal(
         "matchMedia",
         vi.fn().mockImplementation((query: string) => ({
@@ -2110,12 +2106,40 @@ describe("ReportPage", () => {
           dispatchEvent: vi.fn(),
         }))
       );
+
+    // Mark, desktop review 01.10: "Take out the Paywall Pop up that currently triggers at
+    // Challenges in Partnerships". Fatih: desktop only, from 700px; phones keep it. With
+    // no pop-up there is nothing to expose, so desktop readers leave the 50/50 too.
+    it("opens nothing and exposes no arm on a desktop, from 700px", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      stubDesktop();
       lockedV4("&popup=on");
 
       render(<ReportPage />);
       act(() => vi.advanceTimersByTime(3000));
 
       expect(exposure()).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    // The arrival is still the Slack journey's "Paywall hit": /api/price hears of it on a
+    // desktop too, though nothing opens. (The first offer card's observer never fires
+    // here, and no modal opens, so the ping can only come from the pop-up point.)
+    it("still reports reaching the paywall on a desktop", () => {
+      vi.useFakeTimers();
+      const fetchSpy = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+      vi.stubGlobal("fetch", fetchSpy);
+      stubDesktop();
+      lockedV4("&popup=on");
+
+      render(<ReportPage token={TREATMENT_TOKEN} />);
+      act(() => vi.advanceTimersByTime(3000));
+
+      const pings = fetchSpy.mock.calls.filter(([url]) => url === "/api/price");
+      expect(pings).toHaveLength(1);
+      expect(pings[0]![1]).toMatchObject({ method: "POST" });
+      expect(JSON.parse(String(pings[0]![1].body))).toEqual({ token: TREATMENT_TOKEN });
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
 
