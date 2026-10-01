@@ -137,9 +137,14 @@ describe("the V4 chapter order", () => {
       ["Part 5", "How you connect"],
       ["Part 6", "Your edges"],
     ]);
-    // 30.09: the Snapshot's four chapters moved into the pre-report wizard's map, so
-    // Part 2 lists Core Archetype alone (Figma 1:483 runs the card into the Summary).
-    expect(REPORT_V4_NAV_PARTS[1]!.items.map((i) => i.id)).toEqual(["core_archetype"]);
+    // 30.09: the Snapshot's four chapters moved into the pre-report wizard's map. Marcus,
+    // 01.10: "any reason this part only has one chapter? And it's a bit that it doesn't
+    // link to the top of the part right?" Mark's 961:333 (01.10) opens Part 2 on the top
+    // three, "Highest Archetypes Scores", above Core Archetype.
+    expect(REPORT_V4_NAV_PARTS[1]!.items).toEqual([
+      { label: "Highest Archetypes Scores", id: "top_archetypes" },
+      { label: "Core Archetype", id: "core_archetype" },
+    ]);
     expect(REPORT_V4_NAV_IDS).not.toContain("snapshot");
     // ?v3=1 keeps its own.
     expect(REPORT_V3_NAV_PARTS.map((p) => p.part)).toEqual([
@@ -171,9 +176,10 @@ describe("the V4 chapter order", () => {
     ]);
     // The scroll-spy walks V4's own list, the Welcome's anchors first.
     expect(REPORT_V4_NAV_IDS).toEqual(REPORT_V4_NAV_PARTS.flatMap((p) => p.items.map((i) => i.id)));
-    expect(REPORT_V4_NAV_IDS.slice(0, 3)).toEqual([
+    expect(REPORT_V4_NAV_IDS.slice(0, 4)).toEqual([
       "introduction",
       "what_shaped_this_report",
+      "top_archetypes",
       "core_archetype",
     ]);
   });

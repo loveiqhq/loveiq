@@ -291,7 +291,7 @@ describe("PreReportWizard — the report map (slide 2)", () => {
       Object.entries(badges)
         .filter(([, b]) => b === "free")
         .map(([id]) => id)
-    ).toEqual(["introduction", "what_shaped_this_report", "core_archetype"]);
+    ).toEqual(["introduction", "what_shaped_this_report", "top_archetypes", "core_archetype"]);
     expect(
       Object.entries(badges)
         .filter(([, b]) => b === "open")

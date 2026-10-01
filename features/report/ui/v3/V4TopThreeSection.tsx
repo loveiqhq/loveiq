@@ -5,6 +5,7 @@ import {
   REPORT_V4_TOP_THREE_HEADING,
   REPORT_V4_TOP_THREE_LEDE,
 } from "@/data/report3-archetype-page";
+import { REPORT_V4_TOP_THREE_ANCHOR } from "./reportV3Nav";
 import V3TopThree from "./V3TopThree";
 import V4Rating from "./V4Rating";
 import V4Runs from "./V4Runs";
@@ -35,6 +36,8 @@ interface Props {
 
 const V4TopThreeSection: FC<Props> = ({ percentages = REPORT_V4_TOP_THREE, feedback }) => (
   <section
+    // Part 2's first nav row, "Highest Archetypes Scores" (961:333, 01.10), lands here.
+    id={REPORT_V4_TOP_THREE_ANCHOR}
     className="rv4-top3"
     data-node-id="1:493"
     data-name="Section - 3 highest Scoring Archetypes"

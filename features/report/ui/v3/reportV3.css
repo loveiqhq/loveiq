@@ -5358,7 +5358,8 @@
  * match. V4 only: ?v3=1 keeps its own. */
 .rv3.rv4 .rv4-chapter,
 .rv3.rv4 .rv3-chapter,
-.rv3.rv4 .report-section {
+.rv3.rv4 .report-section,
+.rv3.rv4 .rv4-top3 {
   scroll-margin-top: 144px;
 }
 
