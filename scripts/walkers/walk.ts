@@ -1006,25 +1006,30 @@ async function main(argv: string[]): Promise<number> {
           );
         }
       };
+      /**
+       * When the paywall was seen to close, or null when it did not. Timed by what the page
+       * shows, as the site times it (open to close, by its own effect), not from before the
+       * tap: a tap on a phone took a second once, and the dwell came out a second short.
+       */
       const gone = () =>
         page
           .locator(".report-pricing-modal.is-visible")
           .waitFor({ state: "hidden", timeout: 3_000 })
           .then(
-            () => true,
-            () => false
+            () => Date.now(),
+            () => null
           );
-      let closedAt = Date.now();
       await close(how);
-      if (!(await gone())) {
+      let closedAt = await gone();
+      if (closedAt === null) {
         walk.plantFailures = [
           ...(walk.plantFailures ?? []),
           `closing the paywall with ${how} left it open`,
         ];
         how = "close_button";
-        closedAt = Date.now();
         await close(how);
-        if (!(await gone())) {
+        closedAt = await gone();
+        if (closedAt === null) {
           // Still open: no close happened, so none is recorded, and the plan's press is timed
           // from this opening, the one the site's price_shown marked.
           walk.plantFailures = [
