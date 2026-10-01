@@ -1,7 +1,17 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, type FC, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type FC,
+  type ReactNode,
+} from "react";
 import { REPORT_V4_UNSUFFIXED_CHAPTER_IDS } from "@/data/report3-archetype-page";
+import { ChapterOpenContext } from "../hooks/useChapterOpen";
 import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 import {
   REPORT_V3_CHAPTER_BY_ID,
@@ -96,6 +106,13 @@ interface Props {
   archetype?: string;
 }
 
+/**
+ * How long an opening body may take before its reveals go ahead without a
+ * `transitionend`: the body's own 320ms (reportV3.css 604), and a little over, for a
+ * browser that runs no transition there.
+ */
+const BODY_SETTLE_MS = 400;
+
 const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, archetype }) => {
   const isV4 = useIsV4();
   // The delivered V3 frame is "UNTOGGLED (all chapters open)", so open is its
@@ -117,6 +134,32 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
     useCallback(() => setIsOpen(true), []),
     isV4 && !lock
   );
+  // Desktop review 01.10: "Bring back the animations of the V2 report". The 2.0 sections
+  // inside reveal once the chapter is DRAWN, open and done expanding (useChapterOpen):
+  // closed, their reveals fired unseen inside the freeze below and opened finished;
+  // while the body still grows, a chart near its top would play half clipped. Set from
+  // the body's `transitionend` (or the fallback), and reset a frame after it closes.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!isV4) return;
+    if (!isOpen) {
+      const frame = requestAnimationFrame(() => setSettled(false));
+      return () => cancelAnimationFrame(frame);
+    }
+    const body = bodyRef.current;
+    const settle = () => setSettled(true);
+    // The body's own transition only: its contents' transitions bubble up to it.
+    const onEnd = (event: Event) => {
+      if (event.target === body) settle();
+    };
+    body?.addEventListener("transitionend", onEnd);
+    const timer = window.setTimeout(settle, BODY_SETTLE_MS);
+    return () => {
+      body?.removeEventListener("transitionend", onEnd);
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, isV4]);
 
   if (isV4 && lock) {
     // Mark's "fully locked" mock (26.09): the head and the teaser as a closed chapter
@@ -195,11 +238,13 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
           </div>
         ) : null}
 
-        <div className="rv3-chapter__body" id={bodyId} inert={!isOpen}>
+        <div className="rv3-chapter__body" id={bodyId} inert={!isOpen} ref={bodyRef}>
           <div>
             <div className="rv3-chapter__body-inner">
-              {children}
-              {cards ? <V4ChapterCards cards={cards} /> : null}
+              <ChapterOpenContext.Provider value={isOpen && settled}>
+                {children}
+                {cards ? <V4ChapterCards cards={cards} /> : null}
+              </ChapterOpenContext.Provider>
               {feedbackWidget ? (
                 <div className="rv4-rating">
                   <div className="rv4-rating__live">{feedbackWidget}</div>
