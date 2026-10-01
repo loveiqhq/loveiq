@@ -50,6 +50,21 @@ describe("plans pop-up trigger", () => {
     expect(SOURCE).toMatch(/rootMargin:\s*"0px 0px -25% 0px"/);
   });
 
+  it("opens nothing at Challenges in Partnerships on a V4 desktop, but still reports the paywall", () => {
+    // Desktop review 01.10 (Fatih: desktop only, from 700px). The arrival is still
+    // reported first, so the Slack journey's "Paywall hit" stays; then a V4 desktop
+    // stops before the experiment exposure and the modal timer.
+    const fn = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
+    const body = fn.slice(0, fn.indexOf("\n    }\n"));
+    const notify = body.indexOf("notifyPaywallReached();");
+    const desktop = body.indexOf('matchMedia("(min-width: 700px)")');
+    const exposure = body.indexOf("trackExperimentExposure(");
+    expect(notify).toBeGreaterThan(-1);
+    expect(desktop).toBeGreaterThan(notify);
+    expect(exposure).toBeGreaterThan(desktop);
+    expect(body.slice(desktop - 120, desktop + 80)).toMatch(/isV4/);
+  });
+
   it("waits for Part V's new first chapter under V4", () => {
     // V4 opens Part V with Challenges in Partnership, one chapter above Attachment
     // Style (review 24.09), so the pop-up still arrives where that part begins.
