@@ -318,11 +318,14 @@ const ReportPricingModal: FC<Props> = ({
     }
 
     if (didOpenRef.current) {
+      // Without scrolling to it: the modal often opens by itself as the reader scrolls,
+      // so what had focus is what they last clicked, often far above, and focusing it
+      // scrolled the page up to it (Mark, desktop review 30.09: "it scrolls up weirdly").
       const restoreTarget = restoreFocusRef.current;
       if (restoreTarget && restoreTarget.isConnected) {
-        restoreTarget.focus();
+        restoreTarget.focus({ preventScroll: true });
       } else {
-        returnFocusRef?.current?.focus();
+        returnFocusRef?.current?.focus({ preventScroll: true });
       }
       didOpenRef.current = false;
     }
