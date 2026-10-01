@@ -5237,6 +5237,7 @@
   margin-right: 5px;
 }
 .rv3 .rv4-ab__intro > :last-child,
+.rv3 .rv4-ab__after > :last-child,
 .rv3 .rv4-ab__challenges > :last-child,
 .rv3 .rv4-ab__blurred > :last-child {
   margin-bottom: 0;

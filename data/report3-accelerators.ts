@@ -72,6 +72,12 @@ export interface Report3AcceleratorsCopy {
   brakes: readonly Report3TriggerRow[];
   acceleratorsLead?: string;
   accelerators: readonly Report3TriggerRow[];
+  /**
+   * What some of Sanjin's docs set after the two lists, before "Common challenges"
+   * (Loyal Ritualist, Tender Devotee). No frame draws it: it follows the second card.
+   * Free copy: those docs' walls fall later, in the challenges.
+   */
+  afterCards?: readonly Report3Block[];
   challengesTitle?: string;
   challenges: readonly Report3Block[];
   practiceEyebrow?: string;
@@ -318,6 +324,8 @@ export interface Report3AcceleratorsView {
   brakes: readonly Report3TriggerRow[];
   acceleratorsLead: string | null;
   accelerators: readonly Report3TriggerRow[];
+  /** After the second card; absent where the archetype's chapter has none. */
+  afterCards?: readonly Report3Block[];
   /**
    * Index of the first locked row in both cards, or null when the chapter is open.
    * 386:416 and 386:444 keep rows 1-2 sharp; row 3 ramps into the blur, sharp at
@@ -404,6 +412,7 @@ export function buildAccelerators(
     brakes: rows(copy.brakes),
     acceleratorsLead: copy.acceleratorsLead ?? null,
     accelerators: rows(copy.accelerators),
+    ...(copy.afterCards?.length ? { afterCards: copy.afterCards } : {}),
     lockedFrom,
     challengesTitle: copy.challengesTitle ?? ACCELERATORS_CHALLENGES_TITLE,
     challenges: gate(copy.challenges, cuts.challengesFree, locked),
