@@ -695,3 +695,92 @@ describe("PreReportWizard — scaled to fit a phone (01.10)", () => {
     expect(document.querySelector(".wz-slot")).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
   });
 });
+
+/**
+ * Notion, "Review Round 01.10 - Wizard - Mobile": "Can we make the tiles swipable and the
+ * hidden tile clickable please". A vertical swipe on the deep-dive tiles steps them, up for
+ * the next; a tap on the tile peeking in below brings it up. Pointer shortcuts both: ▲ ▼
+ * stay the keyboard's way, and the analytics count them as the arrows.
+ */
+describe("PreReportWizard — the deep-dive tiles swipe and take a tap (01.10)", () => {
+  const tiles = () => document.querySelector<HTMLElement>(".wz-tiles .touch-none")!;
+  const dive = () => activeTile()?.getAttribute("data-deep-dive");
+  const swipe = (el: HTMLElement, from: [number, number], to: [number, number]) => {
+    fireEvent.touchStart(el, { touches: [{ clientX: from[0], clientY: from[1] }] });
+    fireEvent.touchEnd(el, { changedTouches: [{ clientX: to[0], clientY: to[1] }] });
+  };
+  const openDives = () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton());
+    press(continueButton());
+    analytics.trackWizardMapStep.mockClear();
+  };
+
+  it("steps to the next deep dive on a swipe up the tiles, and back on a swipe down", () => {
+    openDives();
+    expect(dive()).toBe(REPORT_DEEP_DIVES[0]!.id);
+    swipe(tiles(), [100, 400], [104, 320]);
+    expect(dive()).toBe(REPORT_DEEP_DIVES[1]!.id);
+    expect(analytics.trackWizardMapStep).toHaveBeenLastCalledWith({
+      from_step: 1,
+      to_step: 2,
+      control: "next",
+    });
+    swipe(tiles(), [100, 300], [98, 380]);
+    expect(dive()).toBe(REPORT_DEEP_DIVES[0]!.id);
+    expect(analytics.trackWizardMapStep).toHaveBeenLastCalledWith({
+      from_step: 2,
+      to_step: 1,
+      control: "previous",
+    });
+  });
+
+  it("ignores a short drag, and stops at either end", () => {
+    openDives();
+    swipe(tiles(), [100, 400], [100, 370]);
+    expect(dive()).toBe(REPORT_DEEP_DIVES[0]!.id);
+    // Nothing above the first.
+    swipe(tiles(), [100, 300], [100, 380]);
+    expect(dive()).toBe(REPORT_DEEP_DIVES[0]!.id);
+    for (let i = 1; i < REPORT_DEEP_DIVES.length; i++) swipe(tiles(), [100, 400], [100, 300]);
+    expect(dive()).toBe(REPORT_DEEP_DIVES.at(-1)!.id);
+    swipe(tiles(), [100, 400], [100, 300]);
+    expect(dive()).toBe(REPORT_DEEP_DIVES.at(-1)!.id);
+    expect(analytics.trackWizardMapStep).toHaveBeenCalledTimes(REPORT_DEEP_DIVES.length - 1);
+  });
+
+  it("brings the tile peeking in below up on a tap", () => {
+    openDives();
+    const peeking = document.querySelector<HTMLElement>(
+      `[data-deep-dive="${REPORT_DEEP_DIVES[1]!.id}"]`
+    )!;
+    // A pointer shortcut: still out of the accessibility tree and the tab order.
+    expect(peeking).toHaveAttribute("aria-hidden", "true");
+    expect(peeking).not.toHaveAttribute("tabindex");
+    expect(peeking).toHaveClass("cursor-pointer");
+    fireEvent.click(peeking);
+    expect(dive()).toBe(REPORT_DEEP_DIVES[1]!.id);
+    expect(analytics.trackWizardMapStep).toHaveBeenLastCalledWith({
+      from_step: 1,
+      to_step: 2,
+      control: "next",
+    });
+    // The tile in view takes no tap.
+    expect(peeking).not.toHaveClass("cursor-pointer");
+    fireEvent.click(peeking);
+    expect(analytics.trackWizardMapStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a sideways swipe on the tiles to the slides", () => {
+    openDives();
+    swipe(tiles(), [300, 400], [200, 410]);
+    flush();
+    expect(heading()).toBe(HEADINGS[2]);
+  });
+
+  it("takes the page's touch panning off the tiles alone", () => {
+    openDives();
+    expect(tiles()).toHaveClass("touch-none");
+    expect(screen.getByRole("main").style.touchAction).toBe("pan-y");
+  });
+});
