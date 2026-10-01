@@ -4,6 +4,11 @@
  * never get it on their own. Both keep every lock, card and the sticky
  * "Unlock full report" bar, so the only thing that differs is the automatic open.
  *
+ * PHONES ONLY SINCE 01.10. Mark's desktop review took the pop-up out from 700px
+ * (Fatih: desktop only), so a desktop reader logs no exposure and is in neither
+ * arm. Readers before that change include desktops: split by device when a
+ * comparison spans it.
+ *
  * WHY THE ARM IS DERIVED FROM THE SUBMISSION ID. Same reasons as the C13 order
  * test (`questionOrderArm.ts`): a reader keeps one arm on every visit and every
  * device, nothing is minted that has to be retired, and a submission's arm can be
