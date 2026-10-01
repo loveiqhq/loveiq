@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type Lenis from "lenis";
+import { getSmoothScroll, setSmoothScroll } from "./smooth-scroll-registry";
 
 function isTouchDevice(): boolean {
   if (typeof window === "undefined") return false;
@@ -28,12 +29,19 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
     // toggles the preference live so the disable is reactive.
     if (isTouchDevice() || pathname.startsWith("/admin") || prefersReducedMotion()) return;
 
+    // The running instance is published for the body-scroll lock, which stops it while
+    // an overlay holds the page and re-measures it after (smooth-scroll-registry.ts).
+    const destroy = () => {
+      const lenis = lenisRef.current;
+      if (!lenis) return;
+      lenis.destroy();
+      lenisRef.current = null;
+      if (getSmoothScroll() === lenis) setSmoothScroll(null);
+    };
+
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const onMotionChange = () => {
-      if (motionQuery.matches) {
-        lenisRef.current?.destroy();
-        lenisRef.current = null;
-      }
+      if (motionQuery.matches) destroy();
     };
     motionQuery.addEventListener("change", onMotionChange);
 
@@ -56,6 +64,7 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
           anchors: true,
         });
         lenisRef.current = lenis;
+        setSmoothScroll(lenis);
       })
       .catch(() => {
         // Lenis unavailable — graceful degradation to native scroll.
@@ -64,8 +73,7 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
     return () => {
       cancelled = true;
       motionQuery.removeEventListener("change", onMotionChange);
-      lenisRef.current?.destroy();
-      lenisRef.current = null;
+      destroy();
     };
   }, [pathname]);
 
