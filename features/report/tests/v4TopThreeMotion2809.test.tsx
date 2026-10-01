@@ -147,7 +147,9 @@ describe("reportV3.css — the top three's entrance", () => {
     const at = V3_CSS.indexOf(media);
     expect(at, "no desktop block for the names' timing").toBeGreaterThan(-1);
     const body = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
-    expect(body).toContain(".rv3 .rv3-top3__list.is-animated .rv3-top3__name {");
+    // The live page only: the 393 preview (.rv4-doc) keeps the phone's timing even in a
+    // desktop browser, so Mark's "does the phone follow?" question stays answerable.
+    expect(body).toContain(".rv3.rv4 .rv3-top3__list.is-animated .rv3-top3__name {");
     expect(body).toContain("transition: opacity 600ms ease-out calc(var(--rv4-t3-i, 0) * 150ms);");
   });
 
