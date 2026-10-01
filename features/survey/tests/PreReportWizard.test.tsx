@@ -139,10 +139,14 @@ describe("PreReportWizard — slides", () => {
   // the page's smooth scroll (Lenis, on a desktop) cancels the wheel over any nested
   // scroller that does not opt out, so on a 1366x650 window CONTINUE, Back and the bar
   // sat 152px below the fold and a mouse could not reach them.
-  it("lets its column scroll under the page's smooth scroll", () => {
+  // Since 01.10 a phone's slides are scaled to fit and nothing scrolls (Notion: "They
+  // should all be equal size and not scrollable"); a desktop's column still scrolls under
+  // a window too short for it (wizard-desktop.css), clear of the page's smooth scroll.
+  it("keeps its column still on a phone, clear of the page's smooth scroll", () => {
     render(<PreReportWizard onComplete={vi.fn()} />);
     const column = screen.getByRole("button", { name: /skip intro/i }).parentElement!;
-    expect(column.className).toContain("overflow-y-auto");
+    expect(column).toHaveClass("overflow-hidden");
+    expect(column.className).not.toContain("overflow-y-auto");
     expect(column).toHaveAttribute("data-lenis-prevent");
   });
 
@@ -448,16 +452,20 @@ describe("PreReportWizard — the hooks its desktop layout styles", () => {
       expect(hook("wz-canvas")).not.toHaveAttribute("style");
     });
 
-    it("keeps a phone's canvas 640 tall, and scales it whole on a narrower one", () => {
+    it("keeps a phone's canvas 640 tall at every width, the slide's own k scaling it", () => {
       sized(393, 852, 345);
       let box = mapBox();
       expect(box.style.height).toBe("640px");
       expect(box.style.getPropertyValue("--wz-drawer-zoom")).toBe("");
       cleanup();
+      // A 375 phone: the slide is drawn at 327 / 345, the map inside it at its own size,
+      // so it is never scaled twice.
       sized(375, 812, 327);
       box = mapBox();
-      expect(parseFloat(box.style.height)).toBeCloseTo((640 * 327) / 345);
-      expect(hook("wz-canvas")!.style.transform).toBe(`scale(${327 / 345})`);
+      expect(box.style.height).toBe("640px");
+      expect(hook("wz-canvas")).not.toHaveAttribute("style");
+      const k = Number(hook("wz-scroll")!.style.getPropertyValue("--wz-k"));
+      expect(k).toBeCloseTo(327 / 345, 3);
     });
   });
 
@@ -540,12 +548,12 @@ describe("PreReportWizard — track={false}, for the preview page", () => {
  * counter's 24 row: a 99.2 footer, 48 left under it.
  */
 describe("PreReportWizard — Mark's 01.10 placement: the bar under CONTINUE (1049:1161)", () => {
-  it("starts the slide and SKIP INTRO 36 down, the 48 under the footer kept", () => {
+  it("starts the slide and SKIP INTRO at the fit's top, 36 in Figma's frame", () => {
     render(<PreReportWizard onComplete={vi.fn()} />);
-    const column = document.querySelector(".wz-scroll")!;
-    expect(column).toHaveClass("pt-9", "pb-12");
+    const column = document.querySelector<HTMLElement>(".wz-scroll")!;
+    expect(column).toHaveClass("pt-[var(--wz-top)]", "pb-[var(--wz-bottom)]");
     expect(column).not.toHaveClass("py-12");
-    expect(screen.getByRole("button", { name: /skip intro/i })).toHaveClass("top-9");
+    expect(screen.getByRole("button", { name: /skip intro/i })).toHaveClass("top-[var(--wz-top)]");
   });
 
   it("sets CONTINUE first, the bar 24 under it, then the counter", () => {
@@ -607,5 +615,83 @@ describe("PreReportWizard — Mark's 01.10 placement: the bar under CONTINUE (10
       "tracking-[0.271px]"
     );
     expect(screen.getByText("Part 1 · Welcome")).toHaveClass("leading-[9.133px]");
+  });
+});
+
+/**
+ * Scaled to fit (Fatih, 01.10: "Scale to fit"; Marcus: CONTINUE sticky to the bottom, Mark:
+ * "Yes"; Notion: "Some slides seem to be longer than others… They should all be equal size
+ * and not scrollable."). Each slide is laid out at Figma's 345 x 640 and drawn at one scale
+ * k for the whole wizard (wizardFit), the footer full size under it, pinned to the bottom.
+ */
+describe("PreReportWizard — scaled to fit a phone (01.10)", () => {
+  const realWidth = window.innerWidth;
+  const realHeight = window.innerHeight;
+  const sized = (width: number, height: number) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
+  };
+  afterEach(() => {
+    sized(realWidth, realHeight);
+    document.documentElement.style.removeProperty("--liq-consent-h");
+  });
+  const fit = () => {
+    const style = document.querySelector<HTMLElement>(".wz-scroll")!.style;
+    return {
+      k: style.getPropertyValue("--wz-k"),
+      top: style.getPropertyValue("--wz-top"),
+      bottom: style.getPropertyValue("--wz-bottom"),
+    };
+  };
+
+  it("draws Figma's frame at 393 x 852: k 1, the slide 36 down, the footer 76.8 off the bottom", () => {
+    sized(393, 852);
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    expect(fit()).toEqual({ k: "1", top: "36px", bottom: "76.8px" });
+    expect(document.querySelector(".wz-footer")).toHaveClass("mt-auto");
+  });
+
+  it("scales every slide by the same k on a shorter phone, and none of them scrolls", () => {
+    sized(393, 699);
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const { k } = fit();
+    expect(Number(k)).toBeCloseTo(543.8 / 640, 3);
+    // The note, the map's overview and a deep dive, then slides 3 to 6.
+    for (let i = 0; i < 7; i++) {
+      expect(fit().k).toBe(k);
+      const slot = document.querySelector(".wz-slot")!;
+      expect(slot).toHaveClass("h-[calc(640px*var(--wz-k))]", "w-[calc(345px*var(--wz-k))]");
+      expect(slot).not.toHaveClass("overflow-y-auto");
+      // Figma's 345 x 640, scaled from its top left: the left edge stays 24 in.
+      expect(slot.firstElementChild).toHaveClass(
+        "wz-fit",
+        "h-[640px]",
+        "w-[345px]",
+        "origin-top-left",
+        "[transform:scale(var(--wz-k))]"
+      );
+      if (i < 6) press(continueButton());
+    }
+  });
+
+  it("steps CONTINUE above the cookie banner while it covers the bottom", async () => {
+    sized(393, 852);
+    document.documentElement.style.setProperty("--liq-consent-h", "316px");
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    expect(fit().bottom).toBe("316px");
+    expect(fit().top).toBe("16px");
+    // Answered, the banner goes, and the frame is Figma's again.
+    await act(async () => {
+      document.documentElement.style.setProperty("--liq-consent-h", "0px");
+      await Promise.resolve();
+    });
+    expect(fit()).toEqual({ k: "1", top: "36px", bottom: "76.8px" });
+  });
+
+  it("lets a slide scroll, at 0.6, only where nothing smaller fits: a phone on its side", () => {
+    sized(852, 393);
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    expect(fit().k).toBe("0.6");
+    expect(document.querySelector(".wz-slot")).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
   });
 });

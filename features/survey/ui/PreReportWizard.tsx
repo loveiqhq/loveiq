@@ -12,6 +12,7 @@ import {
 import Image from "next/image";
 import { trackWizardMapStep, trackWizardSlideAdvanced } from "@features/analytics/client";
 import WizardReportMap, { MAP_STEPS } from "./wizard/WizardReportMap";
+import { useWizardFit } from "./wizard/useWizardFit";
 import { WIZARD_PROOF_CARDS, WIZARD_SLIDE_COUNT } from "./wizard/wizardContent";
 import "./wizard/wizard-desktop.css";
 
@@ -302,8 +303,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
   const busyRef = useRef(false);
   const lastDiveRef = useRef(1);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
-  /** The column scrolls on a short phone; each new view starts at its top. */
+  /** A desktop's column scrolls on a short window; each new view starts at its top. */
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** A phone draws every slide at one scale, measured from the frame (wizardFit). */
+  const frameRef = useRef<HTMLDivElement>(null);
+  const safeRef = useRef<HTMLDivElement>(null);
+  const fit = useWizardFit(frameRef, safeRef);
   const backRef = useRef<HTMLButtonElement>(null);
   const continueRef = useRef<HTMLButtonElement>(null);
   /** Back had focus when it was pressed: slide 1 draws none, so focus goes to CONTINUE. */
@@ -471,51 +476,77 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
       }}
     >
       {/* The 393 canvas, centred; from 1024px the 1120 desktop frame (wizard-desktop.css). */}
-      <div className="wz-frame relative mx-auto h-[100dvh] w-full max-w-[393px]">
+      <div ref={frameRef} className="wz-frame relative mx-auto h-[100dvh] w-full max-w-[393px]">
         <Blobs map={slideIndex === MAP_SLIDE} />
+        {/* As tall as the home indicator's safe area, for the fit to keep CONTINUE clear of it. */}
+        <div
+          ref={safeRef}
+          aria-hidden
+          className="pointer-events-none invisible absolute bottom-0 left-0 h-[env(safe-area-inset-bottom)] w-px"
+        />
 
-        {/* data-lenis-prevent: the column is the scroller, and the page's smooth scroll
-         * (Lenis, desktop) would otherwise cancel the wheel over it; on a 650px-tall
-         * window CONTINUE and Back sat below the fold, out of a mouse's reach. */}
+        {/* On a phone the column holds still: the slide is drawn at the fit's scale, the
+         * footer pinned under it (useWizardFit). A desktop's scrolls on a short window
+         * (wizard-desktop.css), and data-lenis-prevent keeps the page's smooth scroll from
+         * cancelling the wheel over it: on a 650px-tall window CONTINUE and Back sat below
+         * the fold, out of a mouse's reach. */}
         <div
           ref={scrollRef}
           data-lenis-prevent
-          className="wz-scroll relative z-10 flex h-full flex-col overflow-y-auto overflow-x-hidden px-6 pb-12 pt-9"
+          className="wz-scroll relative z-10 flex h-full flex-col overflow-hidden px-6 pb-[var(--wz-bottom)] pt-[var(--wz-top)]"
+          style={
+            {
+              "--wz-k": fit.k,
+              "--wz-top": `${fit.top}px`,
+              "--wz-bottom": `${fit.bottom}px`,
+            } as CSSProperties
+          }
         >
-          {/* 1049:1241 — two lines in its 68px, its right edge 17 in from the canvas's, 36
+          {/* 1049:1241 — two lines in its 68px, its right edge 17 in from the canvas's, as far
            * down as the slide is. */}
           <button
             type="button"
             onClick={handleSkip}
-            className="wz-skip absolute right-[17px] top-9 z-20 w-[68px] text-center font-sans text-[12px] font-bold uppercase leading-[18px] tracking-[1.2px] text-white/50 transition hover:text-white/80 focus-visible-ring"
+            className="wz-skip absolute right-[17px] top-[var(--wz-top)] z-20 w-[68px] text-center font-sans text-[12px] font-bold uppercase leading-[18px] tracking-[1.2px] text-white/50 transition hover:text-white/80 focus-visible-ring"
           >
             Skip Intro
           </button>
 
-          {/* The 640px slot keeps the bar and the buttons where every frame draws them. Its
-           * basis is a class, so a desktop can let it fill the frame. */}
+          {/* The slot is Figma's 345 x 640 at the fit's scale; the box inside it is laid out at
+           * 345 x 640 and scaled from its top left, so every slide keeps Figma's line breaks
+           * and its left edge stays 24 in. The scale sits on its own box: the slot's transform
+           * is the leave animation. Where even 0.6 cannot fit, the slot scrolls instead. A
+           * desktop sizes both itself (wizard-desktop.css). */}
           <div
             key={slideIndex}
-            className="wz-slot flex w-full flex-[0_1_640px] flex-col items-start"
+            className={`wz-slot flex flex-col items-start ${
+              fit.scroll
+                ? // A scroll box clips: reaching 24 further left, it clears the icon's glow.
+                  "-ml-6 min-h-0 w-[calc(345px*var(--wz-k)+24px)] flex-1 overflow-y-auto pl-6"
+                : "h-[calc(640px*var(--wz-k))] w-[calc(345px*var(--wz-k))] shrink-0"
+            }`}
             style={{
               opacity: isLeaving ? 0 : 1,
               transform: isLeaving ? "translateY(-8px)" : "translateY(0)",
               transition: `opacity ${LEAVE_MS}ms ${EASE}, transform ${LEAVE_MS}ms ${EASE}`,
             }}
           >
-            {textSlide ? (
-              <TextSlideView slide={textSlide} />
-            ) : (
-              <div
-                className="wz-map survey-animate w-full"
-                style={{ opacity: 0, animation: `survey-fade-in 600ms ${EASE} both` }}
-              >
-                <WizardReportMap step={mapStep} onStep={(to, control) => moveMap(to, control)} />
-              </div>
-            )}
+            <div className="wz-fit h-[640px] w-[345px] shrink-0 origin-top-left [transform:scale(var(--wz-k))]">
+              {textSlide ? (
+                <TextSlideView slide={textSlide} />
+              ) : (
+                <div
+                  className="wz-map survey-animate w-full"
+                  style={{ opacity: 0, animation: `survey-fade-in 600ms ${EASE} both` }}
+                >
+                  <WizardReportMap step={mapStep} onStep={(to, control) => moveMap(to, control)} />
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="wz-footer w-full shrink-0">
+          {/* Pinned to the bottom: on a phone taller than Figma's the space goes above it. */}
+          <div className="wz-footer mt-auto w-full shrink-0">
             {/* 1049:1235 — slide 1 draws CONTINUE alone, at the left; the rest pair it with Back.
              * A desktop keeps CONTINUE at the right, as Mark's desktop frames do. Since Mark's
              * 01.10 round the buttons come first, the bar 24 under them (1049:1234). */}

@@ -26,7 +26,6 @@ export const MAP_STEPS = REPORT_DEEP_DIVES.length;
 
 const DEEP_DIVE_INDEX = new Map(REPORT_DEEP_DIVES.map((d, i) => [d.id, i + 1]));
 const TILE_PITCH = 314; // 302 tall + 12 between (1049:2034)
-const CANVAS_WIDTH = 345;
 const CANVAS_HEIGHT = 640;
 /** Where the desktop layout starts (wizard-desktop.css). */
 const DESKTOP_MIN = 1024;
@@ -35,16 +34,6 @@ const DRAWER_HEIGHT = 597;
 const TILES_HEIGHT = 541;
 
 const clamp = (min: number, value: number, max: number) => Math.min(max, Math.max(min, value));
-
-/**
- * The phone canvas's scale: one illustration, scaled as a whole. Below a 345 column it
- * shrinks (375 and 320 phones). A desktop lays its parts out as a grid instead
- * (wizard-desktop.css), so there it is 1 and mapZoom sizes the parts.
- */
-export function canvasScale(boxWidth: number, viewportWidth: number) {
-  if (viewportWidth >= DESKTOP_MIN) return 1;
-  return Math.min(1, boxWidth / CANVAS_WIDTH);
-}
 
 /**
  * What a desktop slide's chrome takes of the window's height, as wizard-desktop.css sets
@@ -397,17 +386,16 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
     transition: `opacity 300ms ${EASE}, visibility 0s linear ${shown ? "0s" : "300ms"}`,
   });
 
-  // The canvas is 345 wide, the content box of a 393 phone. On a narrower one (375, 320)
-  // it is drawn smaller as a whole, as the frame, rather than pushing the page sideways.
-  // On a desktop its parts take a grid (wizard-desktop.css), zoomed to the window's height.
+  // The canvas is 345 x 640, the slide's own box on a phone, which the wizard draws at its
+  // fit's scale with every other slide (wizardFit): never scaled here as well. On a desktop
+  // its parts take a grid (wizard-desktop.css), zoomed to the window's height.
   const boxRef = useRef<HTMLDivElement>(null);
-  const [layout, setLayout] = useState({ scale: 1, desktop: false, zoom: { drawer: 1, tiles: 1 } });
+  const [layout, setLayout] = useState({ desktop: false, zoom: { drawer: 1, tiles: 1 } });
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box || typeof ResizeObserver === "undefined") return;
     const fit = () =>
       setLayout({
-        scale: canvasScale(box.clientWidth, window.innerWidth),
         desktop: window.innerWidth >= DESKTOP_MIN,
         zoom: mapZoom(window.innerHeight),
       });
@@ -452,14 +440,11 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
               "--wz-drawer-zoom": layout.zoom.drawer,
               "--wz-tiles-zoom": layout.zoom.tiles,
             } as CSSProperties)
-          : { height: CANVAS_HEIGHT * layout.scale }
+          : { height: CANVAS_HEIGHT }
       }
     >
       {/* 640 tall: the 36px header row and the 604 main area (1049:1637). */}
-      <div
-        className="wz-canvas absolute left-0 top-0 h-[640px] w-[345px] origin-top-left"
-        style={layout.scale !== 1 ? { transform: `scale(${layout.scale})` } : undefined}
-      >
+      <div className="wz-canvas absolute left-0 top-0 h-[640px] w-[345px]">
         <Drawer step={step} />
 
         {/* 1049:1637 — the pitch, centred in the 604 below the header row, at x 165. */}
