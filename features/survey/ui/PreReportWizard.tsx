@@ -42,12 +42,15 @@ const fadeUp = (delay: number) => ({
 /*  Pieces every text slide shares                                      */
 /* ------------------------------------------------------------------ */
 
-/** The 80px icon in its violet glow (e.g. 1049:1173). */
+/**
+ * The 64px icon in its violet glow (e.g. 1049:1173). It was 80 until Mark's 01.10
+ * round ("Decreased Icons size"), which scaled the drawing and its glow by 0.8.
+ */
 const SlideIcon: FC<{ name: string }> = ({ name }) => (
-  <div className="relative h-20 w-20 shrink-0">
+  <div className="relative h-16 w-16 shrink-0">
     <div
       aria-hidden
-      className="pointer-events-none absolute left-[-48px] top-[-48px] h-[176px] w-[176px] rounded-full"
+      className="pointer-events-none absolute left-[-38.4px] top-[-38.4px] h-[140.8px] w-[140.8px] rounded-full"
       style={{
         background:
           "radial-gradient(circle, rgba(167,139,250,0.55) 0%, rgba(167,139,250,0.15) 40%, rgba(167,139,250,0) 70%)",
@@ -56,10 +59,10 @@ const SlideIcon: FC<{ name: string }> = ({ name }) => (
     <Image
       src={`/survey/wizard/${name}.svg`}
       alt=""
-      width={80}
-      height={80}
+      width={64}
+      height={64}
       unoptimized
-      className="relative block h-20 w-20"
+      className="relative block h-16 w-16"
     />
   </div>
 );
@@ -159,7 +162,9 @@ const TEXT_SLIDES: Record<number, TextSlide> = {
         <span className="font-normal">, including:</span>
       </p>
     ),
-    extra: { node: <ProofCards />, gap: 24 },
+    // 20 under the copy's box (1049:1190), which Figma fixes at 198 for the seven lines'
+    // 204.75: CSS stacks the lines in full, so the cards sit 13.25 under the last one.
+    extra: { node: <ProofCards />, gap: 13.25 },
   },
   // 1066:2186
   2: {
@@ -239,7 +244,7 @@ const TextSlideView: FC<{ slide: TextSlide }> = ({ slide }) => (
     >
       {slide.heading}
     </h2>
-    <div className="wz-body survey-animate pt-6" style={fadeUp(300)}>
+    <div className="wz-body survey-animate pt-5" style={fadeUp(300)}>
       {slide.body}
     </div>
     {slide.extra ? (
