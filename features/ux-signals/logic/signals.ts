@@ -59,6 +59,11 @@ export interface SignalDef {
   list?: true;
   /** Set when it cannot be measured from what the site records, saying what is missing. */
   missing?: string;
+  /**
+   * When production began recording what the measure reads (ISO). A real visit from before
+   * then cannot show it, so it would count as not doing it; such visits are left out.
+   */
+  recordedSince?: string;
 }
 
 const SECOND = 1000;
@@ -383,6 +388,9 @@ export const SIGNALS: readonly SignalDef[] = [
         : "not seen";
     },
     positive: (t) => t === "seen",
+    // cta_seen reached production with #442 (live 2026-10-01 00:05:47 UTC): before it, every
+    // visit with locked chapters would read "not seen".
+    recordedSince: "2026-10-01T00:06:00Z",
   },
   {
     name: "CTA hesitation",

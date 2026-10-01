@@ -30,6 +30,17 @@ export function summarize(
   visits: readonly UxVisit[],
   names: ReadonlyMap<string, string> = new Map()
 ): Summary {
+  if (def.recordedSince) {
+    // Whole visits, by their first event: a page loaded before the release runs the old code.
+    const since = Date.parse(def.recordedSince);
+    const after = visits.filter((v) => v.length > 0 && v[0]!.t >= since);
+    const s = summarize({ ...def, recordedSince: undefined }, after, names);
+    const day = def.recordedSince.slice(0, 10);
+    return {
+      ...s,
+      sentence: `${s.sentence} Only visits from ${day} on, when the site began recording it.`,
+    };
+  }
   if (!def.measure) return { n: 0, sentence: def.missing ?? "Not measured." };
   const measured: Array<{ v: SignalValue; visit: UxVisit }> = [];
   for (const visit of visits) {
