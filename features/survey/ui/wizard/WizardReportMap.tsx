@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type FC, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FC,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
 import { WIZARD_DRAWER, type WizardDrawerRow } from "./wizardContent";
@@ -20,6 +28,48 @@ const DEEP_DIVE_INDEX = new Map(REPORT_DEEP_DIVES.map((d, i) => [d.id, i + 1]));
 const TILE_PITCH = 314; // 302 tall + 12 between (1049:2034)
 const CANVAS_WIDTH = 345;
 const CANVAS_HEIGHT = 640;
+/** Where the desktop layout starts (wizard-desktop.css). */
+const DESKTOP_MIN = 1024;
+/** The drawer's own height, and the tiles' block: its 20 spacer, the 475 track, 14 and the controls' 32. */
+const DRAWER_HEIGHT = 597;
+const TILES_HEIGHT = 541;
+
+const clamp = (min: number, value: number, max: number) => Math.min(max, Math.max(min, value));
+
+/**
+ * The phone canvas's scale: one illustration, scaled as a whole. Below a 345 column it
+ * shrinks (375 and 320 phones). A desktop lays its parts out as a grid instead
+ * (wizard-desktop.css), so there it is 1 and mapZoom sizes the parts.
+ */
+export function canvasScale(boxWidth: number, viewportWidth: number) {
+  if (viewportWidth >= DESKTOP_MIN) return 1;
+  return Math.min(1, boxWidth / CANVAS_WIDTH);
+}
+
+/**
+ * What a desktop slide's chrome takes of the window's height, as wizard-desktop.css sets
+ * it: the frame's padding top and bottom, the footer's and the nav's, the 4px bar, the
+ * 24px counter row and the 48px buttons.
+ */
+export function desktopChrome(viewportHeight: number) {
+  const frame = clamp(24, viewportHeight * 0.05, 53);
+  const gap = clamp(24, viewportHeight * 0.045, 48);
+  return 2 * frame + 2 * gap + 4 + 24 + 48;
+}
+
+/**
+ * A desktop map's zooms: the drawer and the tiles each take the height the chrome
+ * leaves, the drawer up to 1.35 and the tiles to 1.5. A laptop's window is shorter than
+ * the phone's 640 canvas plus the chrome, so they shrink below 1 rather than push
+ * CONTINUE off it, down to 0.65; a window too short even for that scrolls.
+ */
+export function mapZoom(viewportHeight: number) {
+  const room = viewportHeight - desktopChrome(viewportHeight);
+  return {
+    drawer: clamp(0.65, room / DRAWER_HEIGHT, 1.35),
+    tiles: clamp(0.65, room / TILES_HEIGHT, 1.5),
+  };
+}
 
 const JAKARTA = "var(--font-jakarta), var(--font-sans)";
 const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
@@ -122,7 +172,7 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
 const Drawer: FC<{ step: number }> = ({ step }) => (
   <div
     aria-hidden
-    className="absolute left-0 top-0 h-[597px] w-[142.6px] rounded-[14px] bg-white"
+    className="wz-drawer absolute left-0 top-0 h-[597px] w-[142.6px] rounded-[14px] bg-white"
     style={{
       border: "1px solid rgba(167,139,250,0.35)",
       boxShadow: "0 12px 32px 0 rgba(13,5,20,0.45)",
@@ -187,7 +237,7 @@ const TileControls: FC<WizardReportMapProps & { width: number }> = ({ step, onSt
   // The overview shows the first dot, as its frame does.
   const dot = Math.max(step, 1);
   return (
-    <div className="flex items-center gap-2" style={{ width }}>
+    <div className="wz-controls flex items-center gap-2" style={{ width }}>
       <div aria-hidden className="flex min-w-0 flex-1 items-center gap-[5px]">
         {REPORT_DEEP_DIVES.map((d, i) => (
           <span
@@ -237,10 +287,13 @@ const Pitch: FC<{ icon: "free" | "open" | "locked"; top: number; children: React
   top,
   children,
 }) => (
-  <div className="flex flex-col items-start" style={{ paddingTop: top }}>
+  <div
+    className="wz-pitch-item flex flex-col items-start pt-[var(--wz-pitch-gap)]"
+    style={{ "--wz-pitch-gap": `${top}px` } as CSSProperties}
+  >
     {icon === "free" ? (
       <span
-        className="flex rounded-[4px] px-[5px] py-[2px] font-sans text-[8px] font-bold uppercase leading-[10px] tracking-[0.5px] text-[#ffb89c]"
+        className="wz-pitch-badge flex rounded-[4px] px-[5px] py-[2px] font-sans text-[8px] font-bold uppercase leading-[10px] tracking-[0.5px] text-[#ffb89c]"
         style={{ background: "rgba(255,158,122,0.16)", border: "1px solid rgba(255,158,122,0.35)" }}
       >
         Free
@@ -252,7 +305,7 @@ const Pitch: FC<{ icon: "free" | "open" | "locked"; top: number; children: React
         width={18}
         height={18}
         unoptimized
-        className="block h-[18px] w-[18px]"
+        className="wz-pitch-icon block h-[18px] w-[18px]"
       />
     )}
     {children}
@@ -339,16 +392,26 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
 
   // The canvas is 345 wide, the content box of a 393 phone. On a narrower one (375, 320)
   // it is drawn smaller as a whole, as the frame, rather than pushing the page sideways.
+  // On a desktop its parts take a grid (wizard-desktop.css), zoomed to the window's height.
   const boxRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
+  const [layout, setLayout] = useState({ scale: 1, desktop: false, zoom: { drawer: 1, tiles: 1 } });
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box || typeof ResizeObserver === "undefined") return;
-    const fit = () => setScale(Math.min(1, box.clientWidth / CANVAS_WIDTH));
+    const fit = () =>
+      setLayout({
+        scale: canvasScale(box.clientWidth, window.innerWidth),
+        desktop: window.innerWidth >= DESKTOP_MIN,
+        zoom: mapZoom(window.innerHeight),
+      });
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(box);
-    return () => observer.disconnect();
+    window.addEventListener("resize", fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", fit);
+    };
   }, []);
 
   // The overview and the tiles each draw their own ▲ ▼, one set hidden while the other
@@ -373,39 +436,50 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
   }, [step]);
 
   return (
-    <div ref={boxRef} className="relative w-full" style={{ height: CANVAS_HEIGHT * scale }}>
+    <div
+      ref={boxRef}
+      className="relative w-full"
+      style={
+        layout.desktop
+          ? ({
+              "--wz-drawer-zoom": layout.zoom.drawer,
+              "--wz-tiles-zoom": layout.zoom.tiles,
+            } as CSSProperties)
+          : { height: CANVAS_HEIGHT * layout.scale }
+      }
+    >
       {/* 640 tall: the 36px header row and the 604 main area (1049:1637). */}
       <div
-        className="absolute left-0 top-0 h-[640px] w-[345px] origin-top-left"
-        style={scale < 1 ? { transform: `scale(${scale})` } : undefined}
+        className="wz-canvas absolute left-0 top-0 h-[640px] w-[345px] origin-top-left"
+        style={layout.scale !== 1 ? { transform: `scale(${layout.scale})` } : undefined}
       >
         <Drawer step={step} />
 
         {/* 1049:1637 — the pitch, centred in the 604 below the header row, at x 165. */}
         <div
           ref={overviewRef}
-          className="absolute left-[165px] top-[36px] flex h-[604px] w-[180px] flex-col justify-center gap-[50px]"
+          className="wz-pitch absolute left-[165px] top-[36px] flex h-[604px] w-[180px] flex-col justify-center gap-[50px]"
           style={fade(overview)}
           aria-hidden={overview ? undefined : true}
         >
           <div className="flex flex-col items-start">
-            <h2 className="w-full font-serif font-medium leading-[28.8px] text-white">
-              <span className="text-[28px]">6 Parts, </span>
+            <h2 className="wz-pitch-title w-full font-serif font-medium leading-[28.8px] text-white">
+              <span className="wz-pitch-big text-[28px]">6 Parts, </span>
               <br />
-              <span className="text-[20px]">20 Chapters</span>
+              <span className="wz-pitch-small text-[20px]">20 Chapters</span>
             </h2>
             <Pitch icon="free" top={20}>
-              <p className="font-sans text-[14px] font-light leading-[19.5px] text-white">
+              <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[19.5px] text-white">
                 Read through <strong className="font-bold">your free chapters</strong>.
               </p>
             </Pitch>
             <Pitch icon="open" top={20}>
-              <p className="font-sans text-[14px] font-light leading-[22.4px] text-white/85">
+              <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
                 Explore our <strong className="font-bold">featured</strong> chapters.
               </p>
             </Pitch>
             <Pitch icon="locked" top={22}>
-              <p className="font-sans text-[14px] font-light leading-[22.4px] text-white/85">
+              <p className="wz-pitch-copy font-sans text-[14px] font-light leading-[22.4px] text-white/85">
                 See the <strong className="font-bold">insights waiting for you</strong> in each
                 chapter preview
               </p>
@@ -417,7 +491,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
         {/* 1049:2028 — the tiles, at (180, 104) on the canvas. */}
         <div
           ref={tilesRef}
-          className="absolute left-[156px] top-[56px] w-[189px]"
+          className="wz-tiles absolute left-[156px] top-[56px] w-[189px]"
           style={fade(!overview)}
           aria-hidden={overview ? true : undefined}
         >

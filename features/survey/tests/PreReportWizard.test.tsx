@@ -359,3 +359,112 @@ describe("PreReportWizard — keys, swipes and analytics", () => {
     ]);
   });
 });
+
+// The desktop layout (01.10) lives in wizard/wizard-desktop.css, inside one 1024px media
+// query (wizardDesktop.test.ts). It styles these hooks; the phone's own classes stay as
+// they were, so a phone renders the 393 design exactly.
+describe("PreReportWizard — the hooks its desktop layout styles", () => {
+  const hook = (name: string) => document.querySelector(`.${name}`);
+
+  it("names the frame, the column, the chrome and a text slide's parts", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    expect(screen.getByRole("main")).toHaveClass("wz-root");
+    for (const name of ["wz-frame", "wz-scroll", "wz-slot", "wz-footer", "wz-nav"]) {
+      expect(hook(name), name).not.toBeNull();
+    }
+    expect(screen.getByRole("button", { name: /skip intro/i })).toHaveClass("wz-skip");
+    expect(continueButton()).toHaveClass("wz-continue");
+    const text = hook("wz-text")!;
+    expect(text.firstElementChild).toHaveClass("wz-icon");
+    expect(text.querySelector("h2")).toHaveClass("wz-heading");
+    expect(text.querySelector(".wz-copy")).not.toBeNull();
+  });
+
+  it("marks the slides with a visual, which a desktop sets beside the text", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    // 1: the three research tiles.
+    expect(hook("wz-text")).toHaveClass("has-extra");
+    expect(hook("wz-extra")?.querySelector(".wz-proof")).not.toBeNull();
+    expect(document.querySelectorAll(".wz-proof-card")).toHaveLength(3);
+    press(continueButton());
+    // 2: the map, whose parts a desktop sets out as a grid.
+    for (const name of ["wz-map", "wz-canvas", "wz-drawer", "wz-pitch", "wz-tiles"]) {
+      expect(hook(name), name).not.toBeNull();
+    }
+    expect(document.querySelectorAll(".wz-controls")).toHaveLength(2);
+    // The pitch's gaps are a var, which the desktop rule can replace: an inline one would win.
+    const items = document.querySelectorAll<HTMLElement>(".wz-pitch-item");
+    expect(items).toHaveLength(3);
+    for (const item of items) {
+      expect(item.style.paddingTop).toBe("");
+      expect(item.style.getPropertyValue("--wz-pitch-gap")).toMatch(/^2[02]px$/);
+    }
+    press(continueButton());
+    press(continueButton());
+    // 3: the guarantee.
+    expect(hook("wz-text")).toHaveClass("has-extra");
+    expect(hook("wz-guarantee")).not.toBeNull();
+    press(continueButton());
+    // 4-6: text alone.
+    expect(hook("wz-text")).not.toHaveClass("has-extra");
+    expect(backButton()).toHaveClass("wz-back");
+  });
+
+  describe("the map's box", () => {
+    const realWidth = window.innerWidth;
+    const realHeight = window.innerHeight;
+    /** A window of `width` x `height` whose content column is `column` wide. */
+    const sized = (width: number, height: number, column: number) => {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
+      vi.spyOn(Element.prototype, "clientWidth", "get").mockReturnValue(column);
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          disconnect() {}
+        }
+      );
+    };
+    afterEach(() => {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: realWidth });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: realHeight });
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+    const mapBox = () => {
+      render(<PreReportWizard onComplete={vi.fn()} />);
+      press(continueButton());
+      return hook("wz-canvas")!.parentElement!;
+    };
+
+    it("hands a desktop's zooms to its grid and lets the grid set the height", () => {
+      sized(1440, 900, 1120);
+      const box = mapBox();
+      // 900 leaves the map 653: the drawer's 597 and the tiles' 541 grow to it.
+      expect(Number(box.style.getPropertyValue("--wz-drawer-zoom"))).toBeCloseTo(653 / 597);
+      expect(Number(box.style.getPropertyValue("--wz-tiles-zoom"))).toBeCloseTo(653 / 541);
+      expect(box.style.height).toBe("");
+      expect(hook("wz-canvas")).not.toHaveAttribute("style");
+    });
+
+    it("keeps a phone's canvas 640 tall, and scales it whole on a narrower one", () => {
+      sized(393, 852, 345);
+      let box = mapBox();
+      expect(box.style.height).toBe("640px");
+      expect(box.style.getPropertyValue("--wz-drawer-zoom")).toBe("");
+      cleanup();
+      sized(375, 812, 327);
+      box = mapBox();
+      expect(parseFloat(box.style.height)).toBeCloseTo((640 * 327) / 345);
+      expect(hook("wz-canvas")!.style.transform).toBe(`scale(${327 / 345})`);
+    });
+  });
+
+  it("loads the desktop stylesheet", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(process.cwd(), "features/survey/ui/PreReportWizard.tsx"), "utf8");
+    expect(src).toContain('import "./wizard/wizard-desktop.css";');
+  });
+});

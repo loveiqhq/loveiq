@@ -1,10 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FC, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FC,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import { trackWizardMapStep, trackWizardSlideAdvanced } from "@features/analytics/client";
 import WizardReportMap, { MAP_STEPS } from "./wizard/WizardReportMap";
 import { WIZARD_PROOF_CARDS, WIZARD_SLIDE_COUNT } from "./wizard/wizardContent";
+import "./wizard/wizard-desktop.css";
 
 /**
  * The pre-report wizard — Figma 1071:2092, "Pre Report Wizard — Mobile (production,
@@ -14,8 +23,9 @@ import { WIZARD_PROOF_CARDS, WIZARD_SLIDE_COUNT } from "./wizard/wizardContent";
  *   3 unlocking is risk free    4 take only what resonates
  *   5 rate each section         6 invite your friends
  *
- * The phone design everywhere: on a desktop it sits centred, on the full-screen purple,
- * until a desktop wizard is designed (Fatih, 30.09).
+ * From 1024px a desktop layout in the system of Mark's desktop wizard frames (1:4454):
+ * wizard/wizard-desktop.css, on the wz-* hooks named here (Fatih, 01.10). A phone keeps
+ * the 393 design exactly.
  */
 
 const MAP_SLIDE = 1;
@@ -55,19 +65,19 @@ const SlideIcon: FC<{ name: string }> = ({ name }) => (
 );
 
 /** Manrope 18/29.25 in the 294 column; a slide's runs set their own weight and colour. */
-const BODY = "max-w-[294px] font-sans text-[18px] leading-[29.25px]";
+const BODY = "wz-copy max-w-[294px] font-sans text-[18px] leading-[29.25px]";
 
 const ProofCards: FC = () => (
   // 1049:1191 — 345 wide on the canvas, so wider than the 294 text column.
-  <div className="grid w-full grid-cols-3 gap-2">
+  <div className="wz-proof grid w-full grid-cols-3 gap-2">
     {WIZARD_PROOF_CARDS.map((card) => (
       <div
         key={card.title}
-        className="flex flex-col items-center gap-2 overflow-hidden rounded-[14px] px-2 py-[14px] text-center"
+        className="wz-proof-card flex flex-col items-center gap-2 overflow-hidden rounded-[14px] px-2 py-[14px] text-center"
         style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
       >
         <span
-          className="flex h-[29.867px] w-[29.867px] items-center justify-center rounded-lg"
+          className="wz-proof-icon flex h-[29.867px] w-[29.867px] items-center justify-center rounded-lg"
           style={{
             border: "1px solid rgba(255,255,255,0.16)",
             backgroundImage:
@@ -83,10 +93,16 @@ const ProofCards: FC = () => (
             className="block h-[17px] w-[17px]"
           />
         </span>
-        <p className="font-sans text-[13px] font-bold leading-[17px] text-white">{card.title}</p>
-        <p className="font-sans text-[11px] font-normal leading-[15px] text-white/70">
-          {card.body}
-        </p>
+        {/* The title over its line, 8 apart as the card's own gap: a desktop sets the
+         * pair beside the icon. */}
+        <div className="wz-proof-text flex flex-col items-center gap-2">
+          <p className="wz-proof-title font-sans text-[13px] font-bold leading-[17px] text-white">
+            {card.title}
+          </p>
+          <p className="wz-proof-body font-sans text-[11px] font-normal leading-[15px] text-white/70">
+            {card.body}
+          </p>
+        </div>
       </div>
     ))}
   </div>
@@ -95,10 +111,10 @@ const ProofCards: FC = () => (
 const GuaranteeCard: FC = () => (
   // 1066:2273
   <div
-    className="flex w-full items-center gap-[14px] overflow-hidden rounded-[14px] px-4 py-[14px]"
+    className="wz-guarantee flex w-full items-center gap-[14px] overflow-hidden rounded-[14px] px-4 py-[14px]"
     style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
   >
-    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]">
+    <span className="wz-guarantee-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]">
       <Image
         src="/survey/wizard/shield.svg"
         alt=""
@@ -109,10 +125,10 @@ const GuaranteeCard: FC = () => (
       />
     </span>
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <p className="font-sans text-[15px] font-bold leading-5 text-white">
+      <p className="wz-guarantee-title font-sans text-[15px] font-bold leading-5 text-white">
         14-day money-back guarantee
       </p>
-      <p className="font-sans text-[12px] font-normal leading-4 text-white/70">
+      <p className="wz-guarantee-body font-sans text-[12px] font-normal leading-4 text-white/70">
         No questions asked. Full refund.
       </p>
     </div>
@@ -136,7 +152,7 @@ const TEXT_SLIDES: Record<number, TextSlide> = {
     body: (
       <p className={`${BODY} font-bold text-white`}>
         Congratulations on completing your test.
-        <span className="font-light text-white/80"> Your openness made this report possible.</span>
+        <span className="font-light text-white/80"> Your openness made this report possible. </span>
         <br />
         <span className="font-normal">It draws on the 60+ answers you gave and is</span> grounded in
         a broad body of sexual and psychological research
@@ -152,10 +168,8 @@ const TEXT_SLIDES: Record<number, TextSlide> = {
     body: (
       <p className={`${BODY} font-light text-white/80`}>
         As we are <strong className="font-bold">confident in the value</strong> of this report, we
-        are offering you a
-        <br />
-        <strong className="font-bold">14-day money back guarantee</strong>,
-        <br />
+        are offering you a <br />
+        <strong className="font-bold">14-day money back guarantee</strong>, <br />
         no questions asked.
       </p>
     ),
@@ -213,23 +227,26 @@ const TEXT_SLIDES: Record<number, TextSlide> = {
 };
 
 const TextSlideView: FC<{ slide: TextSlide }> = ({ slide }) => (
-  <div className="flex w-full flex-col items-start pt-[37px]">
-    <div className="survey-animate" style={fadeUp(0)}>
+  <div
+    className={`wz-text flex w-full flex-col items-start pt-[37px]${slide.extra ? " has-extra" : ""}`}
+  >
+    <div className="wz-icon survey-animate" style={fadeUp(0)}>
       <SlideIcon name={slide.icon} />
     </div>
     <h2
-      className="survey-animate mb-[13px] max-w-[294px] pt-6 font-serif text-[28px] font-medium leading-[38px] text-white"
+      className="wz-heading survey-animate mb-[13px] max-w-[294px] pt-6 font-serif text-[28px] font-medium leading-[38px] text-white"
       style={fadeUp(150)}
     >
       {slide.heading}
     </h2>
-    <div className="survey-animate pt-6" style={fadeUp(300)}>
+    <div className="wz-body survey-animate pt-6" style={fadeUp(300)}>
       {slide.body}
     </div>
     {slide.extra ? (
+      // The gap above it is a class, not an inline padding, so a desktop can take it away.
       <div
-        className="survey-animate w-full"
-        style={{ ...fadeUp(400), paddingTop: slide.extra.gap }}
+        className="wz-extra survey-animate w-full pt-[var(--wz-extra-gap)]"
+        style={{ ...fadeUp(400), "--wz-extra-gap": `${slide.extra.gap}px` } as CSSProperties}
       >
         {slide.extra.node}
       </div>
@@ -431,7 +448,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
 
   return (
     <main
-      className="relative min-h-[100dvh] overflow-hidden bg-[#140a1a]"
+      className="wz-root relative min-h-[100dvh] overflow-hidden bg-[#140a1a]"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       style={{
@@ -440,8 +457,8 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
         transition: `opacity ${isExiting ? 600 : 800}ms ${EASE}`,
       }}
     >
-      {/* The 393 canvas, centred: on a desktop the phone design sits mid-screen. */}
-      <div className="relative mx-auto h-[100dvh] w-full max-w-[393px]">
+      {/* The 393 canvas, centred; from 1024px the 1120 desktop frame (wizard-desktop.css). */}
+      <div className="wz-frame relative mx-auto h-[100dvh] w-full max-w-[393px]">
         <Blobs map={slideIndex === MAP_SLIDE} />
 
         {/* data-lenis-prevent: the column is the scroller, and the page's smooth scroll
@@ -450,23 +467,23 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
         <div
           ref={scrollRef}
           data-lenis-prevent
-          className="relative z-10 flex h-full flex-col overflow-y-auto overflow-x-hidden px-6 py-12"
+          className="wz-scroll relative z-10 flex h-full flex-col overflow-y-auto overflow-x-hidden px-6 py-12"
         >
           {/* 1049:1241 — two lines in its 68px, its right edge 17 in from the canvas's. */}
           <button
             type="button"
             onClick={handleSkip}
-            className="absolute right-[17px] top-12 z-20 w-[68px] text-center font-sans text-[12px] font-bold uppercase leading-[18px] tracking-[1.2px] text-white/50 transition hover:text-white/80 focus-visible-ring"
+            className="wz-skip absolute right-[17px] top-12 z-20 w-[68px] text-center font-sans text-[12px] font-bold uppercase leading-[18px] tracking-[1.2px] text-white/50 transition hover:text-white/80 focus-visible-ring"
           >
             Skip Intro
           </button>
 
-          {/* The 640px slot keeps the bar and the buttons where every frame draws them. */}
+          {/* The 640px slot keeps the bar and the buttons where every frame draws them. Its
+           * basis is a class, so a desktop can let it fill the frame. */}
           <div
             key={slideIndex}
-            className="flex w-full flex-col items-start"
+            className="wz-slot flex w-full flex-[0_1_640px] flex-col items-start"
             style={{
-              flex: "0 1 640px",
               opacity: isLeaving ? 0 : 1,
               transform: isLeaving ? "translateY(-8px)" : "translateY(0)",
               transition: `opacity ${LEAVE_MS}ms ${EASE}, transform ${LEAVE_MS}ms ${EASE}`,
@@ -476,7 +493,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
               <TextSlideView slide={textSlide} />
             ) : (
               <div
-                className="survey-animate w-full"
+                className="wz-map survey-animate w-full"
                 style={{ opacity: 0, animation: `survey-fade-in 600ms ${EASE} both` }}
               >
                 <WizardReportMap step={mapStep} onStep={(to, control) => moveMap(to, control)} />
@@ -484,7 +501,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
             )}
           </div>
 
-          <div className="w-full shrink-0">
+          <div className="wz-footer w-full shrink-0">
             {/* 1049:1219 — six segments, filled up to this slide. */}
             <div className="flex h-1 w-full max-w-[448px] gap-3">
               {Array.from({ length: WIZARD_SLIDE_COUNT }, (_, i) => {
@@ -514,8 +531,9 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
               </span>
             </div>
 
-            {/* 1049:1235 — slide 1 draws CONTINUE alone, at the left; the rest pair it with Back. */}
-            <div className="flex items-center justify-between pt-10">
+            {/* 1049:1235 — slide 1 draws CONTINUE alone, at the left; the rest pair it with Back.
+             * A desktop keeps CONTINUE at the right, as Mark's desktop frames do. */}
+            <div className="wz-nav flex items-center justify-between pt-10">
               {slideIndex > 0 ? (
                 <button
                   ref={backRef}
@@ -525,7 +543,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
                     goBack();
                   }}
                   aria-label="Go to previous slide"
-                  className="flex h-12 w-12 items-center justify-center rounded-full transition hover:-translate-y-[1px] focus-visible-ring"
+                  className="wz-back flex h-12 w-12 items-center justify-center rounded-full transition hover:-translate-y-[1px] focus-visible-ring"
                   style={{
                     background: "rgba(254,104,57,0.1)",
                     border: "1px solid rgba(254,104,57,0.3)",
@@ -547,7 +565,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
                 type="button"
                 onClick={goNext}
                 aria-label={isLast ? "Continue to your report" : "Continue to next slide"}
-                className="inline-flex h-12 items-center gap-3 rounded-full bg-[#fe6839] px-7 font-sans text-[14px] font-bold uppercase leading-5 tracking-[1.4px] text-white transition hover:-translate-y-[1px] focus-visible-ring"
+                className="wz-continue inline-flex h-12 items-center gap-3 rounded-full bg-[#fe6839] px-7 font-sans text-[14px] font-bold uppercase leading-5 tracking-[1.4px] text-white transition hover:-translate-y-[1px] focus-visible-ring"
                 style={{
                   filter:
                     "drop-shadow(0 10px 7.5px rgba(254,104,57,0.2)) drop-shadow(0 4px 3px rgba(254,104,57,0.2))",
