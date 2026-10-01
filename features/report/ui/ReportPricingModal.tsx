@@ -280,9 +280,12 @@ const ReportPricingModal: FC<Props> = ({
   }, [open]);
 
   // Per-plan `price_shown` emit. Deduped by (plan, pricingClusterId, discountStep)
-  // so re-opening the modal or the ladder advancing emits a new event without
-  // double-counting a stable render. Powers the "Price Shown" funnel column +
-  // per-cluster CVR analysis.
+  // for as long as the modal is mounted, which is the whole report visit: the
+  // ladder advancing emits a new event, but re-opening the modal does NOT (the
+  // set is never cleared). Powers the "Price Shown" funnel column + per-cluster
+  // CVR analysis (bucket_performance counts these events), so emitting on every
+  // opening would change those rates; the UX checker's CTA hesitation allows for
+  // it (features/ux-signals/logic/signals.ts).
   const priceShownFiredRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!open) return;

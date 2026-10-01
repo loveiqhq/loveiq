@@ -398,15 +398,21 @@ export const SIGNALS: readonly SignalDef[] = [
     kind: "duration",
     measures:
       "From the plans appearing to pressing one to pay, for visits that pressed one: how long the offer was weighed.",
-    from: ["price_shown", "paywall_initiated", "begin_checkout"],
+    from: ["price_shown", "paywall_initiated", "paywall_dismissed", "begin_checkout"],
     measure: (v) => {
       const checkout = v.find(is("begin_checkout"));
       if (!checkout) return null;
+      const before = v.filter((e) => e.t <= checkout.t);
       // The latest opening before the press: an earlier one may have been closed again.
-      const opened = v.filter(
-        (e) => (e.event === "price_shown" || e.event === "paywall_initiated") && e.t <= checkout.t
-      );
-      return opened.length ? checkout.t - opened.at(-1)!.t : null;
+      const opened = before.filter(is("price_shown", "paywall_initiated")).at(-1);
+      if (!opened) return null;
+      // Closed after it, then pressed: either the press came from outside the plans (the
+      // sticky bar buys straight away), or the plans opened again unrecorded (the picker
+      // stays mounted, so a reopening sends no second price_shown, and one the report opens
+      // by itself sends no paywall_initiated). How long they were weighed is unknown; timed
+      // from the closed opening, it was 3 of 6 measurable presses in the 28 days to 2026-10-01.
+      if (before.some((e) => e.event === "paywall_dismissed" && e.t > opened.t)) return null;
+      return checkout.t - opened.t;
     },
   },
   {
