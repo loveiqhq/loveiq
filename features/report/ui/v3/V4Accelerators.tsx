@@ -72,6 +72,13 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
           onUnlock={onUnlock}
         />
 
+        {/* What some of Sanjin's docs set after the two lists. No frame draws it. */}
+        {view.afterCards ? (
+          <div className="rv4-ab__after">
+            <V4Prose blocks={view.afterCards} />
+          </div>
+        ) : null}
+
         {/* 312:211 open / 314:307 paywalled */}
         <section className="rv4-ab__challenges" data-node-id={locked ? "314:307" : "312:211"}>
           <h3 className="rv4-ab__h2">{view.challengesTitle}</h3>
