@@ -519,3 +519,15 @@ describe("PreReportWizard — Mark's 01.10 round: smaller icons, tighter gaps", 
     }
   });
 });
+
+describe("PreReportWizard — track={false}, for the preview page", () => {
+  it("sends no analytics, so a reviewer's clicks never count as a finisher's", () => {
+    render(<PreReportWizard onComplete={vi.fn()} track={false} />);
+    press(continueButton());
+    expect(heading()).toBe(HEADINGS[1]);
+    press(nextDeepDive());
+    expect(activeTile()).not.toBeNull();
+    expect(analytics.trackWizardSlideAdvanced).not.toHaveBeenCalled();
+    expect(analytics.trackWizardMapStep).not.toHaveBeenCalled();
+  });
+});
