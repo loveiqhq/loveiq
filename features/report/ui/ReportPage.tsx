@@ -2800,6 +2800,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // Report the paywall on ARRIVAL, not after the 1.6s settle beat — the reader
       // has reached it whether or not they wait for the pop-up to fade in.
       notifyPaywallReached();
+      // No pop-up on a V4 desktop (Mark, desktop review 01.10: "Take out the Paywall Pop
+      // up that currently triggers at Challenges in Partnerships"; Fatih: desktop only,
+      // from 700px). Nothing opens, so nothing is exposed: the 50/50 runs on phones.
+      if (
+        isV4 &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(min-width: 700px)").matches
+      ) {
+        return;
+      }
       // Both arms of the pop-up test mark this moment, so readers who got this far
       // are compared like for like; `no_popup` then stops before the pop-up.
       if (popupArm) {

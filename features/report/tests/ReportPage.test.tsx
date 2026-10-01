@@ -2074,6 +2074,33 @@ describe("ReportPage", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
+    // Mark, desktop review 01.10: "Take out the Paywall Pop up that currently triggers at
+    // Challenges in Partnerships". Fatih: desktop only, from 700px; phones keep it. With
+    // no pop-up there is nothing to expose, so desktop readers leave the 50/50 too.
+    it("opens nothing and exposes no arm on a desktop, from 700px", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn().mockImplementation((query: string) => ({
+          matches: query === "(min-width: 700px)",
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }))
+      );
+      lockedV4("&popup=on");
+
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(3000));
+
+      expect(exposure()).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
     it("leaves a reader with no submission out of it, pop-up as built", () => {
       vi.useFakeTimers();
       exposure().mockClear();
