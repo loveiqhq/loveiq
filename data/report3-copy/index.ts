@@ -17,6 +17,7 @@ import { QUIET_WITHDRAWER } from "./quiet-withdrawer";
 import { RADIANT_PERFORMER } from "./radiant-performer";
 import { RELATIONAL_NURTURER } from "./relational-nurturer";
 import { SENSUAL_CONNECTOR } from "./sensual-connector";
+import { SPIRITUAL_LOVER } from "./spiritual-lover";
 import type { Report3ArchetypeCopy } from "./types";
 
 export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCopy>> = {
@@ -31,6 +32,7 @@ export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCop
   "Radiant Performer": RADIANT_PERFORMER,
   "Relational Nurturer": RELATIONAL_NURTURER,
   "Sensual Connector": SENSUAL_CONNECTOR,
+  "Spiritual Lover": SPIRITUAL_LOVER,
 };
 
 /** One chapter of every archetype here, by display name. */
