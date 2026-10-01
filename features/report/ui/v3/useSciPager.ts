@@ -46,7 +46,8 @@ const MERGE_PX = 12;
  */
 export const sciStops = (lefts: readonly number[], max: number, endAt?: number): SciStop[] =>
   lefts.reduce<SciStop[]>((stops, raw, card) => {
-    const reachesEnd = endAt !== undefined && raw >= endAt - 1;
+    // Never the first: the start stays reachable however little the deck scrolls.
+    const reachesEnd = card > 0 && endAt !== undefined && raw >= endAt - 1;
     const left = Math.round(reachesEnd ? max : Math.min(max, Math.max(0, raw)));
     const last = stops[stops.length - 1];
     if (last && stops.length > 1 && left - last.left < MERGE_PX) {

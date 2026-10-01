@@ -52,6 +52,15 @@ describe("sciStops — the end is where the last card shows whole", () => {
     ]);
   });
 
+  // Final review, 01.10: a deck all but wide enough for every card (the end measure at
+  // or under 1) folded the first stop into the end too, and the start was unreachable.
+  it("never folds the first stop into the end", () => {
+    expect(sciStops([0, 280, 560, 840], 10, 0)).toEqual([
+      { left: 0, card: 0 },
+      { left: 10, card: 3 },
+    ]);
+  });
+
   it("changes nothing without the end's measure (the science gallery)", () => {
     expect(sciStops([0, 277, 554, 831, 1108, 1385, 1662], 1010)).toHaveLength(5);
   });
@@ -127,6 +136,16 @@ describe("V3DimensionDeck — the desktop deck (desktop review 01.10)", () => {
     expect(next().getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(previous());
     expect(glides).toEqual([297, 0]);
+  });
+
+  // Final review, 01.10: a trackpad swipe can rest on the 280 snap point, 17px short of
+  // the end, where Power already shows whole: the pager stood on its end dot, Next was
+  // off, and the glow stayed on Initiation.
+  it("focuses Power wherever it shows whole, a swipe resting short of the end", () => {
+    const deck = setup(853, 22);
+    deck.scrollTo(280);
+    expect(deck.states()).toEqual(["peeking", "visible", "visible", "focused"]);
+    expect(deck.next()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("takes two clicks where two cards fit", () => {
