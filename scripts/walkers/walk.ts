@@ -942,9 +942,16 @@ async function main(argv: string[]): Promise<number> {
           button(/^unlock your report$/i),
           button(/^unlock (?!your |the |full )(?:[\w -]+ )?report$/i),
         ]) {
+          // Opened by itself while a tap waited: stop here. Inside the picker the next
+          // opener's pattern can match a plan's button, and pressing that buys (2026-10-01).
+          if (await pricesOpen()) break;
           if (await opener.isVisible().catch(() => false)) {
-            // Centred, not just into view: clear of a phone's sticky unlock bar.
-            await opener.evaluate((el) => el.scrollIntoView({ block: "center" })).catch(() => {});
+            // Centred, not just into view: clear of a phone's sticky unlock bar. At once,
+            // because the site scrolls smoothly: after 400 ms the opener was still 412 px
+            // above the screen, and the tap waited until the picker covered it.
+            await opener
+              .evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
+              .catch(() => {});
             await page.waitForTimeout(400);
             if (
               await opener.click({ timeout: 10_000 }).then(
@@ -1162,14 +1169,18 @@ async function main(argv: string[]): Promise<number> {
     const untappable = new Set<string>();
     while (Date.now() < findBy && !walk.paywallOpenedBy) {
       if (
-        await button(PLAN_CTA[plan])
+        (await pricesOpen()) ||
+        (await button(PLAN_CTA[plan])
           .isVisible()
-          .catch(() => false)
+          .catch(() => false))
       ) {
         walk.paywallOpenedBy = "the report, by itself";
         break;
       }
       for (const [way, how] of ways) {
+        // As in the paywall visit: once the picker is open, no other way is tried, or a way's
+        // pattern can match a button inside it.
+        if (await pricesOpen()) break;
         if (
           !untappable.has(how) &&
           (await way()
@@ -1186,7 +1197,7 @@ async function main(argv: string[]): Promise<number> {
           // ending the walk: on 2026-10-01 two of four walks waited on a closed V4 chapter's
           // "Unlock your report", which is inert, until they stopped.
           await way()
-            .evaluate((el) => el.scrollIntoView({ block: "center" }))
+            .evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
             .catch(() => {});
           await page.waitForTimeout(400);
           if (

@@ -7,12 +7,22 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const supabaseFetch = vi.hoisted(() => vi.fn());
+vi.mock("@features/admin/server/supabase", () => ({ supabaseFetch }));
 
 import { agrees } from "@features/ux-signals/logic/proof";
 import { SIGNALS, type UxEvent } from "@features/ux-signals/logic/signals";
 
-import { MIN_EVENTS, rowsIn, storable, tonight } from "../../scripts/walkers/check-signals";
+import {
+  main,
+  MIN_EVENTS,
+  rowsIn,
+  stoppedIn,
+  storable,
+  tonight,
+} from "../../scripts/walkers/check-signals";
 import {
   draw,
   emptyLog,
@@ -308,7 +318,16 @@ describe("storing the proof walks", () => {
         "events.json": [{ t: 1, event: "rage_click", props: {} }],
         "truth.json": { "Rage clicks / repeated taps": 1 },
       });
-      walk("stopped--iphone-15-pro", { "walk.json": { startedAt: "x", origin: "y" } });
+      walk("stopped--iphone-15-pro", {
+        "walk.json": {
+          startedAt: "x",
+          origin: "y",
+          stoppedAt: "no way to the paywall on the report",
+        },
+      });
+      expect(stoppedIn(dir)).toEqual([
+        { walk: "stopped--iphone-15-pro", why: "no way to the paywall on the report" },
+      ]);
       // A walk run by hand gets a key from its start, so storing it twice adds it once.
       expect(rowsIn(dir, null)[0]!.run_id).toBe("hand:2026-10-01T02:41:00Z");
       const rows = rowsIn(dir, "123");
@@ -329,6 +348,47 @@ describe("storing the proof walks", () => {
       const loud = { ...rows[0]!, events: Array(MIN_EVENTS).fill(rows[0]!.events[0]) };
       expect(storable([loud]).rows).toHaveLength(1);
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails the run when a walk stopped, after storing the ones that finished", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "proof-"));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const walk = (name: string, files: Record<string, unknown>) => {
+        mkdirSync(join(dir, name));
+        for (const [f, v] of Object.entries(files)) {
+          writeFileSync(join(dir, name, f), JSON.stringify(v));
+        }
+      };
+      walk("done--desktop-chrome", {
+        "walk.json": { startedAt: "2026-10-01T02:41:00Z", origin: "o" },
+        "events.json": Array(MIN_EVENTS).fill({ t: 1, event: "rage_click", props: {} }),
+        "truth.json": { "Rage clicks / repeated taps": 1 },
+      });
+      supabaseFetch.mockReset().mockResolvedValue({ ok: true });
+      expect(await main(["--walks", dir])).toBe(0);
+
+      walk("stopped--desktop-chrome", {
+        "walk.json": {
+          startedAt: "x",
+          origin: "o",
+          stoppedAt: "no way to the paywall on the report",
+        },
+      });
+      expect(await main(["--walks", dir])).toBe(1);
+      // The finished walk is stored all the same; only the verdict changes.
+      expect(supabaseFetch).toHaveBeenCalledTimes(2);
+      expect(errors).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "stopped--desktop-chrome stopped (no way to the paywall on the report)"
+        )
+      );
+    } finally {
+      errors.mockRestore();
+      logs.mockRestore();
       rmSync(dir, { recursive: true, force: true });
     }
   });
