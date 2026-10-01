@@ -32,73 +32,115 @@ const NEGATIVE_ISSUES = [
   { id: "other", label: "Other", desc: "Something else." },
 ] as const;
 
-type Step = "idle" | "positive" | "negative-pick" | "negative-comment" | "sent";
+type Step = "idle" | "positive" | "negative-pick" | "negative-comment" | "sent" | "failed";
+
+type Rating = "up" | "down";
 
 interface Props {
-  onFeedback: (payload: FeedbackPayload) => void;
+  /**
+   * Stores the rating alone, on the thumb (review 01.10). Resolves to whether it was
+   * stored; `false` takes the choice back. Optional only for callers with nothing to
+   * store, which then keep the choice on screen.
+   */
+  onRate?: (feedback: Rating) => Promise<boolean> | boolean | void;
+  /** Send: the rating with its optional issue and comment. `false` = not stored. */
+  onFeedback: (payload: FeedbackPayload) => Promise<boolean> | boolean | void;
   sectionTitle: string;
-  value: "up" | "down" | null;
+  /** The rating stored for this section, if any. */
+  value: Rating | null;
+  /** A message has been sent for this section. */
   isSent: boolean;
 }
 
-const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent }) => {
-  const [step, setStep] = useState<Step>(isSent ? "sent" : "idle");
+/**
+ * "Does this resonate?" — a thumb, then an optional message.
+ *
+ * Marcus, review 01.10: "Let's not force users to store a message when rating. Ergo store
+ * the rating also without 'send'". The thumb stores the rating at once and opens the
+ * message box; Cancel only closes the box, the rating stays. The thumbs stay switchable,
+ * a message sent or not. Clicking the thumb already stored only toggles the box.
+ */
+const SectionFeedback: FC<Props> = ({ onRate, onFeedback, sectionTitle, value, isSent }) => {
+  const [step, setStep] = useState<Step>("idle");
   const [comment, setComment] = useState("");
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
-  // Tracks which thumb was most recently sent so the selected color survives
-  // the React batch between onFeedback (deferred via startTransition in parent)
-  // and setStep("sent"). Without this the thumb flashes gray for one frame.
-  const [sentDirection, setSentDirection] = useState<"up" | "down" | null>(
-    value === "up" || value === "down" ? value : null
-  );
+  // The thumb on screen. Follows a stored rating, and moves at once on a click so the
+  // choice shows while it is stored; a refusal moves it back.
+  const [rated, setRated] = useState<Rating | null>(value);
+  const [announce, setAnnounce] = useState("");
 
-  // Auto-dismiss toast after 3 seconds
   useEffect(() => {
-    if (step !== "sent") return;
+    setRated(value);
+  }, [value]);
+
+  // Auto-dismiss a toast after 3 seconds
+  useEffect(() => {
+    if (step !== "sent" && step !== "failed") return;
     const id = setTimeout(() => setStep("idle"), 3000);
     return () => clearTimeout(id);
   }, [step]);
 
   const selectedItem = NEGATIVE_ISSUES.find((i) => i.id === selectedIssue);
+  const panelOpen = (rating: Rating) =>
+    rating === "up" ? step === "positive" : step === "negative-pick" || step === "negative-comment";
+
+  const choose = async (rating: Rating) => {
+    // The panel toggles; the rating only posts when it changes.
+    setStep(panelOpen(rating) ? "idle" : rating === "up" ? "positive" : "negative-pick");
+    if (rated === rating) return;
+    const previous = rated;
+    setRated(rating);
+    setAnnounce("");
+    const stored = onRate ? await onRate(rating) : true;
+    if (stored === false) {
+      setRated(previous);
+      setStep("failed");
+      return;
+    }
+    setAnnounce("Rating saved");
+  };
+
+  const send = async (payload: FeedbackPayload) => {
+    const stored = await onFeedback(payload);
+    if (stored === false) {
+      setStep("failed");
+      return;
+    }
+    setRated(payload.feedback);
+    setComment("");
+    setSelectedIssue(null);
+    setIssueDropdownOpen(false);
+    setStep("sent");
+  };
 
   return (
-    <div className="report-fb">
+    <div className="report-fb" data-sent={isSent || undefined}>
       {/* Thumbs row — always in flow to anchor layout */}
       <span className="report-fb__label">Does this resonate?</span>
       <div className="report-fb__thumbs">
         <button
           type="button"
-          disabled={isSent}
           aria-label={`This resonates: ${sectionTitle}`}
-          className={`report-fb__thumb ${
-            value === "up" || sentDirection === "up" || step === "positive" ? "is-selected" : ""
-          }`}
-          onClick={() => setStep(step === "positive" ? "idle" : "positive")}
+          aria-pressed={rated === "up"}
+          className={`report-fb__thumb ${rated === "up" ? "is-selected" : ""}`}
+          onClick={() => void choose("up")}
         >
           <ThumbUpIcon />
         </button>
         <button
           type="button"
-          disabled={isSent}
           aria-label={`This does not resonate: ${sectionTitle}`}
-          className={`report-fb__thumb ${
-            value === "down" ||
-            sentDirection === "down" ||
-            step === "negative-pick" ||
-            step === "negative-comment"
-              ? "is-selected"
-              : ""
-          }`}
-          onClick={() =>
-            setStep(
-              step === "negative-pick" || step === "negative-comment" ? "idle" : "negative-pick"
-            )
-          }
+          aria-pressed={rated === "down"}
+          className={`report-fb__thumb ${rated === "down" ? "is-selected" : ""}`}
+          onClick={() => void choose("down")}
         >
           <ThumbDownIcon />
         </button>
       </div>
+      <span className="report-fb__status" role="status" aria-live="polite">
+        {announce}
+      </span>
 
       {/* Floating panels — absolutely positioned */}
       {step === "sent" && (
@@ -107,6 +149,15 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
           <div className="report-fb__toast-copy">
             <p className="report-fb__toast-title">Feedback sent!</p>
             <p className="report-fb__toast-sub">Thank you for helping us improve.</p>
+          </div>
+        </div>
+      )}
+
+      {step === "failed" && (
+        <div className="report-fb__panel report-fb--toast is-failed" role="alert">
+          <div className="report-fb__toast-copy">
+            <p className="report-fb__toast-title">Couldn&rsquo;t save that</p>
+            <p className="report-fb__toast-sub">Please try again in a moment.</p>
           </div>
         </div>
       )}
@@ -134,11 +185,7 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
             <button
               type="button"
               className="report-fb__send"
-              onClick={() => {
-                onFeedback({ feedback: "up", comment: comment || undefined });
-                setSentDirection("up");
-                setStep("sent");
-              }}
+              onClick={() => void send({ feedback: "up", comment: comment || undefined })}
             >
               Send
             </button>
@@ -219,15 +266,13 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
             <button
               type="button"
               className="report-fb__send"
-              onClick={() => {
-                onFeedback({
+              onClick={() =>
+                void send({
                   feedback: "down",
                   issue: selectedIssue ?? undefined,
                   comment: comment || undefined,
-                });
-                setSentDirection("down");
-                setStep("sent");
-              }}
+                })
+              }
             >
               Send
             </button>

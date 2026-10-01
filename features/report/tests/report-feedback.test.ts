@@ -189,3 +189,80 @@ describe("POST /api/report-feedback", () => {
     expect(res.status).toBe(500);
   });
 });
+
+/**
+ * Review 01.10. Marcus: "Let's not force users to store a message when rating. Ergo
+ * store the rating also without 'send'". The thumb now posts on its own, so every
+ * section that shows "Does this resonate?" must be one the route accepts. Five did
+ * not: Challenges in Partnerships (V4), Other Archetypes, and V2's findings, insight
+ * map and "What this means for you" were all refused with a 400 on Send, and the page
+ * still said "Feedback sent!".
+ */
+describe("POST /api/report-feedback — every rated section, and a switched vote (01.10)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test-key";
+    delete process.env.SLACK_SURVEY_WEBHOOK_URL;
+    mockBreakerFire.mockImplementation((fn) => fn());
+    mockFetchWithTimeout.mockResolvedValue({ ok: true, status: 201 });
+    allowCsrf();
+    allowRateLimit();
+    mockResolveContext.mockResolvedValue({ submissionId: 42, userId: 84, userEmail: null });
+  });
+
+  const sentRow = () =>
+    JSON.parse((mockFetchWithTimeout.mock.calls[0]![1] as { body: string }).body) as Record<
+      string,
+      unknown
+    >;
+
+  it.each(["challenges_in_partnership", "constellation", "findings", "map", "means_for_you"])(
+    "stores a rating for %s",
+    async (sectionId) => {
+      const res = await POST(postRequest({ token: VALID_TOKEN, sectionId, feedback: "up" }));
+      expect(res.status).toBe(200);
+      expect(sentRow().section_id).toBe(sectionId);
+    }
+  );
+
+  it("accepts every section id the report page rates", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { REPORT_FEEDBACK_SECTION_IDS } = await import("@features/report/feedbackSections");
+    const page = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
+    const literals = [...page.matchAll(/renderFeedback\(\s*"([a-z_]+)"/g)].map((m) => m[1]!);
+    expect(literals.length).toBeGreaterThan(3);
+    for (const id of literals) expect(REPORT_FEEDBACK_SECTION_IDS.has(id), id).toBe(true);
+  });
+
+  it("clears a stale issue when the reader switches to a thumbs-up", async () => {
+    await POST(postRequest({ token: VALID_TOKEN, sectionId: VALID_SECTION, feedback: "up" }));
+    expect(sentRow()).toMatchObject({ feedback: "up", issue: null });
+  });
+
+  it("keeps the issue a thumbs-down names", async () => {
+    await POST(
+      postRequest({
+        token: VALID_TOKEN,
+        sectionId: VALID_SECTION,
+        feedback: "down",
+        issue: "unclear",
+      })
+    );
+    expect(sentRow()).toMatchObject({ feedback: "down", issue: "unclear" });
+  });
+
+  it("leaves an earlier issue alone on a thumbs-down without one", async () => {
+    await POST(postRequest({ token: VALID_TOKEN, sectionId: VALID_SECTION, feedback: "down" }));
+    expect(sentRow()).not.toHaveProperty("issue");
+  });
+
+  it("still refuses a section no page rates", async () => {
+    const res = await POST(
+      postRequest({ token: VALID_TOKEN, sectionId: "premium_unlocked", feedback: "up" })
+    );
+    expect(res.status).toBe(400);
+  });
+});

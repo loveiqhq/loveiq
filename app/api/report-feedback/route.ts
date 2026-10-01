@@ -6,17 +6,22 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { reportSections } from "@/data/report-general";
+import {
+  PAGE_ONLY_FEEDBACK_SECTIONS,
+  REPORT_FEEDBACK_SECTION_IDS,
+} from "@features/report/feedbackSections";
 import { resolveReportNavTitle } from "@features/report/sectionTitles";
 import { resolveSubmissionAccessContext } from "@features/report/server/personalReport";
 import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 
-// Whitelist sectionId against the canonical section list. Without this
-// allowlist, an attacker can pollute the feedback table with fictional
-// section IDs ("premium_unlocked", "secret_archetype", etc.) and use the
-// endpoint to enumerate or fingerprint internal section names.
-const VALID_SECTION_IDS = new Set<string>(reportSections.map((section) => section.id));
+// Whitelist sectionId against the sections the page rates (the canonical list, plus
+// the five panels it rates that have no row there). Without this allowlist, an
+// attacker can pollute the feedback table with fictional section IDs
+// ("premium_unlocked", "secret_archetype", etc.) and use the endpoint to enumerate or
+// fingerprint internal section names.
+const VALID_SECTION_IDS = REPORT_FEEDBACK_SECTION_IDS;
 
 // Either sessionId or token must be present. Both are accepted so feedback
 // captures even when the survey session UUID is no longer in browser storage
@@ -123,7 +128,7 @@ async function notifySlackReportFeedback(input: {
   const section = SECTION_BY_ID.get(input.sectionId);
   const chapterName = section
     ? resolveReportNavTitle(section, archetype ?? "your archetype")
-    : input.sectionId;
+    : (PAGE_ONLY_FEEDBACK_SECTIONS[input.sectionId] ?? input.sectionId);
 
   const emoji = input.feedback === "up" ? ":thumbsup:" : ":thumbsdown:";
   // Domain part of the email is interpolated verbatim — escape so a value like
@@ -242,7 +247,11 @@ export async function POST(request: Request) {
     session_id: parsed.data.sessionId ?? null,
   };
   if (parsed.data.comment) row.comment = parsed.data.comment;
-  if (parsed.data.issue) row.issue = parsed.data.issue;
+  // The rating posts on the thumb since 01.10, and a reader may switch it. A thumbs-up
+  // never keeps the issue an earlier thumbs-down named; a thumbs-down keeps one until
+  // it names another.
+  if (parsed.data.feedback === "up") row.issue = null;
+  else if (parsed.data.issue) row.issue = parsed.data.issue;
 
   try {
     // on_conflict targets the new partial unique index on

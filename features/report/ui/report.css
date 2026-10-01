@@ -848,6 +848,26 @@
   color: #6b6678;
 }
 
+/* Review 01.10: a refused rating or message says so instead of "Feedback sent!". Same
+ * toast, its title in the error red. */
+.report-fb--toast.is-failed .report-fb__toast-title {
+  color: #b42318;
+}
+
+/* "Rating saved" — the thumb stores on its own since 01.10; told to assistive tech, the
+ * lit thumb shows it on screen. */
+.report-fb__status {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
 .report-welcome-grid {
   display: grid;
   gap: 1rem;

@@ -108,7 +108,10 @@ export interface ReportExperienceV1Props {
   reportDate: string;
   resolvedSections: ReturnType<typeof resolveReportSections>;
   snapshot: SnapshotContent;
-  submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
+  /** The thumb: stores the rating alone (review 01.10). Resolves to whether it was stored. */
+  rateSection: (sectionId: string, feedback: "up" | "down") => Promise<boolean>;
+  /** Send: the rating with its optional message. Resolves to whether it was stored. */
+  submitFeedback: (sectionId: string, payload: FeedbackPayload) => Promise<boolean>;
   submitted: Record<string, boolean>;
   theme: ReportTheme;
   unlockedArchetypes: Set<string>;
@@ -149,6 +152,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   ranking,
   resolvedSections,
   snapshot,
+  rateSection,
   submitFeedback,
   submitted,
   theme,
@@ -432,6 +436,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
                     sectionTitle={title}
                     value={feedbacks[section.id] ?? null}
                     isSent={submitted[section.id] ?? false}
+                    onRate={(feedback) => rateSection(section.id, feedback)}
                     onFeedback={(payload) => submitFeedback(section.id, payload)}
                   />
                 ) : null;

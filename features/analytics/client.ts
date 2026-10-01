@@ -1057,12 +1057,18 @@ export const trackChapterFeedbackSubmitted = (params: {
   feedback: "up" | "down";
   issue?: string;
   has_comment: boolean;
+  /**
+   * Since 01.10 the thumb stores the rating on its own ("rating"); Send adds the
+   * optional message to the same row ("message").
+   */
+  step?: "rating" | "message";
 }) => {
   const payload = {
     section_id: params.section_id,
     feedback: params.feedback,
     has_comment: params.has_comment,
     ...(params.issue ? { issue: params.issue } : {}),
+    ...(params.step ? { step: params.step } : {}),
   };
   track("chapter_feedback_submitted", payload);
   persistAnalyticsEvent("chapter_feedback_submitted", payload);
