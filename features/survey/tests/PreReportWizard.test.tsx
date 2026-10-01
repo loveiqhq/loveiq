@@ -662,9 +662,21 @@ describe("PreReportWizard — scaled to fit a phone (01.10)", () => {
       const slot = document.querySelector(".wz-slot")!;
       expect(slot).toHaveClass("h-[calc(640px*var(--wz-k))]", "w-[calc(345px*var(--wz-k))]");
       expect(slot).not.toHaveClass("overflow-y-auto");
-      // Figma's 345 x 640, scaled from its top left: the left edge stays 24 in.
-      expect(slot.firstElementChild).toHaveClass(
+      // Figma's 345 x 640, scaled from its top left (the left edge stays 24 in), inside a
+      // box of its scaled size: a transform keeps the unscaled layout box, which would
+      // otherwise be what a scroll box measures (final review 01.10).
+      const sizer = slot.firstElementChild!;
+      expect(sizer).toHaveClass(
+        "wz-fit-box",
+        "relative",
+        "h-[calc(640px*var(--wz-k))]",
+        "w-[calc(345px*var(--wz-k))]"
+      );
+      expect(sizer.firstElementChild).toHaveClass(
         "wz-fit",
+        "absolute",
+        "left-0",
+        "top-0",
         "h-[640px]",
         "w-[345px]",
         "origin-top-left",

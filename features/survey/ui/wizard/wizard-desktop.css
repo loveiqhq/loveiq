@@ -46,6 +46,7 @@
     justify-content: center;
     width: 100%;
   }
+  .wz-root .wz-fit-box,
   .wz-root .wz-fit {
     display: contents;
   }

@@ -80,6 +80,8 @@ describe("wizardFit", () => {
     const notch = wizardFit({ width: 393, height: 699, safeBottom: 34 });
     expect(notch.bottom).toBe(34);
     expect(notch.k).toBeCloseTo((699 - 36 - 99.2 - 34) / 640);
+    // The banner sits over the home indicator's strip, so the two are not added up.
+    expect(wizardFit({ width: 393, height: 852, safeBottom: 34, consent: 316 }).bottom).toBe(316);
     // CookieYes is 316 tall on a phone (ConsentBannerOffset): CONTINUE steps above it.
     const banner = wizardFit({ width: 393, height: 852, consent: 316 });
     expect(banner.bottom).toBe(316);
