@@ -943,7 +943,7 @@ async function main(argv: string[]): Promise<number> {
           button(/^unlock (?!your |the |full )(?:[\w -]+ )?report$/i),
         ]) {
           if (await opener.isVisible().catch(() => false)) {
-            // Centred, not just into view: at a phone's bottom edge the sticky bar covers it.
+            // Centred, not just into view: clear of a phone's sticky unlock bar.
             await opener.evaluate((el) => el.scrollIntoView({ block: "center" })).catch(() => {});
             await page.waitForTimeout(400);
             if (
@@ -1181,10 +1181,10 @@ async function main(argv: string[]): Promise<number> {
             await readScroll();
             log.scrollBeforePaywallPct ??= log.reportScrollPct;
           }
-          // Centred first, as a reader would bring it up: scrolled only into view it sat at a
-          // phone's bottom edge under the sticky unlock bar, and the tap waited until the walk
-          // stopped (two of four walks on 2026-10-01, one the night before). A way that still
-          // cannot be tapped is passed over for the next one rather than ending the walk.
+          // Centred first, as a reader would bring it up, clear of a phone's sticky unlock bar.
+          // A way that still cannot be tapped is passed over for the next one rather than
+          // ending the walk: on 2026-10-01 two of four walks waited on a closed V4 chapter's
+          // "Unlock your report", which is inert, until they stopped.
           await way()
             .evaluate((el) => el.scrollIntoView({ block: "center" }))
             .catch(() => {});
