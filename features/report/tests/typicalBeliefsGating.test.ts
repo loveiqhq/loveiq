@@ -3,12 +3,13 @@ import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
 import {
   buildTypicalBeliefs,
   REPORT_V4_TYPICAL_BELIEFS,
-  TYPICAL_BELIEFS_CHALLENGES,
   TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
-  TYPICAL_BELIEFS_PRACTICE,
   TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
 } from "@/data/report3-typical-beliefs";
 import type { Report3Block } from "@/data/report3-learn-more";
+
+/** Spark Seeker's chapter: hand-set from Figma, the record these tests read. */
+const SPARK_TB = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!;
 
 // These tests pin the switch's decoy position (lockedBlurCopy.ts): what the chapter
 // sends a locked reader when nothing paid rides under the blur. The default since
@@ -64,9 +65,9 @@ describe("buildTypicalBeliefs — unlocked", () => {
   it("hands over every word, nothing split off", () => {
     const view = buildTypicalBeliefs("Spark Seeker")!;
     expect(view.lockedFrom).toBeNull();
-    expect(view.challenges).toEqual({ free: TYPICAL_BELIEFS_CHALLENGES, ramp: null, rest: [] });
+    expect(view.challenges).toEqual({ free: SPARK_TB.challenges, ramp: null, rest: [] });
     expect(view.practice).toMatchObject({
-      free: TYPICAL_BELIEFS_PRACTICE,
+      free: SPARK_TB.practice,
       ramp: null,
       rest: [],
       locked: false,
@@ -83,12 +84,12 @@ describe("buildTypicalBeliefs — locked", () => {
 
   it("splits Common challenges on the server: four clear, one ramp, the rest scrambled", () => {
     expect(view.challenges.free).toEqual(
-      TYPICAL_BELIEFS_CHALLENGES.slice(0, TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS)
+      SPARK_TB.challenges.slice(0, TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS)
     );
     expect(view.challenges.ramp).toEqual(
-      TYPICAL_BELIEFS_CHALLENGES[TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS]
+      SPARK_TB.challenges[TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS]
     );
-    const originals = TYPICAL_BELIEFS_CHALLENGES.slice(TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS + 1);
+    const originals = SPARK_TB.challenges.slice(TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS + 1);
     expect(view.challenges.rest).toHaveLength(originals.length);
     view.challenges.rest.forEach((block, i) => {
       const original = originals[i]!;
@@ -107,12 +108,10 @@ describe("buildTypicalBeliefs — locked", () => {
   it("splits the practice the same way: two clear, the third as the ramp, the rest scrambled", () => {
     expect(view.practice.locked).toBe(true);
     expect(view.practice.free).toEqual(
-      TYPICAL_BELIEFS_PRACTICE.slice(0, TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS)
+      SPARK_TB.practice.slice(0, TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS)
     );
-    expect(view.practice.ramp).toEqual(
-      TYPICAL_BELIEFS_PRACTICE[TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS]
-    );
-    expect(view.practice.rest).toHaveLength(TYPICAL_BELIEFS_PRACTICE.length - 3);
+    expect(view.practice.ramp).toEqual(SPARK_TB.practice[TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS]);
+    expect(view.practice.rest).toHaveLength(SPARK_TB.practice.length - 3);
   });
 
   it("keeps rows 1-4 real, scrambles rows 5-10, and withholds every locked shift", () => {

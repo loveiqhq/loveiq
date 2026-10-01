@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { REPORT_V4_ACCELERATORS } from "@/data/report3-accelerators";
 import { REPORT_V4_FANTASY } from "@/data/report3-fantasy";
 import { REPORT_V4_PARTNERSHIP } from "@/data/report3-partnership";
-import { TYPICAL_BELIEFS_CHALLENGES, TYPICAL_BELIEFS_INTRO } from "@/data/report3-typical-beliefs";
+import { REPORT_V4_TYPICAL_BELIEFS } from "@/data/report3-typical-beliefs";
 import type { Report3Block } from "@/data/report3-learn-more";
+
+/** Spark Seeker's chapter: hand-set from Figma, the record these tests read. */
+const SPARK_TB = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!;
 
 /**
  * Sanjin, 01.10: "don't forget to update the copy at the end, since there were minor
@@ -41,7 +44,7 @@ describe("Sanjin's Spark Seeker copy, 01.10", () => {
 
   it("bolds the belief map's lede as the doc does", () => {
     // [4] is the H2 "The Spark Seeker belief map"; [5] its lede.
-    const runs = paraRuns(TYPICAL_BELIEFS_INTRO[5]);
+    const runs = paraRuns(SPARK_TB.lede[1]);
     expect(runs.filter((r) => r.weight === 700).map((r) => r.text)).toEqual([
       "Spark Seeker",
       "chemistry, anticipation, play, novelty, and the feeling of being actively wanted",
@@ -52,9 +55,11 @@ describe("Sanjin's Spark Seeker copy, 01.10", () => {
   });
 
   it("sets the two shadow beliefs that open the worked examples in bold italic", () => {
-    const quoted = TYPICAL_BELIEFS_CHALLENGES.flatMap((block) =>
-      block.kind === "para" ? block.runs.filter((r) => r.weight === 700 && r.italic) : []
-    ).map((r) => r.text);
+    const quoted = SPARK_TB.challenges
+      .flatMap((block) =>
+        block.kind === "para" ? block.runs.filter((r) => r.weight === 700 && r.italic) : []
+      )
+      .map((r) => r.text);
     expect(quoted).toEqual([
       "“If sex has to be planned, the spark must be gone.”",
       "“Being desired proves that I am still attractive and exciting.”",

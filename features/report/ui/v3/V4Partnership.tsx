@@ -92,7 +92,9 @@ const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
             aria-hidden={locked ? true : undefined}
             inert={locked}
           >
-            <V4Prose blocks={[view.result]} />
+            {/* The result, then what other archetypes' chapters run after it (no frame
+             * draws that tail: it takes the result's place and its blur). */}
+            <V4Prose blocks={[view.result, ...(view.tail ?? [])]} />
           </div>
         </div>
 

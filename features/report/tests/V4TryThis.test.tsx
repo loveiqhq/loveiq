@@ -4,8 +4,11 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4TryThis from "@features/report/ui/v3/V4TryThis";
-import { buildTypicalBeliefs, TYPICAL_BELIEFS_PRACTICE } from "@/data/report3-typical-beliefs";
+import { buildTypicalBeliefs, REPORT_V4_TYPICAL_BELIEFS } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
+
+/** Spark Seeker's chapter: hand-set from Figma, the record these tests read. */
+const SPARK_TB = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!;
 
 /**
  * "Try this & see what shifts" — Figma 374:217 (closed), 374:238 (open) and
@@ -119,9 +122,7 @@ describe("V4TryThis — open (374:238)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Read all of the practice" }));
     expect(container.querySelector(".rv4-try")!.classList.contains("is-open")).toBe(true);
     expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("374:238");
-    expect(container.querySelectorAll(".rv4-prose__p")).toHaveLength(
-      TYPICAL_BELIEFS_PRACTICE.length
-    );
+    expect(container.querySelectorAll(".rv4-prose__p")).toHaveLength(SPARK_TB.practice.length);
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(screen.getByRole("button", { name: /Try this/ }).getAttribute("aria-expanded")).toBe(
       "true"
@@ -158,9 +159,7 @@ describe("V4TryThis — open & gated (374:258)", () => {
     expect(ramp.textContent).toContain("Separate the event from its meaning.");
     const blurred = container.querySelector(".rv4-try__blurred")!;
     // The rest, under the blur: since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
-    expect(blurred.querySelectorAll(".rv4-prose__p")).toHaveLength(
-      TYPICAL_BELIEFS_PRACTICE.length - 3
-    );
+    expect(blurred.querySelectorAll(".rv4-prose__p")).toHaveLength(SPARK_TB.practice.length - 3);
     expect(blurred.textContent).toContain("Name the rule underneath it.");
     expect(blurred.textContent).toContain("The goal is not for the Spark Seeker");
     for (const el of [ramp, blurred]) {

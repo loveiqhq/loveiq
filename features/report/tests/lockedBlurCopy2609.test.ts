@@ -12,15 +12,16 @@ import { buildPartnership, REPORT_V4_PARTNERSHIP } from "@/data/report3-partners
 import {
   buildTypicalBeliefs,
   REPORT_V4_TYPICAL_BELIEFS,
-  TYPICAL_BELIEFS_CHALLENGES,
   TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
   TYPICAL_BELIEFS_FREE_ROWS,
-  TYPICAL_BELIEFS_PRACTICE,
   TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
 } from "@/data/report3-typical-beliefs";
 import type { Report3Block } from "@/data/report3-learn-more";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { getFantasyMapDots } from "@features/report/server/fantasyMap";
+
+/** Spark Seeker's chapter: hand-set from Figma, the record these tests read. */
+const SPARK_TB = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!;
 
 /**
  * What a locked reader receives under the blur since review 26.09 — the switch's
@@ -79,10 +80,10 @@ describe("Typical Beliefs, locked — the rows under the full blur are the real 
 
   it("sends the gated challenges and practice as written", () => {
     expect(texts(view.challenges.rest)).toEqual(
-      texts(TYPICAL_BELIEFS_CHALLENGES.slice(TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS + 1))
+      texts(SPARK_TB.challenges.slice(TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS + 1))
     );
     expect(texts(view.practice.rest)).toEqual(
-      texts(TYPICAL_BELIEFS_PRACTICE.slice(TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS + 1))
+      texts(SPARK_TB.practice.slice(TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS + 1))
     );
   });
 });

@@ -30,6 +30,7 @@ import {
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
 import type { Report3Block } from "./report3-learn-more";
+import { chapterCopy } from "./report3-copy";
 import type { Report3Run } from "./report3-archetype-page";
 
 const t = (text: string): Report3Run => ({ text });
@@ -46,22 +47,45 @@ export interface Report3TriggerRow {
   subtext: string;
 }
 
-/** Everything one archetype's chapter needs, as authored. */
-export interface Report3AcceleratorsCopy {
-  intro: readonly Report3Block[];
-  brakesLead: string;
-  brakes: readonly Report3TriggerRow[];
-  acceleratorsLead: string;
-  accelerators: readonly Report3TriggerRow[];
-  challengesTitle: string;
-  challenges: readonly Report3Block[];
-  practiceEyebrow: string;
-  practiceTitle: string;
-  practice: readonly Report3Block[];
-  /** 377:221 re-breaks the first practice paragraph for the closed card. */
-  practiceTeaser: readonly Report3Block[];
+/**
+ * Where an archetype's paywall falls in the chapter: rows of the two cards kept sharp,
+ * blocks of "Common challenges" and of the practice kept sharp, and where the practice's
+ * ramp paragraph stops being real (null: real throughout, as the other ramps are).
+ * Omitted, a cut takes Figma's (Spark Seeker's frames: the ACCELERATORS_* constants).
+ */
+export interface Report3AcceleratorsCuts {
+  freeRows: number;
+  challengesFree: number;
+  practiceFree: number;
+  practiceRampThrough: string | null;
 }
 
+/**
+ * Everything one archetype's chapter needs, as authored. The leads, titles, eyebrow and
+ * teaser are Figma's for Spark Seeker; Sanjin's docs have none, so another archetype may
+ * leave them out: no lead line, the universal titles, Spark Seeker's practice time, and
+ * the first free practice paragraph as the closed card's teaser.
+ */
+export interface Report3AcceleratorsCopy {
+  intro: readonly Report3Block[];
+  brakesLead?: string;
+  brakes: readonly Report3TriggerRow[];
+  acceleratorsLead?: string;
+  accelerators: readonly Report3TriggerRow[];
+  challengesTitle?: string;
+  challenges: readonly Report3Block[];
+  practiceEyebrow?: string;
+  practiceTitle?: string;
+  practice: readonly Report3Block[];
+  /** 377:221 re-breaks the first practice paragraph for the closed card. */
+  practiceTeaser?: readonly Report3Block[];
+  cuts?: Partial<Report3AcceleratorsCuts>;
+}
+
+/**
+ * Every archetype's chapter, by display name: Spark Seeker hand-set from Figma here, the
+ * others transcribed from Sanjin's docs (data/report3-copy).
+ */
 export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3AcceleratorsCopy>> = {
   "Spark Seeker": {
     // 310:231 — five paragraphs in a 356px box.
@@ -280,6 +304,7 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
       ),
     ],
   },
+  ...chapterCopy("accelerators"),
 };
 
 /**
@@ -288,9 +313,10 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
  */
 export interface Report3AcceleratorsView {
   intro: readonly Report3Block[];
-  brakesLead: string;
+  /** Null where the archetype's chapter has no lead line (Report3AcceleratorsCopy). */
+  brakesLead: string | null;
   brakes: readonly Report3TriggerRow[];
-  acceleratorsLead: string;
+  acceleratorsLead: string | null;
   accelerators: readonly Report3TriggerRow[];
   /**
    * Index of the first locked row in both cards, or null when the chapter is open.
@@ -326,6 +352,11 @@ export const ACCELERATORS_PRACTICE_FREE_BLOCKS = 1;
  */
 export const ACCELERATORS_PRACTICE_RAMP_THROUGH = "harder to respond?”";
 
+/** The universal titles, and Spark Seeker's practice time: the defaults. */
+export const ACCELERATORS_CHALLENGES_TITLE = "Common challenges";
+export const ACCELERATORS_PRACTICE_TITLE = "Try this & see what shifts";
+export const ACCELERATORS_PRACTICE_EYEBROW = "Practice time: ~12 min.";
+
 /** A row under the lock: as written, or its decoy (lockedBlurCopy.ts). */
 const veilRow = (row: Report3TriggerRow): Report3TriggerRow => ({
   ...row,
@@ -333,8 +364,10 @@ const veilRow = (row: Report3TriggerRow): Report3TriggerRow => ({
   subtext: veilText(row.subtext),
 });
 
-const rampOf = (gated: Report3GatedCopy, realThrough: string): Report3GatedCopy =>
-  gated.ramp ? { ...gated, ramp: splitRamp(gated.ramp, realThrough) } : gated;
+const rampOf = (gated: Report3GatedCopy, realThrough: string | null): Report3GatedCopy =>
+  gated.ramp && realThrough !== null
+    ? { ...gated, ramp: splitRamp(gated.ramp, realThrough) }
+    : gated;
 
 /**
  * Server-side assembly. Returns null for an archetype nobody has written yet, which
@@ -353,29 +386,34 @@ export function buildAccelerators(
 ): Report3AcceleratorsView | null {
   const copy = REPORT_V4_ACCELERATORS[archetype];
   if (!copy) return null;
-  const lockedFrom = locked ? ACCELERATORS_FREE_ROWS : null;
+  const cuts: Report3AcceleratorsCuts = {
+    freeRows: ACCELERATORS_FREE_ROWS,
+    challengesFree: ACCELERATORS_CHALLENGES_FREE_BLOCKS,
+    practiceFree: ACCELERATORS_PRACTICE_FREE_BLOCKS,
+    practiceRampThrough: ACCELERATORS_PRACTICE_RAMP_THROUGH,
+    ...copy.cuts,
+  };
+  const lockedFrom = locked ? cuts.freeRows : null;
   // The ramp row (index lockedFrom) is legible at its sharp end, so only the rows
   // under the full blur are veiled.
   const rows = (list: readonly Report3TriggerRow[]) =>
     list.map((row, index) => (lockedFrom !== null && index > lockedFrom ? veilRow(row) : row));
   return {
     intro: copy.intro,
-    brakesLead: copy.brakesLead,
+    brakesLead: copy.brakesLead ?? null,
     brakes: rows(copy.brakes),
-    acceleratorsLead: copy.acceleratorsLead,
+    acceleratorsLead: copy.acceleratorsLead ?? null,
     accelerators: rows(copy.accelerators),
     lockedFrom,
-    challengesTitle: copy.challengesTitle,
-    challenges: gate(copy.challenges, ACCELERATORS_CHALLENGES_FREE_BLOCKS, locked),
+    challengesTitle: copy.challengesTitle ?? ACCELERATORS_CHALLENGES_TITLE,
+    challenges: gate(copy.challenges, cuts.challengesFree, locked),
     practice: {
-      eyebrow: copy.practiceEyebrow,
-      title: copy.practiceTitle,
+      eyebrow: copy.practiceEyebrow ?? ACCELERATORS_PRACTICE_EYEBROW,
+      title: copy.practiceTitle ?? ACCELERATORS_PRACTICE_TITLE,
       locked,
-      teaser: copy.practiceTeaser,
-      ...rampOf(
-        gate(copy.practice, ACCELERATORS_PRACTICE_FREE_BLOCKS, locked),
-        ACCELERATORS_PRACTICE_RAMP_THROUGH
-      ),
+      // Free copy: never past the practice's own wall.
+      teaser: copy.practiceTeaser ?? copy.practice.slice(0, Math.min(1, cuts.practiceFree)),
+      ...rampOf(gate(copy.practice, cuts.practiceFree, locked), cuts.practiceRampThrough),
     },
   };
 }
