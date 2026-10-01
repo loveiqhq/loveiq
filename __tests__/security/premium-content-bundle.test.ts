@@ -73,6 +73,13 @@ const PREMIUM_DATA_MODULES = [
   "@features/report/server/fantasyCopy",
 ];
 
+/**
+ * Whole folders of paid copy: the module itself and anything under it. Added 2026-10-01
+ * for the other 13 archetypes' V4 chapters (Sanjin's docs), one file per archetype in
+ * data/report3-copy: an exact-path rule would let a new archetype's file slip through.
+ */
+const PREMIUM_DATA_PREFIXES = ["@/data/report3-copy"];
+
 const PROJECT_ROOT = join(__dirname, "..", "..");
 
 function isClientComponent(content: string): boolean {
@@ -93,10 +100,33 @@ function findRuntimePremiumImports(content: string): string[] {
       violations.push(moduleName);
     }
   }
+  for (const prefix of PREMIUM_DATA_PREFIXES) {
+    const runtimeImport = new RegExp(
+      String.raw`^\s*import\s+(?!type\b)[^"';]*from\s+["'](${prefix}(?:/[^"']*)?)["']`,
+      "m"
+    );
+    const match = runtimeImport.exec(content);
+    if (match) violations.push(match[1]!);
+  }
   return violations;
 }
 
 describe("premium content bundle isolation", () => {
+  it("guards a paid folder's every file, and still lets a type through", () => {
+    const flagged = findRuntimePremiumImports(
+      `import { MINIMALIST_COMPANION } from "@/data/report3-copy/minimalist-companion";`
+    );
+    expect(flagged).toEqual(["@/data/report3-copy/minimalist-companion"]);
+    expect(findRuntimePremiumImports(`import { chapterCopy } from "@/data/report3-copy";`)).toEqual(
+      ["@/data/report3-copy"]
+    );
+    expect(
+      findRuntimePremiumImports(
+        `import type { Report3ArchetypeCopy } from "@/data/report3-copy/types";`
+      )
+    ).toEqual([]);
+  });
+
   it("no client component imports archetype prose or practice tendency scores at runtime", () => {
     const featuresUiRoot = join(PROJECT_ROOT, "features");
     const sharedUiRoot = join(PROJECT_ROOT, "shared", "ui");

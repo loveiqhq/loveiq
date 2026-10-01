@@ -34,6 +34,7 @@ import {
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
 import type { Report3Block } from "./report3-learn-more";
+import { chapterCopy } from "./report3-copy";
 import type { Report3Run } from "./report3-archetype-page";
 
 const t = (text: string): Report3Run => ({ text });
@@ -54,6 +55,17 @@ export interface Report3LoopStage {
   underneath: string;
 }
 
+/**
+ * Where an archetype's paywall falls in the chapter: blocks of the body kept sharp, where the
+ * body's ramp paragraph stops being real (null: real throughout), and blocks of the practice
+ * kept sharp. Omitted, a cut takes Figma's (Spark Seeker's frames: the PARTNERSHIP_* constants).
+ */
+export interface Report3PartnershipCuts {
+  freeBlocks: number;
+  rampThrough: string | null;
+  practiceFree: number;
+}
+
 /** Everything one archetype's chapter needs, as authored. */
 export interface Report3PartnershipCopy {
   /** 38:1681 — sixteen blocks; the sixth is the inline "Common challenges". */
@@ -62,12 +74,20 @@ export interface Report3PartnershipCopy {
   loop: readonly Report3LoopStage[];
   /** 647:229 — the paragraph after the loop. */
   result: Report3Block;
-  practiceEyebrow: string;
-  practiceTitle: string;
+  /** Omitted: Spark Seeker's "Practice time: ~10 min.". */
+  practiceEyebrow?: string;
+  practiceTitle?: string;
   /** 399:259 — ONE ordered list; split for a locked reader only (buildPartnership). */
   practice: readonly Report3Block[];
   /** 399:219 / 401:222 — the closed card's teaser: practice paragraphs 1-2. */
-  practiceTeaser: readonly Report3Block[];
+  practiceTeaser?: readonly Report3Block[];
+  /**
+   * What every other archetype's chapter (Sanjin's docs) runs after the loop's result, 4 to
+   * 8 paragraphs. Spark Seeker's ends on the result. No frame draws it: it follows the
+   * result, blurred with it for a locked reader.
+   */
+  tail?: readonly Report3Block[];
+  cuts?: Partial<Report3PartnershipCuts>;
 }
 
 const SPARK_PRACTICE: readonly Report3Block[] = [
@@ -286,6 +306,7 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
     practice: SPARK_PRACTICE,
     practiceTeaser: SPARK_PRACTICE.slice(0, 2),
   },
+  ...chapterCopy("partnership"),
 };
 
 /**
@@ -300,6 +321,8 @@ export interface Report3PartnershipView {
   loop: readonly Report3LoopStage[];
   /** Blurred when locked (659:234): the copy itself, or its decoy (lockedBlurCopy.ts). */
   result: Report3Block;
+  /** After the result, blurred with it when locked; absent where the chapter ends on it. */
+  tail?: readonly Report3Block[];
   practice: Report3PracticeView;
 }
 
@@ -322,6 +345,10 @@ export const PARTNERSHIP_RAMP_THROUGH = "vulnerable needs more directly,";
  * where it reads clear anyway) and the ramp is items 1-2.
  */
 export const PARTNERSHIP_PRACTICE_FREE_BLOCKS = 3;
+
+/** The universal title, and Spark Seeker's practice time: the defaults. */
+export const PARTNERSHIP_PRACTICE_TITLE = "Try this & see what shifts";
+export const PARTNERSHIP_PRACTICE_EYEBROW = "Practice time: ~10 min.";
 
 /** A loop stage under the blur: as written, or its decoy (lockedBlurCopy.ts). */
 const veilStage = (stage: Report3LoopStage): Report3LoopStage => ({
@@ -363,22 +390,29 @@ export function buildPartnership(
 ): Report3PartnershipView | null {
   const copy = REPORT_V4_PARTNERSHIP[archetype];
   if (!copy) return null;
-  const body = gate(copy.body, PARTNERSHIP_FREE_BLOCKS, locked);
+  const cuts: Report3PartnershipCuts = {
+    freeBlocks: PARTNERSHIP_FREE_BLOCKS,
+    rampThrough: PARTNERSHIP_RAMP_THROUGH,
+    practiceFree: PARTNERSHIP_PRACTICE_FREE_BLOCKS,
+    ...copy.cuts,
+  };
+  const body = gate(copy.body, cuts.freeBlocks, locked);
   return {
     locked,
-    body: body.ramp ? { ...body, ramp: splitRamp(body.ramp, PARTNERSHIP_RAMP_THROUGH) } : body,
+    body:
+      body.ramp && cuts.rampThrough !== null
+        ? { ...body, ramp: splitRamp(body.ramp, cuts.rampThrough) }
+        : body,
     loop: locked ? copy.loop.map(veilStage) : copy.loop,
     result: locked ? veilBlock(copy.result) : copy.result,
+    ...(copy.tail?.length ? { tail: locked ? copy.tail.map(veilBlock) : copy.tail } : {}),
     practice: {
-      eyebrow: copy.practiceEyebrow,
-      title: copy.practiceTitle,
+      eyebrow: copy.practiceEyebrow ?? PARTNERSHIP_PRACTICE_EYEBROW,
+      title: copy.practiceTitle ?? PARTNERSHIP_PRACTICE_TITLE,
       locked,
-      teaser: copy.practiceTeaser,
-      ...gate(
-        locked ? splitPracticeList(copy.practice) : copy.practice,
-        PARTNERSHIP_PRACTICE_FREE_BLOCKS,
-        locked
-      ),
+      // Free copy: never past the practice's own wall.
+      teaser: copy.practiceTeaser ?? copy.practice.slice(0, Math.min(2, cuts.practiceFree)),
+      ...gate(locked ? splitPracticeList(copy.practice) : copy.practice, cuts.practiceFree, locked),
     },
   };
 }

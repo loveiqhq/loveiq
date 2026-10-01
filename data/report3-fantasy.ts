@@ -34,6 +34,7 @@ import {
   type ReportPracticeTendencyRow,
 } from "./report-practice-tendencies";
 import type { Report3Block } from "./report3-learn-more";
+import { chapterCopy } from "./report3-copy";
 import type { Report3Run } from "./report3-archetype-page";
 
 const t = (text: string): Report3Run => ({ text });
@@ -42,18 +43,30 @@ const i = (text: string): Report3Run => ({ text, italic: true });
 const p = (...runs: Report3Run[]): Report3Block => ({ kind: "para", runs });
 const h = (text: string): Report3Block => ({ kind: "heading", text });
 
+/**
+ * Where an archetype's paywall falls in the practice: blocks kept sharp. (The table's cuts
+ * are the same for every archetype, and "Common challenges" is blurred whole.) Omitted,
+ * Figma's: FANTASY_PRACTICE_FREE_BLOCKS.
+ */
+export interface Report3FantasyCuts {
+  practiceFree: number;
+}
+
 /** Everything one archetype's chapter needs, as authored. */
 export interface Report3FantasyCopy {
   /** 304:291 — twelve blocks; the sixth is the heading "What a fantasy might actually be about". */
   intro: readonly Report3Block[];
   /** 368:1920 — the heading "Common challenges", then thirteen paragraphs. */
   challenges: readonly Report3Block[];
-  practiceEyebrow: string;
-  practiceTitle: string;
+  /** Omitted: Spark Seeker's "Practice time: ~8 min.". */
+  practiceEyebrow?: string;
+  practiceTitle?: string;
   /** 441:6187 — ten paragraphs. */
   practice: readonly Report3Block[];
   /** 441:6422 — the closed card's teaser: practice paragraphs 1-2. */
-  practiceTeaser: readonly Report3Block[];
+  /** Omitted: the practice's first two paragraphs, never past its wall. */
+  practiceTeaser?: readonly Report3Block[];
+  cuts?: Partial<Report3FantasyCuts>;
 }
 
 const SPARK_INTRO: readonly Report3Block[] = [
@@ -242,6 +255,7 @@ export const REPORT_V4_FANTASY: Readonly<Record<string, Report3FantasyCopy>> = {
     practice: SPARK_PRACTICE,
     practiceTeaser: SPARK_PRACTICE.slice(0, 2),
   },
+  ...chapterCopy("fantasy"),
 };
 
 /**
@@ -325,6 +339,10 @@ export const FANTASY_CLOSED_BLURRED_ROWS = 3;
  */
 export const FANTASY_PRACTICE_FREE_BLOCKS = 3;
 
+/** The universal title, and Spark Seeker's practice time: the defaults. */
+export const FANTASY_PRACTICE_TITLE = "Try this & see what shifts";
+export const FANTASY_PRACTICE_EYEBROW = "Practice time: ~8 min.";
+
 const realRow = (row: ReportPracticeTendencyRow): Report3FantasyRow => ({
   practice: row.practice,
   pull: row.fantasyPull,
@@ -371,6 +389,7 @@ export function buildFantasy(
   const copy = REPORT_V4_FANTASY[archetype];
   const tendencies = reportPracticeTendencies[archetype];
   if (!copy || !tendencies) return null;
+  const { practiceFree } = { practiceFree: FANTASY_PRACTICE_FREE_BLOCKS, ...copy.cuts };
   const categories = tendencies.groups.map((group, index): Report3FantasyCategory => {
     const total = group.rows.length;
     if (!locked) {
@@ -402,11 +421,12 @@ export function buildFantasy(
     table: { locked, categories },
     challenges: locked ? copy.challenges.map(veilBlock) : copy.challenges,
     practice: {
-      eyebrow: copy.practiceEyebrow,
-      title: copy.practiceTitle,
+      eyebrow: copy.practiceEyebrow ?? FANTASY_PRACTICE_EYEBROW,
+      title: copy.practiceTitle ?? FANTASY_PRACTICE_TITLE,
       locked,
-      teaser: copy.practiceTeaser,
-      ...gate(copy.practice, FANTASY_PRACTICE_FREE_BLOCKS, locked),
+      // Free copy: never past the practice's own wall.
+      teaser: copy.practiceTeaser ?? copy.practice.slice(0, Math.min(2, practiceFree)),
+      ...gate(copy.practice, practiceFree, locked),
     },
   };
 }

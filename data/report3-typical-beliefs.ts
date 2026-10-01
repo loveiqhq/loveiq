@@ -30,69 +30,90 @@ export interface Report3BeliefPanels {
   sun: readonly string[];
 }
 
-export const REPORT_V4_TYPICAL_BELIEFS: Readonly<Record<string, Report3BeliefPanels>> = {
-  "Spark Seeker": {
-    turns: [
-      {
-        shadow: "“If sex has to be planned, the spark must be gone.”",
-        shift: "“Planning can create the conditions for anticipation and spark.”",
-      },
-      {
-        shadow: "“Real desire should happen spontaneously.”",
-        shift: "“Spontaneous desire excites me, but desire can also emerge once intimacy begins.”",
-      },
-      {
-        shadow: "“If things feel predictable, attraction must be fading.”",
-        shift:
-          "“Familiarity can lower excitement sometimes without saying anything definitive about attraction.”",
-      },
-      {
-        shadow: "“Good sex should keep becoming more exciting.”",
-        shift:
-          "“Great sex does not always need to escalate. Sometimes depth, connection, or anticipation can be just as powerful.”",
-      },
-      {
-        shadow: "“I need novelty to stay sexually interested.”",
-        shift:
-          "“Novelty strongly activates my desire, but I can create freshness without constantly needing something completely new.”",
-      },
-      {
-        shadow: "“If my partner rarely initiates, they must not really want me.”",
-        shift:
-          "“Initiation is one expression of desire, not the only evidence that desire exists.”",
-      },
-      {
-        shadow: "“Being desired proves that I am still attractive and exciting.”",
-        shift: "“Being desired feels good, but it does not determine my worth or attractiveness.”",
-      },
-      {
-        shadow: "“Talking about how to make sex better makes it less natural.”",
-        shift: "“Talking openly can give us more material to play with, not less.”",
-      },
-      {
-        shadow: "“If I have to ask for flirting or pursuit, it no longer counts.”",
-        shift: "“Asking for what turns me on does not make the response less genuine.”",
-      },
-      {
-        shadow: "“Once a relationship becomes too safe or routine, passion inevitably disappears.”",
-        shift:
-          "“Safety and excitement can coexist, especially when we keep creating room for curiosity and play.”",
-      },
-    ],
-    /** 368:5623 — ten sun beliefs of their own, in the frame's order. */
-    sun: [
-      "“Curiosity is one of the ways I keep my sexuality alive.”",
-      "“I enjoy discovering new sides of myself, my partner, and what turns us on.”",
-      "“I can bring playfulness and energy into intimacy instead of waiting for excitement to appear on its own.”",
-      "“Anticipation can be erotic in itself. Flirting, teasing, and build-up can make desire stronger.”",
-      "“I am allowed to want variety, experimentation, and change without assuming something is missing.”",
-      "“I can be open about what excites me and invite my partner into that exploration.”",
-      "“Familiarity can give me enough safety to experiment more boldly.”",
-      "“I notice chemistry quickly, and I can use that sensitivity to understand what makes desire come alive for me.”",
-      "“I can create novelty through small changes in mood, setting, energy, or interaction, not only through completely new experiences.”",
-      "“Sex can stay alive when I treat excitement as something I can participate in creating.”",
-    ],
-  },
+/**
+ * Where an archetype's paywall falls in the chapter: rows of the two panels turned before
+ * the wall, and blocks of "Common challenges" and of the practice kept sharp. Omitted, a
+ * cut takes Figma's (Spark Seeker's frames: the TYPICAL_BELIEFS_* constants below).
+ */
+export interface Report3TypicalBeliefsCuts {
+  freeRows: number;
+  challengesFree: number;
+  practiceFree: number;
+}
+
+/** One archetype's chapter: the panels and the prose that is its own. */
+export interface Report3TypicalBeliefsCopy extends Report3BeliefPanels {
+  /** The belief map's heading and its lede, after the four universal paragraphs. */
+  lede: readonly Report3Block[];
+  /** "Common challenges", under its title. */
+  challenges: readonly Report3Block[];
+  /** Omitted: Spark Seeker's "Practice time: ~15 min.". */
+  practiceEyebrow?: string;
+  practice: readonly Report3Block[];
+  cuts?: Partial<Report3TypicalBeliefsCuts>;
+}
+
+/** Spark Seeker's panels, read off the frame (above). */
+const SPARK_PANELS: Report3BeliefPanels = {
+  turns: [
+    {
+      shadow: "“If sex has to be planned, the spark must be gone.”",
+      shift: "“Planning can create the conditions for anticipation and spark.”",
+    },
+    {
+      shadow: "“Real desire should happen spontaneously.”",
+      shift: "“Spontaneous desire excites me, but desire can also emerge once intimacy begins.”",
+    },
+    {
+      shadow: "“If things feel predictable, attraction must be fading.”",
+      shift:
+        "“Familiarity can lower excitement sometimes without saying anything definitive about attraction.”",
+    },
+    {
+      shadow: "“Good sex should keep becoming more exciting.”",
+      shift:
+        "“Great sex does not always need to escalate. Sometimes depth, connection, or anticipation can be just as powerful.”",
+    },
+    {
+      shadow: "“I need novelty to stay sexually interested.”",
+      shift:
+        "“Novelty strongly activates my desire, but I can create freshness without constantly needing something completely new.”",
+    },
+    {
+      shadow: "“If my partner rarely initiates, they must not really want me.”",
+      shift: "“Initiation is one expression of desire, not the only evidence that desire exists.”",
+    },
+    {
+      shadow: "“Being desired proves that I am still attractive and exciting.”",
+      shift: "“Being desired feels good, but it does not determine my worth or attractiveness.”",
+    },
+    {
+      shadow: "“Talking about how to make sex better makes it less natural.”",
+      shift: "“Talking openly can give us more material to play with, not less.”",
+    },
+    {
+      shadow: "“If I have to ask for flirting or pursuit, it no longer counts.”",
+      shift: "“Asking for what turns me on does not make the response less genuine.”",
+    },
+    {
+      shadow: "“Once a relationship becomes too safe or routine, passion inevitably disappears.”",
+      shift:
+        "“Safety and excitement can coexist, especially when we keep creating room for curiosity and play.”",
+    },
+  ],
+  /** 368:5623 — ten sun beliefs of their own, in the frame's order. */
+  sun: [
+    "“Curiosity is one of the ways I keep my sexuality alive.”",
+    "“I enjoy discovering new sides of myself, my partner, and what turns us on.”",
+    "“I can bring playfulness and energy into intimacy instead of waiting for excitement to appear on its own.”",
+    "“Anticipation can be erotic in itself. Flirting, teasing, and build-up can make desire stronger.”",
+    "“I am allowed to want variety, experimentation, and change without assuming something is missing.”",
+    "“I can be open about what excites me and invite my partner into that exploration.”",
+    "“Familiarity can give me enough safety to experiment more boldly.”",
+    "“I notice chemistry quickly, and I can use that sensitivity to understand what makes desire come alive for me.”",
+    "“I can create novelty through small changes in mood, setting, energy, or interaction, not only through completely new experiences.”",
+    "“Sex can stay alive when I treat excitement as something I can participate in creating.”",
+  ],
 };
 
 /* ─── chapter prose ──────────────────────────────────────────────────────────
@@ -114,6 +135,7 @@ import {
 } from "@features/report/server/gatedCopy";
 import type { Report3Block } from "./report3-learn-more";
 import type { Report3Run } from "./report3-archetype-page";
+import { chapterCopy } from "./report3-copy";
 
 const t = (text: string): Report3Run => ({ text });
 const b = (text: string): Report3Run => ({ text, weight: 700 });
@@ -125,7 +147,11 @@ const h = (text: string): Report3Block => ({ kind: "heading", text });
 /** 304:277 — Mark, 28.09: "H2"; the same level as the chapter title "Common challenges". */
 const h2 = (text: string): Report3Block => ({ kind: "heading", text, level: 2 });
 
-/** 304:269 through 304:279 — everything above the coral panel. */
+/**
+ * 304:269 through 304:275 — the four paragraphs every archetype's chapter opens on
+ * (verbatim in Sanjin's docs for each). The belief map's heading and lede follow, each
+ * archetype's own.
+ */
 export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
   p(
     t(
@@ -154,6 +180,10 @@ export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
       ". Sun beliefs tend to create more room for flexibility, curiosity, and choice. Shadow beliefs make the meaning of a situation more rigid or conditional. A shadow belief is not necessarily false or irrational. It may have developed for understandable reasons. The important question is whether it still helps interpret the present accurately."
     )
   ),
+];
+
+/** 304:277 through 304:279 — Spark Seeker's belief map heading and lede. */
+const SPARK_LEDE: readonly Report3Block[] = [
   h2("The Spark Seeker belief map"),
   // Sanjin's doc bolds two runs here (29.09), after the frame was set.
   p(
@@ -170,8 +200,8 @@ export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
 /** 304:379 — the chapter's only H2, and the frame's only 18px heading. */
 export const TYPICAL_BELIEFS_CHALLENGES_TITLE = "Common challenges";
 
-/** 304:380 through 304:410 — the two worked examples, below the green panel. */
-export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
+/** 304:380 through 304:410 — Spark Seeker's two worked examples, below the green panel. */
+const SPARK_CHALLENGES: readonly Report3Block[] = [
   h("When spontaneity becomes proof of desire"),
   p(t("Consider the shadow belief "), bi("“If sex has to be planned, the spark must be gone.”")),
   p(
@@ -250,7 +280,7 @@ export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
 export const TYPICAL_BELIEFS_PRACTICE_EYEBROW = "Practice time: ~15 min.";
 export const TYPICAL_BELIEFS_PRACTICE_TITLE = "Try this & see what shifts";
 
-export const TYPICAL_BELIEFS_PRACTICE: readonly Report3Block[] = [
+const SPARK_PRACTICE: readonly Report3Block[] = [
   p(
     t(
       "The goal is not to eliminate shadow beliefs or replace them with artificially positive ones. It is to notice when an automatic interpretation has quietly turned into a fact."
@@ -320,6 +350,20 @@ export const TYPICAL_BELIEFS_PRACTICE: readonly Report3Block[] = [
 ];
 
 /**
+ * Every archetype's chapter, by display name: Spark Seeker hand-set from Figma above, the
+ * others transcribed from Sanjin's docs (data/report3-copy).
+ */
+export const REPORT_V4_TYPICAL_BELIEFS: Readonly<Record<string, Report3TypicalBeliefsCopy>> = {
+  "Spark Seeker": {
+    ...SPARK_PANELS,
+    lede: SPARK_LEDE,
+    challenges: SPARK_CHALLENGES,
+    practice: SPARK_PRACTICE,
+  },
+  ...chapterCopy("typicalBeliefs"),
+};
+
+/**
  * The gated-passage and practice shapes now live with the split itself, in
  * features/report/server/gatedCopy.ts, which Accelerator & Brakes shares. Re-exported
  * so this module's importers keep one place to take a chapter's types from.
@@ -360,7 +404,7 @@ export interface Report3BeliefTurnView {
   shift: string | null;
 }
 
-/** 381:222 turns three rows before the wall. */
+/** 381:222 turns three rows before the wall. Figma's, the default (Report3TypicalBeliefsCuts). */
 export const TYPICAL_BELIEFS_FREE_ROWS = 3;
 
 /**
@@ -389,27 +433,33 @@ export function buildTypicalBeliefs(
   archetype: string,
   { locked = false }: { locked?: boolean } = {}
 ): Report3TypicalBeliefsView | null {
-  const panels = REPORT_V4_TYPICAL_BELIEFS[archetype];
-  if (!panels) return null;
-  const lockedFrom = locked ? TYPICAL_BELIEFS_FREE_ROWS : null;
+  const copy = REPORT_V4_TYPICAL_BELIEFS[archetype];
+  if (!copy) return null;
+  const cuts: Report3TypicalBeliefsCuts = {
+    freeRows: TYPICAL_BELIEFS_FREE_ROWS,
+    challengesFree: TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
+    practiceFree: TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
+    ...copy.cuts,
+  };
+  const lockedFrom = locked ? cuts.freeRows : null;
   const underFullBlur = (i: number) => lockedFrom !== null && i > lockedFrom;
   return {
-    intro: TYPICAL_BELIEFS_INTRO,
+    intro: [...TYPICAL_BELIEFS_INTRO, ...copy.lede],
     panels: {
-      turns: panels.turns.map((turn, i) => ({
+      turns: copy.turns.map((turn, i) => ({
         shadow: underFullBlur(i) ? veilText(turn.shadow) : turn.shadow,
         shift: lockedFrom !== null && i >= lockedFrom ? null : turn.shift,
       })),
-      sun: panels.sun.map((belief, i) => (underFullBlur(i) ? veilText(belief) : belief)),
+      sun: copy.sun.map((belief, i) => (underFullBlur(i) ? veilText(belief) : belief)),
     },
     lockedFrom,
     challengesTitle: TYPICAL_BELIEFS_CHALLENGES_TITLE,
-    challenges: gate(TYPICAL_BELIEFS_CHALLENGES, TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS, locked),
+    challenges: gate(copy.challenges, cuts.challengesFree, locked),
     practice: {
-      eyebrow: TYPICAL_BELIEFS_PRACTICE_EYEBROW,
+      eyebrow: copy.practiceEyebrow ?? TYPICAL_BELIEFS_PRACTICE_EYEBROW,
       title: TYPICAL_BELIEFS_PRACTICE_TITLE,
       locked,
-      ...gate(TYPICAL_BELIEFS_PRACTICE, TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS, locked),
+      ...gate(copy.practice, cuts.practiceFree, locked),
     },
   };
 }
