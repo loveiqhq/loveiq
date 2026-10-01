@@ -8382,6 +8382,11 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-visible > .rv3-deck__card.is-focused .rv3-deck__inner {
   box-shadow: 0 2px 6px 0 rgba(22, 16, 33, 0.06);
 }
+/* The Challenges in Partnerships loop: its arrows and the mouse's prompt, from 700px only. */
+.rv3 .rv4-loop__arrow,
+.rv3 .rv4-loop__prompt-pointer {
+  display: none;
+}
 
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
  * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
@@ -9042,5 +9047,87 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 @media (min-width: 700px) {
   .rv3.rv4 .rv3-deck__track {
     padding-right: 22px;
+  }
+}
+
+/* ══ The Challenges in Partnerships loop from 700px — desktop review 01.10 ══════════════
+ * Mark (frame and arrows.png): "This also needs a frame, and arrows to click. This is too
+ * mobile designed right now. Also there shouldnt be much space when you navigated to the
+ * last tile." The cards and their pager sit in the science gallery's frame; the slides
+ * start-align from a 22px inset and the track ends as far after the last (the spacers
+ * stay, at 6px: with the 16px gap, 22); the 16px bleed goes; Previous / Next sit either
+ * side of the loop's own dots, in the gallery's discs. The phone keeps its centred swipe,
+ * so the arrows and the mouse's prompt are drawn from 700px only (hidden above the
+ * 28.09 (c) touch-up). */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv4-loop {
+    margin-inline: 0;
+    width: 100%;
+  }
+  .rv3.rv4 .rv4-loop__deck {
+    background: #fff;
+    border: 1px solid rgba(255, 106, 61, 0.45);
+    border-radius: 24px;
+    box-shadow:
+      0 20px 80px -24px rgba(255, 106, 61, 0.28),
+      inset 0 1px 0 0 rgba(255, 106, 61, 0.14);
+    margin-top: 18px;
+    overflow: clip;
+    padding: 0 0 22px;
+  }
+  .rv3.rv4 .rv4-loop__viewport {
+    margin-top: 0;
+    padding: 22px 0 14px;
+    scroll-padding-inline: 22px;
+  }
+  .rv3.rv4 .rv4-loop__track::before,
+  .rv3.rv4 .rv4-loop__track::after {
+    flex-basis: 6px;
+  }
+  .rv3.rv4 .rv4-loop__slide {
+    scroll-snap-align: start;
+  }
+  .rv3.rv4 .rv4-loop__pager {
+    margin-top: 4px;
+    padding-top: 0;
+  }
+  .rv3.rv4 .rv4-loop__arrow {
+    align-items: center;
+    background: rgba(121, 95, 200, 0.1);
+    border: 0;
+    border-radius: 50%;
+    color: var(--rv3-violet);
+    cursor: pointer;
+    display: flex;
+    flex: none;
+    height: 34px;
+    justify-content: center;
+    margin-inline: 6px;
+    padding: 0;
+    width: 34px;
+  }
+  .rv3.rv4 .rv4-loop__arrow svg {
+    display: block;
+    height: 15px;
+    width: 15px;
+  }
+  .rv3.rv4 .rv4-loop__arrow[aria-disabled="true"] {
+    cursor: default;
+    opacity: 0.35;
+  }
+  .rv3.rv4 .rv4-loop__arrow:focus-visible {
+    outline: 2px solid var(--rv3-violet);
+    outline-offset: 2px;
+  }
+  .rv3.rv4 .rv4-loop__prompt-touch {
+    display: none;
+  }
+  .rv3.rv4 .rv4-loop__prompt-pointer {
+    display: inline;
+  }
+}
+@media (min-width: 700px) and (hover: hover) and (pointer: fine) {
+  .rv3.rv4 .rv4-loop__arrow:not([aria-disabled="true"]):hover {
+    background: rgba(121, 95, 200, 0.18);
   }
 }

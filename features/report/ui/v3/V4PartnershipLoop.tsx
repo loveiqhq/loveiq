@@ -10,6 +10,7 @@ import {
   type FC,
 } from "react";
 import type { Report3LoopStage } from "@/data/report3-partnership";
+import PagerChevron from "./PagerChevron";
 import useV4Reveal from "./useV4Reveal";
 import V4LockBadge from "./V4LockBadge";
 import { guardedUnlock } from "./v4Unlock";
@@ -46,6 +47,15 @@ import { guardedUnlock } from "./v4Unlock";
  *
  * The step names and colours are the same for every archetype and live here; only
  * the two lines on each card are the archetype's, and arrive as props.
+ *
+ * DESKTOP (review 01.10, Mark: "This also needs a frame, and arrows to click. This is too
+ * mobile designed right now. Also there shouldnt be much space when you navigated to the
+ * last tile."). From 700px the slides sit in the galleries' frame, start-aligned from a
+ * 22px inset that ends as far after the last card, and Previous / Next step the loop.
+ * The track stops once the last card is whole, three steps short of it, so a step is
+ * HELD: the orbit and the highlight go to it at once, and the track scrolls only for a
+ * card not yet whole. The reader's own sideways scroll (wheel, drag, keys) lets the
+ * scroll lead again. The phone keeps its centred swipe and its reading of the scroll.
  */
 
 export const LOOP_STEPS = [
@@ -104,6 +114,21 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
   const [movedOn, setMovedOn] = useState(false);
   const [pulseDone, setPulseDone] = useState(false);
   const pulsing = orbitSeen && !movedOn && !pulseDone;
+  // From 700px: the arrows' held step (see DESKTOP above).
+  const [desktop, setDesktop] = useState(false);
+  const [held, setHeld] = useState<number | null>(null);
+  const heldRef = useRef<number | null>(null);
+  const readRef = useRef<() => void>(() => {});
+  const shown = desktop && held !== null ? held : active;
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(min-width: 700px)");
+    const update = () => setDesktop(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
 
   // The slide pitch, measured rather than assumed: it narrows with the viewport
   // (slides are min(320px, 100% - 32px) wide). Zero until the section is laid out
@@ -125,11 +150,15 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
       const step = stepRef.current || measure();
       if (!step) return;
       const at = Math.min(LOOP_STEPS.length - 1, Math.max(0, viewport.scrollLeft / step));
-      orbitRef.current?.style.setProperty("--orbit-rot", `${Math.round(at * 60 * 100) / 100}deg`);
+      // A held step keeps the orbit where the arrows put it (desktop).
+      if (heldRef.current === null) {
+        orbitRef.current?.style.setProperty("--orbit-rot", `${Math.round(at * 60 * 100) / 100}deg`);
+      }
       setActive(Math.round(at));
       // The pulse points at The Situation; once the reader has left it, it is done.
       if (Math.round(at) !== 0) setMovedOn(true);
     };
+    readRef.current = read;
     const onScroll = () => {
       // Set before scheduling: a frame callback that runs synchronously clears it.
       if (queued) return;
@@ -163,18 +192,66 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
     return () => indicator.removeEventListener("animationend", end);
   }, [pulsing]);
 
+  // The reader's own sideways scroll lets the scroll lead again (desktop). A vertical
+  // wheel over the loop is the page scrolling, not a takeover.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!desktop || !viewport) return;
+    const release = () => {
+      if (heldRef.current === null) return;
+      heldRef.current = null;
+      setHeld(null);
+      readRef.current();
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) release();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") release();
+    };
+    viewport.addEventListener("wheel", onWheel, { passive: true });
+    viewport.addEventListener("pointerdown", release, { passive: true });
+    viewport.addEventListener("keydown", onKey);
+    return () => {
+      viewport.removeEventListener("wheel", onWheel);
+      viewport.removeEventListener("pointerdown", release);
+      viewport.removeEventListener("keydown", onKey);
+    };
+  }, [desktop]);
+
   const goTo = (index: number) => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    const left = index * (stepRef.current || measure());
     const reduce =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (typeof viewport.scrollTo === "function") {
-      viewport.scrollTo({ left, behavior: reduce ? "auto" : "smooth" });
-    } else {
-      viewport.scrollLeft = left;
+    const scroll = (left: number) => {
+      if (typeof viewport.scrollTo === "function") {
+        viewport.scrollTo({ left, behavior: reduce ? "auto" : "smooth" });
+      } else {
+        viewport.scrollLeft = left;
+      }
+    };
+    if (desktop) {
+      const k = Math.min(LOOP_STEPS.length - 1, Math.max(0, index));
+      heldRef.current = k;
+      setHeld(k);
+      orbitRef.current?.style.setProperty("--orbit-rot", `${k * 60}deg`);
+      if (k !== 0) setMovedOn(true);
+      // Scroll only for a card not yet whole, and never past the end.
+      const slide = viewport.querySelectorAll<HTMLElement>(".rv4-loop__slide")[k];
+      if (!slide) return;
+      const box = viewport.getBoundingClientRect();
+      const from = box.left + viewport.clientLeft;
+      const card = slide.getBoundingClientRect();
+      if (card.left >= from - 1 && card.left + card.width <= from + viewport.clientWidth + 1) {
+        return;
+      }
+      const max = viewport.scrollWidth - viewport.clientWidth;
+      scroll(Math.max(0, Math.min(max, k * (stepRef.current || measure()))));
+      return;
     }
+    scroll(index * (stepRef.current || measure()));
   };
 
   return (
@@ -205,7 +282,13 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
           <span className="rv4-loop__ring rv4-loop__ring--inner" />
           <div className="rv4-loop__center">
             <CycleIcon />
-            <p className="rv4-loop__prompt">Swipe the cards below to follow the loop.</p>
+            {/* The phone swipes; from 700px the arrows lead (review 01.10). */}
+            <p className="rv4-loop__prompt">
+              <span className="rv4-loop__prompt-touch">
+                Swipe the cards below to follow the loop.
+              </span>
+              <span className="rv4-loop__prompt-pointer">Use the arrows to follow the loop.</span>
+            </p>
           </div>
           {LOOP_STEPS.map((step, i) => {
             const angle = ((-90 + i * 60) * Math.PI) / 180;
@@ -227,7 +310,7 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
                  * a reader aims at the words as often as at the 11px dot. */}
                 <span
                   className={`rv4-loop__label rv4-loop__label--${LABEL_SIDE[i]}${
-                    i === active ? " is-active" : ""
+                    i === shown ? " is-active" : ""
                   }`}
                   style={at}
                   onClick={() => goTo(i)}
@@ -245,74 +328,102 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
         </div>
       </div>
 
-      {/* 532:262 — the slides, centre-snapped, the next one peeking in. */}
-      <div
-        ref={viewportRef}
-        className="rv4-loop__viewport"
-        role="region"
-        aria-roledescription="carousel"
-        aria-label="The loop, step by step"
-        tabIndex={locked ? -1 : 0}
-        aria-hidden={locked ? true : undefined}
-        inert={locked}
-      >
-        <div className="rv4-loop__track">
-          {LOOP_STEPS.map((step, i) => {
-            const stage = stages[i];
-            return (
-              <article
-                key={step.title}
-                className={`rv4-loop__slide${i === active ? " is-active" : ""}`}
-                aria-roledescription="slide"
-                aria-label={`${step.title} (${i + 1} of ${LOOP_STEPS.length})`}
-                style={
-                  {
-                    "--rv4-loop-dot": step.dot,
-                    "--rv4-loop-label": step.label,
-                  } as CSSProperties
-                }
-              >
-                <header className="rv4-loop__head">
-                  <span className="rv4-loop__bullet" aria-hidden="true" />
-                  <h4 className="rv4-loop__title">{step.title}</h4>
-                </header>
-                <dl className="rv4-loop__rows">
-                  <div className="rv4-loop__row">
-                    <dt className="rv4-loop__term">What Happens</dt>
-                    <dd className="rv4-loop__happens">{stage?.happens}</dd>
+      {/* The cards and their pager. From 700px they sit in the galleries' frame (review
+       * 01.10); the phone draws no frame. */}
+      <div className="rv4-loop__deck">
+        {/* 532:262 — the slides, centre-snapped, the next one peeking in. */}
+        <div
+          ref={viewportRef}
+          className="rv4-loop__viewport"
+          role="region"
+          aria-roledescription="carousel"
+          aria-label="The loop, step by step"
+          tabIndex={locked ? -1 : 0}
+          aria-hidden={locked ? true : undefined}
+          inert={locked}
+        >
+          <div className="rv4-loop__track">
+            {LOOP_STEPS.map((step, i) => {
+              const stage = stages[i];
+              return (
+                <article
+                  key={step.title}
+                  className={`rv4-loop__slide${i === shown ? " is-active" : ""}`}
+                  aria-roledescription="slide"
+                  aria-label={`${step.title} (${i + 1} of ${LOOP_STEPS.length})`}
+                  style={
+                    {
+                      "--rv4-loop-dot": step.dot,
+                      "--rv4-loop-label": step.label,
+                    } as CSSProperties
+                  }
+                >
+                  <header className="rv4-loop__head">
+                    <span className="rv4-loop__bullet" aria-hidden="true" />
+                    <h4 className="rv4-loop__title">{step.title}</h4>
+                  </header>
+                  <dl className="rv4-loop__rows">
+                    <div className="rv4-loop__row">
+                      <dt className="rv4-loop__term">What Happens</dt>
+                      <dd className="rv4-loop__happens">{stage?.happens}</dd>
+                    </div>
+                  </dl>
+                  <div className="rv4-loop__need">
+                    <span className="rv4-loop__need-label">What’s Underneath</span>
+                    <span className="rv4-loop__need-value">{stage?.underneath}</span>
                   </div>
-                </dl>
-                <div className="rv4-loop__need">
-                  <span className="rv4-loop__need-label">What’s Underneath</span>
-                  <span className="rv4-loop__need-value">{stage?.underneath}</span>
-                </div>
-              </article>
-            );
-          })}
+                </article>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* 532:399 — six dots joined by hairlines; blurred with the rest when locked
-       * (612:982), so hidden from assistive tech like the orbit and the slides. */}
-      <div
-        className="rv4-loop__pager"
-        role="group"
-        aria-label="Loop steps"
-        aria-hidden={locked || undefined}
-        inert={locked}
-      >
-        {LOOP_STEPS.map((step, i) => (
-          <Fragment key={step.title}>
-            {i > 0 ? <span className="rv4-loop__pager-line" aria-hidden="true" /> : null}
-            <button
-              type="button"
-              className={`rv4-loop__pager-dot${i === active ? " is-active" : ""}`}
-              aria-label={`Show ${step.title}`}
-              aria-current={i === active ? "true" : undefined}
-              onClick={() => goTo(i)}
-            />
-          </Fragment>
-        ))}
+        {/* 532:399 — six dots joined by hairlines; blurred with the rest when locked
+         * (612:982), so hidden from assistive tech like the orbit and the slides. */}
+        <div
+          className="rv4-loop__pager"
+          role="group"
+          aria-label="Loop steps"
+          aria-hidden={locked || undefined}
+          inert={locked}
+        >
+          {/* From 700px only (review 01.10): Previous and Next either side of the dots. The
+           * arrows stay focusable at the ends (aria-disabled), so a keyboard keeps its place. */}
+          <button
+            type="button"
+            className="rv4-loop__arrow"
+            aria-label="Previous step"
+            aria-disabled={shown <= 0 || undefined}
+            onClick={() => {
+              if (shown > 0) goTo(shown - 1);
+            }}
+          >
+            <PagerChevron back />
+          </button>
+          {LOOP_STEPS.map((step, i) => (
+            <Fragment key={step.title}>
+              {i > 0 ? <span className="rv4-loop__pager-line" aria-hidden="true" /> : null}
+              <button
+                type="button"
+                className={`rv4-loop__pager-dot${i === shown ? " is-active" : ""}`}
+                aria-label={`Show ${step.title}`}
+                aria-current={i === shown ? "true" : undefined}
+                onClick={() => goTo(i)}
+              />
+            </Fragment>
+          ))}
+          <button
+            type="button"
+            className="rv4-loop__arrow"
+            aria-label="Next step"
+            aria-disabled={shown >= LOOP_STEPS.length - 1 || undefined}
+            onClick={() => {
+              if (shown < LOOP_STEPS.length - 1) goTo(shown + 1);
+            }}
+          >
+            <PagerChevron />
+          </button>
+        </div>
       </div>
 
       {/* 612:1002 — on the seam between the orbit and the slides. */}
