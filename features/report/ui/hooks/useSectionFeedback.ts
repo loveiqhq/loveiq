@@ -12,6 +12,9 @@ export interface FeedbackPayload {
   issue?: string;
 }
 
+/** What a post carries: the payload, and which of the two posts it is (the route's Slack). */
+type FeedbackPost = FeedbackPayload & { step: "rating" | "message" };
+
 /**
  * "Does this resonate?" — one row per section in report_section_feedback.
  *
@@ -63,7 +66,7 @@ export function useSectionFeedback(sessionId: string | null, token?: string | nu
   const canStore = Boolean(sessionId || token);
 
   const post = useCallback(
-    async (sectionId: string, payload: FeedbackPayload) => {
+    async (sectionId: string, payload: FeedbackPost) => {
       try {
         const response = await fetch("/api/report-feedback", {
           method: "POST",
@@ -99,7 +102,7 @@ export function useSectionFeedback(sessionId: string | null, token?: string | nu
         has_comment: false,
         step: "rating",
       });
-      const stored = await enqueue(sectionId, () => post(sectionId, { feedback }));
+      const stored = await enqueue(sectionId, () => post(sectionId, { feedback, step: "rating" }));
       if (stored) confirmed.current[sectionId] = feedback;
       // A newer click owns the section now.
       if (!isNewest(sectionId, action)) return true;
@@ -121,7 +124,9 @@ export function useSectionFeedback(sessionId: string | null, token?: string | nu
         step: "message",
       });
       const action = begin(sectionId);
-      const stored = await enqueue(sectionId, () => post(sectionId, payload));
+      const stored = await enqueue(sectionId, () =>
+        post(sectionId, { ...payload, step: "message" })
+      );
       if (stored) {
         confirmed.current[sectionId] = payload.feedback;
         setSubmitted((current) => ({ ...current, [sectionId]: true }));

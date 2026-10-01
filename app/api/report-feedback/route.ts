@@ -38,6 +38,8 @@ const schema = z
     feedback: z.enum(["up", "down"]),
     comment: z.string().max(1000).optional(),
     issue: z.string().max(100).optional(),
+    /** The thumb's own post ("rating") or Send's ("message"); absent from older clients. */
+    step: z.enum(["rating", "message"]).optional(),
   })
   .refine((value) => Boolean(value.sessionId || value.token), {
     message: "sessionId_or_token_required",
@@ -109,6 +111,8 @@ async function notifySlackReportFeedback(input: {
   feedback: "up" | "down";
   comment: string | null;
   issue: string | null;
+  /** False for a thumb's own post: ops hears once the reader says what is wrong. */
+  pingOps: boolean;
 }): Promise<void> {
   const webhookUrl = process.env.SLACK_SURVEY_WEBHOOK_URL;
   if (!webhookUrl) {
@@ -171,7 +175,8 @@ async function notifySlackReportFeedback(input: {
   // The survey-channel ping above is the audit trail; this one is the
   // "needs attention" signal. Must be awaited so scheduleAfterResponse
   // keeps the sandbox alive until the POST completes.
-  const opsWorthy = input.feedback === "down" || Boolean(input.issue) || Boolean(input.comment);
+  const opsWorthy =
+    input.pingOps && (input.feedback === "down" || Boolean(input.issue) || Boolean(input.comment));
   if (opsWorthy) {
     await notifySlack({
       channel: "ops",
@@ -301,17 +306,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
-  scheduleAfterResponse("report-feedback-slack-notification", () =>
-    notifySlackReportFeedback({
-      supabaseUrl: url,
-      serviceRoleKey,
-      submissionId: resolvedSubmissionId,
-      sectionId: parsed.data.sectionId,
-      feedback: parsed.data.feedback,
-      comment: parsed.data.comment ?? null,
-      issue: parsed.data.issue ?? null,
-    })
-  );
+  // One Slack line per reader action (final review, 01.10). The thumb posts the rating on
+  // its own and Send posts again: the rating's line goes to the survey channel, ops hears
+  // once the reader says what is wrong (an issue or a comment), and a Send with neither
+  // repeats nothing. An older client's single post keeps both, as before.
+  const { step, comment, issue } = parsed.data;
+  const addsSomething = step !== "message" || Boolean(comment || issue);
+  if (addsSomething) {
+    scheduleAfterResponse("report-feedback-slack-notification", () =>
+      notifySlackReportFeedback({
+        supabaseUrl: url,
+        serviceRoleKey,
+        submissionId: resolvedSubmissionId,
+        sectionId: parsed.data.sectionId,
+        feedback: parsed.data.feedback,
+        comment: comment ?? null,
+        issue: issue ?? null,
+        pingOps: step !== "rating",
+      })
+    );
+  }
 
   return NextResponse.json({ success: true });
 }

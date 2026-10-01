@@ -120,8 +120,10 @@ describe("useSectionFeedback — one row per section, the rating first (01.10)",
       saved = await result.current.rateSection("typical_beliefs", "up");
     });
     expect(saved).toBe(true);
+    // `step` tells the route which of the two posts this is, for its Slack lines.
     expect(body()).toEqual({
       feedback: "up",
+      step: "rating",
       sectionId: "typical_beliefs",
       token: "rpt_abcdefghijklmnopqrst",
     });
@@ -160,7 +162,12 @@ describe("useSectionFeedback — one row per section, the rating first (01.10)",
       });
     });
     expect(sent).toBe(true);
-    expect(body()).toMatchObject({ feedback: "down", issue: "unclear", comment: "Lost me" });
+    expect(body()).toMatchObject({
+      feedback: "down",
+      issue: "unclear",
+      comment: "Lost me",
+      step: "message",
+    });
     expect(result.current.submitted.typical_beliefs).toBe(true);
     expect(trackChapterFeedbackSubmitted).toHaveBeenCalledWith(
       expect.objectContaining({ step: "message", has_comment: true, issue: "unclear" })
