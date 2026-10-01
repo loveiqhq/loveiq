@@ -5,11 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { surveyQuestions } from "@/data/survey-data";
 import { RANDOMISE_QIDS } from "@features/survey/questionFlags";
-import {
-  OPT_IN_QID,
-  orderDemandBlockBeforeEmail,
-  orderEmailLast,
-} from "@features/survey/ui/questionOrder";
+import { OPT_IN_QID, orderAskedQuestions } from "@features/survey/ui/questionOrder";
 
 const MIGRATION = "supabase/migrations/20260911152724_survey_question_16009_priced_choice.sql";
 const NONE_OF_THESE = "None of these right now";
@@ -46,11 +42,12 @@ describe("16009 — the priced choice", () => {
     //
     // They no longer are. The demand block (16016-16018) had to go above 16015 because
     // every remaining id below it is either live or retired-but-still-holding-answers
-    // (16003 and 16004 carry 322 each). `orderDemandBlockBeforeEmail` is what keeps the
-    // opt-in last in that case, so the guarantee is now a property of the composed
-    // pipeline rather than of `orderEmailLast` alone — assert it that way.
-    const ordered = orderDemandBlockBeforeEmail(
-      orderEmailLast(surveyQuestions.filter((q) => q.qId !== "00000"))
+    // (16003 and 16004 carry 322 each), and the content asks (16019, 16020) after it. The
+    // render-time stages are what keep the opt-in last, so the guarantee is a property of
+    // the composer, `orderAskedQuestions`, rather than of any one stage — assert it that way.
+    const ordered = orderAskedQuestions(
+      surveyQuestions.filter((q) => q.qId !== "00000"),
+      "control"
     );
     expect(ordered.at(-1)!.qId).toBe(OPT_IN_QID);
     expect(question!.qId < OPT_IN_QID).toBe(true);

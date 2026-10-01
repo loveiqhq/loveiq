@@ -30,6 +30,7 @@ import {
   isSurveyClosed,
   submitSurveyOnce,
 } from "@features/survey/server/server";
+import { dropBlankOptionalAnswers } from "@features/survey/server/utils";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 let _resend: Resend | null = null;
@@ -232,7 +233,7 @@ export async function POST(request: Request) {
   const {
     email,
     firstName,
-    answers,
+    answers: submittedAnswers,
     startedAt,
     durationMs,
     utmTracker,
@@ -241,6 +242,9 @@ export async function POST(request: Request) {
     optionOrder,
     website,
   } = parsed.data;
+  // A blank optional answer (16019, 16020 typed into and cleared) is no answer. Dropped
+  // before anything counts, scores or stores it, so submit_survey never writes an empty row.
+  const answers = dropBlankOptionalAnswers(submittedAnswers);
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 

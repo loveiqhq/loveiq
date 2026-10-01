@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   orderAskedQuestions,
   orderC13Opening,
+  orderContentAsksBeforeDemandBlock,
   orderDemandBlockBeforeEmail,
   orderEmailLast,
   C13_OPENING,
+  CONTENT_ASK_QIDS,
   EMAIL_QID,
   OPT_IN_QID,
 } from "@features/survey/ui/questionOrder";
@@ -38,7 +40,9 @@ describe("orderEmailLast", () => {
     const optInIdx = ordered.findIndex((entry) => entry.qId === OPT_IN_QID);
     expect(ordered[optInIdx - 1]!.qId).toBe(EMAIL_QID);
 
-    const full = orderDemandBlockBeforeEmail(ordered);
+    // The content asks (16019, 16020) sort after the opt-in too, so only the whole
+    // composer restores "opt-in last". Asserted on the composer, not rebuilt by hand.
+    const full = orderAskedQuestions(surveyQuestions, "control");
     expect(full[full.length - 1]!.qId).toBe(OPT_IN_QID);
   });
 
@@ -74,6 +78,76 @@ describe("orderEmailLast", () => {
   });
 });
 
+describe("orderContentAsksBeforeDemandBlock", () => {
+  const ids = (qs: SurveyQuestion[]) => qs.map((entry) => entry.qId);
+
+  it("asks Mark's two content questions, in order, immediately before C9", () => {
+    const input = [
+      q("16014"),
+      q("16016"),
+      q("16017"),
+      q("16018"),
+      q(EMAIL_QID),
+      q(OPT_IN_QID),
+      q("16019"),
+      q("16020"),
+    ];
+    expect(ids(orderContentAsksBeforeDemandBlock(input))).toEqual([
+      "16014",
+      "16019",
+      "16020",
+      "16016",
+      "16017",
+      "16018",
+      EMAIL_QID,
+      OPT_IN_QID,
+    ]);
+  });
+
+  it("the two ids are the ones the survey data allocates", () => {
+    // Written out, not read back from the constant: reordering the constant must fail here.
+    expect([...CONTENT_ASK_QIDS]).toEqual(["16019", "16020"]);
+  });
+
+  it("falls back to sitting before email when the demand block is absent", () => {
+    const input = [q("16014"), q(EMAIL_QID), q(OPT_IN_QID), q("16019"), q("16020")];
+    expect(ids(orderContentAsksBeforeDemandBlock(input))).toEqual([
+      "16014",
+      "16019",
+      "16020",
+      EMAIL_QID,
+      OPT_IN_QID,
+    ]);
+  });
+
+  it("falls back to sitting before the opt-in when email was prefilled away too", () => {
+    const input = [q("16014"), q(OPT_IN_QID), q("16019"), q("16020")];
+    expect(ids(orderContentAsksBeforeDemandBlock(input))).toEqual([
+      "16014",
+      "16019",
+      "16020",
+      OPT_IN_QID,
+    ]);
+  });
+
+  it("returns the input untouched when neither question is present", () => {
+    const input = [q("16014"), q("16016"), q(EMAIL_QID), q(OPT_IN_QID)];
+    expect(orderContentAsksBeforeDemandBlock(input)).toBe(input);
+  });
+
+  it("is a permutation that keeps every other question's relative order", () => {
+    const asked = orderContentAsksBeforeDemandBlock(
+      orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions))
+    );
+    expect([...ids(asked)].sort()).toEqual([...ids(surveyQuestions)].sort());
+    const others = (qs: SurveyQuestion[]) =>
+      ids(qs).filter((qId) => !CONTENT_ASK_QIDS.includes(qId));
+    expect(others(asked)).toEqual(
+      others(orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions)))
+    );
+  });
+});
+
 /**
  * The composer SurveyEngine and the end-to-end walks both call. Asserted on the exported
  * function rather than on a hand-written composition, because hand-written compositions
@@ -103,13 +177,26 @@ describe("orderAskedQuestions", () => {
     ]);
   });
 
+  it("asks Mark's two content questions immediately before C9, in both arms", () => {
+    // Written out for the same reason as the block above: the placement is the
+    // requirement (Fatih, 29.09: just before C9, so the sexuality questions stay together
+    // and the "Beyond sex" block follows them).
+    for (const arm of ["control", "variant"] as const) {
+      const ids = orderAskedQuestions(surveyQuestions, arm).map((e) => e.qId);
+      const c9 = ids.indexOf("16016");
+      expect(ids.slice(c9 - 2, c9), arm).toEqual(["16019", "16020"]);
+    }
+  });
+
   it("applies EVERY stage — not a subset", () => {
     // The failure mode is a caller (or a future edit) applying only some of the pipeline.
     // Each stage below moves at least one question, so a composer missing any one of them
     // produces a different array than the full composition.
+    const withoutContentAsks = orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions));
     expect(asked.map((e) => e.qId)).toEqual(
-      orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions)).map((e) => e.qId)
+      orderContentAsksBeforeDemandBlock(withoutContentAsks).map((e) => e.qId)
     );
+    expect(asked.map((e) => e.qId)).not.toEqual(withoutContentAsks.map((e) => e.qId));
     expect(asked.map((e) => e.qId)).not.toEqual(orderEmailLast(surveyQuestions).map((e) => e.qId));
     expect(asked.map((e) => e.qId)).not.toEqual(surveyQuestions.map((e) => e.qId));
   });
@@ -117,9 +204,11 @@ describe("orderAskedQuestions", () => {
   it("applies the C13 reorder in the variant arm, and only there", () => {
     const variant = orderAskedQuestions(surveyQuestions, "variant");
     expect(variant.map((e) => e.qId)).toEqual(
-      orderC13Opening(orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions))).map(
-        (e) => e.qId
-      )
+      orderC13Opening(
+        orderContentAsksBeforeDemandBlock(
+          orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions))
+        )
+      ).map((e) => e.qId)
     );
     // The arms must actually differ. If they ever stop differing the experiment is a
     // no-op that still reports two arms, which is worse than no experiment.

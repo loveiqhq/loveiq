@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 import { surveyQuestions } from "@/data/survey-data";
+import { optionGroupsFor } from "@features/survey/optionGroups";
 import { RANDOMISE_QIDS } from "@features/survey/questionFlags";
-import { orderedOptions } from "@features/survey/ui/questionOrder";
+import { orderedOptionGroups, orderedOptions } from "@features/survey/ui/questionOrder";
 
 const SESSION = "3f2b1c7a-9d4e-4f10-8b52-1a2c3d4e5f60";
 const TEN = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
@@ -83,6 +84,119 @@ describe("orderedOptions", () => {
     const before = [...q.options];
     orderedOptions(q, SESSION);
     expect(q.options).toEqual(before);
+  });
+
+  it("keeps the flat shuffle exactly as it was before grouping existed", () => {
+    // Characterisation, captured from the implementation before C9 was grouped. A
+    // respondent mid-survey when this deploys must see the same order after a reload,
+    // and their recorded order must still be the one they saw.
+    expect(orderedOptions(randomised(), SESSION)).toEqual([
+      "f",
+      "h",
+      "a",
+      "d",
+      "c",
+      "g",
+      "j",
+      "e",
+      "i",
+      "b",
+    ]);
+    expect(
+      orderedOptions(
+        surveyQuestions.find((q) => q.qId === "16014")!,
+        "session-fixed-1"
+      )
+    ).toEqual([
+      "Nothing major is in the way right now",
+      "Useful support feels too expensive or hard to access",
+      "The person I'm with isn't on the same page or willing to engage",
+      "Something else",
+      "I struggle to keep going with things over time",
+      "I don't have enough time or energy",
+      "Physical pain or body issues",
+      "Shame, self-judgment, or inner pressure",
+      "It doesn't feel emotionally safe enough yet",
+      "I'm not sure what would actually help",
+    ]);
+  });
+});
+
+describe("orderedOptionGroups (C9, 16016)", () => {
+  const c9 = surveyQuestions.find((q) => q.qId === "16016")!;
+  const authored = optionGroupsFor(c9)!;
+  const sessions = Array.from({ length: 25 }, (_, i) => `session-${i}`);
+
+  it("returns nothing for a question without categories", () => {
+    expect(orderedOptionGroups(randomised(), SESSION)).toBe(undefined);
+  });
+
+  it("keeps categories and topics in authored order without a session id", () => {
+    // Shuffled iff recorded: with storage blocked nothing records the order, so nothing
+    // may shuffle it either.
+    expect(orderedOptionGroups(c9, "")).toEqual(
+      authored.map((g) => ({ label: g.label, options: [...g.options] }))
+    );
+  });
+
+  it("shuffles the category order, and each category's topics, as true permutations", () => {
+    const out = orderedOptionGroups(c9, SESSION)!;
+    expect(out.map((g) => g.label).sort()).toEqual(authored.map((g) => g.label).sort());
+    for (const group of out) {
+      const original = authored.find((g) => g.label === group.label)!;
+      expect([...group.options].sort(), group.label).toEqual([...original.options].sort());
+    }
+  });
+
+  it("is stable for the same session", () => {
+    const first = orderedOptionGroups(c9, SESSION);
+    for (let i = 0; i < 5; i += 1) expect(orderedOptionGroups(c9, SESSION)).toEqual(first);
+  });
+
+  it("actually reorders the categories across sessions", () => {
+    const labels = authored.map((g) => g.label);
+    const differs = sessions.filter(
+      (s) =>
+        !arraysEqual(
+          orderedOptionGroups(c9, s)!.map((g) => g.label),
+          labels
+        )
+    );
+    // 13! orders: matching the authored one even once in 25 sessions is vanishingly rare.
+    expect(differs.length).toBeGreaterThanOrEqual(24);
+  });
+
+  it("shuffles each category's topics with its own stream", () => {
+    // Mood & Energy and Trauma & Stress both hold four topics. With one shared seed they
+    // would always move in lockstep, a correlated position effect across categories.
+    const pattern = (session: string, label: string) => {
+      const original = authored.find((g) => g.label === label)!.options;
+      return orderedOptionGroups(c9, session)!
+        .find((g) => g.label === label)!
+        .options.map((option) => original.indexOf(option))
+        .join(",");
+    };
+    const lockstep = sessions.filter(
+      (s) => pattern(s, "Mood & Energy") === pattern(s, "Trauma & Stress")
+    );
+    expect(lockstep.length).toBeLessThan(sessions.length);
+  });
+
+  it("records exactly what the categories show: orderedOptions is their flattened order", () => {
+    // `buildOptionOrder` recomputes `orderedOptions` at submit and stores it as
+    // `survey_submission.option_order`. If the grouped view derived its order any other
+    // way, the stored order would stop being the one the respondent saw.
+    for (const session of [...sessions, ""]) {
+      expect(orderedOptions(c9, session), session).toEqual(
+        orderedOptionGroups(c9, session)!.flatMap((g) => g.options)
+      );
+    }
+  });
+
+  it("still records all 53 topics, inside the API's 60-per-question cap", () => {
+    const recorded = orderedOptions(c9, SESSION);
+    expect(recorded).toHaveLength(53);
+    expect(new Set(recorded).size).toBe(53);
   });
 });
 
