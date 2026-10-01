@@ -34,9 +34,10 @@ const ArrowRight: FC = () => (
 );
 
 /**
- * V4's guarantee box: the paywall card's (1015:1218), which the mobile footer draws at
- * 0.68 (1005:397) and the desktop card at its own scale. The frames say "7-day";
- * Fatih, 29.09: the 14 days every surface promises.
+ * V4's guarantee: the paywall card's (1015:1218). The desktop card draws it as a box at
+ * its own scale; the mobile footer, since Mark's 01.10 round (1167:2612), without the box,
+ * in 12 / 10 type. The frames say "7-day"; Fatih, 29.09: the 14 days every surface
+ * promises.
  */
 const GuaranteeBadge: FC<{ nodeId: string }> = ({ nodeId }) => (
   <div className="report-sticky-unlock__badge" data-node-id={nodeId}>
@@ -103,8 +104,8 @@ const ReportStickyUnlockBar: FC<Props> = ({
         inert={hidden}
       >
         {v4 ? (
-          /* 1005:397 — the paywall card's guarantee box at 0.68. */
-          <GuaranteeBadge nodeId="1005:397" />
+          /* 1167:2612 — the paywall card's guarantee, its box dropped (Mark, 01.10). */
+          <GuaranteeBadge nodeId="1167:2612" />
         ) : (
           <p className="report-sticky-unlock__guarantee">14-day money-back guarantee</p>
         )}
