@@ -587,7 +587,8 @@ describe("GET /api/report", () => {
  * Report 3.0's Accelerator & Brakes chapter at the HTTP boundary — what the route
  * actually ships. Gated on the same `accelUnlocked` as V2's `accelCopy`, so a
  * locked Spark Seeker receives the chapter with nothing paid past the wall, a paid
- * one receives all of it, and an archetype nobody has written yet receives null.
+ * one receives all of it, and every other archetype its own since 02.10 (Sanjin's docs,
+ * data/report3-copy). A name with no V4 copy gets null: the builders' own tests.
  */
 describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
   const AB_PROBES = [
@@ -732,7 +733,7 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
     for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
   });
 
-  it("ships null for an archetype without Report 3.0 copy, so V2's section stays", async () => {
+  it("ships another archetype its own chapter, locked, and V2's copy beside it", async () => {
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
       accessPlan: null,
       archetypeTiers: {},
@@ -742,8 +743,9 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
     queueSubmission("Emotional Voyeur");
     const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
     const json = await res.json();
-    expect(json.accelerators).toBeNull();
-    expect(json.acceleratorsArticle).toBeNull();
+    expect(json.accelerators).not.toBeNull();
+    expect(json.accelerators.lockedFrom).not.toBeNull();
+    expect(json.acceleratorsArticle).toMatchObject({ locked: true });
     expect(json.accelCopy).not.toBeNull();
   });
 });
@@ -752,7 +754,8 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
  * Report 3.0's Fantasy vs. Reality chapter at the HTTP boundary. Gated on the same
  * `fantasyUnlocked` as V2's `fantasyCopy` (section 27, full report only), so a
  * locked Spark Seeker receives the chapter with nothing paid past the wall, a paid
- * one receives all of it, and an archetype nobody has written yet receives null.
+ * one receives all of it, and every other archetype its own since 02.10 (Sanjin's docs,
+ * data/report3-copy). A name with no V4 copy gets null: the builders' own tests.
  */
 describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
   // "Common challenges" and the practice past its ramp: only ever seen blurred.
@@ -893,14 +896,14 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
     for (const probe of FVR_PROBES) expect(body, probe).toContain(probe);
   });
 
-  it("ships null for an archetype without Report 3.0 copy, so V2's section stays", async () => {
+  it("ships another archetype its own chapter, locked, and V2's copy beside it", async () => {
     withPlan(null);
     queueSubmission("Emotional Voyeur");
     const json = await (
       await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"))
     ).json();
-    expect(json.fantasy).toBeNull();
-    expect(json.fantasyArticle).toBeNull();
+    expect(json.fantasy).toMatchObject({ locked: true });
+    expect(json.fantasyArticle).toMatchObject({ locked: true });
     expect(json.fantasyCopy).not.toBeNull();
   });
 });
