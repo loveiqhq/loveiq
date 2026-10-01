@@ -214,3 +214,48 @@ describe("reportV3.css — Fantasy vs. Reality body contracts", () => {
     expect(V3_CSS).not.toContain(".rv3 .rv4-fvr + .rv4-try:not(.is-open) {");
   });
 });
+
+/**
+ * Mark, desktop review 01.10: "Can we have a horizontal divider line (that we currently
+ * use before a new Part), but just have it be half the width and centrally aligned and
+ * place it after the last Ritual, Tantra & Conscious Sex category". The separator under
+ * the table (368:5447) carries it from 700px: a 1px hairline across half the column,
+ * centred in the 44px, fading out at both ends where the Part rule fades one way.
+ */
+describe("V4Fantasy — the divider after the table (desktop review 01.10)", () => {
+  const between = (css: string, from: string) => {
+    const at = css.indexOf(from);
+    expect(at, from).toBeGreaterThan(-1);
+    return css.slice(at, css.indexOf("}", at));
+  };
+
+  it("marks the separator after the table, open and locked, without adding a child", () => {
+    for (const view of [OPEN, LOCKED]) {
+      const { container } = render(<V4Fantasy view={view} />);
+      const sep = container.querySelector('.rv4-fvr > [data-node-id="368:5447"]')!;
+      expect(sep).toHaveClass("rv4-sep", "rv4-sep--rule");
+      expect(sep.previousElementSibling).toHaveClass("rv4-fvt");
+      expect(container.querySelectorAll(".rv4-sep--rule")).toHaveLength(1);
+      cleanup();
+    }
+  });
+
+  it("draws it from 700px only: half the table, on its axis, fading at both ends", () => {
+    const desktop = V3_CSS.slice(V3_CSS.indexOf("/* ══ Fantasy vs. Reality's divider"));
+    expect(desktop.startsWith("/* ══ Fantasy vs. Reality's divider")).toBe(true);
+    expect(desktop).toContain("@media (min-width: 700px) {");
+    const line = between(desktop, ".rv3.rv4 .rv4-fvr > .rv4-sep--rule::before {");
+    // The table and the map are 760 wide at the column's left (min(760px, 100%)), so
+    // the line is half that, a quarter in: centred under them, not under the column.
+    expect(line).toContain("width: min(380px, 50%);");
+    expect(line).toContain("margin-left: min(190px, 25%);");
+    expect(line).toContain("height: 1px;");
+    // Prettier sets a long gradient a stop a line: read it flat.
+    const flat = line.replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").replace(/,\s+/g, ", ");
+    expect(flat).toContain(
+      "linear-gradient(90deg, rgba(22, 16, 33, 0), rgba(22, 16, 33, 0.1) 50%, rgba(22, 16, 33, 0))"
+    );
+    const box = between(desktop, ".rv3.rv4 .rv4-fvr > .rv4-sep--rule {");
+    expect(box).toContain("align-items: center;");
+  });
+});
