@@ -8928,3 +8928,31 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     translate: none;
   }
 }
+
+/* ══ Fantasy vs. Reality's divider — desktop review 01.10 ══════════════════════════════
+ * Mark: "Can we have a horizontal divider line (that we currently use before a new
+ * Part), but just have it be half the width and centrally aligned and place it after
+ * the last Ritual, Tantra & Conscious Sex category". The 44px separator under the table
+ * (368:5447) carries it: the Part rule's 1px hairline in its 10% ink, half the table's
+ * width, centred in the gap on the axis the table and the map share (both 760, at the
+ * column's left). The Part rule fades one way, from its left edge; centred, that would
+ * lean left, so this one fades out at both ends. The phone has no such line in its
+ * frames, so this is desktop only. */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv4-fvr > .rv4-sep--rule {
+    align-items: center;
+    display: flex;
+  }
+  .rv3.rv4 .rv4-fvr > .rv4-sep--rule::before {
+    background: linear-gradient(
+      90deg,
+      rgba(22, 16, 33, 0),
+      rgba(22, 16, 33, 0.1) 50%,
+      rgba(22, 16, 33, 0)
+    );
+    content: "";
+    height: 1px;
+    margin-left: min(190px, 25%);
+    width: min(380px, 50%);
+  }
+}

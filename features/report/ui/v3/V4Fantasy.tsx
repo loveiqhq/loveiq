@@ -65,7 +65,9 @@ const V4Fantasy: FC<Props> = ({ view, onUnlock }) => {
 
         <V4FantasyTable table={view.table} onUnlock={onUnlock} />
 
-        <div className="rv4-sep" aria-hidden="true" data-node-id="368:5447" />
+        {/* After the last category: from 700px it carries the half-width divider (desktop
+         * review 01.10). */}
+        <div className="rv4-sep rv4-sep--rule" aria-hidden="true" data-node-id="368:5447" />
 
         {locked ? (
           /* 305:228 "Locked copy", its card 258.3 into it (1015:1379, 29.09). */
