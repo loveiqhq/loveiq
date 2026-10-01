@@ -51,8 +51,13 @@ describe("V4 on tablet and desktop", () => {
         new RegExp(`\\.rv3\\.rv4 \\.report-content ${sel.replace(/\./g, "\\.")}[^{]*\\{[^}]*760px`)
       );
     }
-    // Only the fantasy table keeps it, as its own width (v4Desktop2809b).
-    expect(v3.match(/760px/g)).toHaveLength(1);
+    // Only the Fantasy figures keep it (v4Desktop2809b): the table's own width, and the
+    // map's axis over the table.
+    expect(
+      rules(v3)
+        .filter(([, body]) => body.includes("760px"))
+        .map(([selector]) => selector)
+    ).toEqual([".rv3.rv4 .rv4-fvm", ".rv3.rv4 .rv4-fvt"]);
   });
 
   it("lets every phone-width V4 block fill the column from 700px", () => {

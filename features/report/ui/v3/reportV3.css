@@ -8402,12 +8402,13 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   }
 
   /* Fantasy vs. Reality. The map's plot is the phone's 300 at most, placed in
-   * percentages, so it scales as one piece: 520 here, the figure centred in the column,
-   * which the copy runs; its labels keep their size and so crowd less. The table keeps
-   * a 760 of its own (at the full 917 its names sat 600px from their scores), its score
-   * columns 140 so a fantasy's name sits on one line. */
+   * percentages, so it scales as one piece: 520 here, the figure centred over the
+   * table, so the chapter's two figures share an axis; its labels keep their size and
+   * so crowd less. The table keeps a 760 of its own (at the full 917 its names sat
+   * 600px from their scores), its score columns 140 so a fantasy's name sits on one
+   * line. The copy runs the whole column since 30.09. */
   .rv3.rv4 .rv4-fvm {
-    margin-left: max(0px, (100% - 548px) / 2);
+    margin-left: max(0px, (min(760px, 100%) - 548px) / 2);
     width: min(548px, 100%);
   }
   .rv3.rv4 .rv4-fvm__img {

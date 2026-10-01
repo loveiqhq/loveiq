@@ -199,7 +199,10 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     const cta = within(bar).getByRole("button", { name: "Unlock full report" });
     expect(cta).toHaveClass("report-sticky-unlock__cta--v4");
     expect(cta).not.toHaveClass("rpm-cta");
-    expect(cta.textContent).toBe("Unlock Full Report →");
+    // A no-break space before the arrow, as the footer's pill has: the arrow is its own
+    // flex item, and a plain space at an item's start collapses, leaving "Report→"
+    // where 1005:395 sets one text run, "Unlock Full Report →" (final review, 30.09).
+    expect(cta.textContent).toBe("Unlock Full Report →");
   });
 
   it("opens checkout from the pill and counts it as the desktop bar", async () => {

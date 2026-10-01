@@ -86,11 +86,12 @@ describe("the Summary", () => {
 
 describe("Fantasy vs. Reality uses the column", () => {
   // The table keeps its own 760: at the full 917 it set its names 600px from their
-  // scores. The map keeps its own 548 and centres in the column, which the copy runs
-  // since 30.09.
-  it("grows the map's plot to 520, centred in the column", () => {
+  // scores. The map keeps its own 548, centred over the table, so the chapter's two
+  // figures share an axis. Centred in the 896 column since 30.09's copy width, it stood
+  // 68px right of the table's middle (final review, 30.09).
+  it("grows the map's plot to 520, centred over the table", () => {
     const map = ruleIn(".rv3.rv4 .rv4-fvm");
-    expect(map).toContain("margin-left: max(0px, (100% - 548px) / 2)");
+    expect(map).toContain("margin-left: max(0px, (min(760px, 100%) - 548px) / 2)");
     expect(map).toContain("width: min(548px, 100%)");
     expect(ruleIn(".rv3.rv4 .rv4-fvm__img")).toContain("--fvm-plot: min(520px, 100cqi - 28px)");
   });
