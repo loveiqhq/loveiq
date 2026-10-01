@@ -24,9 +24,11 @@
     width: min(1120px, 100% - 128px);
   }
   /* The column clips sideways. 64 out on each side (the frame leaves 128), it clears
-   * the icons' glow and the drawer's shadow, which a clip flush with the text cut. */
+   * the icons' glow and the drawer's shadow, which a clip flush with the text cut. A phone's
+   * holds still (its slides are scaled to fit); this one scrolls on a window too short. */
   .wz-root .wz-scroll {
     margin: 0 -64px;
+    overflow-y: auto;
     padding: clamp(24px, 5vh, 53px) 64px;
   }
   /* 1:4468 — one line at the content's right edge. */
@@ -36,10 +38,16 @@
     white-space: nowrap;
     width: auto;
   }
-  /* The slide fills what the chrome leaves and sits in its middle (1:4471, centred). */
+  /* The slide fills what the chrome leaves and sits in its middle (1:4471, centred). The
+   * phone's scaled 345 x 640 box steps out of the layout: a desktop sets its own sizes. */
   .wz-root .wz-slot {
     flex: 1 0 auto;
+    height: auto;
     justify-content: center;
+    width: 100%;
+  }
+  .wz-root .wz-fit {
+    display: contents;
   }
 
   /* A text slide (1:4476): the icon (the phone's 64 since Mark's 01.10), 40 to the

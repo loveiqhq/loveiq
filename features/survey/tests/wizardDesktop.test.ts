@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { canvasScale, desktopChrome, mapZoom } from "@features/survey/ui/wizard/WizardReportMap";
+import { desktopChrome, mapZoom } from "@features/survey/ui/wizard/WizardReportMap";
 
 /**
  * The pre-report wizard on a desktop (Fatih, 01.10: "we do need to scale the Wizard
@@ -106,6 +106,18 @@ describe("the wizard's desktop stylesheet", () => {
     expect(scroll).toContain("padding: clamp(24px, 5vh, 53px) 64px");
   });
 
+  // A phone draws each slide at Figma's 345 x 640, scaled to fit (wizardFit) in a column
+  // that never scrolls. A desktop sizes its slides itself: the slot fills the frame, the
+  // scaled box steps out of the layout, and the column scrolls where a window is too short.
+  it("lays the slides out at the desktop's own size, not the phone's scaled box", () => {
+    const slot = rule(".wz-root .wz-slot");
+    expect(slot).toContain("flex: 1 0 auto");
+    expect(slot).toContain("height: auto");
+    expect(slot).toContain("width: 100%");
+    expect(rule(".wz-root .wz-fit")).toContain("display: contents");
+    expect(rule(".wz-root .wz-scroll")).toContain("overflow-y: auto");
+  });
+
   it("puts SKIP INTRO on one line top right, Back far left and CONTINUE far right", () => {
     const skip = rule(".wz-root .wz-skip");
     // The content's right edge, inside the column's 64.
@@ -171,15 +183,7 @@ describe("the map on a desktop", () => {
   });
 });
 
-describe("canvasScale and mapZoom", () => {
-  it("keeps a phone's canvas whole: 1, and smaller below a 345 column", () => {
-    expect(canvasScale(345, 393)).toBe(1);
-    expect(canvasScale(327, 375)).toBeCloseTo(327 / 345);
-    // A desktop's canvas is the grid above, at its natural size, however tall the window.
-    expect(canvasScale(1120, 1440)).toBe(1);
-    expect(canvasScale(1120, 1920)).toBe(1);
-  });
-
+describe("mapZoom", () => {
   it("zooms the drawer and the tiles to what the window's height leaves", () => {
     // 900 leaves 670.3: the drawer is 597 tall, the tiles block with its controls 541.
     const at900 = mapZoom(900);
