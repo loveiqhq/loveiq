@@ -11,6 +11,7 @@ import { AUTHORITY_CONDUCTOR } from "./authority-conductor";
 import { CURIOUS_APPRENTICE } from "./curious-apprentice";
 import { EMOTIONAL_VOYEUR } from "./emotional-voyeur";
 import { EXPLORER_OF_EDGES } from "./explorer-of-edges";
+import { LOYAL_RITUALIST } from "./loyal-ritualist";
 import type { Report3ArchetypeCopy } from "./types";
 
 export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCopy>> = {
@@ -19,6 +20,7 @@ export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCop
   "Curious Apprentice": CURIOUS_APPRENTICE,
   "Emotional Voyeur": EMOTIONAL_VOYEUR,
   "Explorer of Edges": EXPLORER_OF_EDGES,
+  "Loyal Ritualist": LOYAL_RITUALIST,
 };
 
 /** One chapter of every archetype here, by display name. */
