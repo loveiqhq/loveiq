@@ -116,6 +116,7 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
   const pulsing = orbitSeen && !movedOn && !pulseDone;
   // From 700px: the arrows' held step (see DESKTOP above).
   const [desktop, setDesktop] = useState(false);
+  const desktopRef = useRef(false);
   const [held, setHeld] = useState<number | null>(null);
   const heldRef = useRef<number | null>(null);
   const readRef = useRef<() => void>(() => {});
@@ -124,7 +125,17 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
     const query = window.matchMedia("(min-width: 700px)");
-    const update = () => setDesktop(query.matches);
+    const update = () => {
+      desktopRef.current = query.matches;
+      setDesktop(query.matches);
+      // Below 700px the swipe leads alone: a step the arrows held must not keep the orbit
+      // from following it (final review, 01.10).
+      if (!query.matches && heldRef.current !== null) {
+        heldRef.current = null;
+        setHeld(null);
+        readRef.current();
+      }
+    };
     update();
     query.addEventListener?.("change", update);
     return () => query.removeEventListener?.("change", update);
@@ -149,7 +160,15 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
       queued = false;
       const step = stepRef.current || measure();
       if (!step) return;
-      const at = Math.min(LOOP_STEPS.length - 1, Math.max(0, viewport.scrollLeft / step));
+      // A desktop's track stops once the last card is whole, three and a half pitches in,
+      // so its scroll range is spread over the six steps; the phone centres each card.
+      const max = viewport.scrollWidth - viewport.clientWidth;
+      const steps = LOOP_STEPS.length - 1;
+      const raw =
+        desktopRef.current && max > 0
+          ? (viewport.scrollLeft / max) * steps
+          : viewport.scrollLeft / step;
+      const at = Math.min(steps, Math.max(0, raw));
       // A held step keeps the orbit where the arrows put it (desktop).
       if (heldRef.current === null) {
         orbitRef.current?.style.setProperty("--orbit-rot", `${Math.round(at * 60 * 100) / 100}deg`);
@@ -192,8 +211,10 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
     return () => indicator.removeEventListener("animationend", end);
   }, [pulsing]);
 
-  // The reader's own sideways scroll lets the scroll lead again (desktop). A vertical
-  // wheel over the loop is the page scrolling, not a takeover.
+  // The reader's own sideways scroll lets the scroll lead again (desktop): a sideways
+  // wheel, the arrow keys, a touch drag, or a press on the scrollbar. A vertical wheel
+  // over the loop is the page scrolling, and a click on a card is not a scroll (final
+  // review, 01.10: it swung the orbit back from the last step).
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!desktop || !viewport) return;
@@ -209,12 +230,17 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") release();
     };
+    const onPointer = (event: PointerEvent) => {
+      if (event.target === viewport) release();
+    };
     viewport.addEventListener("wheel", onWheel, { passive: true });
-    viewport.addEventListener("pointerdown", release, { passive: true });
+    viewport.addEventListener("pointerdown", onPointer, { passive: true });
+    viewport.addEventListener("touchmove", release, { passive: true });
     viewport.addEventListener("keydown", onKey);
     return () => {
       viewport.removeEventListener("wheel", onWheel);
-      viewport.removeEventListener("pointerdown", release);
+      viewport.removeEventListener("pointerdown", onPointer);
+      viewport.removeEventListener("touchmove", release);
       viewport.removeEventListener("keydown", onKey);
     };
   }, [desktop]);

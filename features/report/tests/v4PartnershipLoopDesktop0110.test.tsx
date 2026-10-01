@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4PartnershipLoop from "@features/report/ui/v3/V4PartnershipLoop";
 import { buildPartnership } from "@/data/report3-partnership";
@@ -136,6 +136,71 @@ describe("V4PartnershipLoop — the desktop loop (desktop review 01.10)", () => 
     fireEvent.wheel(viewport, { deltaX: 40 });
     fireEvent.scroll(viewport);
     expect(active(container)).toBe("The Situation");
+  });
+
+  // Final review, 01.10: a plain click released the held step, so clicking "My
+  // Confirmation" after reaching it with Next swung the orbit back to step 4.
+  it("keeps the held step when a card is clicked", () => {
+    desktop();
+    syncFrames();
+    const { container } = render(<V4PartnershipLoop stages={OPEN.loop} />);
+    const { viewport } = layOut(container);
+    const next = () => fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    for (let i = 0; i < 5; i++) next();
+    fireEvent.scroll(viewport);
+    fireEvent.pointerDown(container.querySelectorAll(".rv4-loop__slide")[5]!);
+    fireEvent.scroll(viewport);
+    expect(active(container)).toBe("My Confirmation");
+    expect(rot(container)).toBe("300deg");
+    // A press on the scrollbar (the viewport itself) is the reader's own scroll: the
+    // scroll leads again.
+    fireEvent.pointerDown(viewport);
+    viewport.scrollLeft = 0;
+    fireEvent.scroll(viewport);
+    expect(active(container)).toBe("The Situation");
+  });
+
+  it("reaches the last step by the reader's own scroll to the end", () => {
+    desktop();
+    syncFrames();
+    const { container } = render(<V4PartnershipLoop stages={OPEN.loop} />);
+    const { viewport } = layOut(container);
+    // The track stops once the last card is whole: 1189, three and a half pitches.
+    viewport.scrollLeft = 1189;
+    fireEvent.scroll(viewport);
+    expect(active(container)).toBe("My Confirmation");
+    expect(rot(container)).toBe("300deg");
+  });
+
+  it("lets a held step go when the window narrows below 700px", () => {
+    const listeners: ((event: { matches: boolean }) => void)[] = [];
+    let wide = true;
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          get matches() {
+            return query === "(min-width: 700px)" && wide;
+          },
+          media: query,
+          addEventListener: (_: string, fn: (event: { matches: boolean }) => void) => {
+            if (query === "(min-width: 700px)") listeners.push(fn);
+          },
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList
+    );
+    syncFrames();
+    const { container } = render(<V4PartnershipLoop stages={OPEN.loop} />);
+    const { viewport } = layOut(container);
+    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    expect(active(container)).toBe("My Interpretation");
+    wide = false;
+    act(() => listeners.forEach((fn) => fn({ matches: false })));
+    // The orbit follows the phone's swipe again: two pitches in, the third step.
+    viewport.scrollLeft = 2 * PITCH;
+    fireEvent.scroll(viewport);
+    expect(active(container)).toBe("My Reaction");
+    expect(rot(container)).toBe("120deg");
   });
 
   it("asks a mouse to use the arrows, and a phone still to swipe", () => {
