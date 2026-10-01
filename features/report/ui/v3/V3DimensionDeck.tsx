@@ -124,22 +124,24 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
       // as the end of the track.
       if (!count || el.clientWidth === 0) return;
       // Whole cards, from the slots' boxes against the viewport's.
-      {
-        const box = el.getBoundingClientRect();
-        const from = box.left + el.clientLeft;
-        const to = from + el.clientWidth;
-        const next = Array.from(el.querySelectorAll<HTMLElement>(".rv3-deck__slot"), (slot) => {
-          const r = slot.getBoundingClientRect();
-          return r.left >= from - 1 && r.left + r.width <= to + 1;
-        });
-        setWhole((prev) =>
-          prev.length === next.length && prev.every((w, i) => w === next[i]) ? prev : next
-        );
-      }
+      const box = el.getBoundingClientRect();
+      const from = box.left + el.clientLeft;
+      const to = from + el.clientWidth;
+      const next = Array.from(el.querySelectorAll<HTMLElement>(".rv3-deck__slot"), (slot) => {
+        const r = slot.getBoundingClientRect();
+        // A box with no width is not drawn (jsdom; a deck not laid out): never whole.
+        return r.width > 0 && r.left >= from - 1 && r.left + r.width <= to + 1;
+      });
+      setWhole((prev) =>
+        prev.length === next.length && prev.every((w, i) => w === next[i]) ? prev : next
+      );
       // Being at the end IS being on the last card, whatever the offset says. Since
       // 30.09 the trailing space lets the last card reach the snap edge at any width,
-      // so this only rounds a scroll that stops a pixel or two short of it.
-      if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 2) {
+      // so this rounds a scroll that stops a pixel or two short of it; and from 01.10,
+      // where three cards fit, a swipe can rest on a snap point short of the end (280 of
+      // 297 at 853) with the last card already whole, which the pager counts as the end.
+      const lastWhole = el.scrollLeft > 0 && next.length > 0 && next[next.length - 1] === true;
+      if (lastWhole || el.scrollLeft >= el.scrollWidth - el.clientWidth - 2) {
         setActive(count - 1);
         return;
       }
