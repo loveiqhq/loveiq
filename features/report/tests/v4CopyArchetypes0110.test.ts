@@ -27,6 +27,7 @@ import {
   TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
   buildTypicalBeliefs,
 } from "@/data/report3-typical-beliefs";
+import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 
 /**
@@ -139,5 +140,22 @@ describe.each(archetypes)("%s's V4 chapters", (name) => {
     if (!copy.practiceTeaser) {
       for (const block of view!.practice.teaser!) expect(free).toContain(text(block));
     }
+  });
+
+  // lockedBlurCopy2609.test.ts holds this for Spark Seeker; the table is each archetype's own
+  // (report-practice-tendencies), so it is held for each.
+  it("Fantasy vs. Reality, locked: no row past the ones the table draws, no note under the lock", () => {
+    const view = buildFantasy(name, { locked: true })!;
+    const groups = reportPracticeTendencies[name]!.groups;
+    const table = JSON.stringify(view.table);
+    const payload = JSON.stringify(view);
+    view.table.categories.forEach((category, index) => {
+      for (const row of groups[index]!.rows.slice(category.rows.length)) {
+        expect(table, row.practice).not.toContain(JSON.stringify(row.practice));
+      }
+      for (const row of groups[index]!.rows.slice(category.blurredFrom)) {
+        if (row.description) expect(payload, row.practice).not.toContain(row.description);
+      }
+    });
   });
 });
