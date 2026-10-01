@@ -139,6 +139,18 @@ describe("reportV3.css — the top three's entrance", () => {
     );
   });
 
+  // Mark, desktop review 01.10: "I think the Archetype names appear too late. Let them
+  // appear while the scales and % are loading". From 700px each name fades in with its
+  // own bar, on the bars' 150ms stagger; the phone keeps 28.09's timing above.
+  it("fades the names in with their bars from 700px, motion allowed", () => {
+    const media = "@media (min-width: 700px) and (prefers-reduced-motion: no-preference) {";
+    const at = V3_CSS.indexOf(media);
+    expect(at, "no desktop block for the names' timing").toBeGreaterThan(-1);
+    const body = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
+    expect(body).toContain(".rv3 .rv3-top3__list.is-animated .rv3-top3__name {");
+    expect(body).toContain("transition: opacity 600ms ease-out calc(var(--rv4-t3-i, 0) * 150ms);");
+  });
+
   it("shows the finished list under reduced motion", () => {
     const blocks = V3_CSS.split("@media (prefers-reduced-motion: reduce)").slice(1);
     const block = blocks.find((b) => b.slice(0, b.indexOf("}")).includes(".rv3-top3__list"));
