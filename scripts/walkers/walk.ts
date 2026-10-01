@@ -244,13 +244,22 @@ window.__loveiqEventTap = function (name, params) {
     var pct = Math.min(100, Math.max(0, Math.round((scrollY / total) * 100)));
     if (pct > max) { max = pct; window.__walkMaxScroll = max; }
   }, { passive: true });
+  var pricesOpen = false;
   var mo = new MutationObserver(function () {
+    var open = !!document.querySelector(".report-pricing-modal.is-visible");
+    // When the plans last appeared, by the page's own clock: the report can open them by
+    // itself while the walk waits on a tap, and the walk then timed the offer 10.6 s late.
+    if (open && !pricesOpen) window.__walkPricesShownAt = Date.now();
+    pricesOpen = open;
     if (!onReport() || window.__walkScrollBeforePrices !== undefined) return;
-    if (document.querySelector(".report-pricing-modal.is-visible")) window.__walkScrollBeforePrices = max;
+    if (open) window.__walkScrollBeforePrices = max;
   });
   // In some frames the document has no element yet when this runs; observing null throws.
+  // childList too: a picker mounted already open changes no class.
   var start = function () {
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"], subtree: true });
+    mo.observe(document.documentElement, {
+      attributes: true, attributeFilter: ["class"], childList: true, subtree: true,
+    });
   };
   if (document.documentElement) start();
   else document.addEventListener("DOMContentLoaded", start);
@@ -1237,7 +1246,14 @@ async function main(argv: string[]): Promise<number> {
     let planShownAt = 0;
     if (!toStripe()) {
       await button(PLAN_CTA[plan]).waitFor({ state: "visible", timeout: 5_000 });
-      planShownAt = paywallLeftOpenAt ?? Date.now();
+      // When the plans appeared, as the page saw it; the walk's own clock only says when it
+      // looked, which can be a whole tap later.
+      planShownAt =
+        (await page
+          .evaluate(() => (window as { __walkPricesShownAt?: number }).__walkPricesShownAt)
+          .catch(() => undefined)) ??
+        paywallLeftOpenAt ??
+        Date.now();
       if (plants) await notePrices();
       await page.waitForTimeout(1_500); // the live quote replaces the fallback price
       walk.prices = await page

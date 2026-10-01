@@ -243,6 +243,22 @@ describe("each measure", () => {
     expect(measure("CTA hesitation", v)).toBe(6 * S);
     // Straight from the sticky bar to Stripe: no plans were shown to weigh.
     expect(measure("CTA hesitation", [ev(0, "begin_checkout")])).toBeNull();
+    // Closed, then pressed with no opening recorded since: the sticky bar, or a reopened
+    // picker that sent nothing. Unknown, not the 36 s since the closed opening.
+    const closed = [
+      ev(0, "price_shown"),
+      ev(4 * S, "paywall_dismissed"),
+      ev(36 * S, "begin_checkout"),
+    ];
+    expect(measure("CTA hesitation", closed)).toBeNull();
+    // A close after the press is not one before it.
+    expect(
+      measure("CTA hesitation", [
+        ev(0, "price_shown"),
+        ev(6 * S, "begin_checkout"),
+        ev(9 * S, "paywall_dismissed"),
+      ])
+    ).toBe(6 * S);
   });
 
   it("answer hesitation: over three times the usual and over eight seconds", () => {
