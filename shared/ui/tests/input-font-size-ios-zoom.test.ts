@@ -14,8 +14,12 @@ import { join, sep } from "node:path";
  * rage-clicked at the moment their viewport went 414 -> 388 -> 378, on
  * question 38 of 59, leaving the remaining 21 questions magnified.
  *
- * Only the UNPREFIXED size matters: `sm:text-[15px]` applies above the mobile
- * breakpoint, where no auto-zoom exists, so a smaller desktop size is fine.
+ * EVERY size a control can take matters, at every width. iOS zooms whatever the
+ * width: an iPhone held sideways is 667-932px wide, past Tailwind's sm (640) and md
+ * (768), and an iPad wider still. So `text-base sm:text-sm` zooms a landscape iPhone
+ * in at 14px (final review, 30.09: the staging login and the report's comment box
+ * still did). Only the placeholder's or the file button's own size is left out: it
+ * does not size what a reader types.
  *
  * 30.09 — it came back ("zoomed in a bit, and the whole page scrolls sideways")
  * through two holes in this scanner, which had passed the whole time:
@@ -26,7 +30,7 @@ import { join, sep } from "node:path";
  *  - it read only Tailwind classes, so a control sized by a stylesheet class was
  *    invisible — the report's 14px "Does this resonate?" comment box.
  * It now walks a tag the way JSX does, and resolves each class a control carries
- * against the stylesheets, a phone-width rule winning over the base rule.
+ * against the stylesheets, every rule for it at every width.
  *
  * The admin is left out: an internal desktop tool, 200+ controls at 12-14px.
  */
@@ -36,8 +40,8 @@ const EXEMPT = [`features${sep}admin${sep}`, `app${sep}admin${sep}`];
 /** iOS zooms only the controls a reader types into or picks from. */
 const NO_ZOOM_TYPES =
   /\btype=["'](?:checkbox|radio|range|hidden|file|color|submit|button|reset|image)["']/;
-/** From this min-width up the layout is not a phone's, so no auto-zoom (Tailwind's sm). */
-const PHONE_MAX = 640;
+/** Variants that size a part of the control, not the text a reader types into it. */
+const NOT_THE_TEXT = /(?:^|:)(?:placeholder|file|before|after|marker|selection):$/;
 
 function files(dir: string, ext: string): string[] {
   const out: string[] = [];
@@ -77,41 +81,43 @@ export function openingTag(src: string, start: number): string {
   return src.slice(start);
 }
 
-/** Unprefixed Tailwind sizes and an inline `fontSize` on a tag, in px. */
+/**
+ * Every Tailwind size and inline `fontSize` on a tag, in px, at any width: `sm:text-sm`
+ * and `md:text-[14px]` count as much as `text-sm`. Placeholder and file-button sizes do
+ * not (NOT_THE_TEXT).
+ */
 export function tagSizes(tag: string): number[] {
-  // `(?<![:\w-])` keeps `sm:text-sm` / `md:text-[14px]` out — those only apply
-  // above the mobile breakpoint.
-  const arbitrary = [...tag.matchAll(/(?<![:\w-])text-\[(\d+(?:\.\d+)?)px\]/g)].map((x) =>
-    parseFloat(x[1]!)
-  );
-  const named = [...tag.matchAll(/(?<![:\w-])text-(xs|sm|base|lg|xl)\b/g)].map(
-    (x) => NAMED[x[1]!]!
-  );
+  const sizes: number[] = [];
+  const TOKEN = /(?<![\w-])((?:[\w-]+:)*)text-(?:\[(\d+(?:\.\d+)?)px\]|(xs|sm|base|lg|xl)\b)/g;
+  for (const m of tag.matchAll(TOKEN)) {
+    if (NOT_THE_TEXT.test(m[1] ?? "")) continue;
+    sizes.push(m[2] ? parseFloat(m[2]) : NAMED[m[3]!]!);
+  }
   const inline = [...tag.matchAll(/fontSize:\s*["'`]?(\d+(?:\.\d+)?)(px|rem|em|%)?/g)]
     .filter((x) => x[2] !== "em" && x[2] !== "%")
     .map((x) => parseFloat(x[1]!) * (x[2] === "rem" ? 16 : 1));
-  return [...arbitrary, ...named, ...inline];
+  return [...sizes, ...inline];
 }
 
 interface CssSize {
   px: number;
-  /** Inside a max-width media query: the phone's own rule. */
-  phoneRule: boolean;
+  /** The media query the rule sits in, if any, for the report. */
+  media: string;
 }
 
 const FONT_SIZE = /(?:^|;)\s*font-size:\s*(\d+(?:\.\d+)?)(px|rem)\b/;
 const FONT_SHORTHAND = /(?:^|;)\s*font:\s*(?:[a-z-]+\s+|\d{3}\s+)*(\d+(?:\.\d+)?)(px|rem)\b/;
 
 /**
- * Every class whose own rule sets a font-size a phone gets, from CSS source:
- * `.a { font-size: 14px }` and `.b .a { … }` both size `.a`. Rules behind a
- * min-width of 640px or more are desktop-only and skipped; rules on a pseudo-class
- * or pseudo-element (`:focus`, `::placeholder`) are skipped too.
+ * Every font-size a class's own rules set, at any width, from CSS source:
+ * `.a { font-size: 14px }` and `.b .a { … }` both size `.a`, inside a media query or
+ * not. Rules on a pseudo-class or pseudo-element (`:focus`, `::placeholder`) are
+ * skipped.
  */
 export function cssClassSizes(css: string): Map<string, CssSize[]> {
   const out = new Map<string, CssSize[]>();
   const src = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const blocks: { desktop: boolean; phone: boolean; depth: number }[] = [];
+  const blocks: { head: string; depth: number }[] = [];
   let depth = 0;
   let prelude = "";
   for (let i = 0; i < src.length; i++) {
@@ -121,12 +127,7 @@ export function cssClassSizes(css: string): Map<string, CssSize[]> {
       prelude = "";
       depth++;
       if (head.startsWith("@")) {
-        const minWidth = /min-width:\s*(\d+)px/.exec(head);
-        blocks.push({
-          desktop: !!minWidth && Number(minWidth[1]) >= PHONE_MAX,
-          phone: /max-width/.test(head),
-          depth,
-        });
+        blocks.push({ head, depth });
         continue;
       }
       const close = src.indexOf("}", i);
@@ -134,9 +135,9 @@ export function cssClassSizes(css: string): Map<string, CssSize[]> {
       i = close;
       depth--;
       const size = FONT_SIZE.exec(body) ?? FONT_SHORTHAND.exec(body);
-      if (!size || blocks.some((b) => b.desktop)) continue;
+      if (!size) continue;
       const px = parseFloat(size[1]!) * (size[2] === "rem" ? 16 : 1);
-      const phoneRule = blocks.some((b) => b.phone);
+      const media = blocks.map((b) => b.head).join(" ");
       for (const selector of head.split(",")) {
         const last =
           selector
@@ -146,7 +147,7 @@ export function cssClassSizes(css: string): Map<string, CssSize[]> {
         if (last.includes(":")) continue;
         for (const cls of last.match(/\.[\w-]+/g) ?? []) {
           const name = cls.slice(1);
-          out.set(name, [...(out.get(name) ?? []), { px, phoneRule }]);
+          out.set(name, [...(out.get(name) ?? []), { px, media }]);
         }
       }
     } else if (c === "}") {
@@ -162,12 +163,10 @@ export function cssClassSizes(css: string): Map<string, CssSize[]> {
   return out;
 }
 
-/** What a phone renders a class at: its last phone rule, else its last base rule. */
-export function phoneSize(sizes: CssSize[] | undefined): number | null {
+/** The smallest size any of a class's rules sets, at any width: the one that zooms. */
+export function smallestSize(sizes: CssSize[] | undefined): CssSize | null {
   if (!sizes?.length) return null;
-  const phone = sizes.filter((s) => s.phoneRule);
-  const rules = phone.length ? phone : sizes;
-  return rules[rules.length - 1]!.px;
+  return sizes.reduce((min, s) => (s.px < min.px ? s : min));
 }
 
 /** The `{…}` expression at the start of `src`, braces balanced, without the braces. */
@@ -223,9 +222,10 @@ function offenders() {
           if (px < 16) found.push(`${file}:${line} <${m[1]}> font-size ${px}px`);
         }
         for (const name of classNames(tag)) {
-          const px = phoneSize(css.get(name));
-          if (px !== null && px < 16) {
-            found.push(`${file}:${line} <${m[1]}> .${name} is ${px}px on a phone`);
+          const smallest = smallestSize(css.get(name));
+          if (smallest && smallest.px < 16) {
+            const where = smallest.media ? ` in ${smallest.media}` : "";
+            found.push(`${file}:${line} <${m[1]}> .${name} is ${smallest.px}px${where}`);
           }
         }
       }
@@ -235,14 +235,13 @@ function offenders() {
 }
 
 describe("form controls never trigger the iOS auto-zoom", () => {
-  it("has no input, textarea or select under 16px at mobile width", () => {
+  it("has no input, textarea or select under 16px, at any width", () => {
     const bad = offenders();
     expect(
       bad,
-      `These controls will zoom iOS in and never zoom back out. Give them a\n` +
-        `16px base and keep any smaller size behind a breakpoint prefix, e.g.\n` +
-        `  text-[16px] sm:text-[15px]\n` +
-        `or, for a stylesheet class, a 16px rule in a max-width media query.\n\n` +
+      `These controls will zoom iOS in and never zoom back out. Give them 16px\n` +
+        `at every width: an iPhone held sideways is 667-932px wide, past sm and md,\n` +
+        `so a smaller size behind a breakpoint prefix zooms it too.\n\n` +
         bad.join("\n")
     ).toEqual([]);
   });
@@ -253,8 +252,11 @@ describe("form controls never trigger the iOS auto-zoom", () => {
     expect(
       tagSizes('<input className="w-full font-sans text-[15px] focus:outline-none" />')
     ).toEqual([15]);
-    // the sm: one must NOT be picked up
-    expect(tagSizes('<input className="text-[16px] sm:text-[15px]" />')).toEqual([16]);
+    // A size behind a breakpoint counts: a landscape iPhone is past sm and md.
+    expect(tagSizes('<input className="text-[16px] sm:text-[15px]" />')).toEqual([16, 15]);
+    expect(tagSizes('<input className="text-base md:text-sm" />')).toEqual([16, 14]);
+    // The placeholder's own size does not size what a reader types.
+    expect(tagSizes('<input className="text-base placeholder:text-sm" />')).toEqual([16]);
   });
 
   it("reads past an arrow function to the className (the 30.09 blind spot)", () => {
@@ -266,21 +268,29 @@ describe("form controls never trigger the iOS auto-zoom", () => {
     expect(openingTag(`<input placeholder="a > b" className="text-xs" />`, 0)).toContain("text-xs");
   });
 
-  it("resolves a stylesheet class, a phone rule winning over the base rule", () => {
+  it("resolves a stylesheet class at every width, its smallest size the one that zooms", () => {
     const base = `.fb__box { width: 100%; font-size: 14px; }`;
-    expect(phoneSize(cssClassSizes(base).get("fb__box"))).toBe(14);
-    const fixed = `${base}\n@media (max-width: 767px) { .fb__panel { top: 0; } .fb__box { font-size: 16px; } }`;
-    expect(phoneSize(cssClassSizes(fixed).get("fb__box"))).toBe(16);
-    // A desktop-only rule is not what a phone gets.
-    const desktop = `@media (min-width: 768px) { .fb__box { font-size: 14px; } }`;
-    expect(phoneSize(cssClassSizes(desktop).get("fb__box"))).toBeNull();
+    expect(smallestSize(cssClassSizes(base).get("fb__box"))?.px).toBe(14);
+    // A 16px phone rule does not save a 14px base: a landscape iPhone at 844 gets it.
+    const phoneOnly = `${base}\n@media (max-width: 767px) { .fb__panel { top: 0; } .fb__box { font-size: 16px; } }`;
+    expect(smallestSize(cssClassSizes(phoneOnly).get("fb__box"))?.px).toBe(14);
+    // Nor is a rule behind a min-width out of a phone's reach.
+    const wide = `@media (min-width: 768px) { .fb__box { font-size: 14px; } }`;
+    expect(smallestSize(cssClassSizes(wide).get("fb__box"))).toEqual({
+      px: 14,
+      media: "@media (min-width: 768px)",
+    });
+    const fixed = `.fb__box { font-size: 16px; }\n@media (min-width: 768px) { .fb__box { font-size: 16px; } }`;
+    expect(smallestSize(cssClassSizes(fixed).get("fb__box"))?.px).toBe(16);
     // A placeholder rule does not size the control.
     expect(
       cssClassSizes(`.fb__box::placeholder { font-size: 12px; }`).get("fb__box")
     ).toBeUndefined();
     // The shorthand counts.
     expect(
-      phoneSize(cssClassSizes(`.fb__box { font: 300 14px/22px var(--font-sans); }`).get("fb__box"))
+      smallestSize(
+        cssClassSizes(`.fb__box { font: 300 14px/22px var(--font-sans); }`).get("fb__box")
+      )?.px
     ).toBe(14);
     expect(
       classNames(

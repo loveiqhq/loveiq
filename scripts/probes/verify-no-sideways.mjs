@@ -14,7 +14,9 @@
  *     never zooms back out; a client-side navigation keeps the zoom for the rest
  *     of the visit (the staging login's 14px password box, 30.09). Playwright
  *     cannot reproduce the zoom itself, so the probe reads every visible text
- *     control's computed font-size instead.
+ *     control's computed font-size instead. The default widths end on a landscape
+ *     iPhone (667, 844, 932): iOS zooms whatever the width, and a size kept behind a
+ *     breakpoint for "desktop" still reaches an iPhone held sideways.
  *
  * USAGE
  *   node scripts/probes/verify-no-sideways.mjs                        # local dev on :3000
@@ -38,7 +40,9 @@ const PATHS = (
   process.env.PATHS ??
   "/report?preview=1&v4=1,/report?preview=1&v4=1&plan=full_report,/survey,/,/login"
 ).split(",");
-const WIDTHS = (process.env.WIDTHS ?? "320,360,375,390,393,414,430").split(",").map(Number);
+const WIDTHS = (process.env.WIDTHS ?? "320,360,375,390,393,414,430,667,844,932")
+  .split(",")
+  .map(Number);
 const ENGINES = (process.env.ENGINES ?? "chromium,webkit").split(",");
 const MUTATE = process.env.MUTATE === "1";
 
