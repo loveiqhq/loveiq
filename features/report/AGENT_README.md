@@ -36,6 +36,28 @@ deliberately left behind (the forced paywall and the urgency countdown).
 - `server/emails/` — report-related email templates (essentials/full/all, share, discount + A/B variants).
 - API routes inline: `app/api/report/route.ts`, `app/api/report/share/*`, `app/api/report-feedback/route.ts`.
 
+**Report V4's chapter copy is paid copy, one record per archetype.** The four designed
+chapters (Typical Beliefs, Accelerators & Brakes, Challenges in Partnerships, Fantasy vs.
+Reality) live in `data/report3-typical-beliefs.ts`, `data/report3-accelerators.ts`,
+`data/report3-partnership.ts` and `data/report3-fantasy.ts`. Each module's `build*` runs on the
+server and hands the chapter down as props, already split at the paywall. Spark Seeker's copy is
+hand-set in those modules from Figma.
+
+Every other archetype's copy is in `data/report3-copy/<slug>.ts`, one file per archetype holding
+all four chapters. They were transcribed from Sanjin's Google Docs on 2026-10-01; each file's
+header lists its doc ids. `data/report3-copy/index.ts` merges the files in by display name.
+
+- **Paywall cuts.** Each record's `cuts` are read off the docs' "Paywall" comments. A cut a record
+  omits takes Spark Seeker's (Figma's).
+- **Client imports.** The whole folder counts as paid:
+  `__tests__/security/premium-content-bundle.test.ts` rejects a runtime import of any path under
+  `@/data/report3-copy` from a client file. `import type` is fine.
+- **Tests.**
+  - `tests/v4CopyFiles0110.test.ts` checks each file on its own.
+  - `tests/v4CopyArchetypes0110.test.ts` checks every archetype's merged chapters, and
+    `tests/v4ChaptersRender0110.test.tsx` draws them.
+  - `tests/sparkViewsPinned0110.test.ts` pins Spark Seeker's views byte for byte.
+
 **Belongs:** report rendering, plan-based gating, share verification, personalization.
 
 **Does NOT belong:**

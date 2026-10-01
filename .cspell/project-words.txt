@@ -90,6 +90,7 @@ recaptcha
 recognisable
 Resend
 ROPA
+Sanjin
 SBOM
 searchconsole
 Semgrep
