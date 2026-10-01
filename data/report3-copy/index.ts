@@ -6,9 +6,12 @@
  * PREMIUM, as everything in this folder but runs.ts and types.ts:
  * __tests__/security/premium-content-bundle.test.ts keeps it out of client bundles.
  */
+import { ANALYTICAL_SEXUALIST } from "./analytical-sexualist";
 import type { Report3ArchetypeCopy } from "./types";
 
-export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCopy>> = {};
+export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCopy>> = {
+  "Analytical Sexualist": ANALYTICAL_SEXUALIST,
+};
 
 /** One chapter of every archetype here, by display name. */
 export function chapterCopy<K extends keyof Report3ArchetypeCopy>(
