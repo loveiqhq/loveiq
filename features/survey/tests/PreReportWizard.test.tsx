@@ -468,3 +468,54 @@ describe("PreReportWizard — the hooks its desktop layout styles", () => {
     expect(src).toContain('import "./wizard/wizard-desktop.css";');
   });
 });
+
+// Mark, Figma 01.10 08:42 on 1071:2092: "Decreased Icons size and space between elements".
+// The sync that morning asked for more above the fold (Marcus: "the top icon") and for
+// slide 1's research cards to come up to the text (Sanjin: "a little bit pushed down").
+describe("PreReportWizard — Mark's 01.10 round: smaller icons, tighter gaps", () => {
+  const extraGap = () =>
+    document.querySelector<HTMLElement>(".wz-extra")!.style.getPropertyValue("--wz-extra-gap");
+
+  it("draws the top icon at 64 in a 140.8 glow, 38.4 out (1049:1173)", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const icon = document.querySelector<HTMLElement>(".wz-icon")!;
+    const img = icon.querySelector("img")!;
+    expect(img).toHaveAttribute("src", "/survey/wizard/note.svg");
+    expect(img).toHaveAttribute("width", "64");
+    expect(img).toHaveAttribute("height", "64");
+    expect(img).toHaveClass("h-16", "w-16");
+    const glow = icon.querySelector("[aria-hidden]")!;
+    expect(glow).toHaveClass("h-[140.8px]", "w-[140.8px]", "left-[-38.4px]", "top-[-38.4px]");
+  });
+
+  it("sets the copy 20 under the heading (1049:1187)", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const body = document.querySelector(".wz-body");
+    expect(body).toHaveClass("pt-5");
+    expect(body).not.toHaveClass("pt-6");
+  });
+
+  it("brings slide 1's research cards up to 20 under the copy's box (1049:1190)", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    // The copy's box is a fixed 198 in Figma, for seven 29.25 lines (204.75) that CSS
+    // stacks in full: 20 under the box is 13.25 under the last line.
+    expect(extraGap()).toBe("13.25px");
+    press(continueButton());
+    press(continueButton());
+    press(continueButton());
+    // Slide 3's guarantee keeps the paragraph's 21px foot and its 24 (1066:2214, 2215).
+    expect(heading()).toBe(HEADINGS[2]);
+    expect(extraGap()).toBe("45px");
+  });
+
+  it("ships Figma's 64 icons: the 80 drawings at 0.8, strokes 4 to 3.2", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    for (const name of ["note", "risk-free", "resonates", "rate", "invite"]) {
+      const svg = readFileSync(join(process.cwd(), "public/survey/wizard", `${name}.svg`), "utf8");
+      expect(svg, name).toContain('width="64" height="64" viewBox="0 0 64 64"');
+      expect(svg, name).toContain('stroke-width="3.2"');
+      expect(svg, name).not.toContain('stroke-width="4"');
+    }
+  });
+});

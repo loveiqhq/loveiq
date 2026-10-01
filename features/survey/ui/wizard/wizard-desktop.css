@@ -42,7 +42,8 @@
     justify-content: center;
   }
 
-  /* A text slide (1:4476): the 80px icon, 40 to the heading, 32 to the copy. */
+  /* A text slide (1:4476): the icon (the phone's 64 since Mark's 01.10), 40 to the
+   * heading, 32 to the copy. */
   .wz-root .wz-text {
     padding-top: 0;
   }
