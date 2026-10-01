@@ -6,7 +6,7 @@
 
 - `ui/SurveyPage.tsx` — orchestrator (intro → wizard → consent → engine).
 - `ui/SurveyEngine.tsx` — question loop + completion phases.
-- `ui/PreReportWizard.tsx` — 6-slide post-submission wizard (Figma 1071:2092); slide 2, the report map, is `ui/wizard/WizardReportMap.tsx`, its copy `ui/wizard/wizardContent.ts`.
+- `ui/PreReportWizard.tsx` — 6-slide post-submission wizard (Figma 1071:2092); slide 2, the report map, is `ui/wizard/WizardReportMap.tsx`, its copy `ui/wizard/wizardContent.ts`. From 1024px `ui/wizard/wizard-desktop.css` lays the slides out for a desktop, on `wz-*` hooks inside one media query, so a phone keeps the 393 design.
 - `ui/SurveyConfirmation.tsx` — processing/success/error screens.
 - `ui/questions/` — question type components (SingleChoice, Scale, etc.).
 - `ui/hooks/` — survey state, submission, tracking hooks (`useSurveyState`, `useSubmitSurvey`, `useSurveyTracking`).
