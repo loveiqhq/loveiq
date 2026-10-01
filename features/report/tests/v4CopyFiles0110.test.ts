@@ -37,6 +37,7 @@ function sections(copy: Report3ArchetypeCopy): [string, readonly Report3Block[] 
   return [
     ["tb.intro", tb.intro],
     ["tb.lede", tb.lede],
+    ["tb.afterPanels", tb.afterPanels],
     ["tb.challenges", tb.challenges],
     ["tb.practice", tb.practice],
     ["ab.intro", ab.intro],
