@@ -348,7 +348,8 @@ describe("buildFantasy — the map", () => {
 
 describe("buildFantasy — who gets the chapter", () => {
   it("returns null for an archetype nobody has written yet, so ReportPage keeps V2's section", () => {
-    expect(buildFantasy("Emotional Voyeur")).toBeNull();
+    // A name no copy knows, so this holds however many archetypes are written (data/report3-copy).
+    expect(buildFantasy("Not An Archetype")).toBeNull();
     expect(buildFantasy("Not An Archetype", { locked: true })).toBeNull();
   });
 

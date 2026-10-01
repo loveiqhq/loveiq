@@ -184,8 +184,9 @@ describe("buildPartnership — unlocked", () => {
   });
 
   it("is null for an archetype nobody has written yet, so the V2 section stays", () => {
-    expect(buildPartnership("Explorer of Edges")).toBeNull();
-    expect(buildPartnership("Explorer of Edges", { locked: true })).toBeNull();
+    // A name no copy knows, so this holds however many archetypes are written (data/report3-copy).
+    expect(buildPartnership("Not An Archetype")).toBeNull();
+    expect(buildPartnership("Not An Archetype", { locked: true })).toBeNull();
   });
 });
 
