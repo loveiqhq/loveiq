@@ -10,9 +10,9 @@ import { V3ModeProvider, V4ModeProvider } from "@features/report/ui/v3/V3Chapter
 
 /**
  * Review 27.09 — "show the report 2.0 version in the other chapters that we don't open
- * by default". For the thirteen archetypes whose Typical Beliefs and Accelerators &
- * Brakes are not written for V4 yet, those two chapters open onto Report 2.0's
- * section. Under V4 both still drew Report 3.0's layouts (the turning beliefs, the
+ * by default". Where an archetype's Typical Beliefs and Accelerators & Brakes have no
+ * V4 copy (the thirteen until 02.10, a name with none since), those two chapters open
+ * onto Report 2.0's section. Under V4 both still drew Report 3.0's layouts (the turning beliefs, the
  * gauge and stacked cards), because `useIsV3()` is true under V4 too. They draw 2.0's
  * own now; `?v3=1` keeps its layouts.
  */

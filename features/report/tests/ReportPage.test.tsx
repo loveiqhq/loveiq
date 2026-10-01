@@ -1019,8 +1019,8 @@ describe("ReportPage", () => {
 
   // Review 26.09: "Can we standardise the space between things/sections?" Every part
   // opens as Figma's part frames do: the fading hairline, the heading, then a 44px
-  // separator before its first block — for the archetypes still on V2's chapters too,
-  // whose first chapter used to sit straight under the heading.
+  // separator before its first block — where the designed chapters fall back to V2's
+  // too, whose first chapter used to sit straight under the heading.
   describe("V4 — every part opens on its rule, its heading and 44px (review 26.09)", () => {
     const FRAMES = [
       ["1:484", "1:491"],
@@ -1478,7 +1478,7 @@ describe("ReportPage", () => {
   // this", "Agree") and Mark closed it ("Let's do that then"). Under V4 a chapter the
   // reader has no access to is its head, its teaser and the gradient lock, and a tap
   // opens the paywall. Who is locked is the nav badges' answer. The four designed
-  // chapters keep their own gates, and V2's previews for the archetypes still on V2.
+  // chapters keep their own gates, and V2's previews where there is no V4 copy.
   describe("V4 — a chapter the reader has no access to is locked outright (review 26.09)", () => {
     const LIBIDO = "libido_challenges_in_relationships";
     const DESIGNED = [
@@ -1538,8 +1538,8 @@ describe("ReportPage", () => {
       expect(locked).toContain("core_insecurities");
       expect(locked).not.toContain("constellation");
       for (const id of DESIGNED) expect(locked).not.toContain(id);
-      // The archetype on screen is still on V2's chapters: its designed chapters open
-      // into V2's own locked preview, as before.
+      // The fixture sends no V4 chapter, as for a name with no V4 copy: its designed
+      // chapters open into V2's own locked preview, as before.
       const beliefs = container.querySelector("#typical_beliefs")!;
       expect(beliefs.querySelector("[aria-expanded]")).not.toBeNull();
       expect(beliefs.querySelector(".rv3-chapter__body")).not.toBeNull();
