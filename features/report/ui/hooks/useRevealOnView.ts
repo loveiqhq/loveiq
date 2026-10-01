@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useChapterOpen } from "./useChapterOpen";
 
 /**
  * One-shot scroll reveal for the report's charts: returns a ref to attach to the
@@ -23,6 +24,10 @@ import { useEffect, useRef, useState } from "react";
  * chart is a far worse failure than an unanimated one. Reduced-motion is handled
  * in CSS, which keeps presentation in one place: the `is-animated` class still
  * lands, and the reduce block pins each part to its final value.
+ *
+ * Inside a V4 chapter it waits for the chapter to be open and drawn (useChapterOpen):
+ * a closed chapter only clips its body, so the check below would fire for a chart the
+ * reader cannot see. Elsewhere that flag is always true.
  */
 /**
  * Mirrors the default `rootMargin`'s -30% bottom inset: the fraction of the
@@ -36,10 +41,11 @@ export function useRevealOnView<T extends Element>({
 }: { threshold?: number; rootMargin?: string } = {}): [React.RefObject<T | null>, boolean] {
   const ref = useRef<T | null>(null);
   const [isRevealed, setIsRevealed] = useState(() => typeof IntersectionObserver === "undefined");
+  const drawn = useChapterOpen();
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || isRevealed) return;
+    if (!el || isRevealed || !drawn) return;
 
     let frame = 0;
     const observer = new IntersectionObserver(
@@ -94,7 +100,7 @@ export function useRevealOnView<T extends Element>({
       window.removeEventListener("scrollend", check);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [isRevealed, threshold, rootMargin]);
+  }, [drawn, isRevealed, threshold, rootMargin]);
 
   return [ref, isRevealed];
 }

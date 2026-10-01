@@ -6020,6 +6020,22 @@ html {
   opacity: 1;
   transform: scale(1);
 }
+/* Reading Recommendations' book opens ITSELF once, as its section arrives (report.css
+ * 11999). 2.0 holds it shut on `.report-section:not(.is-visible)`, a class no V4 chapter
+ * carries, so under V4 it sat open and never moved (desktop review 01.10: "Bring back
+ * the animations of the V2 report"). Shut while its chapter is closed, it opens on its
+ * own transition as the chapter does, as the rows above build in. */
+.rv3.rv4 .rv4-chapter:not(.is-open) .report-reading__book-3d {
+  transform: rotateY(2deg) rotateX(0deg) translateY(5px);
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 2.0's still pose (report.css 12044): a pose is not motion. */
+  .rv3.rv4 .rv4-chapter:not(.is-open) .report-reading__book-3d {
+    transform: rotateY(15deg) rotateX(1.5deg);
+    opacity: 1;
+  }
+}
 
 /* ── Archetype card, V4 — Figma 15:815 as it is drawn today ──────────────────────
  * Mark, 15.09: "We slightly updated the design of the archetype card (Icon size of
