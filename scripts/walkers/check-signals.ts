@@ -8,7 +8,8 @@
  * THE LOG IS PUBLIC (this repository is), so it carries signal names and counts only:
  * no events, no selectors, no URLs. What each walk got wrong is in the table, for Jarvis.
  *
- * Exit 0 when every finished walk was stored; 1 when none finished or a write failed.
+ * Exit 0 when every walk finished and was stored; 1 when one stopped or heard nothing, none
+ * finished, or a write failed.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -66,6 +67,25 @@ export function rowsIn(dir: string, runId: string | null): WalkRow[] {
   return rows;
 }
 
+/**
+ * The walks that stopped before their end: a walk.json, with why, and no truth. The workflow
+ * runs each walk `|| true` so one stop cannot cost the night's others, which left a stop
+ * visible only in the log: on 2026-10-01 a walk bought by accident and stopped, and the run
+ * still read as a success.
+ */
+export function stoppedIn(dir: string): Array<{ walk: string; why: string }> {
+  if (!existsSync(dir)) return [];
+  const out: Array<{ walk: string; why: string }> = [];
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    const at = (f: string) => join(dir, d.name, f);
+    if (!d.isDirectory() || !existsSync(at("walk.json")) || existsSync(at("truth.json"))) continue;
+    // stoppedAt is redacted for this public log by walk.ts.
+    const walk = JSON.parse(readFileSync(at("walk.json"), "utf8")) as { stoppedAt?: string };
+    out.push({ walk: d.name, why: walk.stoppedAt ?? "no reason recorded" });
+  }
+  return out;
+}
+
 /** The walks worth storing, and the deaf ones: finished, but their tap heard next to nothing. */
 export function storable(rows: readonly WalkRow[]): { rows: WalkRow[]; deaf: WalkRow[] } {
   return {
@@ -85,7 +105,7 @@ export function tonight(rows: readonly WalkRow[]): string[] {
   });
 }
 
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[]): Promise<number> {
   const i = argv.indexOf("--walks");
   const dir = i > -1 ? argv[i + 1] : undefined;
   if (!dir) {
@@ -93,6 +113,10 @@ async function main(argv: string[]): Promise<number> {
     return 1;
   }
   const { rows, deaf } = storable(rowsIn(dir, process.env.GITHUB_RUN_ID ?? null));
+  const stopped = stoppedIn(dir);
+  for (const s of stopped) {
+    console.error(`${s.walk} stopped (${s.why}): it is not stored, and the run is not a success.`);
+  }
   for (const r of deaf) {
     console.error(
       `${r.walk} finished but heard ${r.events.length} events: the tap or the walk's page script is broken, so it is not stored.`
@@ -113,8 +137,9 @@ async function main(argv: string[]): Promise<number> {
   }
   console.log(`Stored ${rows.length} proof walk(s). Tonight, against what each walk knew:`);
   for (const line of tonight(rows)) console.log(`- ${line}`);
-  // A deaf walk is a broken instrument: stored or not, the run must not read as a success.
-  return deaf.length ? 1 : 0;
+  // A deaf walk is a broken instrument, and a stopped one a broken walk or page: whatever was
+  // stored, the run must not read as a success.
+  return deaf.length || stopped.length ? 1 : 0;
 }
 
 if (process.argv[1]?.endsWith("check-signals.ts")) {
