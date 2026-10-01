@@ -23,6 +23,12 @@ import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "
  *
  * The archetype card's dimension deck pages with it too, so what a stop is measured from
  * is a parameter: the science tiles by default, the deck's slots there.
+ *
+ * THE END (desktop review 01.10, Mark on the deck: "lets not have this white space next to
+ * the last tile when you click through… one click to the right is already okay"). With
+ * `endsWhenLastShows`, a stop at which the last item already shows whole IS the end: it
+ * and every stop after it fold into the scroll's end. Otherwise a deck that ends 22px
+ * after its last card kept a stop one card in and then a 17px nudge to the end.
  */
 export interface SciStop {
   /** The scrollLeft that lands on it. */
@@ -33,10 +39,15 @@ export interface SciStop {
 
 const MERGE_PX = 12;
 
-/** The deck's stops, from each tile's snap position and the scroll's end. */
-export const sciStops = (lefts: readonly number[], max: number): SciStop[] =>
+/**
+ * The deck's stops, from each tile's snap position and the scroll's end. `endAt`, when
+ * given, is the first scroll position at which the last tile shows whole: a stop there or
+ * past it is the end.
+ */
+export const sciStops = (lefts: readonly number[], max: number, endAt?: number): SciStop[] =>
   lefts.reduce<SciStop[]>((stops, raw, card) => {
-    const left = Math.round(Math.min(max, Math.max(0, raw)));
+    const reachesEnd = endAt !== undefined && raw >= endAt - 1;
+    const left = Math.round(reachesEnd ? max : Math.min(max, Math.max(0, raw)));
     const last = stops[stops.length - 1];
     if (last && stops.length > 1 && left - last.left < MERGE_PX) {
       last.left = left;
@@ -55,16 +66,27 @@ export const nearestSciStop = (stops: readonly SciStop[], x: number): number =>
   );
 
 /** Null before layout (jsdom, a deck not drawn); empty when every tile fits. */
-const measure = (track: HTMLElement, items: string): SciStop[] | null => {
+const measure = (
+  track: HTMLElement,
+  items: string,
+  endsWhenLastShows: boolean
+): SciStop[] | null => {
   const cards = track.querySelectorAll<HTMLElement>(items);
   if (cards.length < 2 || track.clientWidth === 0) return null;
   const max = track.scrollWidth - track.clientWidth;
   if (max <= 0) return [];
   const pad = Number.parseFloat(getComputedStyle(track).scrollPaddingInlineStart) || 0;
-  const edge = track.getBoundingClientRect().left + track.clientLeft + pad;
+  const box = track.getBoundingClientRect().left + track.clientLeft;
+  const edge = box + pad;
+  const last = cards[cards.length - 1]!.getBoundingClientRect();
+  // The scroll at which the last tile's right edge meets the viewport's.
+  const endAt = endsWhenLastShows
+    ? track.scrollLeft + last.left + last.width - box - track.clientWidth
+    : undefined;
   return sciStops(
     Array.from(cards, (card) => track.scrollLeft + card.getBoundingClientRect().left - edge),
-    max
+    max,
+    endAt
   );
 };
 
@@ -80,7 +102,9 @@ export default function useSciPager(
   count: number,
   enabled: boolean,
   /** The items a stop is measured from: each one that snaps. */
-  items = ".rv3-sci__card"
+  items = ".rv3-sci__card",
+  /** A stop that already shows the last item whole is the end (see THE END above). */
+  { endsWhenLastShows = false }: { endsWhenLastShows?: boolean } = {}
 ) {
   const [stops, setStops] = useState<SciStop[] | null>(null);
   const [at, setAt] = useState(0);
@@ -91,11 +115,11 @@ export default function useSciPager(
   const [held, setHeld] = useState<number | null>(null);
 
   const remeasure = useCallback(() => {
-    const next = trackRef.current ? measure(trackRef.current, items) : null;
+    const next = trackRef.current ? measure(trackRef.current, items, endsWhenLastShows) : null;
     stopsRef.current = next;
     setStops((prev) => (sameStops(prev, next) ? prev : next));
     return next;
-  }, [items, trackRef]);
+  }, [endsWhenLastShows, items, trackRef]);
 
   useLayoutEffect(() => {
     const track = trackRef.current;
