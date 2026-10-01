@@ -67,10 +67,12 @@ describe("GET /api/report/preview — Accelerator & Brakes", () => {
     expect(json.accelCopy["edu.eyebrow"]).toEqual(expect.any(String));
   });
 
-  it("falls back to V2 for an archetype without Report 3.0 copy", async () => {
+  // Every archetype has its own chapter since 02.10 (Sanjin's docs, data/report3-copy).
+  it("draws another archetype's own chapter, locked, V2's copy beside it", async () => {
     const { json } = await get("archetype=emotional-voyeur&plan=&v4=1");
-    expect(json.accelerators).toBeNull();
-    expect(json.acceleratorsArticle).toBeNull();
+    expect(json.accelerators).not.toBeNull();
+    expect(json.accelerators.lockedFrom).not.toBeNull();
+    expect(json.acceleratorsArticle).toMatchObject({ locked: true });
     expect(json.accelCopy).not.toBeNull();
   });
 
@@ -191,9 +193,9 @@ describe("GET /api/report/preview — Challenges in Partnerships", () => {
     expect(open.partnershipLoop.steps).toHaveLength(3);
   });
 
-  it("falls back to V2 for an archetype without Report 3.0 copy", async () => {
+  it("draws another archetype's own chapter, open, V2's copy beside it", async () => {
     const { json } = await get("archetype=emotional-voyeur&plan=full_report&v4=1");
-    expect(json.partnership).toBeNull();
+    expect(json.partnership).toMatchObject({ locked: false });
     expect(json.partnershipCopy.locked).toBe(false);
     expect(json.partnershipLoop).not.toBeNull();
   });
@@ -240,10 +242,10 @@ describe("GET /api/report/preview — Fantasy vs. Reality", () => {
     expect(open.fantasyDots).not.toBeNull();
   });
 
-  it("falls back to V2 for an archetype without Report 3.0 copy", async () => {
+  it("draws another archetype's own chapter, open, V2's copy beside it", async () => {
     const { json } = await get("archetype=emotional-voyeur&plan=full_report&v4=1");
-    expect(json.fantasy).toBeNull();
-    expect(json.fantasyArticle).toBeNull();
+    expect(json.fantasy).toMatchObject({ locked: false });
+    expect(json.fantasyArticle).toMatchObject({ locked: false });
     expect(json.fantasyCopy.locked).toBe(false);
   });
 });
