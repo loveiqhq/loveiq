@@ -408,8 +408,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     [question, setAnswer, autoAdvance, cancelAutoAdvance, goNext]
   );
 
+  // Once the last question is answered there is nothing to navigate: the processing
+  // screen, the pre-report wizard and the confirmation own the keys and the swipes. Left
+  // live, these handlers swallowed the wizard's ArrowRight and Enter and took ArrowLeft
+  // or a back swipe to the last question, whose Next does nothing once the survey is
+  // submitted (final review, 30.09).
+  const surveyOver = currentIndex >= totalQuestions;
+
   // Keyboard navigation
   useEffect(() => {
+    if (surveyOver) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === "Enter") {
         if (hasAnswer || !question?.required) {
@@ -423,10 +431,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [hasAnswer, question, goNext, goPrev]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver]);
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
+    if (surveyOver) return;
     const handleTouchStart = (e: TouchEvent) => {
       // TouchEvent always fires with at least one touch point.
       touchStartX.current = e.touches[0]!.clientX;
@@ -450,7 +459,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [hasAnswer, question, goNext, goPrev]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver]);
 
   // Clean up auto-advance timer on unmount
   useEffect(() => {

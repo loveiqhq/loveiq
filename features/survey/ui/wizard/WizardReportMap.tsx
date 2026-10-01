@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type FC, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FC, type ReactNode } from "react";
 import Image from "next/image";
 import { REPORT_DEEP_DIVES } from "@/data/report-deep-dives";
 import { WIZARD_DRAWER, type WizardDrawerRow } from "./wizardContent";
@@ -200,22 +200,27 @@ const TileControls: FC<WizardReportMapProps & { width: number }> = ({ step, onSt
           />
         ))}
       </div>
-      {/* 32px as drawn; the ::after makes the tap target 44px. */}
+      {/* 32px as drawn; the ::after makes the tap target 44px. aria-disabled, not
+       * disabled, at an end: a disabled button drops the keyboard's focus. */}
       <button
         type="button"
         aria-label="Previous deep dive"
-        disabled={!canUp}
-        onClick={() => onStep(step - 1, "previous")}
-        className="relative shrink-0 rounded-full after:absolute after:-inset-1.5 after:content-[''] focus-visible-ring disabled:cursor-default"
+        aria-disabled={!canUp || undefined}
+        onClick={() => {
+          if (canUp) onStep(step - 1, "previous");
+        }}
+        className="relative shrink-0 rounded-full after:absolute after:-inset-1.5 after:content-[''] focus-visible-ring aria-disabled:cursor-default"
       >
         <DeepDiveArrow up enabled={canUp} />
       </button>
       <button
         type="button"
         aria-label="Next deep dive"
-        disabled={!canDown}
-        onClick={() => onStep(step + 1, "next")}
-        className="relative shrink-0 rounded-full after:absolute after:-inset-1.5 after:content-[''] focus-visible-ring disabled:cursor-default"
+        aria-disabled={!canDown || undefined}
+        onClick={() => {
+          if (canDown) onStep(step + 1, "next");
+        }}
+        className="relative shrink-0 rounded-full after:absolute after:-inset-1.5 after:content-[''] focus-visible-ring aria-disabled:cursor-default"
       >
         <DeepDiveArrow up={false} enabled={canDown} />
       </button>
@@ -346,6 +351,27 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
     return () => observer.disconnect();
   }, []);
 
+  // The overview and the tiles each draw their own ▲ ▼, one set hidden while the other
+  // shows. A press that swaps them would leave focus on a button about to be hidden, so
+  // it moves to the same arrow in the set coming in.
+  const overviewRef = useRef<HTMLDivElement>(null);
+  const tilesRef = useRef<HTMLDivElement>(null);
+  const lastStepRef = useRef(step);
+  useEffect(() => {
+    const was = lastStepRef.current;
+    lastStepRef.current = step;
+    if ((was === 0) === (step === 0)) return;
+    const [from, to] =
+      step === 0
+        ? [tilesRef.current, overviewRef.current]
+        : [overviewRef.current, tilesRef.current];
+    const active = document.activeElement;
+    if (!from || !to || !(active instanceof HTMLElement) || !from.contains(active)) return;
+    const label = active.getAttribute("aria-label");
+    const twin = label ? to.querySelector<HTMLElement>(`button[aria-label="${label}"]`) : null;
+    twin?.focus({ preventScroll: true });
+  }, [step]);
+
   return (
     <div ref={boxRef} className="relative w-full" style={{ height: CANVAS_HEIGHT * scale }}>
       {/* 640 tall: the 36px header row and the 604 main area (1049:1637). */}
@@ -357,6 +383,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
 
         {/* 1049:1637 — the pitch, centred in the 604 below the header row, at x 165. */}
         <div
+          ref={overviewRef}
           className="absolute left-[165px] top-[36px] flex h-[604px] w-[180px] flex-col justify-center gap-[50px]"
           style={fade(overview)}
           aria-hidden={overview ? undefined : true}
@@ -389,6 +416,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
 
         {/* 1049:2028 — the tiles, at (180, 104) on the canvas. */}
         <div
+          ref={tilesRef}
           className="absolute left-[156px] top-[56px] w-[189px]"
           style={fade(!overview)}
           aria-hidden={overview ? true : undefined}
