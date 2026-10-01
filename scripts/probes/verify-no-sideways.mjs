@@ -38,7 +38,7 @@ import { stagingCookies } from "./staging-cookie.mjs";
 const ORIGIN = process.env.ORIGIN ?? "http://localhost:3000";
 const PATHS = (
   process.env.PATHS ??
-  "/report?preview=1&v4=1,/report?preview=1&v4=1&plan=full_report,/survey,/,/login"
+  "/report?preview=1&v4=1,/report?preview=1&v4=1&plan=full_report,/survey,/wizard-preview,/,/login"
 ).split(",");
 const WIDTHS = (process.env.WIDTHS ?? "320,360,375,390,393,414,430,667,844,932")
   .split(",")

@@ -283,9 +283,11 @@ const Blobs: FC<{ map: boolean }> = ({ map }) => (
 
 interface PreReportWizardProps {
   onComplete: () => void;
+  /** Off on /wizard-preview, so a reviewer's clicks never reach the funnel's events. */
+  track?: boolean;
 }
 
-const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
+const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true }) => {
   const [slideIndex, setSlideIndex] = useState(0);
   /** The map's own step: 0 the overview, 1-4 a deep dive. */
   const [mapStep, setMapStep] = useState(0);
@@ -323,45 +325,51 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     setTimeout(onComplete, EXIT_MS);
   }, [onComplete]);
 
-  const moveMap = useCallback((to: number, control: "next" | "previous" | "continue" | "back") => {
-    const from = stepRef.current;
-    if (to === from || to < 0 || to > MAP_STEPS) return;
-    trackWizardMapStep({ from_step: from, to_step: to, control });
-    if (to >= 1) lastDiveRef.current = to;
-    stepRef.current = to;
-    setMapStep(to);
-    // Into or out of the tiles is a change of view, like a slide: hold input for as
-    // long, or a double tap on CONTINUE would skip the deep dives altogether.
-    if (control === "continue" || control === "back") {
-      if (scrollRef.current) scrollRef.current.scrollTop = 0;
-      busyRef.current = true;
-      setTimeout(() => {
-        busyRef.current = false;
-      }, LEAVE_MS);
-    }
-  }, []);
+  const moveMap = useCallback(
+    (to: number, control: "next" | "previous" | "continue" | "back") => {
+      const from = stepRef.current;
+      if (to === from || to < 0 || to > MAP_STEPS) return;
+      if (track) trackWizardMapStep({ from_step: from, to_step: to, control });
+      if (to >= 1) lastDiveRef.current = to;
+      stepRef.current = to;
+      setMapStep(to);
+      // Into or out of the tiles is a change of view, like a slide: hold input for as
+      // long, or a double tap on CONTINUE would skip the deep dives altogether.
+      if (control === "continue" || control === "back") {
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+        busyRef.current = true;
+        setTimeout(() => {
+          busyRef.current = false;
+        }, LEAVE_MS);
+      }
+    },
+    [track]
+  );
 
   /** Leave the slide (250ms), then land on `to`. */
-  const moveSlide = useCallback((to: number, direction: "next" | "previous") => {
-    const from = slideRef.current;
-    busyRef.current = true;
-    setIsLeaving(true);
-    setTimeout(() => {
-      busyRef.current = false;
-      setIsLeaving(false);
-      trackWizardSlideAdvanced({ from_slide: from, to_slide: to, direction });
-      // Forward onto the map shows its overview; back from slide 3 shows the deep dive
-      // last looked at, the way Figma's separate deep-dive slide would come back.
-      if (to === MAP_SLIDE) {
-        const step = direction === "next" ? 0 : lastDiveRef.current;
-        stepRef.current = step;
-        setMapStep(step);
-      }
-      slideRef.current = to;
-      setSlideIndex(to);
-      if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    }, LEAVE_MS);
-  }, []);
+  const moveSlide = useCallback(
+    (to: number, direction: "next" | "previous") => {
+      const from = slideRef.current;
+      busyRef.current = true;
+      setIsLeaving(true);
+      setTimeout(() => {
+        busyRef.current = false;
+        setIsLeaving(false);
+        if (track) trackWizardSlideAdvanced({ from_slide: from, to_slide: to, direction });
+        // Forward onto the map shows its overview; back from slide 3 shows the deep dive
+        // last looked at, the way Figma's separate deep-dive slide would come back.
+        if (to === MAP_SLIDE) {
+          const step = direction === "next" ? 0 : lastDiveRef.current;
+          stepRef.current = step;
+          setMapStep(step);
+        }
+        slideRef.current = to;
+        setSlideIndex(to);
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      }, LEAVE_MS);
+    },
+    [track]
+  );
 
   const goNext = useCallback(() => {
     if (busyRef.current) return;
