@@ -77,7 +77,7 @@ export function renderUxSignals(r: UxSignalsReport): string {
   out.push(
     r.walks === null
       ? "Walks: the walk records could not be read, so nothing counts as proven. This is an outage, not a result."
-      : `Walks: ${r.walks} in the last ${PROOF_DAYS} days${r.latestWalk ? `, the latest ${r.latestWalk.slice(0, 10)}` : ""}. They run production's code on staging's database, at night.`
+      : `Walks: ${r.walks} in the last ${PROOF_DAYS} days${r.latestWalk ? `, the latest ${r.latestWalk.slice(0, 10)}` : ""}. They run production's code on staging's database, at night, and a walk run twice in one day counts once.`
   );
 
   const shown = r.signals.filter((s) => s.proof.proven);

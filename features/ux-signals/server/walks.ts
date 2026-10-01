@@ -33,7 +33,17 @@ export async function readWalkRecords(now = new Date()): Promise<WalkRecord[] | 
       truth: WalkRecord["truth"];
     }>;
     if (!Array.isArray(rows) || rows.length >= ROW_LIMIT) return null;
-    return rows.map((r) => ({
+    // A walk's plants are drawn from its UTC day (walk.ts seeds them `date|walk`), so a second
+    // run of the same walk that day repeats the first exactly. Counted twice, one scenario
+    // would stand in for two cases toward the proof's minimums; the newest run is kept.
+    const seen = new Set<string>();
+    const once = rows.filter((r) => {
+      const key = `${r.walk}|${String(r.walked_at).slice(0, 10)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return once.map((r) => ({
       walk: r.walk,
       walkedAt: r.walked_at,
       events: Array.isArray(r.events) ? r.events : [],

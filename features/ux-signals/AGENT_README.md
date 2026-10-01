@@ -26,7 +26,9 @@ blockers.
      measure means (`__tests__/scripts/proof-walks.test.ts`, "on events that are right").
 3. **Proof** (`logic/proof.ts`).
    - `check-signals.ts` stores each walk's events and truth in `ux_walk_record`.
-   - On every read, the measure is run again over the last 28 days of walks.
+   - On every read, the measure is run again over the last 28 days of walks. A walk run
+     twice in one UTC day counts once (the newest run), because its plants come from the day
+     and the second run repeats the first.
    - A signal is shown only when it is right on at least 80% of at least 10 walks.
    - For a signal where most visits show nothing, it must be right on both the walks where
      the behaviour happened and those where it did not. Otherwise a measure that always
