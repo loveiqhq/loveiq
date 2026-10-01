@@ -214,7 +214,8 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
     // 374:308 / 374:317
     practiceEyebrow: "Practice time: ~12 min.",
     practiceTitle: "Try this & see what shifts",
-    // 374:323 — the first three step leads end in a line break, the fourth runs on.
+    // 374:323 — every step lead ends in a line break. The frame runs the fourth on;
+    // Mark's resolved comment on Sanjin's doc asks for the break after each bold lead.
     practice: [
       p(
         b("Notice the moment the state changes."),
@@ -241,7 +242,7 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
       p(
         b("Experiment with conditions, not just intensity."),
         t(
-          " Rather than searching immediately for something more extreme, change one element and observe the effect. Move intimacy out of its usual setting. Build anticipation earlier in the day. Let one person surprise the other. Replace a familiar script with a playful choice. Remove the assumption that initiating intimacy has to lead to intercourse or orgasm. Small changes can reveal which part of the experience actually matters."
+          " \nRather than searching immediately for something more extreme, change one element and observe the effect. Move intimacy out of its usual setting. Build anticipation earlier in the day. Let one person surprise the other. Replace a familiar script with a playful choice. Remove the assumption that initiating intimacy has to lead to intercourse or orgasm. Small changes can reveal which part of the experience actually matters."
         )
       ),
       p(

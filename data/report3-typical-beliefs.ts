@@ -118,6 +118,8 @@ import type { Report3Run } from "./report3-archetype-page";
 const t = (text: string): Report3Run => ({ text });
 const b = (text: string): Report3Run => ({ text, weight: 700 });
 const i = (text: string): Report3Run => ({ text, italic: true });
+/** Bold italic: Sanjin's doc (29.09) sets the two beliefs the worked examples open on so. */
+const bi = (text: string): Report3Run => ({ text, weight: 700, italic: true });
 const p = (...runs: Report3Run[]): Report3Block => ({ kind: "para", runs });
 const h = (text: string): Report3Block => ({ kind: "heading", text });
 /** 304:277 — Mark, 28.09: "H2"; the same level as the chapter title "Common challenges". */
@@ -153,9 +155,14 @@ export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
     )
   ),
   h2("The Spark Seeker belief map"),
+  // Sanjin's doc bolds two runs here (29.09), after the frame was set.
   p(
+    t("The "),
+    b("Spark Seeker"),
+    t(" tends to place unusual value on "),
+    b("chemistry, anticipation, play, novelty, and the feeling of being actively wanted"),
     t(
-      "The Spark Seeker tends to place unusual value on chemistry, anticipation, play, novelty, and the feeling of being actively wanted. These preferences can support a highly alive and exploratory sexuality. The difference between sun and shadow lies in what those experiences are allowed to mean."
+      ". These preferences can support a highly alive and exploratory sexuality. The difference between sun and shadow lies in what those experiences are allowed to mean."
     )
   ),
 ];
@@ -166,7 +173,7 @@ export const TYPICAL_BELIEFS_CHALLENGES_TITLE = "Common challenges";
 /** 304:380 through 304:410 — the two worked examples, below the green panel. */
 export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
   h("When spontaneity becomes proof of desire"),
-  p(t("Consider the shadow belief "), i("“If sex has to be planned, the spark must be gone.”")),
+  p(t("Consider the shadow belief "), bi("“If sex has to be planned, the spark must be gone.”")),
   p(
     t(
       "A partner suggests deliberately setting aside time for intimacy. Nothing about the suggestion itself says attraction has disappeared. It might simply reflect busy schedules, stress, children, work, or a desire to protect time for the relationship."
@@ -197,7 +204,7 @@ export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
     )
   ),
   h("When being wanted becomes evidence of worth"),
-  p(t("Now consider "), i("“Being desired proves that I am still attractive and exciting.”")),
+  p(t("Now consider "), bi("“Being desired proves that I am still attractive and exciting.”")),
   p(
     t(
       "The Spark Seeker often responds strongly to visible signals of desire: flirting, pursuit, teasing, confident initiation, praise, or the sense that someone is having difficulty resisting them. These signals can be particularly rewarding because they combine attraction with excitement."

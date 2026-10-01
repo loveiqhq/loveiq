@@ -99,7 +99,7 @@ describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
         "More familiarity, more predictability, less teasing and pursuit",
         "The relationship stabilizes and uncertainty drops",
       ],
-      ["“We have lost the spark”", "Intensity is my evidence that love is real"],
+      ["“We have lost the spark.”", "Intensity is my evidence that love is real"],
       [
         "I withdraw, initiate less, become restless, or seek more aliveness",
         "Protecting myself from confirming the fear",
@@ -109,7 +109,10 @@ describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
         "They reach for more reassurance, closeness, and predictability",
         "Seeking safety through proximity",
       ],
-      ["I feel more confined and less energized", "The loop has produced its own evidence"],
+      [
+        "I feel more pressured, confined and less energized",
+        "The loop has produced its own evidence",
+      ],
     ]);
   });
 
@@ -280,7 +283,7 @@ describe("buildPartnership — locked", () => {
       "Their own fear of losing me",
       "They reach for more reassurance",
       "Seeking safety through proximity",
-      "I feel more confined and less energized",
+      "I feel more pressured, confined and less energized",
       "The loop has produced its own evidence",
       // The result.
       "The more the partner tries to make the relationship feel secure",

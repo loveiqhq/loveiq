@@ -255,7 +255,7 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
         underneath: "The relationship stabilizes and uncertainty drops",
       },
       {
-        happens: "“We have lost the spark”",
+        happens: "“We have lost the spark.”",
         underneath: "Intensity is my evidence that love is real",
       },
       {
@@ -271,7 +271,7 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
         underneath: "Seeking safety through proximity",
       },
       {
-        happens: "I feel more confined and less energized",
+        happens: "I feel more pressured, confined and less energized",
         underneath: "The loop has produced its own evidence",
       },
     ],
