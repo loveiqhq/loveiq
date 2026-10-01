@@ -7999,7 +7999,8 @@ html {
  * #e5e5e5 hairline. The frame draws the bar 401 wide for a 393 screen, so only its top
  * edge shows; the badge sits 15 from the left and the pill 15 from the right, both 12.5
  * down (the stroke inside). The bar is outside `.rv4`, so the page is matched with
- * :has(). The desktop card is unchanged. */
+ * :has(). The desktop card is unchanged. Mark's 01.10 round (1167:2607) drops the
+ * badge's box, below. */
 body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4 {
   /* The frame's Plus Jakarta Sans: outside `.rv3.rv4`, --font-sans is the site's Manrope. */
   --font-sans: var(--font-jakarta);
@@ -8122,12 +8123,13 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     translate: none;
   }
 }
-/* Below 382 the two no longer fit side by side at the frame's sizes: the margins come
- * in to 12 and the pill's side padding to 12. The 10px line needs 156 (measured with
- * the real font, 15.6 per px of size), so from 355 down it shrinks with the screen,
- * about 7.7px at 320, still above the 6.8 the box design had. An ellipsis stays the
- * last resort, before anything wraps. */
-@media (max-width: 381px) {
+/* Below 386 the two no longer fit side by side at the frame's sizes: 2 x 15 of margin,
+ * the 8 gap, the 163 pill, the shield's 20 and 7.838, and the 10px line's 156 (measured
+ * with the real font, 15.6 per px of size). So the margins come in to 12 and the pill's
+ * side padding to 12, and from 355 down the line shrinks with the screen, about 7.7px
+ * at 320, still above the 6.8 the box design had. An ellipsis stays the last resort,
+ * before anything wraps. */
+@media (max-width: 385px) {
   body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4 {
     gap: 6px;
     padding-left: 12px;
@@ -8144,8 +8146,8 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
     width: auto;
   }
 }
-/* At 320 "14-day money-back" needs 106px of the badge: the pill gives up 6 more of its
- * side padding so the line keeps them. */
+/* At 320 "14-day money-back" needs 122 of the badge (12px bold, the real font): the 12
+ * of side padding above leaves it 120.7, so the pill gives up 2 more. */
 @media (max-width: 340px) {
   body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
     padding: 0 10px;
@@ -8157,8 +8159,8 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
  * heading, Manrope in three weights and a white-bordered button in an orange halo. No
  * desktop frame exists, so the card takes V4's own pieces from Mark's mobile footer
  * (1005:411): the guarantee box, here at the paywall card's own scale (1015:1218; the
- * footer draws it at 0.68), beside the same gradient pill, in Plus Jakarta Sans only,
- * one row at every desktop width. The card itself (report.css) is unchanged. */
+ * footer drew it at 0.68 until 01.10), beside the same gradient pill, in Plus Jakarta
+ * Sans only, one row at every desktop width. The card itself (report.css) is unchanged. */
 body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 {
   --font-sans: var(--font-jakarta);
   font-family: var(--font-sans);

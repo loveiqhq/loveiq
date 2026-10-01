@@ -86,7 +86,8 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     const bar = mobile();
     expect(bar).toHaveClass("is-v4");
     const badge = bar.querySelector(".report-sticky-unlock__badge")!;
-    expect(badge.getAttribute("data-node-id")).toBe("1005:397");
+    // Since Mark's 01.10 round the badge follows 1167:2607's (1167:2612), without its box.
+    expect(badge.getAttribute("data-node-id")).toBe("1167:2612");
     expect(badge.querySelector(".report-sticky-unlock__badge-head")!.textContent).toBe(
       "14-day money-back"
     );
@@ -177,14 +178,19 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     expect(rule("body:has(.rv3.rv4) .report-sticky-unlock__cta--v4::after")).toContain(
       "inset: -6px 0;"
     );
-    // At 320 "14-day money-back" needs 106px of the badge: the pill gives up 6 more of
-    // its padding below 341 so it keeps them (measured with the real font).
+    // At 320 "14-day money-back" needs 122 of the badge (12px bold, the real font): the
+    // compact rule's 12 of side padding leaves it 120.7, so below 341 the pill gives up 2.
     const narrow = css.slice(css.indexOf("@media (max-width: 340px)"));
     expect(narrow.slice(0, narrow.indexOf("\n}\n"))).toContain("padding: 0 10px;");
-    // Below 382 the 10px line (156 wide in the real font) shrinks with the screen from
-    // 355 down rather than ending in an ellipsis; the pill's side padding comes to 12.
-    const under382 = css.slice(css.indexOf("@media (max-width: 381px)"));
-    const block = under382.slice(0, under382.indexOf("\n}\n"));
+    // At the frame's sizes the two need 386: 2 x 15 of margin, the 8 gap, the 163 pill,
+    // the shield's 20 and its 7.838, and the 10px line's 156 (the real font). Below that
+    // the margins and the pill's side padding come to 12, and from 355 down the line
+    // shrinks with the screen rather than ending in an ellipsis. Starting at 381, the rule
+    // left 382-385 cutting the line by up to 3px, and 384 is a common Android width.
+    expect(css).not.toContain("@media (max-width: 381px)");
+    expect(css).toContain("@media (max-width: 385px) {");
+    const compact = css.slice(css.indexOf("@media (max-width: 385px)"));
+    const block = compact.slice(0, compact.indexOf("\n}\n"));
     expect(block).toContain("font-size: min(10px, calc((100vw - 200px) / 15.6));");
     expect(block).toContain("padding: 0 12px;");
   });
@@ -246,7 +252,7 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     const row = rule(`${D} .report-sticky-unlock__desktop-inner`);
     expect(row).toContain("flex-direction: row;");
     expect(row).toContain("justify-content: center;");
-    // 1015:1218 — the footer draws this box at 0.68; the card's is 265.6 x 45.25.
+    // 1015:1218 — the footer drew this box at 0.68 until 01.10; the card's is 265.6 x 45.25.
     const badge = rule(`${D} .report-sticky-unlock__badge`);
     expect(badge).toContain("flex: 0 1 265.6px;");
     expect(badge).toContain("height: 45.25px;");
