@@ -158,14 +158,16 @@ describe("the map on a desktop", () => {
   });
 
   it("reserves for the chrome what the stylesheet gives it", () => {
-    // desktopChrome mirrors the paddings: the frame's twice, the footer's and the nav's.
+    // desktopChrome mirrors the paddings: the frame's twice and the footer's. Since Mark's
+    // 01.10 round the buttons come first and the bar sits 24 under them, as on the phone
+    // (1049:1161), so the nav keeps the phone's 24 below it and takes no gap above.
     expect(rule(".wz-root .wz-scroll")).toContain("padding: clamp(24px, 5vh, 53px) 64px");
     expect(rule(".wz-root .wz-footer")).toContain("padding-top: clamp(24px, 4.5vh, 48px)");
-    expect(rule(".wz-root .wz-nav")).toContain("padding-top: clamp(24px, 4.5vh, 48px)");
-    // At 900: 2 x 45 + 2 x 40.5 + the 4 bar, 24 counter and 48 buttons.
-    expect(desktopChrome(900)).toBeCloseTo(247);
-    expect(desktopChrome(1080)).toBeCloseTo(2 * 53 + 2 * 48 + 76);
-    expect(desktopChrome(600)).toBeCloseTo(2 * 30 + 2 * 27 + 76);
+    expect(rule(".wz-root .wz-nav")).not.toContain("padding-top");
+    // At 900: 2 x 45 + 40.5, then the 48 buttons, 24, the 3.2 bar and the 24 counter.
+    expect(desktopChrome(900)).toBeCloseTo(229.7);
+    expect(desktopChrome(1080)).toBeCloseTo(2 * 53 + 48 + 99.2);
+    expect(desktopChrome(600)).toBeCloseTo(2 * 30 + 27 + 99.2);
   });
 });
 
@@ -179,14 +181,14 @@ describe("canvasScale and mapZoom", () => {
   });
 
   it("zooms the drawer and the tiles to what the window's height leaves", () => {
-    // 900 leaves 653: the drawer is 597 tall, the tiles block with its controls 541.
+    // 900 leaves 670.3: the drawer is 597 tall, the tiles block with its controls 541.
     const at900 = mapZoom(900);
-    expect(at900.drawer).toBeCloseTo(653 / 597);
-    expect(at900.tiles).toBeCloseTo(653 / 541);
+    expect(at900.drawer).toBeCloseTo(670.3 / 597);
+    expect(at900.tiles).toBeCloseTo(670.3 / 541);
     // A tall window caps them: 1.35 and 1.5.
     expect(mapZoom(1440)).toEqual({ drawer: 1.35, tiles: 1.5 });
-    // A laptop's window is short (720 leaves 507, a 1366 x 768 screen's ~657 tall window
-    // 456), so they shrink below the phone's size rather than push CONTINUE off it...
+    // A laptop's window is short (720 leaves 528.2, a 1366 x 768 screen's ~657 tall window
+    // 471), so they shrink below the phone's size rather than push CONTINUE off it...
     const at720 = mapZoom(720);
     expect(at720.drawer).toBeCloseTo((720 - desktopChrome(720)) / 597);
     expect(at720.drawer).toBeLessThan(1);

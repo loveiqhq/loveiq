@@ -19,8 +19,8 @@ import { WIZARD_DRAWER, type WizardDrawerRow } from "./wizardContent";
  *
  * `step` 0 is the overview; 1-4 show deep dive `step`, marked in the drawer beside it.
  * Everything is placed on Figma's 393 canvas, relative to the content box that starts at
- * (24, 48): the drawer at its top-left, the pitch in the column at x 165 and the tiles
- * in the one at x 156.
+ * (24, 36) since Mark's 01.10 round: the drawer at its top-left, the pitch in the column
+ * at x 165 and the tiles in the one at x 156.
  */
 export const MAP_STEPS = REPORT_DEEP_DIVES.length;
 
@@ -48,13 +48,14 @@ export function canvasScale(boxWidth: number, viewportWidth: number) {
 
 /**
  * What a desktop slide's chrome takes of the window's height, as wizard-desktop.css sets
- * it: the frame's padding top and bottom, the footer's and the nav's, the 4px bar, the
- * 24px counter row and the 48px buttons.
+ * it: the frame's padding top and bottom and the footer's, then the footer as the phone
+ * stacks it since Mark's 01.10 round (1049:1161): the 48px buttons, 24, the 3.2 bar and
+ * the 24px counter row.
  */
 export function desktopChrome(viewportHeight: number) {
   const frame = clamp(24, viewportHeight * 0.05, 53);
   const gap = clamp(24, viewportHeight * 0.045, 48);
-  return 2 * frame + 2 * gap + 4 + 24 + 48;
+  return 2 * frame + gap + 48 + 24 + 3.2 + 24;
 }
 
 /**
@@ -87,6 +88,10 @@ interface WizardReportMapProps {
  * One chapter row, 18.8 tall on a 20.762 pitch (the drawer panel's own metrics). The
  * dashed outline, the active marker and the pointer all hang off the row, 1px wider
  * than it each side, so they cannot drift from it.
+ *
+ * The type is 1049:1832's (Mark, 01.10: "Updated fonts and font sizes"): the report's
+ * panel at 0.4905, its labels overridden to 7px, Regular, the four featured chapters
+ * SemiBold, 3.9 from their badge.
  */
 const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) => {
   const dive = DEEP_DIVE_INDEX.get(row.id);
@@ -96,7 +101,7 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
     <div
       data-wizard-row={row.id}
       data-marked={active ? "active" : undefined}
-      className="relative flex h-[18.8px] items-center gap-[1.913px] rounded-[12px] pl-[13.73px] pr-[1.5px]"
+      className="relative flex h-[18.8px] items-center gap-[3.9px] rounded-[12px] pl-[13.73px] pr-[1.5px]"
       style={isCoreArchetype ? { background: "rgba(192,132,252,0.1)" } : undefined}
     >
       {isCoreArchetype ? (
@@ -113,14 +118,16 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
         </span>
       ) : null}
       <span
-        className="min-w-0 flex-1 truncate text-[6.87px] font-light leading-[9.81px]"
+        className={`min-w-0 flex-1 truncate text-[7px] leading-[9.81px] ${
+          row.badge === "open" ? "font-semibold" : "font-normal"
+        }`}
         style={{ fontFamily: JAKARTA, color: isCoreArchetype ? "#161021" : "#3f3a4d" }}
       >
         {row.label}
       </span>
       {row.badge === "free" ? (
         <span
-          className="flex h-[9.905px] shrink-0 items-center rounded-[6px] bg-white px-[4.415px] text-[4.51px] font-semibold leading-[4.513px] tracking-[0.552px] text-[#4a4657]"
+          className="flex h-[9.905px] shrink-0 items-center rounded-[2.943px] bg-white px-[3.924px] text-[4.51px] font-semibold leading-[4.513px] tracking-[0.271px] text-[#4a4657]"
           style={{ fontFamily: JAKARTA, border: "0.491px solid rgba(22,16,33,0.13)" }}
         >
           FREE
@@ -184,7 +191,7 @@ const Drawer: FC<{ step: number }> = ({ step }) => (
         <div key={part.part} className="flex flex-col gap-[1.962px]">
           <div className="min-h-[13.924px] px-[2px] pb-[0.981px] pt-[2.943px]">
             <p
-              className="w-[132.927px] bg-clip-text text-[5.4px] font-bold uppercase leading-[9.5px] tracking-[0.883px] text-transparent"
+              className="w-[132.927px] bg-clip-text text-[5.4px] font-bold uppercase leading-[9.133px] tracking-[0.883px] text-transparent"
               style={{
                 fontFamily: JAKARTA,
                 backgroundImage: "linear-gradient(90deg, #d05976 0%, #c167cf 48%, #8887f6 100%)",
