@@ -7988,18 +7988,18 @@ body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4 {
   gap: 8px;
   padding: 11.5px 15px max(10.3px, env(safe-area-inset-bottom));
 }
-/* 1005:397 — 180.6 x 30.77, its copy 14.206 in (less the stroke), 27 tall and centred. */
+/* 1167:2612 — Mark, 01.10 ("Updated sticky footer for mobile"): the guarantee loses its
+ * box (1005:397 drew a fill and a 0.49 stroke). The shield sits at the badge's left
+ * edge, 15 from the screen's, the copy 7.838 after it, both centred in 30.77. Its 10px
+ * line runs 160 wide, past the frame's 139: the badge may take all the pill leaves. */
 body:has(.rv3.rv4) .report-sticky-unlock__badge {
   align-items: center;
-  background: rgba(0, 0, 0, 0.01);
-  border: 0.49px solid rgba(0, 0, 0, 0.08);
-  border-radius: 9.797px;
   display: flex;
-  flex: 0 1 180.593px;
+  flex: 1 1 auto;
   gap: 7.838px;
   height: 30.769px;
   min-width: 0;
-  padding: 0 13.716px;
+  padding: 0;
 }
 /* 1005:404 / 1005:401 — the files keep the strokes' overhang. */
 body:has(.rv3.rv4) .report-sticky-unlock__shield {
@@ -8027,11 +8027,11 @@ body:has(.rv3.rv4) .report-sticky-unlock__badge-text {
   flex-direction: column;
   min-width: 0;
 }
-/* 1005:406 / 1005:407 */
+/* 1167:2621 / 1167:2622 — 12px bold over 10px regular (were 9.532 / 6.809). */
 body:has(.rv3.rv4) .report-sticky-unlock__badge-head {
   color: #009148;
   font-family: var(--font-sans);
-  font-size: 9.532px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 15.251px;
   min-height: 16px;
@@ -8042,7 +8042,7 @@ body:has(.rv3.rv4) .report-sticky-unlock__badge-head {
 body:has(.rv3.rv4) .report-sticky-unlock__badge-sub {
   color: #6b6678;
   font-family: var(--font-sans);
-  font-size: 6.809px;
+  font-size: 10px;
   font-weight: 400;
   line-height: 10.894px;
   overflow: hidden;
@@ -8102,8 +8102,10 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   }
 }
 /* Below 382 the two no longer fit side by side at the frame's sizes: the margins come
- * in to 12, the pill's side padding to 16 and the badge's to 8, and the badge's lines
- * end in an ellipsis before anything wraps. */
+ * in to 12 and the pill's side padding to 12. The 10px line needs 156 (measured with
+ * the real font, 15.6 per px of size), so from 355 down it shrinks with the screen,
+ * about 7.7px at 320, still above the 6.8 the box design had. An ellipsis stays the
+ * last resort, before anything wraps. */
 @media (max-width: 381px) {
   body:has(.rv3.rv4) .report-sticky-unlock--mobile.is-v4 {
     gap: 6px;
@@ -8112,10 +8114,12 @@ body:has(.rv3.rv4) .report-sticky-unlock__cta--v4:focus-visible {
   }
   body:has(.rv3.rv4) .report-sticky-unlock__badge {
     gap: 6px;
-    padding: 0 8px;
+  }
+  body:has(.rv3.rv4) .report-sticky-unlock__badge-sub {
+    font-size: min(10px, calc((100vw - 200px) / 15.6));
   }
   body:has(.rv3.rv4) .report-sticky-unlock__cta--v4 {
-    padding: 0 16px;
+    padding: 0 12px;
     width: auto;
   }
 }
@@ -8145,9 +8149,11 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__d
   justify-content: center;
   padding: 14px 20px;
 }
+/* The card keeps the box the phone footer dropped on 01.10. */
 body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__badge {
+  background: rgba(0, 0, 0, 0.01);
+  border: 0.719px solid rgba(0, 0, 0, 0.08);
   border-radius: 14.39px;
-  border-width: 0.719px;
   flex: 0 1 265.6px;
   gap: 11.512px;
   height: 45.25px;

@@ -149,15 +149,24 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     expect(bar).toContain("box-shadow: none;");
     // 12.5 from the bar's edge with Figma's stroke inside: 1 of hairline and 11.5.
     expect(bar).toContain("padding: 11.5px 15px max(10.3px, env(safe-area-inset-bottom));");
+    // Mark, 01.10 (1167:2607, "Updated sticky footer for mobile"): the guarantee loses
+    // its box. No fill, no 0.49 stroke; the shield sits at the badge's own left edge,
+    // 15 from the screen's, and the copy 27.2 after it. The head is 12px bold, the
+    // line under it 10px, and the badge may take what the pill leaves (192 at 393),
+    // since the 10px line runs 160 wide.
     const badge = rule("body:has(.rv3.rv4) .report-sticky-unlock__badge");
     expect(badge).toContain("height: 30.769px;");
-    expect(badge).toContain("border-radius: 9.797px;");
+    expect(badge).not.toMatch(/background|border/);
+    expect(badge).toContain("padding: 0;");
+    expect(badge).toContain("flex: 1 1 auto;");
     const head = rule("body:has(.rv3.rv4) .report-sticky-unlock__badge-head");
-    expect(head).toContain("font-size: 9.532px;");
+    expect(head).toContain("font-size: 12px;");
+    expect(head).toContain("line-height: 15.251px;");
     expect(head).toContain("color: #009148;");
-    expect(rule("body:has(.rv3.rv4) .report-sticky-unlock__badge-sub")).toContain(
-      "font-size: 6.809px;"
-    );
+    const sub = rule("body:has(.rv3.rv4) .report-sticky-unlock__badge-sub");
+    expect(sub).toContain("font-size: 10px;");
+    expect(sub).toContain("line-height: 10.894px;");
+    expect(sub).toContain("color: #6b6678;");
     const pill = rule("body:has(.rv3.rv4) .report-sticky-unlock__cta--v4");
     expect(pill).toContain("width: 163px;");
     expect(pill).toContain("height: 32px;");
@@ -172,6 +181,12 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     // its padding below 341 so it keeps them (measured with the real font).
     const narrow = css.slice(css.indexOf("@media (max-width: 340px)"));
     expect(narrow.slice(0, narrow.indexOf("\n}\n"))).toContain("padding: 0 10px;");
+    // Below 382 the 10px line (156 wide in the real font) shrinks with the screen from
+    // 355 down rather than ending in an ellipsis; the pill's side padding comes to 12.
+    const under382 = css.slice(css.indexOf("@media (max-width: 381px)"));
+    const block = under382.slice(0, under382.indexOf("\n}\n"));
+    expect(block).toContain("font-size: min(10px, calc((100vw - 200px) / 15.6));");
+    expect(block).toContain("padding: 0 12px;");
   });
 });
 
@@ -235,6 +250,9 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     const badge = rule(`${D} .report-sticky-unlock__badge`);
     expect(badge).toContain("flex: 0 1 265.6px;");
     expect(badge).toContain("height: 45.25px;");
+    // The desktop card keeps its box: Mark's 01.10 change is the phone footer's.
+    expect(badge).toContain("background: rgba(0, 0, 0, 0.01);");
+    expect(badge).toContain("border: 0.719px solid rgba(0, 0, 0, 0.08);");
     expect(rule(`${D} .report-sticky-unlock__badge-head`)).toContain("font-size: 14px;");
     expect(rule(`${D} .report-sticky-unlock__badge-sub`)).toContain("font-size: 10px;");
   });
