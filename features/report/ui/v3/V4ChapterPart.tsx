@@ -7,7 +7,6 @@ import type { Report3PartnershipView } from "@/data/report3-partnership";
 import type { Report3FantasyView } from "@/data/report3-fantasy";
 import {
   CHAPTER_COPY_PLACEHOLDER,
-  PART_INTRO_PLACEHOLDER,
   REPORT_V4_PART3_CHAPTERS,
   REPORT_V4_PARTS,
   TEASER_PLACEHOLDER,
@@ -26,8 +25,8 @@ import V4PartHeading from "./V4PartHeading";
  * The shared shape of Parts III–VI. Figma 1:849, 1:982, 38:1507 and 1:1137 are the
  * same composition with different chapter lists, so this renders all four.
  *
- * Order and node ids (Part III's, as the reference): rule 1:850 · heading + lede
- * 1:852 · a 44px separator before each chapter row (1:860, 1:862, 1:873, 1:884,
+ * Order and node ids (Part III's, as the reference): rule 1:850 · heading 1:852 · a
+ * 44px separator before each chapter row (1:860, 1:862, 1:873, 1:884,
  * 1:895). The part ENDS there.
  *
  * Part III has five rows, IV seven, V four, VI four — each part opening on one
@@ -52,7 +51,7 @@ interface Props {
   partIndex?: number;
   /**
    * Part VI alone closes with a 44px separator after its last chapter — its visible
-   * children run SEP · INTRO · (SEP · CH) x4 · SEP, where III, IV and V all end on
+   * children run SEP · HEADING · (SEP · CH) x4 · SEP, where III, IV and V all end on
    * a chapter. That trailing rule is 44 of Part VI's 850.
    */
   trailingSeparator?: boolean;
@@ -105,9 +104,9 @@ const V4ChapterPart: FC<Props> = ({
       <div className="rv4-rule" aria-hidden="true" />
     </div>
 
-    {/* 1:852 — the lede is `[Part Introductory Text]` in the frame, for all four
-     * parts that have one. Rendered as drawn rather than invented. */}
-    <V4PartHeading heading={REPORT_V4_PARTS[partIndex]!} intro={PART_INTRO_PLACEHOLDER} />
+    {/* 1:852 — the heading in its 185 box. No lede: the 01.10 sync dropped part
+     * introductions. */}
+    <V4PartHeading heading={REPORT_V4_PARTS[partIndex]!} />
 
     {chapters.map((c) => {
       const entry = c.id ? learnMore?.[c.id] : undefined;

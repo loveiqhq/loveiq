@@ -62,12 +62,7 @@ describe("V4 on tablet and desktop", () => {
 
   it("lets every phone-width V4 block fill the column from 700px", () => {
     const block = v3.slice(v3.indexOf("Report V4 · tablet and desktop"));
-    for (const sel of [
-      ".rv4-copy",
-      ".rv4-chapter__body > *",
-      ".rv4-top3__lede",
-      ".rv4-part__intro",
-    ]) {
+    for (const sel of [".rv4-copy", ".rv4-chapter__body > *", ".rv4-top3__lede"]) {
       expect(block).toContain(`.rv3.rv4 ${sel}`);
     }
   });

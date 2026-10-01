@@ -16,7 +16,6 @@ const BLOCKS = [
   ".rv4-chapter__body > .rv3-prose",
   ".rv4-copy",
   ".rv4-copy > p",
-  ".rv4-part__intro",
   ".rv4-top3__heading",
   ".rv4-top3__lede",
   ".rv4-summary__inner",

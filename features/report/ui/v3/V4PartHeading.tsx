@@ -8,7 +8,9 @@ import useV4Reveal from "./useV4Reveal";
  * Part heading — Report V4.
  *
  * Figma: "Part 1 - Welcome" 1:169 (divider only) and "Part + Introduction Text"
- * 1:852 (divider plus a lede), which the frame repeats for Parts III–VI.
+ * 1:852, which the frame repeats for Parts III–VI. Despite its name, 1:852 holds no
+ * lede since the 01.10 sync dropped part introductions; it is the heading in a
+ * 185px box.
  *
  * Deliberately separate from `V3PartDivider`, which is built to the older V3 frame
  * (10392:18805) and is still what `?v3=1` renders. V4 keeps that component's exact
@@ -16,9 +18,9 @@ import useV4Reveal from "./useV4Reveal";
  * (19.2 line-height), title 22→20px (24 line-height) — so restyling the V3 class in
  * place would silently change the live V3 report.
  *
- * Two shapes, chosen by whether `intro` is supplied:
- * - no intro  → 148px tall, 56px of lead-in above it, accent in near-black (Part I).
- * - intro     → the glow box shortens 226→185px and a lede paragraph follows it.
+ * Two shapes, chosen by the part's `tall`:
+ * - Parts I–II → the 148px stage under a 226px glow (Part I adds a 56px lead-in).
+ * - Parts III–VI (`tall`) → a 185px box, the glow shortened to fill it.
  *
  * THE BLOOM (review 27.09, our own, one of two Fatih approved in answer to Mark's
  * "maybe you also have some good ideas"): the glow holds back (`is-pending`) until
@@ -36,30 +38,24 @@ import useV4Reveal from "./useV4Reveal";
 interface Props {
   heading: Report3PartHeading;
   /**
-   * The part's lede. The frame draws `[Part Introductory Text]` for all four parts
-   * that have one, so that placeholder is what ships until Mark writes them.
-   */
-  intro?: string;
-  /**
    * Part I's divider sits in a 361x204 wrapper — 148 of heading under a 56px
    * lead-in (1:169). Part II's (1:486) is the bare 148 with no lead, and Parts
-   * III-VI use the intro variant, which has none either.
+   * III-VI's 185 box has none either.
    */
   lead?: boolean;
 }
 
-const V4PartHeading: FC<Props> = ({ heading, intro, lead: hasLead = false }) => {
-  const { number, lead, accent, tone, upright, leadItalic } = heading;
-  const withIntro = intro !== undefined;
+const V4PartHeading: FC<Props> = ({ heading, lead: hasLead = false }) => {
+  const { number, lead, accent, tone, upright, leadItalic, tall } = heading;
   const [ref, inView] = useV4Reveal<HTMLDivElement>();
 
   return (
     <div
       ref={ref}
-      className={`rv4-part${withIntro ? " rv4-part--intro" : ""}${hasLead ? " rv4-part--lead" : ""}${
+      className={`rv4-part${tall ? " rv4-part--tall" : ""}${hasLead ? " rv4-part--lead" : ""}${
         inView ? "" : " is-pending"
       }`}
-      data-node-id={withIntro ? "1:852" : "1:169"}
+      data-node-id={tall ? "1:852" : "1:169"}
       data-name="Part heading"
     >
       <div className="rv4-part__stage">
@@ -82,7 +78,6 @@ const V4PartHeading: FC<Props> = ({ heading, intro, lead: hasLead = false }) => 
           {lead ? <span className={leadItalic ? "is-italic" : undefined}>{lead}</span> : null}
           <span>{accent}</span>
         </h2>
-        {withIntro ? <p className="rv4-part__intro rv3-prose">{intro}</p> : null}
       </div>
     </div>
   );

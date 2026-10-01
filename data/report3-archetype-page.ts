@@ -16,9 +16,6 @@ import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 /** The frame's own placeholder for the 17 unwritten chapter teasers (e.g. 1:871). */
 export const TEASER_PLACEHOLDER = "[Teaser Text]";
 
-/** The frame's own placeholder for the 4 unwritten part introductions (1:855). */
-export const PART_INTRO_PLACEHOLDER = "[Part Introductory Text]";
-
 export interface Report3PartHeading {
   /**
    * "Part 1" … "Part 6" — the part as the Snapshot's chips name it. Arabic since Mark's
@@ -29,7 +26,7 @@ export interface Report3PartHeading {
   number: string;
   /** Upright serif segment. Empty when the whole title is the accent (Part 1). */
   lead: string;
-  /** Italic segment. Violet on the part+intro blocks, near-black on Part 1. */
+  /** Italic segment. Violet on Parts 2–6, near-black on Part 1. */
   accent: string;
   /** Part 1 renders its accent in near-black rather than violet — 1:174. */
   tone?: "violet" | "ink";
@@ -41,6 +38,13 @@ export interface Report3PartHeading {
    * your archetype" upright.
    */
   leadItalic?: true;
+  /**
+   * Parts 3–6 sit in a 185px box (1:852, 1:985, 38:1510, 1:1140) where Parts 1–2 use
+   * the 148px stage (1:169, 1:486). The box once held a lede, "[Part Introductory
+   * Text]"; the 01.10 sync dropped part introductions ("go straight into the
+   * content") and Figma's boxes now hold only the heading.
+   */
+  tall?: true;
 }
 
 export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
@@ -49,12 +53,12 @@ export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
   // 1:486
   { eyebrow: "Part 2", number: "2", lead: "Your ", accent: "Constellation", leadItalic: true },
   // 1:852
-  { eyebrow: "Part 3", number: "3", lead: "How your archetype ", accent: "works" },
+  { eyebrow: "Part 3", number: "3", lead: "How your archetype ", accent: "works", tall: true },
   // 1:990 — "Your " upright in ink, "erotic engine" in the accent, lower-case.
-  { eyebrow: "Part 4", number: "4", lead: "Your ", accent: "erotic engine" },
+  { eyebrow: "Part 4", number: "4", lead: "Your ", accent: "erotic engine", tall: true },
   // 38:1515 — "How you connect", lower-case.
-  { eyebrow: "Part 5", number: "5", lead: "How you ", accent: "connect" },
-  { eyebrow: "Part 6", number: "6", lead: "Your ", accent: "edges" },
+  { eyebrow: "Part 5", number: "5", lead: "How you ", accent: "connect", tall: true },
+  { eyebrow: "Part 6", number: "6", lead: "Your ", accent: "edges", tall: true },
 ];
 
 /**
