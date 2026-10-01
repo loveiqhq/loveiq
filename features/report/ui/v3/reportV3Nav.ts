@@ -234,12 +234,15 @@ const navPartsFrom = (
     numerals = V3_PART_NUMERALS,
     snapshotLabel = "Your Snapshot",
     welcome,
+    constellationLead,
   }: {
     numerals?: Record<string, string>;
     /** The Snapshot row's label, or null for a report without a Snapshot (V4). */
     snapshotLabel?: string | null;
     /** A part listed ahead of the constellation's (V4's Part 1). */
     welcome?: ReportV3NavPart;
+    /** A row listed above Core Archetype (V4's top three). */
+    constellationLead?: ReportV3NavPart["items"][number];
   } = {}
 ): readonly ReportV3NavPart[] => [
   ...(welcome ? [welcome] : []),
@@ -247,6 +250,7 @@ const navPartsFrom = (
     part: `Part ${numerals["1"]}`,
     label: "Your constellation",
     items: [
+      ...(constellationLead ? [constellationLead] : []),
       { label: "Core Archetype", id: "core_archetype" },
       ...(snapshotLabel === null
         ? []
@@ -282,9 +286,18 @@ export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
  * its four chapters are the pre-report wizard's map (Figma 1071:2092), and Part 2 runs
  * the Archetype card into the Summary (1:483).
  */
+/**
+ * Where Part 2's first row lands: the top three (V4TopThreeSection, 1:493). Marcus,
+ * 01.10: "any reason this part only has one chapter? And it's a bit that it doesn't link
+ * to the top of the part right?" Mark's 961:333 (01.10) adds the row above Core
+ * Archetype; the label is the frame's own, "Highest Archetypes Scores".
+ */
+export const REPORT_V4_TOP_THREE_ANCHOR = "top_archetypes";
+
 export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
   numerals: { "1": "2", "2": "3", "3": "4", "4": "5", "5": "6" },
   snapshotLabel: null,
+  constellationLead: { label: "Highest Archetypes Scores", id: REPORT_V4_TOP_THREE_ANCHOR },
   welcome: {
     part: "Part 1",
     label: "Welcome",

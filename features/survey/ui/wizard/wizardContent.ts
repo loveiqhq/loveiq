@@ -48,6 +48,7 @@ export interface WizardDrawerPart {
 const FREE_ROWS: ReadonlySet<string> = new Set([
   "introduction",
   "what_shaped_this_report",
+  "top_archetypes",
   "core_archetype",
 ]);
 const DEEP_DIVE_IDS: ReadonlySet<string> = new Set(REPORT_DEEP_DIVES.map((d) => d.id));
@@ -77,7 +78,10 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
   {
     part: "Part 2",
     label: "Your constellation",
-    rows: [row("core_archetype", "Core Archetype")],
+    rows: [
+      row("top_archetypes", "Highest Archetypes Scores"),
+      row("core_archetype", "Core Archetype"),
+    ],
   },
   {
     part: "Part 3",

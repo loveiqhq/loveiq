@@ -187,6 +187,8 @@ describe("reportV3.css — V4 sections clear the floating chrome", () => {
     const rule = css.slice(at, css.indexOf("}", at));
     expect(rule).toContain(".rv3.rv4 .rv3-chapter");
     expect(rule).toContain(".rv3.rv4 .report-section");
+    // The top three is Part 2's first nav row since 01.10 (961:333).
+    expect(rule).toContain(".rv3.rv4 .rv4-top3");
     expect(rule).toContain("scroll-margin-top: 144px;");
   });
 });

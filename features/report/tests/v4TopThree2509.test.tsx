@@ -66,6 +66,16 @@ describe("report4ArchetypeBlurbs — Sanjin's descriptions, all fourteen", () =>
   });
 });
 
+describe("V4TopThreeSection — Part 2's first nav row lands on it (01.10)", () => {
+  it("carries the nav's anchor, the id of the row 'Highest Archetypes Scores'", async () => {
+    const { REPORT_V4_NAV_PARTS } = await import("@features/report/ui/v3/reportV3Nav");
+    const { container } = render(<V4TopThreeSection />);
+    const section = container.querySelector("section.rv4-top3")!;
+    expect(section.id).toBe("top_archetypes");
+    expect(REPORT_V4_NAV_PARTS[1]!.items[0]!.id).toBe(section.id);
+  });
+});
+
 describe("V4TopThreeSection — the new descriptions on the page", () => {
   it("shows the reader's top three with the doc's descriptions", () => {
     const { container } = render(<V4TopThreeSection />);
