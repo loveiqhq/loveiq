@@ -23,7 +23,12 @@ deliberately left behind (the forced paywall and the urgency countdown).
 - `ui/reportPlaceholders.ts` — `{{USER_NAME}}`-style substitution, shared by both.
 - `ui/ReportPricingModal.tsx` — paywall modal.
 - `ui/ShareReportModal.tsx`, `ui/SharedViewerBanner.tsx`, `ui/ShareVerifyGate.tsx` — share flow.
-- `ui/hooks/` — `useReportData`, `useSectionFeedback`, `useReportShares`, `useReportEngagementTimers`.
+- `ui/hooks/` — `useReportData`, `useSectionFeedback` (a thumb saves the rating at once; the
+  message is optional), `useReportShares`, `useReportEngagementTimers`, `useRevealOnView` (2.0's
+  chart reveals) and `useChapterOpen` (false while a V4 chapter is closed or still opening, so
+  the reveals inside wait for it).
+- `feedbackSections.ts` — the section ids `app/api/report-feedback/route.ts` accepts: the
+  report's sections plus the ids only the page rates.
 - `server/personalReport.ts` — personalization composer.
 - `server/access.ts`, `server/planAccess.ts`, `server/shareAccess.ts`, `server/shareVerify.ts` — paywall + share access gates.
 - `server/archetypeSlug.ts` — URL slug ↔ archetype name (includes legacy alias map for V8 renames).
