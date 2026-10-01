@@ -8870,6 +8870,25 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     font-size: 10px;
     top: 45px;
   }
+
+  /* Mark: "Locked CTA box more centrally into the blurred text. not so close to the try
+   * this element". A gate is as tall as its copy, which shortens as the column widens:
+   * from 1024 A&B's is 515, so its card (363) sat at the foot, 16 over "Try this", the
+   * frame's 408 out of reach. Here each chapter body's card sits in the middle of its
+   * gate, or at its top when the gate is shorter than the card. The practice and article
+   * gates keep their windows. */
+  .rv3.rv4 .rv4-tb__gate .rv4-premium {
+    top: max(0px, (100% - 363px) / 2);
+  }
+  .rv3.rv4 .rv4-ab__gate .rv4-premium {
+    top: max(0px, (100% - 363px) / 2);
+  }
+  .rv3.rv4 .rv4-cip__gate .rv4-premium {
+    top: max(0px, (100% - 363px) / 2);
+  }
+  .rv3.rv4 .rv4-fvr__gate .rv4-premium {
+    top: max(0px, (100% - 363px) / 2);
+  }
 }
 /* From 700px too: below it the dots are the phone's lines. */
 @media (min-width: 700px) and (hover: hover) and (pointer: fine) {
