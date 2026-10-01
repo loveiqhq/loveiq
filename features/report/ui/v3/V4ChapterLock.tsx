@@ -14,7 +14,7 @@ import { createContext, useContext, type FC, type ReactNode } from "react";
  * ReportPage decides who is locked from the same gate the nav badges and the
  * sections use, and provides it here. The four designed chapters never lock
  * outright (REPORT_V4_DESIGNED_CHAPTER_IDS): they keep their own gates, and V2's
- * previews for the archetypes still on V2, so Part II's nudges never point at a
+ * previews for a name with no V4 copy, so Part II's nudges never point at a
  * chapter that will not open. V1, V2 and V3 have no provider, so nothing changes
  * there.
  */

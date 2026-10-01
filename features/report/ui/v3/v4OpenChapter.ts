@@ -4,8 +4,8 @@ import { useEffect } from "react";
  * Opening a Report V4 chapter from elsewhere on the page — Part II's chapter nudges
  * ("Read full chapter", Figma 663:1089). A window event rather than a context: the
  * chapters it opens are V4Chapter (Typical Beliefs, Accelerators & Brakes, CiP) and
- * V3's accordion under V4 (every other chapter, and all four for the thirteen
- * archetypes still on V2), and the standalone /report-v4-preview has no provider.
+ * V3's accordion under V4 (every other chapter, and all four for a name with no V4
+ * copy), and the standalone /report-v4-preview has no provider.
  */
 
 export const V4_OPEN_CHAPTER_EVENT = "rv4:open-chapter";

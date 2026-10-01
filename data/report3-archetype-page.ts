@@ -426,7 +426,7 @@ export const REPORT_V4_UNSUFFIXED_CHAPTER_IDS: ReadonlySet<string> = new Set(
  * The chapters Figma has designed — its expanded rows (`body: "chapter"`): Typical
  * Beliefs, Accelerators & Brakes, Challenges in Partnerships and Fantasy vs. Reality.
  * Under V4 they never lock outright (review 26.09, V4ChapterLock): a locked reader
- * gets their paywalled designs, or V2's previews for the archetypes still on V2, so
+ * gets their paywalled designs, or V2's previews for a name with no V4 copy, so
  * Part II's nudges never point at a chapter that will not open.
  */
 export const REPORT_V4_DESIGNED_CHAPTER_IDS: ReadonlySet<string> = new Set(

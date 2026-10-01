@@ -195,7 +195,7 @@ export async function GET(request: Request) {
 
     // V2's Accelerators & Brakes copy, exactly as the real route builds it. Without
     // it the V2 section rendered nothing under ?preview=1, leaving the chapter an
-    // empty head for every archetype still on V2.
+    // empty head in Report 2.0, and in V4's fallback for a name with no V4 copy.
     accelCopy: {
       "edu.eyebrow": accelSection["edu.eyebrow"] ?? null,
       "edu.teaser": accelSection["edu.teaser"] ?? null,
@@ -218,7 +218,8 @@ export async function GET(request: Request) {
 
     // V2's Challenges in Partnership copy and loop, through the real route's own
     // builder. Without them the V2 section rendered nothing under ?preview=1 — the
-    // chapter an empty head for every archetype still on V2, V4's fallback included.
+    // chapter an empty head in Report 2.0, and in V4's fallback for a name with no V4
+    // copy.
     partnershipCopy,
     partnershipLoop,
 
@@ -227,8 +228,8 @@ export async function GET(request: Request) {
     partnership: isV4Request ? buildPartnership(archetype, { locked: !partnershipUnlocked }) : null,
 
     // V2's Fantasy vs. Reality copy and map dots, through the real route's own
-    // builder, so V4's fallback for the thirteen archetypes still on V2 is not an
-    // empty head in the preview.
+    // builder, so Report 2.0's section, and V4's fallback for a name with no V4 copy,
+    // is not an empty head in the preview.
     fantasyCopy,
     fantasyDots,
 

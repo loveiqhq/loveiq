@@ -840,7 +840,8 @@ export async function GET(request: Request) {
      * The "Go deeper & learn more" article closing the same chapter — Figma 235:254,
      * and 235:317 locked. Gated on `accelUnlocked` like the chapter, so the two can
      * never disagree about who has paid, and shipped only alongside the chapter it
-     * belongs to, so the thirteen archetypes still on V2's section carry none of it.
+     * belongs to, so a report that falls back to V2's section (a name with no V4 copy)
+     * carries none of it.
      */
     const acceleratorsArticle =
       accelerators &&
@@ -910,7 +911,8 @@ export async function GET(request: Request) {
      * The "Go deeper & learn more" article closing the same chapter — Figma 244:258,
      * and 482:6479 locked. Gated on `fantasyUnlocked` like the chapter, so the two can
      * never disagree about who has paid, and shipped only alongside the chapter it
-     * belongs to, so the thirteen archetypes still on V2's section carry none of it.
+     * belongs to, so a report that falls back to V2's section (a name with no V4 copy)
+     * carries none of it.
      */
     const fantasyArticle =
       fantasy && REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies
