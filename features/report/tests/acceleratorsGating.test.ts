@@ -106,7 +106,9 @@ describe("buildAccelerators — unlocked", () => {
   });
 
   it("is null for an archetype nobody has written yet, so the V2 section stays", () => {
-    expect(buildAccelerators("Explorer of Edges")).toBeNull();
+    // A name no copy knows, so this holds however many archetypes are written (data/report3-copy).
+    expect(buildAccelerators("Not An Archetype")).toBeNull();
+    expect(buildAccelerators("Not An Archetype", { locked: true })).toBeNull();
   });
 });
 
