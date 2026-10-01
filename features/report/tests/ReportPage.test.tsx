@@ -38,10 +38,12 @@ vi.mock("@features/report/ui/hooks/useReportData", () => ({
   useReportData: (...args: unknown[]) => mockUseReportData(...args),
 }));
 
+const { mockRateSection } = vi.hoisted(() => ({ mockRateSection: vi.fn() }));
 vi.mock("@features/report/ui/hooks/useSectionFeedback", () => ({
   useSectionFeedback: () => ({
     feedbacks: {},
     submitted: {},
+    rateSection: mockRateSection,
     submitFeedback: vi.fn(),
   }),
 }));
@@ -1243,6 +1245,22 @@ describe("ReportPage", () => {
       expect(chapter).not.toHaveClass("rv3-chapter");
       expect(chapter.querySelector(".rv3-chapter__body")).not.toBeNull();
       expect(chapter.querySelector(".rv4-cip")).toBeNull();
+    });
+
+    // Marcus, 01.10: "store the rating also without 'send'". The thumb reaches the
+    // page's own store, under the section's id, with no message.
+    it("stores a chapter's rating from its thumb, through the page", async () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      mockRateSection.mockReset().mockResolvedValue(true);
+      const { container } = render(<ReportPage />);
+      const thumb = container.querySelector<HTMLButtonElement>(
+        '#challenges_in_partnership [aria-label="This resonates: Challenges in Partnerships"]'
+      )!;
+      await act(async () => {
+        fireEvent.click(thumb);
+      });
+      expect(mockRateSection).toHaveBeenCalledWith("challenges_in_partnership", "up");
     });
 
     // Fatih, 24.09: the plural everywhere in V4. V2's section still names itself to

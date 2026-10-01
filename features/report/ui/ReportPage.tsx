@@ -495,7 +495,10 @@ interface ReportExperienceProps {
   mapCopy: MapCopy | null;
   stageCopy: StageCopy | null;
   constellationMottos: Record<string, string | null>;
-  submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
+  /** The thumb: stores the rating alone (review 01.10). Resolves to whether it was stored. */
+  rateSection: (sectionId: string, feedback: "up" | "down") => Promise<boolean>;
+  /** Send: the rating with its optional message. Resolves to whether it was stored. */
+  submitFeedback: (sectionId: string, payload: FeedbackPayload) => Promise<boolean>;
   submitted: Record<string, boolean>;
   theme: ReturnType<typeof getReportTheme>;
   userEmail: string | null;
@@ -601,6 +604,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   mapCopy,
   stageCopy,
   constellationMottos,
+  rateSection,
   submitFeedback,
   submitted,
   theme,
@@ -625,6 +629,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       sectionTitle={sectionTitle}
       value={feedbacks[sectionId] ?? null}
       isSent={submitted[sectionId] ?? false}
+      onRate={(feedback) => rateSection(sectionId, feedback)}
       onFeedback={(payload) => submitFeedback(sectionId, payload)}
     />
   );
@@ -2628,7 +2633,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works
   // cross-device); sessionId is the legacy in-storage one.
-  const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId, token);
+  const { feedbacks, submitted, rateSection, submitFeedback } = useSectionFeedback(
+    sessionId,
+    token
+  );
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   /**
@@ -3358,6 +3366,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             mapCopy={data.mapCopy ?? null}
             stageCopy={data.stageCopy ?? null}
             constellationMottos={data.constellationMottos ?? {}}
+            rateSection={rateSection}
             submitFeedback={submitFeedback}
             submitted={submitted}
             theme={theme}
@@ -3402,6 +3411,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           reportDate={reportDate}
           resolvedSections={resolvedSectionsV1}
           snapshot={snapshot}
+          rateSection={rateSection}
           submitFeedback={submitFeedback}
           submitted={submitted}
           theme={theme}
