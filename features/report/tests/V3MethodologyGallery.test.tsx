@@ -104,9 +104,12 @@ const layOut = (container: HTMLElement, width = 917) => {
 };
 
 let resize: (() => void) | null = null;
+// Every observer the deck makes: the pager's, and the cut-tile reader's (01.10).
+let observers: (() => void)[] = [];
 
 beforeEach(() => {
-  resize = null;
+  observers = [];
+  resize = () => observers.forEach((cb) => cb());
   // Frames run at once, so a scroll is read before the assertion.
   vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
     cb(0);
@@ -117,7 +120,7 @@ beforeEach(() => {
     "ResizeObserver",
     class {
       constructor(cb: () => void) {
-        resize = cb;
+        observers.push(cb);
       }
       observe() {}
       disconnect() {}
