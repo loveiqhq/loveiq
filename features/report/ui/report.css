@@ -4544,11 +4544,6 @@
   background-image: url("/payment-logos/apple-pay.svg");
 }
 
-.report-pricing-modal__payment-logo--paypal {
-  width: 5.15rem;
-  background-image: url("/payment-logos/paypal.svg");
-}
-
 .report-pricing-modal__payment-logo--google-pay {
   width: 2.82rem;
   background-image: url("/payment-logos/google-pay.svg?v=2");
@@ -15724,10 +15719,6 @@
 
   .report-pricing-modal__payment-logo--google-pay {
     width: 2.07rem;
-  }
-
-  .report-pricing-modal__payment-logo--paypal {
-    width: 3.78rem;
   }
 
   .report-pricing-modal__payment-logo--klarna {
