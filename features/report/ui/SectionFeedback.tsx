@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import type { FeedbackPayload } from "./hooks/useSectionFeedback";
 
 const NEGATIVE_ISSUES = [
@@ -69,6 +69,9 @@ const SectionFeedback: FC<Props> = ({ onRate, onFeedback, sectionTitle, value, i
   // choice shows while it is stored; a refusal moves it back.
   const [rated, setRated] = useState<Rating | null>(value);
   const [announce, setAnnounce] = useState("");
+  // Counts the reader's choices: a result that arrives after a newer one is ignored
+  // (final review, 01.10), so a superseded failure never takes back the newer choice.
+  const choices = useRef(0);
 
   useEffect(() => {
     setRated(value);
@@ -89,10 +92,12 @@ const SectionFeedback: FC<Props> = ({ onRate, onFeedback, sectionTitle, value, i
     // The panel toggles; the rating only posts when it changes.
     setStep(panelOpen(rating) ? "idle" : rating === "up" ? "positive" : "negative-pick");
     if (rated === rating) return;
+    const choice = ++choices.current;
     const previous = rated;
     setRated(rating);
     setAnnounce("");
     const stored = onRate ? await onRate(rating) : true;
+    if (choice !== choices.current) return;
     if (stored === false) {
       setRated(previous);
       setStep("failed");
@@ -102,7 +107,9 @@ const SectionFeedback: FC<Props> = ({ onRate, onFeedback, sectionTitle, value, i
   };
 
   const send = async (payload: FeedbackPayload) => {
+    const choice = ++choices.current;
     const stored = await onFeedback(payload);
+    if (choice !== choices.current) return;
     if (stored === false) {
       setStep("failed");
       return;
