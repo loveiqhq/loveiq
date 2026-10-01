@@ -158,6 +158,69 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
   const [active, setActive] = useState(0);
   const trackId = useId();
   const pager = useSciPager(trackRef, cards.length, deck);
+  // Desktop review 01.10 (Mark: "Can we make the hidden tile clickable so that it moves
+  // into view?"): which tiles the frame cuts, read off the track once a frame.
+  const [cut, setCut] = useState<readonly boolean[]>([]);
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!deck || !el) return;
+    let frame = 0;
+    let queued = false;
+    const read = () => {
+      queued = false;
+      const box = el.getBoundingClientRect();
+      const from = box.left + el.clientLeft;
+      const to = from + el.clientWidth;
+      const next = Array.from(el.querySelectorAll<HTMLElement>(".rv3-sci__card"), (card) => {
+        const r = card.getBoundingClientRect();
+        return r.left < from - 1 || r.left + r.width > to + 1;
+      });
+      setCut((prev) =>
+        prev.length === next.length && prev.every((c, i) => c === next[i]) ? prev : next
+      );
+    };
+    const onChange = () => {
+      if (queued) return;
+      queued = true;
+      frame = requestAnimationFrame(read);
+    };
+    el.addEventListener("scroll", onChange, { passive: true });
+    const resize = typeof ResizeObserver === "function" ? new ResizeObserver(onChange) : null;
+    resize?.observe(el);
+    onChange();
+    return () => {
+      el.removeEventListener("scroll", onChange);
+      resize?.disconnect();
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+    };
+  }, [deck]);
+
+  /**
+   * A cut tile glides to the nearest stop that shows it whole: the next one for a tile
+   * cut on the right, the one before for a tile cut on the left. Mouse and touch only;
+   * the pager below stays the keyboard path, so the tile takes no tab stop.
+   */
+  const reveal = (index: number) => {
+    const el = trackRef.current;
+    const card = el?.querySelectorAll<HTMLElement>(".rv3-sci__card")[index];
+    if (!el || !card) return;
+    const box = el.getBoundingClientRect();
+    const r = card.getBoundingClientRect();
+    const left = el.scrollLeft + r.left - box.left - el.clientLeft;
+    const right = left + r.width;
+    const whole = (at: number) => left >= at - 1 && right <= at + el.clientWidth + 1;
+    if (whole(el.scrollLeft)) return;
+    let best = -1;
+    pager.stops.forEach((stop, k) => {
+      if (!Number.isFinite(stop.left) || !whole(stop.left)) return;
+      const nearer =
+        best < 0 ||
+        Math.abs(stop.left - el.scrollLeft) < Math.abs(pager.stops[best]!.left - el.scrollLeft);
+      if (nearer) best = k;
+    });
+    if (best >= 0) pager.goTo(best);
+  };
 
   // The dot row reflects which card is nearest the scroller's left edge.
   useEffect(() => {
@@ -220,11 +283,12 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
 
       <div className="rv3-sci" data-node-id="10360:9879">
         <div className="rv3-sci__track" ref={trackRef} id={deck ? trackId : undefined}>
-          {cards.map((card) => (
+          {cards.map((card, i) => (
             <article
               key={card.title}
-              className="rv3-sci__card"
+              className={`rv3-sci__card${deck && cut[i] ? " is-cut" : ""}`}
               style={{ "--rv3-accent": card.accent } as CSSProperties}
+              onClick={deck && cut[i] ? () => reveal(i) : undefined}
             >
               {chrome === "full" ? <span className="rv3-sci__rule" aria-hidden="true" /> : null}
               <header className="rv3-sci__head">
@@ -266,6 +330,37 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
             </article>
           ))}
         </div>
+        {/* Desktop review 01.10, Mark: "have the arrows also in the middle height of the
+         * hidden tile? So that it is clear that you can navigate through that." Where the
+         * next tile sits wholly past the frame (1440, measured) there is no sliver to
+         * click, so an arrow at the tiles' middle says there is more. Mouse shortcuts, as
+         * the cut tile is: the pager row below is the keyboard path. */}
+        {deck && pager.stops.length > 1 ? (
+          <>
+            {(pager.held ?? pager.at) > 0 ? (
+              <button
+                type="button"
+                className="rv3-sci__edge is-prev"
+                aria-hidden="true"
+                tabIndex={-1}
+                onClick={() => pager.step(-1)}
+              >
+                <PagerChevron back />
+              </button>
+            ) : null}
+            {(pager.held ?? pager.at) < pager.stops.length - 1 ? (
+              <button
+                type="button"
+                className="rv3-sci__edge is-next"
+                aria-hidden="true"
+                tabIndex={-1}
+                onClick={() => pager.step(1)}
+              >
+                <PagerChevron />
+              </button>
+            ) : null}
+          </>
+        ) : null}
         <div className="rv3-sci__dots" aria-hidden="true">
           {cards.map((c, i) => (
             <span key={c.title} className={i === active ? "is-active" : ""} />

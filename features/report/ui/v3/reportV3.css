@@ -8367,6 +8367,15 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   }
 }
 
+/* ══ Desktop review 01.10 — what the phone keeps ═══════════════════════════════════════
+ * From the desktop touch-up below to the end of the file, every rule is the live page's
+ * from 700px (v4Desktop2809b). The 01.10 desktop items' rules for the phone and the 393
+ * preview sit here instead. */
+/* The science gallery's mid-height arrows (Mark's second ask): drawn from 700px only. */
+.rv3 .rv3-method.is-v4 .rv3-sci__edge {
+  display: none;
+}
+
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
  * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
  * properly to not have these huge gaps and spaces". Production's column (991cb18c) is
@@ -8955,5 +8964,58 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     height: 1px;
     margin-left: min(190px, 25%);
     width: min(380px, 50%);
+  }
+}
+
+/* ══ The science gallery's cut tile — desktop review 01.10 ═════════════════════════════
+ * Mark: "Can we make the hidden tile clickable so that it moves into view?" A tile the
+ * frame cuts (V3Methodology's `is-cut`) takes a click and glides into view; it says so
+ * with the pointer and a 2px lift under a mouse. The pager stays the keyboard path. The
+ * mid-height arrows (Mark's second ask) are hidden below 700px above the 28.09 (c)
+ * touch-up. */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card.is-cut {
+    cursor: pointer;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci {
+    position: relative;
+  }
+  /* The tiles stand 22px down the frame and 310 tall: their middle is 177, so the 40px
+   * disc's top is 157. White over the tile it sits on, in the pager's violet. */
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__edge {
+    align-items: center;
+    background: #fff;
+    border: 1px solid rgba(121, 95, 200, 0.18);
+    border-radius: 50%;
+    box-shadow: 0 6px 18px rgba(22, 16, 33, 0.14);
+    color: var(--rv3-violet);
+    cursor: pointer;
+    display: flex;
+    height: 40px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    top: 157px;
+    width: 40px;
+    z-index: 2;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__edge.is-prev {
+    left: 10px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__edge.is-next {
+    right: 10px;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__edge svg {
+    display: block;
+    height: 15px;
+    width: 15px;
+  }
+}
+@media (min-width: 700px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card {
+    transition: translate 180ms ease;
+  }
+  .rv3.rv4 .rv3-method.is-v4 .rv3-sci__card.is-cut:hover {
+    translate: 0 -2px;
   }
 }
