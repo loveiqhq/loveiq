@@ -91,16 +91,19 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
   const viewportRef = useRef<HTMLDivElement>(null);
   const viewportId = useId();
   const [active, setActive] = useState(initialIndex);
-  const pager = useSciPager(viewportRef, dimensions.length, true, ".rv3-deck__slot");
+  const pager = useSciPager(viewportRef, dimensions.length, true, ".rv3-deck__slot", {
+    endsWhenLastShows: true,
+  });
+  // Desktop review 01.10 (Mark: "Lets only have the tile that is no in view be beiged
+  // out"): which cards the viewport shows whole. Only the others take the peeking design.
+  const [whole, setWhole] = useState<readonly boolean[]>([]);
   // The card a click is gliding to wins over the swipe's reading until it lands.
   const heldCard = pager.held === null ? undefined : pager.stops[pager.held]?.card;
   const focus = heldCard ?? active;
-  const last = dimensions.length - 1;
-  /** Glide to the stop that brings `card` to the snap edge — its own, one a card. */
-  const show = (card: number) => {
-    const k = pager.stops.findIndex((stop) => stop.card >= card);
-    pager.goTo(k < 0 ? pager.stops.length - 1 : k);
-  };
+  // The stop the pager stands on: the one holding the focused card. A stop a card on the
+  // phone; where cards share the end, the end holds the last (and the focus is it there).
+  const holding = pager.stops.findIndex((s) => s.card >= focus);
+  const stop = pager.held ?? (holding < 0 ? pager.stops.length - 1 : holding);
 
   // Which card the swipe is on, read while it moves. Every card sits a whole STEP
   // from the one before it and snaps to the same 22px inset, so the scroll offset
@@ -117,7 +120,22 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
     let queued = false;
     const measure = () => {
       queued = false;
-      if (!count) return;
+      // Nothing to read before layout (jsdom, a deck not drawn): its zero widths would read
+      // as the end of the track.
+      if (!count || el.clientWidth === 0) return;
+      // Whole cards, from the slots' boxes against the viewport's.
+      {
+        const box = el.getBoundingClientRect();
+        const from = box.left + el.clientLeft;
+        const to = from + el.clientWidth;
+        const next = Array.from(el.querySelectorAll<HTMLElement>(".rv3-deck__slot"), (slot) => {
+          const r = slot.getBoundingClientRect();
+          return r.left >= from - 1 && r.left + r.width <= to + 1;
+        });
+        setWhole((prev) =>
+          prev.length === next.length && prev.every((w, i) => w === next[i]) ? prev : next
+        );
+      }
       // Being at the end IS being on the last card, whatever the offset says. Since
       // 30.09 the trailing space lets the last card reach the snap edge at any width,
       // so this only rounds a scroll that stops a pixel or two short of it.
@@ -138,8 +156,12 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
       frame = window.requestAnimationFrame(measure);
     };
     el.addEventListener("scroll", onScroll, { passive: true });
+    const resize = typeof ResizeObserver === "function" ? new ResizeObserver(onScroll) : null;
+    resize?.observe(el);
+    onScroll();
     return () => {
       el.removeEventListener("scroll", onScroll);
+      resize?.disconnect();
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, [dimensions.length]);
@@ -174,12 +196,13 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
         <div className="rv3-deck__track" data-node-id="15:1137" data-name="Track">
           {dimensions.map((d, i) => {
             const isFocused = i === focus;
+            const state = isFocused ? "is-focused" : whole[i] ? "is-visible" : "is-peeking";
             return (
               <article
                 key={d.key}
                 data-deck-card
                 data-dimension={d.key}
-                className={`rv3-deck__slot ${isFocused ? "is-focused" : "is-peeking"}`}
+                className={`rv3-deck__slot ${state}`}
                 aria-roledescription="slide"
                 aria-label={`${d.title}: ${d.value}`}
                 style={
@@ -215,23 +238,25 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
           className="rv3-deck__arrow"
           aria-label="Previous dimension"
           aria-controls={viewportId}
-          aria-disabled={focus <= 0 || undefined}
+          aria-disabled={stop <= 0 || undefined}
           onClick={() => {
-            if (focus > 0) show(focus - 1);
+            if (stop > 0) pager.goTo(stop - 1);
           }}
         >
           <PagerChevron back />
         </button>
-        {dimensions.map((d, i) => (
+        {/* A bar a stop: a stop a card on the phone, fewer where cards share the end
+         * (01.10). Each names the card its stop brings in. */}
+        {pager.stops.map(({ card }, k) => (
           <button
-            key={d.key}
+            key={dimensions[card]!.key}
             type="button"
-            className={`rv3-deck__dot${i === focus ? " is-active" : ""}`}
-            aria-current={i === focus}
+            className={`rv3-deck__dot${k === stop ? " is-active" : ""}`}
+            aria-current={k === stop}
             aria-controls={viewportId}
-            onClick={() => show(i)}
+            onClick={() => pager.goTo(k)}
           >
-            <span className="rv3-sr">Show {d.title}</span>
+            <span className="rv3-sr">Show {dimensions[card]!.title}</span>
           </button>
         ))}
         <button
@@ -239,9 +264,9 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
           className="rv3-deck__arrow"
           aria-label="Next dimension"
           aria-controls={viewportId}
-          aria-disabled={focus >= last || undefined}
+          aria-disabled={stop >= pager.stops.length - 1 || undefined}
           onClick={() => {
-            if (focus < last) show(focus + 1);
+            if (stop < pager.stops.length - 1) pager.goTo(stop + 1);
           }}
         >
           <PagerChevron />

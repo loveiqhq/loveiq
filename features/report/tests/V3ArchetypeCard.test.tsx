@@ -221,8 +221,13 @@ describe("V3DimensionDeck", () => {
 // 700px the indicator is the science gallery's pager: Previous and Next either side of
 // the four bars, drawn as dots (useSciPager, measured off the deck's slots).
 describe("V3DimensionDeck — the pager (desktop review 30.09)", () => {
-  /** A desktop deck `width` wide whose smooth scroll never lands: a glide in flight. */
-  const setup = (width = 853) => {
+  /**
+   * A deck `width` wide whose smooth scroll never lands: a glide in flight. The phone's
+   * geometry, where the trailing space lets every card reach the snap edge, so the pager
+   * steps a card a click. From 700px the deck ends 22 after Power and pages to the end
+   * once Power shows whole (desktop review 01.10): v3DimensionDeck0110.test.tsx.
+   */
+  const setup = (width = 361) => {
     // Synchronous frames, as above; one asked for from inside a frame is dropped.
     let inFrame = false;
     vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
@@ -302,8 +307,8 @@ describe("V3DimensionDeck — the pager (desktop review 30.09)", () => {
     expect(focused()).toBe("attachment");
   });
 
-  it("reaches Attachment and Power, however wide the deck", () => {
-    for (const width of [618, 853, 915]) {
+  it("reaches Attachment and Power a card a click, on any phone", () => {
+    for (const width of [320, 361, 393]) {
       const { glides, focused, next } = setup(width);
       fireEvent.click(next());
       fireEvent.click(next());
@@ -507,10 +512,12 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
   // and the track's content without its trailing space is 22 + 4 x 266 + 3 x 14 = 1128,
   // so the trailing space must be at least the viewport less 288 for the scroll to run to
   // 840. The phone's 69 was that for the old 268 card at 359; this is 71 there.
-  it("lets every card reach the snap edge, however wide the deck", () => {
+  // From 700px the track ends 22 after Power instead and pages to the end once Power
+  // shows whole (desktop review 01.10: v3DimensionDeck0110.test.tsx).
+  it("lets every card reach the snap edge below 700px", () => {
     const track = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__track");
     expect(track).toMatch(/padding-right: max\(69px, 100% - 288px\)/);
-    for (const width of [300, 359, 618, 853, 915, 1200]) {
+    for (const width of [300, 359, 393, 618]) {
       const trailing = Math.max(69, width - 288);
       expect(22 + 4 * 266 + 3 * 14 + trailing - width, `at ${width}`).toBeGreaterThanOrEqual(840);
     }
