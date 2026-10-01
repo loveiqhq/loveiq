@@ -111,7 +111,7 @@ function PricingMethodMark({
   label,
 }: {
   label: string;
-  logo: "apple-pay" | "paypal" | "google-pay" | "klarna" | "mastercard" | "visa" | "amex";
+  logo: "apple-pay" | "google-pay" | "klarna" | "mastercard" | "visa" | "amex";
 }) {
   return (
     <span
@@ -745,7 +745,6 @@ const ReportPricingModal: FC<Props> = ({
 
               <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
                 <PricingMethodMark logo="apple-pay" label="Apple Pay" />
-                <PricingMethodMark logo="paypal" label="PayPal" />
                 <PricingMethodMark logo="google-pay" label="Google Pay" />
                 <PricingMethodMark logo="klarna" label="Klarna" />
                 <PricingMethodMark logo="mastercard" label="Mastercard" />
