@@ -202,14 +202,14 @@ const TEXT_SLIDES: Record<number, TextSlide> = {
       </div>
     ),
   },
-  // 1066:1956
+  // 1066:1956 (Mark, 01.10: "Updated copy on this one")
   4: {
     icon: "rate",
     heading: "Rate each report section.",
     body: (
       <p className={`${BODY} font-light text-white/80`}>
-        Your feedback helps us improve the experience and refine the insights we provide to you
-        personally in the future.{" "}
+        Your feedback helps us improve the experience and refine the insights we provide in the
+        future. <br />
         <strong className="font-bold text-white">
           As you go through the report, please rate each section
         </strong>{" "}
@@ -480,13 +480,14 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
         <div
           ref={scrollRef}
           data-lenis-prevent
-          className="wz-scroll relative z-10 flex h-full flex-col overflow-y-auto overflow-x-hidden px-6 py-12"
+          className="wz-scroll relative z-10 flex h-full flex-col overflow-y-auto overflow-x-hidden px-6 pb-12 pt-9"
         >
-          {/* 1049:1241 — two lines in its 68px, its right edge 17 in from the canvas's. */}
+          {/* 1049:1241 — two lines in its 68px, its right edge 17 in from the canvas's, 36
+           * down as the slide is. */}
           <button
             type="button"
             onClick={handleSkip}
-            className="wz-skip absolute right-[17px] top-12 z-20 w-[68px] text-center font-sans text-[12px] font-bold uppercase leading-[18px] tracking-[1.2px] text-white/50 transition hover:text-white/80 focus-visible-ring"
+            className="wz-skip absolute right-[17px] top-9 z-20 w-[68px] text-center font-sans text-[12px] font-bold uppercase leading-[18px] tracking-[1.2px] text-white/50 transition hover:text-white/80 focus-visible-ring"
           >
             Skip Intro
           </button>
@@ -515,38 +516,10 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
           </div>
 
           <div className="wz-footer w-full shrink-0">
-            {/* 1049:1219 — six segments, filled up to this slide. */}
-            <div className="flex h-1 w-full max-w-[448px] gap-3">
-              {Array.from({ length: WIZARD_SLIDE_COUNT }, (_, i) => {
-                const filled = i <= slideIndex;
-                return (
-                  <div
-                    key={i}
-                    data-wizard-segment
-                    data-filled={filled}
-                    className="relative h-1 flex-1 rounded-full transition-shadow duration-500 motion-reduce:transition-none"
-                    style={{
-                      background: "rgba(255,255,255,0.1)",
-                      boxShadow: filled ? "0 0 8px 0 rgba(254,104,57,0.5)" : "none",
-                    }}
-                  >
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full bg-[#fe6839] transition-[width] duration-500 motion-reduce:transition-none"
-                      style={{ width: filled ? "100%" : "0%", transitionTimingFunction: EASE }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-            <div className="relative h-6">
-              <span className="absolute left-0 top-1 whitespace-nowrap font-sans text-[12px] font-medium leading-[18px] tracking-[0.5px] text-white/30">
-                {`${slideIndex + 1} / ${WIZARD_SLIDE_COUNT}`}
-              </span>
-            </div>
-
             {/* 1049:1235 — slide 1 draws CONTINUE alone, at the left; the rest pair it with Back.
-             * A desktop keeps CONTINUE at the right, as Mark's desktop frames do. */}
-            <div className="wz-nav flex items-center justify-between pt-10">
+             * A desktop keeps CONTINUE at the right, as Mark's desktop frames do. Since Mark's
+             * 01.10 round the buttons come first, the bar 24 under them (1049:1234). */}
+            <div className="wz-nav flex items-center justify-between pb-6">
               {slideIndex > 0 ? (
                 <button
                   ref={backRef}
@@ -594,6 +567,35 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
                   className="block h-[18px] w-[18px]"
                 />
               </button>
+            </div>
+
+            {/* 1049:1219 — six segments, filled up to this slide, 3.2 tall since 01.10. */}
+            <div className="wz-bar flex h-[3.2px] w-full max-w-[448px] gap-3">
+              {Array.from({ length: WIZARD_SLIDE_COUNT }, (_, i) => {
+                const filled = i <= slideIndex;
+                return (
+                  <div
+                    key={i}
+                    data-wizard-segment
+                    data-filled={filled}
+                    className="relative h-[3.2px] flex-1 rounded-full transition-shadow duration-500 motion-reduce:transition-none"
+                    style={{
+                      background: "rgba(255,255,255,0.1)",
+                      boxShadow: filled ? "0 0 8px 0 rgba(254,104,57,0.5)" : "none",
+                    }}
+                  >
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-[#fe6839] transition-[width] duration-500 motion-reduce:transition-none"
+                      style={{ width: filled ? "100%" : "0%", transitionTimingFunction: EASE }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="wz-count relative h-6">
+              <span className="absolute left-0 top-1 whitespace-nowrap font-sans text-[12px] font-medium leading-[18px] tracking-[0.5px] text-white/30">
+                {`${slideIndex + 1} / ${WIZARD_SLIDE_COUNT}`}
+              </span>
             </div>
           </div>
         </div>

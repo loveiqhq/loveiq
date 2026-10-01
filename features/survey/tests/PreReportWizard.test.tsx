@@ -441,9 +441,9 @@ describe("PreReportWizard — the hooks its desktop layout styles", () => {
     it("hands a desktop's zooms to its grid and lets the grid set the height", () => {
       sized(1440, 900, 1120);
       const box = mapBox();
-      // 900 leaves the map 653: the drawer's 597 and the tiles' 541 grow to it.
-      expect(Number(box.style.getPropertyValue("--wz-drawer-zoom"))).toBeCloseTo(653 / 597);
-      expect(Number(box.style.getPropertyValue("--wz-tiles-zoom"))).toBeCloseTo(653 / 541);
+      // 900 leaves the map 670.3: the drawer's 597 and the tiles' 541 grow to it.
+      expect(Number(box.style.getPropertyValue("--wz-drawer-zoom"))).toBeCloseTo(670.3 / 597);
+      expect(Number(box.style.getPropertyValue("--wz-tiles-zoom"))).toBeCloseTo(670.3 / 541);
       expect(box.style.height).toBe("");
       expect(hook("wz-canvas")).not.toHaveAttribute("style");
     });
@@ -529,5 +529,83 @@ describe("PreReportWizard — track={false}, for the preview page", () => {
     expect(activeTile()).not.toBeNull();
     expect(analytics.trackWizardSlideAdvanced).not.toHaveBeenCalled();
     expect(analytics.trackWizardMapStep).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Mark's 01.10 placement (1049:1161 and its twins; thread 1946715536: "Updated
+ * placement/spacing and moving the thinner progress bar under the button"; Marcus, 10:15:
+ * the stepper bar takes too much space). Every frame draws SKIP INTRO and the slide 36
+ * down, the 640 slide, then CONTINUE at 676, 24 under it the bar at 3.2, then the
+ * counter's 24 row: a 99.2 footer, 48 left under it.
+ */
+describe("PreReportWizard — Mark's 01.10 placement: the bar under CONTINUE (1049:1161)", () => {
+  it("starts the slide and SKIP INTRO 36 down, the 48 under the footer kept", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const column = document.querySelector(".wz-scroll")!;
+    expect(column).toHaveClass("pt-9", "pb-12");
+    expect(column).not.toHaveClass("py-12");
+    expect(screen.getByRole("button", { name: /skip intro/i })).toHaveClass("top-9");
+  });
+
+  it("sets CONTINUE first, the bar 24 under it, then the counter", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const [nav, bar, count] = [...document.querySelector(".wz-footer")!.children];
+    expect(nav).toHaveClass("wz-nav", "pb-6");
+    expect(nav).not.toHaveClass("pt-10");
+    expect(nav!.contains(continueButton())).toBe(true);
+    expect(bar).toHaveClass("wz-bar");
+    expect(count).toHaveClass("wz-count");
+    expect(count!.textContent).toBe("1 / 6");
+  });
+
+  it("draws the bar 3.2 tall, its six segments 12 apart (1049:1219)", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const bar = document.querySelector(".wz-bar")!;
+    expect(bar).toHaveClass("h-[3.2px]", "gap-3", "max-w-[448px]");
+    const segments = bar.querySelectorAll("[data-wizard-segment]");
+    expect(segments).toHaveLength(6);
+    for (const segment of segments) expect(segment).toHaveClass("h-[3.2px]");
+  });
+
+  it("breaks slide 5's copy after its first sentence, without 'to you personally' (1066:1956)", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    // The map, its first deep dive, then slides 3, 4 and 5.
+    for (let i = 0; i < 5; i++) press(continueButton());
+    expect(heading()).toBe(HEADINGS[4]);
+    const copy = document.querySelector(".wz-copy")!;
+    expect(copy.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "Your feedback helps us improve the experience and refine the insights we provide in the future. As you go through the report, please rate each section to let us know what was helpful, surprising, or meaningful."
+    );
+    const [before, after] = copy.innerHTML.split("<br>");
+    expect(before!.replace(/<[^>]+>/g, "").trim()).toMatch(/in the future\.$/);
+    expect(after!.replace(/<[^>]+>/g, "").trim()).toMatch(/^As you go through the report/);
+    expect(copy.querySelector("strong")!.textContent).toBe(
+      "As you go through the report, please rate each section"
+    );
+  });
+
+  // Mark, 11:06 on 1049:1627: "Updated fonts and font sizes". The drawer there is the
+  // report's panel at 0.4905 (1049:1832), its rows now set at 7px: Regular, the four
+  // featured chapters SemiBold, where every row was Light.
+  it("sets the map's drawer in 1049:1832's type: 7px rows, the featured four SemiBold", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton());
+    for (const part of WIZARD_DRAWER) {
+      for (const row of part.rows) {
+        const label = document.querySelector(`[data-wizard-row="${row.id}"] .truncate`)!;
+        expect(label, row.id).toHaveClass("text-[7px]", "leading-[9.81px]");
+        expect(label, row.id).toHaveClass(row.badge === "open" ? "font-semibold" : "font-normal");
+        expect(label, row.id).not.toHaveClass("font-light");
+      }
+    }
+    // The label 3.9 from its badge; the FREE chip and the part headings at the panel's scale.
+    expect(document.querySelector("[data-wizard-row]")).toHaveClass("gap-[3.9px]");
+    expect(screen.getAllByText("FREE")[0]).toHaveClass(
+      "px-[3.924px]",
+      "rounded-[2.943px]",
+      "tracking-[0.271px]"
+    );
+    expect(screen.getByText("Part 1 · Welcome")).toHaveClass("leading-[9.133px]");
   });
 });

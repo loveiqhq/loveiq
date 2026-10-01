@@ -231,14 +231,14 @@
     zoom: var(--wz-tiles-zoom, 1);
   }
 
-  /* The step bar and the buttons (1:4481): 48 under the slide, 48 between them; Back
-   * at the left, CONTINUE at the right, alone or not (1:4407 draws no Back). */
+  /* The buttons and the step bar (1:4481 drew the bar above them, 48 between; since
+   * Mark's 01.10 phone round the bar sits 24 under CONTINUE, so here too): 48 under the
+   * slide; Back at the left, CONTINUE at the right, alone or not (1:4407 draws no Back). */
   .wz-root .wz-footer {
     padding-top: clamp(24px, 4.5vh, 48px);
   }
   .wz-root .wz-nav {
     justify-content: space-between;
-    padding-top: clamp(24px, 4.5vh, 48px);
   }
   .wz-root .wz-nav > .wz-continue:only-child {
     margin-left: auto;
