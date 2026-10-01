@@ -8270,10 +8270,11 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 }
 /* Mark, desktop review 01.10: "I think the Archetype names appear too late. Let them
  * appear while the scales and % are loading". From 700px each name fades in with its
- * own bar, on the bars' 150ms stagger. The phone keeps the timing above. Only where
- * motion is allowed, so the reduced-motion reset below still wins. */
+ * own bar, on the bars' 150ms stagger. The phone keeps the timing above, and so does the
+ * 393 preview (.rv4-doc) in a desktop browser. Only where motion is allowed, so the
+ * reduced-motion reset below still wins. */
 @media (min-width: 700px) and (prefers-reduced-motion: no-preference) {
-  .rv3 .rv3-top3__list.is-animated .rv3-top3__name {
+  .rv3.rv4 .rv3-top3__list.is-animated .rv3-top3__name {
     transition: opacity 600ms ease-out calc(var(--rv4-t3-i, 0) * 150ms);
   }
 }
