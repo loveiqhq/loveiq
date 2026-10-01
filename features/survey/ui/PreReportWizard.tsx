@@ -280,11 +280,20 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   /** The column scrolls on a short phone; each new view starts at its top. */
   const scrollRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const continueRef = useRef<HTMLButtonElement>(null);
+  /** Back had focus when it was pressed: slide 1 draws none, so focus goes to CONTINUE. */
+  const refocusRef = useRef(false);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setHasEntered(true));
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  useEffect(() => {
+    if (slideIndex === 0 && refocusRef.current) continueRef.current?.focus({ preventScroll: true });
+    refocusRef.current = false;
+  }, [slideIndex]);
 
   const exit = useCallback(() => {
     busyRef.current = true;
@@ -435,8 +444,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
       <div className="relative mx-auto h-[100dvh] w-full max-w-[393px]">
         <Blobs map={slideIndex === MAP_SLIDE} />
 
+        {/* data-lenis-prevent: the column is the scroller, and the page's smooth scroll
+         * (Lenis, desktop) would otherwise cancel the wheel over it; on a 650px-tall
+         * window CONTINUE and Back sat below the fold, out of a mouse's reach. */}
         <div
           ref={scrollRef}
+          data-lenis-prevent
           className="relative z-10 flex h-full flex-col overflow-y-auto overflow-x-hidden px-6 py-12"
         >
           {/* 1049:1241 — two lines in its 68px, its right edge 17 in from the canvas's. */}
@@ -505,8 +518,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
             <div className="flex items-center justify-between pt-10">
               {slideIndex > 0 ? (
                 <button
+                  ref={backRef}
                   type="button"
-                  onClick={goBack}
+                  onClick={() => {
+                    refocusRef.current = document.activeElement === backRef.current;
+                    goBack();
+                  }}
                   aria-label="Go to previous slide"
                   className="flex h-12 w-12 items-center justify-center rounded-full transition hover:-translate-y-[1px] focus-visible-ring"
                   style={{
@@ -524,10 +541,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
                   />
                 </button>
               ) : null}
+              {/* Each name holds the word the button shows (WCAG 2.5.3). */}
               <button
+                ref={continueRef}
                 type="button"
                 onClick={goNext}
-                aria-label={isLast ? "View your report" : "Continue to next slide"}
+                aria-label={isLast ? "Continue to your report" : "Continue to next slide"}
                 className="inline-flex h-12 items-center gap-3 rounded-full bg-[#fe6839] px-7 font-sans text-[14px] font-bold uppercase leading-5 tracking-[1.4px] text-white transition hover:-translate-y-[1px] focus-visible-ring"
                 style={{
                   filter:

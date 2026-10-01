@@ -41,7 +41,9 @@ const HEADINGS = [
 
 const heading = () => screen.getByRole("heading", { level: 2 }).textContent?.replace(/\s+/g, " ");
 const continueButton = () =>
-  screen.getByRole("button", { name: /continue to next slide|view your report/i });
+  screen.getByRole("button", { name: /continue to (next slide|your report)/i });
+/** The deep-dive arrows stay focusable at an end (aria-disabled), so a keyboard keeps its place. */
+const isOff = (button: HTMLElement) => button.getAttribute("aria-disabled") === "true";
 const backButton = () => screen.queryByRole("button", { name: /go to previous slide/i });
 const nextDeepDive = () => screen.getByRole("button", { name: /next deep dive/i });
 const previousDeepDive = () => screen.getByRole("button", { name: /previous deep dive/i });
@@ -132,6 +134,38 @@ describe("PreReportWizard — slides", () => {
     flush(650);
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
+
+  // Final review, 30.09: the column is the scroller (the page is one screen tall), and
+  // the page's smooth scroll (Lenis, on a desktop) cancels the wheel over any nested
+  // scroller that does not opt out, so on a 1366x650 window CONTINUE, Back and the bar
+  // sat 152px below the fold and a mouse could not reach them.
+  it("lets its column scroll under the page's smooth scroll", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    const column = screen.getByRole("button", { name: /skip intro/i }).parentElement!;
+    expect(column.className).toContain("overflow-y-auto");
+    expect(column).toHaveAttribute("data-lenis-prevent");
+  });
+
+  it("hands focus to CONTINUE when Back reaches slide 1, which draws no Back", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton());
+    const back = backButton()!;
+    back.focus();
+    press(back);
+    expect(heading()).toBe(HEADINGS[0]);
+    expect(backButton()).toBeNull();
+    expect(document.activeElement).toBe(continueButton());
+  });
+
+  // WCAG 2.5.3: a control's name holds the words it shows, so a voice command saying
+  // "Continue" finds it on the last slide too.
+  it("names the last CONTINUE with the word it shows", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    for (let i = 0; i < 6; i++) press(continueButton());
+    expect(heading()).toBe(HEADINGS[5]);
+    const last = screen.getByRole("button", { name: "Continue to your report" });
+    expect(last.textContent).toContain("Continue");
+  });
 });
 
 describe("PreReportWizard — the report map (slide 2)", () => {
@@ -143,8 +177,8 @@ describe("PreReportWizard — the report map (slide 2)", () => {
   it("opens on the overview: the pitch copy, ▲ off and ▼ on, nothing marked yet", () => {
     openMap();
     expect(screen.getByText("your free chapters")).toBeInTheDocument();
-    expect(previousDeepDive()).toBeDisabled();
-    expect(nextDeepDive()).toBeEnabled();
+    expect(isOff(previousDeepDive())).toBe(true);
+    expect(isOff(nextDeepDive())).toBe(false);
     expect(activeTile()).toBeNull();
     expect(markedRow()).toBeNull();
   });
@@ -157,7 +191,7 @@ describe("PreReportWizard — the report map (slide 2)", () => {
     expect(activeTile()?.getAttribute("data-deep-dive")).toBe(ids[0]);
     expect(markedRow()?.getAttribute("data-wizard-row")).toBe(ids[0]);
     // The first tile has nothing above it (Figma 1049:1979).
-    expect(previousDeepDive()).toBeDisabled();
+    expect(isOff(previousDeepDive())).toBe(true);
 
     for (let i = 1; i < ids.length; i++) {
       fireEvent.click(nextDeepDive());
@@ -165,11 +199,40 @@ describe("PreReportWizard — the report map (slide 2)", () => {
       expect(markedRow()?.getAttribute("data-wizard-row")).toBe(ids[i]);
     }
     // The last has nothing below it (Figma 1049:2322).
-    expect(nextDeepDive()).toBeDisabled();
-    expect(previousDeepDive()).toBeEnabled();
+    expect(isOff(nextDeepDive())).toBe(true);
+    expect(isOff(previousDeepDive())).toBe(false);
 
     fireEvent.click(previousDeepDive());
     expect(activeTile()?.getAttribute("data-deep-dive")).toBe(ids[2]);
+  });
+
+  it("keeps an arrow focusable at its end, where a press does nothing", () => {
+    openMap();
+    fireEvent.click(nextDeepDive());
+    const up = previousDeepDive();
+    expect(up).not.toBeDisabled();
+    up.focus();
+    fireEvent.click(up);
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[0]!.id);
+    expect(document.activeElement).toBe(up);
+    for (let i = 1; i < REPORT_DEEP_DIVES.length; i++) fireEvent.click(nextDeepDive());
+    const down = nextDeepDive();
+    expect(down).not.toBeDisabled();
+    fireEvent.click(down);
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES.at(-1)!.id);
+  });
+
+  // The overview's ▼ and the tiles' are two buttons, one hidden while the other shows,
+  // so pressing the overview's would have left focus on a button about to disappear.
+  it("carries focus from the overview's ▼ to the tiles' as they come in", () => {
+    openMap();
+    const overviewDown = nextDeepDive();
+    overviewDown.focus();
+    fireEvent.click(overviewDown);
+    expect(activeTile()?.getAttribute("data-deep-dive")).toBe(REPORT_DEEP_DIVES[0]!.id);
+    const tilesDown = nextDeepDive();
+    expect(tilesDown).not.toBe(overviewDown);
+    expect(document.activeElement).toBe(tilesDown);
   });
 
   it("each tile carries its chapter's question and the line under it", () => {

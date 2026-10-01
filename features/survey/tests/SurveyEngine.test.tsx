@@ -373,3 +373,51 @@ describe("SurveyEngine — the staging jump menu", () => {
     expect(screen.queryByText(/Jump to question/)).toBeNull();
   });
 });
+
+// Final review, 30.09: the engine's window-level keys and swipe stayed live once the last
+// question was answered. Under the wizard ArrowRight and Enter were swallowed (a
+// preventDefault and a goNext with nothing to go to), and ArrowLeft or a back swipe went
+// back to the last question, whose Next does nothing once the survey is submitted: the
+// reader was stranded on it.
+describe("SurveyEngine once the survey is over", () => {
+  const atWizard = () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockSubmitStatus = "success";
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+    mockSetCurrentIndex.mockClear();
+  };
+
+  it("leaves the arrow keys and Enter to the wizard", () => {
+    atWizard();
+    for (const key of ["ArrowRight", "Enter", "ArrowLeft"]) {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented, key).toBe(false);
+    }
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+  });
+
+  it("does not take a back swipe to the last question", () => {
+    atWizard();
+    fireEvent.touchStart(window, { touches: [{ clientX: 40, clientY: 300 }] });
+    fireEvent.touchEnd(window, { changedTouches: [{ clientX: 260, clientY: 304 }] });
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+  });
+
+  it("does not go back from the processing screen either", () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
+    mockSetCurrentIndex.mockClear();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })
+    );
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+});
