@@ -51,6 +51,9 @@ const V4TypicalBeliefs: FC<Props> = ({ view, onUnlock }) => {
       <V4ShadowBeliefs turns={view.panels.turns} lockedFrom={view.lockedFrom} onUnlock={onUnlock} />
       <V4SunBeliefs sun={view.panels.sun} lockedFrom={view.lockedFrom} onUnlock={onUnlock} />
 
+      {/* What a doc sets after the two lists. No frame draws it. */}
+      {view.afterPanels ? <V4Prose blocks={view.afterPanels} /> : null}
+
       {/* 304:378 — the chapter's only H2, and the only 18px heading in the frame. */}
       <h3 className="rv4-tb__h2" data-node-id="304:379">
         {view.challengesTitle}

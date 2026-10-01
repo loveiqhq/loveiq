@@ -51,6 +51,12 @@ export interface Report3TypicalBeliefsCopy extends Report3BeliefPanels {
   intro?: readonly Report3Block[];
   /** The belief map's heading and its lede, after the intro. */
   lede: readonly Report3Block[];
+  /**
+   * What a doc sets after the sun beliefs, before "Common challenges" (Authority
+   * Conductor, 01.10). No frame draws it: it follows the sun panel. Free copy: that
+   * doc's wall falls later, in the challenges.
+   */
+  afterPanels?: readonly Report3Block[];
   /** "Common challenges", under its title. */
   challenges: readonly Report3Block[];
   /** Omitted: Spark Seeker's "Practice time: ~15 min.". */
@@ -393,6 +399,8 @@ export interface Report3TypicalBeliefsView {
    * (progressive blur, real copy); every row after it is scrambled.
    */
   lockedFrom: number | null;
+  /** After the sun panel; absent where the archetype's chapter has none. */
+  afterPanels?: readonly Report3Block[];
   challengesTitle: string;
   challenges: Report3GatedCopy;
   practice: Report3PracticeView;
@@ -459,6 +467,7 @@ export function buildTypicalBeliefs(
       sun: copy.sun.map((belief, i) => (underFullBlur(i) ? veilText(belief) : belief)),
     },
     lockedFrom,
+    ...(copy.afterPanels?.length ? { afterPanels: copy.afterPanels } : {}),
     challengesTitle: TYPICAL_BELIEFS_CHALLENGES_TITLE,
     challenges: gate(copy.challenges, cuts.challengesFree, locked),
     practice: {
