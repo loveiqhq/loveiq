@@ -14,6 +14,7 @@ import { EXPLORER_OF_EDGES } from "./explorer-of-edges";
 import { LOYAL_RITUALIST } from "./loyal-ritualist";
 import { MINIMALIST_COMPANION } from "./minimalist-companion";
 import { QUIET_WITHDRAWER } from "./quiet-withdrawer";
+import { RADIANT_PERFORMER } from "./radiant-performer";
 import type { Report3ArchetypeCopy } from "./types";
 
 export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCopy>> = {
@@ -25,6 +26,7 @@ export const REPORT3_ARCHETYPE_COPY: Readonly<Record<string, Report3ArchetypeCop
   "Loyal Ritualist": LOYAL_RITUALIST,
   "Minimalist Companion": MINIMALIST_COMPANION,
   "Quiet Withdrawer": QUIET_WITHDRAWER,
+  "Radiant Performer": RADIANT_PERFORMER,
 };
 
 /** One chapter of every archetype here, by display name. */
