@@ -75,3 +75,41 @@ describe("the 29.09 paywall cards, where the frames set them", () => {
     expect(V3_CSS).not.toContain("left: calc(50% + 6px);");
   });
 });
+
+// Mark, desktop review 30.09 (Notion, "Locked CTA.png"): "Locked CTA box more centrally
+// into the blurred text. not so close to the try this element". A gate is as tall as its
+// copy, which shortens as the column widens, so from 1024 A&B's card sat at its 515px
+// gate's foot, 16px over "Try this" (152 down, the frame's 408 out of reach). From 700px
+// each chapter body's card sits in the middle of its gate, or at its top when the gate is
+// shorter than the card. Four whole selectors, as the 30.09 block writes every rule. The
+// practice and article gates keep their windows (above).
+describe("the chapter-body cards, centred in their gates on desktop (review 30.09)", () => {
+  const MARK = "Desktop review — 30.09 (Notion)";
+  const block = () => {
+    const at = V3_CSS.indexOf(MARK);
+    expect(at, "the 30.09 desktop review block").toBeGreaterThan(-1);
+    return V3_CSS.slice(at).replace(/\/\*[\s\S]*?\*\//g, "");
+  };
+
+  it("centres the card in each of the four chapter bodies' gates from 700px", () => {
+    const css = block();
+    for (const gate of ["tb", "ab", "cip", "fvr"]) {
+      const selector = `.rv3.rv4 .rv4-${gate}__gate .rv4-premium`;
+      const at = css.indexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThan(-1);
+      expect(css.slice(at, css.indexOf("}", at)), selector).toContain(
+        "top: max(0px, (100% - 363px) / 2);"
+      );
+    }
+  });
+
+  // Measured on the page: A&B's card lands 76 into its 515 gate from 1024 (165.5 into
+  // 694 at 700), Typical Beliefs' 233.5 into its 830 (was 384), CiP's about where its
+  // frame's 303 had it, and FvR's 35-47 lower than its 258.
+  it("leaves the practice and article cards to their windows", () => {
+    const css = block();
+    expect(css).not.toContain(".rv4-try__rest .rv4-premium");
+    expect(css).not.toContain(".rv4-try__gate > .rv4-premium");
+    expect(css).not.toContain(".rv4-learn__gate > .rv4-premium");
+  });
+});
