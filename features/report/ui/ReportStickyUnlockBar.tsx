@@ -153,7 +153,9 @@ const ReportStickyUnlockBar: FC<Props> = ({
               onClick={handleClick("desktop")}
               aria-label="Unlock full report"
             >
-              Unlock Full Report<span aria-hidden="true">{" →"}</span>
+              {/* A no-break space, as the footer's: a plain one at the start of the
+               * arrow's flex item collapses. */}
+              Unlock Full Report<span aria-hidden="true">{" →"}</span>
             </button>
           </div>
         ) : (
