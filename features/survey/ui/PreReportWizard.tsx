@@ -531,17 +531,25 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
               transition: `opacity ${LEAVE_MS}ms ${EASE}, transform ${LEAVE_MS}ms ${EASE}`,
             }}
           >
-            <div className="wz-fit h-[640px] w-[345px] shrink-0 origin-top-left [transform:scale(var(--wz-k))]">
-              {textSlide ? (
-                <TextSlideView slide={textSlide} />
-              ) : (
-                <div
-                  className="wz-map survey-animate w-full"
-                  style={{ opacity: 0, animation: `survey-fade-in 600ms ${EASE} both` }}
-                >
-                  <WizardReportMap step={mapStep} onStep={(to, control) => moveMap(to, control)} />
-                </div>
-              )}
+            {/* The scaled box sits in one of its scaled size, out of the flow: a transform
+             * keeps the unscaled 345 x 640 layout box, and a scroll box measured that, so the
+             * last resort scrolled into blank space, down and sideways (final review 01.10). */}
+            <div className="wz-fit-box relative h-[calc(640px*var(--wz-k))] w-[calc(345px*var(--wz-k))] shrink-0">
+              <div className="wz-fit absolute left-0 top-0 h-[640px] w-[345px] origin-top-left [transform:scale(var(--wz-k))]">
+                {textSlide ? (
+                  <TextSlideView slide={textSlide} />
+                ) : (
+                  <div
+                    className="wz-map survey-animate w-full"
+                    style={{ opacity: 0, animation: `survey-fade-in 600ms ${EASE} both` }}
+                  >
+                    <WizardReportMap
+                      step={mapStep}
+                      onStep={(to, control) => moveMap(to, control)}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

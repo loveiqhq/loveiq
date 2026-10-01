@@ -12,7 +12,8 @@
  *   indicator's safe area, or a cookie banner's height while it covers the bottom), then
  *   scales;
  * - below a readable 0.8 the top tightens to 16 and the gap to 12 before it scales on;
- * - below 0.6 (a phone on its side) the slide scrolls at 0.6, as a last resort.
+ * - below 0.6 (a phone on its side, or a short one while the cookie banner is up) the slide
+ *   scrolls at 0.6, as a last resort.
  * A narrow phone (320) caps k at its column: 272 / 345.
  */
 
@@ -62,7 +63,8 @@ export function wizardFit({
   safeBottom = 0,
   consent = 0,
 }: WizardFitInput): WizardFit {
-  const reserve = safeBottom + consent;
+  // The banner sits over the home indicator's strip: whichever is taller, not both.
+  const reserve = Math.max(safeBottom, consent);
   const widthK = Math.min(1, (width - 2 * SIDE) / SLIDE_WIDTH);
   const solve = (top: number, least: number) => {
     const room = height - top - FOOTER;

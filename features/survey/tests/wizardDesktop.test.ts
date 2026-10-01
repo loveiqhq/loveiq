@@ -114,7 +114,7 @@ describe("the wizard's desktop stylesheet", () => {
     expect(slot).toContain("flex: 1 0 auto");
     expect(slot).toContain("height: auto");
     expect(slot).toContain("width: 100%");
-    expect(rule(".wz-root .wz-fit")).toContain("display: contents");
+    expect(rule(".wz-root .wz-fit-box, .wz-root .wz-fit")).toContain("display: contents");
     expect(rule(".wz-root .wz-scroll")).toContain("overflow-y: auto");
   });
 
