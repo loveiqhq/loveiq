@@ -26,6 +26,8 @@ export const MAP_STEPS = REPORT_DEEP_DIVES.length;
 
 const DEEP_DIVE_INDEX = new Map(REPORT_DEEP_DIVES.map((d, i) => [d.id, i + 1]));
 const TILE_PITCH = 314; // 302 tall + 12 between (1049:2034)
+/** A drag on the tiles this far, and more up or down than sideways, steps them. */
+const TILE_SWIPE = 40;
 const CANVAS_HEIGHT = 640;
 /** Where the desktop layout starts (wizard-desktop.css). */
 const DESKTOP_MIN = 1024;
@@ -315,64 +317,95 @@ const Pitch: FC<{ icon: "free" | "open" | "locked"; top: number; children: React
 /**
  * 475 tall, as states 2-4 draw it (1049:2146 / 2261 / 2376): its controls then end at
  * y 645 with the drawer. State 1's frame still has the earlier 409 (1049:2033).
+ *
+ * Notion, 01.10 (Wizard - Mobile): "Can we make the tiles swipable and the hidden tile
+ * clickable please". A swipe up the tiles shows the next deep dive, down the one before; a
+ * tap on the tile peeking in below brings it up. Pointer shortcuts both, as the loop's
+ * cards in the report are: ▲ ▼ stay the keyboard's way, and the analytics count them the
+ * same. The window takes the page's touch panning; a sideways swipe still moves the slide.
  */
-const Tiles: FC<{ step: number }> = ({ step }) => (
-  <div className="relative h-[475px] overflow-hidden">
+const Tiles: FC<WizardReportMapProps> = ({ step, onStep }) => {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const go = (to: number) => {
+    if (to >= 1 && to <= MAP_STEPS && to !== step) onStep(to, to > step ? "next" : "previous");
+  };
+  return (
     <div
-      className="absolute left-0 top-0 flex w-[189px] flex-col gap-3 transition-transform duration-500 motion-reduce:transition-none"
-      style={{
-        transform: `translateY(${-(Math.max(step, 1) - 1) * TILE_PITCH}px)`,
-        transitionTimingFunction: EASE,
+      className="relative h-[475px] touch-none overflow-hidden"
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        start.current = t ? { x: t.clientX, y: t.clientY } : null;
+      }}
+      onTouchEnd={(e) => {
+        const from = start.current;
+        const t = e.changedTouches[0];
+        start.current = null;
+        if (!from || !t) return;
+        const dx = from.x - t.clientX;
+        const dy = from.y - t.clientY;
+        if (Math.abs(dy) <= TILE_SWIPE || Math.abs(dy) <= Math.abs(dx)) return;
+        go(step + (dy > 0 ? 1 : -1));
       }}
     >
-      {REPORT_DEEP_DIVES.map((dive, i) => {
-        const active = i + 1 === step;
-        return (
-          <div
-            key={dive.id}
-            data-deep-dive={dive.id}
-            aria-current={active ? "step" : undefined}
-            aria-hidden={active ? undefined : true}
-            className="relative flex h-[302px] w-full shrink-0 flex-col items-start gap-2 overflow-hidden rounded-[18px] bg-white px-[14px] py-4 transition-opacity duration-500 motion-reduce:transition-none"
-            style={{ border: "1px solid rgba(168,85,247,0.4)", opacity: active ? 1 : 0.4 }}
-          >
-            {/* Challenges' own state (1049:2287) carries a rose wash; the other three have none. */}
-            {dive.id === "challenges_in_partnership" ? (
-              <Image
-                src="/survey/wizard/wash-rose.svg"
-                alt=""
-                width={220}
-                height={190}
-                unoptimized
-                className="pointer-events-none absolute left-[69px] top-[199px] block h-[190px] w-[220px] max-w-none"
-              />
-            ) : null}
-            <Image
-              src="/survey/wizard/tile-open.svg"
-              alt=""
-              width={14.4}
-              height={14.4}
-              unoptimized
-              className="relative block h-[14.4px] w-[14.4px]"
-            />
-            <h3 className="relative w-full font-serif text-[15px] font-bold leading-[19px] text-[#161021]">
-              {dive.title}
-            </h3>
-            <p className="relative w-full font-serif text-[16px] font-medium leading-[21px] text-[#161021]">
-              {dive.question}
-            </p>
-            <p
-              className="relative w-full text-[12px] font-normal leading-[18px] text-[#3f3a4d]"
-              style={{ fontFamily: JAKARTA }}
+      <div
+        className="absolute left-0 top-0 flex w-[189px] flex-col gap-3 transition-transform duration-500 motion-reduce:transition-none"
+        style={{
+          transform: `translateY(${-(Math.max(step, 1) - 1) * TILE_PITCH}px)`,
+          transitionTimingFunction: EASE,
+        }}
+      >
+        {REPORT_DEEP_DIVES.map((dive, i) => {
+          const active = i + 1 === step;
+          return (
+            <div
+              key={dive.id}
+              data-deep-dive={dive.id}
+              aria-current={active ? "step" : undefined}
+              aria-hidden={active ? undefined : true}
+              onClick={active ? undefined : () => go(i + 1)}
+              className={`relative flex h-[302px] w-full shrink-0 flex-col items-start gap-2 overflow-hidden rounded-[18px] bg-white px-[14px] py-4 transition-opacity duration-500 motion-reduce:transition-none${
+                active ? "" : " cursor-pointer"
+              }`}
+              style={{ border: "1px solid rgba(168,85,247,0.4)", opacity: active ? 1 : 0.4 }}
             >
-              {dive.support}
-            </p>
-          </div>
-        );
-      })}
+              {/* Challenges' own state (1049:2287) carries a rose wash; the other three have none. */}
+              {dive.id === "challenges_in_partnership" ? (
+                <Image
+                  src="/survey/wizard/wash-rose.svg"
+                  alt=""
+                  width={220}
+                  height={190}
+                  unoptimized
+                  className="pointer-events-none absolute left-[69px] top-[199px] block h-[190px] w-[220px] max-w-none"
+                />
+              ) : null}
+              <Image
+                src="/survey/wizard/tile-open.svg"
+                alt=""
+                width={14.4}
+                height={14.4}
+                unoptimized
+                className="relative block h-[14.4px] w-[14.4px]"
+              />
+              <h3 className="relative w-full font-serif text-[15px] font-bold leading-[19px] text-[#161021]">
+                {dive.title}
+              </h3>
+              <p className="relative w-full font-serif text-[16px] font-medium leading-[21px] text-[#161021]">
+                {dive.question}
+              </p>
+              <p
+                className="relative w-full text-[12px] font-normal leading-[18px] text-[#3f3a4d]"
+                style={{ fontFamily: JAKARTA }}
+              >
+                {dive.support}
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /* ------------------------------------------------------------------ */
 /*  The slide                                                          */
@@ -489,7 +522,7 @@ const WizardReportMap: FC<WizardReportMapProps> = ({ step, onStep }) => {
         >
           <h2 className="sr-only">6 Parts, 20 Chapters</h2>
           <div className="h-5" />
-          <Tiles step={step} />
+          <Tiles step={step} onStep={onStep} />
           <div className="h-[14px]" />
           <TileControls step={step} onStep={onStep} width={189} />
         </div>
