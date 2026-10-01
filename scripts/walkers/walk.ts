@@ -28,9 +28,25 @@ import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 
 import { stagingCookies } from "../probes/staging-cookie.mjs";
 import personasFile from "./personas.json";
+import {
+  emptyLog,
+  plantsFor,
+  scrubEvent,
+  truthOf,
+  type Escape,
+  type Plants,
+  type Quit,
+  type WalkLog,
+} from "./plants";
 import { PLANS, type Plan } from "./rotation";
 
 export const STAGING = "https://staging.loveiq.org";
+/**
+ * Production's code on staging's database: the staging project's build of `main`, with its
+ * Preview settings (staging's Supabase, Stripe test keys, staging's site address), checked
+ * 2026-10-01. The proof walks run here, so what they prove is what production runs.
+ */
+export const MAIN_ON_STAGING = "https://loveiq-staging-git-main-loveiq.vercel.app";
 /** Blocked in the browser: a walk is not a visitor and must never reach analytics. */
 export const ANALYTICS =
   /googletagmanager|google-analytics|googleadservices|doubleclick|posthog|clarity\.ms|facebook|hotjar/;
@@ -98,6 +114,9 @@ export interface Walk {
   failedRequests: string[];
   slowRequests: string[];
   durationMs?: number;
+  /** A proof walk's planted behaviours, and any the site would not let it carry out. */
+  planted?: string[];
+  plantFailures?: string[];
 }
 
 const norm = (s: string) =>
@@ -111,6 +130,7 @@ const BY_TEXT = new Map(surveyQuestions.map((q) => [norm(q.question), q]));
 export function walkableOrigin(origin: string, allowLocal: boolean): boolean {
   const { hostname, protocol } = new URL(origin);
   if (hostname === "staging.loveiq.org" && protocol === "https:") return true;
+  if (origin === MAIN_ON_STAGING) return true;
   return allowLocal && (hostname === "localhost" || hostname === "127.0.0.1");
 }
 
@@ -176,6 +196,76 @@ export const THINK_SECONDS: Record<string, number> = {
   unknown: 4,
 };
 
+/**
+ * Installed in a proof walk's pages before any of the page's own scripts. Plain JS in a
+ * string: tsx wraps named functions in a __name() the page has never heard of.
+ *
+ * 1. The tap track() calls (features/analytics/client.ts): each event goes to the walk.
+ * 2. The walk's own watch on the locked chapters' unlock button, the same geometry the
+ *    site's cta_seen uses (half of it in view), so the walk knows the truth by itself.
+ * 3. The walk's own scroll listener on the report: the deepest point reached, and how deep
+ *    it was when the prices first appeared. A smooth jump ends after the walk would have
+ *    looked, and a paywall that opens by itself locks the page a moment later; a reading
+ *    taken between steps missed both on 2026-10-01 (it said 75 where the site said 100).
+ */
+export const PROOF_PAGE_SCRIPT = `
+window.__loveiqEventTap = function (name, params) {
+  try { window.__walkHeard(Date.now(), name, JSON.stringify(params || {})); } catch (e) {}
+};
+(function () {
+  function watch() {
+    var io = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting && entries[i].intersectionRatio >= 0.5) window.__walkCtaSeen = true;
+      }
+    }, { threshold: 0.5 });
+    var watched = new WeakSet();
+    function scan() {
+      var els = document.querySelectorAll(".report-premium-overlay__cta");
+      for (var i = 0; i < els.length; i++) {
+        if (!watched.has(els[i])) { watched.add(els[i]); io.observe(els[i]); }
+      }
+    }
+    if (!document.documentElement) return;
+    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+    scan();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", watch);
+  else watch();
+})();
+(function () {
+  // On every page, checked inside: the survey reaches the report without a page load, so a
+  // listener installed only when a document starts on /report/ would never start at all.
+  var max = 0;
+  var onReport = function () { return location.pathname.indexOf("/report/") === 0; };
+  addEventListener("scroll", function () {
+    if (!onReport()) return;
+    var total = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+    var pct = Math.min(100, Math.max(0, Math.round((scrollY / total) * 100)));
+    if (pct > max) { max = pct; window.__walkMaxScroll = max; }
+  }, { passive: true });
+  var mo = new MutationObserver(function () {
+    if (!onReport() || window.__walkScrollBeforePrices !== undefined) return;
+    if (document.querySelector(".report-pricing-modal.is-visible")) window.__walkScrollBeforePrices = max;
+  });
+  // In some frames the document has no element yet when this runs; observing null throws.
+  var start = function () {
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"], subtree: true });
+  };
+  if (document.documentElement) start();
+  else document.addEventListener("DOMContentLoaded", start);
+})();
+`;
+
+/** How far down the page is, the way scroll_depth reckons it (shared/observability/uxSignals.ts). */
+const scrollPct = (page: Page) =>
+  page
+    .evaluate(() => {
+      const total = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      return Math.min(100, Math.max(0, Math.round((window.scrollY / total) * 100)));
+    })
+    .catch(() => 0);
+
 function parseArgs(argv: string[]) {
   const get = (k: string) => {
     const i = argv.indexOf(k);
@@ -191,6 +281,11 @@ function parseArgs(argv: string[]) {
     origin: (process.env.WALK_ORIGIN ?? STAGING).replace(/\/+$/, ""),
     out: process.env.WALK_OUT ?? "walks",
     pace: Number(process.env.WALK_PACE ?? "1") || 1,
+    // A proof walk plants behaviours and records its events (plants.ts). --seed makes a
+    // night's plants repeatable; --quit leaves early, there.
+    proof: argv.includes("--proof"),
+    seed: get("--seed"),
+    quit: get("--quit") as Quit | undefined,
   };
 }
 
@@ -320,6 +415,26 @@ async function main(argv: string[]): Promise<number> {
   await ctx.addCookies(stagingCookies(opts.origin) as Parameters<typeof ctx.addCookies>[0]);
   // Production is never touched, whatever a page links to or redirects to.
   await ctx.route(/^https:\/\/(www\.)?loveiq\.org\//, (r) => r.abort());
+  // A proof walk plants behaviours (plants.ts) and hears every event track() sends.
+  const plants: Plants | null = opts.proof
+    ? plantsFor(`${opts.seed ?? new Date().toISOString().slice(0, 10)}|${slug}`, {
+        phone: Boolean(device.isMobile),
+        quit: opts.quit,
+      })
+    : null;
+  const log: WalkLog = emptyLog();
+  const heard: Array<{ t: number; event: string; props: Record<string, unknown> }> = [];
+  const planted: string[] = [];
+  if (plants) {
+    await ctx.exposeBinding("__walkHeard", (_src, t: number, name: string, json: string) => {
+      try {
+        heard.push(scrubEvent({ t, event: name, props: JSON.parse(json) }));
+      } catch {
+        // One event lost; the proof then shows the measure disagreeing, which is the point.
+      }
+    });
+    await ctx.addInitScript(PROOF_PAGE_SCRIPT);
+  }
   const page = await ctx.newPage();
   await page.route(ANALYTICS, (r) => r.abort());
 
@@ -369,6 +484,10 @@ async function main(argv: string[]): Promise<number> {
 
   let n = 0;
   let last = t0;
+  /** A proof walk that left early, as planned: finished, not failed. */
+  let quitEarly = false;
+  /** When a paywall the walk could not close first appeared, for the press that follows. */
+  let paywallLeftOpenAt: number | null = null;
   const record = async (kind: string, extra: Partial<Step> = {}, shoot = true) => {
     n += 1;
     const s = await readScreen(page);
@@ -415,14 +534,54 @@ async function main(argv: string[]): Promise<number> {
       .catch(() => -1);
 
   try {
-    // Landing on the survey: the cookie banner, then the introduction.
-    await page.goto(`${opts.origin}/survey`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    if (plants) {
+      // A proof walk starts where visitors do, on the landing page, for Time to first action.
+      await page.goto(`${opts.origin}/`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+      await page.locator("html[data-hydrated]").waitFor({ state: "attached", timeout: 60_000 });
+      log.landingShownAt = Date.now();
+      await record("landing");
+      const landingBanner = button(/^reject all$/i);
+      if (
+        await landingBanner.waitFor({ state: "visible", timeout: 8_000 }).then(
+          () => true,
+          () => false
+        )
+      ) {
+        await landingBanner.click();
+      }
+      if (plants.faq) {
+        const question = page.locator("button[aria-controls^='w-faq-panel-']").first();
+        if (await question.count()) {
+          await question.scrollIntoViewIfNeeded();
+          await question.click();
+          log.trustActions += 1;
+          planted.push("opened an answer in the landing FAQ");
+          await page.waitForTimeout(1_500);
+        }
+      }
+      const rest = plants.landingWaitMs - (Date.now() - log.landingShownAt);
+      if (rest > 0) await page.waitForTimeout(rest);
+      const hero = page
+        .getByRole("link", { name: /- hero$/i })
+        .filter({ visible: true })
+        .first();
+      await hero.scrollIntoViewIfNeeded();
+      log.ctaPressedAt = Date.now();
+      await hero.click();
+      await page.waitForURL(/\/survey/, { timeout: 30_000 });
+    } else {
+      // Landing on the survey: the cookie banner, then the introduction.
+      await page.goto(`${opts.origin}/survey`, {
+        waitUntil: "domcontentloaded",
+        timeout: 120_000,
+      });
+    }
     await page.locator("html[data-hydrated]").waitFor({ state: "attached", timeout: 60_000 });
     await record("survey-start");
     // The cookie banner arrives a few seconds after the page and covers its lower third.
     const banner = button(/^reject all$/i);
     if (
-      await banner.waitFor({ state: "visible", timeout: 12_000 }).then(
+      await banner.waitFor({ state: "visible", timeout: plants ? 3_000 : 12_000 }).then(
         () => true,
         () => false
       )
@@ -457,6 +616,8 @@ async function main(argv: string[]): Promise<number> {
     // The questions, one screen at a time. The header's progress says this is a question
     // screen; the heading says which question, matched against this checkout's survey-data.
     const seenTypes = new Set<string>();
+    /** The question id at each position, counted from 1, for what a backtrack leaves. */
+    const askedIds: string[] = [];
     let previous: string | null = null;
     let since = Date.now();
     let asked = 0;
@@ -479,7 +640,35 @@ async function main(argv: string[]): Promise<number> {
         continue;
       }
       const type = q?.answerType ?? "unknown";
-      await page.waitForTimeout(Math.max(450, (THINK_SECONDS[type] ?? 4) * 1000 * opts.pace));
+      // Counted from 1: the question on screen. Only without a backtrack in the way, which
+      // the plant below keeps true by returning to this question before moving on.
+      const position = asked + 1;
+      if (plants?.quit === "survey" && position === plants.quitAt) {
+        log.quitOn = { question: position, progressPct: Number(s.progress.replace("%", "")) };
+        log.exit = "survey";
+        await page.waitForTimeout(2_000);
+        await record("quit", { note: `left the survey on question ${position}, as planned` });
+        quitEarly = true;
+        break;
+      }
+      let think = (THINK_SECONDS[type] ?? 4) * 1000 * opts.pace;
+      if (plants) {
+        const third = surveyQuestions.length / 3;
+        if (plants.pace === "slowing" && position > 2 * third) think *= 2.6;
+        if (plants.pace === "speeding up" && position <= third) think *= 2.6;
+        if (plants.hesitateAt.includes(position)) think += 14_000;
+      }
+      if (plants && plants.deadNextAt === position) {
+        const next = button(/^next$/i);
+        const box = await next.boundingBox().catch(() => null);
+        if (box && !(await next.isEnabled().catch(() => true))) {
+          // A disabled control is pointer-events:none; the tap lands on what is behind it.
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          log.deadTaps.push("disabled_control");
+          planted.push(`tapped the disabled Next on question ${position}`);
+        }
+      }
+      await page.waitForTimeout(Math.max(450, think));
       const answeredAt = Date.now();
       let answer: unknown = null;
       let note: string | undefined;
@@ -487,6 +676,20 @@ async function main(argv: string[]): Promise<number> {
         answer = answerFor(q, persona.answers, email, firstName);
         note = await answerQuestion(page, q, answer);
         if (note) walk.missingOptions.push(`${q.qId}: ${note}`);
+        if (plants?.formError && q.inputType === "email" && log.formErrors === 0) {
+          // Enter with a confirmation that does not match: the survey refuses it, once.
+          const confirm = page.getByLabel("Confirm email address");
+          if (await confirm.isVisible().catch(() => false)) {
+            await confirm.fill(`x${String(answer)}`);
+            await confirm.press("Enter");
+            await page.waitForTimeout(700);
+            log.formErrors += 1;
+            planted.push(
+              "pressed Enter on the email question with a confirmation that does not match"
+            );
+            await confirm.fill(String(answer));
+          }
+        }
       } else {
         const h = s.headings[0] ?? "(no heading)";
         walk.unknownQuestions.push(h);
@@ -512,16 +715,46 @@ async function main(argv: string[]): Promise<number> {
         shoot
       );
       const next = button(/^next$/i);
+      if (plants && plants.backs > 0 && position >= plants.backsAt && log.backs === 0) {
+        // Back to an earlier question and on again, then on from here as usual. Each Next on
+        // the way back moves the survey on from the question it leaves.
+        for (let b = 0; b < plants.backs; b++) {
+          await button(/^previous$/i).click();
+          await page.waitForTimeout(700);
+        }
+        for (let b = plants.backs; b > 0; b--) {
+          log.commits.push({
+            at: Date.now(),
+            questionId: askedIds[position - 1 - b] ?? "?",
+            position: position - b,
+          });
+          await next.click();
+          await page.waitForTimeout(700);
+        }
+        log.backs = plants.backs;
+        planted.push(
+          `went back ${plants.backs} question(s) from question ${position} and came on again`
+        );
+      }
       if (
         (await next.isVisible().catch(() => false)) &&
         (await next.isEnabled().catch(() => false))
       ) {
+        log.commits.push({ at: Date.now(), questionId: q?.qId ?? "?", position });
         await next.click();
       }
+      askedIds[position - 1] = q?.qId ?? "?";
       previous = key;
       since = Date.now();
     }
     walk.questionsAsked = asked;
+    if (quitEarly) {
+      walk.finished = true;
+      return 0;
+    }
+    log.completedSurvey = true;
+    // The last question's Next submits: survey_completed, never a survey_answer.
+    log.commits.pop();
 
     // Processing, then the pre-report slides, then the report.
     await record("processing");
@@ -568,6 +801,262 @@ async function main(argv: string[]): Promise<number> {
       .catch(() => null);
     walk.locksBefore = await countLocks();
 
+    // What a proof walk needs to know about the report as it reads it.
+    const pricesOpen = () =>
+      page
+        .locator(".report-pricing-modal.is-visible")
+        .count()
+        .then((c) => c > 0)
+        .catch(() => false);
+    const ctaSeen = () =>
+      page
+        .evaluate(() => Boolean((window as { __walkCtaSeen?: boolean }).__walkCtaSeen))
+        .catch(() => false);
+    /** What the page's own scroll listener saw (PROOF_PAGE_SCRIPT), folded into the log. */
+    const readScroll = async () => {
+      const seen = await page
+        .evaluate(() => {
+          const w = window as { __walkMaxScroll?: number; __walkScrollBeforePrices?: number };
+          return { max: w.__walkMaxScroll ?? 0, before: w.__walkScrollBeforePrices };
+        })
+        .catch(() => ({ max: 0, before: undefined }));
+      log.reportScrollPct = Math.max(log.reportScrollPct, seen.max);
+      if (seen.before !== undefined) log.scrollBeforePaywallPct ??= seen.before;
+    };
+    /** The prices are in front of the reader: note how far they had read by then. */
+    const notePrices = async () => {
+      log.pricesShown = true;
+      await readScroll();
+      log.scrollBeforePaywallPct ??= log.reportScrollPct;
+    };
+    /**
+     * A plant must never stop the walk that pays: what it managed is in the log (so the
+     * truth stays true), and what it could not do is said, as a finding about the site.
+     */
+    const tryPlant = async (what: string, plant: () => Promise<void>) => {
+      try {
+        await plant();
+      } catch (err) {
+        walk.plantFailures = [
+          ...(walk.plantFailures ?? []),
+          `${what}: ${redact(String((err as Error).message).split("\n")[0]!).slice(0, 160)}`,
+        ];
+        // A chapter drawer left open would cover the rest of the walk. Only that: Escape on an
+        // open paywall would close it, a close the walk's truth would not know about.
+        if (
+          await page
+            .getByRole("dialog", { name: "Report chapters" })
+            .isVisible()
+            .catch(() => false)
+        ) {
+          await page.keyboard.press("Escape").catch(() => {});
+        }
+      }
+    };
+    /** Four taps in well under a second on a report heading nobody can act on. */
+    const plantRage = async () => {
+      const at = await page
+        .evaluate(() => {
+          const vh = window.innerHeight;
+          for (const h of document.querySelectorAll("h2, h3")) {
+            const r = h.getBoundingClientRect();
+            if (r.top < 60 || r.bottom > vh - 140 || r.width < 40) continue;
+            let live = false;
+            for (let el: Element | null = h; el; el = el.parentElement) {
+              if (
+                el.matches(
+                  "a, button, label, summary, [role=button], [onclick], [data-paywall-locked], .report-premium-overlay"
+                ) ||
+                getComputedStyle(el).cursor === "pointer"
+              ) {
+                live = true;
+                break;
+              }
+            }
+            if (!live) return { x: r.left + Math.min(20, r.width / 2), y: r.top + r.height / 2 };
+          }
+          return null;
+        })
+        .catch(() => null);
+      if (!at) return;
+      for (let i = 0; i < 4; i++) {
+        await page.mouse.click(at.x, at.y);
+        await page.waitForTimeout(80);
+      }
+      log.rageBursts = 1;
+      // A heading does nothing when tapped, so the same taps are dead taps too.
+      log.deadTaps.push("non_interactive");
+      planted.push("tapped a report heading four times in under a second");
+    };
+    /**
+     * Open the chapter list and jump twice: the desktop sidebar, or the phone's drawer. The
+     * second jump is to the last chapter, so these walks read far down a report some 100
+     * screens long, and the scroll measures meet walks at more than one depth.
+     */
+    const plantChapters = async () => {
+      const drawer = page.getByRole("dialog", { name: "Report chapters" });
+      for (const nth of [2, -1]) {
+        let items = page
+          .locator('nav[aria-label="Report sections"]')
+          .filter({ visible: true })
+          .first()
+          .locator("button, a");
+        if (device.isMobile) {
+          // The phone's header hides while reading down; a small scroll up brings it back,
+          // as it does for a person reaching for it.
+          await page.evaluate(() => window.scrollBy(0, -240));
+          await page.waitForTimeout(700);
+          const pill = page.locator(".report-chapter-pill__btn").filter({ visible: true }).first();
+          if (!(await pill.isVisible().catch(() => false))) break;
+          await pill.click({ timeout: 8_000 });
+          log.chapterMoves += 1;
+          await page.waitForTimeout(700);
+          items = drawer.locator('nav[aria-label="Report sections"]').locator("button, a");
+        }
+        const item = nth < 0 ? items.last() : items.nth(nth);
+        if (!(await item.isVisible().catch(() => false))) break;
+        await item.click({ timeout: 8_000 });
+        log.chapterMoves += 1;
+        await page.waitForTimeout(1_200);
+        log.reportScrollPct = Math.max(log.reportScrollPct, await scrollPct(page));
+      }
+      // Never leave the drawer over the report: the rest of the walk could not reach it.
+      if (await drawer.isVisible().catch(() => false)) {
+        await page
+          .getByRole("button", { name: "Close chapter menu" })
+          .click()
+          .catch(() => {});
+      }
+      if (log.chapterMoves) planted.push(`used the chapter list (${log.chapterMoves} taps)`);
+    };
+    /**
+     * The paywall opened and looked at, the reviews moved on, then closed one of four ways
+     * (plants.escape) or, for a walk that leaves here, left open.
+     */
+    const plantPaywallVisit = async () => {
+      if (!plants) return;
+      if (!(await pricesOpen())) {
+        for (const opener of [
+          button(/^unlock your report$/i),
+          button(/^unlock (?!your |the |full )(?:[\w -]+ )?report$/i),
+        ]) {
+          if (await opener.isVisible().catch(() => false)) {
+            await opener.scrollIntoViewIfNeeded().catch(() => {});
+            await opener.click().catch(() => {});
+            break;
+          }
+        }
+      }
+      const shown = await page
+        .locator(".report-pricing-modal.is-visible")
+        .waitFor({ timeout: 10_000 })
+        .then(
+          () => true,
+          () => false
+        );
+      if (!shown) return;
+      const openedAt = Date.now();
+      await notePrices();
+      if (plants.reviews) {
+        const more = page.getByRole("button", { name: "Next reviews" }).filter({ visible: true });
+        if (
+          await more
+            .first()
+            .isVisible()
+            .catch(() => false)
+        ) {
+          await more.first().click();
+          log.trustActions += 1;
+          planted.push("moved the paywall's reviews on once");
+        }
+      }
+      if (plants.quit === "paywall") {
+        await page.waitForTimeout(3_000);
+        return;
+      }
+      const rest = plants.dwellMs - (Date.now() - openedAt);
+      if (rest > 0) await page.waitForTimeout(rest);
+      let how = plants.escape as Escape;
+      // Back closes the paywall only where it added a history entry (Safari); elsewhere
+      // it would leave the report, which is not this plant.
+      if (
+        how === "browser_back" &&
+        !(await page
+          .evaluate(() =>
+            Boolean((history.state as { __loveiqOverlay?: boolean } | null)?.__loveiqOverlay)
+          )
+          .catch(() => false))
+      ) {
+        how = "close_button";
+      }
+      const closeButton = page
+        .getByRole("button", { name: "Close pricing modal" })
+        .filter({ visible: true });
+      const close = async (way: Escape) => {
+        if (way === "close_button") await closeButton.first().click();
+        else if (way === "escape") await page.keyboard.press("Escape");
+        else if (way === "browser_back") await page.goBack();
+        else {
+          // Beside the dialog, or above it where it fills the width.
+          const box = await page.locator(".report-pricing-modal__dialog").first().boundingBox();
+          const wide = box ? box.x > 24 : false;
+          await page.mouse.click(
+            wide ? box!.x / 2 : 6,
+            wide ? box!.y + box!.height / 2 : Math.max(4, (box?.y ?? 12) / 2)
+          );
+        }
+      };
+      const gone = () =>
+        page
+          .locator(".report-pricing-modal.is-visible")
+          .waitFor({ state: "hidden", timeout: 3_000 })
+          .then(
+            () => true,
+            () => false
+          );
+      let closedAt = Date.now();
+      await close(how);
+      if (!(await gone())) {
+        walk.plantFailures = [
+          ...(walk.plantFailures ?? []),
+          `closing the paywall with ${how} left it open`,
+        ];
+        how = "close_button";
+        closedAt = Date.now();
+        await close(how);
+        if (!(await gone())) {
+          // Still open: no close happened, so none is recorded, and the plan's press is timed
+          // from this opening, the one the site's price_shown marked.
+          walk.plantFailures = [
+            ...walk.plantFailures,
+            "closing the paywall with close_button left it open",
+          ];
+          paywallLeftOpenAt = openedAt;
+          return;
+        }
+      }
+      log.firstClose = { how, afterMs: closedAt - openedAt };
+      planted.push(
+        `closed the paywall with ${how} after ${Math.round((closedAt - openedAt) / 1000)} s`
+      );
+    };
+    if (plants) {
+      log.reportShown = true;
+      log.reportHasLockedCards = (await page.locator(".report-premium-overlay").count()) > 0;
+      log.reportScrollPct = await scrollPct(page);
+      if (plants.quit === "report") {
+        await page.waitForTimeout(8_000);
+        // The same rule the measure keeps: prices in front of them is not a bounce.
+        log.bounced = !(await pricesOpen());
+        if (await pricesOpen()) await notePrices();
+        log.lockedCtaSeen = await ctaSeen();
+        log.exit = "report";
+        await record("quit", { note: "left the report within seconds, as planned" });
+        walk.finished = true;
+        return 0;
+      }
+    }
+
     // Read the report a screen at a time, as far as it lets a free reader go.
     const viewport = page.viewportSize()?.height ?? 800;
     for (let k = 1; k <= 14; k++) {
@@ -592,13 +1081,37 @@ async function main(argv: string[]): Promise<number> {
       if (device.isMobile) await page.evaluate((dy) => window.scrollBy(0, dy), viewport * 1.2);
       else await page.mouse.wheel(0, viewport * 1.2);
       await page.waitForTimeout(700);
+      if (plants) {
+        log.reportScrollPct = Math.max(log.reportScrollPct, await scrollPct(page));
+        if (await pricesOpen()) await notePrices();
+        if (plants.rage && k === 2 && log.rageBursts === 0)
+          await tryPlant("the rage taps", plantRage);
+        if (plants.chapters && k === 4 && log.chapterMoves === 0) {
+          await tryPlant("the chapter list", plantChapters);
+        }
+      }
       if (k % 3 === 0) await record(`report-read-${k}`);
+    }
+    if (plants) {
+      log.reportScrollPct = Math.max(log.reportScrollPct, await scrollPct(page));
+      await readScroll();
+      log.lockedCtaSeen = await ctaSeen();
+      if (await pricesOpen()) await notePrices();
     }
 
     // The paywall, reached the way a person reaches each plan: the sticky "Unlock full
     // report" bar buys the default plan straight away, and the plan picker opens from a lock.
     // The report can also open the picker by itself while the reader scrolls; then it is
     // already in front of them, and the page behind it is out of reach.
+    if (plants && (plants.escape !== "none" || plants.quit === "paywall")) {
+      await tryPlant("the paywall visit", plantPaywallVisit);
+      if (plants.quit === "paywall") {
+        log.exit = "paywall";
+        await record("quit", { note: "left with the paywall open, as planned" });
+        walk.finished = true;
+        return 0;
+      }
+    }
     const toStripe = () => page.url().includes("checkout.stripe.com");
     // Whichever comes first: the picker (the report can open it on a timer or on scroll), or
     // a way in. For the default plan, the sticky bar or the "Unlock the full report" button
@@ -640,6 +1153,11 @@ async function main(argv: string[]): Promise<number> {
             .catch(() => false)
         ) {
           mark(`clicked ${how}`);
+          // The first price a direct way shows is Stripe's: note how far the reader had read.
+          if (plants) {
+            await readScroll();
+            log.scrollBeforePaywallPct ??= log.reportScrollPct;
+          }
           await way().click();
           walk.paywallOpenedBy = how;
           break;
@@ -653,6 +1171,7 @@ async function main(argv: string[]): Promise<number> {
     // saw the picker appear, Stripe then took the page, and it pressed a button that was no
     // longer there. Only if no checkout opens does the walk look for the picker.
     const direct = plan === "full_report" && walk.paywallOpenedBy !== "the report, by itself";
+    if (direct && plants) log.checkoutPlan = plan;
     if (direct) {
       await page.waitForURL(/checkout\.stripe\.com/, { timeout: 45_000 }).catch(() => {});
     } else {
@@ -661,8 +1180,11 @@ async function main(argv: string[]): Promise<number> {
         button(PLAN_CTA[plan]).waitFor({ state: "visible", timeout: 45_000 }),
       ]).catch(() => {});
     }
+    let planShownAt = 0;
     if (!toStripe()) {
       await button(PLAN_CTA[plan]).waitFor({ state: "visible", timeout: 5_000 });
+      planShownAt = paywallLeftOpenAt ?? Date.now();
+      if (plants) await notePrices();
       await page.waitForTimeout(1_500); // the live quote replaces the fallback price
       walk.prices = await page
         .locator(".report-pricing-modal")
@@ -679,6 +1201,13 @@ async function main(argv: string[]): Promise<number> {
       }
       // Stripe may have taken the page while the prices were read.
       if (!toStripe()) {
+        if (plants) {
+          await readScroll();
+          const rest = plants.ctaWaitMs - (Date.now() - planShownAt - 1_500);
+          if (rest > 0) await page.waitForTimeout(rest);
+          log.planPressedAfterMs = Date.now() - planShownAt;
+          log.checkoutPlan = plan;
+        }
         mark(`clicked the ${plan} plan's button`);
         await button(PLAN_CTA[plan]).click();
         await page.waitForURL(/checkout\.stripe\.com/, { timeout: 60_000 });
@@ -687,6 +1216,13 @@ async function main(argv: string[]): Promise<number> {
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2_500);
     await record("stripe-checkout");
+    if (plants) log.checkoutPlan ??= plan;
+    if (plants?.quit === "checkout") {
+      log.exit = "checkout";
+      await record("quit", { note: "left Stripe's checkout without paying, as planned" });
+      walk.finished = true;
+      return 0;
+    }
     if (!opts.pay) {
       walk.finished = true;
       return 0;
@@ -697,6 +1233,7 @@ async function main(argv: string[]): Promise<number> {
     await payWithTestCard(page, email);
     await page.waitForURL((u) => u.origin === opts.origin, { timeout: 120_000 });
     walk.paid = true;
+    log.paid = true;
     await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
     await record("after-payment");
     // Staging's password cookie is Lax since 2026-09-30, so Stripe's redirect back keeps it.
@@ -746,6 +1283,14 @@ async function main(argv: string[]): Promise<number> {
     return 1;
   } finally {
     walk.durationMs = Date.now() - t0;
+    if (plants) {
+      walk.planted = planted;
+      // Only a walk that did what it planned knows the truth; a stopped one knows nothing.
+      if (walk.finished) {
+        writeFileSync(join(dir, "events.json"), JSON.stringify(heard) + "\n");
+        writeFileSync(join(dir, "truth.json"), JSON.stringify(truthOf(log), null, 2) + "\n");
+      }
+    }
     writeFileSync(join(dir, "walk.json"), JSON.stringify(walk, null, 2) + "\n");
     await browser.close();
     console.log(

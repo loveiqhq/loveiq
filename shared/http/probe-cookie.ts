@@ -8,9 +8,13 @@
  * places. A rename that reached only one of them would silently restore the
  * pollution this exists to stop, and nothing would fail.
  *
- * WHAT IT SUPPRESSES: one `report_session` row. Nothing about access, rendering
- * or fulfilment reads it, so a visitor who forged it would only remove
- * themselves from our own analytics.
+ * WHAT IT SUPPRESSES: one `report_session` row, and PostHog for the whole visit
+ * (instrumentation-client.ts reads it off `document.cookie`, so the probe sets
+ * it readable). Probes open production pages with a real phone's user agent, so
+ * without this each one was a visitor to every PostHog measure and replay: one
+ * report was opened in 17 sessions by 17 fresh visitors in the 30 days to
+ * 2026-09-30. Nothing about access, rendering or fulfilment reads it, so a
+ * visitor who forged it would only remove themselves from our own analytics.
  */
 export const PROBE_COOKIE = "loveiq_probe";
 

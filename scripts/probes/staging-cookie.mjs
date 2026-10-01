@@ -51,7 +51,9 @@ export function stagingCookies(origin) {
     domain: hostname,
     path: "/",
     expires: -1,
-    httpOnly: true,
+    // Readable by the page, which is how PostHog knows to stay off for a probe
+    // (instrumentation-client.ts). It guards nothing, so there is nothing to hide.
+    httpOnly: false,
     secure,
     sameSite: "Strict",
   };

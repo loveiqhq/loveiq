@@ -56,6 +56,11 @@ vi.mock("@features/brain/server/act/slack", async (importOriginal) => ({
 
 const mockRateLimit = vi.fn(async () => ({ allowed: true }));
 const mockFetch = vi.fn();
+const uxReport = vi.hoisted(() => ({ build: vi.fn(), render: vi.fn() }));
+vi.mock("@features/ux-signals/server/report", () => ({
+  buildUxSignalsReport: uxReport.build,
+  renderUxSignals: uxReport.render,
+}));
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
 }));
@@ -1641,6 +1646,7 @@ describe("/api/mcp", () => {
         "break_even",
         "user_totals",
         "cost_watch",
+        "ux_signals",
         "check_answer",
         "experiments",
         "comment_asks",
@@ -4265,6 +4271,49 @@ describe("/api/mcp", () => {
       const r = await call({});
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toMatch(/outage/);
+    });
+  });
+
+  describe("ux_signals", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 72,
+          method: "tools/call",
+          params: { name: "ux_signals", arguments: args },
+        })
+      ).then((r) =>
+        r.json().then((b) => b.result as { isError: boolean; content: Array<{ text: string }> })
+      );
+    beforeEach(() => {
+      uxReport.build.mockReset().mockResolvedValue({ visits: 10, walks: 3 });
+      uxReport.render.mockReset().mockReturnValue("the report");
+    });
+
+    it("measures seven days unless asked, and returns the report as written", async () => {
+      const r = await call({});
+      expect(uxReport.build).toHaveBeenCalledWith(7);
+      expect(r.isError).toBe(false);
+      expect(r.content[0]!.text).toContain("the report");
+      await call({ days: 28 });
+      expect(uxReport.build).toHaveBeenLastCalledWith(28);
+    });
+
+    it("refuses a period it cannot read whole", async () => {
+      for (const days of [0, 29, 2.5, "a week"]) {
+        const r = await call({ days });
+        expect(r.isError, String(days)).toBe(true);
+        expect(r.content[0]!.text).toContain("from 1 to 28");
+      }
+      expect(uxReport.build).not.toHaveBeenCalled();
+    });
+
+    it("calls it an error only when neither PostHog nor the walks could be read", async () => {
+      uxReport.build.mockResolvedValueOnce({ visits: null, walks: 3 });
+      expect((await call({})).isError).toBe(false);
+      uxReport.build.mockResolvedValueOnce({ visits: null, walks: null });
+      expect((await call({})).isError).toBe(true);
     });
   });
 
@@ -7083,6 +7132,8 @@ describe("the runbook's tool count is the real one", () => {
     34: "Thirty-four",
     35: "Thirty-five",
     36: "Thirty-six",
+    37: "Thirty-seven",
+    38: "Thirty-eight",
   };
 
   it("matches what the server actually exposes", () => {

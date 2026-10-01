@@ -2,6 +2,7 @@ import posthog from "posthog-js";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import { POSTHOG_PROXY_PATH, POSTHOG_UI_HOST } from "@shared/analytics/posthog-proxy";
 import { scrollState } from "@shared/ui/body-scroll-lock";
+import { isProbeRequest } from "@shared/http/probe-cookie";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -31,6 +32,9 @@ if (!projectToken || !host) {
       `${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`
     );
   }
+} else if (isProbeRequest(document.cookie)) {
+  // One of our own probes (scripts/probes/staging-cookie.mjs), not a visitor: it stays out
+  // of every PostHog count and replay. track() still runs, and posthog.capture is a no-op.
 } else {
   posthog.init(projectToken, {
     /**

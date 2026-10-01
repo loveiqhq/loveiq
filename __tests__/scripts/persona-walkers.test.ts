@@ -36,6 +36,8 @@ import {
   answerFor,
   findQuestion,
   redact,
+  MAIN_ON_STAGING,
+  PROOF_PAGE_SCRIPT,
   walkableOrigin,
   type Walk,
 } from "../../scripts/walkers/walk";
@@ -158,6 +160,11 @@ describe("a walk", () => {
     expect(walkableOrigin("http://staging.loveiq.org", false)).toBe(false);
     expect(walkableOrigin("http://localhost:3000", false)).toBe(false);
     expect(walkableOrigin("http://localhost:3000", true)).toBe(true);
+    // Production's code on staging's database: the staging project's build of main.
+    expect(walkableOrigin(MAIN_ON_STAGING, false)).toBe(true);
+    // The PRODUCTION project's build of main has production's settings: never.
+    expect(walkableOrigin("https://loveiq-web-git-main-loveiq.vercel.app", false)).toBe(false);
+    expect(walkableOrigin("http://loveiq-staging-git-main-loveiq.vercel.app", false)).toBe(false);
   });
 
   it("recognises every question by the words of its heading", () => {
@@ -206,6 +213,15 @@ const walk = (over: Partial<Walk> = {}): Walk => ({
   slowRequests: [],
   durationMs: 7 * 60_000,
   ...over,
+});
+
+describe("a proof walk's page script", () => {
+  it("is JavaScript a page can run: one error in it and the walk hears nothing at all", () => {
+    // On 2026-10-01 a regex lost its backslashes inside this template string, the whole
+    // script failed to parse, and a proof walk recorded 0 events.
+    expect(() => new Function(PROOF_PAGE_SCRIPT)).not.toThrow();
+    expect(PROOF_PAGE_SCRIPT).toContain("window.__loveiqEventTap = function");
+  });
 });
 
 describe("what a walk proves on its own", () => {

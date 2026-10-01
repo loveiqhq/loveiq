@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
+import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
@@ -1951,6 +1952,30 @@ export const TOOLS = [
       "sheet begins, and the month still open. Lines typed in by hand are flagged when they " +
       "have not moved, and Google Ads is set beside what GA4 recorded. People's pay is left out.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "ux_signals",
+    title: "Marcus's 22 behaviour signals, measured on real visits, shown once proven",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "The UX checker: Marcus's 22 behaviour signals (time to first action, backtracking, dead " +
+      "and rage clicks, scroll, paywall dwell and escape, trust seeking, conversion blockers and " +
+      "the rest), each measured on the last days of real production visits from PostHog. A " +
+      "signal's number is shown only once its measure has been right on at least 80% of the " +
+      "nightly persona walks, on the walks where the behaviour happened and on those where it " +
+      "did not, because a walk knows exactly what it did. Unproven signals say why and where the " +
+      "measure went wrong; those the site cannot yet measure say what is missing. Use it for " +
+      "'where do people struggle', 'do people see the unlock offer', 'how do they leave the " +
+      "paywall'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "number",
+          description: "How many days of real visits to measure, 1 to 28. Default 7.",
+        },
+      },
+    },
   },
   {
     name: "check_answer",
@@ -5689,6 +5714,16 @@ async function callTool(
     return textResult(renderCostWatch(parsed, now, ads, settled));
   }
 
+  if (name === "ux_signals") {
+    const raw = args.days === undefined ? 7 : Number(args.days);
+    if (!Number.isInteger(raw) || raw < 1 || raw > 28) {
+      return textResult("`days` must be a whole number from 1 to 28.", true);
+    }
+    const report = await buildUxSignalsReport(raw);
+    stats.sourceCount = 2;
+    return textResult(renderUxSignals(report), report.visits === null && report.walks === null);
+  }
+
   if (name === "explain_change") {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
@@ -6129,6 +6164,8 @@ export const MCP_INSTRUCTIONS =
   "person, with any group under 5 hidden. Its measure picks what is counted: people (who " +
   "finished and paid), traits (the user graph: the 21 trait averages), emails (reminders sent, " +
   "unsubscribes, bounces) or answers (how a group answered one survey question).\n\n" +
+  "UX SIGNALS: ux_signals measures Marcus's 22 behaviour signals on real visits, and shows a " +
+  "signal's number only once its measure has been proven right on the nightly persona walks.\n\n" +
   "WHAT WE SPEND: cost_watch reads what we pay each month for tools and services from the " +
   "cost sheet, what moved, and which hand-typed lines may be stale.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +

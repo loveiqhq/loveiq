@@ -4858,7 +4858,10 @@
 .report-chapter-drawer-root {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /* Above the sticky unlock bar (70), below the paywall (80). At 60 the phone's bar sat on
+     top of the open chapter list and took the taps meant for its last chapters: found by the
+     proof walks on 2026-10-01, when "Summary" could not be reached on an iPhone. */
+  z-index: 75;
 }
 
 .report-chapter-backdrop {

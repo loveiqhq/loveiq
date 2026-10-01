@@ -228,6 +228,8 @@ export const RESEARCH_TOOLS = [
   "check_answer",
   // Tools and services only; people's pay never leaves the sheet.
   "cost_watch",
+  // Measured behaviour, shown only once proven on the walks; no person in it.
+  "ux_signals",
 ];
 /** Named as well as left off the list, so the model never even sees them. */
 export const WRITE_TOOLS = [
