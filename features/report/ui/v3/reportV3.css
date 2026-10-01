@@ -2419,10 +2419,10 @@
   position: relative;
   width: 100%;
 }
-.rv3 .rv4-part--intro .rv4-part__stage {
-  height: auto;
-  /* 1:854 — the glow box is 185 tall and the lede flows beneath it. */
-  padding-top: 185px;
+/* 1:852 / 1:985 / 38:1510 / 1:1140 — Parts III–VI sit in a 185 box. It held a lede
+ * until the 01.10 sync dropped part introductions; now it holds the heading alone. */
+.rv3 .rv4-part--tall .rv4-part__stage {
+  height: 185px;
 }
 /* 1:172 — 332x226 at left 14, top -33.39. The two radials are the same pair
  * .rv3-glow uses; Figma emits them as inline SVG data-URIs, but they are plain
@@ -2451,7 +2451,7 @@
   width: 332px;
 }
 /* 1:854 — shorter box, both centres rise with it. */
-.rv3 .rv4-part--intro .rv4-part__glow {
+.rv3 .rv4-part--tall .rv4-part__glow {
   background:
     radial-gradient(
       129.48px 85.1px at 175.96px 86.95px,
@@ -2537,10 +2537,6 @@
 }
 .rv3 .rv4-part__title.is-upright > span:last-child {
   font-style: normal;
-}
-.rv3 .rv4-part__intro {
-  margin: 0;
-  width: 356px;
 }
 
 /* ── Chapter row — 1:175 / 1:185 / 1:862 ─────────────────────────── */
@@ -3179,8 +3175,7 @@
  * added exactly 20px to every paragraph in every chapter. Scoped to where V4
  * places prose, not to the preview, because it is a property of the V4 layout. */
 .rv3 .rv4-chapter__body .rv3-prose,
-.rv3 .rv4-copy > .rv3-prose,
-.rv3 .rv4-part__intro {
+.rv3 .rv4-copy > .rv3-prose {
   padding-top: 0;
 }
 
@@ -7528,7 +7523,6 @@ html {
     .rv4-chapter__body > .rv3-prose,
     .rv4-copy,
     .rv4-copy > p,
-    .rv4-part__intro,
     .rv4-top3__heading,
     .rv4-top3__lede,
     .rv4-summary__inner,
@@ -7704,8 +7698,8 @@ html {
  * Each part heading's soft glow (1:172 / 1:854) opens as the heading reaches the
  * screen, on Report 2.0's own timings for its part dividers (report.css
  * `.report-part-reveal`). Only the glow moves; the words are there from the start. The
- * intro variant centres its glow with a transform, so its pending state restates it —
- * the `scale` property would compose outside it and slide the glow. */
+ * 185 box centres its glow with a transform, so its pending state restates it — the
+ * `scale` property would compose outside it and slide the glow. */
 .rv3 .rv4-part .rv4-part__glow {
   transition:
     opacity 1100ms ease-out,
@@ -7715,7 +7709,7 @@ html {
   opacity: 0;
   transform: scale(0.82);
 }
-.rv3 .rv4-part--intro.is-pending .rv4-part__glow {
+.rv3 .rv4-part--tall.is-pending .rv4-part__glow {
   transform: translateX(-50%) scale(0.82);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -7725,8 +7719,8 @@ html {
     transform: none;
     transition: none;
   }
-  .rv3 .rv4-part--intro .rv4-part__glow,
-  .rv3 .rv4-part--intro.is-pending .rv4-part__glow {
+  .rv3 .rv4-part--tall .rv4-part__glow,
+  .rv3 .rv4-part--tall.is-pending .rv4-part__glow {
     transform: translateX(-50%);
   }
 }
@@ -7809,7 +7803,6 @@ html {
     margin-inline: 0;
     width: 100%;
   }
-  .rv3.rv4 .rv4-part__intro,
   .rv3.rv4 .rv4-chapter__body > .rv3-prose,
   .rv3.rv4 .rv4-chapter__body > *,
   .rv3.rv4 .rv4-chapter__teaser,

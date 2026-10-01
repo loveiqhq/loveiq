@@ -13,7 +13,6 @@ import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 import {
   CHAPTER_COPY_PLACEHOLDER,
-  PART_INTRO_PLACEHOLDER,
   REPORT_V4_PART3_CHAPTERS,
   REPORT_V4_PART4_CHAPTERS,
   REPORT_V4_PART5_CHAPTERS,
@@ -145,7 +144,8 @@ describe("V4ChapterPart", () => {
     for (const id of ["core_insecurities", "confidence_level", "power_orientation"]) {
       expect(screen.getByText(REPORT_V4_CHAPTER_TEASERS[id]!)).toBeInTheDocument();
     }
-    expect(screen.getByText(PART_INTRO_PLACEHOLDER)).toBeInTheDocument();
+    // No part introductions since the 01.10 sync: the 185 box holds only the heading.
+    expect(screen.queryByText("[Part Introductory Text]")).toBeNull();
   });
 
   it("ends after its last chapter — the trailing section is hidden in the frame", () => {

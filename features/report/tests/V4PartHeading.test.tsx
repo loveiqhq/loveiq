@@ -95,9 +95,7 @@ describe("V4PartHeading — the glow blooms in when the heading reaches the scre
 
   it("hydrates the server-rendered preview without a mismatch", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
-    const html = renderToString(
-      <V4PartHeading heading={HEADING} intro="[Part Introductory Text]" />
-    );
+    const html = renderToString(<V4PartHeading heading={{ ...HEADING, tall: true }} />);
     expect(html).toContain("is-pending");
     installRevealObserver();
     const host = document.createElement("div");
@@ -105,7 +103,7 @@ describe("V4PartHeading — the glow blooms in when the heading reaches the scre
     document.body.appendChild(host);
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     await act(async () => {
-      hydrateRoot(host, <V4PartHeading heading={HEADING} intro="[Part Introductory Text]" />);
+      hydrateRoot(host, <V4PartHeading heading={{ ...HEADING, tall: true }} />);
     });
     expect(errors).not.toHaveBeenCalled();
     host.remove();
@@ -126,7 +124,7 @@ describe("V4PartHeading — 'Part' and its number (29.09)", () => {
 
   it("sets the word and the number as two runs, read as one", async () => {
     const { REPORT_V4_PARTS } = await import("@/data/report3-archetype-page");
-    const { container } = render(<V4PartHeading heading={REPORT_V4_PARTS[2]!} intro="x" />);
+    const { container } = render(<V4PartHeading heading={REPORT_V4_PARTS[2]!} />);
     const eyebrow = container.querySelector(".rv4-part__eyebrow")!;
     expect(eyebrow.querySelector(".rv4-part__word")!.textContent).toBe("Part");
     expect(eyebrow.querySelector(".rv4-part__num")!.textContent).toBe("3");
@@ -209,21 +207,67 @@ describe("reportV3.css — the part glow's bloom (review 27.09)", () => {
     expect(pending).toContain("transform: scale(0.82)");
   });
 
-  it("keeps the intro glow centred while it blooms: its transform carries translateX(-50%)", () => {
-    expect(rule(".rv3 .rv4-part--intro.is-pending .rv4-part__glow {")).toContain(
+  it("keeps the 185 box's glow centred while it blooms: its transform carries translateX(-50%)", () => {
+    expect(rule(".rv3 .rv4-part--tall.is-pending .rv4-part__glow {")).toContain(
       "transform: translateX(-50%) scale(0.82)"
     );
     // The `scale` property composes outside the transform list: the glow would slide.
     expect(V3_CSS).not.toMatch(/\.rv4-part__glow[^{]*\{[^}]*\bscale:/);
   });
 
-  it("shows the glow in full under reduced motion, the intro one still centred", () => {
+  it("shows the glow in full under reduced motion, the 185 box's still centred", () => {
     const media = rule(`@media (prefers-reduced-motion: reduce) {
   .rv3 .rv4-part .rv4-part__glow,`);
     expect(media).toContain("opacity: 1");
     expect(media).toContain("transition: none");
-    const at = V3_CSS.indexOf("  .rv3 .rv4-part--intro.is-pending .rv4-part__glow {");
+    const at = V3_CSS.indexOf("  .rv3 .rv4-part--tall.is-pending .rv4-part__glow {");
     expect(at).toBeGreaterThan(0);
     expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toContain("transform: translateX(-50%)");
+  });
+});
+
+/**
+ * The 01.10 sync (transcript 00:26:42), Sanjin: "Are we still doing part
+ * introductions or did we ditch that?" The team's unified answer: ditch them and go
+ * straight into the content. Figma followed: Parts III–VI's "Part + Introduction Text"
+ * frames (1:852, 1:985, 38:1510, 1:1140) are now 185-tall boxes holding only "Part",
+ * the number and the title, so the "[Part Introductory Text]" placeholder goes, and
+ * the live page takes the 185 box for those four parts where it drew the 148 one.
+ */
+describe("V4PartHeading — no part introductions (sync 01.10)", () => {
+  afterEach(cleanup);
+
+  it("gives Parts III–VI the 185 box and Parts I–II the 148 stage", async () => {
+    const { REPORT_V4_PARTS } = await import("@/data/report3-archetype-page");
+    expect(REPORT_V4_PARTS.map((p) => Boolean(p.tall))).toEqual([
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("draws the 185 box with its title and no lede paragraph", async () => {
+    const { REPORT_V4_PARTS } = await import("@/data/report3-archetype-page");
+    const { container } = render(<V4PartHeading heading={REPORT_V4_PARTS[2]!} />);
+    const part = container.querySelector(".rv4-part")!;
+    expect(part).toHaveClass("rv4-part--tall");
+    expect(part).toHaveAttribute("data-node-id", "1:852");
+    expect(part.querySelectorAll("p")).toHaveLength(1);
+    expect(part.textContent).toBe("Part 3How your archetype works");
+  });
+
+  it("keeps Part II on the 148 stage", async () => {
+    const { REPORT_V4_PARTS } = await import("@/data/report3-archetype-page");
+    const { container } = render(<V4PartHeading heading={REPORT_V4_PARTS[1]!} />);
+    expect(container.querySelector(".rv4-part")).not.toHaveClass("rv4-part--tall");
+  });
+
+  it("sizes the 185 box in CSS and leaves no intro rule behind", () => {
+    expect(rule(".rv3 .rv4-part--tall .rv4-part__stage {")).toContain("height: 185px");
+    expect(V3_CSS).not.toContain("rv4-part__intro");
+    expect(V3_CSS).not.toContain("rv4-part--intro");
   });
 });
