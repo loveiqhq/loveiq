@@ -43,7 +43,13 @@ export interface Report3TypicalBeliefsCuts {
 
 /** One archetype's chapter: the panels and the prose that is its own. */
 export interface Report3TypicalBeliefsCopy extends Report3BeliefPanels {
-  /** The belief map's heading and its lede, after the four universal paragraphs. */
+  /**
+   * The archetype's own opening, in place of the four universal paragraphs
+   * (TYPICAL_BELIEFS_INTRO). Omitted, the universal four open the chapter. Sanjin's
+   * Curious Apprentice doc (01.10) writes three of its own.
+   */
+  intro?: readonly Report3Block[];
+  /** The belief map's heading and its lede, after the intro. */
   lede: readonly Report3Block[];
   /** "Common challenges", under its title. */
   challenges: readonly Report3Block[];
@@ -444,7 +450,7 @@ export function buildTypicalBeliefs(
   const lockedFrom = locked ? cuts.freeRows : null;
   const underFullBlur = (i: number) => lockedFrom !== null && i > lockedFrom;
   return {
-    intro: [...TYPICAL_BELIEFS_INTRO, ...copy.lede],
+    intro: [...(copy.intro ?? TYPICAL_BELIEFS_INTRO), ...copy.lede],
     panels: {
       turns: copy.turns.map((turn, i) => ({
         shadow: underFullBlur(i) ? veilText(turn.shadow) : turn.shadow,
