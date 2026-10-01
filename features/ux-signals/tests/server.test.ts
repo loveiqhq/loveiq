@@ -110,6 +110,26 @@ describe("the walk records", () => {
     supabaseFetch.mockResolvedValueOnce({ ok: false, status: 500 });
     expect(await readWalkRecords()).toBeNull();
   });
+
+  it("counts a walk run twice in one day once, keeping the newest run", async () => {
+    // Its plants come from its UTC day, so the second run that day repeats the first.
+    const at = (walk: string, walked_at: string) => ({ walk, walked_at, events: [], truth: {} });
+    supabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        at("w1", "2026-10-01T02:50:00+00:00"),
+        at("w2", "2026-10-01T02:45:00+00:00"),
+        at("w1", "2026-10-01T00:20:00+00:00"),
+        at("w1", "2026-09-30T02:50:00+00:00"),
+      ],
+    });
+    const rows = await readWalkRecords(new Date("2026-10-01T12:00:00Z"));
+    expect(rows?.map((r) => `${r.walk} ${r.walkedAt}`)).toEqual([
+      "w1 2026-10-01T02:50:00+00:00",
+      "w2 2026-10-01T02:45:00+00:00",
+      "w1 2026-09-30T02:50:00+00:00",
+    ]);
+  });
 });
 
 describe("the report", () => {
