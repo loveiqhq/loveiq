@@ -389,7 +389,7 @@ describe("V3Methodology science deck in V4 (493:7082)", () => {
         ["Typical Beliefs", "Core Insecurities"],
       ],
       [
-        "Relationship research",
+        "Relationship Research",
         // Sanjin, 2026-09-25 (1941776620 on 493:7082, 493:7233): adapted after reading
         // the mobile staging.
         "How do relationship dynamics shape desire, intimacy, and connection?",
@@ -397,17 +397,17 @@ describe("V3Methodology science deck in V4 (493:7082)", () => {
       ],
       ["Sexology", "How does arousal actually work?", ["Initiation Style", "Fantasy vs. Reality"]],
       [
-        "Behavioral science",
+        "Behavioral Science",
         "Why habits beat intentions?",
         ["Accelerators & Brakes", "Libido Challenges"],
       ],
       [
-        "Attachment research",
+        "Attachment Research",
         "How does emotional security shape desire and intimacy?",
         ["Attachment Style"],
       ],
       [
-        "Therapy rooms",
+        "Therapy Rooms",
         "What have decades of clinical practice taught us about desire and intimacy?",
         ["Reading Recommendations"],
       ],
@@ -417,8 +417,8 @@ describe("V3Methodology science deck in V4 (493:7082)", () => {
   it("leaves the live ?v3=1 deck as it was", () => {
     const { container } = render(<V3Methodology />);
     const titles = [...container.querySelectorAll(".rv3-sci__title")].map((t) => t.textContent);
-    expect(titles[2]).toBe("Attachment research");
-    expect(titles[5]).toBe("Relationship research");
+    expect(titles[2]).toBe("Attachment Research");
+    expect(titles[5]).toBe("Relationship Research");
   });
 });
 

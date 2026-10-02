@@ -34,7 +34,10 @@ interface ScienceCard {
   chaptersV4?: string[];
 }
 
-/** 10360:9880 … 10360:10068, transcribed from the frame. */
+/**
+ * 10360:9880 … 10360:10068, transcribed from the frame. The titles are in the 02.10 sync's
+ * heading case (logic/titleCase.ts); the frames keep their old case.
+ */
 const CARDS: readonly ScienceCard[] = [
   {
     accent: "#fe6839",
@@ -56,7 +59,7 @@ const CARDS: readonly ScienceCard[] = [
     accent: "#ff3d76",
     icon: "attachment-research",
     n: "03",
-    title: "Attachment research",
+    title: "Attachment Research",
     question: "How you connect in relationships and what throws you off?",
     questionV4: "How does emotional security shape desire and intimacy?",
     chapters: ["Attachment Style", "Challenges in Partnership"],
@@ -75,7 +78,7 @@ const CARDS: readonly ScienceCard[] = [
     accent: "#c36ddf",
     icon: "behavioral-science",
     n: "05",
-    title: "Behavioral science",
+    title: "Behavioral Science",
     question: "Why do habits often overwrite intentions? How do we break through self-sabotage?",
     // The frame reads "Why habits beat intentions?dasdads"; the tail is stray typing.
     questionV4: "Why habits beat intentions?",
@@ -85,7 +88,7 @@ const CARDS: readonly ScienceCard[] = [
     accent: "#ff9450",
     icon: "relationship-research",
     n: "06",
-    title: "Relationship research",
+    title: "Relationship Research",
     question: "What keeps intimacy and desire alive over years?",
     // Sanjin's 25.09 rewrite (493:7233), after reading the mobile staging.
     questionV4: "How do relationship dynamics shape desire, intimacy, and connection?",
@@ -97,7 +100,7 @@ const CARDS: readonly ScienceCard[] = [
     accent: "#6b6678",
     icon: "therapy-rooms",
     n: "07",
-    title: "Therapy rooms",
+    title: "Therapy Rooms",
     question:
       "What do decades in the room teach? What are 3 practical ways to keep intimacy intact?",
     questionV4: "What have decades of clinical practice taught us about desire and intimacy?",
@@ -112,11 +115,11 @@ const CARDS: readonly ScienceCard[] = [
 const V4_ORDER = [
   "Neuroscience",
   "Psychology",
-  "Relationship research",
+  "Relationship Research",
   "Sexology",
-  "Behavioral science",
-  "Attachment research",
-  "Therapy rooms",
+  "Behavioral Science",
+  "Attachment Research",
+  "Therapy Rooms",
 ] as const;
 const CARDS_V4: readonly ScienceCard[] = V4_ORDER.map((title) =>
   CARDS.find((c) => c.title === title)!
