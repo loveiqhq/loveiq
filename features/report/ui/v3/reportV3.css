@@ -8482,6 +8482,17 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     font-size: 11.1px;
     line-height: 18.32px;
   }
+  /* 8632:1455 — the Reward card's two opening lines. 2.0 sets 16.15 + 4.04 above the first
+   * row; the card's 14px gap here leaves 6.19 for the line's own margin. */
+  .rv3.rv4 .report-reward__intro {
+    align-self: stretch;
+    margin: 0 0 6.19px;
+    color: #6b6678;
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 14.5px;
+    line-height: 1.65;
+  }
 }
 
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
@@ -9269,5 +9280,12 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   }
   .rv3.rv4 .report-lovelang__intensity {
     width: 94.79px;
+  }
+}
+/* The Reward card's opening lines are the phone's (8632:1455): 2.0's desktop card
+ * (8427:1758) opens on its first row. */
+@media (min-width: 700px) {
+  .rv3.rv4 .report-reward__intro {
+    display: none;
   }
 }

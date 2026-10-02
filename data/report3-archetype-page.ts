@@ -437,3 +437,14 @@ export const REPORT_V4_DESIGNED_CHAPTER_IDS: ReadonlySet<string> = new Set(
     ...REPORT_V4_PART6_CHAPTERS,
   ].flatMap((c) => (c.body === "chapter" && c.id ? [c.id] : []))
 );
+
+/**
+ * Review 02.10, Mark (Notion, mobile unlocked): "The right shows how Report 2.0 looked like
+ * on mobile. Please adapt". Report 2.0's phone Reward card (Figma 8632:1455) opens on these
+ * two lines before the ranked list; its desktop card (8427:1758) has none. Universal copy:
+ * the same for every archetype.
+ */
+export const REPORT_V4_REWARD_INTRO: readonly string[] = [
+  "The four currencies sexual chemistry can pay in — and how your system weighs each.",
+  "This ranking differs sharply between archetypes.",
+];
