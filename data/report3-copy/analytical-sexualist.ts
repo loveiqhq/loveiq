@@ -84,7 +84,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
       "“Understanding can deepen my sexuality, especially when I leave room for spontaneity, uncertainty, and experiences that do not fit neatly into a pattern.”",
     ],
     lede: [
-      h2("The Analytical Sexualist belief map"),
+      h2("The Analytical Sexualist Belief Map"),
       p(
         t("For the "),
         b("Analytical Sexualist"),
@@ -467,7 +467,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
           " It also points toward a clear area of growth: keeping the Analytical Sexualist’s curiosity while learning when intimacy needs attention rather than analysis."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Problem-solving can miss the emotional need underneath the problem."),
         t(
@@ -678,7 +678,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
           ". Where some archetypes may be most excited by spontaneity or emotional intensity, the Analytical Sexualist may enjoy scenarios where feedback is clear, cause and effect make sense, and exploration gradually produces greater mastery."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("The perfect experiment night."),
         t(
@@ -716,7 +716,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A fantasy of mastery can make normal sexual variation feel like failure."),
         t(

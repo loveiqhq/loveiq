@@ -78,7 +78,7 @@ export const EMOTIONAL_VOYEUR: Report3ArchetypeCopy = {
       "“My sexuality does not have to look highly active or performative to be real.”",
     ],
     lede: [
-      h2("The Emotional Voyeur belief map"),
+      h2("The Emotional Voyeur Belief Map"),
       p(
         t("For the "),
         b("Emotional Voyeur"),
@@ -468,7 +468,7 @@ export const EMOTIONAL_VOYEUR: Report3ArchetypeCopy = {
           "The more exposed or evaluated the Emotional Voyeur feels, the easier it may become to retreat into observation, fantasy, or silence. Understanding the pattern makes it possible to protect the erotic value of distance without allowing distance to become the only way intimacy feels safe."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Low initiative can be mistaken for low desire."),
         t(
@@ -721,7 +721,7 @@ export const EMOTIONAL_VOYEUR: Report3ArchetypeCopy = {
           ". Where some archetypes become more aroused by stepping fully into the scene, the Emotional Voyeur may experience considerable erotic intensity from seeing desire unfold while remaining partly outside it."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Watching a partner pleasure themselves."),
         t(
@@ -759,7 +759,7 @@ export const EMOTIONAL_VOYEUR: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("The fantasy can feel more intense precisely because participation is optional."),
         t(

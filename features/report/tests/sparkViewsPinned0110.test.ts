@@ -11,19 +11,20 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
  * per-archetype records. Spark Seeker is hand-set from Figma and must come out of that
  * byte-identical, so its built views, open and locked, are pinned here as hashes: the paid
  * copy itself is not repeated in a test (the repo is public). An intentional change to
- * Spark Seeker's copy updates these, and says so in its commit.
+ * Spark Seeker's copy updates these, and says so in its commit. 02.10: its headings in the
+ * sync's heading case, mapped back to the old case the views hash as before.
  */
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const PINNED: Record<string, string> = {
-  "typicalBeliefs:open": "d7fd54c14a672fdee6ccfa1d3109feeaa763e2341106e225bc260610e14f7c73",
-  "typicalBeliefs:locked": "f3c4bb44efefeaf30d1228350560cabc39bd0bf68b72d7069d523d5bf25091ba",
-  "accelerators:open": "1d603d83c0eac8d031319009a52e0a4765560a972abceb55e5b2065dd30f5fae",
-  "accelerators:locked": "ceacdba194267427b80272eac8d4dbf3a5738cb26f02a879529cd51a956bb80c",
-  "partnership:open": "f47d1013da1a2e1b1516f1c48b894ed646841ac8fb63d979a40c2924c8cb7d71",
-  "partnership:locked": "d2b2cf92309eae677b5a90da3690d7126e675a245d933c263f73b2702b90a964",
-  "fantasy:open": "8c4224f5758ba8cfc2d9087953ff5e21de50c088ca62e2d283ac695ec89fe078",
-  "fantasy:locked": "fd19418fa28ea134ed300ad011222d861fe76d68af7d117364c866ca3abb130f",
+  "typicalBeliefs:open": "fef4e095123334745aff5aa389a0201c0a6b5548684806d28d83b06c9080ac3c",
+  "typicalBeliefs:locked": "3b19507fb42a6b4439c4920cbe2d32e4e5a3485234eeee9c78c9d37cb210d97b",
+  "accelerators:open": "b876495aa1d7e19ffe9ab2112f21fc7afae66787815fa62e7bd76fefbd68164b",
+  "accelerators:locked": "a8c6d94c9c34022036938bc140528726f11bad076779bdc2c18b00268ccbb930",
+  "partnership:open": "d63b13af6c10e584cb960a91f390b552f6c75f958c6377c7a8fd4f5dd8f1b7e4",
+  "partnership:locked": "d71125358863c9c1a296801f0e7e4527f5a5a03df5a89ba9ea3fe4a704d0cc70",
+  "fantasy:open": "675b368746103295f5e1c9e246c701569726e37f2e17a268b65ee6ab8556ae7a",
+  "fantasy:locked": "12a6db8ead12fb1bb2e8abeb5cd8f2b883b2db1b710afa868d19cbeab23bf46d",
 };
 
 const BUILDERS = {

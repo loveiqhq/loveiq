@@ -67,7 +67,7 @@ describe("the chapter body — 304:256", () => {
   // challenges" heads its own, so it takes that heading's level and type.
   it("sets the belief map as an H2, in Common challenges' type", () => {
     render(<V4TypicalBeliefs view={VIEW} />);
-    const map = screen.getByText("The Spark Seeker belief map");
+    const map = screen.getByText("The Spark Seeker Belief Map");
     expect(map.tagName).toBe("H3");
     expect(map).toHaveClass("is-h2");
     const css = V3_CSS.slice(V3_CSS.indexOf(".rv3 .rv4-prose__h.is-h2 {"));
@@ -79,10 +79,10 @@ describe("the chapter body — 304:256", () => {
 
   it("carries the frame's headings", () => {
     render(<V4TypicalBeliefs view={VIEW} />);
-    expect(screen.getByText("The Spark Seeker belief map")).toBeInTheDocument();
-    expect(screen.getByText("Common challenges")).toBeInTheDocument();
-    expect(screen.getByText("When spontaneity becomes proof of desire")).toBeInTheDocument();
-    expect(screen.getByText("When being wanted becomes evidence of worth")).toBeInTheDocument();
+    expect(screen.getByText("The Spark Seeker Belief Map")).toBeInTheDocument();
+    expect(screen.getByText("Common Challenges")).toBeInTheDocument();
+    expect(screen.getByText("When Spontaneity Becomes Proof of Desire")).toBeInTheDocument();
+    expect(screen.getByText("When Being Wanted Becomes Evidence of Worth")).toBeInTheDocument();
   });
 });
 
@@ -333,7 +333,7 @@ describe("the paywalled chapter — 348:213", () => {
     const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
     // 348:221 draws the subheading and three paragraphs sharp; the next block is the
     // ramp and everything after it sits under the full blur, with the card on it.
-    expect(screen.getByText("When spontaneity becomes proof of desire")).toBeInTheDocument();
+    expect(screen.getByText("When Spontaneity Becomes Proof of Desire")).toBeInTheDocument();
     expect(screen.getByText("But the belief changes its meaning.")).toBeInTheDocument();
     const gated = container.querySelector(".rv4-tb__gated");
     expect(gated).not.toBeNull();
@@ -344,7 +344,7 @@ describe("the paywalled chapter — 348:213", () => {
       "For the Spark Seeker, planning may begin to feel like evidence"
     );
     expect(container.querySelector(".rv4-tb__blurred")!.textContent).toContain(
-      "When being wanted becomes evidence of worth"
+      "When Being Wanted Becomes Evidence of Worth"
     );
     expect(container.querySelectorAll(".rv4-tb__gate .rv4-premium")).toHaveLength(1);
   });
@@ -355,7 +355,7 @@ describe("the paywalled chapter — 348:213", () => {
     expect(container.querySelector(".rv4-tb__gated")).toBeNull();
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelectorAll(".rv4-turn__shift-text")).toHaveLength(10);
-    expect(screen.getByText("When being wanted becomes evidence of worth")).toBeInTheDocument();
+    expect(screen.getByText("When Being Wanted Becomes Evidence of Worth")).toBeInTheDocument();
   });
 });
 

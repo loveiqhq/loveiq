@@ -62,7 +62,7 @@ describe("the authored copy (read off 310:229 / 374:304 / 377:221)", () => {
       "For many Spark Seekers, the brakes may sound something like this"
     );
     expect(SPARK.acceleratorsLead.trim()).toBe("The accelerators might be just as recognizable:");
-    expect(SPARK.challengesTitle).toBe("Common challenges");
+    expect(SPARK.challengesTitle).toBe("Common Challenges");
     expect(SPARK.challenges).toHaveLength(7);
     expect(SPARK.practice).toHaveLength(7);
     expect(SPARK.practiceEyebrow).toBe("Practice time: ~12 min.");

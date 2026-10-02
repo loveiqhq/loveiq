@@ -76,7 +76,7 @@ export const TENDER_DEVOTEE: Report3ArchetypeCopy = {
       "“Consistency and emotional warmth can deepen desire rather than make it less exciting.”",
     ],
     lede: [
-      h2("The Tender Devotee belief map"),
+      h2("The Tender Devotee Belief Map"),
       p(
         t("For the "),
         b("Tender Devotee"),
@@ -481,7 +481,7 @@ export const TENDER_DEVOTEE: Report3ArchetypeCopy = {
           ". Recognizing the pattern early makes it easier to ask directly for reassurance, tolerate small moments of disappointment, and separate genuine sexual desire from the urge to keep the relationship secure."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A partner’s quieter affection can feel like declining interest."),
         t(
@@ -684,7 +684,7 @@ export const TENDER_DEVOTEE: Report3ArchetypeCopy = {
           ". Where some archetypes may fantasize primarily about novelty or intensity, the Tender Devotee may be especially responsive to scenarios where uncertainty disappears. The partner is delighted, approval is obvious, and there is no need to wonder whether the Tender Devotee is attractive, desirable or doing enough."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Finally getting everything right."),
         t(
@@ -722,7 +722,7 @@ export const TENDER_DEVOTEE: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b(
           "Fantasy can make enthusiastic feedback feel like the clearest proof that sex is going well."

@@ -59,14 +59,14 @@ describe("V4Fantasy — open (304:290)", () => {
     const intro = body(container).querySelector('[data-node-id="304:291"]')!;
     expect(intro.querySelectorAll(".rv4-prose__p")).toHaveLength(11);
     expect(intro.querySelector(".rv4-prose__h")!.textContent).toBe(
-      "What a fantasy might actually be about"
+      "What a Fantasy Might Actually Be About"
     );
   });
 
   it("sets 'Common challenges' and its thirteen paragraphs in the clear", () => {
     const { container } = render(<V4Fantasy view={OPEN} />);
     const challenges = body(container).querySelector<HTMLElement>('[data-node-id="368:1920"]')!;
-    expect(challenges.querySelector(".rv4-prose__h")!.textContent).toBe("Common challenges");
+    expect(challenges.querySelector(".rv4-prose__h")!.textContent).toBe("Common Challenges");
     expect(challenges.querySelectorAll(".rv4-prose__p")).toHaveLength(13);
     expect(challenges.closest("[inert]")).toBeNull();
     expect(body(container).querySelector(".rv4-premium")).toBeNull();

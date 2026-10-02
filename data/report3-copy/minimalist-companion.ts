@@ -81,7 +81,7 @@ export const MINIMALIST_COMPANION: Report3ArchetypeCopy = {
       "“My sexuality does not need to impress anyone in order to be fulfilling.”",
     ],
     lede: [
-      h2("The Minimalist Companion belief map"),
+      h2("The Minimalist Companion Belief Map"),
       p(
         t("For the "),
         b("Minimalist Companion"),
@@ -456,7 +456,7 @@ export const MINIMALIST_COMPANION: Report3ArchetypeCopy = {
           ". Once this is visible, the question changes from who wants too much or too little to what conditions allow both people to stay engaged without one feeling deprived and the other feeling pushed."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Different desire levels can create a pursuit and withdrawal cycle."),
         t(
@@ -752,7 +752,7 @@ export const MINIMALIST_COMPANION: Report3ArchetypeCopy = {
           " This is why an otherwise calm and uncomplicated erotic style can coexist with fantasies that occasionally look much more intense."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Being completely taken over for once."),
         t(
@@ -790,7 +790,7 @@ export const MINIMALIST_COMPANION: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A bold fantasy can create doubt about what should be wanted in reality."),
         t(

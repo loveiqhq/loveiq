@@ -81,7 +81,7 @@ export const AUTHORITY_CONDUCTOR: Report3ArchetypeCopy = {
       "“I can bring confidence, decisiveness, and presence into intimacy without needing every moment to revolve around control.”",
     ],
     lede: [
-      h2("The Authority Conductor belief map"),
+      h2("The Authority Conductor Belief Map"),
       p(
         t("For the"),
         b(" Authority Conductor"),
@@ -449,7 +449,7 @@ export const AUTHORITY_CONDUCTOR: Report3ArchetypeCopy = {
           ". Recognizing that early can prevent erotic structure from turning into relational rigidity and can show where growth matters most: negotiating authority clearly, tolerating challenge without treating it as disloyalty, and expressing vulnerable needs without having to control the response."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Leadership can collide with a partner’s need for autonomy."),
         t(
@@ -671,7 +671,7 @@ export const AUTHORITY_CONDUCTOR: Report3ArchetypeCopy = {
           ". The appeal may lie not only in having control, but in creating an erotic world where roles are clear, responses make sense and another person willingly enters the structure the Authority Conductor has designed."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Designing the entire encounter."),
         t(
@@ -707,7 +707,7 @@ export const AUTHORITY_CONDUCTOR: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A perfectly responsive fantasy can make real dominance feel less satisfying."),
         t(

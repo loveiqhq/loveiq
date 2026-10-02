@@ -66,7 +66,7 @@ describe("the chapter body — 38:1679", () => {
     expect(text.querySelectorAll(".rv4-prose__p")).toHaveLength(15);
     const heading = text.querySelectorAll(".rv4-prose__h");
     expect(heading).toHaveLength(1);
-    expect(heading[0]!.textContent).toBe("Common challenges");
+    expect(heading[0]!.textContent).toBe("Common Challenges");
     expect(container.querySelector(".rv4-cip__gate")).toBeNull();
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelector(".rv4-loop")).not.toHaveClass("is-locked");

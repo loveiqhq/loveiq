@@ -199,7 +199,7 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
     ],
 
     // 312:212 — the H2 and seven paragraphs, in a 361px box.
-    challengesTitle: "Common challenges",
+    challengesTitle: "Common Challenges",
     challenges: [
       p(t("Consider something as ordinary as planning sex for Friday night.")),
       p(
@@ -364,7 +364,7 @@ export const ACCELERATORS_PRACTICE_FREE_BLOCKS = 1;
 export const ACCELERATORS_PRACTICE_RAMP_THROUGH = "harder to respond?”";
 
 /** The universal titles, and Spark Seeker's practice time: the defaults. */
-export const ACCELERATORS_CHALLENGES_TITLE = "Common challenges";
+export const ACCELERATORS_CHALLENGES_TITLE = "Common Challenges";
 export const ACCELERATORS_PRACTICE_TITLE = "Try this & see what shifts";
 export const ACCELERATORS_PRACTICE_EYEBROW = "Practice time: ~12 min.";
 

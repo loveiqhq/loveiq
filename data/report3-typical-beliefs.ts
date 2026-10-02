@@ -197,7 +197,7 @@ export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
 
 /** 304:277 through 304:279 — Spark Seeker's belief map heading and lede. */
 const SPARK_LEDE: readonly Report3Block[] = [
-  h2("The Spark Seeker belief map"),
+  h2("The Spark Seeker Belief Map"),
   // Sanjin's doc bolds two runs here (29.09), after the frame was set.
   p(
     t("The "),
@@ -210,12 +210,15 @@ const SPARK_LEDE: readonly Report3Block[] = [
   ),
 ];
 
-/** 304:379 — the chapter's only H2, and the frame's only 18px heading. */
-export const TYPICAL_BELIEFS_CHALLENGES_TITLE = "Common challenges";
+/**
+ * 304:379 — the chapter's only H2, and the frame's only 18px heading. The chapters' headings
+ * are in the 02.10 sync's heading case (logic/titleCase.ts); the frames keep their old case.
+ */
+export const TYPICAL_BELIEFS_CHALLENGES_TITLE = "Common Challenges";
 
 /** 304:380 through 304:410 — Spark Seeker's two worked examples, below the green panel. */
 const SPARK_CHALLENGES: readonly Report3Block[] = [
-  h("When spontaneity becomes proof of desire"),
+  h("When Spontaneity Becomes Proof of Desire"),
   p(t("Consider the shadow belief "), bi("“If sex has to be planned, the spark must be gone.”")),
   p(
     t(
@@ -246,7 +249,7 @@ const SPARK_CHALLENGES: readonly Report3Block[] = [
       "“Spontaneity may be especially exciting to me, but desire does not have to be effortless to be genuine. Sometimes spark is discovered; sometimes it is created.”"
     )
   ),
-  h("When being wanted becomes evidence of worth"),
+  h("When Being Wanted Becomes Evidence of Worth"),
   p(t("Now consider "), bi("“Being desired proves that I am still attractive and exciting.”")),
   p(
     t(

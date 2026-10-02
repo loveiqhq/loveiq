@@ -111,7 +111,7 @@ export const CURIOUS_APPRENTICE: Report3ArchetypeCopy = {
       ),
     ],
     lede: [
-      h2("The Curious Apprentice belief map"),
+      h2("The Curious Apprentice Belief Map"),
       p(
         t("For the "),
         b("Curious Apprentice"),
@@ -486,7 +486,7 @@ export const CURIOUS_APPRENTICE: Report3ArchetypeCopy = {
           ". Once the pattern becomes visible, it is easier to address before uncertainty turns into avoidance, frustration, or an unequal sexual dynamic. It also points toward an important area of growth for the Curious Apprentice: learning from a partner without making that partner the final authority on what is right."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Feedback can start to feel like evaluation."),
         t(" A partner may be naturally quiet during sex or give broad responses such as "),
@@ -698,7 +698,7 @@ export const CURIOUS_APPRENTICE: Report3ArchetypeCopy = {
           ". Where some archetypes may fantasize about already knowing exactly what to do, the Curious Apprentice may be drawn to situations where not knowing is part of the erotic experience: a partner demonstrates, gives feedback, introduces something new or creates enough safety to explore without embarrassment."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Being taught by an experienced lover."),
         t(
@@ -732,7 +732,7 @@ export const CURIOUS_APPRENTICE: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Guidance can quietly become a search for the right answer."),
         t(

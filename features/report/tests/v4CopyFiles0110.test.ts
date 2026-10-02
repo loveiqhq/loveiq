@@ -148,9 +148,9 @@ describe.each(FILES.map((f) => [SLUG_TO_NAME.get(f.replace(/\.ts$/, "")) ?? f, f
       ]) {
         expect(list.length).toBeGreaterThan(0);
       }
-      expect(copy.fantasy.challenges[0]).toEqual({ kind: "heading", text: "Common challenges" });
+      expect(copy.fantasy.challenges[0]).toEqual({ kind: "heading", text: "Common Challenges" });
       expect(
-        copy.partnership.body.some((b) => b.kind === "heading" && b.text === "Common challenges")
+        copy.partnership.body.some((b) => b.kind === "heading" && b.text === "Common Challenges")
       ).toBe(true);
     });
 

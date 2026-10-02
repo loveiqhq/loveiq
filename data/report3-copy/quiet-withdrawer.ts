@@ -83,7 +83,7 @@ export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
       "“I can allow small signs of desire to grow without demanding that my body or emotions give me an immediate answer.”",
     ],
     lede: [
-      h2("The Quiet Withdrawer belief map"),
+      h2("The Quiet Withdrawer Belief Map"),
       p(
         t("For the "),
         b("Quiet Withdrawer"),
@@ -475,7 +475,7 @@ export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
           "Recognizing the pattern early can prevent that escalation. It also shows where growth matters most: learning to communicate before disappearing completely, making limits visible rather than relying on withdrawal to enforce them, and creating sexual situations where saying no is safe enough that closeness itself does not have to be avoided."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A need for space can collide with a partner’s need for resolution."),
         t(
@@ -710,7 +710,7 @@ export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
           ". Where some archetypes may be excited by intensity or pursuit, the Quiet Withdrawer may respond more strongly to scenes where nothing has to happen, there is no demand to perform, and closeness can develop slowly without trapping anyone inside an expectation."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Being approached without pressure."),
         t(
@@ -748,7 +748,7 @@ export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Avoiding pressure can gradually mean avoiding situations where desire might appear."),
         t(

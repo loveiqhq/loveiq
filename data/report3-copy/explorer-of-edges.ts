@@ -82,7 +82,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
       "“I can choose intense experiences because I genuinely want them, not because I need them to prove something about who I am.”",
     ],
     lede: [
-      h2("The Explorer of Edges belief map"),
+      h2("The Explorer of Edges Belief Map"),
       p(
         t("For the"),
         b(" Explorer of Edges"),
@@ -441,7 +441,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
           " on the other. Once the underlying pattern is visible, partners can separate genuine incompatibilities from interaction loops that are making those differences harder to navigate."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Different boundaries can start to feel like rejection or restriction."),
         t(
@@ -716,7 +716,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
           ". Where some archetypes may be satisfied by the sexual act itself, the Explorer of Edges may be drawn to scenarios that create a stronger shift in state: suspense, surrender, control, catharsis, taboo or the feeling of temporarily becoming someone different."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Being completely overpowered."),
         t(
@@ -754,7 +754,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Fantasy can make intensity look simpler than it is."),
         t(

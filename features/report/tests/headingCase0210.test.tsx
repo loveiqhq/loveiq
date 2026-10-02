@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_PARTS } from "@/data/report3-archetype-page";
+import { buildFantasy } from "@/data/report3-fantasy";
+import { buildPartnership } from "@/data/report3-partnership";
+import { REPORT_V4_TYPICAL_BELIEFS, buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { titleCase } from "@features/report/logic/titleCase";
 import V3Methodology from "@features/report/ui/v3/V3Methodology";
+import V4Accelerators from "@features/report/ui/v3/V4Accelerators";
+import V4Fantasy from "@features/report/ui/v3/V4Fantasy";
+import V4Partnership from "@features/report/ui/v3/V4Partnership";
+import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 
@@ -50,3 +59,24 @@ describe("the science tiles follow the 02.10 heading rule", () => {
     }
   });
 });
+
+// Spark Seeker's chapters are set from Figma, the other thirteen from Sanjin's docs; both
+// pass through the same components, whose every heading element is checked here.
+describe.each(Object.keys(REPORT_V4_TYPICAL_BELIEFS))(
+  "%s's four designed chapters follow the 02.10 heading rule",
+  (name) => {
+    const open = { locked: false };
+    const chapters: [string, () => ReactElement][] = [
+      ["Typical Beliefs", () => <V4TypicalBeliefs view={buildTypicalBeliefs(name, open)!} />],
+      ["Accelerators & Brakes", () => <V4Accelerators view={buildAccelerators(name, open)!} />],
+      ["Challenges in Partnerships", () => <V4Partnership view={buildPartnership(name, open)!} />],
+      ["Fantasy vs. Reality", () => <V4Fantasy view={buildFantasy(name, open)!} />],
+    ];
+    it.each(chapters)("in every heading of %s", (_, chapter) => {
+      const { container } = render(chapter());
+      const headings = texts(container, "h1, h2, h3, h4, h5, h6");
+      expect(headings.length).toBeGreaterThan(0);
+      headings.forEach(follows);
+    });
+  }
+);

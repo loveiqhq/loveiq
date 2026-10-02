@@ -135,7 +135,7 @@ describe("buildTypicalBeliefs — locked", () => {
     const probes = [
       // Common challenges, after the ramp block.
       "That interpretation can influence behavior.",
-      "When being wanted becomes evidence of worth",
+      "When Being Wanted Becomes Evidence of Worth",
       "The shadow appears when their absence takes on too much meaning.",
       // The practice, after its ramp paragraph.
       "Name the rule underneath it.",

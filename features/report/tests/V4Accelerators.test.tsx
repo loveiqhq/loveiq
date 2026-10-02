@@ -43,7 +43,7 @@ describe("the chapter body — 310:229", () => {
     const { container } = render(<V4Accelerators view={OPEN} />);
     const challenges = container.querySelector(".rv4-ab__challenges")!;
     expect(challenges.getAttribute("data-node-id")).toBe("312:211");
-    expect(challenges.querySelector(".rv4-ab__h2")!.textContent).toBe("Common challenges");
+    expect(challenges.querySelector(".rv4-ab__h2")!.textContent).toBe("Common Challenges");
     expect(challenges.querySelectorAll(".rv4-prose__p")).toHaveLength(7);
     expect(container.querySelector(".rv4-ab__gate")).toBeNull();
     expect(container.querySelector(".rv4-premium")).toBeNull();
