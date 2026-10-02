@@ -59,6 +59,7 @@ import {
   REPORT_V4_DESIGNED_CHAPTER_IDS,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
   REPORT_V4_PART_FRAME_BY_SECTION,
+  REPORT_V4_REWARD_INTRO,
   REPORT_V4_SUMMARY,
   REPORT_V4_TOP_THREE_HEADING,
 } from "@/data/report3-archetype-page";
@@ -1468,6 +1469,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={hasArchetypeCopy ? rewardCopy : null}
                           config={hasArchetypeCopy ? rewardConfig : null}
+                          intro={isV4 ? REPORT_V4_REWARD_INTRO : undefined}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}

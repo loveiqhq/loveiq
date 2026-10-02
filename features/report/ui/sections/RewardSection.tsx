@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type FC } from "react";
+import { Fragment, useState, type CSSProperties, type FC } from "react";
 import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
@@ -68,6 +68,11 @@ interface Props {
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
   tier?: PremiumOverlayTier;
+  /**
+   * V4 only: Report 2.0's phone intro (Figma 8632:1455), a line apiece, opening the
+   * unlocked card. Report 2.0 itself (`?v2=1`) passes none.
+   */
+  intro?: readonly string[];
 }
 
 const BookIcon: FC = () => (
@@ -304,6 +309,7 @@ const RewardSection: FC<Props> = ({
   quote = null,
   sectionTitle,
   tier = "full_report",
+  intro,
 }) => {
   const [statRef, statRevealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
   const [expanded, setExpanded] = useState(false);
@@ -378,6 +384,16 @@ const RewardSection: FC<Props> = ({
           </>
         ) : (
           <>
+            {intro && intro.length > 0 ? (
+              <p className="report-reward__intro">
+                {intro.map((line, i) => (
+                  <Fragment key={line}>
+                    {i > 0 ? <br /> : null}
+                    {line}
+                  </Fragment>
+                ))}
+              </p>
+            ) : null}
             {rows.length > 0 ? <RewardRankedList rows={rows} /> : null}
 
             {hasStat ? (
