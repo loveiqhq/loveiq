@@ -213,11 +213,12 @@ export interface ReportV3NavPart {
   items: { label: string; id: string; gateId?: string }[];
 }
 
+// In the 02.10 sync's heading case (logic/titleCase.ts). Both navs set them in capitals.
 const V3_PART_LABELS: Record<string, string> = {
-  "2": "How your archetype works",
-  "3": "Your erotic engine",
-  "4": "How you connect",
-  "5": "Your edges",
+  "2": "How Your Archetype Works",
+  "3": "Your Erotic Engine",
+  "4": "How You Connect",
+  "5": "Your Edges",
 };
 
 const V3_PART_NUMERALS: Record<string, string> = {
@@ -248,7 +249,7 @@ const navPartsFrom = (
   ...(welcome ? [welcome] : []),
   {
     part: `Part ${numerals["1"]}`,
-    label: "Your constellation",
+    label: "Your Constellation",
     items: [
       ...(constellationLead ? [constellationLead] : []),
       { label: "Core Archetype", id: "core_archetype" },
@@ -304,7 +305,7 @@ export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
     label: "Welcome",
     items: [
       { label: "Introduction", id: "introduction" },
-      { label: "What shaped this report", id: "what_shaped_this_report" },
+      { label: "What Shaped This Report", id: "what_shaped_this_report" },
     ],
   },
 });

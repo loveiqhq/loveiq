@@ -47,7 +47,7 @@ const V4Part1: FC = () => (
 
     {/* 1:185 */}
     <V4Chapter
-      title="What shaped this report"
+      title="What Shaped This Report"
       collapsible={false}
       sectionId="what_shaped_this_report"
     >

@@ -289,16 +289,16 @@ describe("V4 — the finalised nav (961:333)", () => {
   it("opens both navs on Part 1 · Welcome, and numbers the parts 1 to 6", async () => {
     const V4_PARTS = [
       "Part 1 · Welcome",
-      "Part 2 · Your constellation",
-      "Part 3 · How your archetype works",
-      "Part 4 · Your erotic engine",
-      "Part 5 · How you connect",
-      "Part 6 · Your edges",
+      "Part 2 · Your Constellation",
+      "Part 3 · How Your Archetype Works",
+      "Part 4 · Your Erotic Engine",
+      "Part 5 · How You Connect",
+      "Part 6 · Your Edges",
     ];
     const { unmount } = await inV4(<ReportDesktopSidebar activeSectionId="introduction" />);
     expect(parts()).toEqual(V4_PARTS);
     expect(row("introduction").textContent).toMatch(/^Introduction/);
-    expect(row("what_shaped_this_report").textContent).toMatch(/^What shaped this report/);
+    expect(row("what_shaped_this_report").textContent).toMatch(/^What Shaped This Report/);
     expect(row("introduction")).toHaveAttribute("aria-current", "location");
     unmount();
 

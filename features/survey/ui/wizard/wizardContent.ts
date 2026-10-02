@@ -72,12 +72,12 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
     label: "Welcome",
     rows: [
       row("introduction", "Introduction"),
-      row("what_shaped_this_report", "What shaped this report"),
+      row("what_shaped_this_report", "What Shaped This Report"),
     ],
   },
   {
     part: "Part 2",
-    label: "Your constellation",
+    label: "Your Constellation",
     rows: [
       row("top_archetypes", "3 Highest Scoring Archetypes"),
       row("core_archetype", "Core Archetype"),
@@ -85,7 +85,7 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
   },
   {
     part: "Part 3",
-    label: "How your archetype works",
+    label: "How Your Archetype Works",
     rows: [
       row("typical_beliefs", "Typical Beliefs"),
       row("core_insecurities", "Core Insecurities"),
@@ -95,7 +95,7 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
   },
   {
     part: "Part 4",
-    label: "Your erotic engine",
+    label: "Your Erotic Engine",
     rows: [
       row("typical_arousal_accelerators_turn_ons_of_the_core_archetype", "Accelerators & Brakes"),
       row("libido_challenges_in_relationships", "Libido Challenges"),
@@ -107,7 +107,7 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
   },
   {
     part: "Part 5",
-    label: "How you connect",
+    label: "How You Connect",
     rows: [
       row("challenges_in_partnership", "Challenges in Partnerships"),
       row("attachment_style", "Attachment Style"),
@@ -117,7 +117,7 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
   },
   {
     part: "Part 6",
-    label: "Your edges",
+    label: "Your Edges",
     rows: [
       row("typical_sexual_fantasy_amp_practice_tendencies", "Fantasy vs. Reality"),
       row("typical_growth_potentials_for_the_core_archetype", "Growth Potentials"),

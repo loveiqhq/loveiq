@@ -44,7 +44,7 @@ describe("V4Part1", () => {
     expect(
       screen.getByText(/congratulations on having the courage to look inward/)
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "What shaped this report" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What Shaped This Report" })).toBeInTheDocument();
     expect(container.querySelectorAll(".rv4-chapter")).toHaveLength(2);
     expect(container.querySelector(".rv3-method.is-v4")).toBeInTheDocument();
   });
@@ -57,7 +57,7 @@ describe("V4Part1", () => {
   it("does not render the science section's heading twice", () => {
     // 1:185 IS that heading as a chapter, so V3Methodology must not repeat it.
     render(<V4Part1 />);
-    expect(screen.getAllByText("What shaped this report")).toHaveLength(1);
+    expect(screen.getAllByText(/^what shaped this report$/i)).toHaveLength(1);
   });
 });
 

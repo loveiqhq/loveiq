@@ -72,8 +72,8 @@ describe("V4PartHeading — the glow blooms in when the heading reaches the scre
   const HEADING: Report3PartHeading = {
     eyebrow: "Part 5",
     number: "5",
-    lead: "How you ",
-    accent: "connect",
+    lead: "How You ",
+    accent: "Connect",
   };
   const part = (root: ParentNode) => root.querySelector(".rv4-part")!;
 
@@ -142,8 +142,8 @@ describe("V4PartHeading — 'Part' and its number (29.09)", () => {
       "Part 5",
       "Part 6",
     ]);
-    // 38:1515 — "How you connect", in lower case.
-    expect(REPORT_V4_PARTS[4]!.lead).toBe("How you ");
+    // 38:1515 types "How you connect" in lower case; the 02.10 heading rule capitalises it.
+    expect(REPORT_V4_PARTS[4]).toMatchObject({ lead: "How You ", accent: "Connect" });
   });
 
   it("sets Part 1's Welcome upright, in the near-black ink (1:174)", async () => {
@@ -256,7 +256,7 @@ describe("V4PartHeading — no part introductions (sync 01.10)", () => {
     expect(part).toHaveClass("rv4-part--tall");
     expect(part).toHaveAttribute("data-node-id", "1:852");
     expect(part.querySelectorAll("p")).toHaveLength(1);
-    expect(part.textContent).toBe("Part 3How your archetype works");
+    expect(part.textContent).toBe("Part 3How Your Archetype Works");
   });
 
   it("keeps Part II on the 148 stage", async () => {

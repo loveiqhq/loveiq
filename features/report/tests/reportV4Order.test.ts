@@ -131,11 +131,11 @@ describe("the V4 chapter order", () => {
   it("numbers V4's drawer parts 1 to 6 as the page does, with no Snapshot row", () => {
     expect(REPORT_V4_NAV_PARTS.map((p) => [p.part, p.label])).toEqual([
       ["Part 1", "Welcome"],
-      ["Part 2", "Your constellation"],
-      ["Part 3", "How your archetype works"],
-      ["Part 4", "Your erotic engine"],
-      ["Part 5", "How you connect"],
-      ["Part 6", "Your edges"],
+      ["Part 2", "Your Constellation"],
+      ["Part 3", "How Your Archetype Works"],
+      ["Part 4", "Your Erotic Engine"],
+      ["Part 5", "How You Connect"],
+      ["Part 6", "Your Edges"],
     ]);
     // 30.09: the Snapshot's four chapters moved into the pre-report wizard's map. Marcus,
     // 01.10: "any reason this part only has one chapter? And it's a bit that it doesn't
@@ -170,10 +170,10 @@ describe("the V4 chapter order", () => {
     ).toBe("3.1");
   });
 
-  it("opens the nav on Part 1 · Welcome: the Introduction and What shaped this report", () => {
+  it("opens the nav on Part 1 · Welcome: the Introduction and What Shaped This Report", () => {
     expect(REPORT_V4_NAV_PARTS[0]!.items).toEqual([
       { label: "Introduction", id: "introduction" },
-      { label: "What shaped this report", id: "what_shaped_this_report" },
+      { label: "What Shaped This Report", id: "what_shaped_this_report" },
     ]);
     // The scroll-spy walks V4's own list, the Welcome's anchors first.
     expect(REPORT_V4_NAV_IDS).toEqual(REPORT_V4_NAV_PARTS.flatMap((p) => p.items.map((i) => i.id)));
@@ -210,11 +210,12 @@ describe("the V4 chapter order", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  it("sets Part 4's heading as 1:990 does: 'Your' upright, 'erotic engine' in the accent", () => {
+  // 1:990 types "erotic engine" in lower case; the 02.10 heading rule capitalises it.
+  it("sets Part 4's heading as 1:990 does: 'Your' upright, 'Erotic Engine' in the accent", () => {
     expect(REPORT_V4_PARTS[3]).toMatchObject({
       eyebrow: "Part 4",
       lead: "Your ",
-      accent: "erotic engine",
+      accent: "Erotic Engine",
     });
   });
 
