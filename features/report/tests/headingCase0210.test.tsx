@@ -10,6 +10,7 @@ import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildPartnership } from "@/data/report3-partnership";
 import { REPORT_V4_TYPICAL_BELIEFS, buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { titleCase } from "@features/report/logic/titleCase";
+import ReportStickyUnlockBar from "@features/report/ui/ReportStickyUnlockBar";
 import { reportThemes } from "@features/report/ui/reportTheme";
 import CoreArchetypeSection from "@features/report/ui/sections/CoreArchetypeSection";
 import V3ArchetypeCard from "@features/report/ui/v3/V3ArchetypeCard";
@@ -17,6 +18,7 @@ import V3Methodology from "@features/report/ui/v3/V3Methodology";
 import V4Accelerators from "@features/report/ui/v3/V4Accelerators";
 import V4Fantasy from "@features/report/ui/v3/V4Fantasy";
 import V4Partnership from "@features/report/ui/v3/V4Partnership";
+import V4PremiumCard from "@features/report/ui/v3/V4PremiumCard";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import { V4_ARTICLE_LABEL, V4_PRACTICE_TITLE } from "@features/report/ui/v3/v4CardsFromV2";
 import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
@@ -170,5 +172,21 @@ describe("the archetype cards follow the 02.10 heading rule", () => {
     );
     expect(labels).toHaveLength(10);
     labels.forEach(follows);
+  });
+});
+
+describe("the paywall card and V4's sticky footer follow the 02.10 heading rule", () => {
+  it("in the card's title and its guarantee", () => {
+    const { container } = render(<V4PremiumCard />);
+    const heads = texts(container, ".rv4-premium__title, .rv4-premium__guarantee-head");
+    expect(heads).toHaveLength(2);
+    heads.forEach(follows);
+  });
+
+  it("in the footer's guarantee, phone and desktop", () => {
+    const { container } = render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} v4 />);
+    const heads = texts(container, ".report-sticky-unlock__badge-head");
+    expect(heads).toHaveLength(2);
+    heads.forEach(follows);
   });
 });

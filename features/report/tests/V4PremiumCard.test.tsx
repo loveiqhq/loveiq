@@ -44,16 +44,16 @@ describe("V4PremiumCard — the gate card (1015:1207)", () => {
       "/report/v3/locks/lock-14.svg"
     );
     expect(within(card as HTMLElement).getByRole("heading").textContent).toBe(
-      "Unlock full insights!"
+      "Unlock Full Insights!"
     );
     expect(screen.queryByText("Premium content")).toBeNull();
   });
 
   it("keeps the 14-day guarantee the rest of the site promises", () => {
     const { container } = render(<V4PremiumCard />);
-    expect(screen.getByText("14-day money-back")).toBeTruthy();
+    expect(screen.getByText("14-Day Money-Back")).toBeTruthy();
     expect(screen.getByText("Guaranteed, no questions asked.")).toBeTruthy();
-    expect(container.textContent).not.toMatch(/7-day/);
+    expect(container.textContent).not.toMatch(/7-day/i);
   });
 
   it("draws the frame's new shield and tick", () => {

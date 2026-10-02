@@ -198,8 +198,8 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     expect(container.querySelector(".rv4-learn__fade")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show all of the article" })).toBeTruthy();
     // Mark's 29.09 card (1015:1232), with the 14-day guarantee (Fatih, 29.09).
-    expect(screen.getByText("Unlock full insights!")).toBeTruthy();
-    expect(screen.getByText("14-day money-back")).toBeTruthy();
+    expect(screen.getByText("Unlock Full Insights!")).toBeTruthy();
+    expect(screen.getByText("14-Day Money-Back")).toBeTruthy();
     expect(screen.getByText("Guaranteed, no questions asked.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Unlock Report" })).toBeTruthy();
   });

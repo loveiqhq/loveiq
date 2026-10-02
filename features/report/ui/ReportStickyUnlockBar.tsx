@@ -46,7 +46,7 @@ const GuaranteeBadge: FC<{ nodeId: string }> = ({ nodeId }) => (
       <Image src="/report/v3/premium/footer-tick.svg" alt="" width={9} height={11} unoptimized />
     </span>
     <span className="report-sticky-unlock__badge-text">
-      <span className="report-sticky-unlock__badge-head">14-day money-back</span>
+      <span className="report-sticky-unlock__badge-head">14-Day Money-Back</span>
       <span className="report-sticky-unlock__badge-sub">Guaranteed, no questions asked.</span>
     </span>
   </div>
