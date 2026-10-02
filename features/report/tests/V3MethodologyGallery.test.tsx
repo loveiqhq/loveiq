@@ -21,11 +21,11 @@ import { nearestSciStop, sciStops } from "@features/report/ui/v3/useSciPager";
 const V4_TITLES = [
   "Neuroscience",
   "Psychology",
-  "Relationship research",
+  "Relationship Research",
   "Sexology",
-  "Behavioral science",
-  "Attachment research",
-  "Therapy rooms",
+  "Behavioral Science",
+  "Attachment Research",
+  "Therapy Rooms",
 ];
 
 describe("sciStops", () => {
@@ -179,9 +179,9 @@ describe("the desktop gallery's pager", () => {
     expect(pips(container).map((p) => p.getAttribute("aria-label"))).toEqual([
       "Show Neuroscience",
       "Show Psychology",
-      "Show Relationship research",
+      "Show Relationship Research",
       "Show Sexology",
-      "Show Therapy rooms",
+      "Show Therapy Rooms",
     ]);
   });
 
@@ -281,7 +281,7 @@ describe("the desktop gallery's pager", () => {
     act(() => resize?.());
     expect(pips(container)).toHaveLength(6);
     // The 620 column's end stop, 1307, brings in the last tile.
-    expect(pips(container).at(-1)!.getAttribute("aria-label")).toBe("Show Therapy rooms");
+    expect(pips(container).at(-1)!.getAttribute("aria-label")).toBe("Show Therapy Rooms");
     fireEvent.click(pips(container).at(-1)!);
     expect(track.scrollTo).toHaveBeenLastCalledWith({ left: 1307, behavior: "smooth" });
   });
