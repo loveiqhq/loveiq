@@ -103,6 +103,20 @@ describe("the chapter-body cards, centred in their gates on desktop (review 30.0
     }
   });
 
+  // Review of the archetypes' copy, 02.10: the other thirteen archetypes' "Common
+  // challenges" run shorter past the wall than Spark Seeker's, so from 1024 nine of their
+  // A&B gates came out at 262-355, under the 363 card. At their top, the cards ran up to 85
+  // into "Try this", which painted over their button. Each gate now holds its card.
+  it("keeps each chapter body's gate at least as tall as its card from 700px", () => {
+    const css = block();
+    for (const gate of ["tb", "ab", "cip", "fvr"]) {
+      const selector = `.rv3.rv4 .rv4-${gate}__gate {`;
+      const at = css.indexOf(selector);
+      expect(at, selector).toBeGreaterThan(-1);
+      expect(css.slice(at, css.indexOf("}", at)), selector).toContain("min-height: 363px;");
+    }
+  });
+
   // Measured on the page: A&B's card lands 76 into its 515 gate from 1024 (165.5 into
   // 694 at 700), Typical Beliefs' 233.5 into its 830 (was 384), CiP's about where its
   // frame's 303 had it, and FvR's 35-47 lower than its 258.
