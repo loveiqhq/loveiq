@@ -52,13 +52,14 @@ export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
   { eyebrow: "Part 1", number: "1", lead: "", accent: "Welcome", tone: "ink", upright: true },
   // 1:486
   { eyebrow: "Part 2", number: "2", lead: "Your ", accent: "Constellation", leadItalic: true },
-  // 1:852
-  { eyebrow: "Part 3", number: "3", lead: "How your archetype ", accent: "works", tall: true },
-  // 1:990 — "Your " upright in ink, "erotic engine" in the accent, lower-case.
-  { eyebrow: "Part 4", number: "4", lead: "Your ", accent: "erotic engine", tall: true },
-  // 38:1515 — "How you connect", lower-case.
-  { eyebrow: "Part 5", number: "5", lead: "How you ", accent: "connect", tall: true },
-  { eyebrow: "Part 6", number: "6", lead: "Your ", accent: "edges", tall: true },
+  // 1:852. Parts 3–6 are typed in lower case in their frames; the 02.10 sync's heading
+  // rule (logic/titleCase.ts) capitalises them, and Figma keeps its old case.
+  { eyebrow: "Part 3", number: "3", lead: "How Your Archetype ", accent: "Works", tall: true },
+  // 1:990 — "Your " upright in ink, "Erotic Engine" in the accent.
+  { eyebrow: "Part 4", number: "4", lead: "Your ", accent: "Erotic Engine", tall: true },
+  // 38:1515
+  { eyebrow: "Part 5", number: "5", lead: "How You ", accent: "Connect", tall: true },
+  { eyebrow: "Part 6", number: "6", lead: "Your ", accent: "Edges", tall: true },
 ];
 
 /**
