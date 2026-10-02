@@ -95,3 +95,29 @@ describe("Report 2.0's rows from 700px", () => {
     expect(rule(css, ".rv3.rv4 .report-lovelang__meter")).toMatch(/width:\s*169\.27px/);
   });
 });
+
+describe("Report 2.0's phone stat card under the Reward rows (8632:1501)", () => {
+  it("is white with a lavender hairline and 2.0's radius, padding and shadow", () => {
+    const r = rule(block(PHONE), ".rv3.rv4 .report-reward__stat");
+    expect(r).toMatch(/background:\s*#ffffff/);
+    expect(r).toMatch(/border:\s*1\.01px solid rgba\(157, 138, 215, 0\.35\)/);
+    expect(r).toMatch(/border-radius:\s*24\.23px/);
+    expect(r).toMatch(/padding:\s*18\.17px 19\.18px 27\.25px/);
+    expect(r).toMatch(/box-shadow:\s*0 20\.19px 50\.47px rgba\(22, 16, 33, 0\.06\)/);
+  });
+
+  it("carries 2.0's gradient bar along its top, 15.14 in from each side", () => {
+    const r = rule(block(PHONE), ".rv3.rv4 .report-reward__stat::before");
+    expect(r).toMatch(/left:\s*15\.14px/);
+    expect(r).toMatch(/right:\s*15\.14px/);
+    expect(r).toMatch(/height:\s*2\.52px/);
+    expect(r).toMatch(/linear-gradient\(90deg, #e9d5ff 0%, #9d8ad7 55%, #795fc8 100%\)/);
+  });
+
+  it("draws the phone's 14.13 dots and 11.1 lines", () => {
+    const css = block(PHONE);
+    expect(rule(css, ".rv3.rv4 .report-reward__stat-dots")).toMatch(/height:\s*14\.13px/);
+    expect(rule(css, ".rv3.rv4 .report-reward__stat-num")).toMatch(/font-size:\s*11\.1px/);
+    expect(rule(css, ".rv3.rv4 .report-reward__stat-caption")).toMatch(/line-height:\s*14\.99px/);
+  });
+});

@@ -8493,6 +8493,41 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     font-size: 14.5px;
     line-height: 1.65;
   }
+  /* 8632:1501 — 2.0's phone stat card: white, a lavender hairline and a gradient bar along
+   * its top, 15.14 in from each side; the desktop keeps its gradient-stroked pill. */
+  .rv3.rv4 .report-reward__stat {
+    position: relative;
+    gap: 7.07px;
+    padding: 18.17px 19.18px 27.25px;
+    border: 1.01px solid rgba(157, 138, 215, 0.35);
+    border-radius: 24.23px;
+    background: #ffffff;
+    box-shadow: 0 20.19px 50.47px rgba(22, 16, 33, 0.06);
+    overflow: hidden;
+  }
+  .rv3.rv4 .report-reward__stat::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 15.14px;
+    right: 15.14px;
+    height: 2.52px;
+    border-radius: 0 0 3.03px 3.03px;
+    background: linear-gradient(90deg, #e9d5ff 0%, #9d8ad7 55%, #795fc8 100%);
+  }
+  .rv3.rv4 .report-reward__stat-dots {
+    height: 14.13px;
+    margin: 0;
+  }
+  .rv3.rv4 .report-reward__stat-num {
+    font-size: 11.1px;
+    letter-spacing: 1.44px;
+    line-height: 18.32px;
+  }
+  .rv3.rv4 .report-reward__stat-caption {
+    font-size: 11.1px;
+    line-height: 14.99px;
+  }
 }
 
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
