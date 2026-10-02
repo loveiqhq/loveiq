@@ -79,7 +79,7 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
     part: "Part 2",
     label: "Your constellation",
     rows: [
-      row("top_archetypes", "Highest Archetypes Scores"),
+      row("top_archetypes", "3 Highest Scoring Archetypes"),
       row("core_archetype", "Core Archetype"),
     ],
   },

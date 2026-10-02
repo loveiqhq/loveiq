@@ -67,7 +67,7 @@ describe("report4ArchetypeBlurbs — Sanjin's descriptions, all fourteen", () =>
 });
 
 describe("V4TopThreeSection — Part 2's first nav row lands on it (01.10)", () => {
-  it("carries the nav's anchor, the id of the row 'Highest Archetypes Scores'", async () => {
+  it("carries the nav's anchor, the id of the row '3 Highest Scoring Archetypes'", async () => {
     const { REPORT_V4_NAV_PARTS } = await import("@features/report/ui/v3/reportV3Nav");
     const { container } = render(<V4TopThreeSection />);
     const section = container.querySelector("section.rv4-top3")!;

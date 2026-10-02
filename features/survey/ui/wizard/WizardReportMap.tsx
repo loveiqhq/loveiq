@@ -108,11 +108,14 @@ const DrawerRow: FC<{ row: WizardDrawerRow; step: number }> = ({ row, step }) =>
           />
         </span>
       ) : null}
+      {/* 1049:1832 as Mark set it on 02.10 ("Font color match"; the sync: "let's just find
+       * one color and stick to it"): the free and featured rows SemiBold, the locked ones
+       * Regular, every label #3f3a4d, the current row's too; its wash and dot mark it. */}
       <span
         className={`min-w-0 flex-1 truncate text-[7px] leading-[9.81px] ${
-          row.badge === "open" ? "font-semibold" : "font-normal"
+          row.badge === "locked" ? "font-normal" : "font-semibold"
         }`}
-        style={{ fontFamily: JAKARTA, color: isCoreArchetype ? "#161021" : "#3f3a4d" }}
+        style={{ fontFamily: JAKARTA, color: "#3f3a4d" }}
       >
         {row.label}
       </span>
