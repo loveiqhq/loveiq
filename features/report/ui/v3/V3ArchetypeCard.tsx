@@ -41,9 +41,10 @@ const METER_STOPS: ReadonlyArray<{ level: Report3MeterLevel; label: string }> = 
 ];
 /**
  * 870:7211, under "Core motivation" — Mark added it on 28.09 (1943978820), in the manner
- * of the deck cards' "How desire gets spoken". Chrome, the same for every archetype.
+ * of the deck cards' "How desire gets spoken". Chrome, the same for every archetype. The
+ * card's labels are in the 02.10 sync's heading case (logic/titleCase.ts).
  */
-const CORE_MOTIVATION_SUB = "What drives your desire";
+const CORE_MOTIVATION_SUB = "What Drives Your Desire";
 
 interface Props {
   archetype: ArchetypeName;
@@ -124,7 +125,7 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
             </span>
             <span className="rv3-arch__motive-labels" data-node-id="15:839">
               <span className="rv3-arch__motive-label" data-node-id="15:841">
-                Core motivation
+                Core Motivation
               </span>
               <span className="rv3-arch__motive-sub" data-node-id="870:7211">
                 {CORE_MOTIVATION_SUB}

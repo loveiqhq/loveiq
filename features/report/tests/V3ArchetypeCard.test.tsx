@@ -71,9 +71,9 @@ describe("V3ArchetypeCard", () => {
   it("heads core motivation with its label over 'What drives your desire', the value below", () => {
     const { container } = renderCard();
     const labels = container.querySelector(".rv3-arch__motive-labels");
-    expect(labels?.querySelector(".rv3-arch__motive-label")?.textContent).toBe("Core motivation");
+    expect(labels?.querySelector(".rv3-arch__motive-label")?.textContent).toBe("Core Motivation");
     expect(labels?.querySelector(".rv3-arch__motive-sub")?.textContent).toBe(
-      "What drives your desire"
+      "What Drives Your Desire"
     );
     // 15:843 left the labels for a row of its own under the head (15:832).
     expect(labels?.querySelector(".rv3-arch__motive-value")).toBeNull();

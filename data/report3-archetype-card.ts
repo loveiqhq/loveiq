@@ -56,7 +56,7 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
   "Spark Seeker": {
     tagline: "\u201CFind the spark. Fuel the fire. Keep the heat\u201D",
     coreMotivation: {
-      value: "Pleasure & play",
+      value: "Pleasure & Play",
       body: "Sex is about a sense of aliveness, not milestones. The moment it starts feeling like a duty, sex loses its point.",
     },
     // Supportive sentences as reworked by Sanjin and approved by Mark on
@@ -66,35 +66,35 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
       {
         key: "communication",
         title: "Communication",
-        subtitle: "how desire gets spoken",
+        subtitle: "How Desire Gets Spoken",
         value: "Charming",
         body: "Words are part of the foreplay and so is a little tease. Charm and whit are ways attraction is built and intimacy is initiated.",
       },
       {
         key: "initiation",
         title: "Initiation",
-        subtitle: "who makes the first move",
+        subtitle: "Who Makes the First Move",
         value: "Active",
         body: "You make the first move often, and the move itself is part of the pleasure. What matters most is feeling that your interest is met with genuine enthusiasm.",
       },
       {
         key: "attachment",
         title: "Attachment",
-        subtitle: "how closeness is held",
-        value: "Avoidant / secure",
+        subtitle: "How Closeness Is Held",
+        value: "Avoidant / Secure",
         body: "Closeness is comfortable while it stays voluntary. When it starts to feel owed, you may begin to pull back or create some distance.",
       },
       {
         key: "power",
         title: "Power",
-        subtitle: "who takes the lead",
+        subtitle: "Who Takes the Lead",
         value: "Switch",
         body: "You will take the lead or hand it over, and the choosing is the turn-on. What you avoid is a position that never moves.",
       },
     ],
     meters: [
-      { label: "Risk orientation", level: "high" },
-      { label: "Typical confidence", level: "high" },
+      { label: "Risk Orientation", level: "high" },
+      { label: "Typical Confidence", level: "high" },
     ],
   },
 };

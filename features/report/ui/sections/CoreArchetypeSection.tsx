@@ -130,7 +130,7 @@ const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
 
         {/* Body */}
         <div className="report-hero-card__content">
-          <p className="report-hero-card__label">Behavioral tendencies:</p>
+          <p className="report-hero-card__label">Behavioral Tendencies:</p>
 
           <div className="report-hero-card__motivation">
             <div className="report-hero-card__motivation-icon" aria-hidden="true">
@@ -159,33 +159,33 @@ const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
               </svg>
             </div>
             <div className="report-hero-card__motivation-copy">
-              <p className="report-hero-card__motivation-label">Core motivation:</p>
+              <p className="report-hero-card__motivation-label">Core Motivation:</p>
               <p className="report-hero-card__motivation-value">{theme.motivation}</p>
             </div>
           </div>
 
           <div className="report-hero-card__traits">
             <TraitItem
-              label="Communication — how desire gets spoken"
+              label="Communication — How Desire Gets Spoken"
               value={hero?.traits?.communication ?? theme.communication}
               sub={heroSubs?.communication}
               icon={TraitIcons.communication}
             />
             <TraitItem
-              label="Initiation — how sex gets started"
+              label="Initiation — How Sex Gets Started"
               value={hero?.traits?.initiation ?? theme.initiation}
               sub={heroSubs?.initiation}
               icon={TraitIcons.initiation}
             />
             <TraitItem
-              label="Attachment — how closeness feels"
+              label="Attachment — How Closeness Feels"
               value={hero?.traits?.attachment ?? theme.attachment}
               sub={heroSubs?.attachment}
               icon={TraitIcons.attachment}
               iconClassName="report-trait__icon report-trait__icon--attachment"
             />
             <TraitItem
-              label="Power — who leads, who yields"
+              label="Power — Who Leads, Who Yields"
               value={hero?.traits?.power ?? theme.powerOrientation}
               sub={heroSubs?.power}
               icon={TraitIcons.powerOrientation}
@@ -194,12 +194,12 @@ const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
 
           <div className="report-hero-card__progress">
             <ProgressRow
-              label="Risk orientation"
+              label="Risk Orientation"
               segments={hero?.risk_segments ?? theme.riskSegments}
               value={theme.riskOrientation}
             />
             <ProgressRow
-              label="Typical confidence"
+              label="Typical Confidence"
               segments={hero?.confidence_segments ?? theme.confidenceSegments}
               value={theme.confidence}
             />
