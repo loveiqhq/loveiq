@@ -26,6 +26,7 @@ import {
   gate,
   splitRamp,
   veilText,
+  withCuts,
   type Report3GatedCopy,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
@@ -394,13 +395,15 @@ export function buildAccelerators(
 ): Report3AcceleratorsView | null {
   const copy = REPORT_V4_ACCELERATORS[archetype];
   if (!copy) return null;
-  const cuts: Report3AcceleratorsCuts = {
-    freeRows: ACCELERATORS_FREE_ROWS,
-    challengesFree: ACCELERATORS_CHALLENGES_FREE_BLOCKS,
-    practiceFree: ACCELERATORS_PRACTICE_FREE_BLOCKS,
-    practiceRampThrough: ACCELERATORS_PRACTICE_RAMP_THROUGH,
-    ...copy.cuts,
-  };
+  const cuts: Report3AcceleratorsCuts = withCuts(
+    {
+      freeRows: ACCELERATORS_FREE_ROWS,
+      challengesFree: ACCELERATORS_CHALLENGES_FREE_BLOCKS,
+      practiceFree: ACCELERATORS_PRACTICE_FREE_BLOCKS,
+      practiceRampThrough: ACCELERATORS_PRACTICE_RAMP_THROUGH,
+    },
+    copy.cuts
+  );
   const lockedFrom = locked ? cuts.freeRows : null;
   // The ramp row (index lockedFrom) is legible at its sharp end, so only the rows
   // under the full blur are veiled.

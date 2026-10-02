@@ -142,6 +142,7 @@ const SPARK_PANELS: Report3BeliefPanels = {
 import {
   gate,
   veilText,
+  withCuts,
   type Report3GatedCopy,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
@@ -449,12 +450,14 @@ export function buildTypicalBeliefs(
 ): Report3TypicalBeliefsView | null {
   const copy = REPORT_V4_TYPICAL_BELIEFS[archetype];
   if (!copy) return null;
-  const cuts: Report3TypicalBeliefsCuts = {
-    freeRows: TYPICAL_BELIEFS_FREE_ROWS,
-    challengesFree: TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
-    practiceFree: TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
-    ...copy.cuts,
-  };
+  const cuts: Report3TypicalBeliefsCuts = withCuts(
+    {
+      freeRows: TYPICAL_BELIEFS_FREE_ROWS,
+      challengesFree: TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
+      practiceFree: TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
+    },
+    copy.cuts
+  );
   const lockedFrom = locked ? cuts.freeRows : null;
   const underFullBlur = (i: number) => lockedFrom !== null && i > lockedFrom;
   return {
