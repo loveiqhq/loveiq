@@ -8943,6 +8943,21 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   .rv3.rv4 .rv4-fvr__gate .rv4-premium {
     top: max(0px, (100% - 363px) / 2);
   }
+  /* The archetypes' copy, 02.10: the other thirteen's "Common challenges" run shorter past
+   * the wall, so a gate could come out under its 363 card (nine A&B gates at 262-355 from
+   * 1024), and the card, at its top, ran into "Try this". Each gate holds its card. */
+  .rv3.rv4 .rv4-tb__gate {
+    min-height: 363px;
+  }
+  .rv3.rv4 .rv4-ab__gate {
+    min-height: 363px;
+  }
+  .rv3.rv4 .rv4-cip__gate {
+    min-height: 363px;
+  }
+  .rv3.rv4 .rv4-fvr__gate {
+    min-height: 363px;
+  }
 }
 /* From 700px too: below it the dots are the phone's lines. */
 @media (min-width: 700px) and (hover: hover) and (pointer: fine) {
