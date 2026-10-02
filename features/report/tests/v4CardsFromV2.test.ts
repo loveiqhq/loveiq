@@ -142,7 +142,7 @@ describe("v4CardsFromV2 — the Go deeper article", () => {
   it("fills V4's article from the 2.0 panel: fixed label, reading time, teaser then body, nothing gated", () => {
     const article = v4CardsFromV2({ powerCopy: POWER }).cards.get("power_orientation")!.article!;
     expect(article.label).toBe(V4_ARTICLE_LABEL);
-    expect(article.label).toBe("Learn more & go deeper");
+    expect(article.label).toBe("Learn More & Go Deeper");
     expect(article.eyebrow).toBe("Reading time: ~1 min.");
     expect(article.free[0]).toEqual({ kind: "para", runs: [{ text: POWER["edu.teaser"] }] });
     expect(textOf(article.free)).toContain("Yielding has its own power.");
@@ -220,7 +220,7 @@ describe("v4CardsFromV2 — the Try this card", () => {
       "core_insecurities"
     )!.practice!;
     expect(practice.title).toBe(V4_PRACTICE_TITLE);
-    expect(practice.title).toBe("Try this & see what shifts");
+    expect(practice.title).toBe("Try This & See What Shifts");
     expect(practice.eyebrow).toBe("Working with your sensitivity: three moves");
     expect(practice.locked).toBe(false);
     expect(practice.free.map((b) => (b.kind === "para" ? b.runs[0]!.text : ""))).toEqual([

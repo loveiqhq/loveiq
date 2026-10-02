@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_PARTS } from "@/data/report3-archetype-page";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildPartnership } from "@/data/report3-partnership";
 import { REPORT_V4_TYPICAL_BELIEFS, buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { titleCase } from "@features/report/logic/titleCase";
@@ -13,6 +14,7 @@ import V4Accelerators from "@features/report/ui/v3/V4Accelerators";
 import V4Fantasy from "@features/report/ui/v3/V4Fantasy";
 import V4Partnership from "@features/report/ui/v3/V4Partnership";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
+import { V4_ARTICLE_LABEL, V4_PRACTICE_TITLE } from "@features/report/ui/v3/v4CardsFromV2";
 import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 
@@ -80,3 +82,26 @@ describe.each(Object.keys(REPORT_V4_TYPICAL_BELIEFS))(
     });
   }
 );
+
+// The practice card's title and the article card's label are set as a label, not an h
+// element, so they are read from the data each card is drawn from.
+describe("the Try This and Learn More cards follow the 02.10 heading rule", () => {
+  it("in every archetype's four practices", () => {
+    for (const name of Object.keys(REPORT_V4_TYPICAL_BELIEFS)) {
+      for (const build of [
+        buildTypicalBeliefs,
+        buildAccelerators,
+        buildPartnership,
+        buildFantasy,
+      ]) {
+        follows(build(name, { locked: false })!.practice.title);
+      }
+    }
+  });
+
+  it("in every article, and in the cards Report 2.0's chapters take", () => {
+    for (const article of Object.values(REPORT_V4_LEARN_MORE)) follows(article.label);
+    follows(V4_PRACTICE_TITLE);
+    follows(V4_ARTICLE_LABEL);
+  });
+});

@@ -66,7 +66,7 @@ describe("the authored copy (read off 310:229 / 374:304 / 377:221)", () => {
     expect(SPARK.challenges).toHaveLength(7);
     expect(SPARK.practice).toHaveLength(7);
     expect(SPARK.practiceEyebrow).toBe("Practice time: ~12 min.");
-    expect(SPARK.practiceTitle).toBe("Try this & see what shifts");
+    expect(SPARK.practiceTitle).toBe("Try This & See What Shifts");
   });
 
   it("keeps the frame's double space in the intro, where a browser would collapse it", () => {

@@ -655,7 +655,7 @@ describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)
       {
         practice: {
           eyebrow: "Working with your sensitivity: three moves",
-          title: "Try this & see what shifts",
+          title: "Try This & See What Shifts",
           locked: false,
           free: [{ kind: "para" as const, runs: [{ text: "Three small moves." }] }],
           ramp: null,
@@ -663,7 +663,7 @@ describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)
         },
         article: {
           eyebrow: "Reading time: ~1 min.",
-          label: "Learn more & go deeper",
+          label: "Learn More & Go Deeper",
           free: [{ kind: "para" as const, runs: [{ text: "Why it matters." }] }],
           gated: null,
           gatedBlockCount: 0,
@@ -710,8 +710,8 @@ describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)
       "rv4-try",
       "rv4-learn",
     ]);
-    expect(extras.querySelector(".rv4-try__label")!.textContent).toBe("Try this & see what shifts");
-    expect(extras.querySelector(".rv4-learn__label")!.textContent).toBe("Learn more & go deeper");
+    expect(extras.querySelector(".rv4-try__label")!.textContent).toBe("Try This & See What Shifts");
+    expect(extras.querySelector(".rv4-learn__label")!.textContent).toBe("Learn More & Go Deeper");
   });
 
   it("keeps the 2.0 section's own title hidden at the depth the frozen rule needs", () => {

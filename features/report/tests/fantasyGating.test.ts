@@ -123,7 +123,7 @@ describe("the authored copy (304:291 / 368:1920 / 441:6187)", () => {
 
   it("carries the practice's ten paragraphs and its three bold passages", () => {
     expect(SPARK.practiceEyebrow).toBe("Practice time: ~8 min.");
-    expect(SPARK.practiceTitle).toBe("Try this & see what shifts");
+    expect(SPARK.practiceTitle).toBe("Try This & See What Shifts");
     expect(SPARK.practice).toHaveLength(10);
     expect(textOf(SPARK.practice[0]!)).toBe(
       "Understanding fantasy does not require decoding every image or finding a hidden explanation for it. The goal is simpler: learn to separate what happens in the fantasy from what makes it appealing."
@@ -288,7 +288,7 @@ describe("buildFantasy — the practice (441:6168 open, 441:6188 gated)", () => 
     expect(practice.ramp).toBeNull();
     expect(practice.rest).toEqual([]);
     expect(practice.eyebrow).toBe("Practice time: ~8 min.");
-    expect(practice.title).toBe("Try this & see what shifts");
+    expect(practice.title).toBe("Try This & See What Shifts");
     expect(practice.teaser).toEqual(SPARK.practice.slice(0, 2));
   });
 

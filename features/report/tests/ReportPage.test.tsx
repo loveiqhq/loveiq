@@ -1692,7 +1692,7 @@ describe("ReportPage", () => {
       expect(power.querySelector(".report-power__card")).not.toBeNull();
       expect(power.querySelector(".report-power__details")).toBeNull();
       const learn = power.querySelector(".rv4-chapter__extras .rv4-learn")!;
-      expect(learn.querySelector(".rv4-learn__label")!.textContent).toBe("Learn more & go deeper");
+      expect(learn.querySelector(".rv4-learn__label")!.textContent).toBe("Learn More & Go Deeper");
       expect(learn.textContent).toContain(POWER["edu.teaser"]);
       const inner = power.querySelector(".rv3-chapter__body-inner")!;
       expect([...inner.children].map((el) => el.className.split(" ")[0])).toEqual([
@@ -1712,7 +1712,7 @@ describe("ReportPage", () => {
       expect(chapter.querySelector(".report-insecurities__details")).toBeNull();
       const practice = chapter.querySelector(".rv4-chapter__extras .rv4-try")!;
       expect(practice.querySelector(".rv4-try__label")!.textContent).toBe(
-        "Try this & see what shifts"
+        "Try This & See What Shifts"
       );
       expect(practice.querySelector(".rv4-try__eyebrow")!.textContent).toBe(
         INSECURITIES["practical.label"]

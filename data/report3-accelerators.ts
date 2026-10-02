@@ -246,7 +246,7 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
 
     // 374:308 / 374:317
     practiceEyebrow: "Practice time: ~12 min.",
-    practiceTitle: "Try this & see what shifts",
+    practiceTitle: "Try This & See What Shifts",
     // 374:323 — every step lead ends in a line break. The frame runs the fourth on;
     // Mark's resolved comment on Sanjin's doc asks for the break after each bold lead.
     practice: [
@@ -365,7 +365,7 @@ export const ACCELERATORS_PRACTICE_RAMP_THROUGH = "harder to respond?”";
 
 /** The universal titles, and Spark Seeker's practice time: the defaults. */
 export const ACCELERATORS_CHALLENGES_TITLE = "Common Challenges";
-export const ACCELERATORS_PRACTICE_TITLE = "Try this & see what shifts";
+export const ACCELERATORS_PRACTICE_TITLE = "Try This & See What Shifts";
 export const ACCELERATORS_PRACTICE_EYEBROW = "Practice time: ~12 min.";
 
 /** A row under the lock: as written, or its decoy (lockedBlurCopy.ts). */

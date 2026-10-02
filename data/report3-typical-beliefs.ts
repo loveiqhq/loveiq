@@ -294,7 +294,7 @@ const SPARK_CHALLENGES: readonly Report3Block[] = [
  * so it is regular here too — flagged for Mark rather than "fixed". */
 
 export const TYPICAL_BELIEFS_PRACTICE_EYEBROW = "Practice time: ~15 min.";
-export const TYPICAL_BELIEFS_PRACTICE_TITLE = "Try this & see what shifts";
+export const TYPICAL_BELIEFS_PRACTICE_TITLE = "Try This & See What Shifts";
 
 const SPARK_PRACTICE: readonly Report3Block[] = [
   p(

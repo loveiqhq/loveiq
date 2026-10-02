@@ -27,10 +27,10 @@ import { splitEduLabel } from "../sections/eduPara";
  * purpose: production serves browser source maps.
  */
 
-/** 374:224's title, the same on every V4 practice. */
-export const V4_PRACTICE_TITLE = "Try this & see what shifts";
-/** 153:2253's label, the same on every V4 article. */
-export const V4_ARTICLE_LABEL = "Learn more & go deeper";
+/** 374:224's title, the same on every V4 practice, in the 02.10 sync's heading case. */
+export const V4_PRACTICE_TITLE = "Try This & See What Shifts";
+/** 153:2253's label, the same on every V4 article, in the 02.10 sync's heading case. */
+export const V4_ARTICLE_LABEL = "Learn More & Go Deeper";
 
 /** An adult reading prose on a phone; the result is rounded up to whole minutes. */
 const WORDS_PER_MINUTE = 200;
