@@ -27,8 +27,12 @@ describe.each(Object.keys(REPORT_V4_TYPICAL_BELIEFS))("%s's V4 chapters", (name)
       expect(container.textContent).toContain(`The ${name} belief map`);
     });
 
-    it(`Accelerators & Brakes draws ${state}: both cards, five rows each`, () => {
-      const { container } = render(<V4Accelerators view={buildAccelerators(name, { locked })!} />);
+    it(`Accelerators & Brakes draws ${state}: both cards, from five rows each`, () => {
+      const view = buildAccelerators(name, { locked })!;
+      // A card draws a few rows and a peek until "Show all", so the five are the view's.
+      expect(view.brakes).toHaveLength(5);
+      expect(view.accelerators).toHaveLength(5);
+      const { container } = render(<V4Accelerators view={view} />);
       const cards = container.querySelectorAll(".rv4-trig");
       expect(cards).toHaveLength(2);
     });
