@@ -88,9 +88,9 @@ const ConstellationSection: FC<Props> = ({
           2026-08-21 feedback, and the gradient on `constellation,` is back per Eman —
           the italic is not, that belonged to the type that was being matched away. */}
       <h3 className="report-constellation__heading">
-        You&apos;re a <span className="report-constellation__heading-accent">constellation,</span>
+        You&apos;re a <span className="report-constellation__heading-accent">Constellation,</span>
         <br />
-        not a type
+        Not a Type
       </h3>
 
       <section className="report-constellation" aria-label="Other archetypes">

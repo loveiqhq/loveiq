@@ -102,7 +102,7 @@ export const ATTACHMENT_FAMILY_CARDS: {
   chips: { label: string; color: string }[];
 }[] = [
   {
-    title: "Secure attachment",
+    title: "Secure Attachment",
     body: "These archetypes generally feel safe with intimacy and autonomy. They can enjoy closeness without losing themselves and tolerate distance without panic. Desire is relatively stable and flexible across relationship phases.",
     chips: [
       { label: "Sensual Connector", color: "#e57373" },
@@ -113,12 +113,12 @@ export const ATTACHMENT_FAMILY_CARDS: {
     ],
   },
   {
-    title: "Anxious attachment",
+    title: "Anxious Attachment",
     body: "These archetypes are highly attuned to signs of closeness or rejection. Desire is often intertwined with reassurance, validation, and fear of loss. Sexuality can become a way to secure connection or soothe anxiety.",
     chips: [{ label: "Tender Devotee", color: "#e7b3c2" }],
   },
   {
-    title: "Avoidant attachment",
+    title: "Avoidant Attachment",
     body: "These archetypes value autonomy and emotional self-containment. They may experience closeness as threatening or overwhelming. Desire often activates through distance, novelty, or control rather than sustained emotional intimacy.",
     chips: [
       { label: "Spark Seeker", color: "#ff6a3d" },
@@ -129,7 +129,7 @@ export const ATTACHMENT_FAMILY_CARDS: {
     ],
   },
   {
-    title: "Disorganized or mixed",
+    title: "Disorganized or Mixed",
     body: "These archetypes experience closeness as both desired and threatening. Desire may surge and collapse unpredictably. Sexuality can oscillate between craving connection and needing escape, intensity, or control.",
     chips: [
       { label: "Explorer of Edges", color: "#ff2e63" },
@@ -137,7 +137,7 @@ export const ATTACHMENT_FAMILY_CARDS: {
     ],
   },
   {
-    title: "Contextual / adaptive",
+    title: "Contextual / Adaptive",
     body: "Some archetypes shift attachment expression depending on partner, power dynamics, or relational safety. Their attachment is less fixed and more situationally activated.",
     chips: [
       { label: "Spark Seeker", color: "#ff6a3d" },

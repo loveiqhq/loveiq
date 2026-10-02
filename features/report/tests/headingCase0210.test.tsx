@@ -12,6 +12,11 @@ import { REPORT_V4_TYPICAL_BELIEFS, buildTypicalBeliefs } from "@/data/report3-t
 import { titleCase } from "@features/report/logic/titleCase";
 import ReportStickyUnlockBar from "@features/report/ui/ReportStickyUnlockBar";
 import { reportThemes } from "@features/report/ui/reportTheme";
+import {
+  ATTACHMENT_FAMILY_CARDS,
+  ATTACHMENT_PATTERNS_TITLE,
+} from "@features/report/ui/sections/AttachmentPatternsSection";
+import ConstellationSection from "@features/report/ui/sections/ConstellationSection";
 import CoreArchetypeSection from "@features/report/ui/sections/CoreArchetypeSection";
 import V3ArchetypeCard from "@features/report/ui/v3/V3ArchetypeCard";
 import V3Methodology from "@features/report/ui/v3/V3Methodology";
@@ -188,5 +193,32 @@ describe("the paywall card and V4's sticky footer follow the 02.10 heading rule"
     const heads = texts(container, ".report-sticky-unlock__badge-head");
     expect(heads).toHaveLength(2);
     heads.forEach(follows);
+  });
+});
+
+describe("Report 2.0's headings that V4 shows follow the 02.10 heading rule", () => {
+  it("the Other Archetypes chapter's headline, read across its line break", () => {
+    const { container } = render(
+      <ConstellationSection
+        ranking={["Spark Seeker"]}
+        percentages={{ "Spark Seeker": 80 }}
+        mottos={{ "Spark Seeker": null }}
+        viewArchetype="Spark Seeker"
+        onViewArchetype={() => {}}
+      />
+    );
+    const heading = container.querySelector(".report-constellation__heading")!;
+    const line = Array.from(heading.childNodes, (n) => (n.nodeName === "BR" ? " " : n.textContent))
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    expect(line).toMatch(/constellation/i);
+    follows(line);
+  });
+
+  it("the Attachment chapter's five patterns, in its Learn More card", () => {
+    follows(ATTACHMENT_PATTERNS_TITLE);
+    expect(ATTACHMENT_FAMILY_CARDS).toHaveLength(5);
+    for (const card of ATTACHMENT_FAMILY_CARDS) follows(card.title);
   });
 });
