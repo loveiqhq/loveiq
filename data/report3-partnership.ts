@@ -30,6 +30,7 @@ import {
   splitRamp,
   veilBlock,
   veilText,
+  withCuts,
   type Report3GatedCopy,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
@@ -390,12 +391,14 @@ export function buildPartnership(
 ): Report3PartnershipView | null {
   const copy = REPORT_V4_PARTNERSHIP[archetype];
   if (!copy) return null;
-  const cuts: Report3PartnershipCuts = {
-    freeBlocks: PARTNERSHIP_FREE_BLOCKS,
-    rampThrough: PARTNERSHIP_RAMP_THROUGH,
-    practiceFree: PARTNERSHIP_PRACTICE_FREE_BLOCKS,
-    ...copy.cuts,
-  };
+  const cuts: Report3PartnershipCuts = withCuts(
+    {
+      freeBlocks: PARTNERSHIP_FREE_BLOCKS,
+      rampThrough: PARTNERSHIP_RAMP_THROUGH,
+      practiceFree: PARTNERSHIP_PRACTICE_FREE_BLOCKS,
+    },
+    copy.cuts
+  );
   const body = gate(copy.body, cuts.freeBlocks, locked);
   return {
     locked,

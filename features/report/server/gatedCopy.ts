@@ -73,19 +73,34 @@ export const scrambleBlock = (block: Report3Block): Report3Block => {
 export const veilBlock = (block: Report3Block): Report3Block =>
   lockedBlurIsReal() ? block : scrambleBlock(block);
 
-/** Splits a passage at `freeBlocks`: clear, ramp, then the blurred rest. */
+/**
+ * Splits a passage at `freeBlocks`: clear, ramp, then the blurred rest. A cut that is not
+ * a count fails closed, the wall at the passage's start: `slice(0, undefined)` would have
+ * put every block in the clear for a locked reader (final review, 02.10).
+ */
 export const gate = (
   blocks: readonly Report3Block[],
   freeBlocks: number,
   locked: boolean
-): Report3GatedCopy =>
-  locked
-    ? {
-        free: blocks.slice(0, freeBlocks),
-        ramp: blocks.at(freeBlocks) ?? null,
-        rest: blocks.slice(freeBlocks + 1).map(veilBlock),
-      }
-    : { free: blocks, ramp: null, rest: [] };
+): Report3GatedCopy => {
+  if (!locked) return { free: blocks, ramp: null, rest: [] };
+  const free = Number.isInteger(freeBlocks) && freeBlocks >= 0 ? freeBlocks : 0;
+  return {
+    free: blocks.slice(0, free),
+    ramp: blocks.at(free) ?? null,
+    rest: blocks.slice(free + 1).map(veilBlock),
+  };
+};
+
+/**
+ * An archetype's own cuts over the chapter's defaults. A field the record writes as
+ * `undefined` keeps its default, where a spread let it wipe the default out (final
+ * review, 02.10); `null`, no ramp anchor, is a value and stands.
+ */
+export function withCuts<T extends object>(defaults: T, own: Partial<T> | undefined): T {
+  const set = Object.entries(own ?? {}).filter(([, value]) => value !== undefined);
+  return { ...defaults, ...Object.fromEntries(set) } as T;
+}
 
 /**
  * A ramp paragraph whose tail runs on under the FULL blur.

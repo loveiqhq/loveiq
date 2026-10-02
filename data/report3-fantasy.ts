@@ -26,6 +26,7 @@ import {
   gate,
   lockedBlurIsReal,
   veilBlock,
+  withCuts,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
 import { getFantasyMapDots, type FantasyMapDot } from "@features/report/server/fantasyMap";
@@ -389,7 +390,7 @@ export function buildFantasy(
   const copy = REPORT_V4_FANTASY[archetype];
   const tendencies = reportPracticeTendencies[archetype];
   if (!copy || !tendencies) return null;
-  const { practiceFree } = { practiceFree: FANTASY_PRACTICE_FREE_BLOCKS, ...copy.cuts };
+  const { practiceFree } = withCuts({ practiceFree: FANTASY_PRACTICE_FREE_BLOCKS }, copy.cuts);
   const categories = tendencies.groups.map((group, index): Report3FantasyCategory => {
     const total = group.rows.length;
     if (!locked) {
