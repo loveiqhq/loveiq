@@ -168,6 +168,33 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
     };
   }, [dimensions.length]);
 
+  /**
+   * Review 02.10, Mark (desktop locked): "Same as the What shaped this report. Can we have
+   * the arrow and make the hidden one clickable?" A card the viewport cuts glides to the
+   * nearest stop that shows it whole, as the science gallery's cut tile does. Mouse and
+   * touch only; the pager row stays the keyboard path, so the card takes no tab stop.
+   */
+  const reveal = (index: number) => {
+    const el = viewportRef.current;
+    const slot = el?.querySelectorAll<HTMLElement>(".rv3-deck__slot")[index];
+    if (!el || !slot) return;
+    const box = el.getBoundingClientRect();
+    const r = slot.getBoundingClientRect();
+    const left = el.scrollLeft + r.left - box.left - el.clientLeft;
+    const right = left + r.width;
+    const wholeAt = (at: number) => left >= at - 1 && right <= at + el.clientWidth + 1;
+    if (wholeAt(el.scrollLeft)) return;
+    let best = -1;
+    pager.stops.forEach((s, k) => {
+      if (!Number.isFinite(s.left) || !wholeAt(s.left)) return;
+      const nearer =
+        best < 0 ||
+        Math.abs(s.left - el.scrollLeft) < Math.abs(pager.stops[best]!.left - el.scrollLeft);
+      if (nearer) best = k;
+    });
+    if (best >= 0) pager.goTo(best);
+  };
+
   // Open on the requested card without animating past the others. Assigning
   // `scrollLeft` rather than calling `scrollTo` keeps this working anywhere the
   // element API is partial — jsdom, for one, implements the property but not the
@@ -207,6 +234,7 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
                 className={`rv3-deck__slot ${state}`}
                 aria-roledescription="slide"
                 aria-label={`${d.title}: ${d.value}`}
+                onClick={state === "is-peeking" ? () => reveal(i) : undefined}
                 style={
                   { "--rv3-deck-glyph": `url(/report/v4/dimensions/${d.key}.svg)` } as CSSProperties
                 }
@@ -224,6 +252,38 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
           })}
         </div>
       </div>
+
+      {/* Review 02.10 (Mark: "Same as the What shaped this report. Can we have the
+       * arrow"): the science gallery's disc at the cards' middle, either side, wherever
+       * there is a step to take. Mouse shortcuts, as the cut card is: the pager row below
+       * is the keyboard path, so they stay out of the tab order and the a11y tree.
+       * Drawn from 700px only (reportV3.css). */}
+      {pager.stops.length > 1 ? (
+        <>
+          {stop > 0 ? (
+            <button
+              type="button"
+              className="rv3-deck__edge is-prev"
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={() => pager.goTo(stop - 1)}
+            >
+              <PagerChevron back />
+            </button>
+          ) : null}
+          {stop < pager.stops.length - 1 ? (
+            <button
+              type="button"
+              className="rv3-deck__edge is-next"
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={() => pager.goTo(stop + 1)}
+            >
+              <PagerChevron />
+            </button>
+          ) : null}
+        </>
+      ) : null}
 
       {/* 15:1231 — four bars, the active one in the archetype's accent. From 700px they
        * are dots between Previous and Next, which the phone never draws. The arrows stay
