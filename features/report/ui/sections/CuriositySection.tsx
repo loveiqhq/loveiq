@@ -98,17 +98,18 @@ const FIT_FORMS: { slug: string; label: string }[] = [
 ];
 
 /**
- * Dot state per position from a 0..3 fit score. The Figma renders three dots:
- * full purple `#9d8ad7` when the score covers the whole slot (`score ≥ i+1`),
- * orange `#e2a48f` for a half slot (`score ≥ i+0.5`), muted `#f0eef4`
- * otherwise. e.g. 3 → ●●● purple; 2 → ●● purple + muted; 1.5 → ● purple +
- * orange + muted; 0.5 → orange + muted + muted. `null` score (locked/absent) is
- * handled by the caller (no dots rendered).
+ * The three segments of a row, from its 0..3 fit score. Mark, review 02.10: "The
+ * indicators are only red if it they are 1 out of 3. (tiny mistake in report 2.0 on
+ * Monogamish, which should be purple)". A row fills `ceil(score)` segments (a half step
+ * rounds up: 1.5 → two, 2.5 → three), purple `#9d8ad7`, and peach `#e2a48f` only when a
+ * single one is filled; the rest are muted `#f0eef4`. Before, each segment was coloured on
+ * its own (a half step peach), so 1.5 drew purple + peach and 1 drew a lone purple. A
+ * `null` score (locked/absent) is handled by the caller (no segments rendered).
  */
-function dotFill(score: number, i: number): "full" | "half" | "empty" {
-  if (score >= i + 1) return "full";
-  if (score >= i + 0.5) return "half";
-  return "empty";
+export function fitSegments(score: number): ("full" | "low" | "empty")[] {
+  const filled = Math.max(0, Math.min(3, Math.ceil(score)));
+  const tone = filled === 1 ? "low" : "full";
+  return [0, 1, 2].map((i) => (i < filled ? tone : "empty"));
 }
 
 /** One fit row: form label + three fill dots (or none when the score is absent). */
@@ -118,10 +119,10 @@ const FitRow: FC<{ label: string; score: number | null }> = ({ label, score }) =
     <span className="report-curiosity__fit-dots" aria-hidden="true">
       {score == null
         ? null
-        : [0, 1, 2].map((i) => (
+        : fitSegments(score).map((segment, i) => (
             <span
               key={i}
-              className={`report-curiosity__fit-dot report-curiosity__fit-dot--${dotFill(score, i)}`}
+              className={`report-curiosity__fit-dot report-curiosity__fit-dot--${segment}`}
             />
           ))}
     </span>
