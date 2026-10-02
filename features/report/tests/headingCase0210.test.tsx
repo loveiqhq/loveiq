@@ -104,4 +104,12 @@ describe("the Try This and Learn More cards follow the 02.10 heading rule", () =
     follows(V4_PRACTICE_TITLE);
     follows(V4_ARTICLE_LABEL);
   });
+
+  it("in every article's subheadings, free and paywalled", () => {
+    for (const article of Object.values(REPORT_V4_LEARN_MORE)) {
+      const headings = article.blocks.flatMap((b) => (b.kind === "heading" ? [b.text] : []));
+      expect(headings.length).toBeGreaterThan(0);
+      headings.forEach(follows);
+    }
+  });
 });

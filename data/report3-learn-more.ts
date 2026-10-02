@@ -277,7 +277,7 @@ const TYPICAL_BELIEFS_FREE: readonly Report3Block[] = [
     b("what the behavior means to us and what belief may be sitting underneath it"),
     t(".")
   ),
-  h("Your sun beliefs and shadow beliefs"),
+  h("Your Sun Beliefs and Shadow Beliefs"),
   p(
     t("A useful way to look at these patterns is to distinguish between what we call "),
     b("sun beliefs and shadow beliefs"),
@@ -376,7 +376,7 @@ const TYPICAL_BELIEFS_GATED: readonly Report3Block[] = [
       " These beliefs leave room for uncertainty without allowing uncertainty to dictate the entire experience."
     )
   ),
-  h("The beliefs beneath the behavior"),
+  h("The Beliefs Beneath the Behavior"),
   p(
     t(
       "People can engage in exactly the same sexual behavior for very different psychological reasons. Two people may both want frequent sex, for example. For one, sex is primarily about pleasure and exploration. For another, frequent sex reassures them that their relationship is secure. A third may feel uneasy without it because being sexually wanted confirms their attractiveness. The behavior looks similar from the outside, but internally it is serving very different purposes."
@@ -475,7 +475,7 @@ const TYPICAL_BELIEFS_GATED: readonly Report3Block[] = [
       "The revealing question is therefore not only “What do I like sexually?” but “What have I learned that sex means, and how might those beliefs be shaping the way I feel, choose, behave and relate?”"
     )
   ),
-  h("When beliefs become sexual patterns"),
+  h("When Beliefs Become Sexual Patterns"),
   p(t("Beliefs become especially influential when they turn into "), b("rules"), t(".")),
   p(
     t("A person who believes "),
@@ -530,7 +530,7 @@ const TYPICAL_BELIEFS_GATED: readonly Report3Block[] = [
       "Many sexual conflicts are therefore not simply disagreements about sex. They are disagreements about what sex means."
     )
   ),
-  h("Where these ideas come from"),
+  h("Where These Ideas Come From"),
   p(
     t(
       "There is no single scientific theory called “Typical Beliefs.” The concept sits at the intersection of several established lines of psychological and sexual research."
@@ -571,7 +571,7 @@ const TYPICAL_BELIEFS_GATED: readonly Report3Block[] = [
       "Typical Beliefs should therefore be understood as a map for exploration, not a psychological test that reveals a hidden truth about you."
     )
   ),
-  h("Turning an automatic belief into a conscious choice"),
+  h("Turning an Automatic Belief Into a Conscious Choice"),
   p(
     t("The practical value of identifying a belief is that it creates a small gap between "),
     b("what happens and what you automatically conclude it means"),
@@ -696,7 +696,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
       "This distinction matters because a quiet sexual response does not necessarily mean that nothing is turning you on. Sometimes the accelerator is receiving plenty of signals while the brakes are receiving even stronger ones."
     )
   ),
-  h("Two systems working at the same time"),
+  h("Two Systems Working at the Same Time"),
   p(
     t(
       "Your accelerator can respond to obvious erotic cues like touch, the shape of a  body, a fantasy, a particular voice, smell, image, sexual memory, or a type of stimulation. But human sexuality is highly dependent on meaning, so accelerators can also be psychological and relational. Feeling wanted may be perceived as erotic. Feeling emotionally connected may be erotic. Things like novelty, anticipation, privacy, playfulness, a certain power dynamic, being admired, or being free from responsibility can make sexual cues more compelling."
@@ -729,7 +729,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
       ". You may begin from a relatively neutral state, willingly enter an affectionate or erotic situation, start experiencing pleasure, and only then notice genuine sexual wanting emerging. Research on sexual response, particularly work originally developed to better describe women's experiences ,helped establish that this pathway is normal. It should not be treated as a female-only pattern, nor does neutrality mean that someone should participate in sex they do not want. It simply means that, for many people, desire sometimes arrives after the accelerator has received enough positive information and the brakes have enough reason to release."
     )
   ),
-  h("Where the model comes from"),
+  h("Where the Model Comes From"),
   p(
     t("The scientific framework behind the accelerator-and-brakes metaphor is called the "),
     b("Dual Control Model of sexual response"),
@@ -774,7 +774,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
   ),
   p(t("And that raises a much more revealing question than "), i("How high is my libido?")),
   p(b("The questions is: what helps my desire grow, and what gets in the way of of it?")),
-  h("The patterns underneath desire"),
+  h("The Patterns Underneath Desire"),
   p(
     t(
       "Once accelerators and brakes are considered separately, several common patterns become easier to recognize. They are not diagnoses or fixed personality types. Your pattern can shift with age, relationships, health, medication, stress, confidence, experience, and context. Think of them as useful configurations rather than boxes."
@@ -825,7 +825,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
       " Watching yourself from the outside competes with inhabiting the experience from the inside. Body-image research similarly suggests that self-consciousness and evaluative thoughts during sexual activity can interfere with sexual functioning and satisfaction. For someone whose inhibition is especially sensitive to evaluation, trying harder to “perform” may therefore make the very response they are chasing less accessible."
     )
   ),
-  h("Mapping your own system"),
+  h("Mapping Your Own System"),
   p(
     t(
       "Understanding your pattern begins by separating two questions that are often collapsed into one: "
@@ -969,7 +969,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
       "This matters because sexuality becomes much easier to understand once we can properly interpret our fantasies."
     )
   ),
-  h("Fantasy is not the same as wanting"),
+  h("Fantasy Is Not the Same as Wanting"),
   p(
     t(
       "Imagine that someone repeatedly fantasizes about surrendering all control. In the fantasy, that loss of control feels exhilarating. Yet when they imagine actually doing what the fantasy depicts, they become uncomfortable. They want to know what will happen, trust the person involved, establish limits, and remain able to stop."
@@ -1015,7 +1015,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
       "“What is my fantasy telling me? And how do I know whether this is a fantasy that I want or should explore?”"
     )
   ),
-  h("Why imagination and reality can feel so different"),
+  h("Why Imagination and Reality Can Feel So Different"),
   p(t("Fantasy and lived sex operate under different psychological conditions.")),
   p(
     t(
@@ -1060,7 +1060,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
       "The same distinction applies within fantasy. Something may be arousing without being desired as reality. Something may be desired without producing strong arousal at every moment. And something genuinely desired may still turn out to be less pleasurable than expected when real bodies, emotions and circumstances are involved."
     )
   ),
-  h("What sexual science actually tells us"),
+  h("What Sexual Science Actually Tells Us"),
   p(
     t(
       "For much of modern history, unusual sexual thoughts were often treated as signs of hidden problems, unhealthy wishes, or deviance. As researchers began studying sexual fantasies more systematically, that view started to change. By the time psychologists Harold Leitenberg and Kris Henning published a major review of sexual-fantasy research in 1995, fantasies were increasingly understood as a common part of human sexuality rather than something that automatically needed to be explained as a symptom."
@@ -1101,7 +1101,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
       "The content of a fantasy is evidence of what your imagination can make erotic. Its personal meaning has to be understood in context."
     )
   ),
-  h("The hidden variable: context"),
+  h("The Hidden Variable: Context"),
   p(t("This is where fantasies become especially interesting.")),
   p(
     t(
@@ -1148,7 +1148,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
       "Research also shows the reverse. Fantasizing about one's current partner can sometimes increase desire for that partner and is associated in experimental and diary studies with more relationship-promoting behavior. Fantasy is therefore not inherently an escape from intimacy. Depending on its content and context, it can support intimacy, depart from it temporarily, or have little relationship meaning at all."
     )
   ),
-  h("What is the fantasy really giving you?"),
+  h("What Is the Fantasy Really Giving You?"),
   p(
     t("When a fantasy recurs, it can be useful to separate its "),
     b("surface scenario"),
@@ -1207,7 +1207,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
       "That distinction becomes particularly useful when deciding whether a fantasy belongs in imagination or in lived sexuality."
     )
   ),
-  h("Should you live a fantasy?"),
+  h("Should You Live a Fantasy?"),
   p(
     t(
       "There is no rule that sexually healthy people enact their fantasies, and there is no rule that healthy fantasies must remain private."
@@ -1270,7 +1270,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
     )
   ),
   p(t("The fantasy is allowed to break the rules of reality. "), b("Your behavior is not.")),
-  h("Privacy, disclosure and intimacy"),
+  h("Privacy, Disclosure and Intimacy"),
   p(
     t(
       "Understanding fantasy also changes the question of whether everything should be shared with a partner."
@@ -1314,7 +1314,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
     )
   ),
   p(t("That is a much more precise sexual conversation than treating fantasy as confession.")),
-  h("From fantasy to self-knowledge"),
+  h("From Fantasy to Self-Knowledge"),
   p(t("The deeper value of fantasy is not that it exposes a secret version of you.")),
   p(t("It is that it gives you another source of information about how your erotic system works.")),
   p(
