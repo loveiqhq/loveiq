@@ -140,9 +140,10 @@ describe("the V4 chapter order", () => {
     // 30.09: the Snapshot's four chapters moved into the pre-report wizard's map. Marcus,
     // 01.10: "any reason this part only has one chapter? And it's a bit that it doesn't
     // link to the top of the part right?" Mark's 961:333 (01.10) opens Part 2 on the top
-    // three, "Highest Archetypes Scores", above Core Archetype.
+    // three, above Core Archetype; after the 02.10 sync he named the row as the section
+    // itself is titled, "3 Highest Scoring Archetypes".
     expect(REPORT_V4_NAV_PARTS[1]!.items).toEqual([
-      { label: "Highest Archetypes Scores", id: "top_archetypes" },
+      { label: "3 Highest Scoring Archetypes", id: "top_archetypes" },
       { label: "Core Archetype", id: "core_archetype" },
     ]);
     expect(REPORT_V4_NAV_IDS).not.toContain("snapshot");

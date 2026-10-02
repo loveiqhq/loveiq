@@ -7947,7 +7947,7 @@ html {
  *   or partially unlocked"; Mark: "Amazing, i love it"): SemiBold for free and open
  *   chapters, Light for locked ones.
  * - The drawer's rows hold one line and end in an ellipsis; the sidebar keeps its
- *   wrap. Both keep their active wash, dot and colour. report.css's old pill-nav rule
+ *   wrap. Both keep their active wash and dot. report.css's old pill-nav rule
  *   gives the rows `min-width: max-content`, which held the Snapshot's row (in the nav
  *   until 30.09) at its whole title (301px in the 277 column, its FREE chip past the
  *   panel's edge), so the row takes the column instead. */
@@ -7962,6 +7962,13 @@ html {
 .rv3.rv4 .report-mobile-nav__link[data-access="locked"] .report-mobile-nav__label,
 .rv3.rv4 .report-sidebar__item[data-access="locked"] .report-sidebar__item-label {
   font-weight: 300;
+}
+/* Review 02.10, the sync. Mark: "the color needs to be the same as everyone else… let's
+ * just find one color and stick to it". The drawer he cleaned up after (961:333) draws every
+ * label in #3f3a4d, the active row's too: its wash and dot mark it. The sidebar already
+ * keeps the label's colour (report.css). */
+.rv3.rv4 .report-mobile-nav__link.is-active .report-mobile-nav__label {
+  color: #3f3a4d;
 }
 .rv3.rv4 .report-chapter-panel__item {
   min-width: 0;

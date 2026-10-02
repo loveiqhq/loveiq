@@ -594,17 +594,22 @@ describe("PreReportWizard — Mark's 01.10 placement: the bar under CONTINUE (10
   });
 
   // Mark, 11:06 on 1049:1627: "Updated fonts and font sizes". The drawer there is the
-  // report's panel at 0.4905 (1049:1832), its rows now set at 7px: Regular, the four
-  // featured chapters SemiBold, where every row was Light.
-  it("sets the map's drawer in 1049:1832's type: 7px rows, the featured four SemiBold", () => {
+  // report's panel at 0.4905 (1049:1832), its rows set at 7px. Then 02.10 ("Font color
+  // match" on 1049:1832; the sync: "the color needs to be the same as everyone else… let's
+  // just find one color and stick to it"): the free rows SemiBold as the featured four,
+  // the locked ones Regular, and every label #3f3a4d, the current row's too.
+  it("sets the map's drawer in 1049:1832's type: 7px rows, free and featured SemiBold, one colour", () => {
     render(<PreReportWizard onComplete={vi.fn()} />);
     press(continueButton());
     for (const part of WIZARD_DRAWER) {
       for (const row of part.rows) {
-        const label = document.querySelector(`[data-wizard-row="${row.id}"] .truncate`)!;
+        const label = document.querySelector<HTMLElement>(
+          `[data-wizard-row="${row.id}"] .truncate`
+        )!;
         expect(label, row.id).toHaveClass("text-[7px]", "leading-[9.81px]");
-        expect(label, row.id).toHaveClass(row.badge === "open" ? "font-semibold" : "font-normal");
+        expect(label, row.id).toHaveClass(row.badge === "locked" ? "font-normal" : "font-semibold");
         expect(label, row.id).not.toHaveClass("font-light");
+        expect(label.style.color, row.id).toBe("rgb(63, 58, 77)");
       }
     }
     // The label 3.9 from its badge; the FREE chip and the part headings at the panel's scale.

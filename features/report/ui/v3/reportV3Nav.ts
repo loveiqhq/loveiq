@@ -290,14 +290,15 @@ export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
  * Where Part 2's first row lands: the top three (V4TopThreeSection, 1:493). Marcus,
  * 01.10: "any reason this part only has one chapter? And it's a bit that it doesn't link
  * to the top of the part right?" Mark's 961:333 (01.10) adds the row above Core
- * Archetype; the label is the frame's own, "Highest Archetypes Scores".
+ * Archetype. After the 02.10 sync he named it as the section is titled (1:493), "3
+ * Highest Scoring Archetypes".
  */
 export const REPORT_V4_TOP_THREE_ANCHOR = "top_archetypes";
 
 export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
   numerals: { "1": "2", "2": "3", "3": "4", "4": "5", "5": "6" },
   snapshotLabel: null,
-  constellationLead: { label: "Highest Archetypes Scores", id: REPORT_V4_TOP_THREE_ANCHOR },
+  constellationLead: { label: "3 Highest Scoring Archetypes", id: REPORT_V4_TOP_THREE_ANCHOR },
   welcome: {
     part: "Part 1",
     label: "Welcome",
