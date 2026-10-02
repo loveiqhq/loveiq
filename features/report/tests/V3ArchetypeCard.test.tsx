@@ -622,13 +622,13 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     expect(glyph).toMatch(/width: 27\.3458px/);
   });
 
-  it("leaves 22px under the last scale, where 1031 left it clipped (review 01.10)", () => {
+  it("ends at Figma's 1068, with room under the last scale (review 01.10, frame 02.10)", () => {
     // Marcus, 01.10: "Padding too low"; Mark, desktop: "The bottom part of the archetype
     // card needs more space. It is quite cut off. Have some space behind the scales".
     // Each meter is 67.4 tall in its 57px row, so the last LOW / MEDIUM / HIGH ran 3.39
-    // past the 7px pad and was clipped. 7 + 3.39 + 22 gives it 22px of air; the card
-    // grows past Figma's fixed 1031 by that much.
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 32\.4px/);
+    // past the 7px pad and was clipped. Mark then grew 15:815 from 1031 to 1068 (02.10)
+    // with every child unchanged: 1068 - 18 - the 1006 of content leaves 44 under it.
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 44px/);
   });
 
   // 1116:1025 clips at 360, under the page indicator (1116:1120 at 345), so the focused
