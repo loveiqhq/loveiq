@@ -121,3 +121,16 @@ describe("Report 2.0's phone stat card under the Reward rows (8632:1501)", () =>
     expect(rule(css, ".rv3.rv4 .report-reward__stat-caption")).toMatch(/line-height:\s*14\.99px/);
   });
 });
+
+describe("Report 2.0's phone Love Language type (8632:1839, 8632:1897)", () => {
+  it("sets the caption and the closing line at 14.5 / 1.65, the caption Regular", () => {
+    const css = block(PHONE);
+    const caption = rule(css, ".rv3.rv4 .report-lovelang__caption");
+    expect(caption).toMatch(/font-weight:\s*400/);
+    expect(caption).toMatch(/font-size:\s*14\.5px/);
+    expect(caption).toMatch(/line-height:\s*1\.65/);
+    const line = rule(css, ".rv3.rv4 .report-lovelang__catch");
+    expect(line).toMatch(/font-size:\s*14\.5px/);
+    expect(line).toMatch(/line-height:\s*1\.65/);
+  });
+});
