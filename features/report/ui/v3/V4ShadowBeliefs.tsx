@@ -48,7 +48,7 @@ import { guardedUnlock } from "./v4Unlock";
  * report3-typical-beliefs.ts: that module is registered paid copy, and a client
  * component may not reach into it at runtime even for a heading.
  */
-const PANEL_TITLE = "Typical shadow beliefs";
+const PANEL_TITLE = "Typical Shadow Beliefs";
 const SHIFT_LABEL = "THE SHIFT";
 
 const Check: FC<{ className: string }> = ({ className }) => (

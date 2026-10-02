@@ -81,7 +81,7 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
       "“Trust and familiarity can give me more freedom to be vulnerable, attentive, and deeply engaged with a partner.”",
     ],
     lede: [
-      h2("The Loyal Ritualist belief map"),
+      h2("The Loyal Ritualist Belief Map"),
       p(
         t("For the"),
         b(" Loyal Ritualist"),
@@ -467,7 +467,7 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
           ". Recognizing that difference early makes it easier to introduce change without turning it into criticism and to preserve stability without letting it become rigidity."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Routine can feel like intimacy to one partner and stagnation to the other."),
         t(
@@ -678,7 +678,7 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
           ". Where some archetypes may use fantasy to escape familiarity, the Loyal Ritualist may eroticize familiarity itself: a partner who still wants the same intimate rituals years later, a cherished sequence that belongs only to the relationship, or novelty introduced without threatening the security underneath it."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("The ritual that never loses its meaning."),
         t(
@@ -716,7 +716,7 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A change in the ritual can feel like a change in the relationship."),
         t(

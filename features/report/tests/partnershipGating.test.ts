@@ -35,7 +35,7 @@ const payload = (locked: boolean) => JSON.stringify(buildPartnership("Spark Seek
 describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
   it("carries the frame's sixteen body blocks, the sixth the inline 'Common challenges' heading", () => {
     expect(SPARK.body).toHaveLength(16);
-    expect(SPARK.body[5]).toEqual({ kind: "heading", text: "Common challenges" });
+    expect(SPARK.body[5]).toEqual({ kind: "heading", text: "Common Challenges" });
     expect(textOf(SPARK.body[0]!)).toBe(
       "Relationships do not become difficult simply because two people are different. Difficulties often emerge because two perfectly understandable patterns collide."
     );

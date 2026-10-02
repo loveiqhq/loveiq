@@ -104,7 +104,7 @@ const SPARK_INTRO: readonly Report3Block[] = [
       "this distinction can be particularly useful. The archetype tends to respond strongly to novelty, anticipation, playful pursuit, intensity and shifts in power. Fantasy can amplify these experiences almost perfectly. What looks like a very specific sexual wish may sometimes be the mind's way of creating a particular feeling: being irresistibly wanted, escaping routine, surrendering for a moment, taking control, feeling slightly forbidden, or not knowing exactly what happens next."
     )
   ),
-  h("What a fantasy might actually be about"),
+  h("What a Fantasy Might Actually Be About"),
   p(
     t("You imagine "),
     b("a secret lover who cannot resist you"),
@@ -147,7 +147,7 @@ const SPARK_INTRO: readonly Report3Block[] = [
 ];
 
 const SPARK_CHALLENGES: readonly Report3Block[] = [
-  h("Common challenges"),
+  h("Common Challenges"),
   p(t("A fantasy often works because reality has been edited out.")),
   p(
     t(

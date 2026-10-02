@@ -112,7 +112,7 @@ export const RELATIONAL_NURTURER: Report3ArchetypeCopy = {
       ),
     ],
     lede: [
-      h2("The Relational Nurturer belief map"),
+      h2("The Relational Nurturer Belief Map"),
       p(
         t("For the "),
         b("Relational Nurturer"),
@@ -457,7 +457,7 @@ export const RELATIONAL_NURTURER: Report3ArchetypeCopy = {
           "Understanding the pattern early matters because it is much easier to adjust before care turns into exhaustion, resentment, or sexual distance. It also points toward clear areas of growth: making needs visible sooner, setting limits before depletion, and allowing care to move toward the Relational Nurturer rather than mainly away from them."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Care can slowly become an unequal role."),
         t(
@@ -689,7 +689,7 @@ export const RELATIONAL_NURTURER: Report3ArchetypeCopy = {
           ". Sometimes the fantasy reverses that familiar role and makes the Relational Nurturer the one being cared for instead."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Sex after an emotional breakthrough."),
         t(
@@ -725,7 +725,7 @@ export const RELATIONAL_NURTURER: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Pleasure can become easier to read through the partner than through oneself."),
         t(

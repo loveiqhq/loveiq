@@ -24,7 +24,7 @@ describe.each(Object.keys(REPORT_V4_TYPICAL_BELIEFS))("%s's V4 chapters", (name)
       const { container } = render(
         <V4TypicalBeliefs view={buildTypicalBeliefs(name, { locked })!} />
       );
-      expect(container.textContent).toContain(`The ${name} belief map`);
+      expect(container.textContent).toContain(`The ${name} Belief Map`);
     });
 
     it(`Accelerators & Brakes draws ${state}: both cards, from five rows each`, () => {

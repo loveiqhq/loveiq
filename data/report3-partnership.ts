@@ -212,7 +212,7 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
         )
       ),
       // 38:1681 sets this inline, in Lora Bold 18/21.6.
-      { kind: "heading", text: "Common challenges" },
+      { kind: "heading", text: "Common Challenges" },
       p(
         t(
           "Some relationship tensions are especially likely when the Spark Seeker partners with someone whose sexuality and relationship needs work differently:"

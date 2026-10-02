@@ -85,7 +85,7 @@ export const SPIRITUAL_LOVER: Report3ArchetypeCopy = {
       "“Sex can mean different things at different times without any one meaning being less authentic.”",
     ],
     lede: [
-      h2("The Spiritual Lover belief map"),
+      h2("The Spiritual Lover Belief Map"),
       p(
         t("For the "),
         b("Spiritual Lover"),
@@ -488,7 +488,7 @@ export const SPIRITUAL_LOVER: Report3ArchetypeCopy = {
           "Recognizing that pattern early can prevent a difference in style from becoming a conflict about whether one partner is deep enough, emotionally present enough, or truly understands the other. It also reveals where growth can matter most for the Spiritual Lover: expressing needs in concrete language, allowing simple pleasure to remain meaningful, and integrating emotional depth with the ordinary realities of partnership."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A need for depth can begin to feel like pressure to a partner."),
         t(
@@ -757,7 +757,7 @@ export const SPIRITUAL_LOVER: Report3ArchetypeCopy = {
           ". The erotic pull may come from complete presence, emotional surrender, ritual, transcendence or the sensation that two people are briefly moving beyond ordinary separateness."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Losing the boundary between two people."),
         t(
@@ -793,7 +793,7 @@ export const SPIRITUAL_LOVER: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Searching for transcendence can make ordinary connection feel insufficient."),
         t(

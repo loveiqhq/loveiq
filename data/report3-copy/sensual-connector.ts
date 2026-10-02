@@ -81,7 +81,7 @@ export const SENSUAL_CONNECTOR: Report3ArchetypeCopy = {
       "“My sensitivity to emotional connection can be a strength when I use it to deepen intimacy rather than to interpret every change as a threat.”",
     ],
     lede: [
-      h2("The Sensual Connector belief map"),
+      h2("The Sensual Connector Belief Map"),
       p(
         t("For many "),
         b("Sensual Connectors"),
@@ -427,7 +427,7 @@ export const SENSUAL_CONNECTOR: Report3ArchetypeCopy = {
           "Understanding these patterns matters because once the interaction becomes visible, it can be addressed before hurt turns into withdrawal, resentment, or sexual disconnection. It also reveals where growth is most useful: expressing needs more directly, tolerating temporary distance without immediately reading it as rejection, and creating emotional security without requiring constant reassurance."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         t(
           "Some tensions are especially likely when the Sensual Connector partners with someone whose needs work differently."
@@ -650,7 +650,7 @@ export const SENSUAL_CONNECTOR: Report3ArchetypeCopy = {
         ),
         b("more time, more touch, more presence and fewer interruptions.")
       ),
-      h("When fantasy meets reality"),
+      h("When Fantasy Meets Reality"),
       p(
         t("The Sensual Connector may fantasize about "),
         b("hours of slow lovemaking with deep eye contact, lingering touch and emotional openness"),
@@ -682,7 +682,7 @@ export const SENSUAL_CONNECTOR: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         t("One challenge can appear when "),
         b("tenderness starts carrying more meaning than tenderness itself"),

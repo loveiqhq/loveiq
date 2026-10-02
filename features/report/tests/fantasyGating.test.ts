@@ -46,7 +46,7 @@ describe("the authored copy (304:291 / 368:1920 / 441:6187)", () => {
     expect(SPARK.intro).toHaveLength(12);
     expect(SPARK.intro[5]).toEqual({
       kind: "heading",
-      text: "What a fantasy might actually be about",
+      text: "What a Fantasy Might Actually Be About",
     });
     expect(textOf(SPARK.intro[0]!)).toBe(
       "A sexual fantasy can feel like evidence. If a scene is intensely arousing or keeps returning, it is easy to assume it must reveal something you secretly want. But fantasy and real-world desire are not the same psychological experience."
@@ -97,7 +97,7 @@ describe("the authored copy (304:291 / 368:1920 / 441:6187)", () => {
 
   it("opens 'Common challenges' on its heading and runs thirteen paragraphs", () => {
     expect(SPARK.challenges).toHaveLength(14);
-    expect(SPARK.challenges[0]).toEqual({ kind: "heading", text: "Common challenges" });
+    expect(SPARK.challenges[0]).toEqual({ kind: "heading", text: "Common Challenges" });
     expect(textOf(SPARK.challenges[1]!)).toBe(
       "A fantasy often works because reality has been edited out."
     );

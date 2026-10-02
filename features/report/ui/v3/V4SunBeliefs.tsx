@@ -32,7 +32,7 @@ import { guardedUnlock } from "./v4Unlock";
  */
 
 /** 368:5623 heading. Chrome, not paid copy — see V4ShadowBeliefs. */
-const PANEL_TITLE = "Typical sun beliefs";
+const PANEL_TITLE = "Typical Sun Beliefs";
 
 interface Props {
   sun: readonly string[];

@@ -80,7 +80,7 @@ export const RADIANT_PERFORMER: Report3ArchetypeCopy = {
       "“Sexual expression can be bold, playful, glamorous, intense, tender, or imperfect and still feel authentically mine.”",
     ],
     lede: [
-      h2("The Radiant Performer belief map"),
+      h2("The Radiant Performer Belief Map"),
       p(
         t("For the "),
         b("Radiant Performer"),
@@ -502,7 +502,7 @@ export const RADIANT_PERFORMER: Report3ArchetypeCopy = {
           " It also reveals where growth is most useful: asking more directly for the kind of responsiveness that matters, allowing quieter forms of intimacy to count, and building sexual confidence that does not depend entirely on receiving the right reaction."
         )
       ),
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("Quiet affection can feel like fading attraction."),
         t(
@@ -748,7 +748,7 @@ export const RADIANT_PERFORMER: Report3ArchetypeCopy = {
           ". Where some archetypes may be most interested in what is happening physically, the Radiant Performer may also be strongly affected by how the moment is being received: the look in a partner’s eyes, an unmistakable reaction, the feeling of commanding attention, or the sense of becoming impossible to ignore."
         )
       ),
-      h("What a fantasy might actually be about"),
+      h("What a Fantasy Might Actually Be About"),
       p(
         b("Performing for a completely captivated partner."),
         t(
@@ -780,7 +780,7 @@ export const RADIANT_PERFORMER: Report3ArchetypeCopy = {
       ),
     ],
     challenges: [
-      h("Common challenges"),
+      h("Common Challenges"),
       p(
         b("A partner’s reaction can become part of the performance."),
         t(
