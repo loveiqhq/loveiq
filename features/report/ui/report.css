@@ -18841,7 +18841,8 @@
   background: #9d8ad7;
 }
 
-.report-curiosity__fit-dot--half {
+/* A one-of-three fit (Mark, 02.10: "only red if they are 1 out of 3"). */
+.report-curiosity__fit-dot--low {
   background: #e2a48f;
 }
 
