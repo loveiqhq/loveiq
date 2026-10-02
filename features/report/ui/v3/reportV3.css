@@ -6051,12 +6051,13 @@ html {
  * motivation panel grew to 220 on 30.09 (31 at 28.09's 197; 50 before that). That
  * clipped the last LOW / MEDIUM / HIGH by 3.39px: each meter is 67.4 tall in a 57px
  * row. Review 01.10 (Marcus: "Padding too low"; Mark: "quite cut off. Have some space
- * behind the scales") gives it 22px of air, 7 + 3.39 + 22, and the card grows by it.
+ * behind the scales") gave it room, and Mark then grew the frame from 1031 to 1068
+ * (02.10) with every child unchanged: 1068 - 18 - the 1006 of content leaves 44.
  *
  * Scoped to both V4 roots: `.rv4` is the live report under `?v4=1`, `.rv4-doc` the
  * standalone /report-v4-preview, which takes the design's own updates too. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch {
-  padding: 18px 0 32.4px;
+  padding: 18px 0 44px;
 }
 /* 15:816 is a fixed 191: the match row (15:819) grows into the slack and the tagline
  * sits in a fixed 70px box (15:828), so the core motivation panel starts at y=210.
