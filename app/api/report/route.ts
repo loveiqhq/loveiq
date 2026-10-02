@@ -715,8 +715,9 @@ export async function GET(request: Request) {
      * Rides beside beliefsCopy rather than replacing it, because `?v4=1` is a COPY
      * of V2 and every section it does not swap still renders V2's. This is NULL for
      * any archetype Mark and Sanjin have not written yet, which is the signal
-     * ReportPage falls back on: 13 of the 14 keep the V2 section until the content
-     * is scaled, so no reader ever meets an empty chapter.
+     * ReportPage falls back on, so no reader ever meets an empty chapter. Since 02.10
+     * every known archetype has it (data/report3-copy); the fallback is for a name
+     * with no V4 copy.
      *
      * Same gate as beliefsCopy, so the chapter body and the "Go deeper" article
      * below it can never disagree about who has paid. Locked readers receive the
@@ -871,7 +872,8 @@ export async function GET(request: Request) {
      * locked. Rides beside partnershipCopy as `accelerators` rides beside accelCopy:
      * NULL for any archetype whose chapter is not written yet, which is the signal
      * ReportPage keeps V2's section on. Same gate as partnershipCopy. A locked reader
-     * receives paragraphs 1-4 and the practice's opening verbatim, paragraph 5 as
+     * of Spark Seeker's (another archetype's wall sits at its own cuts) receives
+     * paragraphs 1-4 and the practice's opening verbatim, paragraph 5 as
      * written through its fade band, and everything past it — the loop and the result
      * included — as lockedBlurCopy.ts decides (the copy itself since review 26.09,
      * scrambled in decoy mode); see buildPartnership. Built for the V4 page only.

@@ -54,7 +54,7 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
           <V4Prose blocks={view.intro} />
         </div>
 
-        {/* 311:410. Figma's line for Spark Seeker; Sanjin's docs have none for the rest. */}
+        {/* 311:410. Figma's line for Spark Seeker; of Sanjin's docs, only one has a lead. */}
         {view.brakesLead ? <p className="rv4-ab__lead">{view.brakesLead}</p> : null}
         <V4TriggerCard
           tone="brake"

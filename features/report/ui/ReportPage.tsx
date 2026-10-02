@@ -1941,8 +1941,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // dropped `.rv3-chapter` and clip only vertically, review 27.09.)
                     // All three blocks open the same pricing modal every other
                     // locked section does. It falls back to V2's section whenever
-                    // the archetype has no Report 3.0 copy yet — 13 of the 14 — so
-                    // no reader meets an empty chapter while it scales.
+                    // the archetype has no Report 3.0 copy (since 02.10, only a name
+                    // none is written for), so no reader meets an empty chapter.
                     if (isV4 && typicalBeliefs && hasArchetypeCopy) {
                       const unlockBeliefs = () => unlockSection(section);
                       return (
