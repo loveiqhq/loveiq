@@ -8396,6 +8396,10 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 .rv3 .rv3-method.is-v4 .rv3-sci__edge {
   display: none;
 }
+/* The dimension deck's, the same (review 02.10): drawn from 700px only. */
+.rv3 .rv3-deck__edge {
+  display: none;
+}
 /* The dimension deck: a card in full view that is not focused (`is-visible`) keeps the
  * white design, without the focused card's orange glow; only a card the viewport cuts is
  * beige. Wherever two cards fit, so not only from 700px. */
@@ -9333,5 +9337,57 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 @media (min-width: 700px) {
   .rv3.rv4 .report-reward__intro {
     display: none;
+  }
+}
+
+/* ══ The dimension deck's arrow and its hidden card — review 02.10 ═══════════════════════
+ * Mark (desktop locked, hidden.png): "Same as the What shaped this report. Can we have the
+ * arrow and make the hidden one clickable?" The science gallery's disc (01.10, above),
+ * white over the card it sits on, in the pager's violet, 10px in from either side at the
+ * cards' middle: they stand 14px down the deck and 324 tall, so 176, and the 40px disc's
+ * top is 156. A card the viewport cuts (`is-peeking`) takes a click (V3DimensionDeck's
+ * reveal) and, under a mouse, a 2px lift. The pager row stays the keyboard path. */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv3-deck {
+    position: relative;
+  }
+  .rv3.rv4 .rv3-deck__slot.is-peeking {
+    cursor: pointer;
+  }
+  .rv3.rv4 .rv3-deck__edge {
+    align-items: center;
+    background: #fff;
+    border: 1px solid rgba(121, 95, 200, 0.18);
+    border-radius: 50%;
+    box-shadow: 0 6px 18px rgba(22, 16, 33, 0.14);
+    color: var(--rv3-violet);
+    cursor: pointer;
+    display: flex;
+    height: 40px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    top: 156px;
+    width: 40px;
+    z-index: 2;
+  }
+  .rv3.rv4 .rv3-deck__edge.is-prev {
+    left: 10px;
+  }
+  .rv3.rv4 .rv3-deck__edge.is-next {
+    right: 10px;
+  }
+  .rv3.rv4 .rv3-deck__edge svg {
+    display: block;
+    height: 15px;
+    width: 15px;
+  }
+}
+@media (min-width: 700px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .rv3.rv4 .rv3-deck__slot {
+    transition: translate 180ms ease;
+  }
+  .rv3.rv4 .rv3-deck__slot.is-peeking:hover {
+    translate: 0 -2px;
   }
 }
