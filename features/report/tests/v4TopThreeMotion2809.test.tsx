@@ -129,28 +129,22 @@ describe("reportV3.css — the top three's entrance", () => {
     expect(dot).toContain("calc(var(--rv4-t3-i, 0) * 150ms)");
   });
 
-  it("fades the names in only once the last bar has landed", () => {
+  // Mark, desktop review 01.10: "I think the Archetype names appear too late. Let them
+  // appear while the scales and % are loading". Then, 02.10, of the phone: "whenever I
+  // speak about animations and its timing, it should always be across devices". Each name
+  // fades in with its own bar, on the bars' 150ms stagger, on every width.
+  it("fades the names in with their bars, on every device", () => {
     expect(rule(".rv3 .rv3-top3__list.is-animated.is-pending .rv3-top3__name")).toMatch(
       /opacity: 0/
     );
-    // The third bar lands at 2 x 150 + 1800 = 2100ms.
     expect(rule(".rv3 .rv3-top3__list.is-animated .rv3-top3__name")).toContain(
-      "opacity 600ms ease-out calc(2100ms + var(--rv4-t3-i, 0) * 120ms)"
+      "opacity 600ms ease-out calc(var(--rv4-t3-i, 0) * 150ms)"
     );
   });
 
-  // Mark, desktop review 01.10: "I think the Archetype names appear too late. Let them
-  // appear while the scales and % are loading". From 700px each name fades in with its
-  // own bar, on the bars' 150ms stagger; the phone keeps 28.09's timing above.
-  it("fades the names in with their bars from 700px, motion allowed", () => {
-    const media = "@media (min-width: 700px) and (prefers-reduced-motion: no-preference) {";
-    const at = V3_CSS.indexOf(media);
-    expect(at, "no desktop block for the names' timing").toBeGreaterThan(-1);
-    const body = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
-    // The live page only: the 393 preview (.rv4-doc) keeps the phone's timing even in a
-    // desktop browser, so Mark's "does the phone follow?" question stays answerable.
-    expect(body).toContain(".rv3.rv4 .rv3-top3__list.is-animated .rv3-top3__name {");
-    expect(body).toContain("transition: opacity 600ms ease-out calc(var(--rv4-t3-i, 0) * 150ms);");
+  it("keeps no width of its own for the names' timing", () => {
+    expect(V3_CSS).not.toContain("calc(2100ms + var(--rv4-t3-i, 0) * 120ms)");
+    expect(V3_CSS).not.toContain(".rv3.rv4 .rv3-top3__list.is-animated .rv3-top3__name {");
   });
 
   it("shows the finished list under reduced motion", () => {
