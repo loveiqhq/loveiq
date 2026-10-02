@@ -6280,8 +6280,8 @@ html {
   width: 230px;
 }
 /* "How desire gets spoken": the second line opens with a capital in both designs. The
- * copy stays lower-case; the span is a flex item, so blockified, which ::first-letter
- * needs. */
+ * copy is in the 02.10 heading case now; this still capitalises a lower-case subtitle. The
+ * span is a flex item, so blockified, which ::first-letter needs. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__sub::first-letter {
   text-transform: uppercase;
 }

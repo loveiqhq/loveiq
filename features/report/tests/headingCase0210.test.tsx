@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildAccelerators } from "@/data/report3-accelerators";
+import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import { REPORT_V4_PARTS } from "@/data/report3-archetype-page";
 import { buildFantasy } from "@/data/report3-fantasy";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildPartnership } from "@/data/report3-partnership";
 import { REPORT_V4_TYPICAL_BELIEFS, buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { titleCase } from "@features/report/logic/titleCase";
+import { reportThemes } from "@features/report/ui/reportTheme";
+import CoreArchetypeSection from "@features/report/ui/sections/CoreArchetypeSection";
+import V3ArchetypeCard from "@features/report/ui/v3/V3ArchetypeCard";
 import V3Methodology from "@features/report/ui/v3/V3Methodology";
 import V4Accelerators from "@features/report/ui/v3/V4Accelerators";
 import V4Fantasy from "@features/report/ui/v3/V4Fantasy";
@@ -28,7 +32,10 @@ const follows = (heading: string) => expect(heading).toBe(titleCase(heading));
 const texts = (root: ParentNode, selector: string) =>
   Array.from(root.querySelectorAll(selector), (el) => el.textContent ?? "");
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("the part names and the nav follow the 02.10 heading rule", () => {
   it("every part heading, read across its two spans", () => {
@@ -111,5 +118,57 @@ describe("the Try This and Learn More cards follow the 02.10 heading rule", () =
       expect(headings.length).toBeGreaterThan(0);
       headings.forEach(follows);
     }
+  });
+});
+
+describe("the archetype cards follow the 02.10 heading rule", () => {
+  it("Spark Seeker's card: its labels, and the deck's titles, subtitles and verdicts", () => {
+    for (const copy of Object.values(report3ArchetypeCard)) {
+      follows(copy.coreMotivation.value);
+      for (const d of copy.dimensions) [d.title, d.subtitle, d.value].forEach(follows);
+      for (const meter of copy.meters) follows(meter.label);
+    }
+    const { container } = render(
+      <V3ArchetypeCard
+        archetype="Spark Seeker"
+        matchStrength={43}
+        copy={report3ArchetypeCard["Spark Seeker"]!}
+      />
+    );
+    const labels = texts(container, ".rv3-arch__motive-label, .rv3-arch__motive-sub");
+    expect(labels).toHaveLength(2);
+    labels.forEach(follows);
+  });
+
+  // The thirteen archetypes without Report 3.0 card copy draw Report 2.0's card in V4.
+  it.each(Object.keys(reportThemes))("%s's Report 2.0 card", (name) => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    const { container } = render(
+      <CoreArchetypeSection
+        matchScore={80}
+        theme={reportThemes[name as keyof typeof reportThemes]!}
+      />
+    );
+    const labels = texts(
+      container,
+      [
+        ".report-hero-card__badge",
+        ".report-hero-card__label",
+        ".report-hero-card__motivation-label",
+        ".report-hero-card__match-label",
+        ".report-trait__label",
+        ".report-progress__header > span:first-child",
+      ].join(", ")
+    );
+    expect(labels).toHaveLength(10);
+    labels.forEach(follows);
   });
 });
