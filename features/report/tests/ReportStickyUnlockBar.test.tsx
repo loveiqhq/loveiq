@@ -89,7 +89,7 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     // Since Mark's 01.10 round the badge follows 1167:2607's (1167:2612), without its box.
     expect(badge.getAttribute("data-node-id")).toBe("1167:2612");
     expect(badge.querySelector(".report-sticky-unlock__badge-head")!.textContent).toBe(
-      "14-day money-back"
+      "14-Day Money-Back"
     );
     expect(badge.querySelector(".report-sticky-unlock__badge-sub")!.textContent).toBe(
       "Guaranteed, no questions asked."
@@ -98,7 +98,7 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     expect(shield!.getAttribute("src")).toBe("/report/v3/premium/footer-shield.svg");
     expect(tick!.getAttribute("src")).toBe("/report/v3/premium/footer-tick.svg");
     expect(bar.querySelector(".report-sticky-unlock__guarantee")).toBeNull();
-    expect(bar.textContent).not.toMatch(/7-day/);
+    expect(bar.textContent).not.toMatch(/7-day/i);
 
     const cta = within(bar).getByRole("button", { name: "Unlock full report" });
     expect(cta).toHaveClass("report-sticky-unlock__cta--v4");
@@ -213,7 +213,7 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     const badge = bar.querySelector(".report-sticky-unlock__badge")!;
     expect(badge.getAttribute("data-node-id")).toBe("1015:1218");
     expect(badge.querySelector(".report-sticky-unlock__badge-head")!.textContent).toBe(
-      "14-day money-back"
+      "14-Day Money-Back"
     );
     expect(bar.querySelector(".report-sticky-unlock__heading")).toBeNull();
     expect(bar.textContent).not.toMatch(/Ready to meet yourself|doesn.t land/);

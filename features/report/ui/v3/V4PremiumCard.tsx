@@ -55,7 +55,7 @@ const V4PremiumCard: FC<Props> = ({ variant = "gate", nodeId }) => {
         <span className="rv4-premium__lock" aria-hidden="true">
           <Image src="/report/v3/locks/lock-14.svg" alt="" width={14} height={14} unoptimized />
         </span>
-        <h3 className="rv4-premium__title">Unlock full insights!</h3>
+        <h3 className="rv4-premium__title">Unlock Full Insights!</h3>
       </div>
 
       {/* 1015:1174 / 1015:1218 */}
@@ -79,7 +79,7 @@ const V4PremiumCard: FC<Props> = ({ variant = "gate", nodeId }) => {
           />
         </span>
         <span className="rv4-premium__guarantee-text">
-          <span className="rv4-premium__guarantee-head">14-day money-back</span>
+          <span className="rv4-premium__guarantee-head">14-Day Money-Back</span>
           <span className="rv4-premium__guarantee-sub">Guaranteed, no questions asked.</span>
         </span>
       </div>
