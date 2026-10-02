@@ -5,7 +5,7 @@ import { getLibidoLoopSteps } from "@/data/report2-libido-loops";
 import { getLoveLanguageOrder } from "@/data/report2-love-languages";
 import { getPowerZone } from "@/data/report2-power-zones";
 import { getRelationshipFit } from "@/data/report2-relationship-fit";
-import { getRewardProfile } from "@/data/report2-reward";
+import { REWARD_METER_LADDER, getRewardProfile, rewardRolesFor } from "@/data/report2-reward";
 import type { AttachmentPlane } from "@features/report/ui/sections/AttachmentPatternsSection";
 
 /**
@@ -63,9 +63,7 @@ function normalizeAttachmentPlane(raw: unknown): AttachmentPlane | null {
 // Reward-meter config → the client shape. `reward_order` is the four
 // neurochemicals in the reader's rank order; `reward_roles` the role per rank;
 // `reward_meters` the fill % per rank. Returns null (⇒ no bars) when there is no
-// real `order`, so meters/rankings are NEVER fabricated for the 11 archetypes
-// without config (only Spiritual Lover has full meters today; Spark Seeker /
-// Sensual Connector carry order but null meters). Called only when unlocked.
+// real `order`; the completion below fills the rest. Called only when unlocked.
 function normalizeRewardConfig(cfg: Record<string, unknown> | null | undefined): {
   order: string[];
   roles: string[];
@@ -83,6 +81,23 @@ function normalizeRewardConfig(cfg: Record<string, unknown> | null | undefined):
     ? cfg.reward_meters.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
     : [];
   return { order, roles, meters };
+}
+
+// Mark, review 02.10: Report 2.0 draws a slider on every Reward row. Spark Seeker's
+// config carries its order and roles with `reward_meters: null`, and Sensual Connector's
+// the order alone, so those two drew no bars (Sensual Connector no "— the lead" either).
+// Each missing field is completed by the designer's model (`data/report2-reward.ts`):
+// the roles by rank, the meters from the ladder by rank. An order is never invented.
+function completeRewardConfig(
+  cfg: ReturnType<typeof normalizeRewardConfig>
+): ReturnType<typeof normalizeRewardConfig> {
+  if (!cfg) return null;
+  const n = cfg.order.length;
+  return {
+    order: cfg.order,
+    roles: cfg.roles.length === n ? cfg.roles : rewardRolesFor(cfg.order),
+    meters: cfg.meters.length === n ? cfg.meters : REWARD_METER_LADDER.slice(0, n),
+  };
 }
 
 // Energy config → the client shape. `families.energy` (wave/spike/steady/
@@ -268,9 +283,8 @@ export function buildReport2ChapterCopies(
   // (chemical order / roles / meter fills) — is the gated content: shipped
   // ONLY when the report is unlocked at the full_report tier. A locked client
   // (`rewardCopy.locked`) NEVER receives it and renders the hook teaser +
-  // PremiumOverlay. Only Spiritual Lover carries full meters today; the other
-  // archetypes fall back to no bars rather than fabricating. Shared viewers
-  // inherit the owner's plan via `accessPlan`. Keyed to the primary archetype.
+  // PremiumOverlay. Shared viewers inherit the owner's plan via `accessPlan`.
+  // Keyed to the primary archetype.
   const rewardSection = getReport2Section(contentArchetype, "reward");
   const rewardUnlocked = unlocked("biochemical_reward_system_dynamics");
   // `reward_order` is set for 3 of 14 archetypes, `reward_roles` for 2 and
@@ -280,8 +294,8 @@ export function buildReport2ChapterCopies(
   // existing configs exactly. Per-archetype config still wins where present.
   const rewardFallback = getRewardProfile(report2ArchetypeSlug(contentArchetype));
   const rewardConfig = rewardUnlocked
-    ? (normalizeRewardConfig(
-        getReport2Config(contentArchetype) as Record<string, unknown> | null
+    ? (completeRewardConfig(
+        normalizeRewardConfig(getReport2Config(contentArchetype) as Record<string, unknown> | null)
       ) ??
       (rewardFallback
         ? normalizeRewardConfig({

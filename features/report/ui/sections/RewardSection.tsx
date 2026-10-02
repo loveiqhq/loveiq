@@ -45,10 +45,10 @@ export interface RewardCopy {
 /**
  * Reward-meter config from `getReport2Config(name)` — normalized server-side and
  * only sent when unlocked (null otherwise). `order` is the four neurochemicals
- * in the reader's rank order; `meters` the fill % per rank (0–100). Only
- * Spiritual Lover carries full meters today (`[88,56,30,12]`); Spark Seeker /
- * Sensual Connector carry `order` but null meters, and the other 11 carry no
- * order — in those cases the bars are omitted rather than fabricated.
+ * in the reader's rank order; `meters` the fill % per rank (0–100). The server
+ * completes every archetype's config by the designer's model (roles by rank, the
+ * meter ladder `[88,56,30,12]`, `data/report2-reward.ts`), so all 14 draw their
+ * bars; a row without a meter still renders an empty one rather than a guess.
  */
 export interface RewardConfig {
   /** e.g. ["oxytocin","endorphins","dopamine","adrenaline"]. */
