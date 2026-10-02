@@ -120,6 +120,19 @@ const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
  */
 const DIALOG_CLOSED = { timeout: 10_000 };
 const mockScrollTo = vi.fn();
+/**
+ * Closes the plans modal the fixture's discount ladder opens on mount, once nothing can
+ * bring it back. The plans pop-up's 1.6s beat starts on mount too (jsdom's zero-sized boxes
+ * count its chapter as reached), and a close inside the beat lets the pop-up open the modal
+ * again: under the full suite's load the close landed there (2026-10-02: closed at 1.55s,
+ * reopened at 1.84s) and the dialog never left. The beat is a no-op while the modal is
+ * open, so it is let pass first, as "carries neither the forced paywall…" does.
+ */
+async function closeLadderModal(user: ReturnType<typeof userEvent.setup>) {
+  await new Promise((resolve) => setTimeout(resolve, 1_700));
+  await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), DIALOG_CLOSED);
+}
 
 describe("ReportPage", () => {
   function buildSuccessResponse() {
@@ -481,12 +494,7 @@ describe("ReportPage", () => {
       expect(mockTrackPaywallView).not.toHaveBeenCalled();
       expect(mockTrackPaywallInitiated).not.toHaveBeenCalled();
 
-      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-
-      await waitFor(
-        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        DIALOG_CLOSED
-      );
+      await closeLadderModal(user);
       expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
 
       const growthSection = container.querySelector(
@@ -514,11 +522,7 @@ describe("ReportPage", () => {
 
       const { container } = render(<ReportPage />);
 
-      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(
-        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        DIALOG_CLOSED
-      );
+      await closeLadderModal(user);
 
       const firstSectionUnlockButton = container.querySelector(
         ".report-section .report-premium-overlay__cta"
@@ -560,12 +564,7 @@ describe("ReportPage", () => {
       expect(document.body.style.width).toBe("100%");
       expect(document.body.style.overflow).toBe("hidden");
 
-      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-
-      await waitFor(
-        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        DIALOG_CLOSED
-      );
+      await closeLadderModal(user);
       expect(document.documentElement.style.overflow).toBe("");
       expect(document.body.style.position).toBe("");
       expect(document.body.style.top).toBe("");
@@ -669,11 +668,7 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
 
       // Close the auto-opened modal first, then click a locked section.
-      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(
-        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        DIALOG_CLOSED
-      );
+      await closeLadderModal(user);
 
       const lockedCta = container.querySelector(
         ".report-section .report-premium-overlay__cta"
