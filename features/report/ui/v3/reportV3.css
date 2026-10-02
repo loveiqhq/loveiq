@@ -8408,6 +8408,82 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   display: none;
 }
 
+/* ══ Review 02.10 — Report 2.0's rows on the phone ══════════════════════════════════════
+ * Mark (Notion, mobile unlocked): "Left is what is live right now. The right shows how
+ * Report 2.0 looked like on mobile. Please adapt", and "Same goes for Love Languages".
+ * Report 2.0's phone rows (Figma 8632:1457; Love Language 8632:1833) stack the index, the
+ * name, its line, a full-width slider (a 6.06 track, a 7.07 dot at the fill's end) and the
+ * word under the slider. V2's own phone grid (report.css, up to 768px) set the index left
+ * and the word right of the name. 2.0's sizes as drawn; the fonts stay V4's (Fatih, 02.10).
+ * The live page from 700px keeps 2.0's desktop columns (after the touch-up). */
+@media (max-width: 699px) {
+  .rv3.rv4 .report-reward__row,
+  .rv3.rv4 .report-lovelang__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "rank" "main" "meter" "word";
+    gap: 0.4px 0;
+    padding: 15.65px 2.02px 14.13px;
+    border-bottom-width: 1.01px;
+  }
+  .rv3.rv4 .report-reward__row:last-child,
+  .rv3.rv4 .report-lovelang__row:last-child {
+    border-bottom: none;
+  }
+  .rv3.rv4 .report-reward__rank,
+  .rv3.rv4 .report-lovelang__rank {
+    grid-area: rank;
+    width: auto;
+    text-align: left;
+    font-size: 13.12px;
+    line-height: 21.65px;
+  }
+  .rv3.rv4 .report-reward__row-main,
+  .rv3.rv4 .report-lovelang__row-main {
+    grid-area: main;
+    gap: 8.5px;
+    padding: 1.51px 0 11.71px;
+  }
+  .rv3.rv4 .report-reward__chem,
+  .rv3.rv4 .report-lovelang__lang {
+    font-size: 15.14px;
+    line-height: 19.68px;
+  }
+  .rv3.rv4 .report-reward__blurb,
+  .rv3.rv4 .report-lovelang__blurb {
+    font-size: 10.09px;
+    line-height: 14.64px;
+  }
+  .rv3.rv4 .report-reward__meter,
+  .rv3.rv4 .report-lovelang__meter {
+    grid-area: meter;
+    width: 100%;
+    height: 6.06px;
+  }
+  .rv3.rv4 .report-reward__meter-track,
+  .rv3.rv4 .report-reward__meter-fill,
+  .rv3.rv4 .report-lovelang__meter-track,
+  .rv3.rv4 .report-lovelang__meter-fill {
+    height: 6.06px;
+    border-radius: 2.02px;
+  }
+  .rv3.rv4 .report-reward__meter-dot,
+  .rv3.rv4 .report-lovelang__meter-dot {
+    width: 7.07px;
+    height: 7.07px;
+    border-radius: 50%;
+  }
+  .rv3.rv4 .report-reward__role-label,
+  .rv3.rv4 .report-lovelang__intensity {
+    grid-area: word;
+    width: auto;
+    padding-top: 4.64px;
+    text-align: left;
+    font-size: 11.1px;
+    line-height: 18.32px;
+  }
+}
+
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
  * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
  * properly to not have these huge gaps and spaces". Production's column (991cb18c) is
@@ -9164,5 +9240,34 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 @media (min-width: 700px) and (hover: hover) and (pointer: fine) {
   .rv3.rv4 .rv4-loop__arrow:not([aria-disabled="true"]):hover {
     background: rgba(121, 95, 200, 0.18);
+  }
+}
+
+/* ══ Review 02.10 — Report 2.0's rows from 700px ════════════════════════════════════════
+ * From 700px the live page is the desktop, and Report 2.0's desktop rows (8427:1758,
+ * 8427:2094) are columns: index 36, the name and its line, a 169 slider, the word right.
+ * V2's tablet rules (report.css, up to 768px) restack them, so the 700–768 band gets the
+ * columns back; wider, V2's own desktop rules already draw them. */
+@media (min-width: 700px) and (max-width: 768px) {
+  .rv3.rv4 .report-reward__row {
+    grid-template-columns: 36px minmax(0, 1fr) 169px 95px;
+    grid-template-areas: none;
+    gap: 13.5px;
+  }
+  .rv3.rv4 .report-reward__rank,
+  .rv3.rv4 .report-reward__row-main,
+  .rv3.rv4 .report-reward__meter,
+  .rv3.rv4 .report-reward__role-label {
+    grid-area: auto;
+  }
+  .rv3.rv4 .report-lovelang__row {
+    flex-wrap: nowrap;
+    gap: 13.5px;
+  }
+  .rv3.rv4 .report-lovelang__meter {
+    width: 169.27px;
+  }
+  .rv3.rv4 .report-lovelang__intensity {
+    width: 94.79px;
   }
 }
