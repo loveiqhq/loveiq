@@ -51,8 +51,9 @@ export interface Report3TriggerRow {
 /**
  * Where an archetype's paywall falls in the chapter: rows of the two cards kept sharp,
  * blocks of "Common challenges" and of the practice kept sharp, and where the practice's
- * ramp paragraph stops being real (null: real throughout, as the other ramps are).
- * Omitted, a cut takes Figma's (Spark Seeker's frames: the ACCELERATORS_* constants).
+ * ramp paragraph stops being real (null: real throughout, as Typical Beliefs' ramps are,
+ * and then decoy mode cannot veil its tail: lockedBlurCopy.ts). Omitted, a cut takes
+ * Figma's (Spark Seeker's frames: the ACCELERATORS_* constants).
  */
 export interface Report3AcceleratorsCuts {
   freeRows: number;
@@ -63,9 +64,10 @@ export interface Report3AcceleratorsCuts {
 
 /**
  * Everything one archetype's chapter needs, as authored. The leads, titles, eyebrow and
- * teaser are Figma's for Spark Seeker; Sanjin's docs have none, so another archetype may
- * leave them out: no lead line, the universal titles, Spark Seeker's practice time, and
- * the first free practice paragraph as the closed card's teaser.
+ * teaser are Figma's for Spark Seeker; Sanjin's docs have none but Loyal Ritualist's lead
+ * for its brakes, so another archetype may leave them out: no lead line, the universal
+ * titles, Spark Seeker's practice time, and the first free practice paragraph as the
+ * closed card's teaser.
  */
 export interface Report3AcceleratorsCopy {
   intro: readonly Report3Block[];

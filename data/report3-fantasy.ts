@@ -332,11 +332,12 @@ export const FANTASY_BLURRED_ROWS = 2;
 export const FANTASY_CLOSED_BLURRED_ROWS = 3;
 
 /**
- * 441:6188 keeps practice paragraphs 1-3 sharp and fades the blur in over
- * paragraph 4 (488:226: a progressive blur over its first 84.5px). Paragraph 4 is
- * the ramp, and it stays real: at 430px the band covers all but its last few
- * words, so no sentence ends past the band to cut at, as in Typical Beliefs.
- * Paragraph 5 on is only ever seen under the full blur and is scrambled.
+ * Spark Seeker's: 441:6188 keeps practice paragraphs 1-3 sharp and fades the blur in
+ * over paragraph 4 (488:226: a progressive blur over its first 84.5px). Paragraph 4 is
+ * the ramp, and it stays real: at 430px the band covers all but its last few words,
+ * so no sentence ends past the band to cut at, as in Typical Beliefs. Paragraph 5 on
+ * is only ever seen under the full blur and is scrambled. Another archetype's wall sits
+ * at its own cut (data/report3-copy).
  */
 export const FANTASY_PRACTICE_FREE_BLOCKS = 3;
 
@@ -379,9 +380,9 @@ const standIn = (row: ReportPracticeTendencyRow): Report3FantasyRow =>
  * reader receives: the intro verbatim; the first three rows of the first three
  * categories verbatim; everything the page draws blurred — the two rows under each
  * of those, three rows in every other category, the map's dots, "Common challenges"
- * and the practice past paragraph 4 — as the copy itself since 26.09, decoys (and no
- * dots) in the switch's other position (lockedBlurCopy.ts); no row past the ones
- * drawn; and the closed teaser verbatim, because it is free copy.
+ * and the practice past its ramp (paragraph 4, Spark Seeker's) — as the copy itself
+ * since 26.09, decoys (and no dots) in the switch's other position (lockedBlurCopy.ts);
+ * no row past the ones drawn; and the closed teaser verbatim, because it is free copy.
  */
 export function buildFantasy(
   archetype: string,

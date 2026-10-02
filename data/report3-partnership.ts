@@ -83,8 +83,8 @@ export interface Report3PartnershipCopy {
   /** 399:219 / 401:222 — the closed card's teaser: practice paragraphs 1-2. */
   practiceTeaser?: readonly Report3Block[];
   /**
-   * What every other archetype's chapter (Sanjin's docs) runs after the loop's result, 4 to
-   * 8 paragraphs. Spark Seeker's ends on the result. No frame draws it: it follows the
+   * What every other archetype's chapter (Sanjin's docs) runs after the loop's result, 1 to
+   * 10 paragraphs. Spark Seeker's ends on the result. No frame draws it: it follows the
    * result, blurred with it for a locked reader.
    */
   tail?: readonly Report3Block[];
