@@ -96,13 +96,13 @@ describe("V4LearnMore — closed (153:2240)", () => {
     expect(container.querySelector(".rv4-learn__eyebrow-value")?.textContent).toBe("~15 min.");
     // 153:2273 — "Learn more & go deeper", "Learn more" in Bold; the book chip is gone.
     const label = container.querySelector(".rv4-learn__label")!;
-    expect(label.textContent).toBe("Learn more & go deeper");
-    expect(label.querySelector("strong.rv4-learn__lead")?.textContent).toBe("Learn more");
+    expect(label.textContent).toBe("Learn More & Go Deeper");
+    expect(label.querySelector("strong.rv4-learn__lead")?.textContent).toBe("Learn More");
     expect(container.querySelector(".rv4-learn__chip")).toBeNull();
     // 907:7664 — "Read All"; the accessible name keeps what it opens.
     const pill = screen.getByRole("button", { name: "Read all of the article" });
     expect(pill.textContent).toBe("Read all");
-    expect(screen.getByRole("button", { name: /Learn more/ }).getAttribute("aria-expanded")).toBe(
+    expect(screen.getByRole("button", { name: /Learn More/ }).getAttribute("aria-expanded")).toBe(
       "false"
     );
     expect(container.querySelector(".rv4-learn")!.getAttribute("data-name")).toBe(
@@ -286,7 +286,7 @@ describe("V4ChapterPart composition", () => {
     const { container } = render(<V4ChapterPart archetype="Spark Seeker" learnMore={learnMore} />);
     const open = container.querySelectorAll(".rv4-chapter.is-open");
     expect(open).toHaveLength(1);
-    expect(open[0]!.textContent).toContain("Learn more & go deeper");
+    expect(open[0]!.textContent).toContain("Learn More & Go Deeper");
   });
 
   it("drops the [Chapter Copy] placeholder the article replaces", () => {

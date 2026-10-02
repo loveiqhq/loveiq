@@ -1393,7 +1393,7 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
   typical_beliefs: {
     chapterId: "typical_beliefs",
     eyebrow: "Reading time: ~15 min.",
-    label: "Learn more & go deeper",
+    label: "Learn More & Go Deeper",
     blocks: [...TYPICAL_BELIEFS_FREE, ...TYPICAL_BELIEFS_GATED],
     paywallAt: TYPICAL_BELIEFS_FREE.length,
   },
@@ -1401,7 +1401,7 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
   typical_arousal_accelerators_turn_ons_of_the_core_archetype: {
     chapterId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     eyebrow: "Reading time: ~12 min.",
-    label: "Learn more & go deeper",
+    label: "Learn More & Go Deeper",
     // 235:234 is the standard 343px card since the rehaul. Its teaser, 240:239, is the
     // frame's own copy: broken after "A low sex drive." and "becomes possible." where
     // the article runs on, and spelled "fantasise" where the article has "fantasize"
@@ -1426,7 +1426,7 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
   typical_sexual_fantasy_amp_practice_tendencies: {
     chapterId: "typical_sexual_fantasy_amp_practice_tendencies",
     eyebrow: "Reading time: ~13 min.",
-    label: "Learn more & go deeper",
+    label: "Learn More & Go Deeper",
     blocks: FANTASY_REALITY_BLOCKS,
     // The only mid-paragraph cut: 482:6479 ends the free copy inside block 16, at the
     // end of a line at 393, and its blurred window resumes in the same paragraph.

@@ -303,7 +303,7 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
       )
     ),
     practiceEyebrow: "Practice time: ~10 min.",
-    practiceTitle: "Try this & see what shifts",
+    practiceTitle: "Try This & See What Shifts",
     practice: SPARK_PRACTICE,
     practiceTeaser: SPARK_PRACTICE.slice(0, 2),
   },
@@ -348,7 +348,7 @@ export const PARTNERSHIP_RAMP_THROUGH = "vulnerable needs more directly,";
 export const PARTNERSHIP_PRACTICE_FREE_BLOCKS = 3;
 
 /** The universal title, and Spark Seeker's practice time: the defaults. */
-export const PARTNERSHIP_PRACTICE_TITLE = "Try this & see what shifts";
+export const PARTNERSHIP_PRACTICE_TITLE = "Try This & See What Shifts";
 export const PARTNERSHIP_PRACTICE_EYEBROW = "Practice time: ~10 min.";
 
 /** A loop stage under the blur: as written, or its decoy (lockedBlurCopy.ts). */

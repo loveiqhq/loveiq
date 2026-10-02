@@ -131,7 +131,7 @@ describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
 
   it("sets the practice with ONE ordered three-item list, as 399:259 draws it", () => {
     expect(SPARK.practiceEyebrow).toBe("Practice time: ~10 min.");
-    expect(SPARK.practiceTitle).toBe("Try this & see what shifts");
+    expect(SPARK.practiceTitle).toBe("Try This & See What Shifts");
     expect(SPARK.practice).toHaveLength(12);
     const lists = SPARK.practice.filter((b) => b.kind === "list");
     expect(lists).toHaveLength(1);

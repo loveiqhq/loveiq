@@ -69,14 +69,14 @@ describe("V4TryThis — closed (374:217)", () => {
     expect(container.querySelector(".rv4-try__eyebrow-label")).toHaveClass("is-time");
     expect(container.querySelector(".rv4-try__eyebrow-value")?.textContent).toBe("~15 min.");
     const label = container.querySelector(".rv4-try__label")!;
-    expect(label.textContent).toBe("Try this & see what shifts");
+    expect(label.textContent).toBe("Try This & See What Shifts");
     // 185:265 — "Try this" in Bold, the rest Regular; the lightbulb chip is gone.
-    expect(label.querySelector("strong.rv4-try__lead")?.textContent).toBe("Try this");
+    expect(label.querySelector("strong.rv4-try__lead")?.textContent).toBe("Try This");
     expect(container.querySelector(".rv4-try__chip")).toBeNull();
     // 894:7594 — "Read All"; the accessible name keeps what it opens.
     const pill = screen.getByRole("button", { name: "Read all of the practice" });
     expect(pill.textContent).toBe("Read all");
-    expect(screen.getByRole("button", { name: /Try this/ }).getAttribute("aria-expanded")).toBe(
+    expect(screen.getByRole("button", { name: /Try This/ }).getAttribute("aria-expanded")).toBe(
       "false"
     );
     expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("374:217");
@@ -124,7 +124,7 @@ describe("V4TryThis — open (374:238)", () => {
     expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("374:238");
     expect(container.querySelectorAll(".rv4-prose__p")).toHaveLength(SPARK_TB.practice.length);
     expect(container.querySelector(".rv4-premium")).toBeNull();
-    expect(screen.getByRole("button", { name: /Try this/ }).getAttribute("aria-expanded")).toBe(
+    expect(screen.getByRole("button", { name: /Try This/ }).getAttribute("aria-expanded")).toBe(
       "true"
     );
   });
@@ -144,7 +144,7 @@ describe("V4TryThis — open (374:238)", () => {
 
   it("closes again from its own toggle", () => {
     const { container } = render(<V4TryThis practice={OPEN} defaultOpen />);
-    fireEvent.click(screen.getByRole("button", { name: /Try this/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Try This/ }));
     expect(container.querySelector(".rv4-try")!.classList.contains("is-open")).toBe(false);
   });
 });
@@ -183,7 +183,7 @@ describe("V4TryThis — open & gated (374:258)", () => {
     const onUnlock = vi.fn();
     const { container } = render(<V4TryThis practice={LOCKED} onUnlock={onUnlock} defaultOpen />);
     fireEvent.click(container.querySelector(".rv4-try__body > .rv4-prose__p")!);
-    fireEvent.click(screen.getByRole("button", { name: /Try this/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Try This/ }));
     expect(onUnlock).not.toHaveBeenCalled();
   });
 });

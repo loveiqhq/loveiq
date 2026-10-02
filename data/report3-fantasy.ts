@@ -252,7 +252,7 @@ export const REPORT_V4_FANTASY: Readonly<Record<string, Report3FantasyCopy>> = {
     intro: SPARK_INTRO,
     challenges: SPARK_CHALLENGES,
     practiceEyebrow: "Practice time: ~8 min.",
-    practiceTitle: "Try this & see what shifts",
+    practiceTitle: "Try This & See What Shifts",
     practice: SPARK_PRACTICE,
     practiceTeaser: SPARK_PRACTICE.slice(0, 2),
   },
@@ -342,7 +342,7 @@ export const FANTASY_CLOSED_BLURRED_ROWS = 3;
 export const FANTASY_PRACTICE_FREE_BLOCKS = 3;
 
 /** The universal title, and Spark Seeker's practice time: the defaults. */
-export const FANTASY_PRACTICE_TITLE = "Try this & see what shifts";
+export const FANTASY_PRACTICE_TITLE = "Try This & See What Shifts";
 export const FANTASY_PRACTICE_EYEBROW = "Practice time: ~8 min.";
 
 const realRow = (row: ReportPracticeTendencyRow): Report3FantasyRow => ({
