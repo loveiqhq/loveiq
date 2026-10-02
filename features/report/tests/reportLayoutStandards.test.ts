@@ -209,7 +209,7 @@ describe("report layout standards", () => {
     );
     // a span, not an <em>: <em> would italicise it again by default
     expect(src).toContain(
-      '<span className="report-constellation__heading-accent">constellation,</span>'
+      '<span className="report-constellation__heading-accent">Constellation,</span>'
     );
     expect(src).not.toContain('<em className="report-constellation__heading-accent"');
   });
