@@ -1199,8 +1199,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             child order is HERO → SUMMARY → SNAPSHOT, so this sits
                             between the card and Your Snapshot. Free + universal;
                             renders nothing for archetypes with no verified copy.
-                            Also V4's fallback for the 13 archetypes with no V4
-                            summary written yet. */
+                            Under V4 every archetype has its own summary since
+                            Sanjin's docs (03.10), so this is V2's and V3's. */
                           <ReportSection
                             primaryArchetype={viewArchetype}
                             sectionId="means_for_you"
