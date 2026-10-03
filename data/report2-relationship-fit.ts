@@ -1,7 +1,9 @@
 /**
  * Per-archetype `relationship_fit` — the 0..3 score behind each row of the
  * "Fit by relationship form" table (Figma 8427:2013…8427:2075, three pill
- * segments per row: `#9d8ad7` full, `#e2a48f` half, `#f0eef4` empty).
+ * segments per row). Since Mark's review of 02.10 a row fills ceil(score) segments in one
+ * colour: `#e2a48f` when that is a single segment, `#9d8ad7` otherwise, the rest
+ * `#f0eef4` (CuriositySection's `fitSegments`).
  *
  * `report2-archetype-config.json` carries `relationship_fit` for Spiritual Lover
  * ONLY, so 13 of 14 archetypes rendered the table with NO segments at all. The
@@ -16,9 +18,10 @@
  * on each entry is the sentence the numbers were read from — no score here is
  * invented independently of the copy the reader is shown.
  *
- * Scores use the half-steps the dot logic already supports: 0.5 · 1 · 1.5 · 2 ·
- * 2.5 · 3. 0.5 is the floor (a visible "not your shape"), never 0, matching the
- * existing config where the five low-fit forms all sit at 0.5.
+ * Scores keep their half-steps: 0.5 · 1 · 1.5 · 2 · 2.5 · 3. The segments round
+ * them up, so 0.5 draws as 1, 1.5 as 2 and 2.5 as 3. 0.5 is the floor (a visible
+ * "not your shape"), never 0, matching the existing config where the five low-fit
+ * forms all sit at 0.5.
  */
 
 /** The nine form slugs, in the fixed display order of the Figma table. */
