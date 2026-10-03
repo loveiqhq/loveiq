@@ -41,7 +41,7 @@ describe("Report 2.0's rows on the phone (Reward, Love Language)", () => {
     expect(at).toBeGreaterThan(-1);
     expect(at).toBeLessThan(v3.indexOf(TOUCH_UP));
     expect(v3.slice(0, at).split("\n").length).toBeGreaterThan(1884);
-    expect(block(PHONE).trimStart().startsWith("@media (max-width: 699px) {")).toBe(true);
+    expect(block(PHONE).trimStart().startsWith("@media (max-width: 699.98px) {")).toBe(true);
   });
 
   it("stacks index, name, slider and word in one column (8632:1457)", () => {

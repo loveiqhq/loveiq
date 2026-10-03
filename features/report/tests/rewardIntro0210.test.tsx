@@ -72,7 +72,7 @@ describe("Reward System — Report 2.0's intro in the card (V4)", () => {
       ""
     );
     const phone =
-      /@media \(max-width: 699px\) \{[\s\S]*?\.rv3\.rv4 \.report-reward__intro \{([^}]*)\}/.exec(
+      /@media \(max-width: 699\.98px\) \{[\s\S]*?\.rv3\.rv4 \.report-reward__intro \{([^}]*)\}/.exec(
         css
       );
     expect(phone, "phone rule").not.toBeNull();
