@@ -403,21 +403,19 @@ describe("reportV3.css contracts", () => {
 });
 
 describe("report3ArchetypeCard", () => {
-  it("names the archetypes still missing card copy, rather than inventing it", () => {
-    // Mirrors missingReport3Blurbs(): the gap closes loudly. Only Spark Seeker is
-    // drawn in the frames, so only Spark Seeker is authored.
-    const missing = missingReport3CardCopy();
-    expect(missing).not.toContain("Spark Seeker");
-    expect(missing).toHaveLength(13);
+  it("leaves no archetype missing card copy (Sanjin's card docs, 03.10)", () => {
+    expect(missingReport3CardCopy()).toEqual([]);
   });
 
-  it("carries the supportive sentences Mark approved on 2026-09-23", () => {
+  // Mark approved these on 2026-09-23; Sanjin's card doc (03.10) is the source since, and
+  // reworks the attachment line.
+  it("carries the supportive sentences as Sanjin's card doc sets them", () => {
     const body = (key: string) => copy.dimensions.find((d) => d.key === key)?.body;
     expect(body("initiation")).toBe(
       "You make the first move often, and the move itself is part of the pleasure. What matters most is feeling that your interest is met with genuine enthusiasm."
     );
     expect(body("attachment")).toBe(
-      "Closeness is comfortable while it stays voluntary. When it starts to feel owed, you may begin to pull back or create some distance."
+      "Closeness is comfortable while it stays voluntary. When it starts to feel owed, heavy, or restrictive, you may begin to pull back or create some distance."
     );
   });
 });
