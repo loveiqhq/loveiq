@@ -49,7 +49,7 @@ export interface Report3TypicalBeliefsCopy extends Report3BeliefPanels {
    * Curious Apprentice doc (01.10) writes three of its own.
    */
   intro?: readonly Report3Block[];
-  /** The belief map's heading and its lede, after the intro. */
+  /** The archetype's own lede, after the intro and before the panels: prose, no heading. */
   lede: readonly Report3Block[];
   /**
    * A paragraph after the sun beliefs, before "Common challenges". No archetype sets one
@@ -129,8 +129,8 @@ const SPARK_PANELS: Report3BeliefPanels = {
 };
 
 /* ─── chapter prose ──────────────────────────────────────────────────────────
- * 304:264's own blocks, in frame order: four paragraphs, the belief-map
- * subheading and its lede run BEFORE the two panels; "Common challenges" and its
+ * 304:264's own blocks, in frame order: four paragraphs and the lede run BEFORE the two
+ * panels (the frame's belief-map subheading went with Sanjin's doc, 02.10); "Common challenges" and its
  * two worked examples run after. The frame sets body copy in Plus Jakarta Sans
  * 16/25.6 (#3f3a4d), its H3s in Lora Bold 16/19.2 and its one H2 in Lora Bold
  * 18/21.6 — all in #161021.
@@ -156,13 +156,10 @@ const i = (text: string): Report3Run => ({ text, italic: true });
 /** Bold italic: Sanjin's doc (29.09) sets the two beliefs the worked examples open on so. */
 const bi = (text: string): Report3Run => ({ text, weight: 700, italic: true });
 const p = (...runs: Report3Run[]): Report3Block => ({ kind: "para", runs });
-/** 304:277 — Mark, 28.09: "H2"; the same level as the chapter title "Common challenges". */
-const h2 = (text: string): Report3Block => ({ kind: "heading", text, level: 2 });
 
 /**
  * 304:269 through 304:275 — the four paragraphs every archetype's chapter opens on
- * (verbatim in Sanjin's docs for each). The belief map's heading and lede follow, each
- * archetype's own.
+ * (verbatim in Sanjin's docs for each). The lede follows, each archetype's own.
  */
 export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
   p(
@@ -194,9 +191,11 @@ export const TYPICAL_BELIEFS_INTRO: readonly Report3Block[] = [
   ),
 ];
 
-/** 304:277 through 304:279 — Spark Seeker's belief map heading and lede. */
+/**
+ * 304:279 — Spark Seeker's lede, after the four opening paragraphs. The frame headed it with
+ * a belief-map H2 (304:277); Sanjin's doc has none (he removed it, 02.10), so it went.
+ */
 const SPARK_LEDE: readonly Report3Block[] = [
-  h2("The Spark Seeker Belief Map"),
   // Sanjin's doc bolds two runs here (29.09), after the frame was set.
   p(
     t("The "),

@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -82,7 +82,6 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
       "“I can choose intense experiences because I genuinely want them, not because I need them to prove something about who I am.”",
     ],
     lede: [
-      h2("The Explorer of Edges Belief Map"),
       p(
         t("For the"),
         b(" Explorer of Edges"),

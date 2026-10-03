@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -84,7 +84,6 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
       "“Understanding can deepen my sexuality, especially when I leave room for spontaneity, uncertainty, and experiences that do not fit neatly into a pattern.”",
     ],
     lede: [
-      h2("The Analytical Sexualist Belief Map"),
       p(
         t("For the "),
         b("Analytical Sexualist"),

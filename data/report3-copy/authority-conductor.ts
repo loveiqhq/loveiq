@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const AUTHORITY_CONDUCTOR: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -81,7 +81,6 @@ export const AUTHORITY_CONDUCTOR: Report3ArchetypeCopy = {
       "“I can bring confidence, decisiveness, and presence into intimacy without needing every moment to revolve around control.”",
     ],
     lede: [
-      h2("The Authority Conductor Belief Map"),
       p(
         t("For the"),
         b(" Authority Conductor"),

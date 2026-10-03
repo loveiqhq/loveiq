@@ -20,11 +20,12 @@ describe.each(Object.keys(REPORT_V4_TYPICAL_BELIEFS))("%s's V4 chapters", (name)
   for (const locked of [false, true]) {
     const state = locked ? "locked" : "open";
 
-    it(`Typical Beliefs draws ${state}, under its own belief map`, () => {
+    it(`Typical Beliefs draws ${state}, its lede with no belief-map heading`, () => {
       const { container } = render(
         <V4TypicalBeliefs view={buildTypicalBeliefs(name, { locked })!} />
       );
-      expect(container.textContent).toContain(`The ${name} Belief Map`);
+      expect(container.textContent).not.toContain("Belief Map");
+      expect(container.querySelector(".rv4-prose__h.is-h2")).toBeNull();
     });
 
     it(`Accelerators & Brakes draws ${state}: both cards, from five rows each`, () => {

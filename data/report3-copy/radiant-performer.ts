@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const RADIANT_PERFORMER: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -80,7 +80,6 @@ export const RADIANT_PERFORMER: Report3ArchetypeCopy = {
       "“Sexual expression can be bold, playful, glamorous, intense, tender, or imperfect and still feel authentically mine.”",
     ],
     lede: [
-      h2("The Radiant Performer Belief Map"),
       p(
         t("For the "),
         b("Radiant Performer"),

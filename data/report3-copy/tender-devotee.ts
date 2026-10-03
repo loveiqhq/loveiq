@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const TENDER_DEVOTEE: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -76,7 +76,6 @@ export const TENDER_DEVOTEE: Report3ArchetypeCopy = {
       "“Consistency and emotional warmth can deepen desire rather than make it less exciting.”",
     ],
     lede: [
-      h2("The Tender Devotee Belief Map"),
       p(
         t("For the "),
         b("Tender Devotee"),

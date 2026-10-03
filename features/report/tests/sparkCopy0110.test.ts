@@ -42,9 +42,9 @@ describe("Sanjin's Spark Seeker copy, 01.10", () => {
     expect(loop[5]!.happens).toBe("I feel more pressured, confined and less energized");
   });
 
-  it("bolds the belief map's lede as the doc does", () => {
-    // [4] is the H2 "The Spark Seeker belief map"; [5] its lede.
-    const runs = paraRuns(SPARK_TB.lede[1]);
+  it("bolds the lede as the doc does", () => {
+    // The lede is one paragraph since the belief-map heading went (Sanjin's doc, 02.10).
+    const runs = paraRuns(SPARK_TB.lede[0]);
     expect(runs.filter((r) => r.weight === 700).map((r) => r.text)).toEqual([
       "Spark Seeker",
       "chemistry, anticipation, play, novelty, and the feeling of being actively wanted",

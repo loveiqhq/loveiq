@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const MINIMALIST_COMPANION: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -81,7 +81,6 @@ export const MINIMALIST_COMPANION: Report3ArchetypeCopy = {
       "“My sexuality does not need to impress anyone in order to be fulfilling.”",
     ],
     lede: [
-      h2("The Minimalist Companion Belief Map"),
       p(
         t("For the "),
         b("Minimalist Companion"),
