@@ -1,10 +1,10 @@
 "use client";
 
 import type { CSSProperties, FC } from "react";
-import { archetypePresentation } from "@features/report/data/archetypePresentation";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import type { Report3CardCopy, Report3MeterLevel } from "@/data/report3-archetype-card";
 import V3DimensionDeck from "./V3DimensionDeck";
+import { v4ArchetypeColors } from "./v4ArchetypeColors";
 import useV4CountUp from "./useV4CountUp";
 import useV4Reveal from "./useV4Reveal";
 
@@ -18,10 +18,9 @@ import useV4Reveal from "./useV4Reveal";
  * Two sub-frames of 15:815 are `hidden="true"` in the file — 15:848 (a 697px
  * alternative body) and 15:966/967 — so they are deliberately not built here.
  *
- * The palette is NOT hardcoded to Spark Seeker. The frame's #ff6a3d chip and #f97316
- * meter-gradient end are precisely `archetypePresentation[name].iconBg` and `.dotColor`,
- * so the card reads both from there and renders correctly for any of the 14 archetypes
- * that has card copy authored.
+ * The palette is the archetype's own (v4ArchetypeColors): the frame's #ff6a3d chip and
+ * #f97316 meter end for Spark Seeker, and every other archetype's report theme (its accent,
+ * and its contrast-safe ink for the meter's dark end), Fatih, 03.10.
  *
  * The entrance (Mark, 28.09, 1943981051: "Also check for V2 animations and build them
  * into this please" / "If there werent any, feel free to be creative"). V2's card
@@ -56,9 +55,7 @@ interface Props {
 }
 
 const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDeckIndex = 0 }) => {
-  const presentation = archetypePresentation[archetype];
-  const accent = presentation?.iconBg ?? "#ff6a3d";
-  const accentDeep = presentation?.dotColor ?? "#f97316";
+  const { accent, deep: accentDeep } = v4ArchetypeColors(archetype);
   // The frame prints a whole number here ("43%") even where the top-three list
   // beside it prints one decimal ("43.4%"). The bar keeps the exact value.
   const matchLabel = Math.round(matchStrength);

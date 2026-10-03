@@ -1913,14 +1913,17 @@
 }
 
 /* ── Card shell — 15:815 ─────────────────────────────────────────── */
+/* The frame is the archetype's accent (Fatih, 03.10: each archetype's own colours);
+ * Spark Seeker's is the frame's #ff6a3d. The science gallery and the CiP loop deck are
+ * drawn in this same frame, so they follow it. */
 .rv3 .rv3-arch {
   align-items: flex-start;
   background: #fff;
-  border: 1px solid rgba(255, 106, 61, 0.45);
+  border: 1px solid rgb(var(--report-accent-rgb) / 0.45);
   border-radius: 24px;
   box-shadow:
-    0 20px 80px -24px rgba(255, 106, 61, 0.28),
-    inset 0 1px 0 0 rgba(255, 106, 61, 0.14);
+    0 20px 80px -24px rgb(var(--report-accent-rgb) / 0.28),
+    inset 0 1px 0 0 rgb(var(--report-accent-rgb) / 0.14);
   display: flex;
   flex-direction: column;
   overflow: clip;
@@ -2002,8 +2005,8 @@
   align-items: flex-start;
   background: linear-gradient(
     168.3779248324052deg,
-    rgba(255, 106, 61, 0.11) 8.4861%,
-    rgba(255, 106, 61, 0.05) 91.514%
+    rgb(var(--report-accent-rgb) / 0.11) 8.4861%,
+    rgb(var(--report-accent-rgb) / 0.05) 91.514%
   );
   border-radius: 14px;
   display: flex;
@@ -2220,7 +2223,7 @@
   top: 0;
   box-shadow:
     0 2px 6px 0 rgba(22, 16, 33, 0.06),
-    0 30px 60px 0 rgba(213, 69, 28, 0.28);
+    0 30px 60px 0 rgb(var(--rv3-accent-ink-rgb, 213 69 28) / 0.28);
   gap: 5px;
   height: 100%;
   min-height: 236px;
@@ -6092,8 +6095,8 @@ html {
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive {
   background: linear-gradient(
     165.7374deg,
-    rgba(255, 106, 61, 0.11) 8.4861%,
-    rgba(255, 106, 61, 0.05) 91.514%
+    rgb(var(--report-accent-rgb) / 0.11) 8.4861%,
+    rgb(var(--report-accent-rgb) / 0.05) 91.514%
   );
   gap: 10px;
   height: auto;
@@ -8801,11 +8804,11 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
    * box. */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci {
     background: #fff;
-    border: 1px solid rgba(255, 106, 61, 0.45);
+    border: 1px solid rgb(var(--report-accent-rgb) / 0.45);
     border-radius: 24px;
     box-shadow:
-      0 20px 80px -24px rgba(255, 106, 61, 0.28),
-      inset 0 1px 0 0 rgba(255, 106, 61, 0.14);
+      0 20px 80px -24px rgb(var(--report-accent-rgb) / 0.28),
+      inset 0 1px 0 0 rgb(var(--report-accent-rgb) / 0.14);
     overflow: clip;
     padding: 0 0 22px;
   }
@@ -9242,11 +9245,11 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   }
   .rv3.rv4 .rv4-loop__deck {
     background: #fff;
-    border: 1px solid rgba(255, 106, 61, 0.45);
+    border: 1px solid rgb(var(--report-accent-rgb) / 0.45);
     border-radius: 24px;
     box-shadow:
-      0 20px 80px -24px rgba(255, 106, 61, 0.28),
-      inset 0 1px 0 0 rgba(255, 106, 61, 0.14);
+      0 20px 80px -24px rgb(var(--report-accent-rgb) / 0.28),
+      inset 0 1px 0 0 rgb(var(--report-accent-rgb) / 0.14);
     margin-top: 18px;
     overflow: clip;
     padding: 0 0 22px;

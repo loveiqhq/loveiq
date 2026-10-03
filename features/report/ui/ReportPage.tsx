@@ -94,6 +94,7 @@ import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
 import { resolveReportSections, type DisplayReportSection } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
+import { v4InkStyle } from "./v3/v4ArchetypeColors";
 import AttachmentPatternsSection, {
   type AttachmentCopy,
   type AttachmentPlane,
@@ -924,7 +925,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       ref={mainContentRef}
       tabIndex={-1}
       className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}${isV3 ? " rv3" : ""}${isV4 ? " rv4" : ""}`}
-      style={getReportThemeStyle(theme)}
+      // V4 sets the archetype's name and accent inks too (Fatih, 03.10: its own colours).
+      style={{ ...getReportThemeStyle(theme), ...(isV4 ? v4InkStyle(theme.archetype) : {}) }}
       /**
        * Copy, right-click and drag are blocked on the LIVE site only. The report
        * is the paid product, so lifting its text is the thing this prevents.

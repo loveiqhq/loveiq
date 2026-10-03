@@ -218,7 +218,8 @@ describe("reportV3.css — the desktop loop (01.10)", () => {
   it("frames the cards and their pager as the science gallery is framed", () => {
     expect(block().startsWith("/* ══ The Challenges in Partnerships loop from 700px")).toBe(true);
     const frame = block().slice(block().indexOf(".rv3.rv4 .rv4-loop__deck {"));
-    expect(frame).toContain("border: 1px solid rgba(255, 106, 61, 0.45);");
+    // The card's frame, in the archetype's accent (Fatih, 03.10).
+    expect(frame).toContain("border: 1px solid rgb(var(--report-accent-rgb) / 0.45);");
     expect(frame).toContain("border-radius: 24px;");
   });
 
