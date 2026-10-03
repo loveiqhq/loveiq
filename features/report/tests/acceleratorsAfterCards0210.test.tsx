@@ -5,11 +5,11 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Sanjin's Loyal Ritualist and Tender Devotee docs (01.10) close the two lists with a
- * paragraph of their own ("This creates an important tension: …") before "Common
- * challenges". No frame draws it: it follows the second card, in the chapter's 16px rhythm,
- * and it is free copy, the docs' walls falling later, in the challenges. An archetype
- * without one draws nothing there. Stand-in archetypes, so no copy sits in this test.
+ * The `afterCards` slot: a paragraph after the two lists, before "Common challenges", in the
+ * chapter's 16px rhythm, as free copy. Loyal Ritualist's and Tender Devotee's docs set one on
+ * 01.10, and Sanjin deleted both on 02.10 (no text around the lists), so no archetype uses
+ * it now; the slot keeps its behaviour. An archetype without one draws nothing there.
+ * Stand-in archetypes, so no copy sits in this test.
  */
 const { CLOSE, record } = vi.hoisted(() => {
   const para = (text: string) => ({ kind: "para" as const, runs: [{ text }] });

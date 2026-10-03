@@ -315,14 +315,6 @@ export const TENDER_DEVOTEE: Report3ArchetypeCopy = {
           "Sex may become more accessible when there is room to be imperfect, take time and explore without feeling judged.",
       },
     ],
-    afterCards: [
-      p(
-        t("This creates an important tension: "),
-        b(
-          "some of the cues that most strongly accelerate the Tender Devotee’s desire also make partner feedback unusually influential. When reassurance becomes part of what makes sex feel safe and exciting, its sudden absence can sometimes press the brakes even when nothing has actually gone wrong."
-        )
-      ),
-    ],
     challenges: [
       p(
         t(

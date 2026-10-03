@@ -3,11 +3,11 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Sanjin's Authority Conductor doc (01.10) sets a paragraph after the sun beliefs, before
- * "Common challenges": a reflection on the two lists, not a challenge. No frame draws it:
- * it follows the sun panel as the chapter's prose does, 16 apart, and it is free copy, the
- * doc's wall falling later, in the challenges. An archetype without one draws nothing
- * there. Stand-in archetypes, so no copy sits in this test.
+ * The `afterPanels` slot: a paragraph after the sun beliefs, before "Common challenges". It
+ * follows the sun panel as the chapter's prose does, 16 apart, as free copy. Authority
+ * Conductor's doc set one on 01.10, and Sanjin deleted it on 02.10 (no text around the
+ * lists), so no archetype uses it now; the slot keeps its behaviour. An archetype without
+ * one draws nothing there. Stand-in archetypes, so no copy sits in this test.
  */
 const { AFTER, record } = vi.hoisted(() => {
   const para = (text: string) => ({ kind: "para" as const, runs: [{ text }] });

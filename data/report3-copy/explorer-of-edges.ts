@@ -89,7 +89,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
         t(", these beliefs often organize around "),
         b("intensity, freedom, taboo, exploration, and transformation"),
         t(
-          ". The important distinction is not whether those desires are unusual or intense, but what they come to mean. When intensity becomes proof that desire is real, that a partner truly accepts the Explorer of Edges, or that sex is meaningful enough, a genuine preference can harden into a rule. At other times, those same tendencies can support unusual openness, curiosity, self-knowledge, and deeply intentional exploration. The shadow and sun beliefs below show how these different meanings can shape the Explorer of Edges’ sexual experience."
+          ". The important distinction is not whether those desires are unusual or intense, but what they come to mean. When intensity becomes proof that desire is real, that a partner truly accepts the Explorer of Edges, or that sex is meaningful enough, a genuine preference can harden into a rule. At other times, those same tendencies can support unusual openness, curiosity, self-knowledge, and deeply intentional exploration. The shadow and sun beliefs below show how these different meanings can shape the Explorer of Edges sexual experience."
         )
       ),
     ],
@@ -137,7 +137,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
         t(" the boundary can acquire a much larger meaning. "),
         i("“If they really understood me, they would want to go there with me.”"),
         t(
-          " What began as a difference in willingness can start to feel like rejection of the Explorer of Edges’ sexuality itself."
+          " What began as a difference in willingness can start to feel like rejection of the Explorer of Edges sexuality itself."
         )
       ),
       p(
@@ -316,7 +316,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
     challenges: [
       p(
         t(
-          "Imagine that a strong, clearly negotiated power dynamic has activated the Explorer of Edges’s accelerator. The psychological intensity is exactly what makes the experience compelling. Then something changes. The partner becomes quieter, less responsive or slightly uncertain."
+          "Imagine that a strong, clearly negotiated power dynamic has activated the Explorer of Edges accelerator. The psychological intensity is exactly what makes the experience compelling. Then something changes. The partner becomes quieter, less responsive or slightly uncertain."
         )
       ),
       p(
@@ -390,7 +390,7 @@ export const EXPLORER_OF_EDGES: Report3ArchetypeCopy = {
       ),
       p(
         t(
-          "The goal is therefore not to weaken the Explorer of Edges’s appetite for intensity. It is to "
+          "The goal is therefore not to weaken the Explorer of Edges appetite for intensity. It is to "
         ),
         b("calibrate intensity rather than endlessly maximize it"),
         t(

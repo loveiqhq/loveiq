@@ -149,7 +149,7 @@ export const CURIOUS_APPRENTICE: Report3ArchetypeCopy = {
       ),
       p(
         t(
-          "Another appeal for Curious Apprentice is guidance, especially with a partner who communicates openly and makes experimentation feel safe. The challenge appears when guidance becomes a requirement for action."
+          "Another appeal for the Curious Apprentice is guidance, especially with a partner who communicates openly and makes experimentation feel safe. The challenge appears when guidance becomes a requirement for action."
         )
       ),
       p(

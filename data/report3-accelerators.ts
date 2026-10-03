@@ -76,9 +76,9 @@ export interface Report3AcceleratorsCopy {
   acceleratorsLead?: string;
   accelerators: readonly Report3TriggerRow[];
   /**
-   * What some of Sanjin's docs set after the two lists, before "Common challenges"
-   * (Loyal Ritualist, Tender Devotee). No frame draws it: it follows the second card.
-   * Free copy: those docs' walls fall later, in the challenges.
+   * A paragraph after the two lists, before "Common challenges". No archetype sets one
+   * since 02.10: Sanjin deleted Loyal Ritualist's and Tender Devotee's ("no text should be
+   * between before or after" the lists). Free copy where a doc sets it, after the second card.
    */
   afterCards?: readonly Report3Block[];
   challengesTitle?: string;

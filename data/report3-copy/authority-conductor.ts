@@ -94,16 +94,6 @@ export const AUTHORITY_CONDUCTOR: Report3ArchetypeCopy = {
         )
       ),
     ],
-    // The doc sets this after the sun beliefs, above Common challenges.
-    afterPanels: [
-      p(
-        t("The revealing part is not simply which beliefs sound familiar. It is "),
-        b("what happens when one of them becomes activated in an ordinary intimate moment"),
-        t(
-          ". The same preference for leadership can create a clear, exciting container in one situation and make a small loss of control feel surprisingly personal in another."
-        )
-      ),
-    ],
     challenges: [
       p(
         t(

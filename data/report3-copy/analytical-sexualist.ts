@@ -196,7 +196,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
       ),
       p(
         t(
-          "Then practice the new belief in small moments. If a sensation changes, notice it for a few moments before analysing it. If a partner responds differently, stay curious before interpreting the difference as feedback on performance. If something does not work, allow “not tonight” to be a complete explanation occasionally."
+          "Then practice the new belief in small moments. If a sensation changes, notice it for a few moments before analyzing it. If a partner responds differently, stay curious before interpreting the difference as feedback on performance. If something does not work, allow “not tonight” to be a complete explanation occasionally."
         )
       ),
       p(
@@ -523,7 +523,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
       p(t("More questions follow.")),
       p(
         t(
-          "The partner feels increasingly analysed and becomes less willing to explain. The Analytical Sexualist receives even less usable information and tries harder to understand."
+          "The partner feels increasingly analyzed and becomes less willing to explain. The Analytical Sexualist receives even less usable information and tries harder to understand."
         )
       ),
     ],
@@ -541,7 +541,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
         underneath: "Analysis reduces uncertainty",
       },
       {
-        happens: "“I feel analysed, not understood.”",
+        happens: "“I feel analyzed, not understood.”",
         underneath: "They want emotional attunement",
       },
       {
@@ -696,7 +696,7 @@ export const ANALYTICAL_SEXUALIST: Report3ArchetypeCopy = {
         t(
           " A very different fantasy may involve another person taking over so completely that the Analytical Sexualist stops monitoring, adjusting and evaluating. There is nothing left to solve. In imagination, the mind simply switches off. In reality, trying to force oneself to stop thinking can create another layer of monitoring: "
         ),
-        i("“Am I relaxed yet? Why am I still analysing this?”")
+        i("“Am I relaxed yet? Why am I still analyzing this?”")
       ),
       p(
         t("These fantasies reveal an important tension. "),
