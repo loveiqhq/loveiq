@@ -294,6 +294,7 @@ describe("/report-v4-preview — the archetype's own colours (Fatih, 03.10)", ()
         accessPlan={null}
         accessPlanLabel="no purchase"
         quotes={buildPreviewQuotes()}
+        typicalBeliefs={null}
       />
     );
     const column = container.querySelector<HTMLElement>(".rv3.rv4-doc")!;
