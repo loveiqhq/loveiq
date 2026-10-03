@@ -51,4 +51,29 @@ describe("titleCase — the report's heading rule (02.10)", () => {
     );
     expect(titleCase("what it comes down to")).toBe("What It Comes Down To");
   });
+
+  // The final review (02.10): the helper drives the heading guard, so it must not ask for
+  // a wrong case on headings the report does not have yet.
+  it("leaves a number's letters alone: ordinals stay as written", () => {
+    expect(titleCase("your 2nd archetype")).toBe("Your 2nd Archetype");
+    expect(titleCase("3rd time lucky")).toBe("3rd Time Lucky");
+  });
+
+  it("keeps a small word small inside a hyphenated word, unless it ends the heading", () => {
+    expect(titleCase("one-on-one time")).toBe("One-on-One Time");
+    expect(titleCase("talking face-to-face")).toBe("Talking Face-to-Face");
+    expect(titleCase("what to come back to")).toBe("What to Come Back To");
+  });
+
+  it("capitalises both halves of a pair joined by a slash or a dash", () => {
+    expect(titleCase("push/pull dynamics")).toBe("Push/Pull Dynamics");
+    expect(titleCase("fantasy\u2014reality")).toBe("Fantasy\u2014Reality");
+    expect(titleCase("give\u2013take")).toBe("Give\u2013Take");
+  });
+
+  it("reads the last word past a trailing space, and keeps the spacing it was given", () => {
+    expect(titleCase("what it comes down to ")).toBe("What It Comes Down To ");
+    expect(titleCase(" the hidden variable")).toBe(" The Hidden Variable");
+    expect(titleCase("")).toBe("");
+  });
 });
