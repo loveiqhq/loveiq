@@ -149,10 +149,13 @@ describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
   });
 
   it("finishes the sentence the frame cut off, as Sanjin's doc now does (02.10)", () => {
+    // Held by its shape, not quoted: this is paid copy, and the repo is public.
     const principle = textOf(SPARK.practice[8]!);
-    expect(principle).toContain("removing all uncertainty. Create routines");
-    expect(principle).toContain("leave room inside those routines for surprise.");
-    expect(principle.endsWith("completely predictable.")).toBe(true);
+    // The frame cut it after its third sentence; the doc runs four more.
+    expect(principle.split(/(?<=[.!?])\s+/)).toHaveLength(7);
+    // The doc's missing space after a full stop is restored: no sentence runs into the next.
+    expect(principle).not.toMatch(/[.!?][A-Z]/);
+    expect(principle.endsWith(".")).toBe(true);
   });
 
   it("gives the closed card practice paragraphs 1-2 as its teaser (399:219)", () => {
