@@ -3,6 +3,8 @@
 import { useState, type FC } from "react";
 import V4Report from "@features/report/ui/v3/V4Report";
 import ReportPricingModal from "@features/report/ui/ReportPricingModal";
+import { getReportTheme, getReportThemeStyle } from "@features/report/ui/reportTheme";
+import { v4InkStyle } from "@features/report/ui/v3/v4ArchetypeColors";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -97,7 +99,12 @@ const ReportV4PreviewClient: FC<Props> = ({
       </header>
 
       <div className="rv4-preview__frame">
-        <div className="rv3 rv4-doc">
+        {/* Themed as the live report's root is, so the card takes the archetype's own
+            colours (Fatih, 03.10). */}
+        <div
+          className="rv3 rv4-doc"
+          style={{ ...getReportThemeStyle(getReportTheme(archetype)), ...v4InkStyle(archetype) }}
+        >
           <V4Report
             archetype={archetype}
             matchStrength={matchStrength}

@@ -37,6 +37,7 @@ import type { ReportAccessPlan } from "@features/report/server/access";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { reportThemes } from "@features/report/ui/reportTheme";
 
 afterEach(cleanup);
 
@@ -275,5 +276,31 @@ describe("/report-v4-preview — Fantasy vs. Reality", () => {
     expect(container.querySelector(".rv4-fvr")).not.toBeNull();
     expect(container.querySelector(".rv4-fvr__gate")).toBeNull();
     expect(container.querySelector(".rv4-fvt__lock")).toBeNull();
+  });
+});
+
+describe("/report-v4-preview — the archetype's own colours (Fatih, 03.10)", () => {
+  it("themes the report column as the live report's root is themed", () => {
+    const { container } = render(
+      <ReportV4PreviewClient
+        archetype="Quiet Withdrawer"
+        matchStrength={43}
+        copy={report3ArchetypeCard["Quiet Withdrawer"]!}
+        learnMore={buildLearnMoreForReader({
+          chapters: ALL_CHAPTERS,
+          articles: REPORT_V4_LEARN_MORE,
+          accessPlan: null,
+        })}
+        accessPlan={null}
+        accessPlanLabel="no purchase"
+        quotes={buildPreviewQuotes()}
+      />
+    );
+    const column = container.querySelector<HTMLElement>(".rv3.rv4-doc")!;
+    // The card's frame reads --report-accent-rgb, its inks the V4 variables.
+    expect(column.style.getPropertyValue("--report-accent-rgb")).toBe(
+      reportThemes["Quiet Withdrawer"]!.accentRgb
+    );
+    expect(column.style.getPropertyValue("--rv3-accent-ink-rgb")).toBe("27 127 123");
   });
 });
