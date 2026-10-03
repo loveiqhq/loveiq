@@ -258,8 +258,6 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
         b("stability often creates the conditions from which desire can grow.")
       ),
     ],
-    brakesLead:
-      "The Loyal Ritualist’s brakes are more likely to engage when sex suddenly feels unpredictable, evaluative or as though familiar intimacy is no longer acceptable.",
     brakes: [
       {
         label: "Pressure for constant novelty",
@@ -313,17 +311,6 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
         subtext:
           "Touch, positions, settings or practices that have reliably felt good before can become powerful erotic cues precisely because they are known.",
       },
-    ],
-    afterCards: [
-      p(
-        t("This creates an important tension: "),
-        b(
-          "the conditions that make desire easiest to access can also make it especially sensitive to disruption."
-        ),
-        t(
-          " The deeper question is not whether routine is good or bad, but what happens when a trusted sexual pattern begins to change."
-        )
-      ),
     ],
     challenges: [
       p(
@@ -640,7 +627,9 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
         )
       ),
     ],
-    // The Paywall selection stops before the question line's colon: after the line is meant.
+    // The practice's Paywall marks its question line (re-made 02.10). As in Spark Seeker's
+    // chapter (PARTNERSHIP_PRACTICE_FREE_BLOCKS), that line is the zero end of the blur and
+    // stays clear; the questions ramp.
     cuts: { freeBlocks: 4, rampThrough: "inherently the problem. ", practiceFree: 2 },
   },
   fantasy: {

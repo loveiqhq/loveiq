@@ -111,7 +111,7 @@ export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
       p(t("The simplest solution may seem to be pulling away now.")),
       p(
         t(
-          "From the Quiet Withdrawer’s perspective, this can reduce uncertainty and preserve control. From the partner’s perspective, it may look like a rejection of closeness itself. Over time, even nonsexual affection can become less frequent."
+          "From the Quiet Withdrawer’s perspective, this can reduce uncertainty and preserve control. From the partner’s perspective, it may look like a rejection of closeness itself. Over time, even non-sexual affection can become less frequent."
         )
       ),
       p(
@@ -774,7 +774,7 @@ export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
           "The challenge is that avoiding expectation can also remove the low-pressure contact through which desire might have had time to emerge."
         ),
         t(
-          " When affection and sexual obligation become psychologically linked, even nonsexual closeness can start carrying more pressure than the partner intended."
+          " When affection and sexual obligation become psychologically linked, even non-sexual closeness can start carrying more pressure than the partner intended."
         )
       ),
       p(

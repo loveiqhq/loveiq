@@ -681,7 +681,6 @@ export const EMOTIONAL_VOYEUR: Report3ArchetypeCopy = {
         )
       ),
     ],
-    // The Paywall selection starts one letter into body[5]: the paragraph's start is meant.
     cuts: { freeBlocks: 5, rampThrough: null, practiceFree: 3 },
   },
   fantasy: {

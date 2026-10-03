@@ -81,36 +81,6 @@ export const RELATIONAL_NURTURER: Report3ArchetypeCopy = {
       "“Naming what I need gives my partner a better chance to care for me well.”",
       "“A satisfying sexual connection can include giving, receiving, comforting, playfulness, desire, and pleasure without any one role defining me.”",
     ],
-    // The doc's opening: the four universal paragraphs, the third with "in this case".
-    intro: [
-      p(
-        t(
-          "Long before people consciously decide what sex, desire, or intimacy mean to them, they have already absorbed beliefs about how these things are supposed to work. Some come directly from caregivers, previous partners, religion, media, or culture. Others are learned more quietly, by noticing what is praised, discouraged, desired, judged, or treated as normal."
-        )
-      ),
-      p(
-        t(
-          "Because many of these beliefs form before they are consciously examined, they rarely feel like beliefs. They simply feel true. Over time, they become part of the mental framework through which situations are interpreted. The event itself matters, but so does the meaning attached to it."
-        )
-      ),
-      p(
-        t(
-          "Imagine two people whose partners have not initiated sex for several days. One believes that being sexually desired is evidence of being attractive and valued. The lack of initiation may quickly become "
-        ),
-        i("“Maybe they do not want me anymore.”"),
-        t(
-          " Another believes that desire naturally rises and falls with stress, energy, mood, and circumstance. The same few days may carry almost no threat in this case. "
-        ),
-        b("The situation is identical. The belief changes what the situation means and feels like.")
-      ),
-      p(
-        t("A useful way to think about this is using the framework of "),
-        b("sun beliefs and shadow beliefs"),
-        t(
-          ". Sun beliefs tend to create more room for flexibility, curiosity, and choice. Shadow beliefs make the meaning of a situation more rigid or conditional. A shadow belief is not necessarily false or irrational. It may have developed for understandable reasons. The important question is whether it still helps interpret the present accurately."
-        )
-      ),
-    ],
     lede: [
       h2("The Relational Nurturer Belief Map"),
       p(

@@ -417,8 +417,7 @@ export const MINIMALIST_COMPANION: Report3ArchetypeCopy = {
         )
       ),
     ],
-    // The challenges' Paywall sits inside their first paragraph, which the ramp then is. The
-    // practice's selection skips its paragraph's first word: the paragraph's start is meant.
+    // The challenges' Paywall sits inside their first paragraph, which the ramp then is.
     cuts: { challengesFree: 0, practiceFree: 1, practiceRampThrough: null },
   },
   partnership: {

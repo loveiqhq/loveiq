@@ -52,9 +52,9 @@ export interface Report3TypicalBeliefsCopy extends Report3BeliefPanels {
   /** The belief map's heading and its lede, after the intro. */
   lede: readonly Report3Block[];
   /**
-   * What a doc sets after the sun beliefs, before "Common challenges" (Authority
-   * Conductor, 01.10). No frame draws it: it follows the sun panel. Free copy: that
-   * doc's wall falls later, in the challenges.
+   * A paragraph after the sun beliefs, before "Common challenges". No archetype sets one
+   * since 02.10: Sanjin deleted Authority Conductor's, the only one ("no text should be
+   * between before or after" the lists). Free copy where a doc sets it, after the panel.
    */
   afterPanels?: readonly Report3Block[];
   /** "Common challenges", under its title. */
