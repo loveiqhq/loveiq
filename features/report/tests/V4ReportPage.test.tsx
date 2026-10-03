@@ -113,11 +113,11 @@ describe("V4Part2", () => {
     expect(container.querySelector(".rv4-snap")).toBeNull();
   });
 
-  it("omits the summary for an archetype Mark has not written", () => {
+  it("draws every archetype's own summary, from Sanjin's docs (03.10)", () => {
     const { container } = render(
       <V4Part2 archetype="Quiet Withdrawer" matchStrength={12} card={card} />
     );
-    expect(container.querySelector(".rv4-summary")).toBeNull();
+    expect(container.querySelector(".rv4-summary")).toBeInTheDocument();
     expect(container.querySelector(".rv4-nudges")).toBeNull();
   });
 });
@@ -280,10 +280,8 @@ describe("V4Report — the whole page", () => {
 });
 
 describe("Report V4 copy", () => {
-  it("names the archetypes still missing a Part II summary", () => {
-    const missing = missingReport3Summary();
-    expect(missing).not.toContain("Spark Seeker");
-    expect(missing).toHaveLength(13);
+  it("leaves no archetype missing a Part II summary (Sanjin's docs, 03.10)", () => {
+    expect(missingReport3Summary()).toEqual([]);
   });
 
   it("keeps the frame's own teaser placeholder as a single source", () => {
