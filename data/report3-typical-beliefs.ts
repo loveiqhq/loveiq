@@ -156,7 +156,6 @@ const i = (text: string): Report3Run => ({ text, italic: true });
 /** Bold italic: Sanjin's doc (29.09) sets the two beliefs the worked examples open on so. */
 const bi = (text: string): Report3Run => ({ text, weight: 700, italic: true });
 const p = (...runs: Report3Run[]): Report3Block => ({ kind: "para", runs });
-const h = (text: string): Report3Block => ({ kind: "heading", text });
 /** 304:277 — Mark, 28.09: "H2"; the same level as the chapter title "Common challenges". */
 const h2 = (text: string): Report3Block => ({ kind: "heading", text, level: 2 });
 
@@ -216,9 +215,11 @@ const SPARK_LEDE: readonly Report3Block[] = [
  */
 export const TYPICAL_BELIEFS_CHALLENGES_TITLE = "Common Challenges";
 
-/** 304:380 through 304:410 — Spark Seeker's two worked examples, below the green panel. */
+/**
+ * 304:380 through 304:410 — Spark Seeker's two worked examples, below the green panel. Sanjin's
+ * doc runs them without the frame's two subheadings (02.10: "just pull from the doc again").
+ */
 const SPARK_CHALLENGES: readonly Report3Block[] = [
-  h("When Spontaneity Becomes Proof of Desire"),
   p(t("Consider the shadow belief "), bi("“If sex has to be planned, the spark must be gone.”")),
   p(
     t(
@@ -249,7 +250,6 @@ const SPARK_CHALLENGES: readonly Report3Block[] = [
       "“Spontaneity may be especially exciting to me, but desire does not have to be effortless to be genuine. Sometimes spark is discovered; sometimes it is created.”"
     )
   ),
-  h("When Being Wanted Becomes Evidence of Worth"),
   p(t("Now consider "), bi("“Being desired proves that I am still attractive and exciting.”")),
   p(
     t(
@@ -426,11 +426,11 @@ export interface Report3BeliefTurnView {
 export const TYPICAL_BELIEFS_FREE_ROWS = 3;
 
 /**
- * 348:221 keeps "Common challenges"' subheading and its first three paragraphs
- * sharp; the fourth block ("For the Spark Seeker, planning…") is the one the
- * blur ramps in over.
+ * 348:221, and Mark's Paywall on Sanjin's doc: the first three paragraphs of "Common
+ * challenges" stay sharp, and the next ("For the Spark Seeker, planning…") is the one the
+ * blur ramps in over. Block 3 since the doc dropped the subheading above them (02.10).
  */
-export const TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS = 4;
+export const TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS = 3;
 
 /** 374:264 keeps the first two practice paragraphs sharp; the third ramps. */
 export const TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS = 2;

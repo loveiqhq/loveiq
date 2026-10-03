@@ -54,7 +54,8 @@ describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
     };
     expect(runs(0)).toEqual([["two perfectly understandable patterns collide", 700, undefined]]);
     expect(runs(1)).toEqual([]);
-    expect(runs(2)).toEqual([["Spark Seeker,", 700, undefined]]);
+    // Sanjin's doc bolds the name, not its comma (02.10).
+    expect(runs(2)).toEqual([["Spark Seeker", 700, undefined]]);
     expect(runs(3)).toEqual([
       [
         "What is each of us responding to, and what are we accidentally creating together?",
@@ -147,10 +148,11 @@ describe("the authored copy (38:1681 / 532:262 / 647:229 / 399:259)", () => {
     expect(textOf(SPARK.practice[2]!)).toBe("When tension appears, ask three questions:");
   });
 
-  it("drops the sentence the frame and Sanjin's doc both cut off (Fatih, 24.09)", () => {
+  it("finishes the sentence the frame cut off, as Sanjin's doc now does (02.10)", () => {
     const principle = textOf(SPARK.practice[8]!);
-    expect(principle.endsWith("Build security without removing all uncertainty.")).toBe(true);
-    expect(payload(false)).not.toContain("leave room inside");
+    expect(principle).toContain("removing all uncertainty. Create routines");
+    expect(principle).toContain("leave room inside those routines for surprise.");
+    expect(principle.endsWith("completely predictable.")).toBe(true);
   });
 
   it("gives the closed card practice paragraphs 1-2 as its teaser (399:219)", () => {

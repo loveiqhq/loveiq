@@ -63,11 +63,12 @@ export interface Report3AcceleratorsCuts {
 }
 
 /**
- * Everything one archetype's chapter needs, as authored. The leads, titles, eyebrow and
- * teaser are Figma's for Spark Seeker; Sanjin's docs have none but Loyal Ritualist's lead
- * for its brakes, so another archetype may leave them out: no lead line, the universal
- * titles, Spark Seeker's practice time, and the first free practice paragraph as the
- * closed card's teaser.
+ * Everything one archetype's chapter needs, as authored. The titles, eyebrow and teaser are
+ * Figma's for Spark Seeker, and another archetype may leave them out: the universal titles,
+ * Spark Seeker's practice time, and the first free practice paragraph as the closed card's
+ * teaser. No archetype sets a lead line since 02.10: no text before or between the lists
+ * (Sanjin), so Spark Seeker's two from Figma went with its doc; the slots stay for a frame
+ * that draws one.
  */
 export interface Report3AcceleratorsCopy {
   intro: readonly Report3Block[];
@@ -136,8 +137,6 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
       ),
     ],
 
-    // 311:411
-    brakesLead: "For many Spark Seekers, the brakes may sound something like this",
     // 386:219 "WHAT BRAKES YOU"
     brakes: [
       {
@@ -167,8 +166,6 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
       },
     ],
 
-    // 311:413 — the frame's trailing space is kept; it has no width at a line end.
-    acceleratorsLead: "The accelerators might be just as recognizable: ",
     // 386:317 "WHAT ACCELERATES YOU"
     accelerators: [
       {

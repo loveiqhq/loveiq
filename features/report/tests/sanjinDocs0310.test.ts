@@ -32,7 +32,7 @@ const everyRecord = () =>
 describe("no text before, between or after the visual lists (Sanjin, 02.10)", () => {
   // "The typical beliefs (sun and shadow list), and acc&brakes list are visual elements, so
   // no text should be between before or after."
-  it.each(ARCHETYPES.filter((name) => name !== "Spark Seeker"))(
+  it.each(ARCHETYPES)(
     "%s sets nothing after its sun beliefs, and nothing around its two A&B lists",
     (name) => {
       expect(REPORT_V4_TYPICAL_BELIEFS[name]!.afterPanels).toBeUndefined();
@@ -42,6 +42,18 @@ describe("no text before, between or after the visual lists (Sanjin, 02.10)", ()
       expect(ab.afterCards).toBeUndefined();
     }
   );
+});
+
+describe('Spark Seeker\'s chapters follow its docs (Sanjin, 02.10: "pull from the doc again")', () => {
+  it("runs Common Challenges without the frame's two subheadings", () => {
+    const blocks = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!.challenges;
+    expect(blocks.filter((block) => block.kind === "heading")).toEqual([]);
+  });
+
+  it("carries the doc's second example after the loop's result, six paragraphs", () => {
+    const tail = REPORT_V4_PARTNERSHIP["Spark Seeker"]!.tail ?? [];
+    expect(tail.map((block) => block.kind)).toEqual(Array(6).fill("para"));
+  });
 });
 
 describe("the docs' wording after Sanjin's fixes (02.10)", () => {
