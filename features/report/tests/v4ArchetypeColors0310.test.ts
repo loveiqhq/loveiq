@@ -101,3 +101,52 @@ describe("the card's rules read the archetype's colours, not Spark Seeker's lite
     expect(body).not.toMatch(/213,\s*69,\s*28/);
   });
 });
+
+describe("Spark Seeker's card paints as it did (Fatih, 03.10)", () => {
+  const css = V3_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+  /** Every rule for the selector that reads an accent variable, Spark Seeker's values put in. */
+  const withSparkValues = (selector: string) => {
+    const bodies: string[] = [];
+    for (
+      let at = css.indexOf(`${selector} {`);
+      at > -1;
+      at = css.indexOf(`${selector} {`, at + 1)
+    ) {
+      const body = css.slice(at, css.indexOf("}", at));
+      if (/var\(--(report-accent-rgb|rv3-accent-ink-rgb)/.test(body)) bodies.push(body);
+    }
+    expect(bodies, selector).toHaveLength(1);
+    return bodies[0]!
+      .replace(/rgb\(var\(--report-accent-rgb\) \/ ([\d.]+)\)/g, "rgba(255, 106, 61, $1)")
+      .replace(
+        /rgb\(var\(--rv3-accent-ink-rgb, 213 69 28\) \/ ([\d.]+)\)/g,
+        "rgba(213, 69, 28, $1)"
+      );
+  };
+
+  it("keeps Spark Seeker's theme accent the frame's #ff6a3d, which those rules read", () => {
+    expect(reportThemes["Spark Seeker"]!.accentRgb).toBe("255 106 61");
+  });
+
+  const FRAME_RULE = [
+    "border: 1px solid rgba(255, 106, 61, 0.45);",
+    "0 20px 80px -24px rgba(255, 106, 61, 0.28),",
+    "inset 0 1px 0 0 rgba(255, 106, 61, 0.14);",
+  ];
+  const MOTIVE_RULE = ["rgba(255, 106, 61, 0.11) 8.4861%,", "rgba(255, 106, 61, 0.05) 91.514%"];
+  it.each([
+    [".rv3 .rv3-arch", FRAME_RULE],
+    [".rv3 .rv3-arch__motive", MOTIVE_RULE],
+    [".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive", MOTIVE_RULE],
+    [
+      ".rv3 .rv3-deck__card.is-focused .rv3-deck__inner",
+      ["0 30px 60px 0 rgba(213, 69, 28, 0.28);"],
+    ],
+    [".rv3.rv4 .rv3-method.is-v4 .rv3-sci", FRAME_RULE],
+    [".rv3.rv4 .rv4-loop__deck", FRAME_RULE],
+  ])("%s reads exactly its old literals with Spark Seeker's values in", (selector, literals) => {
+    const body = withSparkValues(selector);
+    for (const literal of literals) expect(body).toContain(literal);
+    expect(body).not.toContain("var(--report-accent-rgb)");
+  });
+});
