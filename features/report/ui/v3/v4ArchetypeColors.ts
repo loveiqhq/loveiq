@@ -10,12 +10,18 @@ import { reportThemes } from "../reportTheme";
  * accent, and its contrast-safe ink for text and the meter's dark end: the palette the
  * archetype's top-three row and old card already use). Spark Seeker's card is the frame's
  * (15:815), and its colours are kept to the hex so it renders exactly as before.
+ *
+ * As the old report does, the accent tints and fills (the frame, the motivation panel, the
+ * meter's light end) and the ink draws the strokes: several accents are too pale to draw a
+ * glyph in (Quiet Withdrawer's #c7f3f1 is 1.2:1 on white).
  */
 export interface V4ArchetypeColors {
-  /** The motivation chip and glyph, and the meter's light end. */
+  /** The meter's light end. The frame and the motivation panel are --report-accent-rgb. */
   accent: string;
   /** The meter's dark end. */
   deep: string;
+  /** The glyphs, the deck's active dot and its focus ring. */
+  glyph: string;
   /** The active meter label and the focused deck card's glow. */
   ink: string;
   /** The archetype's name. */
@@ -23,7 +29,13 @@ export interface V4ArchetypeColors {
 }
 
 const FRAME: Readonly<Record<string, V4ArchetypeColors>> = {
-  "Spark Seeker": { accent: "#ff6a3d", deep: "#f97316", ink: "#d5451c", nameInk: "#d63200" },
+  "Spark Seeker": {
+    accent: "#ff6a3d",
+    deep: "#f97316",
+    glyph: "#ff6a3d",
+    ink: "#d5451c",
+    nameInk: "#d63200",
+  },
 };
 
 export function v4ArchetypeColors(archetype: string): V4ArchetypeColors {
@@ -32,7 +44,7 @@ export function v4ArchetypeColors(archetype: string): V4ArchetypeColors {
   const theme = reportThemes[archetype];
   if (!theme) return FRAME["Spark Seeker"]!;
   const ink = theme.accentInk.toLowerCase();
-  return { accent: theme.accent.toLowerCase(), deep: ink, ink, nameInk: ink };
+  return { accent: theme.accent.toLowerCase(), deep: ink, glyph: ink, ink, nameInk: ink };
 }
 
 const rgbTriplet = (hex: string) =>

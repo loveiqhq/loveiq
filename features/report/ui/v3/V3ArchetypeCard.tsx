@@ -55,7 +55,7 @@ interface Props {
 }
 
 const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDeckIndex = 0 }) => {
-  const { accent, deep: accentDeep } = v4ArchetypeColors(archetype);
+  const { accent, deep: accentDeep, glyph } = v4ArchetypeColors(archetype);
   // The frame prints a whole number here ("43%") even where the top-three list
   // beside it prints one decimal ("43.4%"). The bar keeps the exact value.
   const matchLabel = Math.round(matchStrength);
@@ -73,7 +73,13 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
       className={`rv3-arch is-animated${headInView ? "" : " is-pending"}`}
       data-node-id="15:815"
       data-name="Archetype card"
-      style={{ "--rv3-arch-accent": accent, "--rv3-arch-deep": accentDeep } as CSSProperties}
+      style={
+        {
+          "--rv3-arch-accent": accent,
+          "--rv3-arch-deep": accentDeep,
+          "--rv3-arch-glyph": glyph,
+        } as CSSProperties
+      }
       aria-label={`${archetype} — your core archetype`}
     >
       {/* 15:816 — name, match strength, tagline. */}
@@ -143,7 +149,7 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
 
       <V3DimensionDeck
         dimensions={copy.dimensions}
-        accent={accent}
+        accent={glyph}
         initialIndex={initialDeckIndex}
       />
 
