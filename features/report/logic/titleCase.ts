@@ -43,8 +43,7 @@ const raiseFirst = (part: string) =>
 
 export function titleCase(text: string): string {
   const words = text.split(" ");
-  let last = words.length - 1;
-  while (last > 0 && words[last] === "") last--;
+  const last = words.reduce((at, word, i) => (word === "" ? at : i), -1);
   let opensPhrase = true;
   return words
     .map((word, i) => {
