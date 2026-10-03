@@ -19,22 +19,20 @@ const LOCKED = buildAccelerators("Spark Seeker", { locked: true })!;
 afterEach(cleanup);
 
 describe("the chapter body — 310:229", () => {
-  it("runs intro, brakes lead, brakes card, accelerators lead, accelerators card, challenges", () => {
+  // Figma's two lead lines (311:411, 311:413) went with Sanjin's doc on 02.10: no text before
+  // or between the lists.
+  it("runs intro, brakes card, accelerators card, challenges, with no lead lines", () => {
     const { container } = render(<V4Accelerators view={OPEN} />);
     const body = container.querySelector(".rv4-ab")!;
     expect(body.getAttribute("data-node-id")).toBe("310:229");
     expect([...body.children].map((el) => el.className.split(" ")[0])).toEqual([
       "rv4-ab__intro",
-      "rv4-ab__lead",
       "rv4-trig",
-      "rv4-ab__lead",
       "rv4-trig",
       "rv4-ab__challenges",
     ]);
     expect(body.querySelectorAll(".rv4-ab__intro .rv4-prose__p")).toHaveLength(5);
-    const leads = [...body.querySelectorAll(".rv4-ab__lead")].map((el) => el.textContent);
-    expect(leads[0]).toBe("For many Spark Seekers, the brakes may sound something like this");
-    expect(leads[1]!.trim()).toBe("The accelerators might be just as recognizable:");
+    expect(body.querySelectorAll(".rv4-ab__lead")).toHaveLength(0);
     expect(body.querySelector(".rv4-trig--brake")).not.toBeNull();
     expect(body.querySelector(".rv4-trig--accel")).not.toBeNull();
   });
@@ -125,7 +123,6 @@ describe("the paywalled chapter — 314:211", () => {
     }
     onUnlock.mockClear();
     fireEvent.click(container.querySelector(".rv4-ab__intro .rv4-prose__p")!);
-    fireEvent.click(container.querySelector(".rv4-ab__lead")!);
     fireEvent.click(container.querySelector(".rv4-ab__challenges .rv4-prose__p")!);
     expect(onUnlock).not.toHaveBeenCalled();
   });

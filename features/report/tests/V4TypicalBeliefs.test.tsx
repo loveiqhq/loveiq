@@ -77,12 +77,11 @@ describe("the chapter body — 304:256", () => {
     );
   });
 
-  it("carries the frame's headings", () => {
-    render(<V4TypicalBeliefs view={VIEW} />);
+  it("carries its headings: Common Challenges, and no subheadings under it (Sanjin's doc)", () => {
+    const { container } = render(<V4TypicalBeliefs view={VIEW} />);
     expect(screen.getByText("The Spark Seeker Belief Map")).toBeInTheDocument();
     expect(screen.getByText("Common Challenges")).toBeInTheDocument();
-    expect(screen.getByText("When Spontaneity Becomes Proof of Desire")).toBeInTheDocument();
-    expect(screen.getByText("When Being Wanted Becomes Evidence of Worth")).toBeInTheDocument();
+    expect(container.querySelectorAll(".rv4-prose__h:not(.is-h2)")).toHaveLength(0);
   });
 });
 
@@ -329,11 +328,10 @@ describe("the paywalled chapter — 348:213", () => {
     expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
   });
 
-  it("holds Common challenges open for four blocks, then ramps into the blur", () => {
+  it("holds Common challenges open for three blocks, then ramps into the blur", () => {
     const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
-    // 348:221 draws the subheading and three paragraphs sharp; the next block is the
-    // ramp and everything after it sits under the full blur, with the card on it.
-    expect(screen.getByText("When Spontaneity Becomes Proof of Desire")).toBeInTheDocument();
+    // 348:221 and Mark's Paywall on the doc keep three paragraphs sharp; the next block is
+    // the ramp and everything after it sits under the full blur, with the card on it.
     expect(screen.getByText("But the belief changes its meaning.")).toBeInTheDocument();
     const gated = container.querySelector(".rv4-tb__gated");
     expect(gated).not.toBeNull();
@@ -343,9 +341,7 @@ describe("the paywalled chapter — 348:213", () => {
     expect(container.querySelector(".rv4-tb__ramp")!.textContent).toContain(
       "For the Spark Seeker, planning may begin to feel like evidence"
     );
-    expect(container.querySelector(".rv4-tb__blurred")!.textContent).toContain(
-      "When Being Wanted Becomes Evidence of Worth"
-    );
+    expect(container.querySelector(".rv4-tb__blurred")!.textContent).toContain("Now consider");
     expect(container.querySelectorAll(".rv4-tb__gate .rv4-premium")).toHaveLength(1);
   });
 
@@ -355,7 +351,7 @@ describe("the paywalled chapter — 348:213", () => {
     expect(container.querySelector(".rv4-tb__gated")).toBeNull();
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelectorAll(".rv4-turn__shift-text")).toHaveLength(10);
-    expect(screen.getByText("When Being Wanted Becomes Evidence of Worth")).toBeInTheDocument();
+    expect(container.querySelector(".rv4-tb__gate")).toBeNull();
   });
 });
 

@@ -13,12 +13,11 @@
  * THE COPY IS THE FRAME'S, read off 38:1681, the loop cards 532:263-532:375, the
  * result 647:229 and the practice 399:259, run by run — including the straight
  * apostrophe in "Spark Seeker's" (38:1681) and the curly quotes around quoted
- * speech. Two departures, both Fatih's calls of 2026-09-24:
- *  - 38:1681 ends "They feel like facts. " with a trailing space; dropped.
- *  - The practice's principle paragraph runs on in Figma into "Create routines
- *    that make connection possible, then leave room inside" and stops mid-sentence
- *    — Sanjin's source doc ("Spark_Seeker_How_to_improve") is cut off in the same
- *    place. The fragment is dropped until Sanjin supplies the full sentence.
+ * speech. Since 02.10 Sanjin's docs are the source for this copy too, and the practice's
+ * principle paragraph runs on to the end of the sentence the frame cut off ("…leave room
+ * inside those routines for surprise"), with the rest of that paragraph from his doc. One
+ * departure, Fatih's call of 2026-09-24: 38:1681 ends "They feel like facts. " with a
+ * trailing space; dropped.
  *
  * Chrome text — the loop's step names ("The Situation" … "My Confirmation"),
  * "What happens", "What's underneath", the orbit prompt — is universal and lives
@@ -83,9 +82,9 @@ export interface Report3PartnershipCopy {
   /** 399:219 / 401:222 — the closed card's teaser: practice paragraphs 1-2. */
   practiceTeaser?: readonly Report3Block[];
   /**
-   * What every other archetype's chapter (Sanjin's docs) runs after the loop's result, 1 to
-   * 10 paragraphs. Spark Seeker's ends on the result. No frame draws it: it follows the
-   * result, blurred with it for a locked reader.
+   * What a chapter (Sanjin's docs) runs after the loop's result, 1 to 10 paragraphs; Spark
+   * Seeker's second example since 02.10. No frame draws it: it follows the result, blurred
+   * with it for a locked reader.
    */
   tail?: readonly Report3Block[];
   cuts?: Partial<Report3PartnershipCuts>;
@@ -157,7 +156,7 @@ const SPARK_PRACTICE: readonly Report3Block[] = [
     t("The most useful principle for the Spark Seeker is often simple: "),
     b("keep the commitment clear while leaving parts of the experience open."),
     t(
-      " Protect time for intimacy without scripting every detail. Build security without removing all uncertainty."
+      " Protect time for intimacy without scripting every detail. Build security without removing all uncertainty. Create routines that make connection possible, then leave room inside those routines for surprise. A date can be planned while what happens during it remains open. Familiar sex can still contain a new element. The goal is to create enough stability for the relationship to feel secure without making every intimate experience completely predictable."
     )
   ),
   p(
@@ -195,9 +194,9 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
       ),
       p(
         t("For the "),
-        b("Spark Seeker,"),
+        b("Spark Seeker"),
         t(
-          " these collisions often become most visible as a relationship settles into familiarity. The same stability that can deepen trust and closeness can also remove some of the uncertainty, pursuit, and discovery that once made desire feel effortless. This can make ordinary shifts in a long-term relationship carry more meaning than they need to, with less intensity sometimes being read as less attraction, less interest, or a sign that something has changed between two people. The challenge is therefore not simply a preference for novelty, but learning to distinguish between a relationship that is genuinely no longer fulfilling and one that simply requires different conditions for desire to stay engaged."
+          ", these collisions often become most visible as a relationship settles into familiarity. The same stability that can deepen trust and closeness can also remove some of the uncertainty, pursuit, and discovery that once made desire feel effortless. This can make ordinary shifts in a long-term relationship carry more meaning than they need to, with less intensity sometimes being read as less attraction, less interest, or a sign that something has changed between two people. The challenge is therefore not simply a preference for novelty, but learning to distinguish between a relationship that is genuinely no longer fulfilling and one that simply requires different conditions for desire to stay engaged."
         )
       ),
       p(
@@ -302,6 +301,43 @@ export const REPORT_V4_PARTNERSHIP: Readonly<Record<string, Report3PartnershipCo
         "The more the partner tries to make the relationship feel secure, the more predictable it becomes. The more predictable it becomes, the more the Spark Seeker may experience the loss of excitement as evidence that something is wrong."
       )
     ),
+    // Sanjin's doc (02.10): a second version of the pattern, after the loop's result. Its
+    // apostrophes are set straight, as the rest of this chapter's.
+    tail: [
+      p(
+        t(
+          "A second version of the pattern can appear when partners experience desire very differently."
+        )
+      ),
+      p(
+        t(
+          "Imagine the Spark Seeker initiates sex and the partner responds warmly, but without immediate intensity. They may need time to settle in, feel connected, or let arousal build gradually. From the partner's perspective, desire is present. It simply develops more slowly."
+        )
+      ),
+      p(
+        t("The Spark Seeker may read that slower response differently. A thought may appear: "),
+        i("“If they really wanted me, I would feel it more strongly.”")
+      ),
+      p(
+        t(
+          "That interpretation can change the interaction. The Spark Seeker may push for more energy, become noticeably disappointed, or withdraw before the partner's desire has had time to build. The partner may then feel rushed, tested, or as though their natural way of becoming aroused is not enough."
+        )
+      ),
+      p(
+        t(
+          "What began as a difference in desire rhythm can therefore start looking like a difference in attraction."
+        )
+      ),
+      p(
+        t("This is one of the important challenges for the Spark Seeker in relationships: "),
+        b(
+          "not every drop in intensity means desire is disappearing, and not every partner expresses wanting through immediacy."
+        ),
+        t(
+          " Learning to recognize different forms and rhythms of desire can make it easier to protect the spark without turning every quieter moment into a judgment about the relationship."
+        )
+      ),
+    ],
     practiceEyebrow: "Practice time: ~10 min.",
     practiceTitle: "Try This & See What Shifts",
     practice: SPARK_PRACTICE,

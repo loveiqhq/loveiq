@@ -56,12 +56,12 @@ describe("the authored copy (read off 310:229 / 374:304 / 377:221)", () => {
     }
   });
 
-  it("carries the intro, both leads, seven challenge paragraphs and seven practice paragraphs", () => {
+  it("carries the intro, no lead lines, seven challenge paragraphs and seven practice paragraphs", () => {
     expect(SPARK.intro).toHaveLength(5);
-    expect(SPARK.brakesLead).toBe(
-      "For many Spark Seekers, the brakes may sound something like this"
-    );
-    expect(SPARK.acceleratorsLead.trim()).toBe("The accelerators might be just as recognizable:");
+    // Figma's two lead lines (311:411, 311:413) are not in Sanjin's doc, and no text sits
+    // before or between the lists (Sanjin, 02.10; Fatih: "Remove, as the doc").
+    expect(SPARK.brakesLead).toBeUndefined();
+    expect(SPARK.acceleratorsLead).toBeUndefined();
     expect(SPARK.challengesTitle).toBe("Common Challenges");
     expect(SPARK.challenges).toHaveLength(7);
     expect(SPARK.practice).toHaveLength(7);

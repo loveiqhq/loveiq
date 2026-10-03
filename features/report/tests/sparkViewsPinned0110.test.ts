@@ -13,17 +13,19 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
  * copy itself is not repeated in a test (the repo is public). An intentional change to
  * Spark Seeker's copy updates these, and says so in its commit. 02.10: its headings and its
  * practices' title in the sync's heading case; mapped back to the old case, the views hash
- * as before.
+ * as before. 03.10: its copy from Sanjin's docs (Common Challenges without subheadings, no
+ * A&B lead lines, CiP's second example and finished practice sentence); a structural diff
+ * of the eight views against the previous commit showed those changes and nothing else.
  */
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const PINNED: Record<string, string> = {
-  "typicalBeliefs:open": "91cf58bcb34309f909a59293da883b6bc76162984048093ef802d8b3663d9485",
-  "typicalBeliefs:locked": "13ad30fc9b7f8afeb07a85b8c002537077dfde10512e4fbe43f5c0155c668bfa",
-  "accelerators:open": "862e127fd4953ca7f719d96396dadf52b9552b8d2319ee8bc2dae77f957aabd9",
-  "accelerators:locked": "cf84dcf5e778eb3084c1ba74a1315ff9cea3eff06aa6573eafbf55e6f90cd920",
-  "partnership:open": "5825c3105cd0d1f2350151cb964078f98d112959795a4564cbf9af7555ae4459",
-  "partnership:locked": "5e63acff129e2b84b45847b740ff8e58fb44fac44d62a19ba37a987a7824a32d",
+  "typicalBeliefs:open": "1a1d7c050f0664474d57ff2f6f60d67b555e42e91f668a897aff911db8177b14",
+  "typicalBeliefs:locked": "e506217144d5a1ecb1a2b6cad0932d93a31a4ed8573e725032b365dd7507f5a7",
+  "accelerators:open": "c3c009133b4eb26cd3d11dfe550c8ffb05926fa8f154fef83ba27eee7cf1c130",
+  "accelerators:locked": "7becb3420063f7454d15222cbfb090790ffddb5c689e77a384a3c5c5d57f1c45",
+  "partnership:open": "8bfc00eb582555e7d1d3552e159d446a3bc611292c7a1047a1d1899dbd243e3e",
+  "partnership:locked": "1bce22c397122f9f5228345b8362341a866a9f404f108293554b7c234e433832",
   "fantasy:open": "75422df86ad437ae8446a0de69eea9d681b0badb531cf685d672b248e42a3f9c",
   "fantasy:locked": "9d35808a592a7025230aab7c2d1ab36645949915e0aef924966f36d94af84603",
 };
