@@ -7,7 +7,7 @@ import V4Runs from "./V4Runs";
  *
  * Named "Chapter H1 + Copy / Non Expandable + Archetype Colored" in the file: the
  * same head-and-copy shape as a chapter row but with no chevron and no collapse,
- * and with the second word carrying the archetype ink (#d63200). Its title is
+ * and with the second word carrying the archetype's ink (--rv3-name-ink). Its title is
  * tracked at -0.8px, tighter than either chapter variant.
  */
 

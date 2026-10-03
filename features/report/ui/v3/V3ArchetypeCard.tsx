@@ -18,9 +18,10 @@ import useV4Reveal from "./useV4Reveal";
  * Two sub-frames of 15:815 are `hidden="true"` in the file — 15:848 (a 697px
  * alternative body) and 15:966/967 — so they are deliberately not built here.
  *
- * The palette is the archetype's own (v4ArchetypeColors): the frame's #ff6a3d chip and
- * #f97316 meter end for Spark Seeker, and every other archetype's report theme (its accent,
- * and its contrast-safe ink for the meter's dark end), Fatih, 03.10.
+ * The palette is the archetype's own (v4ArchetypeColors), Fatih, 03.10: the frame's
+ * #ff6a3d glyphs and #f97316 meter end for Spark Seeker; every other archetype's report
+ * theme, its accent tinting and its contrast-safe ink drawing the glyphs and the meter's
+ * dark end.
  *
  * The entrance (Mark, 28.09, 1943981051: "Also check for V2 animations and build them
  * into this please" / "If there werent any, feel free to be creative"). V2's card
