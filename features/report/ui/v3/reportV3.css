@@ -8424,7 +8424,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
  * word under the slider. V2's own phone grid (report.css, up to 768px) set the index left
  * and the word right of the name. 2.0's sizes as drawn; the fonts stay V4's (Fatih, 02.10).
  * The live page from 700px keeps 2.0's desktop columns (after the touch-up). */
-@media (max-width: 699px) {
+@media (max-width: 699.98px) {
   .rv3.rv4 .report-reward__row,
   .rv3.rv4 .report-lovelang__row {
     display: grid;
