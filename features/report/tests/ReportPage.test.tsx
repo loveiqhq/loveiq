@@ -2168,4 +2168,33 @@ describe("ReportPage", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
   });
+
+  // Fatih, 03.10: each archetype's own colours. The live root is the only place a V4 reader
+  // gets the inks, so the page is what this pins.
+  describe("V4 — the report root carries the archetype's own inks", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const renderRoot = (query: string) => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      return render(<ReportPage />).container.querySelector<HTMLElement>("main.report-page")!;
+    };
+
+    it("sets Emotional Voyeur's inks beside its accent under ?v4=1", () => {
+      const main = renderRoot("v4=1");
+      expect(main.style.getPropertyValue("--rv3-name-ink")).toBe("#0d7e7a");
+      expect(main.style.getPropertyValue("--rv3-accent-ink")).toBe("#0d7e7a");
+      expect(main.style.getPropertyValue("--rv3-accent-ink-rgb")).toBe("13 126 122");
+      expect(main.style.getPropertyValue("--report-accent-rgb")).toBe("52 234 228");
+    });
+
+    it("leaves ?v3=1's root on the stylesheet's defaults", () => {
+      const main = renderRoot("v3=1");
+      expect(main.style.getPropertyValue("--rv3-name-ink")).toBe("");
+      expect(main.style.getPropertyValue("--rv3-accent-ink-rgb")).toBe("");
+      expect(main.style.getPropertyValue("--report-accent-rgb")).toBe("52 234 228");
+    });
+  });
 });
