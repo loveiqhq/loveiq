@@ -1894,11 +1894,11 @@
  */
 .rv3 {
   --rv3-accent-ink: #d5451c; /* active meter label + focused-card glow */
-  --rv3-name-ink: #d63200; /* archetype name; already used by .report-snapshot-compare__rail */
+  --rv3-name-ink: #d63200; /* archetype name: Spark Seeker's; v4InkStyle sets each one's */
   --rv3-peach: #faf6f4; /* peeking card ground */
   --rv3-quiet: #9a96a6; /* peeking card sub-label */
   /* inactive meter step — faded further on Mark's request (15:942 / 15:944 fill
-   * rgb(181,181,181)), so only the orange level reads. */
+   * rgb(181,181,181)), so only the archetype's level reads. */
   --rv3-scale: #b5b5b5;
 }
 
@@ -4347,8 +4347,8 @@
   filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
-/* 348:332 down: every block of "Common challenges" past the subheading and its
- * first three paragraphs. The mask ramps the copy in over two 25.6px lines rather
+/* 348:332 down: every block of "Common challenges" past its first three
+ * paragraphs. The mask ramps the copy in over two 25.6px lines rather
  * than cutting to it — Mark's "Fade first 2 lines of next paragraph". */
 .rv3 .rv4-tb__gated {
   filter: blur(var(--rv4-veil, 5px));
@@ -4771,7 +4771,7 @@
 }
 
 /* ── The chapter's gated prose — 348:221 ──────────────────────────────────────
- * The subheading and three paragraphs stay sharp; the next block ramps in over
+ * Its first three paragraphs stay sharp; the next block ramps in over
  * four 25.6px lines (Mark: "have all paywall go through progression of 4 lines");
  * everything after sits under the full blur to the end of the chapter, with the
  * paywall card on it (below). The old uniform blur and two-line opacity mask are
@@ -8409,7 +8409,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   display: none;
 }
 /* The dimension deck: a card in full view that is not focused (`is-visible`) keeps the
- * white design, without the focused card's orange glow; only a card the viewport cuts is
+ * white design, without the focused card's glow; only a card the viewport cuts is
  * beige. Wherever two cards fit, so not only from 700px. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-visible > .rv3-deck__card.is-focused .rv3-deck__inner {
   box-shadow: 0 2px 6px 0 rgba(22, 16, 33, 0.06);
@@ -9221,7 +9221,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
  *   stops where Power is whole; where three cards fit, one click goes there (the pager's
  *   end is the first stop that shows Power whole: useSciPager's endsWhenLastShows).
  * - A card in full view that is not focused (`is-visible`) keeps the white design; only a
- *   card the viewport cuts is beige. The orange glow stays the focused card's (its face
+ *   card the viewport cuts is beige. The glow stays the focused card's (its face
  *   is set above the 28.09 (c) touch-up, as it holds wherever two cards fit).
  * The phone keeps its trailing space and its stop a card. */
 @media (min-width: 700px) {

@@ -383,7 +383,7 @@ const rampOf = (gated: Report3GatedCopy, realThrough: string | null): Report3Gat
  *
  * `locked` is decided by the caller, from the same gate the V2 section runs through
  * (`accelUnlocked`), so nothing in the V4 tree ever sees an access plan. A locked
- * reader receives: the intro, both leads and rows 1-2 verbatim; rows 3-5 and
+ * reader receives: the intro, any leads and rows 1-2 verbatim; rows 3-5 and
  * everything past the ramps as the page draws them blurred — the copy itself since
  * 26.09, decoys in the switch's other position (lockedBlurCopy.ts); and the closed
  * practice teaser verbatim, because it is free copy.

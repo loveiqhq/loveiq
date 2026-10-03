@@ -285,7 +285,7 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
         </>
       ) : null}
 
-      {/* 15:1231 — four bars, the active one in the archetype's accent. From 700px they
+      {/* 15:1231 — four bars, the active one in the archetype's glyph colour. From 700px they
        * are dots between Previous and Next, which the phone never draws. The arrows stay
        * focusable at the ends (aria-disabled), so a keyboard keeps its place. */}
       <div

@@ -68,7 +68,7 @@ const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex =
       {/* 1:734 */}
       <div className="rv4-sep" aria-hidden="true" />
 
-      {/* 1:736 — omitted rather than faked for an archetype Mark has not written. */}
+      {/* 1:736 — omitted, not faked, for an archetype with no summary (none since 03.10). */}
       {summary ? <V4SummaryChapter archetype={archetype} summary={summary} /> : null}
     </section>
   );

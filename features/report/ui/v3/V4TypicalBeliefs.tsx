@@ -23,7 +23,7 @@ import { guardedUnlock } from "./v4Unlock";
  * "Common challenges" into free, ramp and blurred parts, which the server makes
  * so the browser never decides where the wall falls.
  *
- * THE PAYWALLED STATE — 348:221. The subheading and three paragraphs stay sharp;
+ * THE PAYWALLED STATE — 348:221. The first three paragraphs stay sharp;
  * the fourth block is the ramp (the blur fades in over its first four lines, per
  * Mark's "progression of 4 lines"); everything after sits under the full blur to
  * the end of the chapter, and the Premium content card floats 87px in. That whole
