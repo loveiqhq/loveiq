@@ -1886,11 +1886,11 @@
  * Figma "Report V4 — MOBILE" (1:165) > Archetype card 15:815 (361x1031) and the
  * "Archetype dimension deck" component 15:194, placed as instance 15:847.
  *
- * Palette note: #ff6a3d and #f97316 are NOT deck constants — they are
- * archetypePresentation["Spark Seeker"].iconBg and .dotColor, so both arrive as
- * --rv3-arch-accent / --rv3-arch-deep and the card works for any archetype.
- * #d5451c is new: it is both the active meter label and the rgb of the focused
- * card's glow, rgba(213,69,28,.28).
+ * Palette note: no colour here is Spark Seeker's constant. v4ArchetypeColors sets them
+ * per archetype (Fatih, 03.10): --rv3-arch-accent / --rv3-arch-deep / --rv3-arch-glyph on
+ * the card, --rv3-deck-accent on the deck, and the inks on the report root. Spark Seeker's
+ * are the frame's: #ff6a3d, #f97316, and #d5451c, both the active meter label and the
+ * rgb of the focused card's glow, rgba(213,69,28,.28). The values below are its defaults.
  */
 .rv3 {
   --rv3-accent-ink: #d5451c; /* active meter label + focused-card glow */
@@ -6108,7 +6108,8 @@ html {
 /* 1107:2432 — the solid chip is gone: a 32x45 box around the 26px target outline
  * (1107:2430), whose stroke runs 0.67 past it (the 27.35 export). Mark's glyph is a
  * new drawing, not the old one scaled, and it is painted through a mask so it takes
- * the archetype's accent, as the chip did; the frame nudges it 0.5 left. */
+ * the archetype's glyph colour (its ink where the accent is too pale to draw in); the
+ * frame nudges it 0.5 left. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-chip {
   background: none;
   border-radius: 0;
@@ -6118,7 +6119,7 @@ html {
   width: 32px;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-glyph {
-  background: var(--rv3-arch-accent);
+  background: var(--rv3-arch-glyph);
   height: 27.3458px;
   mask: url("/report/v4/dimensions/core-motivation.svg") center / contain no-repeat;
   -webkit-mask: url("/report/v4/dimensions/core-motivation.svg") center / contain no-repeat;

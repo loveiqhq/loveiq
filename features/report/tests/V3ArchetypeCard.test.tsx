@@ -48,13 +48,32 @@ describe("V3ArchetypeCard", () => {
     expect(V3_CSS).toMatch(/\.rv3 \.rv3-arch__bar-fill \{[^}]*width: var\(--rv3-arch-match\)/);
   });
 
-  it("takes its palette from archetypePresentation, so it is not Spark-Seeker-only", () => {
+  it("takes its palette from v4ArchetypeColors, so it is not Spark-Seeker-only", () => {
     const { container } = renderCard();
     const card = container.querySelector<HTMLElement>(".rv3-arch");
-    // archetypePresentation["Spark Seeker"].iconBg / .dotColor — the frame's
-    // #ff6a3d chip and #f97316 meter-gradient end.
+    // Spark Seeker's are the frame's: the #ff6a3d glyphs and #f97316 meter-gradient end.
     expect(card?.style.getPropertyValue("--rv3-arch-accent")).toBe("#ff6a3d");
     expect(card?.style.getPropertyValue("--rv3-arch-deep")).toBe("#f97316");
+    expect(card?.style.getPropertyValue("--rv3-arch-glyph")).toBe("#ff6a3d");
+    const deck = container.querySelector<HTMLElement>(".rv3-deck");
+    expect(deck?.style.getPropertyValue("--rv3-deck-accent")).toBe("#ff6a3d");
+  });
+
+  it("strokes a pale accent's glyphs in the archetype's ink (Fatih, 03.10)", () => {
+    // Quiet Withdrawer's accent, #c7f3f1, is 1.2:1 on white: it tints, but a glyph drawn
+    // in it disappears. Its ink, #1b7f7b, draws the glyphs, the active dot and the ring.
+    const { container } = render(
+      <V3ArchetypeCard
+        archetype="Quiet Withdrawer"
+        matchStrength={43}
+        copy={report3ArchetypeCard["Quiet Withdrawer"]!}
+      />
+    );
+    const card = container.querySelector<HTMLElement>(".rv3-arch");
+    expect(card?.style.getPropertyValue("--rv3-arch-accent")).toBe("#c7f3f1");
+    expect(card?.style.getPropertyValue("--rv3-arch-glyph")).toBe("#1b7f7b");
+    const deck = container.querySelector<HTMLElement>(".rv3-deck");
+    expect(deck?.style.getPropertyValue("--rv3-deck-accent")).toBe("#1b7f7b");
   });
 
   it("fills one meter segment per step and highlights only the reached label", () => {
@@ -607,15 +626,15 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
   });
 
   // 1107:2432 — the chip is gone: a 32x45 box holding the 26px target outline (1107:2430),
-  // drawn in the archetype's accent through a mask of Mark's own glyph.
-  it("draws the core motivation icon as the bare outline, in the accent", () => {
+  // drawn in the archetype's glyph colour through a mask of Mark's own glyph.
+  it("draws the core motivation icon as the bare outline, in the glyph colour", () => {
     const chip = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-chip");
     expect(chip).toMatch(/background: none/);
     expect(chip).toMatch(/height: 45px/);
     expect(chip).toMatch(/width: 32px/);
     expect(chip).toMatch(/padding: 0/);
     const glyph = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-glyph");
-    expect(glyph).toMatch(/background: var\(--rv3-arch-accent\)/);
+    expect(glyph).toMatch(/background: var\(--rv3-arch-glyph\)/);
     expect(glyph).toMatch(/\/report\/v4\/dimensions\/core-motivation\.svg/);
     expect(glyph).toMatch(/width: 27\.3458px/);
   });

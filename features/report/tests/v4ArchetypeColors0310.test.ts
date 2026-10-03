@@ -27,6 +27,7 @@ describe("the V4 archetype colours (Fatih, 03.10: each archetype's own)", () => 
     expect(v4ArchetypeColors("Spark Seeker")).toEqual({
       accent: "#ff6a3d",
       deep: "#f97316",
+      glyph: "#ff6a3d",
       ink: "#d5451c",
       nameInk: "#d63200",
     });
@@ -39,6 +40,7 @@ describe("the V4 archetype colours (Fatih, 03.10: each archetype's own)", () => 
       expect(v4ArchetypeColors(name)).toEqual({
         accent: theme.accent.toLowerCase(),
         deep: theme.accentInk.toLowerCase(),
+        glyph: theme.accentInk.toLowerCase(),
         ink: theme.accentInk.toLowerCase(),
         nameInk: theme.accentInk.toLowerCase(),
       });
@@ -46,11 +48,13 @@ describe("the V4 archetype colours (Fatih, 03.10: each archetype's own)", () => 
   );
 
   it.each(KNOWN_ARCHETYPES.filter((name) => name !== "Spark Seeker"))(
-    "sets %s's text inks readable on white (4.5:1)",
+    "sets %s's text inks readable on white (4.5:1) and its glyphs at 3:1",
     (name) => {
-      const { ink, nameInk } = v4ArchetypeColors(name);
+      const { glyph, ink, nameInk } = v4ArchetypeColors(name);
       expect(onWhite(ink)).toBeGreaterThanOrEqual(4.5);
       expect(onWhite(nameInk)).toBeGreaterThanOrEqual(4.5);
+      // Glyphs, the deck's active dot and its focus ring are strokes: WCAG's 3:1 for graphics.
+      expect(onWhite(glyph)).toBeGreaterThanOrEqual(3);
     }
   );
 
@@ -84,6 +88,11 @@ describe("the card's rules read the archetype's colours, not Spark Seeker's lite
     const body = rule(selector);
     expect(body).toContain("var(--report-accent-rgb)");
     expect(body).not.toMatch(/255,\s*106,\s*61/);
+  });
+
+  it("draws the motivation glyph in the glyph colour", () => {
+    const body = rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-glyph");
+    expect(body).toContain("background: var(--rv3-arch-glyph)");
   });
 
   it("glows the focused deck card in the accent ink", () => {

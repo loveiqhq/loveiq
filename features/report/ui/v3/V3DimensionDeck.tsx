@@ -59,8 +59,8 @@ const STEP = 280;
 interface Props {
   /** Exactly four, in frame order: communication, initiation, attachment, power. */
   dimensions: readonly Report3Dimension[];
-  /** The archetype's own accent — `archetypePresentation[name].iconBg`, #ff6a3d for
-   * Spark Seeker. Drives the focused chip, the glyphs and the active indicator. */
+  /** The archetype's glyph colour (v4ArchetypeColors): #ff6a3d for Spark Seeker, the
+   * others' ink. Drives the glyphs, the active indicator and the focus ring. */
   accent: string;
   /** Which card opens focused. The card instance opens on Communication. */
   initialIndex?: number;
