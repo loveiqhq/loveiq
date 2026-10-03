@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const RELATIONAL_NURTURER: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -82,7 +82,6 @@ export const RELATIONAL_NURTURER: Report3ArchetypeCopy = {
       "“A satisfying sexual connection can include giving, receiving, comforting, playfulness, desire, and pleasure without any one role defining me.”",
     ],
     lede: [
-      h2("The Relational Nurturer Belief Map"),
       p(
         t("For the "),
         b("Relational Nurturer"),

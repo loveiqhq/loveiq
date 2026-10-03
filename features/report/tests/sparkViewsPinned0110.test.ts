@@ -16,12 +16,14 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
  * as before. 03.10: its copy from Sanjin's docs (Common Challenges without subheadings, no
  * A&B lead lines, CiP's second example and finished practice sentence); a structural diff
  * of the eight views against the previous commit showed those changes and nothing else.
+ * Then the belief-map H2 went from the lede (no doc has one): the old views minus that one
+ * heading equal the new.
  */
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const PINNED: Record<string, string> = {
-  "typicalBeliefs:open": "1a1d7c050f0664474d57ff2f6f60d67b555e42e91f668a897aff911db8177b14",
-  "typicalBeliefs:locked": "e506217144d5a1ecb1a2b6cad0932d93a31a4ed8573e725032b365dd7507f5a7",
+  "typicalBeliefs:open": "8b929fff8d5d2860ac4bd4e2a949d835ded191f2a2fe47e65678d4d79374ea96",
+  "typicalBeliefs:locked": "82b56e5ab6b95531d26a0e10281d2d19179728c29cea0dbc2ce24813d8463b12",
   "accelerators:open": "c3c009133b4eb26cd3d11dfe550c8ffb05926fa8f154fef83ba27eee7cf1c130",
   "accelerators:locked": "7becb3420063f7454d15222cbfb090790ffddb5c689e77a384a3c5c5d57f1c45",
   "partnership:open": "8bfc00eb582555e7d1d3552e159d446a3bc611292c7a1047a1d1899dbd243e3e",

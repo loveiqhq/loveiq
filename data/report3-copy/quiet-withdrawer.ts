@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -83,7 +83,6 @@ export const QUIET_WITHDRAWER: Report3ArchetypeCopy = {
       "“I can allow small signs of desire to grow without demanding that my body or emotions give me an immediate answer.”",
     ],
     lede: [
-      h2("The Quiet Withdrawer Belief Map"),
       p(
         t("For the "),
         b("Quiet Withdrawer"),

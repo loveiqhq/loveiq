@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const SENSUAL_CONNECTOR: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -81,7 +81,6 @@ export const SENSUAL_CONNECTOR: Report3ArchetypeCopy = {
       "“My sensitivity to emotional connection can be a strength when I use it to deepen intimacy rather than to interpret every change as a threat.”",
     ],
     lede: [
-      h2("The Sensual Connector Belief Map"),
       p(
         t("For many "),
         b("Sensual Connectors"),

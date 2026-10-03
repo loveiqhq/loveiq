@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const SPIRITUAL_LOVER: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -85,7 +85,6 @@ export const SPIRITUAL_LOVER: Report3ArchetypeCopy = {
       "“Sex can mean different things at different times without any one meaning being less authentic.”",
     ],
     lede: [
-      h2("The Spiritual Lover Belief Map"),
       p(
         t("For the "),
         b("Spiritual Lover"),

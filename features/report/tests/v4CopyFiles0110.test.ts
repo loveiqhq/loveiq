@@ -129,8 +129,9 @@ describe.each(FILES.map((f) => [SLUG_TO_NAME.get(f.replace(/\.ts$/, "")) ?? f, f
       const copy = await load();
       expect(copy.typicalBeliefs.turns).toHaveLength(10);
       expect(copy.typicalBeliefs.sun).toHaveLength(10);
-      expect(copy.typicalBeliefs.lede.length).toBeGreaterThanOrEqual(2);
-      expect(copy.typicalBeliefs.lede[0]).toMatchObject({ kind: "heading", level: 2 });
+      // The lede is prose: no doc heads it with a belief-map heading (Sanjin, 02.10).
+      expect(copy.typicalBeliefs.lede.length).toBeGreaterThanOrEqual(1);
+      expect(copy.typicalBeliefs.lede.every((block) => block.kind === "para")).toBe(true);
       expect(copy.accelerators.brakes).toHaveLength(5);
       expect(copy.accelerators.accelerators).toHaveLength(5);
       expect(copy.partnership.loop).toHaveLength(6);

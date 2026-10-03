@@ -56,6 +56,17 @@ describe('Spark Seeker\'s chapters follow its docs (Sanjin, 02.10: "pull from th
   });
 });
 
+describe("no belief-map heading over the lists (no doc has one; Sanjin, 02.10)", () => {
+  // Spark Seeker's frame drew one (304:277) and every record copied it. Sanjin removed it
+  // from Spark Seeker's doc ("there's still this spark seeker belief map, because I removed
+  // it"), and the other docs never had one.
+  it.each(ARCHETYPES)("%s's Typical Beliefs leads into its lists with prose only", (name) => {
+    const lede = REPORT_V4_TYPICAL_BELIEFS[name]!.lede;
+    expect(lede.length).toBeGreaterThan(0);
+    expect(lede.filter((block) => block.kind !== "para")).toEqual([]);
+  });
+});
+
 describe("the docs' wording after Sanjin's fixes (02.10)", () => {
   it("opens Relational Nurturer's Typical Beliefs on the universal paragraphs", () => {
     // "no, i deleted that 'in this case' part in the relational nurturer, the intro should

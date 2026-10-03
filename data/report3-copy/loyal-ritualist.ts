@@ -9,7 +9,7 @@
  * PREMIUM: server-only (__tests__/security/premium-content-bundle.test.ts).
  */
 import type { Report3ArchetypeCopy } from "./types";
-import { b, bi, h, h2, i, ol, p, t } from "./runs";
+import { b, bi, h, i, ol, p, t } from "./runs";
 
 export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
   typicalBeliefs: {
@@ -81,7 +81,6 @@ export const LOYAL_RITUALIST: Report3ArchetypeCopy = {
       "“Trust and familiarity can give me more freedom to be vulnerable, attentive, and deeply engaged with a partner.”",
     ],
     lede: [
-      h2("The Loyal Ritualist Belief Map"),
       p(
         t("For the"),
         b(" Loyal Ritualist"),
