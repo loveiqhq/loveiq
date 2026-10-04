@@ -490,12 +490,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       // Finished, including a run restored onto its completion screen (hasCompleted is
       // only set by submitting in this mount): the same guard as goPrev, see #393.
       if (currentIndex >= totalQuestions || index === currentIndex) return;
-      // Forward is a Next, so Next's checks apply. Without them, Back to the email
-      // question, an edit and Forward submitted an address nobody had confirmed.
-      // Refused, the history steps back onto the question on screen.
-      if (index > currentIndex && !mayMoveOn) {
+      // Forward is a Next, so Next's checks apply, one question at a time. Without
+      // them, Back to the email question, an edit and Forward submitted an address
+      // nobody had confirmed; and a jump over several entries (the browser's history
+      // list) would skip the checks of every question edited since. Refused, the
+      // history steps back onto the question on screen.
+      if (index > currentIndex && (index > currentIndex + 1 || !mayMoveOn)) {
         setAttemptedNext(true);
-        window.history.back();
+        window.history.go(currentIndex - index);
         return;
       }
       // Back while paused goes back a question like any other Back, and the dialog
