@@ -407,9 +407,9 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 
 ### Pre-push hook standard
 
-- Pre-push runs: `npm test` (unit tests only, ~10–30s) ✅
+- Pre-push runs `npm run lint`, `npm run typecheck`, `npm test` and `npm run docs:check` (`.husky/pre-push`) ✅
 - E2E belongs in CI, NOT pre-push — too slow, blocks developer flow ❌
-- E2E now RUNS in CI (`ci.yml`, job `End-to-end (Playwright)`), on every push and PR.
+- E2E now RUNS in CI (`ci.yml`, jobs `E2E <project>`, one per browser), on pushes to `main`/`staging` and on PRs from branches in this repo, Dependabot's included (PRs from forks are skipped).
   ~6 min at 4 workers against a locally built server with NO database credentials,
   so it cannot write to production the way a local run does.
 

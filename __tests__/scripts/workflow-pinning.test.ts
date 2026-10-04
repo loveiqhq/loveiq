@@ -35,4 +35,31 @@ describe("GitHub Actions are pinned to commits", () => {
     }
     expect(offenders, `these run third-party code from a movable tag`).toEqual([]);
   });
+
+  /**
+   * The commit pin covers the action's own code, not a container it pulls.
+   * TruffleHog's action runs `docker run <image>:<version>` with `version`
+   * defaulting to `latest`, so a pinned SHA still scanned with whatever image
+   * `latest` pointed at that day. Found by audit on 2026-10-04.
+   */
+  it("pins the image TruffleHog's action pulls to a digest", () => {
+    const steps: string[] = [];
+    for (const name of readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f))) {
+      const text = readFileSync(join(DIR, name), "utf8");
+      // A `uses:` line plus the `with:` block that follows it, up to the next step.
+      for (const m of text.matchAll(
+        /^\s*(?:-\s*)?uses:\s*trufflesecurity\/trufflehog@[^\n]*\n(?:(?!\s*-\s)[^\n]*\n)*/gm
+      )) {
+        steps.push(`${name}\n${m[0]}`);
+      }
+    }
+    expect(steps.length, "no TruffleHog step found, so this test checks nothing").toBeGreaterThan(
+      0
+    );
+    for (const step of steps) {
+      expect(step, "TruffleHog's `version` must name a digest, not a tag").toMatch(
+        /^\s*version:\s*"?[\w.-]+@sha256:[0-9a-f]{64}"?\s*$/m
+      );
+    }
+  });
 });

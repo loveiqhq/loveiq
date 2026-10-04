@@ -46,6 +46,7 @@ Subprocessors
 Subresource
 Supabase
 Svix
+trufflesecurity
 TrustBox
 Trustpilot
 Upstash
