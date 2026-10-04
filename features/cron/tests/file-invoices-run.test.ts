@@ -79,6 +79,20 @@ const invoice = (mailbox: string) => ({
 });
 const ECB = `<Cube><Cube time='2026-09-18'><Cube currency='USD' rate='1.1700'/></Cube></Cube>`;
 
+/** What the Google Ads API answers for the month's spend; null is the API down. */
+let adsAnswer: unknown = null;
+/** The API's answer: one row per month ("2026-09") with its spend in micros. */
+const spendOf = (byMonth: Record<string, string>, currencyCode = "EUR") => ({
+  results: Object.entries(byMonth).map(([month, costMicros]) => ({
+    customer: { currencyCode },
+    segments: { month: `${month}-01` },
+    metrics: { costMicros },
+  })),
+});
+const AUG_SEP = { "2026-08": "1252990172", "2026-09": "1217940961" };
+/** The Adwords line: August (column R) and September (S) onward as given. */
+const adwordsRow = (aug: number, sep: number) =>
+  HEADER.map((c, i) => (i === 0 ? "Adwords" : i < 8 ? "" : i < 17 ? -1000 : i === 17 ? aug : sep));
 const fetched: string[] = [];
 const sheetWrites: Array<{ data: Array<{ range: string; values: number[][] }> }> = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
@@ -91,6 +105,11 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       json: async () => body,
       text: async () => text,
     });
+    if (u.includes("googleads.googleapis.com")) {
+      if (adsAnswer === null)
+        return { ok: false, status: 503, json: async () => ({}), text: async () => "down" };
+      return ok(adsAnswer);
+    }
     if (u.includes(":batchUpdate")) {
       sheetWrites.push(JSON.parse(String(init?.body)));
       return ok({});
@@ -153,6 +172,7 @@ beforeEach(() => {
   relayedIn = "";
   ecbDown = false;
   more = {};
+  adsAnswer = null;
   sheet = [HEADER, vercelRow(HEADER)];
   process.env.CRON_SECRET = "s";
   // The scheduled run on 3 October: September is wholly inside the 45-day window.
@@ -442,5 +462,83 @@ describe("a complete filing run", () => {
       "error",
       "not written, needs a person: Vercel 2026/09"
     );
+  });
+});
+
+describe("Google Ads, which sends no invoice by email", () => {
+  beforeEach(() => {
+    gmailOpen = () => true;
+  });
+
+  it("puts the closed month's spend in while the line still carries the month before", async () => {
+    // July's 1,129 typed once and carried: what August and September showed until 2026-10-04.
+    sheet = [HEADER, vercelRow(HEADER), adwordsRow(-1129, -1129)];
+    adsAnswer = spendOf(AUG_SEP);
+    await run();
+    expect(sheetWrites[0]?.data).toContainEqual({
+      range: "Costs!S3:X3",
+      values: [[-1217.94, -1217.94, -1217.94, -1217.94, -1217.94, -1217.94]],
+    });
+    expect(slackText()).toContain(
+      "Adwords 2026/09: -1129.00 → -1217.94 (spend, until the invoice)"
+    );
+    expect(slackText()).toContain(
+      "Google Ads 2026/09 is the month's spend, standing in for the invoice"
+    );
+    expect(mockRecord).toHaveBeenCalledWith(
+      "file-invoices",
+      expect.any(Number),
+      "success",
+      undefined
+    );
+  });
+
+  it("replaces last month's carried spend after the month before was corrected by hand", async () => {
+    // The last run carried August's spend (1,252.99) into September; then August's invoice
+    // (1,254.91) was typed into August's cell alone. September still holds the spend.
+    sheet = [HEADER, vercelRow(HEADER), adwordsRow(-1254.91, -1252.99)];
+    adsAnswer = spendOf(AUG_SEP);
+    await run();
+    expect(sheetWrites[0]?.data).toContainEqual({
+      range: "Costs!S3:X3",
+      values: [[-1217.94, -1217.94, -1217.94, -1217.94, -1217.94, -1217.94]],
+    });
+  });
+
+  it("never replaces a total entered from the invoice", async () => {
+    sheet = [HEADER, vercelRow(HEADER), adwordsRow(-1254.91, -1219.31)];
+    adsAnswer = spendOf(AUG_SEP);
+    await run();
+    expect(sheetWrites.flatMap((w) => w.data).some((d) => d.range.endsWith("3:X3"))).toBe(false);
+    expect(slackText()).toContain(
+      "Google Ads 2026/09: -1219.31 on the sheet, entered from the invoice"
+    );
+    expect(mockRecord).toHaveBeenCalledWith(
+      "file-invoices",
+      expect.any(Number),
+      "success",
+      undefined
+    );
+  });
+
+  it("fails the run when the spend cannot be read, since the month is not settled", async () => {
+    sheet = [HEADER, vercelRow(HEADER), adwordsRow(-1129, -1129)];
+    await run();
+    expect(sheetWrites.flatMap((w) => w.data).some((d) => d.range.endsWith("3:X3"))).toBe(false);
+    expect(slackText()).toContain("Google Ads 2026/09 could not be read from the Google Ads API");
+    expect(mockRecord).toHaveBeenCalledWith(
+      "file-invoices",
+      expect.any(Number),
+      "error",
+      "not written, needs a person: Adwords 2026/09"
+    );
+  });
+
+  it("refuses a spend in another currency rather than converting it", async () => {
+    sheet = [HEADER, vercelRow(HEADER), adwordsRow(-1129, -1129)];
+    adsAnswer = spendOf({ "2026-08": "1400000000", "2026-09": "1400000000" }, "USD");
+    await run();
+    expect(sheetWrites.flatMap((w) => w.data).some((d) => d.range.endsWith("3:X3"))).toBe(false);
+    expect(slackText()).toContain("could not be read from the Google Ads API");
   });
 });
