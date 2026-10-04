@@ -29,6 +29,7 @@ Follow the "Working alongside other sessions" section of `CLAUDE.md` in full. In
 - Delete only the worktrees and branches you created, and only after they are merged.
 - Never run `npm install` in someone else's checkout, never stop a process you did not start,
   and run your own server on a free port.
-- Read live settings before changing them, list every outside change in the PR, and run
-  `--apply` scripts only from a clean worktree of `origin/main`.
+- Read live settings before changing them, and list every outside change in the PR. Run `--apply`
+  scripts only from a clean worktree of `origin/main`, after checking which database or service
+  `.env.local` points them at.
 - Push your branch whenever you stop.

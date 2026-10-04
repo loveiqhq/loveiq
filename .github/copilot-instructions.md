@@ -13,7 +13,7 @@ Before suggesting code, understand:
 
 ## Pull Requests into `main`
 
-`main` deploys to production. When the work on a PR into `main` is done, request a review from Eman: `gh pr edit <number> --add-reviewer eman-cickusic`. This holds for every PR, whoever or whatever wrote it.
+`main` deploys to production. When the work on a PR into `main` is done, request a review from Eman: `gh pr edit <number> --add-reviewer eman-cickusic`. This holds for every PR, whoever or whatever wrote it, except one opened from Eman's own account, which cannot request its author.
 
 ## 🎯 Project Context
 

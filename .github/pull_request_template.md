@@ -14,7 +14,7 @@
 - [ ] `npm run check:migrations` passes (if `supabase/migrations/**` touched)
 - [ ] Tested manually in browser (if UI change)
 - [ ] No secrets committed (check `.env.example` if adding env vars)
-- [ ] Review requested from @eman-cickusic once the work is done (every PR into `main`)
+- [ ] Review requested from @eman-cickusic once the work is done (every PR into `main` not opened from his own account)
 - [ ] Security controls preserved (CSP, CSRF, rate limiting)
 - [ ] Documentation updated
 - [ ] No doc impact

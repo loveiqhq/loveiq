@@ -735,7 +735,10 @@ They hold for every person and every agent.
   and list every outside change in the PR description.
 - **Scripts that write to a live service** (any script run with `--apply`) run from a clean
   worktree of `origin/main`, never from a feature branch: they publish whatever the working
-  tree holds.
+  tree holds. That decides only the code. The target is whatever `.env.local` points at, which
+  is production unless you changed it, and a new worktree has none until you copy one. Check
+  the target before every `--apply`, and run the script without `--apply` first if it has a
+  dry run.
 - **Scheduled jobs** (Vercel crons, GitHub Actions, the brain's launchd jobs) run what is on
   `main`, so a merge is live at their next run.
 
