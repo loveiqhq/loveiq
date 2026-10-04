@@ -64,7 +64,7 @@ const normText = (s: string) =>
 const SOURCE_NAMES = [
   ...["decision", "plan", "notice", "report", "research", "skill", "domain", "doc"],
   ...["analytics", "ga4", "gsc", "notion", "drive", "slack", "gmail", "calendar"],
-  ...["whatsapp", "people", "evidence", "clarity", "book", "paper"],
+  ...["whatsapp", "people", "evidence", "clarity", "book", "paper", "corporate"],
 ].join("|");
 const ID = new RegExp(`\\b(?:${SOURCE_NAMES})\\/[^\\s,;)\\]]+`, "gi");
 /**
