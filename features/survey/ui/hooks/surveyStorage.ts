@@ -63,6 +63,9 @@ export function saveLandingPrefill(qId: string, value: number): void {
     const answers = (base.answers as Record<string, unknown> | undefined) ?? {};
     const prefilled = Array.isArray(base.prefilled) ? (base.prefilled as string[]) : [];
     const isFreshDraft = Object.keys(answers).length === 0 && !base.currentIndex;
+    // A fresh draft is a new run, and consent belongs to a run: one given and then left
+    // with no answers (or by someone else on a shared device) must not carry over to it.
+    if (isFreshDraft) forgetSurveyConsent();
 
     localStorage.setItem(
       SURVEY_STATE_KEY,
@@ -130,6 +133,15 @@ export function hasSurveyConsent(): boolean {
     return Boolean(localStorage.getItem(SURVEY_CONSENT_KEY));
   } catch {
     return false;
+  }
+}
+
+export function forgetSurveyConsent(): void {
+  consentGivenOnThisPage = false;
+  try {
+    localStorage.removeItem(SURVEY_CONSENT_KEY);
+  } catch {
+    /* storage unavailable */
   }
 }
 

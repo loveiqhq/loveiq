@@ -562,6 +562,29 @@ describe("SurveyPage — consent comes before any question", () => {
     expect(localStorage.getItem(SURVEY_CONSENT_KEY)).toBeTruthy();
   });
 
+  it("asks again when the homepage card starts a new run after a consent with no answers", async () => {
+    // Agreed, then left before answering (or someone else on this device): the card's
+    // fresh draft is a new run, and that consent was not given for it.
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-01T09:00:00.000Z");
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    expect(await screen.findByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("keeps the consent of a run in progress when the card adds its answer to it", async () => {
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-01T09:00:00.000Z");
+    localStorage.setItem(
+      ANSWERS_STORAGE_KEY,
+      JSON.stringify({ answers: { "00001": "Sam" }, currentIndex: 1 })
+    );
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+  });
+
   it("shows consent on a refresh of the questions when this run never agreed", async () => {
     sessionStorage.setItem(SURVEY_STEP_KEY, "6");
     localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
