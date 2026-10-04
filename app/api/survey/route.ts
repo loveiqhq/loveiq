@@ -57,7 +57,16 @@ const surveySchema = z.object({
   // they can be tested directly — Next.js rejects arbitrary exports from a route file.
   answers: surveyAnswersSchema,
   startedAt: z.string().datetime(),
-  durationMs: z.number().int().min(0).max(86_400_000),
+  // Clamped to a day, never rejected. Answers persist on the device, so a reader can
+  // start one day and finish the next. The old .max() returned 400 to every such
+  // reader, Retry resent the same payload, and three who answered every question
+  // never got a report (2026-09-21/22/28). The column is BIGINT; the clamp only
+  // keeps a months-old start from skewing the duration averages.
+  durationMs: z
+    .number()
+    .int()
+    .min(0)
+    .transform((ms) => Math.min(ms, 86_400_000)),
   // 1000 (not 500) so a Google Ads click id (gclid, ~100 chars) captured
   // alongside utm params + the A/B stamps below fits without rejecting the
   // submission. Column is `text`, so the cap is only an anti-abuse bound.
