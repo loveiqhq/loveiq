@@ -763,8 +763,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
             </div>
 
             {/* Previous / Next and the progress strip stay on screen while a long
-                question scrolls (above the cookie banner while it is up). Not on
-                a landscape phone, where they would cover half the screen. */}
+                question scrolls (above the cookie banner while it is up). Not in a
+                window 500px tall or less (a landscape phone, a short desktop window),
+                where they would cover a third to half of it: there they follow the
+                question and the page scrolls to them. */}
             <div
               ref={footerRef}
               className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
