@@ -140,7 +140,7 @@ interface AdDay {
   campaigns: Map<string, number>;
 }
 
-interface Ga4Row {
+export interface Ga4Row {
   dimensionValues?: Array<{ value?: string }>;
   metricValues?: Array<{ value?: string }>;
 }
@@ -168,7 +168,7 @@ const PAGING_BUDGET_MS = 15_000;
  * with no warning, and that figure feeds `Net` and `Cost per paying customer`.
  * `rowCount` is the true total, so it is the loop's terminating condition.
  */
-async function runGa4Report(
+export async function runGa4Report(
   token: string,
   propertyId: string,
   body: Record<string, unknown>,
@@ -271,11 +271,11 @@ async function runGa4Report(
 }
 
 /** `YYYYMMDD` (GA4's `date` dimension) to `YYYY-MM-DD`. */
-function ga4Date(raw: string): string {
+export function ga4Date(raw: string): string {
   return raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw;
 }
 
-function num(v: string | undefined): number {
+export function num(v: string | undefined): number {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
@@ -311,7 +311,7 @@ function periodIsComplete(
 }
 
 /** Monday of the ISO week containing `day`, and the Sunday that ends it. */
-function isoWeekBounds(day: string): { first: string; last: string } {
+export function isoWeekBounds(day: string): { first: string; last: string } {
   const d = new Date(`${day}T00:00:00Z`);
   const shift = (d.getUTCDay() + 6) % 7; // Monday = 0
   const mon = new Date(d.getTime() - shift * 86_400_000);
@@ -762,7 +762,7 @@ export async function ingestGa4(
   return { source: GA4_SOURCE, rows: written + touched, swept };
 }
 
-interface GscRow {
+export interface GscRow {
   keys?: string[];
   clicks?: number;
   impressions?: number;
@@ -781,7 +781,7 @@ interface GscRow {
  *
  * There is no `rowCount` here, so a short page is the terminating signal.
  */
-async function queryGsc(
+export async function queryGsc(
   token: string,
   site: string,
   body: Record<string, unknown>,

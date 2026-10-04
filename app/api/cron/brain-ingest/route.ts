@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { BACKFILL_DAYS, ingestSearchConsole } from "@features/brain/server/ingest/google";
+import { ingestCorporateSite } from "@features/brain/server/ingest/corporate";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -183,6 +184,8 @@ export async function GET(request: Request) {
     // what made the keyless path fail silently in production.
     const oidcToken = readVercelOidcToken(request);
     await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, windowDays, oidcToken));
+    // appliedpsychometrics.org, the parent company's website: opt-in source `corporate`.
+    await run("corporate", () => ingestCorporateSite(stampedAt, isOutOfTime, oidcToken));
     // Notion last, and given the run's clock: it is the only source whose cost
     // scales with page COUNT rather than row count (one request per page for
     // block content), so it is the one most likely to need cutting short.

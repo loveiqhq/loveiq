@@ -1037,6 +1037,23 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       noSource("paper", 12)
     ),
     /**
+     * THE CORPORATE WEBSITE IS OPT-IN (20261004150000), because its traffic rows are written in
+     * the same words as LoveIQ's own `ga4` rows. Named, it must answer a question about its own
+     * visits; unnamed, a plain question about our website traffic must return none of it, or
+     * "how many visitors did we have" could be answered with the wrong site's numbers.
+     */
+    P(
+      "corporate-named",
+      "how many people visited the appliedpsychometrics.org website this month",
+      topSource("corporate", 3),
+      { sources: ["corporate"] }
+    ),
+    P(
+      "corporate-opt-in",
+      "how many people visited our website this month and where did they come from",
+      noSource("corporate", 12)
+    ),
+    /**
      * THE SHIPPED COPY ADDED ON 2026-09-21, probed for the same reason the evidence
      * base is: a source with nothing asserting it can be demoted into invisibility and
      * the battery would score exactly the same. All three were measured absent before
