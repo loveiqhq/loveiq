@@ -37,8 +37,6 @@ import {
 } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
-import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
-import { useCloseOnBack } from "@features/report/ui/hooks/useCloseOnBack";
 import { readCookie } from "@shared/observability/cookie";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
@@ -465,8 +463,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       // Finished, including a run restored onto its completion screen (hasCompleted is
       // only set by submitting in this mount): the same guard as goPrev, see #393.
       if (currentIndex >= totalQuestions || index === currentIndex) return;
-      // A Back the dialog did not catch (desktop Chrome's Back button is a traversal,
-      // not a close request) must not leave it open over a different question.
+      // Back while paused goes back a question like any other Back, and the dialog
+      // closes with it instead of promising "where you left off" over another question.
       setShowPauseModal(false);
       trackNavigation(index < currentIndex ? "back" : "forward");
       goTo(index);
@@ -504,15 +502,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     setShowPauseModal(false);
   }, []);
 
-  // Back closes the pause dialog, as it does the report's overlays, instead of
-  // changing the question underneath it: with a history entry per question, Back
-  // would otherwise move "where you left off" while the dialog still promised it.
-  useCloseOnBack(showPauseModal, handleResumeFromPause);
-
   const handleExitFromPause = useCallback(() => {
-    // Leave once the dialog's Back entry (Safari) is off the stack. Closing it here
-    // would release that entry with a history.back() racing the navigation home.
-    afterOverlayEntryGone(onExit);
+    setShowPauseModal(false);
+    onExit();
   }, [onExit]);
 
   // Handle answer change
