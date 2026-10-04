@@ -34,6 +34,7 @@ const AlertCircleIcon: FC = () => (
 const MAX_LENGTH = 500;
 // Qs that render without a character limit or counter (email + name).
 const UNLIMITED_QIDS = new Set(["00000", "00001"]);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getValidationError(
   value: string,
@@ -42,8 +43,7 @@ function getValidationError(
 ): string | null {
   if (!value) return null;
   if (inputType === "email") {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value))
+    if (!EMAIL_RE.test(value))
       return "Hmm, that doesn\u2019t look like a valid email. Make sure it follows the format: name@example.com";
   }
   if (limited && value.length > MAX_LENGTH) return `Maximum ${MAX_LENGTH} characters allowed`;
@@ -73,6 +73,15 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
     confirmCurrent.trim().length > 0 &&
     currentValue.trim().toLowerCase() !== confirmCurrent.trim().toLowerCase();
   const showConfirmError = (confirmTouched || forceValidation) && emailMismatch;
+  /**
+   * Next stays disabled until the confirm box matches, and a disabled button
+   * takes no tap, so with the confirm box EMPTY nothing ever said why Next did
+   * nothing: no error fires until the box holds something. Reproduced on iPhone
+   * and Android emulation, 2026-10-04: a valid email, Next greyed out, taps and
+   * the keyboard's Go both ignored, no message. So say it as soon as it is the
+   * one thing missing, and in red once they have tried to go on.
+   */
+  const confirmMissing = EMAIL_RE.test(currentValue) && confirmCurrent.trim().length === 0;
 
   const white = useSurveyTheme() === "white";
   // White autofill: omit the dark autofill overpaint class (it forces white
@@ -176,6 +185,15 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
                   Emails don&rsquo;t match. Please re-enter.
                 </span>
               </>
+            )}
+            {confirmMissing && (
+              <span
+                className={`font-sans text-[13px] font-medium ${
+                  forceValidation ? "text-[#ef4444]" : white ? "text-black/55" : "text-white/55"
+                }`}
+              >
+                Type your email again to confirm it.
+              </span>
             )}
           </div>
         </div>
