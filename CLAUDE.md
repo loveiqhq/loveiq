@@ -716,9 +716,12 @@ They hold for every person and every agent.
   same thing can each pass CI alone, so the second is brought up to date and checked again
   before it merges.
 - **Delete only what you made.** After your PR merges, remove your own worktree
-  (`git worktree remove <path>`) and branch (`git branch -d <branch>`; lowercase `-d`
-  refuses an unmerged branch). Never `git worktree prune`, `git branch -D` or
-  `git push origin --delete` anything you did not create.
+  (`git worktree remove <path>`) and branch (`git branch -d <branch>`; lowercase `-d` refuses
+  an unmerged branch). GitHub keeps merged branches, so delete your remote one with
+  `gh api -X DELETE repos/loveiqhq/loveiq/git/refs/heads/<branch>`. `git push origin --delete`
+  runs the whole pre-push hook (lint, typecheck, tests, docs) in whichever checkout you run it
+  from, and in a stale checkout that fails and blocks the delete. Never `git worktree prune`,
+  `git branch -D` or delete anything you did not create.
 - **Push early.** Unpushed commits exist on one disk only, and scratch directories under
   `/tmp` are swept by age, overnight. Push your branch whenever you stop.
 - **Tests that run `git`** must clear the `GIT_*` variables a hook exports, or they act on

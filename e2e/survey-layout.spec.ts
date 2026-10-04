@@ -35,6 +35,8 @@ test.describe("Survey — question layout", () => {
         prefilled: [],
       };
       window.localStorage.setItem("loveiq-survey-answers", JSON.stringify(state));
+      // A reader who already agreed on the consent screen; without it /survey opens there.
+      window.localStorage.setItem("loveiq-survey-consent", new Date().toISOString());
       window.sessionStorage.setItem("loveiq-survey-step", "6");
     }, SCALE_INDEX);
     await page.goto("/survey");

@@ -12,6 +12,10 @@ import {
   loadPendingCompletion,
   savePendingCompletion,
   type PendingSurveyCompletion,
+  SURVEY_CONSENT_KEY,
+  __resetSurveyConsentForTests,
+  hasSurveyConsent,
+  recordSurveyConsent,
 } from "@features/survey/ui/hooks/surveyStorage";
 
 const payload: PendingSurveyCompletion = {
@@ -110,5 +114,40 @@ describe("isCompletionReady with a landing-prefilled question", () => {
     // Still gated on the email, and still false for a genuine mid-survey drop-off.
     expect(isCompletionReady(SURVEY_TOTAL_QUESTIONS - 1, { "00000": "" })).toBe(false);
     expect(isCompletionReady(3, { "00000": "someone@example.test" })).toBe(false);
+  });
+});
+
+describe("survey consent record", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetSurveyConsentForTests();
+  });
+
+  it("is cleared with the run it was given for", () => {
+    recordSurveyConsent();
+    expect(hasSurveyConsent()).toBe(true);
+
+    clearPersistedSurveyState({ clearPendingCompletion: true });
+
+    expect(localStorage.getItem(SURVEY_CONSENT_KEY)).toBeNull();
+    expect(hasSurveyConsent()).toBe(false);
+  });
+
+  it("is still held for this page when the browser refuses storage", () => {
+    const real = window.localStorage;
+    const boom = () => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => ({ getItem: boom, setItem: boom, removeItem: boom, clear: boom, key: boom }),
+    });
+    try {
+      expect(hasSurveyConsent()).toBe(false);
+      recordSurveyConsent();
+      expect(hasSurveyConsent()).toBe(true);
+    } finally {
+      Object.defineProperty(window, "localStorage", { configurable: true, value: real });
+    }
   });
 });

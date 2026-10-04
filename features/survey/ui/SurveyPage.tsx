@@ -8,7 +8,9 @@ import {
   ANSWERS_STORAGE_KEY,
   SURVEY_STEP_KEY,
   clearPersistedSurveyState,
+  hasSurveyConsent,
   loadPendingCompletion,
+  recordSurveyConsent,
 } from "./hooks/surveyStorage";
 import {
   completedReportToken,
@@ -1205,7 +1207,19 @@ const ConsentScreen: FC<{
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+/**
+ * Where a visit opens. Whatever would open the questions (a draft, a pending completion, a
+ * refresh on them) opens the consent screen instead until the reader has agreed for this
+ * run. The homepage question card saves a draft before anyone has seen that screen, and
+ * those readers went straight to question 1, while the server stamps consent on every
+ * submission.
+ */
 function loadInitialStep(): number {
+  const step = loadSavedStep();
+  return step === TOTAL_STEPS + 2 && !hasSurveyConsent() ? TOTAL_STEPS + 1 : step;
+}
+
+function loadSavedStep(): number {
   if (typeof window === "undefined") return 0;
 
   try {
@@ -1317,7 +1331,9 @@ const SurveyPage: FC = () => {
     const handlePopState = (e: PopStateEvent) => {
       isPopStateNav.current = true;
       const prevStep = e.state?.surveyStep;
-      const next = prevStep !== undefined ? prevStep : 0;
+      const saved = prevStep !== undefined ? prevStep : 0;
+      // Never onto the questions without consent for this run (see loadInitialStep).
+      const next = saved === TOTAL_STEPS + 2 && !hasSurveyConsent() ? TOTAL_STEPS + 1 : saved;
       // Only a real entry: a second history entry for the survey, which a reload on it
       // pushes, lands on step 6 FROM step 6, and must not retire the run just finished.
       if (next === TOTAL_STEPS + 2 && stepRef.current !== TOTAL_STEPS + 2) {
@@ -1390,6 +1406,7 @@ const SurveyPage: FC = () => {
   }, []);
 
   const handleAgree = useCallback(() => {
+    recordSurveyConsent();
     retireFinishedRun();
     setFinishedToken(null);
     setStep(TOTAL_STEPS + 2);
