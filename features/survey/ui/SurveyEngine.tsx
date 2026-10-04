@@ -54,6 +54,15 @@ interface SurveyEngineProps {
   onComplete: (reportToken?: string | null) => void;
 }
 
+const TEXT_ENTRY_TYPES = /^(text|email|search|tel|url|number|password)$/;
+
+/** A field the reader types into, where the arrow keys are theirs. Not radios or checkboxes. */
+function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target.tagName === "TEXTAREA") return true;
+  return target instanceof HTMLInputElement && TEXT_ENTRY_TYPES.test(target.type);
+}
+
 /**
  * How many question entries this one sits above its base, or 0 when the entry on
  * screen is not the question shown (out of step, or not a question entry at all), so
@@ -537,6 +546,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (showPauseModal) return; // the dialog has the keyboard
+      // In a text field the arrows move the caret. They used to change the question,
+      // so fixing a typo in your email threw you back to the question before it.
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && isTextEntry(e.target)) return;
       if (e.key === "ArrowRight" || e.key === "Enter") {
         if (hasAnswer || !question?.required) {
           e.preventDefault();

@@ -637,3 +637,61 @@ describe("SurveyEngine — Back with the pause dialog open", () => {
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("SurveyEngine — arrow keys in a text field", () => {
+  // Regression, 2026-10-04 (on main before this branch): ArrowLeft in the email field
+  // jumped to the previous question, so fixing a typo threw the reader back.
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/survey"); // no question entries in play
+  });
+  afterEach(() => {
+    document.body.querySelectorAll("[data-probe-field]").forEach((el) => el.remove());
+  });
+  const field = (type: string) => {
+    const input = document.createElement("input");
+    input.type = type;
+    input.setAttribute("data-probe-field", "");
+    document.body.appendChild(input);
+    input.focus();
+    return input;
+  };
+
+  it("leaves ArrowLeft to an email field instead of going back a question", () => {
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(field("email"), { key: "ArrowLeft" });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(mockTrackNavigation).not.toHaveBeenCalledWith("back");
+  });
+
+  it("leaves ArrowRight to a text field instead of skipping ahead", () => {
+    mockCurrentIndex = 1; // optional question, so ArrowRight would otherwise advance
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(field("text"), { key: "ArrowRight" });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("still goes back on ArrowLeft from a focused option (a radio is not a text field)", () => {
+    // Treating radios as text would hand the arrows to the native radio group, which
+    // changes the selected answer instead of the question.
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(field("radio"), { key: "ArrowLeft" });
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+  });
+
+  it("still goes back on ArrowLeft outside a text field", () => {
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+  });
+});
