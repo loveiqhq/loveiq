@@ -65,7 +65,8 @@ function getResend(): Resend | null {
 interface PaidUserRow {
   id: number;
   payment_date_time: string;
-  metadata: { plan?: string | null } | null;
+  personal_report_id?: number | null;
+  metadata: { plan?: string | null; reportToken?: string | null } | null;
   app_user: { email?: string | null; first_name?: string | null } | null;
 }
 
@@ -99,7 +100,7 @@ async function fetchPaidCandidates(): Promise<PaidUserRow[]> {
     `?status=eq.succeeded` +
     `&payment_date_time=gte.${encodeURIComponent(minIso)}` +
     `&payment_date_time=lte.${encodeURIComponent(maxIso)}` +
-    `&select=id,payment_date_time,metadata,app_user!fk_payment_user(email,first_name)` +
+    `&select=id,payment_date_time,personal_report_id,metadata,app_user!fk_payment_user(email,first_name)` +
     `&order=payment_date_time.desc` +
     `&limit=${CANDIDATE_LIMIT}`;
 
@@ -108,6 +109,31 @@ async function fetchPaidCandidates(): Promise<PaidUserRow[]> {
     throw new Error(`payment_query_failed:${response.status}`);
   }
   return (await response.json()) as PaidUserRow[];
+}
+
+const REPORT_TOKEN_RE = /^rpt_[A-Za-z0-9]{20}$/;
+
+/**
+ * The buyer's own report link. Checkout records it on the payment; older payments are
+ * looked up through their report's submission, as fulfillment does.
+ */
+async function reportTokenForPayment(row: PaidUserRow): Promise<string | null> {
+  const recorded = row.metadata?.reportToken;
+  if (typeof recorded === "string" && REPORT_TOKEN_RE.test(recorded)) return recorded;
+  if (!row.personal_report_id) return null;
+  const report = await supabaseGet(
+    `/rest/v1/personal_report?id=eq.${row.personal_report_id}&select=survey_submission_id&limit=1`
+  );
+  if (!report.ok) return null;
+  const submissionId = ((await report.json()) as Array<{ survey_submission_id?: number }>)[0]
+    ?.survey_submission_id;
+  if (!submissionId) return null;
+  const tokens = await supabaseGet(
+    `/rest/v1/report_access_token?survey_submission_id=eq.${submissionId}&select=token&order=created_at.desc&limit=1`
+  );
+  if (!tokens.ok) return null;
+  const token = ((await tokens.json()) as Array<{ token?: string }>)[0]?.token;
+  return typeof token === "string" && REPORT_TOKEN_RE.test(token) ? token : null;
 }
 
 async function hasSentInvite(email: string): Promise<boolean> {
@@ -155,11 +181,6 @@ export async function GET(request: Request) {
   let cronError: string | undefined;
 
   const siteUrl = getEmailSiteUrl();
-  // Deep-link into the Refer-a-Friend modal on the report page. `from=email`
-  // softens the forced-paywall arm to the dismissible experience (see
-  // resolveReportPaywallCohort) — otherwise a forced-arm owner hits a
-  // non-closable wall and can't reach the invite modal at all.
-  const inviteCtaUrl = `${siteUrl}/report?invite=1&from=email`;
 
   const summary = {
     candidates: 0,
@@ -171,6 +192,7 @@ export async function GET(request: Request) {
     skippedOutOfWindow: 0,
     skippedWrongPlan: 0,
     skippedSuppressed: 0,
+    skippedNoToken: 0,
     errors: 0,
   };
 
@@ -216,6 +238,20 @@ export async function GET(request: Request) {
         summary.skippedCooldown++;
         continue;
       }
+
+      // Deep-link into the Refer-a-Friend modal on the buyer's OWN report. It was bare
+      // /report, which works only in the browser that took the survey: anywhere else
+      // (another device, a mail app's browser, storage Safari cleared after 7 days)
+      // it showed "Can't find your report", and on a shared device another person's
+      // report. `from=email` softens the forced-paywall arm (see
+      // resolveReportPaywallCohort) so the invite modal can open. No link, no email.
+      const reportToken = await reportTokenForPayment(row);
+      if (!reportToken) {
+        summary.skippedNoToken++;
+        logger.warn({ paymentId: row.id }, "invite-reminders: no report link for a buyer");
+        continue;
+      }
+      const inviteCtaUrl = `${siteUrl}/report/${encodeURIComponent(reportToken)}?invite=1&from=email`;
 
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret

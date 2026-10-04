@@ -155,6 +155,24 @@ async function bumpEmailEngagement(kind: "opened" | "clicked"): Promise<void> {
   }
 }
 
+/**
+ * Writes the suppression a bounce, a complaint or a send Resend refused calls for. True
+ * when the event calls for none, or the write landed.
+ */
+async function suppressFor(type: unknown, email: string): Promise<boolean> {
+  switch (type) {
+    case "email.bounced":
+      return addToSuppression(email, "hard_bounce");
+    case "email.complained":
+      return addToSuppression(email, "complaint");
+    case "email.suppressed":
+      // Only if absent, so an address recorded as a complaint keeps that label.
+      return addToSuppression(email, "hard_bounce", { ifAbsent: true });
+    default:
+      return true;
+  }
+}
+
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -189,6 +207,20 @@ export async function POST(request: Request) {
       username: "ops_alerts",
     });
     return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
+  }
+
+  /**
+   * The suppression comes before the replay guard, so a failed write gets a retry.
+   *
+   * It used to come after the claim and its failure was swallowed: the event was
+   * claimed and answered 200, Resend never retried, and a complaint lost to a Supabase
+   * blip left the address on every list. The write is an idempotent upsert, so a replay
+   * repeating it is harmless, and answering before the claim means the retry is
+   * processed in full (counter and Slack ping), once.
+   */
+  const email = payload.data?.to?.[0]?.toLowerCase().trim();
+  if (email && !(await suppressFor(payload.type, email))) {
+    return NextResponse.json({ error: "Suppression not recorded." }, { status: 503 });
   }
 
   // R-02: claim the svix_id before side effects. Same svix_id arriving twice
@@ -234,14 +266,12 @@ export async function POST(request: Request) {
     await recordExperimentEvent(payload, payload.type.replace(/^email\./, ""));
   }
 
-  const email = payload.data?.to?.[0]?.toLowerCase().trim();
   if (!email) {
     return NextResponse.json({ ok: true });
   }
 
   if (payload.type === "email.bounced") {
-    logger.info({ email }, "Hard bounce — suppressing email address");
-    await addToSuppression(email, "hard_bounce");
+    logger.info({ email }, "Hard bounce — address suppressed");
     await notifySlack({
       channel: "ops",
       kind: "email_bounce",
@@ -249,8 +279,7 @@ export async function POST(request: Request) {
       username: "ops_alerts",
     });
   } else if (payload.type === "email.complained") {
-    logger.info({ email }, "Spam complaint — suppressing email address");
-    await addToSuppression(email, "complaint");
+    logger.info({ email }, "Spam complaint — address suppressed");
     await notifySlack({
       channel: "ops",
       kind: "email_complaint",
@@ -261,10 +290,8 @@ export async function POST(request: Request) {
     // Resend refused the send because the address is on its account-level
     // suppression list (an earlier bounce or complaint, some from before our
     // table existed). Without this our own senders kept retrying it. No Slack
-    // ping: Resend already blocked it, so there is nothing to act on. Insert
-    // only if absent, so an address recorded as a complaint keeps that label.
-    logger.info({ email }, "Resend suppressed a send — suppressing email address");
-    await addToSuppression(email, "hard_bounce", { ifAbsent: true });
+    // ping: Resend already blocked it, so there is nothing to act on.
+    logger.info({ email }, "Resend suppressed a send — address suppressed");
   } else if (payload.type === "email.failed") {
     // B3: Resend rejected the send before delivery attempt (different from
     // hard bounce). Rare. Often a misconfigured From address or invalid

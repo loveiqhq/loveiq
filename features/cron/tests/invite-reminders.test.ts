@@ -115,6 +115,7 @@ describe("GET /api/cron/invite-reminders", () => {
     opts: {
       candidates?: Array<ReturnType<typeof paidRow>>;
       hasInvite?: boolean;
+      submissionToken?: string | null;
     } = {}
   ) {
     const candidates = opts.candidates ?? [paidRow()];
@@ -125,9 +126,57 @@ describe("GET /api/cron/invite-reminders", () => {
       if (typeof url === "string" && url.includes("/rest/v1/invite_event")) {
         return { ok: true, json: async () => (opts.hasInvite ? [{ id: 1 }] : []) };
       }
+      if (typeof url === "string" && url.includes("/rest/v1/personal_report")) {
+        return { ok: true, json: async () => [{ survey_submission_id: 555 }] };
+      }
+      if (typeof url === "string" && url.includes("/rest/v1/report_access_token")) {
+        return {
+          ok: true,
+          json: async () => (opts.submissionToken ? [{ token: opts.submissionToken }] : []),
+        };
+      }
       throw new Error(`Unexpected fetchWithTimeout call: ${url}`);
     });
   }
+
+  // Regression, 2026-10-04: every reminder linked to bare /report, which works only in the
+  // browser that took the survey. Anywhere else it was "Can't find your report", and on a
+  // shared device it could open another person's report.
+  it("links the reminder to the buyer's own report", async () => {
+    mockResendSend.mockResolvedValue({ data: { id: "e1" } });
+    mockSupabaseSequence({
+      candidates: [
+        paidRow({ metadata: { plan: "full_report", reportToken: "rpt_AbCdEfGhIjKlMnOpQrSt" } }),
+      ],
+    });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.reminder2Sent + body.reminder1Sent).toBe(1);
+    const html = mockResendSend.mock.calls[0]![0].html as string;
+    expect(html).toContain("/report/rpt_AbCdEfGhIjKlMnOpQrSt?invite=1&amp;from=email");
+    expect(html).not.toMatch(/\/report\?invite=1/);
+  });
+
+  it("finds an older buyer's link through their report's submission", async () => {
+    mockResendSend.mockResolvedValue({ data: { id: "e1" } });
+    mockSupabaseSequence({
+      candidates: [paidRow({ personal_report_id: 42 })],
+      submissionToken: "rpt_ZyXwVuTsRqPoNmLkJiHg",
+    });
+    await GET(makeRequest("test-cron-secret"));
+    expect(mockResendSend.mock.calls[0]![0].html as string).toContain(
+      "/report/rpt_ZyXwVuTsRqPoNmLkJiHg?invite=1"
+    );
+  });
+
+  it("sends nothing to a buyer whose link cannot be found, rather than a dead link", async () => {
+    mockSupabaseSequence({
+      candidates: [paidRow({ personal_report_id: 42 })],
+      submissionToken: null,
+    });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.skippedNoToken).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
 
   it("skips rows whose metadata.plan is not full_report or all_reports", async () => {
     mockSupabaseSequence({ candidates: [paidRow({ metadata: { plan: "essentials" } })] });
