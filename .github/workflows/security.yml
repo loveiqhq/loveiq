@@ -119,7 +119,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -136,13 +136,14 @@ jobs:
           set +e
           report=$(npm audit --audit-level=high --json 2>/dev/null)
           set -e
-          high=$(printf '%s' "$report" \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=JSON.parse(s).metadata.vulnerabilities;console.log((v.high||0)+(v.critical||0))}catch{console.log("unknown")}})')
+          # Counts advisories, minus the reviewed exceptions in .osv-scanner.toml
+          # (the same list the OSV step below reads), or prints "unknown".
+          high=$(printf '%s' "$report" | node scripts/npm-audit-gate.mjs)
           if [ "$high" = "unknown" ]; then
             echo "::warning::npm audit could not be read — the registry endpoint did not answer. NOT treating this as a vulnerability."
             exit 0
           fi
-          echo "high+critical advisories: $high"
+          echo "high+critical advisories not accepted in .osv-scanner.toml: $high"
           if [ "$high" -gt 0 ]; then
             npm audit --audit-level=high || true
             echo "::error::$high high or critical advisory(ies)"
@@ -194,7 +195,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -226,7 +227,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies

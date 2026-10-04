@@ -74,3 +74,94 @@ describe("OpenResponseQuestion", () => {
     expect(screen.getByDisplayValue("Current answer")).toBeInTheDocument();
   });
 });
+
+/**
+ * The confirm box, when it is the only thing missing.
+ *
+ * Next stays disabled until the two boxes match, and a disabled button takes no
+ * tap, so an EMPTY confirm box used to block Next with nothing on screen saying
+ * why: no error fires until the box holds something. Reproduced on iPhone and
+ * Android emulation on 2026-10-04.
+ */
+describe("OpenResponseQuestion: the empty confirm box", () => {
+  const email = { ...baseQuestion, qId: "00000", inputType: "email" } as SurveyQuestion;
+  const PROMPT = "Type your email again to confirm it.";
+  const renderEmail = (value: string, confirmValue: string, forceValidation = false) =>
+    render(
+      <OpenResponseQuestion
+        question={email}
+        value={value}
+        onChange={vi.fn()}
+        confirmValue={confirmValue}
+        onConfirmChange={vi.fn()}
+        forceValidation={forceValidation}
+      />
+    );
+
+  it("says so as soon as a valid email is in and the confirm box is empty", () => {
+    renderEmail("jane@example.com", "");
+    const prompt = screen.getByText(PROMPT);
+    // A hint before they have tried to go on, not an error.
+    expect(prompt.className).not.toContain("text-[#ef4444]");
+  });
+
+  it("turns red once they try to go on", () => {
+    renderEmail("jane@example.com", "", true);
+    expect(screen.getByText(PROMPT).className).toContain("text-[#ef4444]");
+  });
+
+  it("goes once the confirm box holds anything", () => {
+    renderEmail("jane@example.com", "jane@example.com");
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+    cleanup();
+    // A different address is the mismatch error's job, not this prompt's.
+    renderEmail("jane@example.com", "jan@example.com", true);
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+    expect(screen.getByText(/Emails don.t match/)).toBeInTheDocument();
+  });
+
+  it("waits for a valid email first, which has its own message", () => {
+    renderEmail("jane@", "");
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+    cleanup();
+    renderEmail("", "");
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+  });
+
+  it("is tied to the confirm box for screen readers, and marks it invalid once red", () => {
+    renderEmail("jane@example.com", "");
+    let confirm = screen.getByRole("textbox", { name: "Confirm email address" });
+    const describedBy = confirm.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(PROMPT);
+    // A hint is not an error.
+    expect(confirm).not.toHaveAttribute("aria-invalid");
+    cleanup();
+
+    renderEmail("jane@example.com", "", true);
+    confirm = screen.getByRole("textbox", { name: "Confirm email address" });
+    expect(confirm).toHaveAttribute("aria-invalid", "true");
+    expect(document.getElementById(confirm.getAttribute("aria-describedby")!)).toHaveTextContent(
+      PROMPT
+    );
+    cleanup();
+
+    // Nothing to say, nothing referenced.
+    renderEmail("jane@example.com", "jane@example.com", true);
+    confirm = screen.getByRole("textbox", { name: "Confirm email address" });
+    expect(confirm).not.toHaveAttribute("aria-describedby");
+    expect(confirm).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("is only ever on the email question", () => {
+    render(
+      <OpenResponseQuestion
+        question={baseQuestion}
+        value="jane@example.com"
+        onChange={vi.fn()}
+        confirmValue=""
+      />
+    );
+    expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
+  });
+});
