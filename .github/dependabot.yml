@@ -61,6 +61,12 @@ updates:
       # tests, not as a bot bump (PR #483, 2026-10-04).
       - dependency-name: "svix"
         update-types: ["version-update:semver-major"]
+      # vitest 5's @vitest/mocker declares an optional peer of msw ^2. With msw 3,
+      # CI's npm 10 refuses the lockfile ("Missing: msw@2.15.0"), so `npm ci`
+      # fails before any test runs (PR #485, 2026-10-04). Revisit when that peer
+      # range includes msw 3.
+      - dependency-name: "msw"
+        update-types: ["version-update:semver-major"]
     versioning-strategy: increase
     commit-message:
       prefix: "chore"
