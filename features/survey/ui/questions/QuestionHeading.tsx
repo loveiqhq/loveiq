@@ -2,33 +2,29 @@
 
 import type { FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
-import { useSurveyTheme } from "../SurveyThemeContext";
 
 /**
- * Shared question title + optional subtitle. Theme-aware for the survey white
- * A/B: the dark branch emits the exact classes the question components used
- * inline before extraction (byte-identical dark arm); white uses ink + a
- * readable purple subtitle. Subtitle renders only when the canonical data
- * (`question.formatGuidance`) supplies one.
+ * The guide line a question shows under its title (Figma 11303:174). The few
+ * questions without a guide show their answer instruction there instead.
+ * GuidancePanel's "Info & guidance" repeats it on purpose — the frame does, and
+ * that was the call (2026-10-04).
  */
+export function questionGuide(question: SurveyQuestion): string {
+  return question.supportAndGuidance || question.guide || question.formatGuidance || "";
+}
+
+/** Shared question title + guide line. */
 const QuestionHeading: FC<{ question: SurveyQuestion }> = ({ question }) => {
-  const white = useSurveyTheme() === "white";
-  const subtitle = question.formatGuidance ?? "";
+  const guide = questionGuide(question);
 
   return (
-    <div className="flex flex-col gap-2">
-      <h2
-        className={`font-serif text-[31px] font-medium leading-[1.2] break-words sm:text-[39px] ${
-          white ? "text-[#161021]" : "text-white"
-        }`}
-      >
+    <div className="flex flex-col gap-[8.8px]">
+      <h2 className="break-words font-serif text-[22.4px] font-medium leading-[1.2] text-[#161021] sm:text-[32px]">
         {question.question}
       </h2>
-      {subtitle && (
-        <p
-          className={`font-sans text-[15px] font-medium ${white ? "text-[#6b5b95]" : "text-[#a78bfa]"}`}
-        >
-          {subtitle}
+      {guide && (
+        <p className="font-sans text-[13.5px] leading-[20.25px] text-[#4a4458] sm:max-w-[625px]">
+          {guide}
         </p>
       )}
     </div>

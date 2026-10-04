@@ -312,7 +312,6 @@ async function readScreen(page: Page): Promise<Screen> {
         .filter((e) => (e as HTMLElement).offsetParent !== null || e.getClientRects().length > 0)
         .map((e) => (e.textContent ?? "").replace(/\s+/g, " ").trim())
         .filter(Boolean);
-      const body = document.body?.innerText ?? "";
       // What is on screen right now, not the page's first lines: a report is one long page.
       // Every visible text node, so a number in a bare <span> ("0% complete") is not missed.
       const inView: string[] = [];
@@ -336,11 +335,22 @@ async function readScreen(page: Page): Promise<Screen> {
           continue;
         if (inView.at(-1) !== t) inView.push(t);
       }
-      // The survey header's "PROGRESS 12%": present on every question screen, and only there.
-      const m = /progress\s+(\d+)%/i.exec(body);
+      // The bar under every question screen, and only there: "Question n of N". Kept as
+      // the share already answered, the number the survey_progress event carries, not
+      // the bar's 15% head start.
+      const bar = document.querySelector('[role="progressbar"][aria-label="Survey progress"]');
+      const at = /Question (\d+) of (\d+)/.exec(bar?.getAttribute("aria-valuetext") ?? "");
+      // The header's "PROGRESS 12%" from before the 2026-10-04 redesign. This walk runs
+      // from main against staging.loveiq.org, which serves the staging branch; drop this
+      // once staging carries the redesign.
+      const old = at ? null : /progress\s+(\d+)%/i.exec(document.body?.innerText ?? "");
       return {
         headings,
-        progress: m ? `${m[1]}%` : null,
+        progress: at
+          ? `${Math.round(((Number(at[1]) - 1) / Number(at[2])) * 100)}%`
+          : old
+            ? `${old[1]}%`
+            : null,
         text: inView.join("\n").slice(0, 1500),
       };
     })
@@ -622,7 +632,7 @@ async function main(argv: string[]): Promise<number> {
     await page.getByRole("checkbox").nth(1).locator("div").first().click();
     await button(/i agree/i).click();
 
-    // The questions, one screen at a time. The header's progress says this is a question
+    // The questions, one screen at a time. The progress bar says this is a question
     // screen; the heading says which question, matched against this checkout's survey-data.
     const seenTypes = new Set<string>();
     /** The question id at each position, counted from 1, for what a backtrack leaves. */

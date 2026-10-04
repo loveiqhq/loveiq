@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import { COUNTRIES, getCountryFlagUrl } from "@/data/countries";
+import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
 
 interface CountryQuestionProps {
@@ -150,12 +151,8 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <h2
-        className={`font-sans text-[28px] font-bold leading-tight sm:text-[36px] ${white ? "text-[#161021]" : "text-white"}`}
-      >
-        {question.question}
-      </h2>
+    <div className="flex flex-col gap-5">
+      <QuestionHeading question={question} />
 
       <div ref={containerRef} className="relative">
         {/* Search input */}

@@ -82,11 +82,8 @@ async function renderedOptions(page: Page, role: "radio" | "checkbox"): Promise<
 }
 
 /**
- * Answer whichever question is on screen, then make sure we land on the next one.
- *
- * single / scale / country auto-advance after 350ms; open and multiple do not. Rather
- * than encode that per type, answer and then wait for the heading to change — falling
- * back to Next when it does not. That keeps the driver correct if auto-advance changes.
+ * Answer whichever question is on screen, press Next, and make sure we land on the next
+ * one. Every question needs Next: auto-advance left with the 2026-10-04 redesign.
  */
 async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: string | null) {
   switch (q.answerType) {
@@ -117,35 +114,11 @@ async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: stri
   }
 
   if (!nextHeading) return;
-  const next = page.getByRole("heading", { name: nextHeading, exact: true });
-  try {
-    await next.waitFor({ state: "visible", timeout: 1200 });
-  } catch {
-    /**
-     * THE CLICK IS A NUDGE. THE HEADING IS THE ASSERTION.
-     *
-     * Two different situations are indistinguishable at this point: a question that
-     * genuinely needs Next (open, multiple), and an auto-advance that was merely slow.
-     * 1200ms is 350ms of auto-advance plus headroom, and a cold Desktop Firefox on a
-     * CI runner spends more than that on the first transition.
-     *
-     * In the slow-auto-advance case the page is already moving, so Next is sliding out
-     * from under the cursor and `.click()` fails its "visible, enabled and STABLE"
-     * check — measured on Desktop Firefox, flaky on 2026-09-21's first CI run and an
-     * outright failure on the next. That is a flake, not a defect: the survey did
-     * exactly what it should. Letting a failed nudge fail the test is what made this
-     * the only genuinely unreliable spec in the suite.
-     *
-     * So the nudge is best-effort and the heading below is what decides. A question
-     * that really did need Next and really did not advance still fails here, because
-     * the heading never arrives.
-     */
-    await page
-      .getByRole("button", { name: /next/i })
-      .click({ timeout: 4000 })
-      .catch(() => {});
-    await next.waitFor({ state: "visible", timeout: 8000 });
-  }
+  // A Next that stays disabled is an answer that did not register: fail on the click.
+  await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
+  await page
+    .getByRole("heading", { name: nextHeading, exact: true })
+    .waitFor({ state: "visible", timeout: 12_000 });
 }
 
 test.describe("Survey — the questions the work order changed", () => {

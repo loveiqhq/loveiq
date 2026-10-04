@@ -795,10 +795,6 @@ export const trackReportEngagement = (
   persistAnalyticsEvent(eventName, params, thresholdSeconds * 1000);
 };
 
-export const trackSurveyPause = (qId: string, progress: number) => {
-  track("survey_pause", { question_id: qId, progress_pct: progress });
-};
-
 export const trackSurveyInvite = (method: string = "email") => {
   track("survey_invite", { method });
 };
@@ -1057,16 +1053,12 @@ export const trackChapterFeedbackSubmitted = (params: {
 /*  Phase B.2 — Survey funnel events (GA4-only + persisted)     */
 /* ============================================================ */
 
-export const trackSurveyPauseModalOpened = (params: {
+/** One of the question's two guidance rows opened or closed ("info" | "why"). */
+export const trackSurveyGuidanceExpanded = (params: {
   question_id: string;
-  progress_pct: number;
-}) => track("survey_pause_modal_opened", params);
-
-export const trackSurveyAutoAdvanceToggled = (params: { enabled: boolean; question_id?: string }) =>
-  track("survey_auto_advance_toggled", params);
-
-export const trackSurveyGuidanceExpanded = (params: { question_id: string; expanded: boolean }) =>
-  track("survey_guidance_expanded", params);
+  section: "info" | "why";
+  expanded: boolean;
+}) => track("survey_guidance_expanded", params);
 
 export const trackSurveyFormError = (params: {
   question_id: string;

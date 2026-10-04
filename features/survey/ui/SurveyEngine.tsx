@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
-import SurveyHeader from "./SurveyHeader";
 import SurveyNav from "./SurveyNav";
+import SurveyProgress from "./SurveyProgress";
 import GuidancePanel from "./GuidancePanel";
 import OpenResponseQuestion from "./questions/OpenResponseQuestion";
 import ScaleQuestion from "./questions/ScaleQuestion";
@@ -17,7 +17,6 @@ import {
   trackSurveyAnswer,
   trackSurveyProgress,
   trackSurveyComplete,
-  trackSurveyPause,
   trackSurveyFormError,
   setReportSubmissionContext,
   setSurveyVariant,
@@ -29,7 +28,6 @@ import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
-import { useAutoAdvance } from "./hooks/useAutoAdvance";
 import {
   BASE_STATE_KEY,
   clearPersistedSurveyState,
@@ -43,7 +41,6 @@ import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
-import SurveyPauseModal from "./SurveyPauseModal";
 
 type CompletionPhase = "processing" | "wizard" | "done";
 
@@ -82,7 +79,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     currentIndex,
     startedAt,
     prefilled,
-    progress,
     setAnswer,
     getAnswer,
     getLatestAnswers,
@@ -110,10 +106,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 
-  const { autoAdvance, toggleAutoAdvance } = useAutoAdvance();
-
   const [animKey, setAnimKey] = useState(0);
-  const [showPauseModal, setShowPauseModal] = useState(false);
   const [emailConfirmValue, setEmailConfirmValue] = useState("");
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
@@ -121,7 +114,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const backFallback = useRef<number | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The card's last pixel; while it is below the fold the sticky footer is
+  // floating over content and gets a hairline to separate the two.
+  const cardEndRef = useRef<HTMLDivElement | null>(null);
+  const cardWrapRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const [footerFloating, setFooterFloating] = useState(false);
 
   const hasCleared = useRef(false);
 
@@ -145,23 +145,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const question = orderedQuestions[currentIndex];
 
   // Survey theme. The A/B concluded in white's favour on 2026-08-25, so this is
-  // "white" for everyone; `?survey=white|dark` still previews either on
-  // dev/staging. Resolved on first render so the first question paint is already
-  // themed (the engine renders client-only, behind SurveyPage's hydration gate).
-  const [surveyVariant] = useState<SurveyVariant>(() => {
-    const devParam =
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("survey");
-    return assignSurveyVariant(devParam);
-  });
+  // "white" for everyone. The `?survey=dark` preview went with the 2026-10-04
+  // redesign (Figma 11303:174), which has no dark version to preview. Resolved
+  // here because assignSurveyVariant also expires the old arm cookie.
+  const [surveyVariant] = useState<SurveyVariant>(() => assignSurveyVariant());
   const surveyExposureFired = useRef(false);
   useEffect(() => {
     if (surveyExposureFired.current) return;
     surveyExposureFired.current = true;
     /**
-     * Stamp the theme onto persisted survey events. Still worth doing — on
-     * staging `?survey=dark` previews the old arm and the events should say so.
+     * Stamp the theme onto persisted survey events, so they keep carrying the
+     * same `survey_variant` property they always have.
      *
      * No `trackExperimentExposure` any more. That wrote a one-per-visitor
      * `experiment_exposure` row as the denominator for a per-arm completion
@@ -289,13 +283,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
 
   const { trackNavigation } = useSurveyTracking(currentIndex, hasAnswer, question);
 
-  const cancelAutoAdvance = useCallback(() => {
-    if (autoAdvanceTimer.current) {
-      clearTimeout(autoAdvanceTimer.current);
-      autoAdvanceTimer.current = null;
-    }
-  }, []);
-
   /** A pending Previous fallback belongs to the question it was pressed on. */
   const cancelBackFallback = useCallback(() => {
     if (backFallback.current === null) return;
@@ -307,7 +294,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const goTo = useCallback(
     (index: number) => {
       if (index < 0 || index > totalQuestions) return;
-      cancelAutoAdvance();
       cancelBackFallback();
       setAnimKey((k) => k + 1);
       setAttemptedNext(false);
@@ -319,7 +305,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       setCurrentIndex(index);
       window.scrollTo({ top: 0, behavior: "instant" });
     },
-    [totalQuestions, setCurrentIndex, cancelAutoAdvance, cancelBackFallback, orderedQuestions]
+    [totalQuestions, setCurrentIndex, cancelBackFallback, orderedQuestions]
   );
 
   /**
@@ -418,9 +404,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     goTo,
     submitSurvey,
     // `answers` is deliberately NOT a dependency. Nothing in this callback reads it any
-    // more, and leaving it out is what makes `goNext` stable across answer changes — so
-    // the auto-advance timer's captured copy is the same function and still reads fresh
-    // answers through getLatestAnswers().
+    // more: the submit reads getLatestAnswers(), so a Next pressed before React has
+    // committed the last answer still sends it.
     getLatestAnswers,
     trackNavigation,
     isEmailValid,
@@ -436,9 +421,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // the finished run's session id, saving its answers again; a reload then read them as a
     // new run (#393) and Next filed the same answers as a second submission.
     if (currentIndex >= totalQuestions) return;
-    // An auto-advance still pending would push the next question over the pop in flight,
-    // and the reader's Previous was lost.
-    cancelAutoAdvance();
     const moveWithoutHistory = () => {
       trackNavigation("back");
       if (currentIndex > 0) markBase(currentIndex - 1, true);
@@ -458,15 +440,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       return;
     }
     moveWithoutHistory();
-  }, [
-    currentIndex,
-    totalQuestions,
-    goTo,
-    trackNavigation,
-    markBase,
-    cancelAutoAdvance,
-    cancelBackFallback,
-  ]);
+  }, [currentIndex, totalQuestions, goTo, trackNavigation, markBase, cancelBackFallback]);
 
   /**
    * The phone's Back goes to the previous question, and Forward to the next.
@@ -503,9 +477,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
         window.history.back();
         return;
       }
-      // Back while paused goes back a question like any other Back, and the dialog
-      // closes with it instead of promising "where you left off" over another question.
-      setShowPauseModal(false);
       trackNavigation(index < currentIndex ? "back" : "forward");
       goTo(index);
     };
@@ -526,59 +497,27 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     };
   }, [cancelBackFallback]);
 
-  const handlePause = useCallback(() => {
-    cancelBackFallback(); // it would move the question under the dialog
-    savePartial();
-    trackNavigation("abandon");
-    if (question) {
-      trackSurveyPause(question.qId, progress);
-    }
-    setShowPauseModal(true);
-  }, [question, progress, trackNavigation, savePartial, cancelBackFallback]);
-
-  const handleResumeFromPause = useCallback(() => {
-    setShowPauseModal(false);
-  }, []);
-
-  const handleExitFromPause = useCallback(() => {
-    setShowPauseModal(false);
-    onExit();
-  }, [onExit]);
-
-  // Handle answer change
+  // Handle answer change. Moving on is always the reader's own Next: the
+  // auto-advance toggle and the Pause / Save & exit control left with the
+  // 2026-10-04 redesign (Figma 11303:174), which carries neither.
   const handleChange = useCallback(
     (value: AnswerValue) => {
       if (!question) return;
       setAnswer(question.qId, value);
-
-      // Auto-advance for single-selection question types
-      cancelAutoAdvance();
-      if (
-        autoAdvance &&
-        (question.answerType === "single" ||
-          question.answerType === "scale" ||
-          question.answerType === "country")
-      ) {
-        // Skip auto-advance when "Other" is selected (user needs to type)
-        if (
-          question.answerType === "single" &&
-          typeof value === "string" &&
-          /^other\b/i.test(value)
-        ) {
-          return;
-        }
-        autoAdvanceTimer.current = setTimeout(() => {
-          goNext();
-        }, 350);
-      }
     },
-    [question, setAnswer, autoAdvance, cancelAutoAdvance, goNext]
+    [question, setAnswer]
   );
 
   // Keyboard navigation
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (showPauseModal) return; // the dialog has the keyboard
+      // Enter on a focused control is that control's own press: a scale point, an
+      // option, Previous/Next, a guidance row. Taking it here moved the survey on AND
+      // cancelled the press, so a changed answer was never saved, and Enter on Next
+      // moved twice. Enter anywhere else (a text box, the page) still means next.
+      if (e.key === "Enter" && e.target instanceof Element && e.target.closest("button, a")) {
+        return;
+      }
       // In a text field the arrows move the caret. They used to change the question,
       // so fixing a typo in your email threw you back to the question before it.
       if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && isTextEntry(e.target)) return;
@@ -594,7 +533,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [hasAnswer, question, goNext, goPrev, showPauseModal]);
+  }, [hasAnswer, question, goNext, goPrev]);
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
@@ -605,7 +544,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     };
     const handleTouchEnd = (e: TouchEvent) => {
       if (touchStartX.current === null || touchStartY.current === null) return;
-      if (showPauseModal) return; // a swipe on the dialog is not a question move
       const diffX = e.changedTouches[0]!.clientX - touchStartX.current;
       const diffY = e.changedTouches[0]!.clientY - touchStartY.current;
       touchStartX.current = null;
@@ -622,14 +560,73 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [hasAnswer, question, goNext, goPrev, showPauseModal]);
+  }, [hasAnswer, question, goNext, goPrev]);
 
-  // Clean up auto-advance timer on unmount
-  useEffect(() => {
-    return () => {
-      cancelAutoAdvance();
+  // The country search opens a list under its box, which a phone keyboard would cover
+  // if the question sat lower: that one stays at the top on a phone.
+  const holdAtTop = question?.answerType === "country";
+
+  // No dead space. From 640px the card hugs its content and sits a little above the
+  // middle of the window; on a phone the question sits a little above the middle of
+  // the room left over the pinned buttons. Placed once as each question opens, then
+  // held: picking an answer or opening a row grows it downward instead of moving what
+  // was just pressed, and too tall to fit just starts at the top. Written to the
+  // elements directly, so placing costs no re-render.
+  useLayoutEffect(() => {
+    let placedWidth = -1;
+    const place = () => {
+      const wrap = cardWrapRef.current;
+      const card = cardRef.current;
+      const body = bodyRef.current;
+      const foot = footerRef.current;
+      if (!wrap || !card || !body || !foot) return;
+      placedWidth = window.innerWidth;
+      const banner =
+        parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--liq-consent-h")
+        ) || 0;
+      const room = window.innerHeight - banner;
+      const wide =
+        typeof window.matchMedia === "function" && window.matchMedia("(min-width: 640px)").matches;
+      wrap.style.paddingTop = "";
+      body.style.paddingTop = "";
+      if (wide) {
+        const free = room - card.offsetHeight;
+        wrap.style.paddingTop = `${Math.max(24, Math.floor(free * 0.4))}px`;
+        return;
+      }
+      if (holdAtTop) return;
+      const first = body.firstElementChild;
+      const last = body.lastElementChild;
+      if (!first || !last) return;
+      const content = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+      const top = parseFloat(getComputedStyle(body).paddingTop) || 0;
+      // 24px always kept between the content and the buttons.
+      const free = room - foot.offsetHeight - top - content - 24;
+      if (free > 0) body.style.paddingTop = `${top + Math.floor(free * 0.4)}px`;
     };
-  }, [cancelAutoAdvance]);
+    // A phone's toolbar sliding away on scroll is a height-only resize: re-placing on
+    // it would shift the question under the reader's thumb. Re-place on width only.
+    const onResize = () => {
+      if (window.innerWidth !== placedWidth) place();
+    };
+    place();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [currentIndex, totalQuestions, holdAtTop]);
+
+  // Hairline over the sticky footer only while it floats over the card's content.
+  useEffect(() => {
+    const end = cardEndRef.current;
+    if (!end || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      ([entry]) => setFooterFloating(entry ? !entry.isIntersecting : false),
+      // A few px of slack: a card ending exactly on the viewport edge is not floating.
+      { rootMargin: "0px 0px 4px 0px" }
+    );
+    io.observe(end);
+    return () => io.disconnect();
+  }, [currentIndex, totalQuestions]);
 
   // Survey complete — phase-based rendering
   const handleRetry = useCallback(async () => {
@@ -669,19 +666,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       />
     );
   }
-  // Status text for nav
-  const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;
-
   const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
 
-  const isWhite = surveyVariant === "white";
-
   return (
-    // The QUESTIONS-only theme, white for everyone since the test concluded
-    // 2026-08-25. The provider + data attribute scope it to this <main> (the
-    // post-submit processing/wizard/confirmation are separate early returns above
-    // and stay dark). The dark branches remain, reachable via ?survey=dark on
-    // dev/staging.
+    // The question screen, Figma 11303:174 (2026-10-04): one card holding the
+    // question, then Previous / Next, then the progress strip. The theme provider
+    // stays for the components that still read it; it is always "white".
     <SurveyThemeProvider variant={surveyVariant}>
       {/* NOTE: the survey root is deliberately NOT masked from session replay
           (owner decision, 2026-08-10) — this reverses audit finding L8. It
@@ -695,44 +685,36 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
           To restore the protection, put data-clarity-mask="true" back on the
           <main> below — that single attribute is the whole control. */}
       <main
-        className={`relative flex min-h-screen flex-col ${isWhite ? "bg-white" : "bg-[#0a0510]"}`}
+        id="main-content"
+        className="relative flex min-h-dvh flex-col bg-white"
         style={{ touchAction: "pan-y" }}
         data-survey-theme={surveyVariant}
       >
         {/* Background gradient blurs */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div
-            className={`absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full blur-[120px] ${
-              isWhite ? "bg-[rgba(167,139,250,0.10)]" : "bg-[rgba(167,139,250,0.06)]"
-            }`}
-          />
-          <div
-            className={`absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full blur-[120px] ${
-              isWhite ? "bg-[rgba(254,104,57,0.08)]" : "bg-[rgba(254,104,57,0.04)]"
-            }`}
-          />
+          <div className="absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full bg-[rgba(167,139,250,0.10)] blur-[120px]" />
+          <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-[rgba(254,104,57,0.08)] blur-[120px]" />
         </div>
 
-        {/* Content */}
-        <div className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col gap-6 px-6 pb-[100px] pt-6 sm:pb-32 sm:pt-10">
-          {/* Header */}
-          <SurveyHeader
-            progress={progress}
-            onPause={handlePause}
-            autoAdvance={autoAdvance}
-            onToggleAutoAdvance={toggleAutoAdvance}
-          />
-
-          {/* Question with animation */}
-          <div
-            key={animKey}
-            className="flex-1"
-            style={{
-              animation: "survey-fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both",
-            }}
+        {/* Phones: the card is the screen. From 640px: a 720px card with a border. */}
+        <div
+          ref={cardWrapRef}
+          className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col sm:flex-none sm:px-6 sm:pb-6"
+        >
+          {/* Figma draws its 1px strokes INSIDE a frame; a CSS border adds 1px. So
+              every bordered box here sits 1px in from the frame's padding (36 → 35). */}
+          <section
+            ref={cardRef}
+            aria-label={`Question ${currentIndex + 1} of ${totalQuestions}`}
+            className="relative flex flex-1 flex-col bg-white sm:rounded-[22px] sm:border sm:border-[rgba(22,16,33,0.09)]"
           >
-            {/* Question component */}
-            <div className="py-4">
+            {/* Fill `backwards`, not `both`: a transform left in place after the
+                entrance would trap the country dropdown under the sticky footer. */}
+            <div
+              key={animKey}
+              ref={bodyRef}
+              className="flex flex-1 flex-col gap-5 px-[18.4px] pt-[22.4px] motion-safe:animate-[survey-fade-up_0.4s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:px-[35px] sm:pb-3 sm:pt-[33px]"
+            >
               {question.answerType === "open" && (
                 <OpenResponseQuestion
                   question={question}
@@ -776,39 +758,35 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                   onChange={handleChange}
                 />
               )}
-            </div>
 
-            {/* Guidance panel */}
-            <div className="mt-4">
               <GuidancePanel question={question} />
             </div>
-          </div>
 
-          {/* Navigation — fixed bottom bar on mobile, sticky glass card on desktop */}
-          <div
-            className={`fixed bottom-0 left-0 right-0 z-20 rounded-tl-[24px] rounded-tr-[24px] border-t px-6 py-4 backdrop-blur-xl sm:sticky sm:bottom-6 sm:left-auto sm:right-auto sm:rounded-2xl sm:border ${
-              isWhite
-                ? "border-black/[0.08] bg-white/80 sm:border-black/[0.08]"
-                : "border-white/10 bg-[rgba(10,5,16,0.8)] sm:border-white/10"
-            }`}
-          >
-            <SurveyNav
-              canGoBack={currentIndex > 0}
-              canGoNext={canGoNext}
-              hasAnswer={hasAnswer}
-              statusText={statusText}
-              onPrevious={goPrev}
-              onNext={goNext}
-            />
-          </div>
+            {/* Previous / Next and the progress strip stay on screen while a long
+                question scrolls (above the cookie banner while it is up). Not in a
+                window 500px tall or less (a landscape phone, a short desktop window),
+                where they would cover a third to half of it: there they follow the
+                question and the page scrolls to them. */}
+            <div
+              ref={footerRef}
+              className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
+                footerFloating
+                  ? "shadow-[0_-1px_0_rgba(22,16,33,0.09),0_-12px_24px_-16px_rgba(22,16,33,0.2)]"
+                  : ""
+              }`}
+            >
+              <SurveyNav
+                canGoBack={currentIndex > 0}
+                canGoNext={canGoNext}
+                hasAnswer={hasAnswer}
+                onPrevious={goPrev}
+                onNext={goNext}
+              />
+              <SurveyProgress index={currentIndex} total={totalQuestions} />
+            </div>
+            <div ref={cardEndRef} aria-hidden className="absolute bottom-0 h-px w-px" />
+          </section>
         </div>
-
-        <SurveyPauseModal
-          open={showPauseModal}
-          email={(answers["00000"] as string) || ""}
-          onResume={handleResumeFromPause}
-          onExit={handleExitFromPause}
-        />
       </main>
     </SurveyThemeProvider>
   );

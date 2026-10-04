@@ -19,7 +19,7 @@ const analytics = vi.hoisted(() => ({
   start: vi.fn(),
   answer: vi.fn(),
   progress: vi.fn(),
-  pause: vi.fn(),
+  guidance: vi.fn(),
   setCtx: vi.fn(),
   setVariant: vi.fn(),
 }));
@@ -28,7 +28,7 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyAnswer: analytics.answer,
   trackSurveyProgress: analytics.progress,
   trackSurveyComplete: analytics.complete,
-  trackSurveyPause: analytics.pause,
+  trackSurveyGuidanceExpanded: analytics.guidance,
   setReportSubmissionContext: analytics.setCtx,
   setSurveyVariant: analytics.setVariant,
 }));
@@ -119,8 +119,8 @@ describe("survey completion fires exactly once", () => {
   });
 
   it("stays at one when Next is pressed again after completing", async () => {
-    // Four triggers reach goNext (button, keyboard, swipe, auto-advance), and a
-    // second one arriving ~50ms later is the shape the production data shows.
+    // Three triggers reach goNext (button, keyboard, swipe), and a second one
+    // arriving ~50ms later is the shape the production data shows.
     const { user, next } = await completeIt();
     await waitFor(() => expect(analytics.complete).toHaveBeenCalled());
     // The completion screen may render no buttons at all; the assertion is

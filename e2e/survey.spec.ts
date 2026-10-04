@@ -350,7 +350,10 @@ test.describe("Survey — Full happy path", () => {
     await expect(page.getByRole("heading", { name: /what is your name/i })).toBeVisible({
       timeout: 5000,
     });
-    await expect(page.getByText("0%")).toBeVisible();
+    // The bar starts at 15%, never at 0 (Mark, Figma 2026-09-23), and counts honestly.
+    const bar = page.getByRole("progressbar", { name: "Survey progress" });
+    await expect(bar).toHaveAttribute("aria-valuenow", "15");
+    await expect(bar).toHaveAttribute("aria-valuetext", /^Question 1 of \d+$/);
     await expect(page.getByRole("button", { name: /previous/i })).toBeDisabled();
 
     await page.getByRole("textbox").fill("Test");
@@ -360,6 +363,7 @@ test.describe("Survey — Full happy path", () => {
     await expect(page.getByRole("heading", { name: /satisfied with my sex life/i })).toBeVisible({
       timeout: 5000,
     });
+    await expect(bar).toHaveAttribute("aria-valuetext", /^Question 2 of \d+$/);
 
     // --- Go back and verify persistence ---
     await page.getByRole("button", { name: /previous/i }).click();
@@ -368,11 +372,12 @@ test.describe("Survey — Full happy path", () => {
     });
     await expect(page.getByRole("textbox")).toHaveValue("Test");
 
-    // --- Pause opens the resume dialog (it does not navigate away) ---
-    // `handlePause` saves the draft and opens `SurveyPauseModal`; it has not navigated to
-    // "/" since the modal was introduced. This spec still waited for that navigation.
-    await page.getByRole("button", { name: /pause/i }).click();
-    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole("button", { name: /continue where I left off/i })).toBeVisible();
+    // --- The guidance rows open in place (Figma 11303:174) ---
+    // Pause / Save & exit and Auto-advance left with the 2026-10-04 redesign.
+    const why = page.getByRole("button", { name: "Why we ask this" });
+    await expect(why).toHaveAttribute("aria-expanded", "false");
+    await why.click();
+    await expect(why).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", { name: /pause|save & exit/i })).toHaveCount(0);
   });
 });
