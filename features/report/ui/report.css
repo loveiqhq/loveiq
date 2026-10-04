@@ -4588,6 +4588,13 @@
 }
 
 .report-status-screen {
+  /* The status screens (loading, the errors, "Can't find your report") render
+     outside .report-page, so they had none of its palette: .report-button's
+     background resolved to nothing and its white label vanished into the white
+     card, leaving "Reload report" an empty pill. The same two tokens as
+     .report-page above. */
+  --report-brand-rgb: 254 104 57;
+  --report-surface: #ffffff;
   background: linear-gradient(90deg, #ffffff 0%, #ffffff 100%);
 }
 
