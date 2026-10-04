@@ -50,10 +50,19 @@ const find = (sigs: ReturnType<typeof buildSurveySignals>, label: string) =>
   sigs.find((s) => s.label === label);
 
 /** One question's reach, by its real q_id: ids no longer asked are dropped. */
-const reach = (q_id: string, sessions: number, quits: number): QuestionReach => ({
+const reach = (
+  q_id: string,
+  sessions: number,
+  quits: number,
+  over: Partial<QuestionReach> = {}
+): QuestionReach => ({
   q_id,
   sessions,
   quits,
+  went_back: 0,
+  median_ms: 9000,
+  timed: sessions,
+  ...over,
 });
 
 /** A question's number in the survey as asked today ("Q56" for the email). */
@@ -92,13 +101,16 @@ describe("buildSurveySignals", () => {
   it("reports hesitation relative to a typical question, not in raw seconds", () => {
     // 26s means nothing on its own; 2.9x the typical question is the finding.
     const sigs = buildSurveySignals(
-      snap([q({ question_index: 0 }), q({ question_index: 47, median_ms: 26000 })], {
+      snap([q({ question_index: 0 })], {
         median_ms: 9000,
+        by_question: [reach("00001", 100, 1), reach(ASKED[47]!, 100, 1, { median_ms: 26000 })],
       })
     );
     const hes = find(sigs, "Answer hesitation");
     expect(hes?.value).toContain("2.9x");
     expect(hes?.status).toBe("watch");
+    // Named as the survey asks it today, from the question's own row.
+    expect(hes?.where).toBe(qn(ASKED[47]!));
   });
 
   it("calls a normal question quiet rather than inventing a trend", () => {
@@ -240,13 +252,17 @@ describe("buildFrictionWatchList", () => {
    */
   const names = new Map([
     ["00000", "What is your email?"],
-    ["q47", "Which changes would actually help?"],
+    [ASKED[47]!, "Which changes would actually help?"],
   ]);
   const signals = () => [
     ...buildSurveySignals(
-      snap([q({ question_index: 0 }), q({ question_index: 47, median_ms: 40_000, backs: 30 })], {
+      snap([q({ question_index: 0 })], {
         median_ms: 9000,
-        by_question: [reach("00001", 100, 1), reach("00000", 100, 40)],
+        by_question: [
+          reach("00001", 100, 1),
+          reach(ASKED[47]!, 100, 1, { median_ms: 40_000, went_back: 30 }),
+          reach("00000", 100, 40),
+        ],
       }),
       names
     ),
@@ -283,7 +299,7 @@ describe("buildFrictionWatchList", () => {
       `40% of sessions that reach ${qn("00000")} (What is your email?) end there.`
     );
     expect(text).toContain(
-      "People take 40.0s on Q48 (Which changes would actually help?), 4.4x the usual time."
+      `People take 40.0s on ${qn(ASKED[47]!)} (Which changes would actually help?), 4.4x the usual time.`
     );
   });
 
@@ -350,6 +366,30 @@ describe("sessionEnds", () => {
       })
     );
     expect(ends.map((e) => e.label)).toEqual([qn("00001"), qn("16015")]);
+  });
+});
+
+describe("every survey sentence names a question as it is asked today", () => {
+  it("going back and answer time come from the question's own row, not its screen position", () => {
+    // Position 47 held a different question for people before 2026-09-11. The
+    // per-position rows here say position 47 is slow and much gone-back-from;
+    // the question rows say it is the email question. The sentences must
+    // follow the question.
+    const s = snap([q({ question_index: 47, median_ms: 90_000, backs: 60, visits: 100 })], {
+      median_ms: 9000,
+      by_question: [
+        reach("00001", 200, 2),
+        // 45 of 200 is 22.5% exactly: any other denominator rounds differently.
+        reach("00000", 200, 2, { went_back: 45, median_ms: 40_000 }),
+        // Retired on 2026-09-11: never named, however slow.
+        reach("03014", 200, 2, { went_back: 150, median_ms: 120_000 }),
+      ],
+    });
+    const sigs = buildSurveySignals(s);
+    expect(find(sigs, "Went back a step")?.where).toBe(qn("00000"));
+    expect(find(sigs, "Went back a step")?.value).toBe("23%");
+    expect(find(sigs, "Answer hesitation")?.where).toBe(qn("00000"));
+    expect(find(sigs, "Time to first action")?.where).toBe(qn("00001"));
   });
 });
 

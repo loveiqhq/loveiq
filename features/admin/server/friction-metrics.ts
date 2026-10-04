@@ -111,6 +111,11 @@ export interface QuestionReach {
    * people who left the survey here for good. Finishing is never counted.
    */
   quits: number;
+  /** Sessions that went back a step from this question. */
+  went_back: number;
+  /** Median time on this question, over the `timed` rows that had one. */
+  median_ms: number;
+  timed: number;
 }
 
 export interface FrictionSnapshot {
@@ -178,25 +183,35 @@ const ASKED_POSITION = new Map(
     .map((q, i) => [q.qId, i])
 );
 
-/** A question's quitting, with its place in today's survey. */
-interface QuestionEnd extends QuestionReach {
+/** A question as asked today: its reads and its place in the survey. */
+interface AskedQuestion extends QuestionReach {
   position: number;
-  /** Of the people who reached it, the share who left there and never finished. */
-  pct: number;
 }
 
 /**
- * The questions with enough people for a rate to mean anything, in survey order.
- * Questions no longer asked are left out: there is nothing to fix on them.
+ * Today's questions, in survey order. Questions no longer asked are left out:
+ * there is nothing to fix on them, and their old numbers would point at a
+ * different question now.
  */
-function questionEnds(snap: FrictionSnapshot): QuestionEnd[] {
-  const ends: QuestionEnd[] = [];
+function askedQuestions(snap: FrictionSnapshot): AskedQuestion[] {
+  const asked: AskedQuestion[] = [];
   for (const q of snap.by_question ?? []) {
     const position = ASKED_POSITION.get(q.q_id);
-    if (position === undefined || q.sessions < FLOOR) continue;
-    ends.push({ ...q, position, pct: computeRate(q.quits, q.sessions) });
+    if (position !== undefined) asked.push({ ...q, position });
   }
-  return ends.sort((a, b) => a.position - b.position);
+  return asked.sort((a, b) => a.position - b.position);
+}
+
+/** A question's quitting: of the people who reached it, the share who left there. */
+interface QuestionEnd extends AskedQuestion {
+  pct: number;
+}
+
+/** The questions with enough people for a rate to mean anything, in survey order. */
+function questionEnds(snap: FrictionSnapshot): QuestionEnd[] {
+  return askedQuestions(snap)
+    .filter((q) => q.sessions >= FLOOR)
+    .map((q) => ({ ...q, pct: computeRate(q.quits, q.sessions) }));
 }
 
 export interface SessionEnd {
@@ -244,9 +259,13 @@ export function buildSurveySignals(
   const qs = snap.questions ?? [];
   if (qs.length === 0 || snap.total_rows === 0) return signals;
 
-  const ranked = qs.filter((q) => q.visits >= FLOOR);
-  const label = (q: FrictionQuestion) => qLabel(q.question_index, q.q_id, questionNames);
-  const plain = (q: FrictionQuestion) => qPlain(q.question_index, q.q_id, questionNames);
+  /**
+   * Every survey sentence names a question as it is asked today: per q_id, not
+   * per screen position, which held different questions for different people.
+   */
+  const asked = askedQuestions(snap);
+  const label = (q: AskedQuestion) => qLabel(q.position, q.q_id, questionNames);
+  const plain = (q: AskedQuestion) => qPlain(q.position, q.q_id, questionNames);
 
   // --- Drop-off / exit point -------------------------------------------------
   // Survey order, then a stable sort: a tie names the earlier question, as the
@@ -262,17 +281,18 @@ export function buildSurveySignals(
       label: "Where sessions end",
       group: "Survey",
       value: `${Math.round(worstDrop.pct)}%`,
-      where: qLabel(worstDrop.position, worstDrop.q_id, questionNames),
+      where: label(worstDrop),
       n: worstDrop.sessions,
       status: worstDrop.pct >= 10 ? "watch" : "quiet",
       // Of the sessions that REACH it: the rate divides by the people who got there.
-      sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${qPlain(worstDrop.position, worstDrop.q_id, questionNames)} end there.`,
+      sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${plain(worstDrop)} end there.`,
     });
   }
 
   // --- Backtracking ----------------------------------------------------------
-  const worstBack = ranked
-    .map((q) => ({ q, pct: computeRate(q.backs, q.visits) }))
+  const worstBack = asked
+    .filter((q) => q.sessions >= FLOOR)
+    .map((q) => ({ q, pct: computeRate(q.went_back, q.sessions) }))
     .sort((a, b) => b.pct - a.pct)[0];
   if (worstBack) {
     signals.push({
@@ -280,7 +300,7 @@ export function buildSurveySignals(
       group: "Survey",
       value: `${Math.round(worstBack.pct)}%`,
       where: label(worstBack.q),
-      n: worstBack.q.visits,
+      n: worstBack.q.sessions,
       status: worstBack.pct >= 10 ? "watch" : "quiet",
       sentence: `${Math.round(worstBack.pct)}% of sessions that reach ${plain(worstBack.q)} go back a step there.`,
     });
@@ -288,7 +308,7 @@ export function buildSurveySignals(
 
   // --- Answer hesitation / step completion time ------------------------------
   const typical = snap.median_ms;
-  const slowest = ranked
+  const slowest = asked
     .filter((q) => q.timed >= FLOOR)
     .sort((a, b) => b.median_ms - a.median_ms)[0];
   if (slowest && typical > 0) {
@@ -314,7 +334,7 @@ export function buildSurveySignals(
   }
 
   // --- Time to first action --------------------------------------------------
-  const first = qs.find((q) => q.question_index === 0);
+  const first = asked.find((q) => q.position === 0);
   if (first && first.timed >= FLOOR) {
     signals.push({
       label: "Time to first action",
