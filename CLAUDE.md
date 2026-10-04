@@ -660,6 +660,89 @@ When working in this codebase:
 11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `docs/plans/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `docs/runbooks/SECURITY.md`, `docs/runbooks/DEVELOPMENT.md`, `docs/architecture/*`) should remain in the repo.
 12. **Request Eman's review on every PR into `main`** - `main` deploys to production. When the work on a PR into `main` is done, request a review from Eman: `gh pr edit <number> --add-reviewer eman-cickusic`. This holds for every PR, whoever or whatever wrote it. `.github/CODEOWNERS` usually requests him when the PR opens; add him anyway, which does nothing if he is already requested. A PR opened from Eman's own account cannot request its author.
 
+### Working alongside other sessions
+
+Several people and AI sessions work on this repository at the same time, often on one
+machine: Claude Code terminals, cloud sessions, scheduled jobs and the team's own editors.
+Each rule below exists because one session once lost, reverted or shipped another's work.
+They hold for every person and every agent.
+
+**Where to work**
+
+- **Your own worktree, on your own branch.** Start from the latest `main`:
+  `git fetch origin && git worktree add -b <type>/<topic> <path> origin/main`. Never switch
+  branches, reset, stash or rebase in a checkout you did not create. Another session may be
+  working in it, and its local `main` may hold commits that are not pushed yet. On Eman's Mac
+  the main checkout `/Users/eman/loveiq` is shared like that.
+- **Leave other worktrees alone.** `git worktree list` shows them all. Never edit, reset,
+  prune or remove one you did not create. `~/.loveiq-brain` is the brain's scheduled jobs,
+  pinned to `origin/main`.
+- **A branch name nobody uses.** Check `git branch -a --list '*<topic>*'` and
+  `gh pr list --search <topic>` first. Never reuse, push to or delete a branch you did not
+  create.
+- **`node_modules`.** Tests and lint work with a symlink to the main checkout's
+  (`ln -s /Users/eman/loveiq/node_modules node_modules`). `next dev` and `next build` reject
+  that symlink: copy it with `cp -cR` instead (copy-on-write, seconds). Never run
+  `npm install` or `npm ci` in a checkout you did not create: it changes the packages under
+  other sessions' servers and tests. Never leave a second `node_modules` inside a checkout:
+  vitest collects the test files inside it.
+- **Ports and processes.** The dev server and Playwright default to port 3000. Run your own
+  server on a free port (`npx next start -p 3100` with
+  `PLAYWRIGHT_BASE_URL=http://localhost:3100`). Never build in a checkout another session's
+  server runs from (it serves from `.next`), and never stop a server or process you did not
+  start.
+
+**Git operations that destroy someone else's work**
+
+- **Never rewrite shared history.** No force-push (`--force` or `--force-with-lease`) to
+  `main`, `staging` or any branch someone else pushes to. No rebase or reset of a branch
+  another session uses. Do not count on GitHub to stop you: `main`'s protection does not bind
+  admin accounts, which is what our AI sessions push as, and `staging` has no protection at all.
+- **Re-read before any history operation.** Run `git log -1` and `git status` right before a
+  reset, amend, rebase or squash. Never trust a SHA you remember: another session may have
+  committed into the same checkout in between.
+- **Squash only on the current base.** Before `git reset --soft origin/main` and a new
+  commit, check that `git merge-base HEAD origin/main` equals `git rev-parse origin/main`.
+  If `main` moved, that squash deletes everything `main` gained since. Afterwards
+  `git diff --stat origin/main HEAD` must list only your own files.
+- **Discarding is for your own changes.** `git checkout -- <file>`, `git restore`,
+  `git stash` and `git clean` destroy uncommitted work. Use them only on files you changed,
+  in your own worktree. Commit a fix before mutation-testing it, so reverting a mutation
+  returns to your commit.
+- **Stay current by merging.** Once a branch is pushed, bring in `main` with
+  `git fetch origin && git merge origin/main`, not a rebase.
+- **Look before you push or merge.** `git fetch origin`, then
+  `git log --oneline HEAD..origin/main` shows what landed meanwhile. Two PRs that change the
+  same thing can each pass CI alone, so the second is brought up to date and checked again
+  before it merges.
+- **Delete only what you made.** After your PR merges, remove your own worktree
+  (`git worktree remove <path>`) and branch (`git branch -d <branch>`; lowercase `-d`
+  refuses an unmerged branch). Never `git worktree prune`, `git branch -D` or
+  `git push origin --delete` anything you did not create.
+- **Push early.** Unpushed commits exist on one disk only, and scratch directories under
+  `/tmp` are swept by age, overnight. Push your branch whenever you stop.
+- **Tests that run `git`** must clear the `GIT_*` variables a hook exports, or they act on
+  the real repository (see `__tests__/scripts/replay-pr.test.ts`).
+
+**Shared state outside git (one copy for everyone)**
+
+- **The production database.** A migration ships in a PR. Whoever applies it to production
+  also records its ledger row, and checks first that nobody applied it already;
+  `npm run check:migration-drift` shows both directions. Bring staging forward afterwards
+  (see "Staging has its OWN database" above).
+- **Settings in Vercel, Supabase, Stripe, Resend, PostHog, CookieYes and Google.** Read the
+  current value first, change only what the task needs, never restore "what I remember",
+  and list every outside change in the PR description.
+- **Scripts that write to a live service** (any script run with `--apply`) run from a clean
+  worktree of `origin/main`, never from a feature branch: they publish whatever the working
+  tree holds.
+- **Scheduled jobs** (Vercel crons, GitHub Actions, the brain's launchd jobs) run what is on
+  `main`, so a merge is live at their next run.
+
+**Before you stop:** nothing you meant to keep is uncommitted, your branch is pushed, a
+finished PR has Eman requested as reviewer (rule 12), and after the merge your worktree and
+branch are removed, and nothing else.
+
 ### Verify, then audit, then audit again
 
 **This is a standing requirement, not something to do when asked.** Work is not finished

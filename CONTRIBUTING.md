@@ -15,7 +15,7 @@ See [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md) for env vars, troubleshooting
 
 ## Branch and Review Workflow
 
-1. Branch from `main`.
+1. Branch from `main`, in your own worktree. Several people and AI sessions work at once; follow the "Working alongside other sessions" section of `CLAUDE.md`.
 2. Make the smallest coherent change set you can.
 3. Run `npm run check`.
 4. Run `npm run docs:truth` when your change touches docs, API routes, env vars, scripts, or workflows.
