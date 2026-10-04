@@ -302,3 +302,67 @@ describe("renderDropoutBars: each label sits under its own bar", () => {
     expect(Math.abs(centre(first) - centre(firstBar))).toBeLessThan(slot / 2);
   });
 });
+
+describe("renderDropoutBars: which bar is which question", () => {
+  // The real shape on 2026-10-04: 57 questions, Q1 and Q2 both 6%, Q56 the
+  // steepest at 11%, Q57 near zero.
+  const bars = Array.from({ length: 57 }, (_, i) => ({
+    label: `Q${i + 1}`,
+    dropPct: i === 55 ? 11 : i <= 1 ? 6 : i === 56 ? 0.1 : 1 + (i % 4),
+  }));
+  const boxes = () => boxesIn(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
+  const centre = (b: { left: number; width: number }) => b.left + b.width / 2;
+
+  it("numbers Q1, every fifth question and the last", () => {
+    const labels = boxes()
+      .filter((b) => b.key.startsWith("x-"))
+      .map((b) => b.text);
+    // Q55 gives way to Q57: two bars apart, the two would touch.
+    expect(labels).toEqual([
+      "Q1",
+      ...Array.from({ length: 10 }, (_, k) => `Q${(k + 1) * 5}`),
+      "Q57",
+    ]);
+  });
+
+  it("draws a tick under every bar", () => {
+    const ticks: string[] = [];
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const el = node as ReactElement<Record<string, unknown>> & { key?: string | null };
+      if (String(el.key ?? "").startsWith("tick-")) ticks.push(String(el.key));
+      const props = (el.props ?? {}) as Record<string, unknown>;
+      if (props.children) walk(props.children);
+    };
+    walk(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
+    expect(ticks).toHaveLength(57);
+  });
+
+  it("names each red bar's question on the bar, touching equal ones together", () => {
+    const all = boxes();
+    const names = all.filter((b) => b.key.startsWith("q-"));
+    expect(names.map((b) => b.text)).toEqual(["Q1, Q2", "Q56"]);
+    // Each name sits over its own bar(s): nearer them than any other bar.
+    const bar = (i: number) => all.find((b) => b.key === `bar-Q${i + 1}-${i}`)!;
+    const slot = centre(bar(1)) - centre(bar(0));
+    const q56 = names.find((b) => b.text === "Q56")!;
+    expect(Math.abs(centre(q56) - centre(bar(55)))).toBeLessThan(slot / 2);
+    const pair = names.find((b) => b.text === "Q1, Q2")!;
+    expect(Math.abs(centre(pair) - (centre(bar(0)) + centre(bar(1))) / 2)).toBeLessThan(slot / 2);
+  });
+
+  it("keeps separate names for touching red bars that differ", () => {
+    // A cliff: Q4 at 11%, Q5 at 24%. One shared "11-24%" would hide the
+    // steepest number, so these stay separate and the steepest keeps its name.
+    const cliff = Array.from({ length: 20 }, (_, i) => ({
+      label: `Q${i + 1}`,
+      dropPct: i === 3 ? 11 : i === 4 ? 24 : 2,
+    }));
+    const names = boxesIn(renderDropoutBars({ kind: "dropout-funnel", bars: cliff }).element)
+      .filter((b) => b.key.startsWith("q-"))
+      .map((b) => b.text);
+    expect(names).toContain("Q5");
+    expect(names).not.toContain("Q4, Q5");
+  });
+});

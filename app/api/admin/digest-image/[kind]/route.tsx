@@ -948,10 +948,20 @@ export function renderDropoutBars(p: DropoutPayload): {
    * are now absolutely positioned with room to breathe, and only as many as fit
    * at DROPOUT_LABEL_W apart.
    */
-  const labelEvery = Math.max(1, Math.ceil(DROPOUT_LABEL_W / Math.max(slot, 1)));
+  /**
+   * Which bar is which question: a tick under EVERY bar, and a number at Q1,
+   * every fifth question and the last. Round numbers to count from, never more
+   * than two bars away: the old rule labelled every third bar, so locating Q23
+   * meant counting in threes from Q22.
+   */
+  const everyBar = slot >= DROPOUT_LABEL_W;
+  const questionNumber = (label: string) => Number(/^Q(\d+)$/.exec(label)?.[1]);
   const xTicks = bars
     .map((b, i) => ({ i, label: b.label }))
-    .filter(({ i }) => i === 0 || i === bars.length - 1 || i % labelEvery === 0)
+    .filter(
+      ({ i, label }) =>
+        everyBar || i === 0 || i === bars.length - 1 || questionNumber(label) % 5 === 0
+    )
     // Drop any tick that would collide with its neighbour OR with the final
     // tick, which is always kept. Without the second test Q55 and Q58 landed
     // on top of each other at the right edge.
@@ -977,7 +987,7 @@ export function renderDropoutBars(p: DropoutPayload): {
             display: "flex",
             position: "relative",
             width: DROPOUT_AXIS_W + plotW + labelRoom,
-            height: DROPOUT_PLOT_H + 24,
+            height: DROPOUT_PLOT_H + 26,
           }}
         >
           {/* y-axis labels, each centred on its own gridline */}
@@ -1049,6 +1059,26 @@ export function renderDropoutBars(p: DropoutPayload): {
           {/* the number on the bars that matter, so the eye never has to
               estimate the ones being pointed at */}
           {[...worstIdx]
+            .sort((a, b) => a - b)
+            /**
+             * Touching red bars with the same rounded share get ONE label naming
+             * both ("Q1, Q2" over "6%"). Labelled one by one they collide, and one
+             * was dropped: on 2026-10-04 Q2 was a red bar with no number on it.
+             */
+            .reduce<number[][]>((groups, i) => {
+              const group = groups[groups.length - 1];
+              const prev = group?.[group.length - 1];
+              if (
+                group &&
+                prev === i - 1 &&
+                Math.round(bars[prev]!.dropPct) === Math.round(bars[i]!.dropPct)
+              ) {
+                group.push(i);
+              } else {
+                groups.push([i]);
+              }
+              return groups;
+            }, [])
             /**
              * Two adjacent worst bars (Q57 and Q58 are neighbours, both 15%) put two
              * 36px labels on two ~11px slots, which overlapped into an unreadable
@@ -1064,15 +1094,30 @@ export function renderDropoutBars(p: DropoutPayload): {
              *
              * Steepest first, then greedily keep whatever still fits.
              */
-            .sort((a, b) => bars[b]!.dropPct - bars[a]!.dropPct)
-            .reduce<number[]>((keep, i) => {
-              if (keep.every((k) => Math.abs(i - k) * slot >= DROPOUT_VALUE_W + 2)) keep.push(i);
+            .sort(
+              (a, b) =>
+                Math.max(...b.map((i) => bars[i]!.dropPct)) -
+                Math.max(...a.map((i) => bars[i]!.dropPct))
+            )
+            .reduce<number[][]>((keep, g) => {
+              const mid = (g[0]! + g[g.length - 1]!) / 2;
+              if (
+                keep.every(
+                  (k) =>
+                    Math.abs(mid - (k[0]! + k[k.length - 1]!) / 2) * slot >= DROPOUT_VALUE_W + 2
+                )
+              ) {
+                keep.push(g);
+              }
               return keep;
             }, [])
-            .sort((a, b) => a - b)
-            .map((i) => {
-              const b = bars[i]!;
-              const h = Math.max(2, Math.round((b.dropPct / peak) * DROPOUT_PLOT_H));
+            .sort((a, b) => a[0]! - b[0]!)
+            .map((g) => {
+              const first = bars[g[0]!]!;
+              const last = bars[g[g.length - 1]!]!;
+              const mid = (g[0]! + g[g.length - 1]!) / 2;
+              const tallest = Math.max(...g.map((i) => bars[i]!.dropPct));
+              const h = Math.max(2, Math.round((tallest / peak) * DROPOUT_PLOT_H));
               // A bar at the axis ceiling leaves no room above it, and a label
               // placed there is clipped by the plot edge — which is what happened
               // to the two 15% bars on the first render.
@@ -1087,22 +1132,51 @@ export function renderDropoutBars(p: DropoutPayload): {
               // that claims to handle a case is worse than no branch: it reads as
               // cover the code does not have.
               const above = DROPOUT_PLOT_H - h - 19;
-              return (
+              // Clamp on the SAME width the box actually is. It was clamped to -36
+              // while the text needed more, so the last bar's "15%" rendered as
+              // "5%" with the 1 cut off.
+              // Down to the end of the y-axis numbers (they stop 8px short of the
+              // plot), not the plot's edge: held at the edge, "Q1, Q2" sat 11px to
+              // the right of its two bars, over Q2 and Q3.
+              const left = Math.max(
+                DROPOUT_AXIS_W - 8,
+                Math.min(
+                  DROPOUT_AXIS_W + mid * slot + slot / 2 - DROPOUT_VALUE_W / 2,
+                  DROPOUT_AXIS_W + plotW + labelRoom - DROPOUT_VALUE_W
+                )
+              );
+              const name =
+                g.length === 1
+                  ? first.label
+                  : g.length === 2
+                    ? `${first.label}, ${last.label}`
+                    : `${first.label} to ${last.label}`;
+              return [
+                // Which question, on the bar itself: the bars that matter never
+                // need counting along the axis.
                 <div
-                  key={`val-${i}`}
+                  key={`q-${g[0]}`}
                   style={{
                     display: "flex",
                     position: "absolute",
-                    // Clamp on the SAME width the box actually is. It was
-                    // clamped to -36 while the text needed more, so the last
-                    // bar's "15%" rendered as "5%" with the 1 cut off.
-                    left: Math.max(
-                      DROPOUT_AXIS_W,
-                      Math.min(
-                        DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_VALUE_W / 2,
-                        DROPOUT_AXIS_W + plotW + labelRoom - DROPOUT_VALUE_W
-                      )
-                    ),
+                    left,
+                    top: above - 15,
+                    width: DROPOUT_VALUE_W,
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: COLORS.danger,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {name}
+                </div>,
+                <div
+                  key={`val-${g[0]}`}
+                  style={{
+                    display: "flex",
+                    position: "absolute",
+                    left,
                     top: above,
                     width: DROPOUT_VALUE_W,
                     justifyContent: "center",
@@ -1111,10 +1185,36 @@ export function renderDropoutBars(p: DropoutPayload): {
                     color: COLORS.danger,
                   }}
                 >
-                  {`${Math.round(b.dropPct)}%`}
-                </div>
-              );
+                  {`${Math.round(tallest)}%`}
+                </div>,
+              ];
             })}
+
+          {/* a tick under every bar, longer where a number is printed */}
+          <div
+            style={{
+              display: "flex",
+              position: "absolute",
+              left: DROPOUT_AXIS_W,
+              top: DROPOUT_PLOT_H,
+            }}
+          >
+            <svg width={plotW} height={6}>
+              {bars.map((b, i) => {
+                const x = i * slot + (slot - 1) / 2;
+                const long = xTicks.some((t) => t.i === i);
+                return (
+                  <polyline
+                    key={`tick-${b.label}-${i}`}
+                    points={`${x},0 ${x},${long ? 6 : 3}`}
+                    fill="none"
+                    stroke={COLORS.textMuted}
+                    strokeWidth="1"
+                  />
+                );
+              })}
+            </svg>
+          </div>
 
           {/* x-axis labels, absolutely positioned and centred on their bar */}
           {xTicks.map(({ i, label }) => (
@@ -1127,7 +1227,7 @@ export function renderDropoutBars(p: DropoutPayload): {
                   Math.max(DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_LABEL_W / 2, 0),
                   DROPOUT_AXIS_W + plotW + labelRoom - DROPOUT_LABEL_W
                 ),
-                top: DROPOUT_PLOT_H + 6,
+                top: DROPOUT_PLOT_H + 8,
                 width: DROPOUT_LABEL_W,
                 justifyContent: "center",
                 fontSize: 12,
