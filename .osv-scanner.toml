@@ -23,3 +23,18 @@ id = "GHSA-w5hq-g745-h8pq"
 # remaining v10 reference is a manifest-only declaration in a
 # transitive dep, not an installed version.
 reason = "Transitive uuid pinned to >=11.0.0 via npm overrides"
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-12-04
+# braces stack-exhaustion DoS (CVE-2026-93687). Every release up to 3.0.3 is
+# affected and none is fixed (micromatch/braces#70; fix PRs #72 and #75 still
+# unmerged on 2026-10-04). braces reaches us only through build tooling:
+# tailwindcss 3 (chokidar, fast-glob, micromatch), eslint-config-next
+# (fast-glob) and markdownlint-cli2 (globby). `npm ls braces --omit=dev` is
+# empty and `npm audit --omit=dev` is clean, so nothing ships to production.
+# The DoS needs an attacker-controlled brace pattern; these tools only expand
+# patterns from our own config files. Also read by security.yml's npm audit
+# step (scripts/npm-audit-gate.mjs). When the date passes, both scanners fail
+# again: check for a fixed braces, update it, and delete this entry.
+reason = "No fixed braces release; dev-only build tooling, patterns are our own"

@@ -380,6 +380,36 @@ describe("ReportPage", () => {
     expect(screen.getByRole("link", { name: /reload report/i })).toHaveAttribute("href", "/report");
   });
 
+  it("reloads the reader's own report, not bare /report, when they came by link", () => {
+    // Bare /report only works in the browser that took the survey. From an emailed
+    // link it could only lead to "Can't find your report" (2026-10-03).
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 500, message: "Unable to process request." },
+    });
+
+    render(<ReportPage token="rpt_abc123" />);
+
+    expect(screen.getByRole("link", { name: /reload report/i })).toHaveAttribute(
+      "href",
+      "/report/rpt_abc123"
+    );
+  });
+
+  it("treats a malformed report link (400) as not found, not as an outage", () => {
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 400, message: "Invalid input" },
+    });
+
+    render(<ReportPage token="[object Object]" />);
+
+    expect(screen.getByRole("heading", { name: /can.t find your report/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /temporarily unavailable/i })).toBeNull();
+  });
+
   it("does not render pre-2.0 sections the redesign retired", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
 

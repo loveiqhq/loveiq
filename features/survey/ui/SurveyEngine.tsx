@@ -46,9 +46,11 @@ type CompletionPhase = "processing" | "wizard" | "done";
 interface SurveyEngineProps {
   onExit: () => void;
   onComplete: (reportToken?: string | null) => void;
+  /** Discard this run and begin again. Without it the error screen offers no Start Over. */
+  onStartOver?: () => void;
 }
 
-const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
+const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }) => {
   const {
     answers,
     currentIndex,
@@ -500,7 +502,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
         status={submitStatus === "idle" && hasPendingCompletion ? "error" : submitStatus}
         onExit={onExit}
         onRetry={handleRetry}
-        onStartOver={onComplete}
+        onStartOver={onStartOver}
       />
     );
   }

@@ -167,6 +167,24 @@ describe("POST /api/survey", () => {
     expect(res.status).toBe(400);
   });
 
+  it("accepts a survey finished more than a day after it was started, clamping the duration", async () => {
+    // Answers persist on the device, so start-today-finish-tomorrow is ordinary. A
+    // .max(86_400_000) used to 400 these, Retry resent the same payload, and three
+    // readers who answered every question never got a report.
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    const res = await POST(makeRequest({ ...validBody(), durationMs: 27 * 3_600_000 }));
+
+    expect(res.status).toBe(200);
+    const rpcCall = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/rpc/submit_survey")
+    );
+    expect(JSON.parse((rpcCall![1] as { body: string }).body).p_duration_ms).toBe(86_400_000);
+  });
+
   it("returns 429 when rate limited", async () => {
     allowCsrf();
     mockCheckRateLimit.mockResolvedValue({
