@@ -494,10 +494,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       // them, Back to the email question, an edit and Forward submitted an address
       // nobody had confirmed; and a jump over several entries (the browser's history
       // list) would skip the checks of every question edited since. Refused, the
-      // history steps back onto the question on screen.
+      // history steps back ONE entry and this runs again where it lands: entries can
+      // skip question numbers once a run was re-based (another tab moved it on), so a
+      // go() by the question gap could overshoot. A refused jump therefore ends one
+      // question on, if this one passes, or back on this one.
       if (index > currentIndex && (index > currentIndex + 1 || !mayMoveOn)) {
         setAttemptedNext(true);
-        window.history.go(currentIndex - index);
+        window.history.back();
         return;
       }
       // Back while paused goes back a question like any other Back, and the dialog
