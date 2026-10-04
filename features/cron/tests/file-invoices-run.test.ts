@@ -41,8 +41,14 @@ let invoiceText = "Total $11.70 USD";
 let relayedIn = "";
 let ecbDown = false;
 /** More Vercel invoices by message id, each with its own day, text and Message-ID. */
-let more: Record<string, { day: number; text: string; subject?: string }> = {};
-const invoiceOn = (id: string, day: number, text: string, subject = "Your receipt") => ({
+let more: Record<string, { day: number; text: string; subject?: string; files?: string[] }> = {};
+const invoiceOn = (
+  id: string,
+  day: number,
+  text: string,
+  subject = "Your receipt",
+  files = [`${id}.pdf`]
+) => ({
   internalDate: String(day),
   payload: {
     headers: [
@@ -51,7 +57,7 @@ const invoiceOn = (id: string, day: number, text: string, subject = "Your receip
       { name: "Message-Id", value: `<${id}@vercel.com>` },
     ],
     parts: [
-      { filename: `${id}.pdf`, body: { attachmentId: "a1" } },
+      ...files.map((filename) => ({ filename, body: { attachmentId: "a1" } })),
       { mimeType: "text/plain", body: { data: Buffer.from(text).toString("base64url") } },
     ],
   },
@@ -128,7 +134,9 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     if (u.includes("format=full")) {
       const id = /messages\/([^/?]+)\?/.exec(u)?.[1] ?? "";
       const spec = more[id];
-      return ok(spec ? invoiceOn(id, spec.day, spec.text, spec.subject) : invoice(mailbox));
+      return ok(
+        spec ? invoiceOn(id, spec.day, spec.text, spec.subject, spec.files) : invoice(mailbox)
+      );
     }
     if (u.includes("gmail.googleapis.com")) {
       const ids = inbox[mailbox] ?? [];
@@ -395,6 +403,27 @@ describe("a complete filing run", () => {
     sheet = [HEADER, vercelRow(HEADER).map((c, i) => (i === 18 ? "" : c))];
     await run();
     expect(slackText()).toContain("Vercel 2026/09: (blank) → -10.00");
+  });
+
+  it("counts an invoice once when it comes in two emails", async () => {
+    // Supabase's "New invoice" and "Payment received" both carry the invoice's PDF.
+    inbox = { "ec@loveiq.org": ["issued", "paid"] };
+    more = {
+      issued: {
+        day: Date.UTC(2026, 8, 30, 10),
+        text: "Total €10.00 EUR",
+        files: ["Invoice-CBNDLH-00012.pdf"],
+      },
+      paid: {
+        day: Date.UTC(2026, 8, 30, 11),
+        text: "Total €10.00 EUR",
+        files: ["Invoice-CBNDLH-00012.pdf", "Receipt-CBNDLH-00012.pdf"],
+      },
+    };
+    await run();
+    expect(sheetWrites[0]?.data).toEqual([
+      { range: "Costs!S2:X2", values: [[-10, -10, -10, -10, -10, -10]] },
+    ]);
   });
 
   it("enters the closed month and carries it forward, and holds the month in progress", async () => {

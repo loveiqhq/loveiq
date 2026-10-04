@@ -497,6 +497,8 @@ export async function GET(request: Request) {
     const chargesAs = new Map<string, string[]>();
     // One email can reach two walked mailboxes (a vendor addressing two of us); counted once.
     const seenMessageIds = new Set<string>();
+    // The PDF names each vendor's month has counted: one invoice can come in two emails.
+    const countedPdfs = new Map<string, Set<string>>();
     /**
      * Vendor+month -> summed charge. BOTH halves matter.
      *
@@ -665,12 +667,12 @@ export async function GET(request: Request) {
          */
         let messageAmount: Charge | null = null;
         let sawPdf = false;
-        let pdfNames = "";
+        const pdfFiles: string[] = [];
 
         for (const p of parts) {
           if (!p.filename?.toLowerCase().endsWith(".pdf") || !p.body?.attachmentId) continue;
           sawPdf = true;
-          pdfNames += ` ${p.filename}`;
+          pdfFiles.push(p.filename);
 
           // The attachment is fetched BEFORE the duplicate check, because its
           // total has to be counted whether or not the file is new. Skipping
@@ -726,6 +728,17 @@ export async function GET(request: Request) {
           filed.push({ vendor: vendor.sheetName, month, file: p.filename, amount });
         }
 
+        // One invoice, two emails: Supabase mails "New invoice" and then "Payment received", each
+        // with Invoice-<number>.pdf, and adding both doubled the month. A PDF name this vendor's
+        // month has already counted is the same document (the rule the Drive filing above uses),
+        // so the email's amount is not added again.
+        const monthKey = `${vendor.sheetName}|${month}`;
+        const counted = countedPdfs.get(monthKey) ?? new Set<string>();
+        countedPdfs.set(monthKey, counted);
+        const repeats = pdfFiles.some((f) => counted.has(f));
+        for (const f of pdfFiles) counted.add(f);
+        if (repeats) continue;
+
         // A stated zero charged nothing: neither written nor left for a person. Written, it
         // would carry EUR 0 into every forecast month of a vendor that bills again next month.
         if (messageAmount !== null && messageAmount.value > 0) {
@@ -765,7 +778,7 @@ export async function GET(request: Request) {
           sawPdf &&
           // Only mail that says it is a bill. The vendor matchers cover a whole sender
           // domain, so a brochure or a terms PDF from the same address must not block a month.
-          /invoice|receipt|rechnung|factur|bill/i.test(`${subject}${pdfNames}`)
+          /invoice|receipt|rechnung|factur|bill/i.test(`${subject} ${pdfFiles.join(" ")}`)
         ) {
           // An invoice whose total cannot be read still charged us. Dropped, the month was
           // written as the sum of the OTHER invoices, or left stale as "already matched".
