@@ -84,6 +84,8 @@ vi.mock("@features/survey/server/server", () => ({
   ensureSubmissionScored: (...args: unknown[]) => mockEnsureSubmissionScored(...args),
   submitSurveyOnce: (...args: unknown[]) => mockSubmitSurveyOnce(...args),
   isSurveyClosed: () => Promise.resolve(false),
+  // No earlier submission under this session: the replay path stays out of the way.
+  fetchSubmissionBySessionId: () => Promise.resolve(null),
 }));
 
 vi.mock("@features/report/server/personalReport", () => ({

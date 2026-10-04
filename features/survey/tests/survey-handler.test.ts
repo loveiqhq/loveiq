@@ -14,10 +14,12 @@ vi.mock("@shared/http/csrf", () => ({
 const mockCheckRateLimit = vi.fn();
 const mockCheckCooldown = vi.fn();
 const mockGetClientIp = vi.fn();
+const mockReleaseCooldown = vi.fn();
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   checkCooldown: (...args: unknown[]) => mockCheckCooldown(...args),
   getClientIp: (...args: unknown[]) => mockGetClientIp(...args),
+  releaseCooldown: (...args: unknown[]) => mockReleaseCooldown(...args),
 }));
 
 const mockFetchWithTimeout = vi.fn();
@@ -683,5 +685,154 @@ describe("POST /api/survey", () => {
         "marketing-opt-in: Resend contact create failed"
       )
     );
+  });
+});
+
+describe("POST /api/survey — a finished survey is never stranded", () => {
+  // Regression, 2026-10-04: at the final submit a 400 or a 429 is a dead end. Retry
+  // resends the same stored payload, and only Start Over (which discards every answer)
+  // gets the reader out. Four readers lost their report that way in September.
+  type Init = { method?: string; body?: string };
+  const SESSION = "3f2b8c1e-9d4a-4e7b-8a6f-2c1d0e9b7a65";
+  function routeFetch(handlers: Record<string, (url: string, init?: Init) => unknown>) {
+    mockFetchWithTimeout.mockImplementation(async (url: string, init?: Init) => {
+      for (const [fragment, reply] of Object.entries(handlers)) {
+        if (url.includes(fragment)) return reply(url, init);
+      }
+      return { ok: true, json: async () => [] };
+    });
+  }
+  const rpcOk = () => ({ ok: true, json: async () => ({ success: true, submission_id: 123 }) });
+  const rpcBody = () => {
+    const call = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/rpc/submit_survey")
+    );
+    return JSON.parse((call![1] as { body: string }).body);
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    mockResendContactsCreate.mockResolvedValue({ data: { id: "c1" } });
+    mockResendEmailsSend.mockResolvedValue({ data: { id: "e1" } });
+    __resetSurveyStatusCacheForTests(false);
+    mockIsFeatureEnabled.mockResolvedValue(true);
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+  });
+
+  it("gives a replayed submit its submission back, without the cooldown or a second submit", async () => {
+    routeFetch({
+      "/survey_submission?session_id=": () => ({
+        ok: true,
+        json: async () => [{ id: 77, status: "completed" }],
+      }),
+      "/report_access_token?survey_submission_id=eq.77": () => ({
+        ok: true,
+        json: async () => [{ token: "rpt_existing" }],
+      }),
+    });
+
+    const res = await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      success: true,
+      submissionId: 77,
+      reportToken: "rpt_existing",
+    });
+    expect(mockCheckCooldown).not.toHaveBeenCalled();
+    expect(
+      mockFetchWithTimeout.mock.calls.some((c) => (c[0] as string).includes("/rpc/submit_survey"))
+    ).toBe(false);
+    expect(mockResendEmailsSend).not.toHaveBeenCalled();
+  });
+
+  it("gives a replayed submit whose submission never got a link a new one", async () => {
+    routeFetch({
+      "/survey_submission?session_id=": () => ({
+        ok: true,
+        json: async () => [{ id: 77, status: "completed" }],
+      }),
+      "/report_access_token": (_url, init) =>
+        init?.method === "POST" ? { ok: true } : { ok: true, json: async () => [] },
+    });
+
+    const json = await (await POST(makeRequest({ ...validBody(), sessionId: SESSION }))).json();
+
+    expect(json.reportToken).toMatch(/^rpt_[A-Za-z0-9]{20}$/);
+  });
+
+  it("clamps a negative duration (a clock set back) to zero", async () => {
+    routeFetch({ "/rpc/submit_survey": rpcOk });
+    const res = await POST(makeRequest({ ...validBody(), durationMs: -90_000 }));
+    expect(res.status).toBe(200);
+    expect(rpcBody().p_duration_ms).toBe(0);
+  });
+
+  it("cuts a name over 80 characters instead of refusing it", async () => {
+    routeFetch({ "/rpc/submit_survey": rpcOk });
+    const res = await POST(makeRequest({ ...validBody(), firstName: "A".repeat(200) }));
+    expect(res.status).toBe(200);
+    expect(rpcBody().p_first_name).toHaveLength(80);
+  });
+
+  it("tidies pasted extras around the email", async () => {
+    routeFetch({ "/rpc/submit_survey": rpcOk });
+    const res = await POST(makeRequest({ ...validBody(), email: " <Alice@Example.com.> " }));
+    expect(res.status).toBe(200);
+    expect(rpcBody().p_email).toBe("alice@example.com");
+  });
+
+  it("names the email when it is the field at fault, so the screen can send the reader back", async () => {
+    const res = await POST(makeRequest({ ...validBody(), email: "a..b@example.com" }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid input", field: "email" });
+  });
+
+  it("submits without the session when its id is not a UUID", async () => {
+    routeFetch({ "/rpc/submit_survey": rpcOk });
+    const res = await POST(makeRequest({ ...validBody(), sessionId: "s-1696400000000-abc123" }));
+    expect(res.status).toBe(200);
+    expect(rpcBody().p_session_id).toBeNull();
+  });
+
+  it("drops an over-long tracker instead of refusing the submission", async () => {
+    routeFetch({ "/rpc/submit_survey": rpcOk });
+    const res = await POST(makeRequest({ ...validBody(), utmTracker: "x".repeat(1500) }));
+    expect(res.status).toBe(200);
+    expect(rpcBody().p_utm_tracker).toBeNull();
+  });
+
+  it("trims over-cap answers and drops answers to hidden questions", async () => {
+    routeFetch({ "/rpc/submit_survey": rpcOk });
+    const answers = { ...validBody().answers, "16001": ["a", "b", "c"], "15011": "x" };
+    const res = await POST(makeRequest({ ...validBody(), answers }));
+    expect(res.status).toBe(200);
+    expect(rpcBody().p_answers["16001"]).toEqual(["a", "b"]);
+    expect(rpcBody().p_answers).not.toHaveProperty("15011");
+  });
+
+  it("gives the email cooldown back when the submit fails", async () => {
+    routeFetch({
+      "/rpc/submit_survey": () => ({ ok: false, status: 500, json: async () => ({}) }),
+    });
+    const res = await POST(makeRequest(validBody()));
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(mockReleaseCooldown).toHaveBeenCalledWith("alice@example.com", "survey-email");
+  });
+
+  it("tries the report link twice before giving up on it", async () => {
+    let posts = 0;
+    routeFetch({
+      "/rpc/submit_survey": rpcOk,
+      "/report_access_token": () => ({ ok: ++posts > 1, status: posts > 1 ? 201 : 503 }),
+    });
+    const json = await (await POST(makeRequest(validBody()))).json();
+    expect(posts).toBe(2);
+    expect(json.reportToken).toMatch(/^rpt_/);
   });
 });

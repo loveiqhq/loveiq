@@ -57,16 +57,20 @@ describe("surveyAnswersSchema — server-side cap enforcement", () => {
     expect(surveyAnswersSchema.safeParse({ ...ok, "16014": ["a"] }).success).toBe(true);
   });
 
-  it("rejects one selection over the cap", () => {
-    // The whole point of enforcing server-side: the UI already blocks this, so anything
-    // arriving here came from a client that does not play by the rules.
+  it("keeps the first picks when an answer is over the cap, instead of refusing it", () => {
+    // A refusal at the final submit strands the reader: Retry resends the same stored
+    // answers. Over-cap answers come from drafts saved before a cap went live (16001 and
+    // 16014 on 2026-09-11) or a page left open across that deploy, and stranded one
+    // reader. Trimming still keeps the ranking those answers feed within the cap.
     const over = surveyAnswersSchema.safeParse({ ...ok, "16001": ["a", "b", "c"] });
-    expect(over.success).toBe(false);
-    expect(JSON.stringify(over.error?.issues)).toContain("At most 2 selections allowed");
+    expect(over.success).toBe(true);
+    expect(over.data?.["16001"]).toEqual(["a", "b"]);
   });
 
-  it("rejects an over-cap answer on the cap-of-one question", () => {
-    expect(surveyAnswersSchema.safeParse({ ...ok, "16014": ["a", "b"] }).success).toBe(false);
+  it("trims an over-cap answer on the cap-of-one question to its first pick", () => {
+    expect(surveyAnswersSchema.safeParse({ ...ok, "16014": ["a", "b"] }).data?.["16014"]).toEqual([
+      "a",
+    ]);
   });
 
   it("leaves uncapped questions alone", () => {
@@ -79,7 +83,32 @@ describe("surveyAnswersSchema — server-side cap enforcement", () => {
     expect(surveyAnswersSchema.safeParse({ ...ok, "16001": "single string" }).success).toBe(true);
   });
 
-  it("still enforces the pre-existing bounds", () => {
-    expect(surveyAnswersSchema.safeParse({ "16011": Array(21).fill("x") }).success).toBe(false);
+  it("trims a long uncapped list to 20 picks, and refuses only what no real client sends", () => {
+    expect(
+      surveyAnswersSchema.safeParse({ "16011": Array(21).fill("x") }).data?.["16011"]
+    ).toHaveLength(20);
+    expect(surveyAnswersSchema.safeParse({ "16011": Array(101).fill("x") }).success).toBe(false);
+    const tooManyKeys = Object.fromEntries(Array.from({ length: 201 }, (_, i) => [`k${i}`, "x"]));
+    expect(surveyAnswersSchema.safeParse(tooManyKeys).success).toBe(false);
+  });
+});
+
+describe("surveyAnswersSchema — tidies what a real browser can have stored", () => {
+  it("cuts text to 1000 characters (the Other box had no limit)", () => {
+    const parsed = surveyAnswersSchema.safeParse({ "15010_other": "x".repeat(5000) });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.["15010_other"]).toHaveLength(1000);
+  });
+
+  it("drops answers to a hidden question, and its Other text", () => {
+    const parsed = surveyAnswersSchema.safeParse({ "15011": "a", "15011_other": "b", q1: "c" });
+    expect(parsed.data).toEqual({ q1: "c" });
+  });
+
+  it("drops a scale answer that is not a number (it was a text question once)", () => {
+    const scale = surveyQuestions.find((q) => q.answerType === "scale")!.qId;
+    const parsed = surveyAnswersSchema.safeParse({ [scale]: "Somewhat", q1: "c" });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({ q1: "c" });
   });
 });
