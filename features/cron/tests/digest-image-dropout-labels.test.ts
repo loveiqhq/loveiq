@@ -253,3 +253,52 @@ describe("renderDropoutBars: what the bars measure", () => {
     expect(all.join(" ")).toContain("bottom: all 57 questions, in the order asked today");
   });
 });
+
+/** Every absolutely placed box in the chart: where it starts, how wide, what it says. */
+function boxesIn(
+  node: unknown,
+  out: Array<{ key: string; left: number; width: number; text?: string }> = []
+): Array<{ key: string; left: number; width: number; text?: string }> {
+  if (Array.isArray(node)) {
+    for (const child of node) boxesIn(child, out);
+    return out;
+  }
+  if (!node || typeof node !== "object") return out;
+  const el = node as ReactElement<Record<string, unknown>> & { key?: string | null };
+  const props = (el.props ?? {}) as Record<string, unknown>;
+  const style = (props.style ?? {}) as Record<string, unknown>;
+  if (style.position === "absolute" && typeof style.left === "number") {
+    out.push({
+      key: String(el.key ?? ""),
+      left: style.left,
+      width: Number(style.width),
+      text: typeof props.children === "string" ? props.children : undefined,
+    });
+  }
+  if (props.children) boxesIn(props.children, out);
+  return out;
+}
+
+describe("renderDropoutBars: each label sits under its own bar", () => {
+  it("puts the last question's label under the last bar, not the one before it", () => {
+    // The 2026-10-04 render: 57 questions, the tallest (red) bar second to last,
+    // the last one near zero. "Q57" stood under the red bar, so the near-zero
+    // bar after it read as a 58th question.
+    const bars = Array.from({ length: 57 }, (_, i) => ({
+      label: `Q${i + 1}`,
+      dropPct: i === 55 ? 11 : i === 56 ? 0 : 1 + (i % 5),
+    }));
+    const boxes = boxesIn(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
+    const centre = (b: { left: number; width: number }) => b.left + b.width / 2;
+    const label = boxes.find((b) => b.text === "Q57" && b.key.startsWith("x-"))!;
+    const last = boxes.find((b) => b.key === "bar-Q57-56")!;
+    const beforeIt = boxes.find((b) => b.key === "bar-Q56-55")!;
+    expect(label).toBeDefined();
+    const slot = centre(last) - centre(beforeIt);
+    expect(Math.abs(centre(label) - centre(last))).toBeLessThan(slot / 2);
+    // And the first label sits under the first bar.
+    const first = boxes.find((b) => b.text === "Q1" && b.key.startsWith("x-"))!;
+    const firstBar = boxes.find((b) => b.key === "bar-Q1-0")!;
+    expect(Math.abs(centre(first) - centre(firstBar))).toBeLessThan(slot / 2);
+  });
+});

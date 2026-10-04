@@ -930,8 +930,14 @@ export function renderDropoutBars(p: DropoutPayload): {
    * root fix; positioning tricks were treating the symptom.
    */
   const { max: peak, intervals } = niceAxis(rawPeak * 1.18);
-  // 28 = chartShell's padding, both sides.
-  const plotW = WIDTH - 2 * 28 - DROPOUT_AXIS_W;
+  /**
+   * 28 = chartShell's padding, both sides. Less half a label on the right, so the
+   * LAST question's label can sit centred under its own bar. Without the room it
+   * was pushed back inside the plot, under the bar before it: "Q57" stood under
+   * Q56's red bar, and Q57's own near-zero bar read as a 58th question.
+   */
+  const labelRoom = DROPOUT_LABEL_W / 2;
+  const plotW = WIDTH - 2 * 28 - DROPOUT_AXIS_W - labelRoom;
   const yFor = (v: number) => DROPOUT_PLOT_H - (v / peak) * DROPOUT_PLOT_H;
   const slot = plotW / bars.length;
 
@@ -970,7 +976,7 @@ export function renderDropoutBars(p: DropoutPayload): {
           style={{
             display: "flex",
             position: "relative",
-            width: DROPOUT_AXIS_W + plotW,
+            width: DROPOUT_AXIS_W + plotW + labelRoom,
             height: DROPOUT_PLOT_H + 24,
           }}
         >
@@ -1094,7 +1100,7 @@ export function renderDropoutBars(p: DropoutPayload): {
                       DROPOUT_AXIS_W,
                       Math.min(
                         DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_VALUE_W / 2,
-                        DROPOUT_AXIS_W + plotW - DROPOUT_VALUE_W
+                        DROPOUT_AXIS_W + plotW + labelRoom - DROPOUT_VALUE_W
                       )
                     ),
                     top: above,
@@ -1119,7 +1125,7 @@ export function renderDropoutBars(p: DropoutPayload): {
                 position: "absolute",
                 left: Math.min(
                   Math.max(DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_LABEL_W / 2, 0),
-                  DROPOUT_AXIS_W + plotW - DROPOUT_LABEL_W
+                  DROPOUT_AXIS_W + plotW + labelRoom - DROPOUT_LABEL_W
                 ),
                 top: DROPOUT_PLOT_H + 6,
                 width: DROPOUT_LABEL_W,
