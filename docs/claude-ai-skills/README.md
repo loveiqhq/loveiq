@@ -11,14 +11,23 @@ Code half is `.claude/skills/` in this repo.
 | `loveiq-numbers`        | KPI, funnel, revenue and cost questions, with period and source |
 | `loveiq-research`       | What the published research says, with every source named       |
 
-`PROJECT_INSTRUCTIONS.md` is the text for a claude.ai Project called "LoveIQ".
+`PROJECT_INSTRUCTIONS.md` is the text for the claude.ai Project "LoveIQ", which exists since
+2026-10-05 and is shared with the whole organization. After changing the file, paste its new
+text into the project's instructions.
+
+All four skills have been in the organization library since 2026-10-05, installed by default
+for everyone.
 
 ## Install one
 
 1. Build the zips: `npm run skills:pack`. It checks each skill (only the front matter
    keys claude.ai accepts, a valid name, a description it will not cut) and writes
    `dist/claude-ai-skills/<name>.zip`.
-2. In claude.ai: **Settings → Capabilities → Skills → Upload skill**, and choose the zip.
+2. For everyone (an organization admin): claude.ai → **Organization settings → Plugins &
+   skills → Add → Upload a skill**, and choose the zip. A skill uploaded there is installed by
+   default for every member, and Claude Code sessions see it too. A name that already exists
+   asks "Upload and replace": that saves a new version, and earlier versions stay in its
+   history. For yourself only: **Customize → Skills → Add → Upload skill**.
 3. In a chat, turn on the **loveiq-brain** connector. The skills call its tools, and do
    nothing useful without it.
 
