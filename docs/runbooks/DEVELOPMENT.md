@@ -6,7 +6,7 @@
 
 ## Prerequisites
 
-- Node.js `20` as used in CI. See [docs/versions.md](../versions.md) for the pinned toolchain list.
+- Node.js `22`, as used in CI and by production on Vercel. See [docs/versions.md](../versions.md) for the pinned toolchain list.
 - npm from the bundled Node.js installation.
 - Optional service credentials only when you need live integrations.
 

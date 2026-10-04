@@ -14,13 +14,14 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  adsCellTakesSpend,
+  amountFrom,
+  betterCharge,
   colLetter,
   columnForMonth,
   driveQuoteEscape,
-  monthFullyCovered,
   LOOKBACK_DAYS,
-  amountFrom,
-  betterCharge,
+  monthFullyCovered,
   rateOn,
   toEur,
 } from "@/app/api/cron/file-invoices/route";
@@ -366,5 +367,25 @@ describe("toEur", () => {
 
   it("refuses when no rate covers the date", () => {
     expect(toEur({ value: 20, currency: "USD" }, RATES, "2026-07-01")).toBeNull();
+  });
+});
+
+describe("the Google Ads line takes the month's spend", () => {
+  // Index 1 is the month before, index 2 the closed month.
+  it("into a blank, an N/A, or the month before carried forward", () => {
+    expect(adsCellTakesSpend([0, -1129, ""], 2)).toBe(true);
+    expect(adsCellTakesSpend([0, -1129, undefined], 2)).toBe(true);
+    expect(adsCellTakesSpend([0, "N/A", "N/A"], 2)).toBe(true);
+    expect(adsCellTakesSpend([0, -1129, -1129], 2)).toBe(true);
+  });
+
+  it("over the month before's spend that the last run carried forward", () => {
+    expect(adsCellTakesSpend([0, -1254.91, -1252.99], 2, 1252.99)).toBe(true);
+    expect(adsCellTakesSpend([0, -1254.91, -1219.31], 2, 1252.99)).toBe(false);
+  });
+
+  it("never over a figure of its own, which is the invoice entered", () => {
+    expect(adsCellTakesSpend([0, -1254.91, -1219.31], 2)).toBe(false);
+    expect(adsCellTakesSpend([0, "N/A", -3.9], 2)).toBe(false);
   });
 });

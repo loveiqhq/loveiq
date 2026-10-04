@@ -400,6 +400,36 @@ describe("SurveyPage", () => {
     }
   });
 
+  // Regression, 2026-10-04: a reload restores the step onto the entry it was saved from,
+  // and pushing a second copy buried the questions' own entry, so the first Back after a
+  // reload did nothing.
+  it("does not stack a second history entry for the step a reload restores", async () => {
+    window.history.replaceState({ surveyStep: 6, surveyQuestion: 3 }, "", "/survey");
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    const push = vi.spyOn(window.history, "pushState");
+    try {
+      render(<SurveyPage />);
+      await screen.findByTestId("survey-engine");
+      expect(push).not.toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+    }
+  });
+
+  it("still pushes the entry when it arrives at a step from elsewhere", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    const push = vi.spyOn(window.history, "pushState");
+    try {
+      render(<SurveyPage />);
+      await screen.findByTestId("survey-engine");
+      expect(push).toHaveBeenCalledWith(expect.objectContaining({ surveyStep: 6 }), "");
+    } finally {
+      push.mockRestore();
+    }
+  });
+
   function captureNavigation() {
     const original = Object.getOwnPropertyDescriptor(window, "location");
     const navigated: string[] = [];

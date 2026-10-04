@@ -28,7 +28,11 @@ import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
-import { clearPersistedSurveyState } from "./hooks/surveyStorage";
+import {
+  BASE_STATE_KEY,
+  clearPersistedSurveyState,
+  QUESTION_STATE_KEY,
+} from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
@@ -45,6 +49,28 @@ interface SurveyEngineProps {
   onComplete: (reportToken?: string | null) => void;
   /** Discard this run and begin again. Without it the error screen offers no Start Over. */
   onStartOver?: () => void;
+}
+
+const TEXT_ENTRY_TYPES = /^(text|email|search|tel|url|number|password)$/;
+
+/** A field the reader types into, where the arrow keys are theirs. Not radios or checkboxes. */
+function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target.tagName === "TEXTAREA") return true;
+  return target instanceof HTMLInputElement && TEXT_ENTRY_TYPES.test(target.type);
+}
+
+/**
+ * How many question entries this one sits above its base, or 0 when the entry on
+ * screen is not the question shown (out of step, or not a question entry at all), so
+ * that nothing ever pops or jumps history it did not stack.
+ */
+function entriesAboveBase(currentIndex: number): number {
+  const state = window.history.state as Record<string, unknown> | null;
+  const q = state?.[QUESTION_STATE_KEY];
+  const base = state?.[BASE_STATE_KEY];
+  if (typeof q !== "number" || typeof base !== "number" || q !== currentIndex) return 0;
+  return Math.max(0, q - base);
 }
 
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }) => {
@@ -84,6 +110,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const [emailConfirmValue, setEmailConfirmValue] = useState("");
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
+  /** Pending fallback for a Previous whose history.back() found nothing to go back to. */
+  const backFallback = useRef<number | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   // The card's last pixel; while it is below the fold the sticky footer is
@@ -255,10 +283,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
 
   const { trackNavigation } = useSurveyTracking(currentIndex, hasAnswer, question);
 
+  /** A pending Previous fallback belongs to the question it was pressed on. */
+  const cancelBackFallback = useCallback(() => {
+    if (backFallback.current === null) return;
+    window.clearTimeout(backFallback.current);
+    backFallback.current = null;
+  }, []);
+
   // Navigation
   const goTo = useCallback(
     (index: number) => {
       if (index < 0 || index > totalQuestions) return;
+      cancelBackFallback();
       setAnimKey((k) => k + 1);
       setAttemptedNext(false);
       // Clear transient email-confirm state when leaving the email question
@@ -269,8 +305,25 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       setCurrentIndex(index);
       window.scrollTo({ top: 0, behavior: "instant" });
     },
-    [totalQuestions, setCurrentIndex, orderedQuestions]
+    [totalQuestions, setCurrentIndex, cancelBackFallback, orderedQuestions]
   );
+
+  /**
+   * Make the entry on screen the questions' base, pointing at `index`, unless it
+   * already names that question. Done at the first move rather than on mount: React
+   * runs this component's effects before SurveyPage's, so on mount the entry on screen
+   * is still consent's, and stamping it turned Back from the first question into a
+   * jump back to it. An entry naming ANOTHER question is out of step (another tab moved
+   * the run on, or the reader jumped through the Back menu) and its base is not ours:
+   * kept, it let Previous and the collapse fall through to questions long passed.
+   */
+  const markBase = useCallback((index: number, force = false) => {
+    if (!force && window.history.state?.[QUESTION_STATE_KEY] === index) return;
+    window.history.replaceState(
+      { ...window.history.state, [QUESTION_STATE_KEY]: index, [BASE_STATE_KEY]: index },
+      ""
+    );
+  }, []);
 
   const goNext = useCallback(() => {
     if (!isEmailValid || !isSelectionCountValid) {
@@ -317,6 +370,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       // first of them. See the note in useSurveyState.
       submitSurvey(getLatestAnswers(), startedAt, utmTracker);
       goTo(totalQuestions); // one past the end → triggers completion
+      // Collapse the question entries back onto their base, so Back after submitting
+      // never meets dozens of ignored entries (the listener ignores pops once
+      // hasCompleted is set; the move to the report then drops the entries above).
+      // Only entries this engine stacked, and never further than the browser holds:
+      // Chromium and Firefox keep 50, so a full run has already lost its base and first
+      // questions, and this lands on the oldest entry left, where Back has nowhere
+      // further to go. A go() past the first entry would do nothing at all.
+      const above = Math.min(entriesAboveBase(currentIndex), window.history.length - 1);
+      if (above > 0) window.history.go(-above);
       return;
     }
     savePartial();
@@ -325,6 +387,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       trackSurveyAnswer(question.qId, question.chapter);
       trackSurveyProgress(question.qId, currentIndex + 1, totalQuestions);
     }
+    // Its own history entry, so the phone's Back returns here. See the popstate effect.
+    markBase(currentIndex);
+    // Every entry carries its base, so the stack is readable after a remount (back to
+    // consent and forward again) when nothing in memory survived.
+    window.history.pushState(
+      { ...window.history.state, [QUESTION_STATE_KEY]: currentIndex + 1 },
+      ""
+    );
     goTo(currentIndex + 1);
   }, [
     currentIndex,
@@ -342,6 +412,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     isSelectionCountValid,
     utmTracker,
     savePartial,
+    markBase,
   ]);
 
   const goPrev = useCallback(() => {
@@ -350,9 +421,81 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // the finished run's session id, saving its answers again; a reload then read them as a
     // new run (#393) and Next filed the same answers as a second submission.
     if (currentIndex >= totalQuestions) return;
-    trackNavigation("back");
-    goTo(currentIndex - 1);
-  }, [currentIndex, totalQuestions, goTo, trackNavigation]);
+    const moveWithoutHistory = () => {
+      trackNavigation("back");
+      if (currentIndex > 0) markBase(currentIndex - 1, true);
+      goTo(currentIndex - 1);
+    };
+    if (entriesAboveBase(currentIndex) > 0) {
+      // A second tap before the first popstate must not leave the first tap's fallback
+      // armed: it would fire later with a stale index and move the screen forward.
+      cancelBackFallback();
+      window.history.back(); // the popstate effect shows the previous question
+      // The browser keeps 50 entries, so deep into a run the one below may be gone and
+      // back() does nothing. No popstate soon after means exactly that: move anyway.
+      backFallback.current = window.setTimeout(() => {
+        backFallback.current = null;
+        moveWithoutHistory();
+      }, 500);
+      return;
+    }
+    moveWithoutHistory();
+  }, [currentIndex, totalQuestions, goTo, trackNavigation, markBase, cancelBackFallback]);
+
+  /**
+   * The phone's Back goes to the previous question, and Forward to the next.
+   *
+   * The questions used to share ONE history entry, so Back left them: it showed the
+   * 18+ consent screen with both boxes unticked, which reads as "the survey reset",
+   * and a couple more presses reached the homepage. 30 Sep–4 Oct, 20 readers landed
+   * on the homepage mid-survey that way (8 past question 40) and 19 never answered
+   * again; the recording watchers flagged it 26 times as "sent back to the start".
+   *
+   * So the history mirrors the questions: every forward move pushes an entry, every
+   * backward move pops one, and the entry the questions opened on (the base) holds
+   * the question on screen whenever nothing sits above it. A pop past the base is
+   * SurveyPage's, as before: Back from the first question still reaches consent.
+   */
+  const navigateFromHistory = useRef<(index: number) => void>(() => {});
+  // What a Next press would accept here: the button's rule and goNext's own checks.
+  const mayMoveOn = (hasAnswer || !question?.required) && isEmailValid && isSelectionCountValid;
+  useEffect(() => {
+    navigateFromHistory.current = (index: number) => {
+      // Finished, including a run restored onto its completion screen (hasCompleted is
+      // only set by submitting in this mount): the same guard as goPrev, see #393.
+      if (currentIndex >= totalQuestions || index === currentIndex) return;
+      // Forward is a Next, so Next's checks apply, one question at a time. Without
+      // them, Back to the email question, an edit and Forward submitted an address
+      // nobody had confirmed; and a jump over several entries (the browser's history
+      // list) would skip the checks of every question edited since. Refused, the
+      // history steps back ONE entry and this runs again where it lands: entries can
+      // skip question numbers once a run was re-based (another tab moved it on), so a
+      // go() by the question gap could overshoot. A refused jump therefore ends one
+      // question on, if this one passes, or back on this one.
+      if (index > currentIndex && (index > currentIndex + 1 || !mayMoveOn)) {
+        setAttemptedNext(true);
+        window.history.back();
+        return;
+      }
+      trackNavigation(index < currentIndex ? "back" : "forward");
+      goTo(index);
+    };
+  }, [currentIndex, totalQuestions, goTo, trackNavigation, mayMoveOn]);
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      cancelBackFallback();
+      const index = (e.state as Record<string, unknown> | null)?.[QUESTION_STATE_KEY];
+      if (typeof index !== "number") return; // consent or a slide: SurveyPage's
+      if (hasCompleted.current) return; // after submitting these are not questions
+      navigateFromHistory.current(index);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      cancelBackFallback();
+    };
+  }, [cancelBackFallback]);
 
   // Handle answer change. Moving on is always the reader's own Next: the
   // auto-advance toggle and the Pause / Save & exit control left with the
@@ -375,6 +518,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       if (e.key === "Enter" && e.target instanceof Element && e.target.closest("button, a")) {
         return;
       }
+      // In a text field the arrows move the caret. They used to change the question,
+      // so fixing a typo in your email threw you back to the question before it.
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && isTextEntry(e.target)) return;
       if (e.key === "ArrowRight" || e.key === "Enter") {
         if (hasAnswer || !question?.required) {
           e.preventDefault();

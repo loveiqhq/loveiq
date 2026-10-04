@@ -9,6 +9,10 @@ export const SURVEY_STATE_KEY = "loveiq-survey-answers";
 export const SURVEY_INDEX_KEY = "loveiq-survey-index";
 export const SURVEY_STEP_KEY = "loveiq-survey-step";
 export const PENDING_COMPLETION_KEY = "loveiq-survey-pending-completion";
+/** history.state key on an entry that is one of the questions. See SurveyEngine. */
+export const QUESTION_STATE_KEY = "surveyQuestion";
+/** history.state key: the question index of the base those question entries stack on. */
+export const BASE_STATE_KEY = "surveyQuestionBase";
 export const ANSWERS_STORAGE_KEY = SURVEY_STATE_KEY;
 
 export interface PendingSurveyCompletion {

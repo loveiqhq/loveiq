@@ -63,6 +63,20 @@ export const maxDuration = 300;
 
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
+/**
+ * Google Ads bills this account by card, and a card-paid account gets no invoice by email and
+ * none from the invoice API ("not on monthly invoicing"). So the line kept whatever was typed
+ * last: July's EUR 1,129 stood for August and September, found only on 2026-10-04. The
+ * closed month's spend now comes from the Google Ads API as a stand-in until someone enters the
+ * invoice, which differs from it: lower by Google's credits (EUR 252.91 in May 2026, 405.87 in
+ * June) and higher by country fees (3 to 7 a month). Read as ec@loveiq.org, a user of the
+ * account; the Cloud project has had Basic access since 2026-10-04. Google retires an API
+ * version about a year after it ships, so a 404 here means moving to the current one.
+ */
+const GOOGLE_ADS_SEARCH =
+  "https://googleads.googleapis.com/v25/customers/3087717405/googleAds:search";
+const ADWORDS_SCOPE = "https://www.googleapis.com/auth/adwords";
+
 /** Finance / Invoices and Receipts. */
 // eslint-disable-next-line no-secrets/no-secrets -- Drive folder id, not a credential
 const DRIVE_ROOT = "1ml7y_fMcGB8YFpelnQJzWWcpEgTExBBO";
@@ -264,6 +278,73 @@ export function columnForMonth(header: unknown[], year: number, month: number): 
     if (serialMonth(header[i] as number) === want) return i;
   }
   return null;
+}
+
+/**
+ * Whether the closed month's Adwords cell may take the spend: blank, not a number, the month
+ * before's figure carried forward, or the month before's SPEND that this filing carried forward
+ * last month (`carriedSpend`). The last matters because a person corrects the month before by
+ * typing its invoice into that one cell, which leaves this month holding the old spend; without
+ * it, that spend read as an entered figure and was never replaced. An invoice total entered for
+ * this month differs from all of them, and is never replaced by the spend.
+ */
+export function adsCellTakesSpend(
+  row: unknown[],
+  colIndex: number,
+  carriedSpend?: number
+): boolean {
+  const raw = row[colIndex];
+  const current = raw === undefined || raw === "" ? NaN : Number(raw);
+  if (!Number.isFinite(current)) return true;
+  const same = (v: number) => Number.isFinite(v) && Math.abs(current - v) < 0.005;
+  return same(Number(row[colIndex - 1])) || (carriedSpend !== undefined && same(-carriedSpend));
+}
+
+/**
+ * Google Ads spend in euros for each month from `from` to `to` ("2026-08", "2026-09"), months
+ * with no spend as 0; null when it cannot be read in euros.
+ */
+async function googleAdsSpend(from: string, to: string): Promise<Map<string, number> | null> {
+  const token = await getDelegatedToken("ec@loveiq.org", ADWORDS_SCOPE);
+  if (!token) return null;
+  const [y = 0, m = 0] = to.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  try {
+    const res = await gapi<{
+      results?: Array<{
+        customer?: { currencyCode?: string };
+        segments?: { month?: string };
+        metrics?: { costMicros?: string };
+      }>;
+    }>(GOOGLE_ADS_SEARCH, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `SELECT customer.currency_code, segments.month, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${from}-01' AND '${lastDay}'`,
+      }),
+    });
+    const rows = res.results ?? [];
+    // The Costs tab is in euros, and no rate is invented here.
+    if (rows.some((r) => r.customer?.currencyCode && r.customer.currencyCode !== "EUR"))
+      return null;
+    const micros = new Map<string, number>([
+      [from, 0],
+      [to, 0],
+    ]);
+    for (const r of rows) {
+      const month = String(r.segments?.month ?? "").slice(0, 7);
+      micros.set(month, (micros.get(month) ?? 0) + Number(r.metrics?.costMicros ?? 0));
+    }
+    const euros = new Map<string, number>();
+    for (const [month, v] of micros) {
+      if (!Number.isFinite(v)) return null;
+      euros.set(month, Math.round(v / 10_000) / 100);
+    }
+    return euros;
+  } catch (err) {
+    logger.warn({ err }, "file-invoices: the Google Ads spend could not be read");
+    return null;
+  }
 }
 
 async function gapi<T>(url: string, token: string, init?: RequestInit): Promise<T> {
@@ -800,6 +881,53 @@ export async function GET(request: Request) {
       for (let c = colIndex; c <= lastIndex; c++) carried[c] = next;
     }
 
+    // ---- Google Ads: the closed month's spend, until its invoice is entered ----
+    let adsNote = "";
+    const adsRow = rowOf("Adwords");
+    const today = new Date();
+    const closed = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+    const closedKey = closed.toISOString().slice(0, 7);
+    const adsCol = adsRow
+      ? columnForMonth(rows[0] ?? [], closed.getUTCFullYear(), closed.getUTCMonth() + 1)
+      : null;
+    if (adsRow && adsCol !== null && adsCol <= lastIndex) {
+      const adsCells = (rows[adsRow - 1] ??= []) as unknown[];
+      const label = closedKey.replace("-", "/");
+      const shown = Number.isFinite(Number(adsCells[adsCol]))
+        ? Number(adsCells[adsCol]).toFixed(2)
+        : "(blank)";
+      const before = new Date(Date.UTC(closed.getUTCFullYear(), closed.getUTCMonth() - 1, 1));
+      const beforeKey = before.toISOString().slice(0, 7);
+      const spends = await googleAdsSpend(beforeKey, closedKey);
+      if (spends === null) {
+        // Left stale, the month is not settled, and a run that records success says it is.
+        unwrittenClosed.push(`Adwords ${label}`);
+        adsNote = `:warning: *Google Ads ${label} could not be read from the Google Ads API*, so its line still shows ${shown}: if that is not the invoice, enter the invoice by hand.`;
+      } else if (!adsCellTakesSpend(adsCells, adsCol, spends.get(beforeKey))) {
+        adsNote = `_Google Ads ${label}: ${shown} on the sheet, entered from the invoice, so left as is._`;
+      } else {
+        const spend = spends.get(closedKey) ?? 0;
+        if (spend > 0) {
+          const next = -spend;
+          updates.push({
+            range: `${SHEET_TAB}!${colLetter(adsCol)}${adsRow}:${colLetter(lastIndex)}${adsRow}`,
+            values: [Array.from({ length: lastIndex - adsCol + 1 }, () => next)],
+          });
+          changes.push(
+            `Adwords ${label}: ${shown} → ${next.toFixed(2)} (spend, until the invoice)`
+          );
+          for (let c = adsCol; c <= lastIndex; c++) adsCells[c] = next;
+          // From an incomplete walk nothing is written (below), and the changes say so.
+          if (!incomplete.length)
+            adsNote =
+              `:information_source: *Google Ads ${label} is the month's spend, standing in for the invoice.* ` +
+              `Card payments get no invoice by email: download it in Google Ads (Billing, Documents) and send it to Claude, who files it and enters the exact total.`;
+        } else {
+          adsNote = `_Google Ads ${label}: no spend that month, so its line was left as is._`;
+        }
+      }
+    }
+
     // Nothing is written from an incomplete walk: a month summed from part of a mailbox would
     // overwrite the right total with a smaller one, carried into every forecast month, and
     // after about the 15th a re-run can no longer reconcile that month to repair it.
@@ -837,6 +965,7 @@ export async function GET(request: Request) {
       convertedAny
         ? `_Dollar invoices are converted to EUR at the ECB reference rate on each invoice's own date._`
         : "",
+      adsNote,
       foreignCurrency.length
         ? `:currency_exchange: *Not written — could not be read or converted, enter by hand:*\n` +
           foreignCurrency.map((f) => `• ${escapeSlack(f)}`).join("\n")

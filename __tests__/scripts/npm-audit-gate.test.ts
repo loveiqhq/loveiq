@@ -195,4 +195,15 @@ describe("security.yml's npm audit gate", () => {
     expect(run(report(advisory("GHSA-aaaa-bbbb-cccc", "moderate")))).toBe("0");
     expect(run("")).toBe("unknown");
   });
+
+  /**
+   * `npm run ci:local` says it mirrors security.yml, but it kept its own bare
+   * `if npm audit …`, so it stopped on the accepted braces advisory (and would
+   * on any registry outage) while CI stayed green. Found by audit on 2026-10-04.
+   */
+  it("is the gate scripts/ci-local.sh uses too", () => {
+    const local = readFileSync(resolve(process.cwd(), "scripts/ci-local.sh"), "utf8");
+    expect(local).toContain("| node scripts/npm-audit-gate.mjs");
+    expect(local).not.toMatch(/^\s*if\s+npm audit\b/m);
+  });
 });

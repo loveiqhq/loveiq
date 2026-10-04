@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 const mockSetAnswer = vi.fn();
@@ -13,6 +13,8 @@ let mockProgress = 0;
 let mockSubmitStatus = "idle";
 // qIds answered on the landing page — SurveyEngine drops these from the flow.
 let mockPrefilled: string[] = [];
+// A test's own questions; null keeps the four defaults.
+let mockQuestions: ReturnType<typeof makeSurveyQuestion>[] | null = null;
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
   useSurveyState: () => ({
@@ -57,8 +59,12 @@ vi.mock("@features/survey/ui/hooks/useSurveyTracking", () => ({
 // because vi.mock() hoists above the top-level imports.
 vi.mock("@/data/survey-data", async () => {
   const { defaultSurveyQuestions } = await import("@/__tests__/__fixtures__/survey");
+  const defaults = defaultSurveyQuestions();
   return {
-    surveyQuestions: defaultSurveyQuestions(),
+    // Read at render, so a test can swap in its own questions (the email step).
+    get surveyQuestions() {
+      return mockQuestions ?? defaults;
+    },
   };
 });
 
@@ -149,6 +155,7 @@ vi.mock("@features/survey/ui/ProcessingSequence", () => ({
 }));
 
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
+import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -156,6 +163,7 @@ beforeEach(() => {
   mockProgress = 0;
   mockSubmitStatus = "idle";
   mockPrefilled = [];
+  mockQuestions = null;
   mockSetAnswer.mockClear();
   mockGetAnswer.mockClear().mockReturnValue(null);
   mockSetCurrentIndex.mockClear();
@@ -430,5 +438,390 @@ describe("SurveyEngine completion phases", () => {
 
     expect(onStartOver).toHaveBeenCalledTimes(1);
     expect(onComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe("SurveyEngine — the phone's Back button walks the questions", () => {
+  // Regression, 2026-10-04: the questions shared ONE history entry, so the phone's Back
+  // left them for the 18+ consent screen (unticked boxes, read as "the survey reset") and
+  // a couple more presses reached the homepage. 20 readers landed there mid-survey in
+  // four days; 19 never answered again.
+  const q = (index: number, base: number) => ({ surveyQuestion: index, surveyQuestionBase: base });
+  const popTo = (state: unknown) =>
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state }));
+    });
+
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/survey");
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("gives every question it moves forward to its own entry, on a marked base", () => {
+    mockCurrentIndex = 1; // q2, optional, so Next is live
+    const replace = vi.spyOn(window.history, "replaceState");
+    const push = vi.spyOn(window.history, "pushState");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(replace).toHaveBeenCalledWith(expect.objectContaining(q(1, 1)), "");
+    expect(push).toHaveBeenCalledWith(expect.objectContaining(q(2, 1)), "");
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(2);
+  });
+
+  it("shows the question a Back lands on", () => {
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(1, 0));
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+    expect(mockTrackNavigation).toHaveBeenCalledWith("back");
+  });
+
+  it("ignores a Back that lands on the question already showing", () => {
+    // Re-running goTo for it would replay the entry animation and log a false move.
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(2, 0));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(mockTrackNavigation).not.toHaveBeenCalledWith("forward");
+  });
+
+  it("leaves a Back past the questions (consent, a slide) to the page", () => {
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo({ surveyStep: 5 });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("reopens no question once the run is finished, even one restored onto that screen", () => {
+    mockCurrentIndex = 4; // past the last of four: the completion screens
+    mockProgress = 100;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(2, 0));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("Previous pops the entry above the base, and the popstate moves the screen", () => {
+    window.history.replaceState(q(2, 0), "");
+    mockCurrentIndex = 2;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-prev"));
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+
+    popTo(q(1, 0));
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    // Moved once, by the popstate: its arrival cancelled the fallback.
+    expect(mockSetCurrentIndex).toHaveBeenCalledTimes(1);
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+  });
+
+  it("Previous still moves when the browser had no entry left to go back to", () => {
+    // Browsers keep 50 entries; deep into the 57 questions the ones below are evicted
+    // and back() does nothing, so the button must not go dead.
+    window.history.replaceState(q(2, 0), "");
+    mockCurrentIndex = 2;
+    vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const replace = vi.spyOn(window.history, "replaceState");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-prev"));
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+    expect(replace).toHaveBeenCalledWith(expect.objectContaining(q(1, 1)), "");
+  });
+
+  it("two fast Previous taps leave no stale fallback to move the screen later", () => {
+    window.history.replaceState(q(3, 0), "");
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A"] : null));
+    vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-prev"));
+    fireEvent.click(screen.getByTestId("survey-nav-prev"));
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledTimes(1);
+  });
+
+  it("Previous at the base moves without history and re-points the base", () => {
+    window.history.replaceState(q(2, 2), "");
+    mockCurrentIndex = 2;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const replace = vi.spyOn(window.history, "replaceState");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-prev"));
+
+    expect(back).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith(expect.objectContaining(q(1, 1)), "");
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+  });
+
+  it("submitting collapses the question entries onto the base", () => {
+    window.history.replaceState(q(3, 0), "");
+    mockCurrentIndex = 3; // the last question
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B"] : null));
+    vi.spyOn(window.history, "length", "get").mockReturnValue(20);
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(mockSubmit).toHaveBeenCalled();
+    expect(go).toHaveBeenCalledWith(-3);
+  });
+
+  it("never collapses further back than the browser holds", () => {
+    // A go() past the first entry is a no-op, so asking for -56 on a capped stack would
+    // collapse nothing at all.
+    window.history.replaceState(q(3, 0), "");
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B"] : null));
+    vi.spyOn(window.history, "length", "get").mockReturnValue(2);
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(go).toHaveBeenCalledWith(-1);
+  });
+
+  // Found in review, 2026-10-04: the tests below.
+  it("makes an entry that names another question the base before moving on", () => {
+    // The engine restored question 2 from storage while the entry still names question 1
+    // (another tab moved the run on, or a jump through the Back menu). Keeping that
+    // entry's base let Previous from question 3 fall straight through to question 1.
+    window.history.replaceState(q(0, 0), "", "/survey");
+    mockCurrentIndex = 1; // optional, so Next is live
+    const push = vi.spyOn(window.history, "pushState");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(push).toHaveBeenCalledWith(expect.objectContaining(q(2, 1)), "");
+  });
+
+  it("lets Forward through where Next would go", () => {
+    window.history.replaceState(q(1, 0), "", "/survey");
+    mockCurrentIndex = 1; // optional
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(2, 0));
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(2);
+    expect(mockTrackNavigation).toHaveBeenCalledWith("forward");
+  });
+
+  it("refuses a Forward off a required question left unanswered", () => {
+    window.history.replaceState(q(0, 0), "", "/survey");
+    mockCurrentIndex = 0; // required, no answer: Next is disabled
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(1, 0));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(back).toHaveBeenCalledTimes(1); // the history steps back onto this question
+  });
+
+  it("refuses a Forward off the email question until the address is confirmed", () => {
+    // Back to the email question clears the confirmation; an edit and the browser's
+    // Forward then submitted an address nobody had confirmed.
+    mockQuestions = [
+      makeSurveyQuestion({
+        qId: "00000",
+        question: "What is your email?",
+        answerType: "open",
+        inputType: "email",
+        options: [],
+      }),
+      makeSurveyQuestion({ qId: "16015", question: "Keep me posted?" }),
+    ];
+    mockGetAnswer.mockImplementation((qId: string) =>
+      qId === "00000" ? "reader@example.com" : null
+    );
+    window.history.replaceState(q(0, 0), "", "/survey");
+    mockCurrentIndex = 0;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(1, 0));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a Forward off a multiple choice over its limit", () => {
+    mockQuestions = [
+      makeSurveyQuestion({
+        qId: "m1",
+        answerType: "multiple",
+        options: ["A", "B", "C"],
+        maxSelections: 2,
+      }),
+      makeSurveyQuestion({ qId: "s2" }),
+    ];
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "m1" ? ["A", "B", "C"] : null));
+    window.history.replaceState(q(0, 0), "", "/survey");
+    mockCurrentIndex = 0;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(1, 0));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns a Forward jump over several questions into one step", () => {
+    // The browser's history list can jump straight past a question edited since it was
+    // last passed (an email changed, then Back further), skipping its checks. The jump
+    // steps back one entry at a time; where it lands one question on, that is a single
+    // step, with this question's checks.
+    window.history.replaceState(q(1, 0), "", "/survey");
+    mockCurrentIndex = 1; // optional, so a single step is allowed
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const go = vi.spyOn(window.history, "go");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(3, 0));
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(go).not.toHaveBeenCalled(); // never a go() by the question gap
+
+    popTo(q(2, 0)); // where that back() lands
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(2);
+  });
+
+  it("never steps back past the question on screen when entries skip numbers", () => {
+    // Re-based by another tab: entries for questions 20, 31 and 32 sit side by side.
+    // A go() by the question gap (-12) from 32 would have passed 20 entirely.
+    mockQuestions = Array.from({ length: 40 }, (_, i) =>
+      makeSurveyQuestion({ qId: `x${i}`, required: false })
+    );
+    window.history.replaceState(q(19, 0), "", "/survey");
+    mockCurrentIndex = 19;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(31, 30)); // jumped forward two entries
+    popTo(q(30, 30)); // the first step back: still not this question's entry
+    popTo(q(19, 0)); // the second: home
+
+    expect(back).toHaveBeenCalledTimes(2);
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("ignores a pop that lands before the finished run renders", () => {
+    // The collapse's own popstate can arrive while navigation still holds the last
+    // question: only hasCompleted stops it reopening a question under the finished
+    // run (#393).
+    window.history.replaceState(q(3, 0), "", "/survey");
+    mockCurrentIndex = 3; // the last question; the mock keeps it there after the submit
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A"] : null));
+    vi.spyOn(window.history, "go").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+    mockSetCurrentIndex.mockClear();
+
+    popTo(q(0, 0));
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("drops a pending Previous fallback when Next moves on before it fires", () => {
+    window.history.replaceState(q(2, 0), "", "/survey");
+    mockCurrentIndex = 2; // optional, so Next is live
+    vi.spyOn(window.history, "back").mockImplementation(() => {}); // the pop never lands
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("survey-nav-prev")); // arms the fallback
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+    mockSetCurrentIndex.mockClear();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe("SurveyEngine — arrow keys in a text field", () => {
+  // Regression, 2026-10-04 (on main before this branch): ArrowLeft in the email field
+  // jumped to the previous question, so fixing a typo threw the reader back.
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/survey"); // no question entries in play
+  });
+  afterEach(() => {
+    document.body.querySelectorAll("[data-probe-field]").forEach((el) => el.remove());
+  });
+  const field = (type: string) => {
+    const input = document.createElement("input");
+    input.type = type;
+    input.setAttribute("data-probe-field", "");
+    document.body.appendChild(input);
+    input.focus();
+    return input;
+  };
+
+  it("leaves ArrowLeft to an email field instead of going back a question", () => {
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(field("email"), { key: "ArrowLeft" });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(mockTrackNavigation).not.toHaveBeenCalledWith("back");
+  });
+
+  it("leaves ArrowRight to a text field instead of skipping ahead", () => {
+    mockCurrentIndex = 1; // optional question, so ArrowRight would otherwise advance
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(field("text"), { key: "ArrowRight" });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("still goes back on ArrowLeft from a focused option (a radio is not a text field)", () => {
+    // Treating radios as text would hand the arrows to the native radio group, which
+    // changes the selected answer instead of the question.
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(field("radio"), { key: "ArrowLeft" });
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+  });
+
+  it("still goes back on ArrowLeft outside a text field", () => {
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
   });
 });
