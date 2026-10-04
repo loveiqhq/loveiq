@@ -26,6 +26,8 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { computeRate } from "@features/admin/server/digest-metrics";
 import logger from "@shared/observability/logger";
 import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
+import { orderEmailLast } from "@features/survey/ui/questionOrder";
 
 /**
  * q_id -> a short human question, so a line can say "Q58 (What is your email?)"
@@ -84,24 +86,36 @@ export interface FrictionQuestion {
   /**
    * 'abandon' EVENTS. The survey sends one every time the page is hidden, so this
    * counts app and tab switches by people who came back and finished (292 of 924
-   * over the 30 days to 2026-10-03). Not a count of people who quit: see `quits`.
+   * over the 30 days to 2026-10-03). Not a count of people who quit: see
+   * `QuestionReach.quits`.
    */
   abandons: number;
-  /** Sessions that reached this question. */
-  sessions: number;
-  /**
-   * Sessions whose last event is at this question and that never finished: the
-   * people who left the survey here for good. Finishing is never counted.
-   */
-  quits: number;
   backs: number;
   skipped: number;
   median_ms: number;
   timed: number;
 }
 
+/**
+ * One question's reach and quits, by q_id. Per QUESTION, not per position: a
+ * position held different questions for different people (landing-page answers
+ * drop questions from the flow, and the survey lost two on 2026-09-11), so the
+ * email question was at position 56 for some and 58 for others.
+ */
+export interface QuestionReach {
+  q_id: string;
+  /** Sessions that reached this question. */
+  sessions: number;
+  /**
+   * Sessions whose last event is on this question and that never finished: the
+   * people who left the survey here for good. Finishing is never counted.
+   */
+  quits: number;
+}
+
 export interface FrictionSnapshot {
   questions: FrictionQuestion[];
+  by_question?: QuestionReach[];
   total_rows: number;
   total_timed: number;
   median_ms: number;
@@ -157,8 +171,33 @@ function secs(ms: number): string {
 /** Only rank questions with enough traffic for a rate to mean anything. */
 const FLOOR = 20;
 
-/** Of the people who reach a question, the share who leave there and never finish. */
-const endRate = (q: FrictionQuestion) => computeRate(q.quits, q.sessions);
+/** Each question's place in the survey as it is asked today, from 0. */
+const ASKED_POSITION = new Map(
+  orderEmailLast(surveyQuestions)
+    .filter((q) => !isHidden(q.qId))
+    .map((q, i) => [q.qId, i])
+);
+
+/** A question's quitting, with its place in today's survey. */
+interface QuestionEnd extends QuestionReach {
+  position: number;
+  /** Of the people who reached it, the share who left there and never finished. */
+  pct: number;
+}
+
+/**
+ * The questions with enough people for a rate to mean anything, in survey order.
+ * Questions no longer asked are left out: there is nothing to fix on them.
+ */
+function questionEnds(snap: FrictionSnapshot): QuestionEnd[] {
+  const ends: QuestionEnd[] = [];
+  for (const q of snap.by_question ?? []) {
+    const position = ASKED_POSITION.get(q.q_id);
+    if (position === undefined || q.sessions < FLOOR) continue;
+    ends.push({ ...q, position, pct: computeRate(q.quits, q.sessions) });
+  }
+  return ends.sort((a, b) => a.position - b.position);
+}
 
 export interface SessionEnd {
   label: string;
@@ -166,7 +205,8 @@ export interface SessionEnd {
 }
 
 /**
- * Where people quit the survey, one bar per question, in question order.
+ * Where people quit the survey, one bar per question, in survey order, numbered
+ * as the survey asks them today.
  *
  * The same floor and the same rate as the "end there" sentence, so the chart's
  * tallest bar is always the question that sentence names. Both the daily and the
@@ -177,10 +217,7 @@ export interface SessionEnd {
  * everyone who finished: it drew ~300 finishers as a 76% drop-off.
  */
 export function sessionEnds(snap: FrictionSnapshot): SessionEnd[] {
-  return (snap.questions ?? [])
-    .filter((q) => q.sessions >= FLOOR)
-    .sort((a, b) => a.question_index - b.question_index)
-    .map((q) => ({ label: `Q${q.question_index + 1}`, pct: endRate(q) }));
+  return questionEnds(snap).map((e) => ({ label: `Q${e.position + 1}`, pct: e.pct }));
 }
 
 /** `sessionEnds` for a window, or null when the read fails. */
@@ -212,10 +249,9 @@ export function buildSurveySignals(
   const plain = (q: FrictionQuestion) => qPlain(q.question_index, q.q_id, questionNames);
 
   // --- Drop-off / exit point -------------------------------------------------
-  const worstDrop = qs
-    .filter((q) => q.sessions >= FLOOR)
-    .map((q) => ({ q, pct: endRate(q) }))
-    .sort((a, b) => b.pct - a.pct)[0];
+  // Survey order, then a stable sort: a tie names the earlier question, as the
+  // chart's red bars do.
+  const worstDrop = questionEnds(snap).sort((a, b) => b.pct - a.pct)[0];
   if (worstDrop) {
     signals.push({
       /**
@@ -226,11 +262,11 @@ export function buildSurveySignals(
       label: "Where sessions end",
       group: "Survey",
       value: `${Math.round(worstDrop.pct)}%`,
-      where: label(worstDrop.q),
-      n: worstDrop.q.sessions,
+      where: qLabel(worstDrop.position, worstDrop.q_id, questionNames),
+      n: worstDrop.sessions,
       status: worstDrop.pct >= 10 ? "watch" : "quiet",
       // Of the sessions that REACH it: the rate divides by the people who got there.
-      sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${plain(worstDrop.q)} end there.`,
+      sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${qPlain(worstDrop.position, worstDrop.q_id, questionNames)} end there.`,
     });
   }
 

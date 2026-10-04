@@ -15,16 +15,18 @@ import {
   sessionEnds,
   type FrictionQuestion,
   type FrictionSnapshot,
+  type QuestionReach,
   type ReportFrictionSnapshot,
 } from "@features/admin/server/friction-metrics";
+import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
+import { orderEmailLast } from "@features/survey/ui/questionOrder";
 
 function q(over: Partial<FrictionQuestion> & { question_index: number }): FrictionQuestion {
   return {
     q_id: `q${over.question_index}`,
     visits: 100,
     abandons: 1,
-    sessions: 100,
-    quits: 1,
     backs: 1,
     skipped: 0,
     median_ms: 9000,
@@ -47,17 +49,32 @@ const snap = (
 const find = (sigs: ReturnType<typeof buildSurveySignals>, label: string) =>
   sigs.find((s) => s.label === label);
 
+/** One question's reach, by its real q_id: ids no longer asked are dropped. */
+const reach = (q_id: string, sessions: number, quits: number): QuestionReach => ({
+  q_id,
+  sessions,
+  quits,
+});
+
+/** A question's number in the survey as asked today ("Q56" for the email). */
+const ASKED = orderEmailLast(surveyQuestions)
+  .filter((x) => !isHidden(x.qId))
+  .map((x) => x.qId);
+const qn = (qId: string) => `Q${ASKED.indexOf(qId) + 1}`;
+
 describe("buildSurveySignals", () => {
   it("names the worst drop-off question, not just the rate", () => {
     // A number with no subject is not actionable. "21%" is a statistic;
     // "Q58 — What is your email?" is a decision.
     const sigs = buildSurveySignals(
-      snap([q({ question_index: 0, quits: 2 }), q({ question_index: 57, quits: 21 })]),
-      new Map([["q57", "What is your email?"]])
+      snap([q({ question_index: 0 })], {
+        by_question: [reach("00001", 100, 2), reach("00000", 100, 21)],
+      }),
+      new Map([["00000", "What is your email?"]])
     );
     const drop = find(sigs, "Where sessions end");
     expect(drop?.value).toBe("21%");
-    expect(drop?.where).toBe("Q58 — What is your email?");
+    expect(drop?.where).toBe(`${qn("00000")} — What is your email?`);
     expect(drop?.status).toBe("watch");
   });
 
@@ -65,12 +82,11 @@ describe("buildSurveySignals", () => {
     // 1 of 3 people leaving is 33% and means nothing. Ranking on it would put
     // a near-empty question at the top of the board every quiet week.
     const sigs = buildSurveySignals(
-      snap([
-        q({ question_index: 0, visits: 3, sessions: 3, quits: 1, timed: 3 }),
-        q({ question_index: 1, visits: 200, sessions: 200, quits: 10, timed: 200 }),
-      ])
+      snap([q({ question_index: 0 })], {
+        by_question: [reach("00001", 3, 1), reach("01002", 200, 10)],
+      })
     );
-    expect(find(sigs, "Where sessions end")?.where).toBe("Q2");
+    expect(find(sigs, "Where sessions end")?.where).toBe(qn("01002"));
   });
 
   it("reports hesitation relative to a typical question, not in raw seconds", () => {
@@ -119,7 +135,9 @@ describe("buildSurveySignals", () => {
       // Slow AND with people going back: what the surprise proxy ranked on.
       q({ question_index: i, abandons: 10, median_ms: 90_000, backs: 30, skipped: 5 })
     );
-    const sigs = buildSurveySignals(snap([...early, ...late]));
+    const sigs = buildSurveySignals(
+      snap([...early, ...late], { by_question: [reach("00001", 100, 1)] })
+    );
 
     for (const gone of [
       "Skipped questions",
@@ -221,19 +239,15 @@ describe("buildFrictionWatchList", () => {
    * it "normal" every day. Mark, 2026-09-21: "Not easy to consume at all."
    */
   const names = new Map([
-    ["q57", "What is your email?"],
+    ["00000", "What is your email?"],
     ["q47", "Which changes would actually help?"],
   ]);
   const signals = () => [
     ...buildSurveySignals(
-      snap(
-        [
-          q({ question_index: 0 }),
-          q({ question_index: 47, median_ms: 40_000, backs: 30 }),
-          q({ question_index: 57, quits: 40 }),
-        ],
-        { median_ms: 9000 }
-      ),
+      snap([q({ question_index: 0 }), q({ question_index: 47, median_ms: 40_000, backs: 30 })], {
+        median_ms: 9000,
+        by_question: [reach("00001", 100, 1), reach("00000", 100, 40)],
+      }),
       names
     ),
     ...buildReportSignals(reportSnap()),
@@ -265,7 +279,9 @@ describe("buildFrictionWatchList", () => {
   it("names the question in words, not just its number", () => {
     const text = buildFrictionWatchList({ signals: signals(), rowsRead: 0 }, 30);
     // Of the sessions that reach the question, which is what the rate divides by.
-    expect(text).toContain("40% of sessions that reach Q58 (What is your email?) end there.");
+    expect(text).toContain(
+      `40% of sessions that reach ${qn("00000")} (What is your email?) end there.`
+    );
     expect(text).toContain(
       "People take 40.0s on Q48 (Which changes would actually help?), 4.4x the usual time."
     );
@@ -296,21 +312,23 @@ describe("buildFrictionWatchList", () => {
 });
 
 describe("sessionEnds", () => {
-  it("is in question order, skips thin questions, and peaks where the sentence points", () => {
-    const s = snap([
-      // 22.5% exactly: any other rate for the sentence rounds to a different
-      // whole number, so this cannot pass with the two computed differently.
-      q({ question_index: 57, sessions: 200, quits: 45 }),
-      q({ question_index: 0, quits: 2 }),
-      // 3 of 4 is 75%: a bar this tall would out-shout every real question.
-      q({ question_index: 3, sessions: 4, quits: 3 }),
-      q({ question_index: 56, quits: 16 }),
-    ]);
+  it("is in survey order, skips thin questions, and peaks where the sentence points", () => {
+    const s = snap([q({ question_index: 0 })], {
+      by_question: [
+        // 22.5% exactly: any other rate for the sentence rounds to a different
+        // whole number, so this cannot pass with the two computed differently.
+        reach("00000", 200, 45),
+        reach("00001", 100, 2),
+        // 3 of 4 is 75%: a bar this tall would out-shout every real question.
+        reach("01005", 4, 3),
+        reach("16014", 100, 16),
+      ],
+    });
     const ends = sessionEnds(s);
     expect(ends).toEqual([
-      { label: "Q1", pct: 2 },
-      { label: "Q57", pct: 16 },
-      { label: "Q58", pct: 22.5 },
+      { label: qn("00001"), pct: 2 },
+      { label: qn("16014"), pct: 16 },
+      { label: qn("00000"), pct: 22.5 },
     ]);
     // The chart's tallest bar is the question the "end there" sentence names.
     const top = [...ends].sort((a, b) => b.pct - a.pct)[0]!;
@@ -319,33 +337,48 @@ describe("sessionEnds", () => {
     expect(drop.value).toBe("23%");
     expect(drop.value).toBe(`${Math.round(top.pct)}%`);
   });
+
+  it("numbers questions as the survey asks them today, and drops retired ones", () => {
+    // The email question is asked second to last, just before the opt-in.
+    expect(qn("00000")).toBe(`Q${ASKED.length - 1}`);
+    expect(qn("16015")).toBe(`Q${ASKED.length}`);
+    // 03014 was retired on 2026-09-11. People who left on it then are real, but
+    // there is no question left to fix, so it is not drawn.
+    const ends = sessionEnds(
+      snap([q({ question_index: 0 })], {
+        by_question: [reach("16015", 100, 0), reach("03014", 100, 50), reach("00001", 100, 5)],
+      })
+    );
+    expect(ends.map((e) => e.label)).toEqual([qn("00001"), qn("16015")]);
+  });
 });
 
 describe("where people quit counts people who left for good", () => {
   it("never counts a tab switch by someone who came back and finished", () => {
-    // Q2: 60 'abandon' events, every one from people who switched app and came
-    // back. Nobody left there. Q1: 5 of 100 really left.
-    const s = snap([
-      q({ question_index: 0, abandons: 5, quits: 5 }),
-      q({ question_index: 1, abandons: 60, quits: 0 }),
-    ]);
+    // 60 'abandon' EVENTS at position 1, every one from people who switched app
+    // and came back. They do not feed the rate: nobody left on that question.
+    const s = snap(
+      [q({ question_index: 0, abandons: 5 }), q({ question_index: 1, abandons: 60 })],
+      {
+        by_question: [reach("00001", 100, 5), reach("01002", 100, 0)],
+      }
+    );
     expect(sessionEnds(s)).toEqual([
-      { label: "Q1", pct: 5 },
-      { label: "Q2", pct: 0 },
+      { label: qn("00001"), pct: 5 },
+      { label: qn("01002"), pct: 0 },
     ]);
-    expect(find(buildSurveySignals(s), "Where sessions end")?.where).toBe("Q1");
+    expect(find(buildSurveySignals(s), "Where sessions end")?.where).toBe(qn("00001"));
   });
 
   it("never counts the last screen's finishers as quitting", () => {
-    // The last screen: 396 people reached it, 395 finished there, 1 left. The
-    // weekly chart used to read this as a 76% drop-off.
-    const s = snap([
-      q({ question_index: 55, sessions: 448, quits: 36 }),
-      q({ question_index: 56, sessions: 396, quits: 1 }),
-    ]);
+    // The last screen: 397 people reached it, all 397 finished. The weekly chart
+    // used to read the screen before the end as a 76% drop-off.
+    const s = snap([q({ question_index: 0 })], {
+      by_question: [reach("00000", 447, 49), reach("16015", 397, 0)],
+    });
     expect(sessionEnds(s)).toEqual([
-      { label: "Q56", pct: 8 },
-      { label: "Q57", pct: 0.3 },
+      { label: qn("00000"), pct: 11 },
+      { label: qn("16015"), pct: 0 },
     ]);
   });
 });
@@ -354,24 +387,30 @@ describe("buildFrictionReport", () => {
   it("hands the digest the per-question ends from the same read as the sentence", async () => {
     // Without this the chart could be dropped from production with every other
     // test green: the digest tests build their reports by hand.
-    const questions = [
-      q({ question_index: 1, quits: 3 }),
-      q({ question_index: 0, quits: 2 }),
-      q({ question_index: 57, quits: 19 }),
-    ];
     mockSupabaseFetch.mockImplementation(async (path: string) =>
       path.includes("get_survey_friction")
-        ? new Response(JSON.stringify(snap(questions)), { status: 200 })
+        ? new Response(
+            JSON.stringify(
+              snap([q({ question_index: 0 })], {
+                by_question: [
+                  reach("01002", 100, 3),
+                  reach("00001", 100, 2),
+                  reach("00000", 100, 19),
+                ],
+              })
+            ),
+            { status: 200 }
+          )
         : new Response("{}", { status: 500 })
     );
     const report = await buildFrictionReport("2026-09-04T00:00:00Z", "2026-10-04T00:00:00Z");
     expect(report?.ends).toEqual([
-      { label: "Q1", pct: 2 },
-      { label: "Q2", pct: 3 },
-      { label: "Q58", pct: 19 },
+      { label: qn("00001"), pct: 2 },
+      { label: qn("01002"), pct: 3 },
+      { label: qn("00000"), pct: 19 },
     ]);
     expect(find(report!.signals, "Where sessions end")?.sentence).toBe(
-      "19% of sessions that reach Q58 end there."
+      `19% of sessions that reach ${qn("00000")} end there.`
     );
   });
 });
@@ -379,11 +418,13 @@ describe("buildFrictionReport", () => {
 describe("fetchSessionEnds", () => {
   it("gives the weekly digest the same bars as the daily one", async () => {
     // The weekly digest's tests mock this, so this is the test that sees it.
-    const questions = [q({ question_index: 0, quits: 2 }), q({ question_index: 1, quits: 9 })];
-    mockSupabaseFetch.mockResolvedValue(new Response(JSON.stringify(snap(questions))));
-    expect(await fetchSessionEnds("2026-09-04T00:00:00Z", "2026-10-04T00:00:00Z")).toEqual(
-      sessionEnds(snap(questions))
-    );
+    const read = snap([q({ question_index: 0 })], {
+      by_question: [reach("00001", 100, 2), reach("01002", 100, 9)],
+    });
+    mockSupabaseFetch.mockResolvedValue(new Response(JSON.stringify(read)));
+    const ends = await fetchSessionEnds("2026-09-04T00:00:00Z", "2026-10-04T00:00:00Z");
+    expect(ends).toEqual(sessionEnds(read));
+    expect(ends).toHaveLength(2);
     expect(mockSupabaseFetch.mock.calls.at(-1)![0]).toContain("get_survey_friction");
   });
 

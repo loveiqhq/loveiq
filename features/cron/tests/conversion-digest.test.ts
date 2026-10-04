@@ -101,6 +101,9 @@ import {
   type FrictionQuestion,
   type FrictionReport,
 } from "@features/admin/server/friction-metrics";
+import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
+import { orderEmailLast } from "@features/survey/ui/questionOrder";
 import {
   buildAlerts,
   buildArmVerdict,
@@ -3065,29 +3068,44 @@ describe("conversion-digest: where sessions end, and paywall to payment", () => 
       Buffer.from(new URL(img.image_url).searchParams.get("d")!, "base64").toString("utf8")
     ) as Record<string, unknown>;
 
+  /** The survey as asked today, by q_id. */
+  const ASKED = orderEmailLast(surveyQuestions)
+    .filter((x) => !isHidden(x.qId))
+    .map((x) => x.qId);
+  const qn = (qId: string) => `Q${ASKED.indexOf(qId) + 1}`;
+
   /**
    * A survey's worth of questions, built by the REAL producers, so the sentence
    * and the bars come from one snapshot exactly as they do in production. The
-   * email question (Q58) is the worst; Q41 is too thin to carry a rate.
+   * email question is the worst; the 41st question is too thin to carry a rate.
    */
   function frictionReport(): FrictionReport {
-    const questions: FrictionQuestion[] = Array.from({ length: 60 }, (_, i) => ({
+    const questions: FrictionQuestion[] = ASKED.map((q_id, i) => ({
       question_index: i,
-      q_id: `q${i}`,
+      q_id,
       visits: 1000 - i * 10,
       abandons: 10,
-      sessions: 1000 - i * 10,
-      quits: i === 57 ? 76 : i === 55 ? 40 : i === 2 ? 59 : 10,
       backs: 5,
       skipped: 0,
       median_ms: 9000,
       timed: 900,
     }));
+    const by_question = ASKED.map((q_id, i) => ({
+      q_id,
+      sessions: 1000 - i * 10,
+      quits: q_id === "00000" ? 76 : i === 53 ? 40 : i === 2 ? 59 : 10,
+    }));
     // 4 of 5 leaving is 80%, and would top the chart if the floor were missing.
-    questions[40] = { ...questions[40]!, visits: 5, sessions: 5, quits: 4, timed: 5 };
-    const snap = { questions, total_rows: 30_000, total_timed: 27_000, median_ms: 9000 };
+    by_question[40] = { ...by_question[40]!, sessions: 5, quits: 4 };
+    const snap = {
+      questions,
+      by_question,
+      total_rows: 30_000,
+      total_timed: 27_000,
+      median_ms: 9000,
+    };
     return {
-      signals: buildSurveySignals(snap, new Map([["q57", "What is your email?"]])),
+      signals: buildSurveySignals(snap, new Map([["00000", "What is your email?"]])),
       rowsRead: 30_000,
       ends: sessionEnds(snap),
     };
@@ -3105,18 +3123,20 @@ describe("conversion-digest: where sessions end, and paywall to payment", () => 
       bars: Array<{ label: string; dropPct: number }>;
       windowLabel: string;
     };
-    // Every question that clears the floor, in question order. The thin one is out.
-    expect(p.bars).toHaveLength(59);
+    // Every question that clears the floor, in survey order. The thin one is out.
+    expect(p.bars).toHaveLength(ASKED.length - 1);
     expect(p.bars[0]!.label).toBe("Q1");
     expect(p.bars.map((b) => b.label)).not.toContain("Q41");
     // The tallest bar is the question the sentence names, at the number it prints.
     const top = [...p.bars].sort((a, b) => b.dropPct - a.dropPct)[0]!;
-    expect(top.label).toBe("Q58");
+    expect(top.label).toBe(qn("00000"));
     expect(texts(blocks)[at]).toContain(
-      `${Math.round(top.dropPct)}% of sessions that reach Q58 (What is your email?) end there.`
+      `${Math.round(top.dropPct)}% of sessions that reach ${qn("00000")} (What is your email?) end there.`
     );
     expect(p.windowLabel).toBe("30 days to 3 Oct");
-    expect(img.alt_text).toBe("Where sessions end, by question. Highest: Q58 18%, Q56 9%, Q3 6%.");
+    expect(img.alt_text).toBe(
+      `Where sessions end, by question. Highest: ${qn("00000")} 17%, Q54 9%, Q3 6%.`
+    );
   });
 
   it("draws no bars when fewer than two questions carry a rate", async () => {
