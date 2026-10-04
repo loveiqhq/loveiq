@@ -6,8 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SurveyPage from "@features/survey/ui/SurveyPage";
 import {
   ANSWERS_STORAGE_KEY,
+  LANDING_PREFILL_QID,
   PENDING_COMPLETION_KEY,
+  SURVEY_CONSENT_KEY,
   SURVEY_STEP_KEY,
+  __resetSurveyConsentForTests,
+  saveLandingPrefill,
 } from "@features/survey/ui/hooks/surveyStorage";
 import { COMPLETED_REPORT_KEY } from "@features/survey/ui/hooks/surveySession";
 
@@ -68,7 +72,11 @@ describe("SurveyPage", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    __resetSurveyConsentForTests();
     window.history.replaceState(null, "", "/survey");
+    // Most tests here model a reader who already agreed for this run. The ones about the
+    // consent gate itself remove this.
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-04T12:00:00.000Z");
   });
 
   afterEach(() => {
@@ -203,12 +211,15 @@ describe("SurveyPage", () => {
     });
 
     it("starts a new submission when a landing answer opens the survey after finishing", async () => {
-      // Round-11 audit: the landing page's question saves an answer, and /survey then opens
-      // straight into the survey, past "I agree".
+      // Round-11 audit: the landing page's question saves an answer before /survey opens.
+      // It now opens on consent (that run has not agreed yet), and agreeing starts it fresh.
+      localStorage.removeItem(SURVEY_CONSENT_KEY);
       sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
       sessionStorage.setItem("loveiq-survey-session", "finished-run");
       localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: 3 } }));
       render(<SurveyPage />);
+
+      await agree();
 
       expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
       expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
@@ -506,5 +517,79 @@ describe("SurveyPage", () => {
     render(<SurveyPage />);
 
     expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+  });
+});
+
+async function agree() {
+  const user = userEvent.setup();
+  const agreeButton = await screen.findByRole("button", { name: /i agree/i });
+  for (const box of screen.getAllByRole("checkbox")) await user.click(box);
+  await user.click(agreeButton);
+}
+
+describe("SurveyPage — consent comes before any question", () => {
+  // Regression, 2026-10-04: the homepage question card saves its answer, and /survey opened
+  // straight onto question 1, past the 18+ / terms / sensitive-data screen, while the server
+  // stamps consent on every submission.
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    __resetSurveyConsentForTests();
+    window.history.replaceState(null, "", "/survey");
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("opens the consent screen, not the questions, after the homepage card", async () => {
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    expect(await screen.findByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("opens the questions once the reader agrees, keeping the card's answer", async () => {
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    await agree();
+
+    expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(ANSWERS_STORAGE_KEY) ?? "{}").answers).toEqual(
+      expect.objectContaining({ [LANDING_PREFILL_QID]: 4 })
+    );
+    expect(localStorage.getItem(SURVEY_CONSENT_KEY)).toBeTruthy();
+  });
+
+  it("shows consent on a refresh of the questions when this run never agreed", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    render(<SurveyPage />);
+
+    expect(await screen.findByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("asks for consent before the retry screen of a run that never agreed", async () => {
+    localStorage.setItem(PENDING_COMPLETION_KEY, JSON.stringify(pendingCompletion));
+    render(<SurveyPage />);
+
+    await agree();
+
+    expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+  });
+
+  it("does not let Forward onto the questions skip consent", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    render(<SurveyPage />);
+    await screen.findByRole("button", { name: /i agree/i });
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 6 } }));
+    });
+
+    expect(screen.getByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
   });
 });

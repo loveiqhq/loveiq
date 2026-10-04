@@ -9,6 +9,12 @@ export const SURVEY_STATE_KEY = "loveiq-survey-answers";
 export const SURVEY_INDEX_KEY = "loveiq-survey-index";
 export const SURVEY_STEP_KEY = "loveiq-survey-step";
 export const PENDING_COMPLETION_KEY = "loveiq-survey-pending-completion";
+/**
+ * When the reader agreed on the consent screen (18+, terms, sensitive data) for the run in
+ * progress. A draft is not proof of it: the homepage question card saves its answer before
+ * the reader ever sees that screen, and the server stamps consent on every submission.
+ */
+export const SURVEY_CONSENT_KEY = "loveiq-survey-consent";
 /** history.state key on an entry that is one of the questions. See SurveyEngine. */
 export const QUESTION_STATE_KEY = "surveyQuestion";
 /** history.state key: the question index of the base those question entries stack on. */
@@ -106,15 +112,44 @@ export function clearPendingCompletion(): void {
   }
 }
 
+/** Also held in memory, so a browser that refuses storage is not sent back to consent on every Back. */
+let consentGivenOnThisPage = false;
+
+export function recordSurveyConsent(): void {
+  consentGivenOnThisPage = true;
+  try {
+    localStorage.setItem(SURVEY_CONSENT_KEY, new Date().toISOString());
+  } catch {
+    /* storage unavailable: the consent screen is shown again after a reload */
+  }
+}
+
+export function hasSurveyConsent(): boolean {
+  if (consentGivenOnThisPage) return true;
+  try {
+    return Boolean(localStorage.getItem(SURVEY_CONSENT_KEY));
+  } catch {
+    return false;
+  }
+}
+
+/** Test-only: module state outlives a jsdom test. */
+export function __resetSurveyConsentForTests(): void {
+  consentGivenOnThisPage = false;
+}
+
 export function clearPersistedSurveyState(options?: {
   clearPendingCompletion?: boolean;
   clearSurveySession?: boolean;
 }): void {
+  consentGivenOnThisPage = false;
   if (!canUseStorage()) return;
 
   try {
     localStorage.removeItem(SURVEY_STATE_KEY);
     localStorage.removeItem(SURVEY_INDEX_KEY);
+    // Consent belongs to the run it was given for; the next run asks again.
+    localStorage.removeItem(SURVEY_CONSENT_KEY);
     localStorage.removeItem(UTM_STORAGE_KEY);
     localStorage.removeItem(GLOBAL_UTM_KEY);
     if (options?.clearPendingCompletion) {
