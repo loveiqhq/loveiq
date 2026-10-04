@@ -329,7 +329,12 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
             <button
               type="button"
               onClick={onExit}
-              className="rounded-full bg-gradient-brand px-6 py-3 font-sans text-[14px] font-bold text-white shadow-[0_4px_20px_rgba(254,104,57,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_6px_24px_rgba(254,104,57,0.4)] focus-visible-ring"
+              className={
+                // One main action: when the fix is on offer, leaving is the quiet choice.
+                fixEmail
+                  ? "rounded-full border border-white/15 bg-transparent px-6 py-3 font-sans text-[14px] font-medium text-white/80 transition-all duration-300 hover:border-white/30 hover:bg-white/5 focus-visible-ring"
+                  : "rounded-full bg-gradient-brand px-6 py-3 font-sans text-[14px] font-bold text-white shadow-[0_4px_20px_rgba(254,104,57,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_6px_24px_rgba(254,104,57,0.4)] focus-visible-ring"
+              }
             >
               Return to Site
             </button>
