@@ -27,7 +27,8 @@ decide someone else approves instead (step 7); which instrument ships first is t
    - help lines for each country our readers are in, and an `ANY` fallback.
 
    Plain words, screening language, no dashes, and a school reading grade of 8 or less.
-   Jarvis's `check_copy` runs the same rules.
+   Jarvis's `check_copy` runs the dash, phrasing and absolute-claim part of these rules. The
+   diagnosis wording and the grade-8 limit at any length are the gate's own.
 
 5. **Run the gate:** `npx vitest run features/assessments`. It fails the build when:
    - a reachable total falls in no band, or in two;
@@ -35,13 +36,19 @@ decide someone else approves instead (step 7); which instrument ships first is t
    - a reversed item's answers are uneven;
    - a safety rule points at no item, can never trigger, triggers on every answer, or has no
      fallback help;
-   - the source, license, credit line or published form is missing;
+   - a help line is empty, or is filed under a region that is not `ANY` or a two-letter
+     country code in capitals, or under the same region twice (the reader's country is
+     matched in capitals, so `gb` would never be found);
+   - the instructions, the source, the license terms, the credit line or the published form
+     is missing or empty;
    - our copy (bands and safety messages) breaks the Copy Gate or reads as a diagnosis;
    - `validated` is set without the standard sign-off lines, each signed and dated, against
      what is there now.
 
-   The test also pins each instrument's fingerprint (`reviewHash`), so any change to what
-   the sign-off covers fails the build until the test is updated on purpose.
+   The test also pins every instrument's fingerprint (`reviewHash`), and fails when an
+   instrument has no pin, so any change to what the sign-off covers fails the build until
+   the test is updated on purpose. The fingerprint covers the wording of the sign-off lines
+   too: rewording a line in `signoff.ts` voids every signature under it.
 
 6. **Send the validation pack:** `npx tsx scripts/assessments/validation-pack.ts <id>`
    prints the review document. It shows:
@@ -64,29 +71,45 @@ decide someone else approves instead (step 7); which instrument ships first is t
 
 ## What is in it now
 
-| Instrument | Measures   | Status    | Why                                                          |
-| ---------- | ---------- | --------- | ------------------------------------------------------------ |
-| GAD-7      | anxiety    | validated | approved by Eman on 2026-09-30; free with the credit line    |
-| PHQ-9      | depression | validated | approved by Eman on 2026-09-30; item 9 routes to crisis help |
-| UCLA-3     | loneliness | draft     | the source gives no cutoffs, and commercial use is unchecked |
+| Instrument | Measures                    | Status        | Why                                                                                       |
+| ---------- | --------------------------- | ------------- | ----------------------------------------------------------------------------------------- |
+| GAD-7      | anxiety                     | validated     | approved by Eman on 2026-09-30; free with the credit line                                 |
+| PHQ-9      | depression                  | validated     | approved by Eman on 2026-09-30; item 9 routes to crisis help                              |
+| UCLA-3     | loneliness                  | draft         | the source gives no cutoffs, and commercial use is unchecked                              |
+| SCS-SF     | self-compassion             | in-validation | Inner Critic backbone; Neff grants use "for any purpose whatsoever"; bands are her rubric |
+| RSES       | self-esteem                 | in-validation | Inner Critic backbone; public domain on UMD's notice; bands are ours (15 and 25)          |
+| BFNE       | fear of negative evaluation | draft         | Boundaries backbone; a catalogue says "no restrictions", the rights holder was not asked  |
+| UCS        | unmitigated communion       | draft         | Boundaries backbone; no terms of use, and the scoring key is inferred until checked       |
 
 ## What it works on next
 
 1. **GAD-7 and PHQ-9 are validated.** Eman approved them on 2026-09-30 without waiting for
    Mark and Sanjin's line-by-line review, and the sign-off lines name him. Mark and Sanjin
    can still review them in the validation pack; a change they ask for is a new sign-off.
-2. **UCLA-3's license.** Someone checks commercial digital use with the rights holder.
-   Until then it stays a draft and its lines wait, because settling the license changes
-   its fingerprint.
-3. **Which assessments come next** is Mark's roadmap of 10 to 20 assessments. What people
+2. **Three licenses to ask about.** UCLA-3 (Daniel Russell), BFNE (Mark Leary, and Sage)
+   and UCS (Vicki Helgeson). The question for each is the same: may a paid product show the
+   scale to people who take it on their own, with the credit line? Until then each stays a
+   draft, and its lines wait, because settling the license changes its fingerprint. UCS also
+   needs its scoring key checked against Fritz and Helgeson (1998): item 2 reversed and a
+   mean are inferred from the wording, not read from the source.
+3. **SCS-SF and RSES are ready for their validators.** Their licenses allow commercial use
+   outright (Neff's "for any purpose whatsoever"; the University of Maryland's
+   public-domain notice), and both have reversed items, so their sign-off also checks the
+   engine's reversing against each source's key. RSES's bands are ours, so its sign-off
+   includes whether the split at 15 and 25 is acceptable.
+4. **Which assessments come next** is Mark's roadmap of 10 to 20 assessments. His portfolio
+   matrix of 18 Sep ranks "The Inner Critic" first and "Boundaries & People-Pleasing"
+   second; the four above are their backbones that fit the factory as it is. The others
+   named there (FSCRS, GASP, the Silencing the Self Scale) report several subscales, which
+   the engine does not score yet. What people
    most want to understand next will come from the survey's demand question once it ships,
    and Jarvis's `user_totals` (`measure: "answers"`) counts the answers.
-4. **After the first validation:** step 8.
+5. **After the first validation:** step 8.
 
 Jarvis holds the status and the owners as a recorded decision (topic `assessments`).
 
 ## Beyond LoveIQ
 
 Each instrument has a place in the Humangraph (affect, anxiety, attachment, desire, meaning,
-regulation). Once results are stored, Jarvis's `user_totals` reports them as one more
+regulation, self). Once results are stored, Jarvis's `user_totals` reports them as one more
 measure: totals by group, never a person, with the same smallest-group rule.

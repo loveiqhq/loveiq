@@ -1,7 +1,8 @@
 # features/assessments
 
-**Purpose:** the Assessment Factory. Validated psychometric instruments (GAD-7, PHQ-9,
-UCLA-3 so far) held exactly as their sources publish them, scored by one generic engine,
+**Purpose:** the Assessment Factory. Published psychometric instruments (GAD-7, PHQ-9,
+UCLA-3, SCS-SF, RSES, BFNE and UCS so far; which of them we have signed off is the status
+table in docs/runbooks/ASSESSMENT_FACTORY.md) held exactly as their sources publish them, scored by one generic engine,
 checked by an automated gate, and signed off by people (Mark and Sanjin by default, or
 whoever the team decides approves instead, by their own name) before anyone takes them. The first building block of the Applied Psychometrics platform's instrument
 library ("Proven instruments, applied faithfully").
@@ -24,7 +25,7 @@ library ("Proven instruments, applied faithfully").
 **Belongs:** instrument definitions, scoring, the gate, the review pack.
 
 **Does NOT belong (yet):** a UI to take an instrument, storing results, or the Humangraph.
-Those come once an instrument is validated and the product decision (Mark and Sanjin) says
+Those come once an instrument is validated and the product decision (Mark's roadmap) says
 which one ships first. LoveIQ's own archetype survey stays in `features/scoring/`.
 
 **Rules:**

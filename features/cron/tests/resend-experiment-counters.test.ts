@@ -326,3 +326,32 @@ describe("resend webhook: per-arm experiment counters", () => {
     expect(mockAddToSuppression).toHaveBeenCalled();
   });
 });
+
+describe("resend webhook: a send Resend suppressed", () => {
+  /**
+   * Resend refuses to send to an address on its account suppression list and
+   * reports it as email.suppressed. The event was ignored, so the address never
+   * reached email_suppression and every later email to it was sent and refused.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockVerify.mockReturnValue({
+      type: "email.suppressed",
+      data: { to: ["Fake@Example.com"], suppressed: { type: "OnAccountSuppressionList" } },
+    });
+  });
+
+  it("records the address as undeliverable, only if absent, without a Slack ping", async () => {
+    const res = await POST(request());
+    expect(res.status).toBe(200);
+    // ifAbsent: an address already recorded as a complaint keeps that label.
+    expect(mockAddToSuppression).toHaveBeenCalledWith("fake@example.com", "hard_bounce", {
+      ifAbsent: true,
+    });
+    expect(mockNotifySlack).not.toHaveBeenCalled();
+  });
+});

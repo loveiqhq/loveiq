@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ReportDesktopSidebar from "@features/report/ui/ReportDesktopSidebar";
+import ReportDesktopSidebarV1 from "@features/report/ui/v1/ReportDesktopSidebar";
 import ReportMobileNav from "@features/report/ui/ReportMobileNav";
 import { REPORT_NAV_IDS, REPORT_NAV_PARTS } from "@features/report/ui/reportNav";
 
@@ -36,6 +37,40 @@ describe("ReportDesktopSidebar", () => {
       .getAllByRole("link")
       .filter((link) => link.getAttribute("aria-current") === "location");
     expect(activeLinks.some((link) => link.getAttribute("href") === "#core_archetype")).toBe(true);
+  });
+});
+
+// With nothing to share (a friend viewing a shared report, a preview with no report
+// behind it) the button used to stay on screen disabled, styled exactly like a live
+// one: a dead CTA (2026-10-04). It now shows only when it does something.
+describe.each([
+  [
+    "V1",
+    (onShareClick?: () => void) => (
+      <ReportDesktopSidebarV1
+        activeSectionId="core_archetype"
+        onShareClick={onShareClick}
+        sections={[]}
+      />
+    ),
+  ],
+  [
+    "2.0+",
+    (onShareClick?: () => void) => (
+      <ReportDesktopSidebar activeSectionId="core_archetype" onShareClick={onShareClick} />
+    ),
+  ],
+])("%s desktop sidebar Share Report", (_version, sidebar) => {
+  it("is not there when there is nothing to share", () => {
+    render(sidebar());
+    expect(screen.queryByRole("button", { name: /share report/i })).not.toBeInTheDocument();
+  });
+
+  it("opens sharing when tapped", () => {
+    const onShareClick = vi.fn();
+    render(sidebar(onShareClick));
+    fireEvent.click(screen.getByRole("button", { name: /share report/i }));
+    expect(onShareClick).toHaveBeenCalledTimes(1);
   });
 });
 

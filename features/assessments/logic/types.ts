@@ -10,10 +10,17 @@
 
 /** Where an instrument sits in the Humangraph (Applied Psychometrics, "Mapping the human mind"). */
 export type HumangraphDimension =
-  "affect" | "anxiety" | "attachment" | "desire" | "meaning" | "regulation";
+  | "affect"
+  | "anxiety"
+  | "attachment"
+  | "desire"
+  | "meaning"
+  | "regulation"
+  /** How a person sees and treats themselves: self-esteem, self-compassion, the inner critic. */
+  | "self";
 
 /**
- * draft: being assembled; in-validation: with Mark and Sanjin; validated: signed off and
+ * draft: being assembled; in-validation: with its validators; validated: signed off and
  * safe to put in front of people; retired: kept so past results still resolve.
  */
 export type InstrumentStatus = "draft" | "in-validation" | "validated" | "retired";
@@ -102,7 +109,11 @@ export interface PublishedForm {
   adaptation?: string;
 }
 
-/** One line of the human sign-off. Filled in by the reviewer, never by code. */
+/**
+ * One line of the human sign-off: what a reviewer confirms, and who signed it and when. Its
+ * wording is part of the fingerprint, so a reworded line voids the signature, however the
+ * lines are produced.
+ */
 export interface SignOff {
   check: string;
   by?: string;
@@ -139,7 +150,7 @@ export interface InstrumentDefinition {
   };
   bands: Band[];
   safety?: SafetyRule[];
-  /** Filled in by Mark and Sanjin; `validated` needs every line signed. */
+  /** Filled in by the validators (Mark and Sanjin unless the team names someone else); `validated` needs every line signed. */
   signOff: SignOff[];
   /**
    * `reviewHash(def)` at the moment of sign-off. A change to anything the sign-off covers

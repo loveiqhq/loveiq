@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
  * With no Redis the limiter falls back to memory and says so once per process. On real
- * production that is an incident (an error, which reaches the ops channel). On a preview
- * deployment such as staging it is the expected state, and on 2026-09-29 it was posting a
- * mislabelled "api_5xx" to #brain on every cold start during the persona walks.
+ * production that is an incident (an error, which reaches the ops channel). On the staging
+ * project it is the expected state, and it posted a mislabelled "api_5xx" on every cold
+ * start twice: from staging.loveiq.org, a preview, on 2026-09-29, and from that project's
+ * build of main, a production deployment, eight times on 2026-10-04.
  */
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock("@shared/observability/logger", () => ({ default: logger }));
@@ -24,20 +25,34 @@ describe("the limiter with no Redis", () => {
   });
 
   const noStore = { KV_REST_API_URL: "", KV_REST_API_TOKEN: "" };
+  const prod = { NEXT_PUBLIC_SITE_URL: "https://www.loveiq.org" };
+  const staging = { NEXT_PUBLIC_SITE_URL: "https://staging.loveiq.org" };
 
   it("is an error on production", async () => {
-    await limitOnce({ ...noStore, NODE_ENV: "production", VERCEL_ENV: "production" });
+    await limitOnce({ ...noStore, ...prod, NODE_ENV: "production", VERCEL_ENV: "production" });
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("is an error on a production build outside Vercel too", async () => {
-    await limitOnce({ ...noStore, NODE_ENV: "production", VERCEL_ENV: undefined });
+    await limitOnce({ ...noStore, ...prod, NODE_ENV: "production", VERCEL_ENV: undefined });
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
   it("is only a warning on a preview deployment such as staging", async () => {
-    await limitOnce({ ...noStore, NODE_ENV: "production", VERCEL_ENV: "preview" });
+    await limitOnce({ ...noStore, ...staging, NODE_ENV: "production", VERCEL_ENV: "preview" });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("is only a warning in development, even with production's address", async () => {
+    await limitOnce({ ...noStore, ...prod, NODE_ENV: "development", VERCEL_ENV: undefined });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("is only a warning on the staging project's build of main, a production deployment", async () => {
+    await limitOnce({ ...noStore, ...staging, NODE_ENV: "production", VERCEL_ENV: "production" });
     expect(logger.error).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });

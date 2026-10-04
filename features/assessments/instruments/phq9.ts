@@ -186,5 +186,7 @@ export const phq9: InstrumentDefinition = {
     by: "Eman Cickusic",
     on: "2026-09-30",
   })),
-  signedHash: "a38a3e3655c255a1",
+  // Re-expressed on 2026-09-30, when the fingerprint began to cover the sign-off lines' own
+  // wording. The old fingerprint, a38a3e3655c255a1, still matched, so what was approved is unchanged.
+  signedHash: "a7ed0e7b7b72ac6b",
 };

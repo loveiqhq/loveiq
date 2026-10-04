@@ -1,7 +1,7 @@
 import type { InstrumentDefinition, SignOff } from "./types";
 
 /**
- * What Mark and Sanjin sign for every instrument, in this order. The first lines are about
+ * What the validators sign for every instrument, in this order. The first lines are about
  * being faithful to the published form; the rest about our part: the copy, the next steps
  * and the safety routing. The gate refuses `validated` unless exactly these lines are signed.
  */

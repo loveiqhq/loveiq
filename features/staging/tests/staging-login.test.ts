@@ -87,7 +87,22 @@ describe("POST /api/staging-login", () => {
 
     const setCookie = res.headers.get("set-cookie");
     expect(setCookie).toContain("staging_session=");
-    expect(setCookie?.toLowerCase()).toContain("samesite=strict");
+    expect(setCookie?.toLowerCase()).toContain("samesite=lax");
+  });
+
+  it("sets the same cookie the probe and walker helper mints, value and SameSite alike", async () => {
+    // scripts/probes/staging-cookie.mjs mints staging_session instead of logging in. When
+    // this route moved to Lax and the helper stayed Strict, the walks kept landing on the
+    // password page after Stripe while testers no longer did.
+    const { stagingCookies } = await import("@/scripts/probes/staging-cookie.mjs");
+    const minted = stagingCookies("https://staging.loveiq.org").find(
+      (c) => c.name === "staging_session"
+    );
+    const setCookie = (await POST(makeRequest({ password: "test-staging-pw" }))).headers.get(
+      "set-cookie"
+    );
+    expect(setCookie).toContain(`staging_session=${minted?.value};`);
+    expect(setCookie?.toLowerCase()).toContain(`samesite=${minted?.sameSite.toLowerCase()}`);
   });
 
   it("returns 400 when body is malformed JSON", async () => {

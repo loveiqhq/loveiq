@@ -16,7 +16,7 @@ import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
-import { isEmailSuppressed } from "@shared/emails/suppression";
+import { isEmailSuppressed, suppressionState } from "@shared/emails/suppression";
 import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
@@ -325,16 +325,27 @@ export async function POST(request: Request) {
       if (audienceId && resendClient) {
         scheduleAfterResponse("resend-audience-subscribe", async () => {
           try {
-            await resendClient.contacts.create({
+            // Creating a contact re-subscribes one Resend has as unsubscribed,
+            // so only an address confirmed NOT on our do-not-send list is added.
+            // A failed lookup skips: a missed push is safer than a re-subscribe.
+            if ((await suppressionState(normalizedEmail)) !== "clear") return;
+            const { error } = await resendClient.contacts.create({
               email: normalizedEmail,
               firstName: normalizedFirstName,
               audienceId,
               unsubscribed: false,
             });
+            // The SDK returns API errors instead of throwing, so this is the only
+            // trace of a failed push. A repeat sign-up is not an error: Resend
+            // returns the existing contact.
+            if (error) {
+              logger.warn(
+                { error, submissionId },
+                "marketing-opt-in: Resend contact create failed"
+              );
+            }
           } catch (err) {
-            // Resend returns 422 for duplicate email — that's the common
-            // case (re-submission with the same email) and is fine. Log
-            // anything else for visibility; never escalates to the user.
+            // Network failure or timeout; never escalates to the user.
             logger.warn(
               { err, submissionId },
               "marketing-opt-in: Resend contact create non-fatal failure"

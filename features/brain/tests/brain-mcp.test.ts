@@ -56,6 +56,11 @@ vi.mock("@features/brain/server/act/slack", async (importOriginal) => ({
 
 const mockRateLimit = vi.fn(async () => ({ allowed: true }));
 const mockFetch = vi.fn();
+const uxReport = vi.hoisted(() => ({ build: vi.fn(), render: vi.fn() }));
+vi.mock("@features/ux-signals/server/report", () => ({
+  buildUxSignalsReport: uxReport.build,
+  renderUxSignals: uxReport.render,
+}));
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
 }));
@@ -128,6 +133,7 @@ import {
 import { atomsIn } from "@features/brain/server/check-answer";
 import { citesSources } from "@features/brain/server/night-shift";
 import { BOOKS, partHead } from "@/scripts/brain-books";
+import { partHead as paperPartHead } from "@features/brain/server/ingest/papers";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
@@ -1272,6 +1278,43 @@ describe("/api/mcp", () => {
         expect(r.content[0]!.text).toContain("Checked 1 figure and 1 quote");
       });
 
+      it("checks a paper against the part cited, without the head every part opens with", async () => {
+        // The head carries the year and "Part 7 of 19": left in, a made-up "19%" would be found.
+        const paper = {
+          pmcid: "PMC8255964",
+          title: "Intimacy and Sexual Desire",
+          firstAuthor: "van Lankveld JJDM",
+          authorCount: 4,
+          journal: null,
+          year: "2021",
+          doi: null,
+          license: "cc by" as const,
+        };
+        const id = "paper:PMC8255964#7";
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.paper") &&
+            path.includes(`source_id=eq.${encodeURIComponent(id)}`)
+              ? [
+                  {
+                    body: `${paperPartHead(paper, 7, 19)}\nIntimacy predicted desire in 312 couples.`,
+                  },
+                ]
+              : [],
+        }));
+        const r = await call({
+          answer: `In 312 couples, 19% lost desire (paper/${id}).`,
+          sources: [`paper/${id}`],
+        });
+        expect(r.content[0]!.text).toContain("Checked 2 figures");
+        // 312 is in the paper's text; 19 is only in the head ("Part 7 of 19"), which is ours.
+        expect(r.content[0]!.text).toContain(`19% is not in paper/${id}`);
+        expect(r.content[0]!.text).not.toMatch(/: 312 (?:\(nearest|is not in)/);
+      });
+
       it("checks a long document's part alone, not the document it belongs to", async () => {
         // Round-9 audit: joined whole, 3 of the 9 largest Drive documents "confirmed" all
         // 90 made-up percentages from 10% to 99%.
@@ -1603,6 +1646,7 @@ describe("/api/mcp", () => {
         "break_even",
         "user_totals",
         "cost_watch",
+        "ux_signals",
         "check_answer",
         "experiments",
         "comment_asks",
@@ -3128,6 +3172,18 @@ describe("/api/mcp", () => {
       expect(other.content[0].text).not.toContain("Books are left out");
     });
 
+    it("says papers are opt-in when a paper filter comes back empty", async () => {
+      wire([]);
+      const r = await call({ meta: { kind: "paper" } });
+      expect(r.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+      wire([]);
+      const byId = await call({ meta: { pmcid: "PMC8255964" } });
+      expect(byId.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+      wire([]);
+      const named = await call({ sources: ["paper"], meta: { kind: "paper" } });
+      expect(named.content[0].text).not.toContain("Papers are left out");
+    });
+
     it("gives a plain total when nothing is grouped", async () => {
       wire([{ bucket: "(all)", n: 91, total: 91 }]);
       const r = await call({ sources: ["calendar"] });
@@ -3390,6 +3446,12 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toContain('Books are left out unless `sources` names "book".');
     });
 
+    it("says papers are opt-in when a paper filter lists nothing", async () => {
+      wire([], 0);
+      const r = await call({ meta: { kind: "paper" } });
+      expect(r.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+    });
+
     it("marks a replaced decision on its line, and as it stood on `until`", async () => {
       wire(
         [
@@ -3580,6 +3642,54 @@ describe("/api/mcp", () => {
       wire([row(1)], 1);
       await call({ sources: ["book"] });
       expect(urlOf()).not.toContain("neq.book");
+    });
+
+    it("lists papers only when they are named, like books", async () => {
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.paper");
+      wire([row(1)], 1);
+      await call({ sources: ["paper"] });
+      expect(urlOf()).not.toContain("neq.paper");
+      // Naming one opt-in source does not let the other in.
+      expect(urlOf()).toContain("source=neq.book");
+    });
+
+    it("lists the corporate website only when it is named, like the papers", async () => {
+      // Its traffic rows read like LoveIQ's own, so an unnamed browse must never list them.
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.corporate");
+      wire([row(1)], 1);
+      await call({ sources: ["corporate"] });
+      expect(urlOf()).not.toContain("neq.corporate");
+      expect(urlOf()).toContain("source=neq.paper");
+    });
+
+    it("says the corporate website is opt-in when a site filter comes back empty", async () => {
+      wire([]);
+      const r = await call({ meta: { site: "appliedpsychometrics.org" } });
+      expect(r.content[0].text).toContain(
+        'The corporate website is left out unless `sources` names "corporate".'
+      );
+      wire([]);
+      const named = await call({
+        sources: ["corporate"],
+        meta: { site: "appliedpsychometrics.org" },
+      });
+      expect(named.content[0].text).not.toContain("The corporate website is left out");
     });
 
     it("orders by when the brain learned it, and shows that date", async () => {
@@ -4192,6 +4302,49 @@ describe("/api/mcp", () => {
       const r = await call({});
       expect(r.isError).toBe(true);
       expect(r.content[0]!.text).toMatch(/outage/);
+    });
+  });
+
+  describe("ux_signals", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 72,
+          method: "tools/call",
+          params: { name: "ux_signals", arguments: args },
+        })
+      ).then((r) =>
+        r.json().then((b) => b.result as { isError: boolean; content: Array<{ text: string }> })
+      );
+    beforeEach(() => {
+      uxReport.build.mockReset().mockResolvedValue({ visits: 10, walks: 3 });
+      uxReport.render.mockReset().mockReturnValue("the report");
+    });
+
+    it("measures seven days unless asked, and returns the report as written", async () => {
+      const r = await call({});
+      expect(uxReport.build).toHaveBeenCalledWith(7);
+      expect(r.isError).toBe(false);
+      expect(r.content[0]!.text).toContain("the report");
+      await call({ days: 28 });
+      expect(uxReport.build).toHaveBeenLastCalledWith(28);
+    });
+
+    it("refuses a period it cannot read whole", async () => {
+      for (const days of [0, 29, 2.5, "a week"]) {
+        const r = await call({ days });
+        expect(r.isError, String(days)).toBe(true);
+        expect(r.content[0]!.text).toContain("from 1 to 28");
+      }
+      expect(uxReport.build).not.toHaveBeenCalled();
+    });
+
+    it("calls it an error only when neither PostHog nor the walks could be read", async () => {
+      uxReport.build.mockResolvedValueOnce({ visits: null, walks: 3 });
+      expect((await call({})).isError).toBe(false);
+      uxReport.build.mockResolvedValueOnce({ visits: null, walks: null });
+      expect((await call({})).isError).toBe(true);
     });
   });
 
@@ -7010,6 +7163,8 @@ describe("the runbook's tool count is the real one", () => {
     34: "Thirty-four",
     35: "Thirty-five",
     36: "Thirty-six",
+    37: "Thirty-seven",
+    38: "Thirty-eight",
   };
 
   it("matches what the server actually exposes", () => {

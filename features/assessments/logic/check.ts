@@ -1,4 +1,4 @@
-import { checkCopy, readingGrade } from "@features/brain/server/copy-gate";
+import { phrasingFindings, readingGrade } from "@features/brain/server/copy-gate";
 
 import { bandOf, itemValue, optionsOf, reviewHash, scoredItems, scoreRange } from "./score";
 import { standardSignOff } from "./signoff";
@@ -6,7 +6,8 @@ import type { InstrumentDefinition } from "./types";
 
 /**
  * THE FACTORY'S AUTOMATED GATE: everything about an instrument that code can check, so the
- * people who validate it (Mark and Sanjin) spend their time on what only people can judge:
+ * people who validate it (Mark and Sanjin, unless the team names someone else) spend their
+ * time on what only people can judge:
  * whether the wording is the source's, whether the bands are the manual's, whether the copy
  * is right for someone who just scored "severe".
  *
@@ -36,8 +37,6 @@ const DIAGNOSTIC: RegExp[] = [
   /\b(?:is|means) (?:a|your) diagnosis\b/i,
   /\bdisorder\b/i,
 ];
-/** Copy Gate findings that apply to short copy (the rest are about report chapters). */
-const COPY_KINDS = new Set(["em-dash", "ai-phrase", "absolute"]);
 /** The Copy Gate's own reading target, applied here to copy of any length. */
 const TARGET_GRADE = 8;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,10 +63,9 @@ function copyProblems(where: string, text: string): string[] {
   if (!text.trim()) return [`${where} is empty`];
   const out: string[] = [];
   if (DIAGNOSTIC.some((re) => re.test(text))) out.push(`${where} reads as a diagnosis`);
-  for (const f of checkCopy({ text }).findings) {
-    // Warnings too: this copy is a sentence or two, and it has to be clean.
-    if (COPY_KINDS.has(f.kind)) out.push(`${where}: ${f.message}`);
-  }
+  // The Copy Gate's sentence rules, warnings included: this copy is a sentence or two, and it
+  // has to be clean. The chapter rules (length, repetition across archetypes) do not apply.
+  for (const f of phrasingFindings(text)) out.push(`${where}: ${f.message}`);
   const grade = readingGrade(text);
   if (grade > TARGET_GRADE) {
     out.push(`${where} reads at school grade ${grade.toFixed(1)}; the target is ${TARGET_GRADE}`);
@@ -84,6 +82,7 @@ export function checkInstrument(def: InstrumentDefinition): Problem[] {
   const dup = ids.filter((id, i) => ids.indexOf(id) !== i);
   if (dup.length) add("items", `item ids repeat: ${[...new Set(dup)].join(", ")}`);
   if (!scoredItems(def).length) add("items", "no item is scored");
+  if (!def.instructions.trim()) add("items", "the instructions are empty");
   for (const item of def.items) {
     if (!item.text.trim()) add("items", `${item.id} has no wording`);
     const values = optionsOf(def, item).map((o) => o.value);
@@ -148,11 +147,28 @@ export function checkInstrument(def: InstrumentDefinition): Problem[] {
     for (const r of rule.resources) {
       if (!r.lines.length)
         add("safety", `the safety rule on ${rule.item} lists no help for ${r.region}`);
+      if (r.lines.some((l) => !l.trim())) {
+        add("safety", `the safety rule on ${rule.item} has an empty help line for ${r.region}`);
+      }
+      // helpFor upper-cases the reader's country, so "gb" here would never be found.
+      if (r.region !== "ANY" && !/^[A-Z]{2}$/.test(r.region)) {
+        add(
+          "safety",
+          `the safety rule on ${rule.item} lists help for "${r.region}", which is not ANY or a two-letter country code in capitals`
+        );
+      }
+    }
+    const regions = rule.resources.map((r) => r.region);
+    const twice = [...new Set(regions.filter((r, i) => regions.indexOf(r) !== i))];
+    if (twice.length) {
+      add("safety", `the safety rule on ${rule.item} lists ${twice.join(", ")} more than once`);
     }
   }
 
   // Sources and permission.
   if (!def.citations.length) add("license", "no source is cited");
+  if (def.citations.some((c) => !c.text.trim())) add("license", "a citation has no text");
+  if (!def.license.terms.trim()) add("license", "the license terms are empty");
   if (!def.license.source.trim()) add("license", "the license terms have no source");
   if (def.license.kind === "attribution" && !def.license.attribution?.trim()) {
     add("license", "the license needs a credit line, and none is given");
@@ -160,6 +176,7 @@ export function checkInstrument(def: InstrumentDefinition): Problem[] {
   if (def.license.kind === "unknown" && def.status !== "draft") {
     add("license", `the license is unchecked, so it must stay a draft (it is ${def.status})`);
   }
+  if (!def.form.title.trim()) add("license", "the published form has no title");
   if (!def.form.url.trim() || !realDay(def.form.retrieved)) {
     add("license", "the published form needs a url and the day it was read (YYYY-MM-DD)");
   }

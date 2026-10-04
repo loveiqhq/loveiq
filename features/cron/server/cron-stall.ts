@@ -92,6 +92,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // run looks exactly like a quiet one, and the corpus it feeds goes stale invisibly —
   // research cards do not announce their own age.
   "brain-evidence": 26 * 3_600_000,
+  // Daily, straight after brain-evidence, and silent the same way: it posts only when Europe
+  // PMC is unreachable or the run crashes, so a missing day is the only sign it stopped.
+  "brain-papers": 26 * 3_600_000,
   // Nightly, in GitHub Actions. It records a run whether or not anything was queued, so a
   // missing night means the job did not fire, and questions are waiting on it.
   "brain-night-shift": 26 * 3_600_000,
@@ -114,6 +117,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
    */
   "ux-review-verify": 3 * 3_600_000,
   "ux-digest-audit": 26 * 3_600_000,
+  // The UX checker's proof walks (persona-walkers.yml `proof`), nightly at 02:41: a day and
+  // two hours is one night missed. Quiet, the proofs stop growing and nothing else says so.
+  "ux-proof-walks": 26 * 3_600_000,
   /**
    * EVERY FIVE MINUTES ON A LAPTOP, not a server (LAPTOP_JOBS below), so it pauses whenever the Mac is
    * closed, and only a successful run counts. Three days because a closed laptop only
@@ -157,6 +163,7 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-battery-mcp": "brain-daily.yml",
   "ux-review-verify": "ux-review-verify.yml",
   "ux-digest-audit": "ux-digest-audit.yml",
+  "ux-proof-walks": "persona-walkers.yml",
 };
 
 /**

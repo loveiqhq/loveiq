@@ -111,7 +111,7 @@ function PricingMethodMark({
   label,
 }: {
   label: string;
-  logo: "apple-pay" | "paypal" | "google-pay" | "klarna" | "mastercard" | "visa" | "amex";
+  logo: "apple-pay" | "google-pay" | "klarna" | "mastercard" | "visa" | "amex";
 }) {
   return (
     <span
@@ -280,9 +280,12 @@ const ReportPricingModal: FC<Props> = ({
   }, [open]);
 
   // Per-plan `price_shown` emit. Deduped by (plan, pricingClusterId, discountStep)
-  // so re-opening the modal or the ladder advancing emits a new event without
-  // double-counting a stable render. Powers the "Price Shown" funnel column +
-  // per-cluster CVR analysis.
+  // for as long as the modal is mounted, which is the whole report visit: the
+  // ladder advancing emits a new event, but re-opening the modal does NOT (the
+  // set is never cleared). Powers the "Price Shown" funnel column + per-cluster
+  // CVR analysis (bucket_performance counts these events), so emitting on every
+  // opening would change those rates; the UX checker's CTA hesitation allows for
+  // it (features/ux-signals/logic/signals.ts).
   const priceShownFiredRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!open) return;
@@ -423,7 +426,20 @@ const ReportPricingModal: FC<Props> = ({
         }}
       />
 
-      <div className="report-pricing-modal__viewport">
+      {/* A tap outside the dialog closes it, as the backdrop's handler above intends. The
+          viewport covers the backdrop edge to edge (it is later in the page and positioned),
+          so that tap lands HERE and never reached the backdrop: measured on production on
+          2026-10-01, a tap beside the dialog hit this div and left the paywall open, on a
+          desktop and an iPhone, and none of 171 closes in 30 days came from a tap outside.
+          Only a tap on the viewport itself: one inside the dialog bubbles up to here too. */}
+      <div
+        className="report-pricing-modal__viewport"
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          dismissReasonRef.current = "backdrop";
+          onClose();
+        }}
+      >
         <div
           ref={dialogRef}
           role={open ? "dialog" : undefined}
@@ -729,7 +745,6 @@ const ReportPricingModal: FC<Props> = ({
 
               <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
                 <PricingMethodMark logo="apple-pay" label="Apple Pay" />
-                <PricingMethodMark logo="paypal" label="PayPal" />
                 <PricingMethodMark logo="google-pay" label="Google Pay" />
                 <PricingMethodMark logo="klarna" label="Klarna" />
                 <PricingMethodMark logo="mastercard" label="Mastercard" />

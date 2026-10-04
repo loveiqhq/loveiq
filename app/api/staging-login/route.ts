@@ -60,10 +60,11 @@ export async function POST(request: Request) {
   response.cookies.set("staging_session", expected, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    // strict matches /api/staging-logout and prevents cross-site form posts
-    // from forging staging logins. The staging gate is the only thing
-    // protecting pre-prod content — keep CSRF surface minimal.
-    sameSite: "strict",
+    // lax, not strict: a strict cookie is left off every navigation that starts on another
+    // site, so Stripe's redirect back after a test payment landed on the password page
+    // (2026-09-29). Lax still keeps it off cross-site form posts, iframes and fetches, and
+    // the gate itself is the password.
+    sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 7, // 7 days
   });

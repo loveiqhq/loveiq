@@ -51,7 +51,9 @@ export function stagingCookies(origin) {
     domain: hostname,
     path: "/",
     expires: -1,
-    httpOnly: true,
+    // Readable by the page, which is how PostHog knows to stay off for a probe
+    // (instrumentation-client.ts). It guards nothing, so there is nothing to hide.
+    httpOnly: false,
     secure,
     sameSite: "Strict",
   };
@@ -82,7 +84,9 @@ export function stagingCookies(origin) {
       httpOnly: true,
       // http on localhost drops a Secure cookie, so this must follow the target.
       secure,
-      sameSite: "Strict",
+      // As app/api/staging-login/route.ts sets it. Strict here would keep the walks
+      // bouncing off the password page after Stripe while testers no longer do.
+      sameSite: "Lax",
     },
   ];
 }

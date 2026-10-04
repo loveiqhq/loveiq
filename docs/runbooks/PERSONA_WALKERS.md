@@ -151,10 +151,10 @@ npx tsx scripts/walkers/walk.ts --persona "Spark Seeker" --device "Desktop Chrom
   same walks pay on macOS. The runners are in the US, where Stripe's Link offers to save
   the card with its box ticked and then requires a phone number; the walk unticks it, as a
   buyer who only wants to pay would.
-- **Staging asks for its password after Stripe.** Its password cookie is `SameSite=Strict`,
-  so the browser leaves it off Stripe's redirect back. The gate keeps the page it was
-  protecting in `next`, and the walk goes there, as a tester would after typing the
-  password. loveiq.org has no gate, so a real buyer never sees this.
+- **Staging used to ask for its password after Stripe.** Its password cookie was
+  `SameSite=Strict`, so the browser left it off Stripe's redirect back. Since 2026-09-30 it
+  is `Lax`, which is sent on that redirect. If the password page ever comes back, the walk
+  still follows the `next` it keeps, as a tester would after typing the password.
 - **The judge is a model.** Its precision has not been measured against a labelled set
   yet, which is why a second pass has to confirm each finding. It checks each finding
   against the screenshots, because the text in `walk.json` is a capture and can miss

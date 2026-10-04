@@ -10,6 +10,7 @@ import {
 } from "@features/report/server/emails/nurture/chapter-nudge";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
+import { EMAIL_LOGO_PATH } from "@shared/emails/shared";
 
 const SITE = "https://loveiq.org";
 const CTA = "https://loveiq.org/report/rpt_abc?offer=1";
@@ -210,7 +211,7 @@ describe("chapter-nudge email (Figma 7725-11594)", () => {
 
   it("hides the in-card LoveIQ logo header (matches Figma)", () => {
     const out = chapterNudgeEmail(baseParams);
-    expect(out.html).not.toContain("apple-touch-icon");
+    expect(out.html).not.toContain(EMAIL_LOGO_PATH);
     // The brand wordmark only renders inside the (now hidden) header.
     expect(out.html).not.toContain(">Love</span>");
   });
