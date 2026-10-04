@@ -142,6 +142,28 @@ function secs(ms: number): string {
   return s >= 60 ? `${Math.round(s)}s` : `${s.toFixed(1)}s`;
 }
 
+/** Only rank questions with enough traffic for a rate to mean anything. */
+const FLOOR = 20;
+
+/** The share of sessions that reach a question and end there. */
+const endRate = (q: FrictionQuestion) => computeRate(q.abandons, q.visits);
+
+/**
+ * Where sessions end, one bar per question, in question order.
+ *
+ * The same floor and the same rate as the "end there" sentence, so the chart's
+ * tallest bar is always the question that sentence names. The weekly drop-off
+ * chart measures something else (reached a question, never reached the next)
+ * and disagreed with the sentence by 6 points at Q58 on the 30 days to
+ * 2026-09-18, so it is not reused here.
+ */
+export function sessionEnds(snap: FrictionSnapshot): Array<{ label: string; pct: number }> {
+  return (snap.questions ?? [])
+    .filter((q) => q.visits >= FLOOR)
+    .sort((a, b) => a.question_index - b.question_index)
+    .map((q) => ({ label: `Q${q.question_index + 1}`, pct: endRate(q) }));
+}
+
 /**
  * The survey half of the scoreboard: seven of Marcus's signals off one query.
  *
@@ -157,16 +179,12 @@ export function buildSurveySignals(
   const qs = snap.questions ?? [];
   if (qs.length === 0 || snap.total_rows === 0) return signals;
 
-  /** Only rank questions with enough traffic for a rate to mean anything. */
-  const FLOOR = 20;
   const ranked = qs.filter((q) => q.visits >= FLOOR);
   const label = (q: FrictionQuestion) => qLabel(q.question_index, q.q_id, questionNames);
   const plain = (q: FrictionQuestion) => qPlain(q.question_index, q.q_id, questionNames);
 
   // --- Drop-off / exit point -------------------------------------------------
-  const worstDrop = ranked
-    .map((q) => ({ q, pct: computeRate(q.abandons, q.visits) }))
-    .sort((a, b) => b.pct - a.pct)[0];
+  const worstDrop = ranked.map((q) => ({ q, pct: endRate(q) })).sort((a, b) => b.pct - a.pct)[0];
   if (worstDrop) {
     signals.push({
       /**
@@ -449,6 +467,8 @@ export interface FrictionReport {
   /** How many raw rows the aggregate actually saw. Printed so a truncation
    *  like the PostgREST one can never hide again. */
   rowsRead: number;
+  /** Where sessions end, per question. See `sessionEnds`. */
+  ends?: Array<{ label: string; pct: number }>;
 }
 
 export async function buildFrictionReport(
@@ -467,6 +487,7 @@ export async function buildFrictionReport(
       ...(report ? buildReportSignals(report) : []),
     ],
     rowsRead: snap.total_rows + (report?.total_rows ?? 0),
+    ends: sessionEnds(snap),
   };
 }
 

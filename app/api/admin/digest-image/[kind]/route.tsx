@@ -162,6 +162,12 @@ interface DropoutPayload {
   // (label + drop-off %) ride in the signed URL to stay under Slack's
   // ~3000-char image_url cap. `reached` is intentionally omitted.
   bars: Array<{ label: string; dropPct: number }>;
+  /**
+   * What the bar height measures, in words. The daily message plots where
+   * sessions END, which is a different measure from the weekly default below,
+   * and a chart has to say which one it is drawing.
+   */
+  footnote?: string;
 }
 
 /**
@@ -1026,16 +1032,12 @@ export function renderDropoutBars(p: DropoutPayload): {
                   top: DROPOUT_PLOT_H - h,
                   width: Math.max(2, slot - 1),
                   height: h,
-                  background: isWorst ? COLORS.danger : COLORS.accentOrange,
                   /**
-                   * 0.9, not 0.5. The de-emphasis was tuned against the old dark
-                   * surface, where half-strength orange still read as orange. Over
-                   * white the same 0.5 composites to #f0aa97 — 1.93:1, a hard
-                   * contrast failure for a DATA mark, and the bars came out pale
-                   * pink. 0.9 is the first step that passes (3.36:1) and the red
-                   * still carries the highlight on its own.
+                   * Slate, not orange: orange MEANS Landing Page V2 on every chart
+                   * now, and a question is not an arm. Same pair as the funnel
+                   * chart, so red means "look here" across the whole message.
                    */
-                  opacity: isWorst ? 1 : 0.9,
+                  background: isWorst ? COLORS.danger : COLORS.neutral,
                   borderRadius: 1,
                 }}
               />
@@ -1138,7 +1140,8 @@ export function renderDropoutBars(p: DropoutPayload): {
         {/* What the axes MEAN, in words. A reader who has never seen this chart
             should not have to infer either one. */}
         <div style={{ display: "flex", marginTop: 4, fontSize: 12, color: COLORS.textMuted }}>
-          left: % of people who reach a question and do not continue · bottom: question order
+          {p.footnote ??
+            "left: % of people who reach a question and do not continue · bottom: question order"}
         </div>
 
         <div

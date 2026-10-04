@@ -1,9 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const mockSupabaseFetch = vi.fn();
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
+}));
+
 import {
   WATCH_LIST_MAX,
+  buildFrictionReport,
   buildFrictionWatchList,
   buildReportSignals,
   buildSurveySignals,
+  sessionEnds,
   type FrictionQuestion,
   type FrictionSnapshot,
   type ReportFrictionSnapshot,
@@ -281,5 +289,57 @@ describe("buildFrictionWatchList", () => {
     // Flagged but cut are not "normal": they are counted as still needing a look.
     expect(text).toContain("_3 more need a look._");
     expect(text).not.toContain("look normal");
+  });
+});
+
+describe("sessionEnds", () => {
+  it("is in question order, skips thin questions, and peaks where the sentence points", () => {
+    const s = snap([
+      // 22.5% exactly: any other rate for the sentence rounds to a different
+      // whole number, so this cannot pass with the two computed differently.
+      q({ question_index: 57, visits: 200, abandons: 45, timed: 200 }),
+      q({ question_index: 0, abandons: 2 }),
+      // 3 of 4 is 75%: a bar this tall would out-shout every real question.
+      q({ question_index: 3, visits: 4, abandons: 3, timed: 4 }),
+      q({ question_index: 56, abandons: 16 }),
+    ]);
+    const ends = sessionEnds(s);
+    expect(ends).toEqual([
+      { label: "Q1", pct: 2 },
+      { label: "Q57", pct: 16 },
+      { label: "Q58", pct: 22.5 },
+    ]);
+    // The chart's tallest bar is the question the "end there" sentence names.
+    const top = [...ends].sort((a, b) => b.pct - a.pct)[0]!;
+    const drop = find(buildSurveySignals(s), "Where sessions end")!;
+    expect(drop.where).toBe(top.label);
+    expect(drop.value).toBe("23%");
+    expect(drop.value).toBe(`${Math.round(top.pct)}%`);
+  });
+});
+
+describe("buildFrictionReport", () => {
+  it("hands the digest the per-question ends from the same read as the sentence", async () => {
+    // Without this the chart could be dropped from production with every other
+    // test green: the digest tests build their reports by hand.
+    const questions = [
+      q({ question_index: 1, abandons: 3 }),
+      q({ question_index: 0, abandons: 2 }),
+      q({ question_index: 57, abandons: 19 }),
+    ];
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      path.includes("get_survey_friction")
+        ? new Response(JSON.stringify(snap(questions)), { status: 200 })
+        : new Response("{}", { status: 500 })
+    );
+    const report = await buildFrictionReport("2026-09-04T00:00:00Z", "2026-10-04T00:00:00Z");
+    expect(report?.ends).toEqual([
+      { label: "Q1", pct: 2 },
+      { label: "Q2", pct: 3 },
+      { label: "Q58", pct: 19 },
+    ]);
+    expect(find(report!.signals, "Where sessions end")?.sentence).toBe(
+      "19% of sessions that reach Q58 end there."
+    );
   });
 });

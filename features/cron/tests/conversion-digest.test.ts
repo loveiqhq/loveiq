@@ -92,7 +92,15 @@ import {
   buildArmSeries,
   buildSiteStartSeries,
   buildStartSeries,
+  buildTrailingSeries,
 } from "@/app/api/cron/conversion-digest/route";
+import { computeRate } from "@features/admin/server/digest-metrics";
+import {
+  buildSurveySignals,
+  sessionEnds,
+  type FrictionQuestion,
+  type FrictionReport,
+} from "@features/admin/server/friction-metrics";
 import {
   buildAlerts,
   buildArmVerdict,
@@ -3013,5 +3021,203 @@ describe("conversion-digest — the daily line carries what the day cost", () =>
     await run();
 
     expect(postedText()).toContain("EUR 0.00 spent");
+  });
+});
+
+/**
+ * The two pictures asked for on 2026-10-04 ("lets do 1 and 5"): where sessions
+ * end, question by question, and paywall to payment as a trend.
+ */
+describe("conversion-digest: where sessions end, and paywall to payment", () => {
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "test-digest-signing-secret-value";
+  });
+
+  /** 4 Sep to 3 Oct: the 30 days the 4 Oct message covers. */
+  const DAYS = Array.from({ length: 30 }, (_, i) =>
+    new Date(Date.UTC(2026, 8, 4) + i * 86_400_000).toISOString().slice(0, 10)
+  );
+
+  const build = (over: Partial<Parameters<typeof buildConversionDigest>[0]>) =>
+    buildConversionDigest({
+      dayKey: "2026-10-03",
+      funnel: null,
+      cohorts: [],
+      midway: null,
+      paywall: null,
+      unitEconomics: null,
+      emailExperiments: null,
+      now: new Date("2026-10-04T09:00:00Z"),
+      ...over,
+    });
+
+  const texts = (blocks: SlackBlock[]) =>
+    blocks.map((b) => (b as { text?: { text?: string } }).text?.text ?? "");
+
+  const imageOf = (blocks: SlackBlock[], kind: string) =>
+    blocks.find((b) =>
+      String((b as { image_url?: string }).image_url ?? "").includes(`/digest-image/${kind}`)
+    ) as { image_url: string; alt_text: string } | undefined;
+
+  const payloadOf = (img: { image_url: string }) =>
+    JSON.parse(
+      Buffer.from(new URL(img.image_url).searchParams.get("d")!, "base64").toString("utf8")
+    ) as Record<string, unknown>;
+
+  /**
+   * A survey's worth of questions, built by the REAL producers, so the sentence
+   * and the bars come from one snapshot exactly as they do in production. The
+   * email question (Q58) is the worst; Q41 is too thin to carry a rate.
+   */
+  function frictionReport(): FrictionReport {
+    const questions: FrictionQuestion[] = Array.from({ length: 60 }, (_, i) => ({
+      question_index: i,
+      q_id: `q${i}`,
+      visits: 1000 - i * 10,
+      abandons: i === 57 ? 76 : i === 55 ? 40 : i === 2 ? 59 : 10,
+      backs: 5,
+      skipped: 0,
+      median_ms: 9000,
+      timed: 900,
+    }));
+    // 4 of 5 leaving is 80%, and would top the chart if the floor were missing.
+    questions[40] = { ...questions[40]!, visits: 5, abandons: 4, timed: 5 };
+    const snap = { questions, total_rows: 30_000, total_timed: 27_000, median_ms: 9000 };
+    return {
+      signals: buildSurveySignals(snap, new Map([["q57", "What is your email?"]])),
+      rowsRead: 30_000,
+      ends: sessionEnds(snap),
+    };
+  }
+
+  it("draws where sessions end right under the stuck list, from the sentence's own numbers", async () => {
+    const { blocks } = await build({ friction: frictionReport() });
+    const at = texts(blocks).findIndex((t) => t.startsWith("*Where people get stuck*"));
+    expect(at).toBeGreaterThan(-1);
+    const img = blocks[at + 1] as { type: string; image_url: string; alt_text: string };
+    expect(img.type).toBe("image");
+    expect(img.image_url).toContain("/digest-image/dropout-funnel");
+
+    const p = payloadOf(img) as {
+      bars: Array<{ label: string; dropPct: number }>;
+      footnote: string;
+      windowLabel: string;
+    };
+    // Every question that clears the floor, in question order. The thin one is out.
+    expect(p.bars).toHaveLength(59);
+    expect(p.bars[0]!.label).toBe("Q1");
+    expect(p.bars.map((b) => b.label)).not.toContain("Q41");
+    // The tallest bar is the question the sentence names, at the number it prints.
+    const top = [...p.bars].sort((a, b) => b.dropPct - a.dropPct)[0]!;
+    expect(top.label).toBe("Q58");
+    expect(texts(blocks)[at]).toContain(
+      `${Math.round(top.dropPct)}% of sessions that reach Q58 (What is your email?) end there.`
+    );
+    // It names its own measure, which is not the weekly chart's.
+    expect(p.footnote).toContain("reach a question and end there");
+    expect(p.windowLabel).toBe("30 days to 3 Oct");
+    expect(img.alt_text).toBe("Where sessions end, by question. Highest: Q58 18%, Q56 9%, Q3 6%.");
+  });
+
+  it("draws no bars when fewer than two questions carry a rate", async () => {
+    const report = frictionReport();
+    const { blocks } = await build({ friction: { ...report, ends: report.ends!.slice(0, 1) } });
+    expect(texts(blocks).some((t) => t.startsWith("*Where people get stuck*"))).toBe(true);
+    expect(imageOf(blocks, "dropout-funnel")).toBeUndefined();
+  });
+
+  it("fits a whole survey of bars inside Slack's image link limit", async () => {
+    // Over the limit the chart is dropped with only a log line, so this is the
+    // test that notices. 62 questions, every rate with a decimal, worst case.
+    const ends = Array.from({ length: 62 }, (_, i) => ({ label: `Q${i + 1}`, pct: 10.5 + i }));
+    const { blocks } = await build({ friction: { ...frictionReport(), ends } });
+    expect(imageOf(blocks, "dropout-funnel")).toBeDefined();
+  });
+
+  /**
+   * Ten people a day at the paywall from 6 Sep, a sale every third day, and one
+   * more on the last day, so the latest week (3 of 70) differs from the first
+   * whole one (2 of 70) and a caption reading the wrong week cannot pass.
+   */
+  function paywallDays() {
+    return DAYS.map((day, i) => ({
+      day,
+      visitors: 400,
+      starts: 40,
+      // Not counted before 6 Sep, while sales still happened.
+      paygate: day < "2026-09-06" ? 0 : 10,
+      purchased: i % 3 === 0 || i === 29 ? 1 : 0,
+    }));
+  }
+  const PAYWALL = { hits: 280, firstRowDay: "2026-09-06" };
+
+  const paywallChart = (blocks: SlackBlock[]) =>
+    blocks.find(
+      (b) =>
+        (b as { type?: string }).type === "image" &&
+        payloadOf(b as { image_url: string }).title === "People at the paywall who pay"
+    ) as { image_url: string; alt_text: string } | undefined;
+
+  it("draws paywall to payment as a trend, with the counts behind the latest rate", async () => {
+    const cvrDays = paywallDays();
+    const { blocks } = await build({ cvrDays, paywall: PAYWALL });
+    const t = texts(blocks);
+    const at = t.findIndex((x) => x.startsWith("*People at the paywall who pay*"));
+    expect(at).toBeGreaterThan(-1);
+    // Paired with the other trend line, directly under it.
+    expect(String((blocks[at - 1] as { alt_text?: string }).alt_text)).toMatch(
+      /^Site-wide share of visits/
+    );
+    const img = blocks[at + 1] as { image_url: string };
+    expect(img).toBe(paywallChart(blocks));
+
+    const p = payloadOf(img) as {
+      first: Array<number | null>;
+      last?: unknown;
+      headline: string;
+      colorFirst: string;
+    };
+    // Not an arm: slate, and one series.
+    expect(p.last).toBeUndefined();
+    expect(p.colorFirst).toBe("#334155");
+    // The last point is the 7 days to 3 Oct, and the caption shows what it is made of.
+    const last7 = cvrDays.slice(-7);
+    const sales = last7.reduce((n, d) => n + d.purchased, 0);
+    const people = last7.reduce((n, d) => n + d.paygate, 0);
+    const rate = computeRate(sales, people);
+    expect(p.first.at(-1)).toBe(rate);
+    expect(t[at]).toContain(`${rate}% over the last 7 days (${sales} of ${people})`);
+    expect(p.headline).toContain(`${rate}% of people at the paywall paid`);
+  });
+
+  it("leaves a gap wherever the week reaches back before the paywall was counted", async () => {
+    const { blocks } = await build({ cvrDays: paywallDays(), paywall: PAYWALL });
+    const p = payloadOf(paywallChart(blocks)!) as { first: Array<number | null> };
+    // 10 and 11 Sep have a full week behind them, but it starts on 4 or 5 Sep: sales
+    // set against days with no paywall count. Drawn, the first would be the peak (6%).
+    expect(p.first.slice(0, 8)).toEqual(Array(8).fill(null));
+    // 12 Sep is the first week that starts on 6 Sep.
+    expect(p.first[8]).toBe(computeRate(2, 70));
+  });
+
+  it("draws no paywall line when nobody reached the paywall", async () => {
+    const cvrDays = paywallDays().map((d) => ({ ...d, paygate: 0 }));
+    const { blocks } = await build({ cvrDays, paywall: PAYWALL });
+    expect(texts(blocks).some((t) => t.includes("People at the paywall who pay"))).toBe(false);
+    // The survey-reach line is unaffected.
+    expect(texts(blocks).some((t) => t.startsWith("*Visits that reach the survey*"))).toBe(true);
+  });
+
+  it("treats a week with nobody in it as a gap, and a week where nobody bought as 0%", () => {
+    const days = DAYS.slice(0, 14).map((day, i) => ({ day, n: 0, d: i < 7 ? 0 : 5 }));
+    const s = buildTrailingSeries(
+      days,
+      (x) => x.n,
+      (x) => x.d
+    );
+    expect(s.values[6]).toBeNull();
+    expect(s.values[13]).toBe(0);
+    expect(s.counts[13]).toEqual({ num: 0, den: 35 });
   });
 });

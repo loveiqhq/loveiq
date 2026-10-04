@@ -189,7 +189,7 @@ function deployStamp(): string {
  */
 async function signedChartUrl(
   payload: Record<string, unknown>,
-  kind: "conversion-by-arm" | "funnel-steps" = "conversion-by-arm"
+  kind: "conversion-by-arm" | "funnel-steps" | "dropout-funnel" = "conversion-by-arm"
 ): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL;
   if (!base) {
@@ -311,26 +311,128 @@ export function buildArmSeries<T extends { arm: string; day: string; completions
  */
 export function buildSiteStartSeries(
   days: Array<{ day: string; visitors: number; starts: number }>
+): ReturnType<typeof buildTrailingSeries> {
+  return buildTrailingSeries(
+    days,
+    (d) => d.starts,
+    (d) => d.visitors
+  );
+}
+
+/**
+ * A rate for each day over the 7 days to it, from per-day counts. The one
+ * trailing window behind both trend lines.
+ *
+ * A point is a gap (null), never a zero, when:
+ *   * it is one of the first six days. Same warm-up rule as the other trailing
+ *     series: a window without seven days behind it is not the rate the
+ *     footnote promises.
+ *   * its window has an empty denominator.
+ *   * its window reaches back before `from`, the first day the step was
+ *     counted. Such a window sets a week of sales against a few days of paywall
+ *     hits and draws a spike that never happened.
+ */
+export function buildTrailingSeries<T extends { day: string }>(
+  days: T[],
+  numerator: (d: T) => number,
+  denominator: (d: T) => number,
+  from?: string | null
 ): {
   labels: string[];
   values: Array<number | null>;
+  /** Each point's two counts, so a caption can show what a rate is made of. */
+  counts: Array<{ num: number; den: number } | null>;
 } {
   const sorted = [...days].sort((a, b) => a.day.localeCompare(b.day));
+  const counts = sorted.map((_, idx) => {
+    if (idx < 6) return null;
+    const week = sorted.slice(idx - 6, idx + 1);
+    if (from && week[0]!.day < from) return null;
+    const num = week.reduce((t, d) => t + numerator(d), 0);
+    const den = week.reduce((t, d) => t + denominator(d), 0);
+    return den > 0 ? { num, den } : null;
+  });
   return {
     labels: sorted.map((d) => shortDay(d.day)),
-    values: sorted.map((_, idx) => {
-      // Same warm-up rule as the other trailing series: a window without seven
-      // days behind it is not the rate the footnote promises.
-      if (idx < 6) return null;
-      let visitors = 0;
-      let starts = 0;
-      for (let i = idx - 6; i <= idx; i += 1) {
-        visitors += sorted[i]!.visitors;
-        starts += sorted[i]!.starts;
-      }
-      return visitors > 0 ? computeRate(starts, visitors) : null;
-    }),
+    values: counts.map((c) => (c ? computeRate(c.num, c.den) : null)),
+    counts,
   };
+}
+
+/**
+ * A single-series trend: its caption, then its picture. Nothing when the series
+ * has no point or the chart cannot be signed.
+ *
+ * Drawn by the ARM renderer in single-series mode, not by the sparkline one the
+ * first trend started on. That renderer pinned its y-scale to the series' own
+ * max with no axis labels, which was measured: re-rendering the same shape at a
+ * tenth of the magnitude produced a byte-identical plot, so a 6% rate and a
+ * 0.6% rate drew the same picture. Three earlier commits fixed gridlines, tick
+ * alignment, the clipped peak and the rounding in the arm renderer and never
+ * touched the other one.
+ *
+ * Nulls are passed straight through: the arm renderer draws them as gaps, so
+ * the warm-up days need no slicing and an interior null stays a gap instead of
+ * being flattened to a plotted 0%.
+ *
+ * "Over the last 7 days", not "7-day trailing" or "7-day average": each point
+ * pools seven days of the numerator over seven days of the denominator, which
+ * is not an average of seven daily rates.
+ */
+async function trendBlocks(t: {
+  windowLabel: string;
+  title: string;
+  series: ReturnType<typeof buildTrailingSeries>;
+  /**
+   * Print the latest point's two counts beside its rate, "0% (0 of 87)". For a
+   * line that sits near zero, where the rate alone cannot say whether nobody
+   * bought out of three people or out of three hundred.
+   */
+  showCounts?: boolean;
+  /** The image's own headline, from the latest point. */
+  headline: (latest: number) => string;
+  footnote: string;
+  alt: (latest: number, peak: number) => string;
+}): Promise<SlackBlock[]> {
+  const real = t.series.values.filter((v): v is number => v != null);
+  if (real.length === 0) return [];
+  const latest = real[real.length - 1]!;
+  const latestCounts = t.series.counts.filter((c) => c !== null).at(-1);
+  const counts =
+    t.showCounts && latestCounts
+      ? ` (${latestCounts.num.toLocaleString("en-US")} of ${latestCounts.den.toLocaleString("en-US")})`
+      : "";
+  const peak = Math.max(...real);
+  const direction =
+    peak - latest >= 1
+      ? `, down from ${peak}% at its peak`
+      : latest - Math.min(...real) >= 1
+        ? `, up from ${Math.min(...real)}%`
+        : "";
+  const url = await signedChartUrl({
+    windowLabel: t.windowLabel,
+    labels: t.series.labels,
+    first: t.series.values,
+    // No `last` key at all: single-series mode. An all-null `last` would be a
+    // second arm with no data, which is a different statement.
+    title: t.title,
+    legendFirst: t.title,
+    /**
+     * Slate, not the categorical blue. Neither line is an arm, and blue means
+     * Landing Page V1 on the charts below — the same "follow the coloured line
+     * across two charts and you are following two different things" problem
+     * the per-arm colours were bound to fix. 10.35:1 on white.
+     */
+    colorFirst: "#334155",
+    headline: `${t.headline(latest)}${direction}`,
+    footnote: t.footnote,
+    emptyLabel: "Awaiting data: nothing recorded in this window yet.",
+  });
+  if (!url) return [];
+  return [
+    section(`*${t.title}*  ·  ${latest}% over the last 7 days${counts}${direction}.`),
+    { type: "image", image_url: url, alt_text: t.alt(latest, peak) },
+  ];
 }
 
 /**
@@ -466,8 +568,17 @@ interface DigestInput {
   emailExperiments: EmailExperimentRow[] | null;
   /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
   axisRows?: AxisFunnelRow[];
-  /** Site-wide visitors + starts per day, for the landing→survey trend line. */
-  cvrDays?: Array<{ day: string; visitors: number; starts: number }> | null;
+  /**
+   * Site-wide counts per day: visitors + starts for the survey-reach line,
+   * paywall hits + sales for the paywall line.
+   */
+  cvrDays?: Array<{
+    day: string;
+    visitors: number;
+    starts: number;
+    paygate?: number;
+    purchased?: number;
+  }> | null;
   /**
    * What was spent on ads on `dayKey`, or NULL when GA4 does not cover that day.
    *
@@ -503,6 +614,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // An overridden axis is being declared live, so its arms are live too.
   const includeRetired = input.liveAxesOverride !== undefined;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
+  /**
+   * The label in a chart's top corner. Short, because the long `windowLabel`
+   * wraps onto a second line there.
+   */
+  const chartWindow = `${WINDOW_DAYS} days to ${shortDay(dayKey)}`;
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
@@ -735,7 +851,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const funnelTitle = `The funnel, last ${WINDOW_DAYS} days`;
     const chartUrl = await signedChartUrl(
       {
-        windowLabel: `${WINDOW_DAYS} days to ${shortDay(dayKey)}`,
+        windowLabel: chartWindow,
         title: "The funnel",
         steps: steps.map((s, i) => ({ label: s.step, count: s.count, pct: stepPct(i) })),
         worst: worstIndex,
@@ -807,6 +923,34 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   if (input.friction && input.friction.signals.length > 0) {
     blocks.push(section(buildFrictionWatchList(input.friction, WINDOW_DAYS)));
+    /**
+     * Every question's "end there" share as a bar, so the worst ones are seen
+     * against the rest. Same numbers as the sentence above (`sessionEnds`), so
+     * the tallest red bar is always the question the sentence names.
+     */
+    const ends = input.friction.ends ?? [];
+    const endsUrl =
+      ends.length > 1
+        ? await signedChartUrl(
+            {
+              windowLabel: chartWindow,
+              bars: ends.map((e) => ({ label: e.label, dropPct: e.pct })),
+              footnote:
+                "left: % of sessions that reach a question and end there · bottom: question order",
+            },
+            "dropout-funnel"
+          )
+        : null;
+    if (endsUrl) {
+      const worst = [...ends].sort((a, b) => b.pct - a.pct).slice(0, 3);
+      blocks.push({
+        type: "image",
+        image_url: endsUrl,
+        alt_text: `Where sessions end, by question. Highest: ${worst
+          .map((e) => `${e.label} ${Math.round(e.pct)}%`)
+          .join(", ")}.`,
+      });
+    }
   }
 
   /**
@@ -822,71 +966,48 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    * has seen this line.
    */
   if (cvrDays && cvrDays.length > 0) {
-    const site = buildSiteStartSeries(cvrDays);
-    const real = site.values.filter((v): v is number => v != null);
-    if (real.length > 0) {
-      /**
-       * Drawn by the ARM renderer in single-series mode, not by the sparkline
-       * one it started on. That renderer pinned its y-scale to the series' own
-       * max with no axis labels, which was measured: re-rendering the same shape
-       * at a tenth of the magnitude produced a byte-identical plot — a 6% rate
-       * and a 0.6% rate drew the same picture, and the only thing that moved was
-       * a 98x10px text readout. Three earlier commits fixed gridlines, tick
-       * alignment, the clipped peak and the rounding in the arm renderer and
-       * never touched the other one, so this metric was promoted onto the
-       * pre-audit code path.
-       *
-       * Nulls are passed straight through now: the arm renderer draws them as
-       * gaps, so the six warm-up days need no slicing and — the part that
-       * actually mattered — an interior null from a day with no visitors stays a
-       * gap instead of being flattened to a plotted 0%.
-       */
-      const latest = real[real.length - 1]!;
-      const peak = Math.max(...real);
-      const direction =
-        peak - latest >= 1
-          ? `, down from ${peak}% at its peak`
-          : latest - Math.min(...real) >= 1
-            ? `, up from ${Math.min(...real)}%`
-            : "";
-      const url = await signedChartUrl({
-        windowLabel,
-        labels: site.labels,
-        first: site.values,
-        // No `last` key at all: single-series mode. An all-null `last` would be a
-        // second arm with no data, which is a different statement.
+    blocks.push(
+      ...(await trendBlocks({
+        windowLabel: chartWindow,
         title: "Visits that reach the survey",
-        legendFirst: "Visits that reach the survey",
-        /**
-         * Slate, not the categorical blue. This is the site TOTAL, not an arm, and
-         * it sits two blocks above a chart where blue means Landing Page V1 — the
-         * same "follow the coloured line across two charts and you are following
-         * two different things" problem the per-arm colours were bound to fix.
-         * 10.35:1 on white.
-         */
-        colorFirst: "#334155",
-        headline: `${latest}% of visits reach the survey${direction}`,
+        series: buildSiteStartSeries(cvrDays),
+        headline: (latest) => `${latest}% of visits reach the survey`,
         footnote:
           "survey starts ÷ visits, over the 7 days to each point · a gap is a day with no visits",
-        emptyLabel: "Awaiting data — no visits recorded in this window yet.",
-      });
-      if (url) {
-        /**
-         * "Visits", as the funnel's top row says, not "visit-days": the line that
-         * defined that word is gone. And "over the last 7 days", not "7-day
-         * trailing" or "7-day average": each point pools seven days of starts
-         * over seven days of visits, which is not an average of seven daily rates.
-         */
-        blocks.push(
-          section(`*Visits that reach the survey*  ·  ${latest}% over the last 7 days${direction}.`)
-        );
-        blocks.push({
-          type: "image",
-          image_url: url,
-          alt_text: `Site-wide share of visits that reach the survey, over the 7 days to each point. Currently ${latest}%, peak ${peak}%.`,
-        });
-      }
-    }
+        alt: (latest, peak) =>
+          `Site-wide share of visits that reach the survey, over the 7 days to each point. Currently ${latest}%, peak ${peak}%.`,
+      }))
+    );
+
+    /**
+     * Paywall → payment, the step Marcus is working on, as a trend: is the share
+     * of people at the paywall who pay moving? The funnel above says how many
+     * over 30 days; this says which way it is going.
+     *
+     * SALES, not unlocks: money moved, our own tests excluded, counted per
+     * person. The same definition as break-even, so the two never disagree about
+     * what a sale is. Event days on both sides, so a sale two days after its
+     * paywall hit lands in a later week than the hit; over seven days that is
+     * noise, not bias.
+     */
+    blocks.push(
+      ...(await trendBlocks({
+        windowLabel: chartWindow,
+        title: "People at the paywall who pay",
+        series: buildTrailingSeries(
+          cvrDays,
+          (d) => d.purchased ?? 0,
+          (d) => d.paygate ?? 0,
+          paywall?.firstRowDay
+        ),
+        showCounts: true,
+        headline: (latest) => `${latest}% of people at the paywall paid`,
+        footnote:
+          "sales ÷ people who reached the paywall, over the 7 days to each point · a gap is a week with no paywall data",
+        alt: (latest, peak) =>
+          `Share of people at the paywall who paid, over the 7 days to each point. Currently ${latest}%, peak ${peak}%.`,
+      }))
+    );
   }
 
   /**

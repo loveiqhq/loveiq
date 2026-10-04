@@ -200,3 +200,50 @@ describe("digest-image: which drop-offs the summary names", () => {
     expect(summary).toContain("Q2 5%");
   });
 });
+
+/** Every string drawn anywhere in the chart. */
+function stringsIn(node: unknown, out: string[] = []): string[] {
+  if (typeof node === "string") {
+    out.push(node);
+    return out;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) stringsIn(child, out);
+    return out;
+  }
+  if (!node || typeof node !== "object") return out;
+  const props = ((node as ReactElement<Record<string, unknown>>).props ?? {}) as Record<
+    string,
+    unknown
+  >;
+  if (props.children !== undefined) stringsIn(props.children, out);
+  return out;
+}
+
+describe("renderDropoutBars: what the bars measure", () => {
+  const bars = [
+    { label: "Q1", dropPct: 5 },
+    { label: "Q2", dropPct: 9 },
+  ];
+
+  it("prints the measure the caller names", () => {
+    // The daily message plots where sessions END, a different measure from the
+    // weekly chart's, and the picture has to say which one it is.
+    const all = stringsIn(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars,
+        footnote: "left: % of sessions that reach a question and end there",
+      }).element
+    );
+    expect(all).toContain("left: % of sessions that reach a question and end there");
+    expect(all.join(" ")).not.toContain("do not continue");
+  });
+
+  it("keeps the weekly chart's own measure when none is given", () => {
+    const all = stringsIn(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
+    expect(all).toContain(
+      "left: % of people who reach a question and do not continue · bottom: question order"
+    );
+  });
+});

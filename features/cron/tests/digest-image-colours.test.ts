@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ReactElement } from "react";
 
 import {
+  renderDropoutBars,
   renderDropoutByArm,
   renderLongitudinal,
   renderStageConversion,
@@ -128,6 +129,24 @@ describe("digest-image: only experiment arms get the arm colours", () => {
     }
     // And every row shares the one ink, rather than cycling.
     expect(new Set(marks.filter((m) => m === "#334155")).size).toBe(1);
+  });
+
+  it("draws per-question drop-off bars in the neutral ink, red only on the worst three", () => {
+    // They were orange, which means Landing Page V2 everywhere else. A question
+    // is not an arm.
+    const { element } = renderDropoutBars({
+      kind: "dropout-funnel",
+      bars: Array.from({ length: 20 }, (_, i) => ({
+        label: `Q${i + 1}`,
+        dropPct: i === 7 ? 19 : 2 + (i % 4),
+      })),
+    });
+    const marks = marksIn(element);
+    for (const arm of ARM_COLOURS) {
+      expect(marks, `the drop-off chart used the ${arm} arm colour`).not.toContain(arm);
+    }
+    expect(marks.filter((m) => m === "#334155")).toHaveLength(17);
+    expect(marks.filter((m) => m === "#b91c1c")).toHaveLength(3);
   });
 
   it("draws nurture-stage bars in a neutral ink, not V1's blue", () => {
