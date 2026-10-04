@@ -17,10 +17,11 @@ updates:
     labels:
       - "dependencies"
     # Minor and patch updates arrive as two grouped PRs. Production minors used to
-    # be left out of their group, which did not give them PRs of their own: while a
-    # group PR is open, Dependabot marks every dependency of that type as handled
-    # and raises nothing else ("Found no dependencies to update", job log
-    # 2026-09-28). React 19.3, zod 4.6 and other minors never got a PR that way.
+    # sit outside the patch-only group. The docs say such updates get PRs of their
+    # own; in practice they did not. With a group PR open, the scheduled run logs
+    # "Adding dependencies as handled" for every dependency of that type, then
+    # "Found no dependencies to update" (job log 2026-09-28). React 19.3, zod 4.6
+    # and other production minors never got a PR.
     groups:
       development-dependencies:
         dependency-type: "development"
