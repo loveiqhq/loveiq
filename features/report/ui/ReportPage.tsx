@@ -591,7 +591,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     });
   }, [hasLockedPremiumCards, fullReportQuote, submissionId]);
   // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
-  // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report?invite=1
+  // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report/<token>?invite=1
   // — they would silently fail without this auto-open.
   const reportSearchParams = useSearchParams();
   const shouldAutoOpenInvite = viewMode === "owner" && reportSearchParams.get("invite") === "1";

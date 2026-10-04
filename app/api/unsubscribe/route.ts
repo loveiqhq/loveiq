@@ -57,7 +57,7 @@ const PAGE_CSS = [
   "a{color:#5900AC;text-decoration:none;font-weight:600}",
   ".back{margin-top:32px}",
   "form{margin-top:28px}",
-  "button{font:inherit;font-size:16px;font-weight:600;padding:12px 28px;border:0;border-radius:999px;background:#5900AC;color:#fff;cursor:pointer}",
+  "button{font:inherit;font-size:16px;font-weight:600;min-height:48px;padding:12px 28px;border:0;border-radius:999px;background:#5900AC;color:#fff;cursor:pointer}",
   "button:focus-visible{outline:3px solid #5900AC;outline-offset:3px}",
 ].join("");
 
