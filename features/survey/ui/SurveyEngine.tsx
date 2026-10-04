@@ -28,12 +28,8 @@ import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
-import {
-  BASE_STATE_KEY,
-  clearPersistedSurveyState,
-  QUESTION_STATE_KEY,
-} from "./hooks/surveyStorage";
-import { completedReportToken, copySurveySessionToReportSession } from "./hooks/surveySession";
+import { BASE_STATE_KEY, QUESTION_STATE_KEY } from "./hooks/surveyStorage";
+import { completedReportToken } from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
