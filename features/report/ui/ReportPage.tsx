@@ -2568,7 +2568,17 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   }
 
   if (status === "error" || !data) {
-    const statusState = getErrorState(error);
+    const notFound = error?.statusCode === 404 || error?.statusCode === 400;
+    // A shared link (rpts_) that is gone was withdrawn by its owner. The usual copy
+    // ("We emailed your report link when you finished") is about someone else's survey.
+    const statusState =
+      notFound && token?.startsWith("rpts_")
+        ? {
+            ...getErrorState(error),
+            title: "This shared report isn't available",
+            copy: "The person who shared it may have withdrawn the link. Ask them to send it again.",
+          }
+        : getErrorState(error);
     // "Reload report" must reload THIS report. Bare /report only works in the browser
     // that took the survey, so from an emailed link it could only say "Can't find
     // your report".
