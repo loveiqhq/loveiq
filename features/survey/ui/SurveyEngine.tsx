@@ -465,6 +465,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       // Finished, including a run restored onto its completion screen (hasCompleted is
       // only set by submitting in this mount): the same guard as goPrev, see #393.
       if (currentIndex >= totalQuestions || index === currentIndex) return;
+      // A Back the dialog did not catch (desktop Chrome's Back button is a traversal,
+      // not a close request) must not leave it open over a different question.
+      setShowPauseModal(false);
       trackNavigation(index < currentIndex ? "back" : "forward");
       goTo(index);
     };

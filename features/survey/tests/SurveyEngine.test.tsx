@@ -600,6 +600,30 @@ describe("SurveyEngine — Back with the pause dialog open", () => {
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
   });
 
+  it("closes the dialog when a Back it did not catch moves the question", () => {
+    // Chromium hands the dialog a CloseWatcher, which takes Android's back gesture and
+    // Escape but not desktop's Back button: that one is a plain traversal.
+    class FakeCloseWatcher {
+      onclose: (() => void) | null = null;
+      destroy() {}
+    }
+    vi.stubGlobal("CloseWatcher", FakeCloseWatcher);
+    try {
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+
+      act(() => {
+        window.history.replaceState(q(1, 0), "");
+        window.dispatchEvent(new PopStateEvent("popstate", { state: q(1, 0) }));
+      });
+
+      expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("does not move the question on ArrowLeft while the dialog is open", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
