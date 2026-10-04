@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Builds one zip per claude.ai skill in docs/claude-ai-skills/, for Settings → Capabilities
- * → Skills → Upload skill.
+ * Builds one zip per claude.ai skill in docs/claude-ai-skills/, for claude.ai → Organization
+ * settings → Plugins & skills → Add → Upload a skill (everyone), or Customize → Skills → Add →
+ * Upload skill (yourself only).
  *
  *   npm run skills:pack          # writes dist/claude-ai-skills/<name>.zip
  *
