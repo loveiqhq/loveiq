@@ -385,7 +385,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
           }}
           onSectionClick={handleSectionClick}
           onShareClick={
-            viewMode === "owner" && ownerToken
+            viewMode === "owner"
               ? () => {
                   trackReportShareOpened({ source: "drawer" });
                   onOpenShareModal();
@@ -411,7 +411,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
               }}
               onSectionClick={handleSectionClick}
               onShareClick={
-                viewMode === "owner" && ownerToken
+                viewMode === "owner"
                   ? () => {
                       trackReportShareOpened({ source: "sidebar" });
                       onOpenShareModal();
@@ -689,7 +689,9 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
         primaryArchetype={primaryArchetype}
         variant={pricingVariant}
       />
-      {viewMode === "owner" && ownerToken ? (
+      {/* The owner's even with no token, which a ?preview=1 page never has: sharing then
+       * says on Send that nothing went, where the sidebar used to show a dead button. */}
+      {viewMode === "owner" ? (
         <ShareReportModal
           open={isShareModalOpen}
           onClose={onCloseShareModal}

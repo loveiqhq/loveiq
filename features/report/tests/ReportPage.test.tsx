@@ -715,6 +715,33 @@ describe("ReportPage", () => {
     expect(screen.queryByRole("heading", { name: /unlock your reports/i })).not.toBeInTheDocument();
   });
 
+  it(
+    "opens Share Report on a report with no token behind it, as ?preview=1 is (Marcus, 2026-10-04)",
+    async () => {
+      // The preview route answers ownerToken: null. The sidebar drew the button disabled
+      // but styled live, and nothing opened. Now sharing opens and Send says nothing went.
+      const user = userEvent.setup();
+      const fetchSpy = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+      vi.stubGlobal("fetch", fetchSpy);
+      const paid = buildSuccessResponse();
+      paid.data.accessPlan = "full_report";
+      mockUseReportData.mockReturnValue(paid);
+
+      render(<ReportPage />);
+
+      await user.click(screen.getAllByRole("button", { name: /share report/i })[0]!);
+      const dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText(/email address/i), "friend@example.com");
+      await user.click(within(dialog).getByRole("button", { name: /share report/i }));
+
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent(/nothing was sent/i);
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("/api/report/share"))).toBe(
+        false
+      );
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
   it("does NOT open the offer modal for a paid customer on an ?offer=1 email link (Marcus regression)", () => {
     // A nurture/offer email link always carries ?offer=1. A customer who already
     // bought must land on their report, never the payment modal.

@@ -113,7 +113,12 @@ export function useReportShares(
 
   const add = useCallback<UseReportSharesResult["add"]>(
     async (recipientEmail, personalMessage) => {
-      if (!ownerToken) return { ok: false, error: "Missing report context." };
+      if (!ownerToken) {
+        return {
+          ok: false,
+          error: "Nothing was sent — open your report from its email link to share it.",
+        };
+      }
       setSubmitting(true);
       setError(null);
       try {
