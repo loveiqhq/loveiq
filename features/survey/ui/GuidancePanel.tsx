@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FC, type KeyboardEvent } from "react";
+import { useId, useState, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import { trackSurveyGuidanceExpanded } from "@features/analytics/client";
 import { questionGuide } from "./questions/QuestionHeading";
@@ -23,12 +23,6 @@ const Chevron: FC<{ open: boolean }> = ({ open }) => (
     <path d="m9 18 6-6-6-6" />
   </svg>
 );
-
-// Enter on a row opens it; it must not also reach SurveyEngine's window-level
-// "Enter = next question" shortcut.
-const keepEnterLocal = (e: KeyboardEvent) => {
-  if (e.key === "Enter") e.stopPropagation();
-};
 
 const Row: FC<{
   label: string;
@@ -53,7 +47,6 @@ const Row: FC<{
         aria-expanded={open}
         aria-controls={bodyId}
         onClick={toggle}
-        onKeyDown={keepEnterLocal}
         className={`flex w-full items-center gap-[6.4px] rounded-sm ${divider ? "pt-[11.8px]" : "pt-[12.8px]"} text-left font-sans text-[13px] font-semibold leading-[19px] text-[#6b5b95] transition-colors hover:text-[#4f4270] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6b5b95]/40`}
       >
         <Chevron open={open} />

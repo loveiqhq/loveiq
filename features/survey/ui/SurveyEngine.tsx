@@ -364,6 +364,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // Keyboard navigation
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      // Enter on a focused control is that control's own press: a scale point, an
+      // option, Previous/Next, a guidance row. Taking it here moved the survey on AND
+      // cancelled the press, so a changed answer was never saved, and Enter on Next
+      // moved twice. Enter anywhere else (a text box, the page) still means next.
+      if (e.key === "Enter" && e.target instanceof Element && e.target.closest("button, a")) {
+        return;
+      }
       if (e.key === "ArrowRight" || e.key === "Enter") {
         if (hasAnswer || !question?.required) {
           e.preventDefault();

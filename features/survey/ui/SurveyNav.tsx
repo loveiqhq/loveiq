@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC, KeyboardEvent } from "react";
+import type { FC } from "react";
 
 interface SurveyNavProps {
   canGoBack: boolean;
@@ -26,18 +26,11 @@ const Chevron: FC<{ d: string }> = ({ d }) => (
   </svg>
 );
 
-// A focused button already acts on Enter through its click. Letting the key also
-// reach SurveyEngine's window-level "Enter = next" shortcut moved twice per press.
-const keepEnterLocal = (e: KeyboardEvent) => {
-  if (e.key === "Enter") e.stopPropagation();
-};
-
 const SurveyNav: FC<SurveyNavProps> = ({ canGoBack, canGoNext, hasAnswer, onPrevious, onNext }) => (
   <nav className="flex items-center justify-between gap-3 px-[18.4px] pb-[18.4px] pt-[20.8px] sm:px-[35px] sm:pb-7">
     <button
       type="button"
       onClick={onPrevious}
-      onKeyDown={keepEnterLocal}
       disabled={!canGoBack}
       className="flex items-center gap-[6.4px] rounded-full border border-[rgba(22,16,33,0.09)] px-[17.6px] py-[8.6px] font-sans text-[14px] font-semibold leading-5 text-[#4a4458] transition-[background-color,opacity] hover:bg-[rgba(22,16,33,0.04)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-[0.32]"
     >
@@ -48,7 +41,6 @@ const SurveyNav: FC<SurveyNavProps> = ({ canGoBack, canGoNext, hasAnswer, onPrev
     <button
       type="button"
       onClick={onNext}
-      onKeyDown={keepEnterLocal}
       disabled={!canGoNext}
       className={`flex items-center gap-[7.2px] rounded-full bg-[#e8511f] px-6 py-[11.5px] font-sans text-[15px] font-bold leading-[21px] text-white transition-[opacity,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none ${
         hasAnswer

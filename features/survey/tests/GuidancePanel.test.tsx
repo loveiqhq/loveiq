@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
@@ -90,19 +90,6 @@ describe("GuidancePanel", () => {
       [{ question_id: "q1", section: "info", expanded: true }],
       [{ question_id: "q1", section: "info", expanded: false }],
     ]);
-  });
-
-  it("keeps Enter on a row from reaching the survey's Enter-for-next shortcut", () => {
-    const q = { ...baseQuestion, supportAndGuidance: "Guide" };
-    const onWindowKey = vi.fn();
-    window.addEventListener("keydown", onWindowKey);
-    try {
-      render(<GuidancePanel question={q} />);
-      fireEvent.keyDown(screen.getByRole("button", { name: "Info & guidance" }), { key: "Enter" });
-      expect(onWindowKey).not.toHaveBeenCalled();
-    } finally {
-      window.removeEventListener("keydown", onWindowKey);
-    }
   });
 
   it("never renders the legacy 'Answer option(s) explained' block", () => {
