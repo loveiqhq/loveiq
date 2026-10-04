@@ -281,38 +281,66 @@ export function columnForMonth(header: unknown[], year: number, month: number): 
 }
 
 /**
- * Whether the closed month's Adwords cell may take the spend: blank, not a number, or still the
- * month before's figure carried forward. A total entered from the invoice differs from both, and
- * is never replaced by the spend.
+ * Whether the closed month's Adwords cell may take the spend: blank, not a number, the month
+ * before's figure carried forward, or the month before's SPEND that this filing carried forward
+ * last month (`carriedSpend`). The last matters because a person corrects the month before by
+ * typing its invoice into that one cell, which leaves this month holding the old spend; without
+ * it, that spend read as an entered figure and was never replaced. An invoice total entered for
+ * this month differs from all of them, and is never replaced by the spend.
  */
-export function adsCellTakesSpend(row: unknown[], colIndex: number): boolean {
+export function adsCellTakesSpend(
+  row: unknown[],
+  colIndex: number,
+  carriedSpend?: number
+): boolean {
   const raw = row[colIndex];
   const current = raw === undefined || raw === "" ? NaN : Number(raw);
   if (!Number.isFinite(current)) return true;
-  const before = Number(row[colIndex - 1]);
-  return Number.isFinite(before) && Math.abs(current - before) < 0.005;
+  const same = (v: number) => Number.isFinite(v) && Math.abs(current - v) < 0.005;
+  return same(Number(row[colIndex - 1])) || (carriedSpend !== undefined && same(-carriedSpend));
 }
 
-/** A month's Google Ads spend in euros ("2026-09"), or null when it cannot be read in euros. */
-async function googleAdsSpend(month: string): Promise<number | null> {
+/**
+ * Google Ads spend in euros for each month from `from` to `to` ("2026-08", "2026-09"), months
+ * with no spend as 0; null when it cannot be read in euros.
+ */
+async function googleAdsSpend(from: string, to: string): Promise<Map<string, number> | null> {
   const token = await getDelegatedToken("ec@loveiq.org", ADWORDS_SCOPE);
   if (!token) return null;
+  const [y = 0, m = 0] = to.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
   try {
     const res = await gapi<{
-      results?: Array<{ customer?: { currencyCode?: string }; metrics?: { costMicros?: string } }>;
+      results?: Array<{
+        customer?: { currencyCode?: string };
+        segments?: { month?: string };
+        metrics?: { costMicros?: string };
+      }>;
     }>(GOOGLE_ADS_SEARCH, token, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        query: `SELECT customer.currency_code, metrics.cost_micros FROM customer WHERE segments.month = '${month}-01'`,
+        query: `SELECT customer.currency_code, segments.month, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${from}-01' AND '${lastDay}'`,
       }),
     });
     const rows = res.results ?? [];
     // The Costs tab is in euros, and no rate is invented here.
     if (rows.some((r) => r.customer?.currencyCode && r.customer.currencyCode !== "EUR"))
       return null;
-    const micros = rows.reduce((sum, r) => sum + Number(r.metrics?.costMicros ?? 0), 0);
-    return Number.isFinite(micros) ? Math.round(micros / 10_000) / 100 : null;
+    const micros = new Map<string, number>([
+      [from, 0],
+      [to, 0],
+    ]);
+    for (const r of rows) {
+      const month = String(r.segments?.month ?? "").slice(0, 7);
+      micros.set(month, (micros.get(month) ?? 0) + Number(r.metrics?.costMicros ?? 0));
+    }
+    const euros = new Map<string, number>();
+    for (const [month, v] of micros) {
+      if (!Number.isFinite(v)) return null;
+      euros.set(month, Math.round(v / 10_000) / 100);
+    }
+    return euros;
   } catch (err) {
     logger.warn({ err }, "file-invoices: the Google Ads spend could not be read");
     return null;
@@ -868,13 +896,18 @@ export async function GET(request: Request) {
       const shown = Number.isFinite(Number(adsCells[adsCol]))
         ? Number(adsCells[adsCol]).toFixed(2)
         : "(blank)";
-      if (!adsCellTakesSpend(adsCells, adsCol)) {
+      const before = new Date(Date.UTC(closed.getUTCFullYear(), closed.getUTCMonth() - 1, 1));
+      const beforeKey = before.toISOString().slice(0, 7);
+      const spends = await googleAdsSpend(beforeKey, closedKey);
+      if (spends === null) {
+        // Left stale, the month is not settled, and a run that records success says it is.
+        unwrittenClosed.push(`Adwords ${label}`);
+        adsNote = `:warning: *Google Ads ${label} could not be read from the Google Ads API*, so its line still shows ${shown}: if that is not the invoice, enter the invoice by hand.`;
+      } else if (!adsCellTakesSpend(adsCells, adsCol, spends.get(beforeKey))) {
         adsNote = `_Google Ads ${label}: ${shown} on the sheet, entered from the invoice, so left as is._`;
       } else {
-        const spend = await googleAdsSpend(closedKey);
-        if (spend === null) {
-          adsNote = `:warning: *Google Ads ${label} could not be read from the Google Ads API*, so its line still shows ${shown}: enter the invoice by hand.`;
-        } else if (spend > 0) {
+        const spend = spends.get(closedKey) ?? 0;
+        if (spend > 0) {
           const next = -spend;
           updates.push({
             range: `${SHEET_TAB}!${colLetter(adsCol)}${adsRow}:${colLetter(lastIndex)}${adsRow}`,
