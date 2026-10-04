@@ -79,7 +79,8 @@ vi.mock("@shared/auth/supabase-middleware", () => ({
   createSupabaseMiddleware: () => ({ auth: { getUser: mockGetUser } }),
 }));
 
-import { proxy, shouldCountSurveyView, shouldCountVisit } from "@/proxy";
+import { config, proxy, shouldCountSurveyView, shouldCountVisit } from "@/proxy";
+import { renderBrandHeader } from "@shared/emails/shared";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
 
@@ -910,5 +911,25 @@ describe("CSP — the consent banner can reach its own region lookup", () => {
     expect(allowsSubdomain, `connect-src does not permit directory.cookieyes.com: ${connect}`).toBe(
       true
     );
+  });
+});
+
+/**
+ * Every response this middleware touches says Cross-Origin-Resource-Policy: same-origin,
+ * and browsers enforce that on <img>. So an image an email draws must come from a path the
+ * middleware skips: served from the site root, the logo drew as a broken image inside
+ * Outlook on the web (2026-10-04).
+ */
+describe("the email logo stays outside the middleware", () => {
+  const runsOn = (path: string) => new RegExp(`^${config.matcher[0]!.source}$`).test(path);
+
+  it("serves the logo every email draws from a path the middleware skips", () => {
+    const src = /<img src="([^"]+)"/.exec(renderBrandHeader("https://www.loveiq.org"))?.[1];
+    expect(src).toBeDefined();
+    expect(runsOn(new URL(src!).pathname)).toBe(false);
+  });
+
+  it("would catch the old logo, which sat at the site root", () => {
+    expect(runsOn("/apple-touch-icon.png")).toBe(true);
   });
 });
