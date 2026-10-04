@@ -21,6 +21,7 @@ See [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md) for env vars, troubleshooting
 4. Run `npm run docs:truth` when your change touches docs, API routes, env vars, scripts, or workflows.
 5. Open a PR against `main`.
 6. Complete the PR checklist truthfully. If high-risk code changed without markdown updates, check `No doc impact` explicitly.
+7. When the work is done, request a review from Eman (`@eman-cickusic`): `gh pr edit <number> --add-reviewer eman-cickusic`. Every PR into `main` needs it, whether a person or an AI agent wrote it.
 
 The CI docs-impact gate blocks PRs that change `app/api/admin`, `app/admin`, `features/admin`, public API routes, `proxy.ts`, `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, package/env files, or workflow/docs scripts without either markdown changes or a checked `No doc impact` box.
 

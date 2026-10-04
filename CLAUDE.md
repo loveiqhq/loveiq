@@ -658,6 +658,7 @@ When working in this codebase:
 9. **Use existing utilities** - `shared/http/ratelimit.ts`, `shared/http/csrf.ts`, `features/analytics/client.ts`, `shared/observability/logger.ts`, `shared/http/circuit-breaker.ts`, `shared/http/fetch-with-timeout.ts`
 10. **Document unknowns** - If uncertain, note assumptions and which files to check
 11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `docs/plans/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `docs/runbooks/SECURITY.md`, `docs/runbooks/DEVELOPMENT.md`, `docs/architecture/*`) should remain in the repo.
+12. **Request Eman's review on every PR into `main`** - `main` deploys to production. When the work on a PR into `main` is done, request a review from Eman: `gh pr edit <number> --add-reviewer eman-cickusic`. This holds for every PR, whoever or whatever wrote it. `.github/CODEOWNERS` usually requests him when the PR opens; add him anyway, which does nothing if he is already requested. A PR opened from Eman's own account cannot request its author.
 
 ### Verify, then audit, then audit again
 
