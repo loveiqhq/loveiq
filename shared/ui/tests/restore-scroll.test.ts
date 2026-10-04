@@ -59,7 +59,6 @@ describe("restoreScroll", () => {
       "features/report/ui/ReportPricingModal.tsx",
       "features/report/ui/ShareReportModal.tsx",
       "features/report/ui/ReportMobileNav.tsx",
-      "features/survey/ui/SurveyPauseModal.tsx",
     ];
     const locksByHand = [
       "features/landing/ui/NavSection.tsx",

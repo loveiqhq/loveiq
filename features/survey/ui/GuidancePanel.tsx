@@ -1,85 +1,95 @@
 "use client";
 
-import { type FC } from "react";
+import { useId, useState, type FC, type KeyboardEvent } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
-import { useSurveyTheme } from "./SurveyThemeContext";
+import { trackSurveyGuidanceExpanded } from "@features/analytics/client";
+import { questionGuide } from "./questions/QuestionHeading";
 
 interface GuidancePanelProps {
   question: SurveyQuestion;
 }
 
-const BookIcon: FC = () => (
+const Chevron: FC<{ open: boolean }> = ({ open }) => (
   <svg
     aria-hidden
-    className="h-4 w-4 shrink-0"
+    className={`h-[13px] w-[13px] shrink-0 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
     viewBox="0 0 24 24"
     fill="none"
-    stroke="#A78BFA"
-    strokeWidth="2"
+    stroke="currentColor"
+    strokeWidth="2.1"
     strokeLinecap="round"
     strokeLinejoin="round"
   >
-    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    <path d="m9 18 6-6-6-6" />
   </svg>
 );
 
-const HelpCircleIcon: FC = () => (
-  <svg aria-hidden className="h-4 w-4 shrink-0" viewBox="0 0 16 16" fill="none">
-    <path
-      d="M8 14.665c3.682 0 6.667-2.984 6.667-6.666S11.682 1.332 8 1.332 1.333 4.317 1.333 7.999 4.318 14.665 8 14.665Z"
-      stroke="#A78BFA"
-      strokeWidth="1.333"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M6.06 6c.157-.445.466-.821.873-1.06a1.946 1.946 0 0 1 1.351-.307c.466.08.888.322 1.192.683.304.362.47.819.47 1.291 0 1.334-2 2-2 2"
-      stroke="#A78BFA"
-      strokeWidth="1.333"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M8 11.332h.007"
-      stroke="#A78BFA"
-      strokeWidth="1.333"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
+// Enter on a row opens it; it must not also reach SurveyEngine's window-level
+// "Enter = next question" shortcut.
+const keepEnterLocal = (e: KeyboardEvent) => {
+  if (e.key === "Enter") e.stopPropagation();
+};
 
-const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
-  const white = useSurveyTheme() === "white";
-  const supportText = question.supportAndGuidance || question.guide;
-  const howAnswerIsUsed = question.howAnswerIsUsed || question.comment;
+const Row: FC<{
+  label: string;
+  text: string;
+  questionId: string;
+  section: "info" | "why";
+  divider?: boolean;
+}> = ({ label, text, questionId, section, divider }) => {
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
 
-  if (!supportText && !howAnswerIsUsed) return null;
-
-  const titleClass = `font-serif text-[16px] font-semibold sm:text-[20px] ${white ? "text-[#161021]" : "text-white/90"}`;
-  const bodyClass = `font-sans text-[13px] leading-[1.6] ${white ? "text-[#6b6678]" : "text-white/70"}`;
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    trackSurveyGuidanceExpanded({ question_id: questionId, section, expanded: next });
+  };
 
   return (
-    <div className="flex flex-col gap-8">
-      {supportText && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <BookIcon />
-            <h4 className={titleClass}>Info and guidance</h4>
-          </div>
-          <p className={bodyClass}>{supportText}</p>
-        </div>
-      )}
+    <div className={divider ? "border-t border-[rgba(22,16,33,0.09)]" : undefined}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={toggle}
+        onKeyDown={keepEnterLocal}
+        className={`flex w-full items-center gap-[6.4px] rounded-sm ${divider ? "pt-[11.8px]" : "pt-[12.8px]"} text-left font-sans text-[13px] font-semibold leading-[19px] text-[#6b5b95] transition-colors hover:text-[#4f4270] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6b5b95]/40`}
+      >
+        <Chevron open={open} />
+        {label}
+      </button>
+      <p
+        id={bodyId}
+        hidden={!open}
+        className="whitespace-pre-line pl-[19.4px] pt-2 font-sans text-[13.5px] leading-[20.25px] text-[#4a4458]"
+      >
+        {text}
+      </p>
+    </div>
+  );
+};
 
-      {howAnswerIsUsed && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <HelpCircleIcon />
-            <h4 className={titleClass}>How this answer will be used</h4>
-          </div>
-          <p className={bodyClass}>{howAnswerIsUsed}</p>
-        </div>
+/**
+ * "Info & guidance" and "Why we ask this", both closed until tapped (Figma
+ * 11303:174). Info repeats the guide line under the title, as the frame does, and
+ * adds the answer instruction when the question has a separate one.
+ */
+const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
+  const guide = questionGuide(question);
+  const info =
+    question.formatGuidance && question.formatGuidance !== guide
+      ? `${guide}\n${question.formatGuidance}`
+      : guide;
+  const why = question.howAnswerIsUsed || question.comment || "";
+
+  if (!info && !why) return null;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {info && <Row label="Info & guidance" text={info} questionId={question.qId} section="info" />}
+      {why && (
+        <Row label="Why we ask this" text={why} questionId={question.qId} section="why" divider />
       )}
     </div>
   );

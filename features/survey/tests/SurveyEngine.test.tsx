@@ -67,7 +67,6 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyAnswer: vi.fn(),
   trackSurveyProgress: vi.fn(),
   trackSurveyComplete: vi.fn(),
-  trackSurveyPause: vi.fn(),
   trackSurveyFormError: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   setSurveyVariant: vi.fn(),
@@ -107,8 +106,12 @@ vi.mock("@features/survey/ui/questions/CountryQuestion", () => ({
   ),
 }));
 
-vi.mock("@features/survey/ui/SurveyHeader", () => ({
-  default: () => <div data-testid="survey-header" />,
+vi.mock("@features/survey/ui/SurveyProgress", () => ({
+  default: (props: { index: number; total: number }) => (
+    <div data-testid="survey-progress">
+      {props.index}/{props.total}
+    </div>
+  ),
 }));
 
 vi.mock("@features/survey/ui/SurveyNav", () => ({
@@ -255,10 +258,26 @@ describe("SurveyEngine", () => {
     expect(screen.getByText("Q4?")).toBeInTheDocument();
   });
 
-  it("shows survey header and nav when in question view", () => {
+  it("shows the nav and the progress strip when in question view", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-    expect(screen.getByTestId("survey-header")).toBeInTheDocument();
     expect(screen.getByTestId("survey-nav")).toBeInTheDocument();
+    expect(screen.getByTestId("survey-progress")).toBeInTheDocument();
+  });
+
+  it("feeds the progress strip the position on screen, out of the questions asked", () => {
+    // A landing-prefilled question leaves the flow, so the strip must count what
+    // is actually asked: 4 fixture questions minus q2 is 3, and index 1 is Q3.
+    mockPrefilled = ["q2"];
+    mockCurrentIndex = 1;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-progress")).toHaveTextContent("1/3");
+  });
+
+  it("offers no Pause or Auto-advance control any more", () => {
+    // Both left with the 2026-10-04 redesign (Figma 11303:174).
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /pause|save & exit/i })).toBeNull();
+    expect(screen.queryByText(/auto-advance/i)).toBeNull();
   });
 
   it("blocks progressing when a persisted multiselect answer exceeds maxSelections", () => {
