@@ -206,7 +206,9 @@ Consequences that need a legal decision (flagged 2026-08-10, not resolved here):
    those recordings are disclosed to an independent controller. Compounding
    this, the tag is **no longer consent-gated** (see §"Consent" below), so the
    disclosure happens without the Art. 9(2)(a) explicit consent that the privacy
-   policy §5 relies on. Restoring either control is a one-line change.
+   policy §5 relies on. Restoring either control is a one-line change. One narrow
+   exception since 2026-09-29: the free-text boxes for `16019` and `16020` carry
+   `data-clarity-mask="true"`, so what a respondent types there is not recorded.
 2. **No per-user erasure.** Clarity has no per-subject delete: Microsoft's FAQ
    states "You need to delete the entire project to delete user's data." This
    conflicts with the Art. 17 route in activity #14 — an erasure request cannot

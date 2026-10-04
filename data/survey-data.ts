@@ -1340,7 +1340,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16011",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "Which of these have you actually paid for in the last 12 months?",
+    question:
+      "For your Personal Development, which of these have you paid for in the last 12 months?",
     answerType: "multiple",
     options: [
       "Therapy, coaching, or counseling",
@@ -1552,7 +1553,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16018",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "We're building more of these. Want first access to what you picked?",
+    question:
+      "We're building more assessments, including one on the area you picked. Would you like first access when we launch?",
     answerType: "single",
     options: ["Yes, tell me when it's ready", "No thanks"],
     required: true,
@@ -1565,5 +1567,45 @@ export const surveyQuestions: SurveyQuestion[] = [
     howAnswerIsUsed:
       "The only behavioural signal in this block. What people say they want and what they sign up for usually differ, and the sign-up is the one to trust.",
     formatGuidance: "Select one option.",
+  },
+  {
+    qId: "16019",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question: "Was there a learning or insight that profoundly changed or improved your sexuality?",
+    answerType: "open",
+    options: ["Free text"],
+    required: false,
+    guide:
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
+    supportAndGuidance:
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
+    inputType: "text",
+    placeholder:
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
+    comment:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    howAnswerIsUsed:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    formatGuidance: "Optional. Share as much or as little as you like.",
+  },
+  {
+    qId: "16020",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question:
+      "What are books, articles, blogs or YouTube channels around sexuality that helped you?",
+    answerType: "open",
+    options: ["Free text"],
+    required: false,
+    guide: "Post any links or names that reference to the helpful content",
+    supportAndGuidance: "Post any links or names that reference to the helpful content",
+    inputType: "text",
+    placeholder: "Post any links or names that reference to the helpful content",
+    comment:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    howAnswerIsUsed:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    formatGuidance: "Optional. Share as much or as little as you like.",
   },
 ];

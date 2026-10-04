@@ -1,9 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
 
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
+import { optionGroupsFor } from "../features/survey/optionGroups";
 import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
 import { orderAskedQuestions, orderedOptions } from "../features/survey/ui/questionOrder";
 import { pinSurveySession } from "./surveyArm";
+import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
 
 /**
  * Walks the whole survey in a real browser and checks the three behaviours the survey
@@ -115,6 +117,7 @@ async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: stri
       await page.getByRole("radio").first().click();
       break;
     case "multiple":
+      await openFirstCategory(page, q); // C9's topics sit under closed categories
       await page.getByRole("checkbox").first().click();
       break;
     case "country":
@@ -177,8 +180,11 @@ test.describe("Survey — the questions the work order changed", () => {
       if (RANDOMISE_QIDS.has(q.qId)) {
         // C0. The order on screen must equal the order `useSubmitSurvey` recomputes for
         // this session — that equality IS the feature. If they can differ, the recorded
-        // order is a fiction and the rankings built on it are worse than no data.
-        const shown = await renderedOptions(page, "checkbox");
+        // order is a fiction and the rankings built on it are worse than no data. C9 shows
+        // its topics category by category, so it is read by opening each one in turn.
+        const shown = optionGroupsFor(q)
+          ? await renderedGroupedOptions(page, q)
+          : await renderedOptions(page, "checkbox");
         const expected = orderedOptions(q, sessionId!);
         expect(shown.length, `${q.qId} option count`).toBe(expected.length);
         shown.forEach((label, idx) => {

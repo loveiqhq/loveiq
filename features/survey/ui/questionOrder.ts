@@ -1,3 +1,4 @@
+import { optionGroupsFor, type OptionGroup } from "@features/survey/optionGroups";
 import { isRandomised } from "@features/survey/questionFlags";
 import type { QuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
@@ -73,6 +74,46 @@ export function orderDemandBlockBeforeEmail(questions: SurveyQuestion[]): Survey
   if (anchorIdx === -1) return questions; // defensive: no anchor, leave untouched
 
   return [...rest.slice(0, anchorIdx), ...block, ...rest.slice(anchorIdx)];
+}
+
+/**
+ * Mark's two open-text content asks (29.09, worded by Marcus 30.09): a learning or insight
+ * that changed or improved someone's sexuality, and the books, articles, blogs or YouTube
+ * channels that helped them. Both are optional, and both feed the report's Learn and Practice sections rather
+ * than the archetype.
+ */
+export const CONTENT_ASK_QIDS: readonly string[] = ["16019", "16020"];
+
+/**
+ * Move the content asks to sit immediately before C9 (16016).
+ *
+ * WHY THESE IDS, AND WHY A RENDER-TIME MOVE. The same two reasons as the demand block:
+ * every id below the opt-in is live or retired-but-still-holding-answers, so these were
+ * allocated above the demand block, and `scripts/update-survey.js` sorts by qId, so without
+ * this they would render after the opt-in.
+ *
+ * WHY BEFORE C9 (Fatih, 29.09). The buying and spend questions before them are about the
+ * respondent's sex life; C9 opens "Beyond sex". Asking these two first keeps the
+ * sexuality questions together and lets the demand block lead into email and the opt-in.
+ * Never between C9 and C10 or C12, which refer back to C9's picks.
+ *
+ * Anchors on C9, then email, then the opt-in, so the asks never land after the final
+ * question whichever of those is present. Pure and total, like the stages above: a
+ * permutation that keeps every other question's relative order and the asks' own order.
+ */
+export function orderContentAsksBeforeDemandBlock(questions: SurveyQuestion[]): SurveyQuestion[] {
+  const asks = CONTENT_ASK_QIDS.map((qId) => questions.find((q) => q.qId === qId)).filter(
+    (q): q is SurveyQuestion => q !== undefined
+  );
+  if (asks.length === 0) return questions; // nothing to move
+
+  const rest = questions.filter((q) => !CONTENT_ASK_QIDS.includes(q.qId));
+  const anchorIdx = [DEMAND_BLOCK_QIDS[0], EMAIL_QID, OPT_IN_QID]
+    .map((qId) => rest.findIndex((q) => q.qId === qId))
+    .find((idx) => idx !== -1);
+  if (anchorIdx === undefined) return questions; // defensive: no anchor, leave untouched
+
+  return [...rest.slice(0, anchorIdx), ...asks, ...rest.slice(anchorIdx)];
 }
 
 /**
@@ -179,7 +220,9 @@ export function orderAskedQuestions(
   questions: SurveyQuestion[],
   arm: QuestionOrderArm
 ): SurveyQuestion[] {
-  const base = orderDemandBlockBeforeEmail(orderEmailLast(questions));
+  const base = orderContentAsksBeforeDemandBlock(
+    orderDemandBlockBeforeEmail(orderEmailLast(questions))
+  );
   return arm === "variant" ? orderC13Opening(base) : base;
 }
 
@@ -210,10 +253,63 @@ function mulberry32(seed: number): () => number {
 }
 
 /**
+ * `items` in a seeded random order: a copy, never the input.
+ *
+ * Fisher-Yates, descending, each index landing on a uniformly chosen remaining element,
+ * drawn from `mulberry32(hashSeed(seed))`. This is the exact loop `orderedOptions` always
+ * ran, lifted out so the categories and each category's topics can share it. The flat
+ * orders it produces are unchanged, which `orderedOptions.test.ts` pins.
+ */
+function shuffled<T>(items: readonly T[], seed: string): T[] {
+  const rand = mulberry32(hashSeed(seed));
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+/**
+ * The categories of a grouped question (see `optionGroups.ts`), in the order this session
+ * should see them, or `undefined` when the question has no categories.
+ *
+ * Two levels, each its own seeded stream: the category order from `sessionId:qId`, and
+ * each category's topics from `sessionId:qId:label`. Position bias does not go away when
+ * a list is folded into headings. The first heading is the one opened most, so its order
+ * is randomised as well as the order inside it. A seed per category keeps two
+ * equal-length categories from moving in lockstep.
+ *
+ * Without a session id, or for a question outside `RANDOMISE_QIDS`, both levels stay in
+ * authored order: shuffled if and only if recorded.
+ */
+export function orderedOptionGroups(
+  question: SurveyQuestion,
+  sessionId: string
+): OptionGroup[] | undefined {
+  const groups = optionGroupsFor(question);
+  if (!groups) return undefined;
+
+  if (!sessionId || !isRandomised(question.qId)) {
+    return groups.map((group) => ({ label: group.label, options: [...group.options] }));
+  }
+
+  return shuffled(groups, `${sessionId}:${question.qId}`).map((group) => ({
+    label: group.label,
+    options: shuffled(group.options, `${sessionId}:${question.qId}:${group.label}`),
+  }));
+}
+
+/**
  * The options of `question`, in the order this session should see them.
  *
  * Randomised only for questions in `RANDOMISE_QIDS`; everything else is returned
  * untouched, in authored order.
+ *
+ * A grouped question returns its categories' flattened order (`orderedOptionGroups`),
+ * category by category. That is the order its page shows from the top down, and it is
+ * what `buildOptionOrder` records at submit, so the stored order stays the one the
+ * respondent saw.
  *
  * Seeded from the session id AND the qId, never from `Math.random()`. Two reasons this
  * matters rather than being a style preference:
@@ -230,6 +326,9 @@ function mulberry32(seed: number): () => number {
  * duplicates — so callers can treat it as a reordering and nothing else.
  */
 export function orderedOptions(question: SurveyQuestion, sessionId: string): string[] {
+  const groups = orderedOptionGroups(question, sessionId);
+  if (groups) return groups.flatMap((group) => group.options);
+
   // No session id means storage is blocked (see `getSessionId`), and the submit path
   // records no order for that respondent. Shuffling anyway would show an order nothing
   // recorded — worse than not shuffling, because the resulting answer looks comparable
@@ -237,12 +336,5 @@ export function orderedOptions(question: SurveyQuestion, sessionId: string): str
   if (!sessionId) return question.options;
   if (!isRandomised(question.qId) || question.options.length < 2) return question.options;
 
-  const rand = mulberry32(hashSeed(`${sessionId}:${question.qId}`));
-  const out = [...question.options];
-  // Fisher-Yates, descending — each index lands on a uniformly chosen remaining element.
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rand() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
+  return shuffled(question.options, `${sessionId}:${question.qId}`);
 }

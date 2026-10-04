@@ -4,6 +4,7 @@ import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden } from "../features/survey/questionFlags";
 import { OPT_IN_QID, orderAskedQuestions } from "../features/survey/ui/questionOrder";
 import { pinSurveySession } from "./surveyArm";
+import { openFirstCategory } from "./surveyGroups";
 
 /**
  * The last question's answer must survive into the submit payload.
@@ -120,6 +121,7 @@ test("the final answer reaches the submit payload even when Next is clicked inst
         await page.getByRole("radio").first().click();
         break;
       case "multiple":
+        await openFirstCategory(page, q); // C9's topics sit under closed categories
         await page.getByRole("checkbox").first().click();
         needsNext = true;
         break;

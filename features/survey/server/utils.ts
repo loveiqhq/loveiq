@@ -13,6 +13,48 @@ import type { SurveyAnswers, SurveyAnswerValue } from "./types";
 export const SURVEY_TOTAL_QUESTIONS = surveyQuestions.filter((q) => !isHidden(q.qId)).length;
 
 /**
+ * Questions a respondent may leave blank: `required: false` in the survey data, which
+ * `scripts/update-survey.js` derives from guidance copy that begins "Optional". Today that
+ * is Mark's two content asks, 16019 and 16020.
+ */
+const OPTIONAL_QIDS: ReadonlySet<string> = new Set(
+  surveyQuestions.filter((q) => !q.required).map((q) => q.qId)
+);
+
+/**
+ * How many asked questions must be answered before a draft counts as finished.
+ *
+ * `SURVEY_TOTAL_QUESTIONS` still counts the optional ones, because it is what "Question X of
+ * N" shows. Completion cannot wait on them: a respondent who skipped both content asks has
+ * finished, and counting the asks would keep them off the admin recovery list.
+ */
+const SURVEY_REQUIRED_QUESTIONS = surveyQuestions.filter(
+  (q) => !isHidden(q.qId) && !OPTIONAL_QIDS.has(q.qId)
+).length;
+
+/** Answers that count toward completion: everything except `_other` text and optional asks. */
+function countRequiredAnswers(answers: SurveyAnswers): number {
+  return Object.keys(answers).filter((key) => !key.endsWith("_other") && !OPTIONAL_QIDS.has(key))
+    .length;
+}
+
+/**
+ * `answers` without optional answers that say nothing.
+ *
+ * A respondent who types into an optional box and then clears it leaves `""` behind, and
+ * `submit_survey` would store that as an empty `answer_text` row that reads as answered.
+ * Dropped here, at the trust boundary, before anything counts, scores or stores the
+ * answers. Required questions are never touched: what their blanks mean is not this
+ * function's call.
+ */
+export function dropBlankOptionalAnswers<T extends Record<string, unknown>>(answers: T): T {
+  const kept = Object.entries(answers).filter(
+    ([qId, value]) => !(OPTIONAL_QIDS.has(qId) && typeof value === "string" && !value.trim())
+  );
+  return Object.fromEntries(kept) as T;
+}
+
+/**
  * Question id → how many options may be selected, for the questions that cap.
  *
  * The cap is authored as ordinary guidance copy ("Select up to two options.") and parsed
@@ -63,9 +105,11 @@ export function isCompletionReady(currentIndex: number, answers: SurveyAnswers):
   // Also count-based, not index-only: a question answered on the landing page is
   // dropped from the survey flow, so those visitors finish with `currentIndex`
   // one short of the total. Judging by index alone would hide them from the
-  // admin recovery list. Having answered everything is the real signal.
+  // admin recovery list. Having answered every REQUIRED question is the real
+  // signal; the optional content asks may be skipped.
   const reachedEnd =
-    currentIndex >= SURVEY_TOTAL_QUESTIONS || countSurveyAnswers(answers) >= SURVEY_TOTAL_QUESTIONS;
+    currentIndex >= SURVEY_TOTAL_QUESTIONS ||
+    countRequiredAnswers(answers) >= SURVEY_REQUIRED_QUESTIONS;
   return reachedEnd && normalizeSurveyEmail(answers["00000"]).length > 0;
 }
 

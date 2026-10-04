@@ -10,6 +10,7 @@ import {
   DEMAND_BLOCK_QIDS,
   EMAIL_QID,
   OPT_IN_QID,
+  orderAskedQuestions,
   orderDemandBlockBeforeEmail,
   orderEmailLast,
 } from "@features/survey/ui/questionOrder";
@@ -61,7 +62,9 @@ describe("orderDemandBlockBeforeEmail", () => {
   });
 
   it("leaves the opt-in as the very last question", () => {
-    const out = ordered();
+    // Asserted on the whole composer: the content asks (16019, 16020) also sort after the
+    // opt-in, so this stage alone no longer ends on it.
+    const out = orderAskedQuestions(surveyQuestions, "control");
     expect(out[out.length - 1]!.qId).toBe(OPT_IN_QID);
   });
 

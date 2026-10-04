@@ -77,12 +77,24 @@ function detectInputType(options, question) {
   return "text";
 }
 
+// ─── Placeholder authored inside "Answer options" ───────────────────────────────
+// The V3 sheet has no "Default input / placeholder" column, so the grey text in an open
+// question's box is written after the answer type: "Free text - Think of something…"
+// (Marcus, 30.09, for 16019 and 16020). Returns that text, or null when there is none.
+const FREE_TEXT_PLACEHOLDER = /^free text\s*[-–—:]\s*(.+)$/is;
+function parseFreeTextPlaceholder(options) {
+  const match = (options || "").trim().match(FREE_TEXT_PLACEHOLDER);
+  return match ? match[1].trim() : null;
+}
+
 // ─── Detect placeholder for open response ───────────────────────────────────────
 function detectPlaceholder(defaultInput, options, question) {
   // Use "Default input / placeholder" column if provided and not N/A
   if (defaultInput && defaultInput.trim() !== "" && defaultInput.trim().toLowerCase() !== "n/a") {
     return defaultInput.trim();
   }
+  const authored = parseFreeTextPlaceholder(options);
+  if (authored) return authored;
   // Fallback to old detection logic
   const lower = (options || "").toLowerCase();
   if (lower.includes("email")) return "your@email.com";
@@ -219,13 +231,19 @@ function main() {
     const answerOptions = (row["Answer options"] || row["Answer Options"] || "").trim();
     const answerTypeRaw = (row["Answer format"] || row["Answer Type"] || "").trim();
     const howAnswerIsUsed = cleanText(row["How this answer will be used"] || row["Comment"] || "");
-    // Marketing opt-in questions (e.g. Q16015) are not required.
-    // Convention: "Marketing opt-in" in the "How this answer will be used" column flips required→false.
-    const required = !/marketing opt-in/i.test(howAnswerIsUsed);
+    const formatGuidance = cleanText(row["Answer format guidance"] || "");
+    // Two conventions flip required→false, both read off copy the source already carries
+    // rather than a dedicated column (the V3 export drops columns; see questionFlags.ts):
+    //  - "Marketing opt-in" in the "How this answer will be used" column (e.g. Q16015);
+    //  - an "Answer format guidance" that begins "Optional" (Q16019, Q16020). That sentence
+    //    is the subtitle the respondent reads, the same way the selection cap below is read
+    //    out of "Select up to three options.", so what the respondent is told and how the
+    //    question behaves cannot drift apart.
+    const required =
+      !/marketing opt-in/i.test(howAnswerIsUsed) && !/^optional\b/i.test(formatGuidance);
     const supportAndGuidance = cleanText(
       row["Support and guidance"] || row["Guide (display)"] || row["Info and guidance"] || ""
     );
-    const formatGuidance = cleanText(row["Answer format guidance"] || "");
     // V3 CSV drops the explicit "Max selections" column. The cap was previously
     // embedded as "(Pick up to N.)" in the question text — V3 (May 2026) moved
     // that wording into the formatGuidance column as "Select up to N options." or
@@ -294,7 +312,12 @@ function main() {
       question,
       answerType,
       options:
-        answerType === "scale" || answerType === "country" ? [] : parseOptions(answerOptions),
+        answerType === "scale" || answerType === "country"
+          ? []
+          : // The placeholder after "Free text - " is shown in the box, not stored as an option.
+            answerType === "open" && parseFreeTextPlaceholder(answerOptions)
+            ? ["Free text"]
+            : parseOptions(answerOptions),
       required,
       guide: supportAndGuidance,
       supportAndGuidance,
@@ -446,4 +469,7 @@ export const surveyQuestions: SurveyQuestion[] = [\n`;
   console.log(`  ${questions.length} questions`);
 }
 
-main();
+// Run as a script; required (by the parser tests), it only exports.
+if (require.main === module) main();
+
+module.exports = { parseFreeTextPlaceholder };
