@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import TimeRangeSelector from "@features/admin/ui/TimeRangeSelector";
+import { SURVEY_TOTAL_QUESTIONS as TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
 interface PartialSave {
   id: number;
@@ -33,7 +34,6 @@ interface AbandonmentData {
 
 const TABS = ["Overview", "Partial Saves", "Kill Questions"] as const;
 type Tab = (typeof TABS)[number];
-const TOTAL_QUESTIONS = 61;
 
 export default function AbandonmentDashboard() {
   const [days, setDays] = useState(0);
