@@ -57,7 +57,7 @@ Includes:
 
 - Weekly npm dependency updates (Mondays 9am UTC): minor and patch updates arrive as one production and one development group PR
 - Monthly GitHub Actions updates, all actions in one PR (CodeQL's `init`, `analyze` and `autobuild` must share a version)
-- Deliberately ignored, with the reason next to each in the file: Tailwind and ESLint majors, Stripe minors and majors
+- Deliberately ignored, with the reason next to each in the file: Tailwind, ESLint, TypeScript, svix and msw majors, Stripe minors and majors
 - Reviewers come from `CODEOWNERS`; E2E runs on Dependabot PRs like on any other
 
 ### `SECURITY_CHECKLIST.md`

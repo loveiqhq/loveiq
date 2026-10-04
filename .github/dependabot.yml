@@ -50,6 +50,23 @@ updates:
       # checkout. Patches keep the API version and still arrive.
       - dependency-name: "stripe"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # TypeScript 7 (the native compiler) cannot be loaded by typescript-eslint:
+      # `npm run lint` dies in the module loader (PR #482, 2026-10-04). Revisit
+      # once typescript-eslint and Next.js support it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # svix 2's Webhook.verify() returns nothing instead of the payload, so
+      # app/api/resend/webhook/route.ts would need to parse the body itself. That
+      # is the signature check on our email webhook; change it on purpose, with
+      # tests, not as a bot bump (PR #483, 2026-10-04).
+      - dependency-name: "svix"
+        update-types: ["version-update:semver-major"]
+      # vitest 5's @vitest/mocker declares an optional peer of msw ^2. With msw 3,
+      # CI's npm 10 refuses the lockfile ("Missing: msw@2.15.0"), so `npm ci`
+      # fails before any test runs (PR #485, 2026-10-04). Revisit when that peer
+      # range includes msw 3.
+      - dependency-name: "msw"
+        update-types: ["version-update:semver-major"]
     versioning-strategy: increase
     commit-message:
       prefix: "chore"
