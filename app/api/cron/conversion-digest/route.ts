@@ -821,8 +821,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       section(
         [
           `*Break-even, last ${WINDOW_DAYS} days*`,
-          ...buildUnitEconomicsLines(unitEconomics),
+          // First: it is the fact people were counting by hand.
           ...(lastSaleLine ? [lastSaleLine] : []),
+          ...buildUnitEconomicsLines(unitEconomics),
         ].join("\n")
       )
     );
@@ -868,8 +869,10 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           first: spendLine,
           last: salesLine,
           title: "Ad spend vs sales",
-          legendFirst: "Ad spend, EUR",
-          legendLast: "Sales, EUR",
+          // The unit in brackets: the end labels keep only the words that differ
+          // once brackets are dropped, so they read "Ad spend" and "Sales".
+          legendFirst: "Ad spend (EUR)",
+          legendLast: "Sales (EUR)",
           // Neither series is a landing page, so neither takes an arm's colour:
           // slate for the cost, teal for the money in (5.47:1 on white).
           colorFirst: "#334155",
