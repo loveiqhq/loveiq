@@ -140,6 +140,15 @@ interface AdDay {
   campaigns: Map<string, number>;
 }
 
+/**
+ * Set by runGa4Report and queryGsc when they stop before the last page: the time budget,
+ * the paging budget or the page ceiling. They return the rows they have rather than throw,
+ * so a caller that sweeps must ask, or it deletes whatever the missing pages would have kept.
+ */
+export interface ReportOutcome {
+  truncated: boolean;
+}
+
 export interface Ga4Row {
   dimensionValues?: Array<{ value?: string }>;
   metricValues?: Array<{ value?: string }>;
@@ -172,7 +181,8 @@ export async function runGa4Report(
   token: string,
   propertyId: string,
   body: Record<string, unknown>,
-  isOutOfTime: () => boolean = () => false
+  isOutOfTime: () => boolean = () => false,
+  outcome?: ReportOutcome
 ): Promise<Ga4Row[]> {
   const pageSize = typeof body.limit === "number" ? body.limit : 10_000;
   const all: Ga4Row[] = [];
@@ -215,6 +225,7 @@ export async function runGa4Report(
         { got: all.length, dimensions: body.dimensions },
         "GA4 report stopped early on the time budget — figures derived from it are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -256,6 +267,7 @@ export async function runGa4Report(
         { got: all.length, total, dimensions: body.dimensions },
         "GA4 report hit the paging time budget — figures derived from it are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -265,6 +277,7 @@ export async function runGa4Report(
         { got: all.length, total, dimensions: body.dimensions },
         "GA4 report hit the page ceiling — figures derived from it are incomplete"
       );
+      if (outcome) outcome.truncated = true;
     }
   }
   return all;
@@ -785,7 +798,8 @@ export async function queryGsc(
   token: string,
   site: string,
   body: Record<string, unknown>,
-  isOutOfTime: () => boolean = () => false
+  isOutOfTime: () => boolean = () => false,
+  outcome?: ReportOutcome
 ): Promise<GscRow[]> {
   const pageSize = typeof body.rowLimit === "number" ? body.rowLimit : 5000;
   const all: GscRow[] = [];
@@ -805,6 +819,7 @@ export async function queryGsc(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query stopped early on the time budget — query totals are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -834,6 +849,7 @@ export async function queryGsc(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query hit the paging time budget — query totals are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -842,6 +858,7 @@ export async function queryGsc(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query hit the page ceiling — query totals are incomplete"
       );
+      if (outcome) outcome.truncated = true;
     }
   }
   return all;

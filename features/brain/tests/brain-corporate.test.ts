@@ -45,6 +45,7 @@ const r = (dims: string[], metrics: number[]) => ({
 
 let failSearch = false;
 let failLinkClicks = false;
+let truncateDays = false;
 
 /** Answers each report by the dimensions it asks for, like GA4 and Search Console do. */
 vi.mock("@shared/http/fetch-with-timeout", () => ({
@@ -93,6 +94,8 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       "yearMonth,linkDomain": [r(["202610", "loveiq.org"], [2])],
     };
     if (dims === "yearMonth,linkDomain" && failLinkClicks) return bad;
+    // More rows than any page returns, so the report pages until its ceiling and stops short.
+    if (dims === "date" && truncateDays) return ok({ rows: [rows.date![0]], rowCount: 1000 });
     const found = rows[dims] ?? [];
     return ok({ rows: found, rowCount: found.length });
   }),
@@ -109,6 +112,7 @@ describe("the corporate website's traffic and searches", () => {
     written = [];
     failSearch = false;
     failLinkClicks = false;
+    truncateDays = false;
   });
 
   it("writes everything under `corporate`, never ga4 or gsc, so neither sweep deletes the other", async () => {
@@ -159,6 +163,19 @@ describe("the corporate website's traffic and searches", () => {
     expect(byId("ga4-day:2026-10-01")).toBeDefined();
     expect(written.some((w) => w.source_id.startsWith("gsc-"))).toBe(false);
     expect(sweepStale).not.toHaveBeenCalled();
+  });
+
+  it("does not sweep when a report stopped before its last page", async () => {
+    truncateDays = true;
+    const result = await ingestCorporateSite(STAMP);
+    expect(result).toMatchObject({
+      source: "corporate",
+      complete: false,
+      sweepBlocked: true,
+      swept: 0,
+    });
+    expect(sweepStale).not.toHaveBeenCalled();
+    expect(byId("ga4-day:2026-10-01")).toBeDefined();
   });
 
   it("does not report zero clicks when the click report could not be read", async () => {

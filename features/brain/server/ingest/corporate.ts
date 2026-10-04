@@ -5,7 +5,15 @@ import {
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { isoWeek, longDate, longMonth, monthEnd } from "./analytics";
-import { ga4Date, isoWeekBounds, num, queryGsc, runGa4Report, type GscRow } from "./google";
+import {
+  ga4Date,
+  isoWeekBounds,
+  num,
+  queryGsc,
+  runGa4Report,
+  type GscRow,
+  type ReportOutcome,
+} from "./google";
 import {
   recordSweep,
   shouldSweep,
@@ -153,6 +161,9 @@ export async function ingestCorporateSite(
     { name: "screenPageViews" },
     { name: "engagedSessions" },
   ];
+  // A report that stops before its last page still returns rows, so the sweep must ask:
+  // deleting what a cut-short report did not list would delete real history.
+  const outcome: ReportOutcome = { truncated: false };
   const report = (dimensions: string[], extra: Record<string, unknown> = {}) =>
     runGa4Report(
       token,
@@ -164,7 +175,8 @@ export async function ingestCorporateSite(
         limit: 10_000,
         ...extra,
       },
-      isOutOfTime
+      isOutOfTime,
+      outcome
     );
 
   // Users are not additive, so each grain asks GA4 for its own unique counts; sessions,
@@ -225,7 +237,8 @@ export async function ingestCorporateSite(
         metrics: [{ name: "screenPageViews" }],
         limit: 10_000,
       },
-      isOutOfTime
+      isOutOfTime,
+      outcome
     )) {
       const month = ga4Month(r.dimensionValues?.[0]?.value ?? "");
       const page = topPages.get(month) ?? new Map<string, number>();
@@ -242,7 +255,8 @@ export async function ingestCorporateSite(
         dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { value: "click" } } },
         limit: 10_000,
       },
-      isOutOfTime
+      isOutOfTime,
+      outcome
     )) {
       const month = ga4Month(r.dimensionValues?.[0]?.value ?? "");
       const domain = r.dimensionValues?.[1]?.value;
@@ -268,13 +282,15 @@ export async function ingestCorporateSite(
       token,
       SITE,
       { ...body, dimensions: ["date"], rowLimit: 5000 },
-      isOutOfTime
+      isOutOfTime,
+      outcome
     );
     searchQueries = await queryGsc(
       token,
       SITE,
       { ...body, dimensions: ["date", "query"], rowLimit: 5000 },
-      isOutOfTime
+      isOutOfTime,
+      outcome
     );
   } catch (err) {
     searchError = err;
@@ -419,8 +435,14 @@ export async function ingestCorporateSite(
   const written = await upsertChunks(rows);
   if (searchError) throw searchError;
 
-  const sweeping = await shouldSweep(SOURCE);
+  const complete = !outcome.truncated;
+  const sweeping = complete && (await shouldSweep(SOURCE));
   if (sweeping) await recordSweep(SOURCE);
   const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written) : 0;
-  return { source: SOURCE, rows: written, swept };
+  return {
+    source: SOURCE,
+    rows: written,
+    swept,
+    ...(complete ? {} : { complete: false, sweepBlocked: true }),
+  };
 }
