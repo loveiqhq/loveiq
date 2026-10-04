@@ -836,12 +836,38 @@ describe("conversion-digest handler", () => {
         0
       );
       expect(chart!.last.at(-1)).toBe(Math.round(revenue));
+      // Spend totals fewer days than sales here, and the picture says so: it is
+      // forwarded without the break-even lines that carry the caveat.
       expect(chart!.headline).toBe(
-        `EUR ${(40 * (days.length - 1)).toLocaleString("en-US")} spent, EUR ${Math.round(revenue).toLocaleString("en-US")} earned`
+        `EUR ${(40 * (days.length - 1)).toLocaleString("en-US")} spent (${days.length - 1} of ${days.length} days reported), EUR ${Math.round(revenue).toLocaleString("en-US")} earned`
       );
+      expect(chart!.alt).toContain(`(${days.length - 1} of ${days.length} days reported)`);
       // Neither series is a landing page, so neither wears an arm's colour.
       expect([chart!.colorFirst, chart!.colorLast]).toEqual(["#334155", "#0f766e"]);
       expect(chart!.alt).toContain("spent");
+    });
+
+    it("says nothing about coverage when GA4 reported every day", async () => {
+      const days = fixtureDays();
+      mockAdCostByDay.mockResolvedValue({
+        byDay: new Map(days.map((d) => [d, 10])),
+        from: days[0]!,
+        to: days.at(-1)!,
+      });
+      await GET(request());
+      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+      expect(spendChart(arg.blocks)!.headline).not.toContain("reported");
+    });
+
+    it("still names the last sale when the payment figures cannot be read", async () => {
+      // The break-even block needs the payment ledger; the last sale needs only the
+      // funnel's rows. One failed read must not take both.
+      mockFetchUnitEconomics.mockResolvedValue(null);
+      await GET(request());
+      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+      const flat = blockText(arg.blocks);
+      expect(flat).not.toContain("Break-even");
+      expect(flat).toContain("• *Last sale:* ");
     });
 
     it("leaves the chart out when GA4 covers no day at all", async () => {

@@ -827,6 +827,10 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         ].join("\n")
       )
     );
+  } else if (lastSaleLine) {
+    // A failed payment read costs the break-even figures, not the last sale: that
+    // comes from the funnel's own rows, which were read.
+    blocks.push(section(lastSaleLine));
   }
 
   /**
@@ -859,9 +863,16 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         spendLine.push(null);
       }
     }
-    if (spendLine.some((v) => v !== null) && days.length > 1) {
+    const covered = spendLine.filter((v) => v !== null).length;
+    if (covered > 0 && days.length > 1) {
       const lastSpend = [...spendLine].reverse().find((v): v is number => v !== null)!;
-      const totals = `EUR ${lastSpend.toLocaleString("en-US")} spent, EUR ${Math.round(earned).toLocaleString("en-US")} earned`;
+      /**
+       * Says so on the picture when GA4 has not reported every day, which is most
+       * days: it lags by one. Spend then totals fewer days than sales, and the
+       * image is forwarded without the break-even lines that carry the caveat.
+       */
+      const coverage = covered < days.length ? ` (${covered} of ${days.length} days reported)` : "";
+      const totals = `EUR ${lastSpend.toLocaleString("en-US")} spent${coverage}, EUR ${Math.round(earned).toLocaleString("en-US")} earned`;
       const url = await signedChartUrl(
         {
           windowLabel: `${WINDOW_DAYS} days to ${shortDay(dayKey)}`,
