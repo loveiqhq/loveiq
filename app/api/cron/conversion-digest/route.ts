@@ -189,7 +189,7 @@ function deployStamp(): string {
  */
 async function signedChartUrl(
   payload: Record<string, unknown>,
-  kind: "conversion-by-arm" | "funnel-steps" | "metric-trend" = "conversion-by-arm"
+  kind: "conversion-by-arm" | "funnel-steps" = "conversion-by-arm"
 ): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL;
   if (!base) {
@@ -482,14 +482,6 @@ interface DigestInput {
    * unavailable, which omits the section rather than printing an empty table.
    */
   friction?: FrictionReport | null;
-  /**
-   * GA4's ad spend per Berlin day and the days it covers, for the spend-vs-sales
-   * chart. REQUIRED for the same reason as `midway`: the preview script builds
-   * this input from its own fetch list, and an optional field lets it render a
-   * message the real one does not have. Null, or no covered day, leaves the
-   * chart out rather than drawing a sales line with nothing to compare it to.
-   */
-  ad: AdCost | null;
   now: Date;
 }
 
@@ -796,113 +788,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    * business case in three lines, and it goes above the friction detail because
    * it is the number a decision gets made on.
    */
-  /**
-   * The day of the last sale in the window: a day with a charge, not a free
-   * unlock. Mark (2026-09-30, WhatsApp): "We haven't had a single conversion for
-   * 16 days now", counted by hand. Null when there was none in the window.
-   */
-  const lastSaleDay = funnel
-    ? ([...new Set(funnel.daily.filter((r) => r.charges > 0).map((r) => r.day))].sort().at(-1) ??
-      null)
-    : null;
-  /** "5 Sep, 25 days ago", counted from today, the day after `dayKey`. */
-  const lastSaleLine = (() => {
-    if (!funnel) return null;
-    if (!lastSaleDay) return `• *Last sale:* none in the last ${WINDOW_DAYS} days`;
-    const ago =
-      Math.round(
-        (Date.parse(`${dayKey}T00:00:00Z`) - Date.parse(`${lastSaleDay}T00:00:00Z`)) / 86_400_000
-      ) + 1;
-    return `• *Last sale:* ${shortDay(lastSaleDay)}, ${ago === 1 ? "yesterday" : `${ago} days ago`}`;
-  })();
-
   if (unitEconomics) {
     blocks.push(
       section(
-        [
-          `*Break-even, last ${WINDOW_DAYS} days*`,
-          // First: it is the fact people were counting by hand.
-          ...(lastSaleLine ? [lastSaleLine] : []),
-          ...buildUnitEconomicsLines(unitEconomics),
-        ].join("\n")
+        [`*Break-even, last ${WINDOW_DAYS} days*`, ...buildUnitEconomicsLines(unitEconomics)].join(
+          "\n"
+        )
       )
     );
-  } else if (lastSaleLine) {
-    // A failed payment read costs the break-even figures, not the last sale: that
-    // comes from the funnel's own rows, which were read.
-    blocks.push(section(lastSaleLine));
-  }
-
-  /**
-   * Spent vs earned, as a picture under the break-even lines.
-   *
-   * Marcus (2026-09-18): "Our core mission is to turn the survey to report
-   * journey break even." Two running totals over the window answer how far off
-   * that is at a glance: the gap between the lines is the loss, and a sales line
-   * that goes flat is a run of days without a sale.
-   *
-   * Running totals, not daily bars: sales here are a few a month, and a bar per
-   * day is a row of zeros with the odd spike. Sales come from the same daily rows
-   * as yesterday's Revenue field, so the two cannot disagree; ad spend is GA4's,
-   * and a day GA4 has not reported is a gap, never a zero.
-   */
-  if (funnel && input.ad) {
-    const ad = input.ad;
-    const days = [...new Set(funnel.daily.map((r) => r.day))].sort();
-    let spent = 0;
-    let earned = 0;
-    const spendLine: Array<number | null> = [];
-    const salesLine: Array<number | null> = [];
-    for (const day of days) {
-      for (const r of funnel.daily) if (r.day === day) earned += r.revenue;
-      salesLine.push(Math.round(earned));
-      if (adCovers(ad, day)) {
-        spent += ad.byDay.get(day) ?? 0;
-        spendLine.push(Math.round(spent));
-      } else {
-        spendLine.push(null);
-      }
-    }
-    const covered = spendLine.filter((v) => v !== null).length;
-    if (covered > 0 && days.length > 1) {
-      const lastSpend = [...spendLine].reverse().find((v): v is number => v !== null)!;
-      /**
-       * Says so on the picture when GA4 has not reported every day, which is most
-       * days: it lags by one. Spend then totals fewer days than sales, and the
-       * image is forwarded without the break-even lines that carry the caveat.
-       */
-      const coverage = covered < days.length ? ` (${covered} of ${days.length} days reported)` : "";
-      const totals = `EUR ${lastSpend.toLocaleString("en-US")} spent${coverage}, EUR ${Math.round(earned).toLocaleString("en-US")} earned`;
-      const url = await signedChartUrl(
-        {
-          windowLabel: `${WINDOW_DAYS} days to ${shortDay(dayKey)}`,
-          labels: days.map(shortDay),
-          first: spendLine,
-          last: salesLine,
-          title: "Ad spend vs sales",
-          // The unit in brackets: the end labels keep only the words that differ
-          // once brackets are dropped, so they read "Ad spend" and "Sales".
-          legendFirst: "Ad spend (EUR)",
-          legendLast: "Sales (EUR)",
-          // Neither series is a landing page, so neither takes an arm's colour:
-          // slate for the cost, teal for the money in (5.47:1 on white).
-          colorFirst: "#334155",
-          colorLast: "#0f766e",
-          unit: "",
-          headline: totals,
-          footnote: "running totals · sales are paid reports only · ad spend from GA4",
-          emptyLabel: "No ad spend or sales recorded in this window yet.",
-        },
-        "metric-trend"
-      );
-      if (url) {
-        blocks.push({
-          type: "image",
-          image_url: url,
-          alt_text: `Ad spend vs sales, running totals over the last ${WINDOW_DAYS} days: ${totals}.`,
-        });
-      }
-    }
   }
 
   /**
@@ -1595,7 +1488,6 @@ export async function GET(request: Request) {
       cvrDays: cvrSnap?.days ?? null,
       adSpend,
       friction,
-      ad,
       now,
     });
     if (digest.trimmed) {

@@ -302,7 +302,6 @@ async function landingLiveBlocks(): Promise<SlackBlock[]> {
     unitEconomics: (await mockFetchUnitEconomics()) ?? null,
     adSpend: null,
     friction: null,
-    ad: await mockAdCostByDay(),
     now,
   });
   return digest.blocks;
@@ -338,9 +337,6 @@ describe("conversion-digest handler", () => {
     mockFetchPaywallHits.mockResolvedValue(null);
     mockFetchEmailExperiments.mockResolvedValue(null);
     mockFetchUnitEconomics.mockResolvedValue(null);
-    // clearAllMocks keeps implementations, so a test that sets ad spend would
-    // leak it into every test after it. Default: GA4 has nothing for the window.
-    mockAdCostByDay.mockResolvedValue({ byDay: new Map<string, number>(), from: null, to: null });
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -770,184 +766,6 @@ describe("conversion-digest handler", () => {
     const rows = caption.split("\n").filter((l) => l.startsWith("`"));
     expect(rows.length).toBeGreaterThan(3);
     expect(rows[0]).toContain("Visits");
-  });
-
-  describe("ad spend vs sales", () => {
-    /** The signed payload of the spend-vs-sales chart, or undefined if it is absent. */
-    const spendChart = (blocks: SlackBlock[]) => {
-      const img = blocks.find((b) =>
-        String((b as { image_url?: string }).image_url ?? "").includes("/digest-image/metric-trend")
-      ) as { image_url: string; alt_text: string } | undefined;
-      if (!img) return undefined;
-      const d = new URL(img.image_url).searchParams.get("d")!;
-      return {
-        alt: img.alt_text,
-        ...(JSON.parse(Buffer.from(d, "base64").toString("utf8")) as {
-          title: string;
-          unit: string;
-          first: Array<number | null>;
-          last: Array<number | null>;
-          colorFirst: string;
-          colorLast: string;
-          headline: string;
-        }),
-      };
-    };
-    /** "5 Aug", the way the message writes a day. */
-    const short = (day: string) => {
-      const d = new Date(`${day}T00:00:00Z`);
-      return `${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
-    };
-    const fixtureDays = () =>
-      [...new Set(makeFunnel().daily.map((r: { day: string }) => r.day))].sort() as string[];
-
-    it("draws spend against sales as running totals, a gap where GA4 has not reported", async () => {
-      /**
-       * Marcus (2026-09-18): "Our core mission is to turn the survey to report
-       * journey break even." The gap between the lines is the loss; a flat sales
-       * line is a run of days with no sale.
-       */
-      const days = fixtureDays();
-      // GA4 covers every day but the last, which is its usual reporting lag.
-      mockAdCostByDay.mockResolvedValue({
-        byDay: new Map(days.slice(0, -1).map((d) => [d, 40])),
-        from: days[0]!,
-        to: days[days.length - 2]!,
-      });
-      await GET(request());
-      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-      const chart = spendChart(arg.blocks);
-      expect(chart, "the spend-vs-sales chart").toBeDefined();
-      expect(chart!.title).toBe("Ad spend vs sales");
-      // Euros, not percentages, on the axis and the end labels.
-      expect(chart!.unit).toBe("");
-
-      // Spend: a running total over the covered days, and a GAP, not a zero, for
-      // the day GA4 has not reported.
-      expect(chart!.first.at(-1)).toBeNull();
-      expect(chart!.first.at(-2)).toBe(40 * (days.length - 1));
-      const spend = chart!.first.filter((v): v is number => v !== null);
-      for (let i = 1; i < spend.length; i += 1) {
-        expect(spend[i]!).toBeGreaterThanOrEqual(spend[i - 1]!);
-      }
-      // Sales: a running total of the same rows yesterday's Revenue field reads.
-      const revenue = makeFunnel().daily.reduce(
-        (t: number, r: { revenue: number }) => t + r.revenue,
-        0
-      );
-      expect(chart!.last.at(-1)).toBe(Math.round(revenue));
-      // Spend totals fewer days than sales here, and the picture says so: it is
-      // forwarded without the break-even lines that carry the caveat.
-      expect(chart!.headline).toBe(
-        `EUR ${(40 * (days.length - 1)).toLocaleString("en-US")} spent (${days.length - 1} of ${days.length} days reported), EUR ${Math.round(revenue).toLocaleString("en-US")} earned`
-      );
-      expect(chart!.alt).toContain(`(${days.length - 1} of ${days.length} days reported)`);
-      // Neither series is a landing page, so neither wears an arm's colour.
-      expect([chart!.colorFirst, chart!.colorLast]).toEqual(["#334155", "#0f766e"]);
-      expect(chart!.alt).toContain("spent");
-    });
-
-    it("says nothing about coverage when GA4 reported every day", async () => {
-      const days = fixtureDays();
-      mockAdCostByDay.mockResolvedValue({
-        byDay: new Map(days.map((d) => [d, 10])),
-        from: days[0]!,
-        to: days.at(-1)!,
-      });
-      await GET(request());
-      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-      expect(spendChart(arg.blocks)!.headline).not.toContain("reported");
-    });
-
-    it("still names the last sale when the payment figures cannot be read", async () => {
-      // The break-even block needs the payment ledger; the last sale needs only the
-      // funnel's rows. One failed read must not take both.
-      mockFetchUnitEconomics.mockResolvedValue(null);
-      await GET(request());
-      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-      const flat = blockText(arg.blocks);
-      expect(flat).not.toContain("Break-even");
-      expect(flat).toContain("• *Last sale:* ");
-    });
-
-    it("leaves the chart out when GA4 covers no day at all", async () => {
-      // The default mock: GA4 has nothing for this window. A sales line alone
-      // would compare against nothing.
-      await GET(request());
-      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-      expect(spendChart(arg.blocks)).toBeUndefined();
-    });
-
-    it("names the last sale, counted from today, and a free unlock is not a sale", async () => {
-      // Mark (2026-09-30): "We haven't had a single conversion for 16 days now",
-      // counted by hand. The message now says it.
-      const base = makeFunnel();
-      const days = fixtureDays();
-      const lastSale = [
-        ...new Set(
-          base.daily
-            .filter((r: { charges: number }) => r.charges > 0)
-            .map((r: { day: string }) => r.day)
-        ),
-      ]
-        .sort()
-        .at(-1) as string;
-      // A free unlock on the LAST day, after the last sale. Counting unlocks
-      // instead of charges would name the wrong day.
-      const lastDay = days.at(-1)!;
-      expect(lastDay > lastSale, "fixture: the free unlock must come after the sale").toBe(true);
-      mockFetchLandingArmFunnel.mockResolvedValue({
-        ...base,
-        daily: base.daily.map((r: { day: string; arm: string }) =>
-          r.day === lastDay && r.arm === "white"
-            ? { ...r, paid: 1, charges: 0, freeUnlocks: 1, revenue: 0 }
-            : r
-        ),
-      });
-      mockFetchUnitEconomics.mockResolvedValue({
-        adSpend: 1000,
-        revenue: 100,
-        paidReports: 5,
-        compedReports: 1,
-        otherCurrencyReports: 0,
-        coveredDays: 30,
-        windowDays: 30,
-      });
-      await GET(request());
-      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-      // The fake clock is 2026-08-24, so yesterday, the reported day, is the 23rd.
-      const ago =
-        Math.round(
-          (Date.parse("2026-08-23T00:00:00Z") - Date.parse(`${lastSale}T00:00:00Z`)) / 86_400_000
-        ) + 1;
-      const breakEven = arg.blocks
-        .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-        .find((t) => t.includes("*Break-even"))!;
-      expect(breakEven).toContain(
-        `• *Last sale:* ${short(lastSale)}, ${ago === 1 ? "yesterday" : `${ago} days ago`}`
-      );
-      expect(breakEven).not.toContain(`• *Last sale:* ${short(lastDay)}`);
-    });
-
-    it("says so when there was no sale in the window", async () => {
-      const base = makeFunnel();
-      mockFetchLandingArmFunnel.mockResolvedValue({
-        ...base,
-        daily: base.daily.map((r: Record<string, unknown>) => ({ ...r, charges: 0, revenue: 0 })),
-      });
-      mockFetchUnitEconomics.mockResolvedValue({
-        adSpend: 1000,
-        revenue: 0,
-        paidReports: 0,
-        compedReports: 0,
-        otherCurrencyReports: 0,
-        coveredDays: 30,
-        windowDays: 30,
-      });
-      await GET(request());
-      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-      expect(blockText(arg.blocks)).toContain("• *Last sale:* none in the last 30 days");
-    });
   });
 
   it("prints a quiet day's zero with no dash beside it", async () => {
