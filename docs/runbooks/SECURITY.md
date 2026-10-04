@@ -302,6 +302,12 @@ The repository uses multiple layers of automated security scanning:
 
 - **npm audit** (`--audit-level=high`): **blocks the merge** in `ci.yml` (Dependabot PRs exempted) and runs again in `security.yml`.
 - **OSV-Scanner**: pinned binary (sha256-verified), config in `.osv-scanner.toml`.
+- **Accepted advisories**: `.osv-scanner.toml` is the one list of reviewed exceptions,
+  and both scanners in `security.yml` read it: OSV natively, npm audit through
+  `scripts/npm-audit-gate.mjs`. Every entry needs a `reason`. An entry for a bug that
+  upstream has not fixed yet also gets an `ignoreUntil` date; once it passes, both
+  scanners fail again, so someone looks again. The blocking audit in `ci.yml` covers
+  production dependencies only and accepts nothing.
 - **SBOM generation**: CycloneDX format, stored as a 90-day artifact (not signed/attested).
 - **Dependency Review**: currently **disabled** (commented out in `security.yml`; requires GHAS for private repos). npm audit + OSV cover the gap.
 
@@ -442,8 +448,10 @@ Both audit steps (`ci.yml` and `security.yml`) now tell the two cases apart:
 The distinction is `metadata.vulnerabilities` in the `--json` output. An
 unreadable report is a gap in our visibility, not a verdict about our
 dependencies, and a check that is red for reasons nobody can act on is one
-people learn to scroll past. `__tests__/scripts/npm-audit-gate.test.ts` pins the
-counting against six inputs, including the three shapes an outage actually takes.
+people learn to scroll past. `security.yml` then subtracts the advisories
+accepted in `.osv-scanner.toml` (see Dependency Scanning above).
+`__tests__/scripts/npm-audit-gate.test.ts` pins the counting, including the
+three shapes an outage actually takes and an acceptance that has expired.
 
 ### Every action is pinned to a commit, never a tag
 

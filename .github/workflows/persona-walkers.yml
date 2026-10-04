@@ -29,6 +29,10 @@ on:
         description: "Judge the walks and post the result (off: walk only, post nothing)"
         type: boolean
         default: true
+      proof:
+        description: "Also run the UX checker's proof walks (production's code, staging's database)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -185,3 +189,64 @@ jobs:
           text=":walking: The persona walks on staging ${how} in GitHub Actions. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           jq -n --arg text "$text" '{text: $text}' |
             curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL"
+
+  # The UX checker's proof (features/ux-signals): four walks a night of production's code on
+  # staging's database (walk.ts MAIN_ON_STAGING), each planting behaviours on purpose and so
+  # knowing the truth of what it did. check-signals.ts stores each walk's events and truth,
+  # and Jarvis's ux_signals shows a signal only once its measure is right on 80% of them.
+  # Not judged and nothing posted; its own runner, alongside the walks above. The log says
+  # counts only: this repository and its logs are public.
+  proof:
+    if: ${{ inputs.proof }}
+    runs-on: macos-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium webkit
+
+      - name: Proof walks
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          WALK_OUT: ${{ runner.temp }}/proof
+          WALK_ORIGIN: https://loveiq-staging-git-main-loveiq.vercel.app
+        run: |
+          set -uo pipefail
+          mkdir -p "$WALK_OUT"
+          if [ -z "${STAGING_PASSWORD:-}" ]; then
+            echo "::error::STAGING_PASSWORD is not set, so no walk can pass the staging gate"
+            exit 1
+          fi
+          # One at a time, for the survey's three submissions a minute from one address. A walk
+          # that stops early writes no truth, so it is simply not counted.
+          while read -r w; do
+            quit=$(jq -r '.quit // ""' <<<"$w")
+            npx tsx scripts/walkers/walk.ts --proof \
+              --persona "$(jq -r .persona <<<"$w")" \
+              --device "$(jq -r .device <<<"$w")" \
+              --plan "$(jq -r .plan <<<"$w")" \
+              ${quit:+--quit "$quit"} </dev/null || true
+          done < <(npx tsx scripts/walkers/plants.ts | jq -c '.[]')
+
+      - name: Store the walks, and record the run
+        if: ${{ !cancelled() }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WALK_OUT: ${{ runner.temp }}/proof
+        run: |
+          set -uo pipefail
+          outcome=success
+          npx tsx scripts/walkers/check-signals.ts --walks "$WALK_OUT" || outcome=error
+          # The stall watcher (features/cron/server/cron-stall.ts) alerts #ops when this goes quiet.
+          npx tsx scripts/record-cron-run.mjs ux-proof-walks "$outcome"
+          [ "$outcome" = success ]

@@ -88,9 +88,10 @@ describe("the tool names the pack relies on", () => {
   it("reads the real source list, so the check below can fail", () => {
     expect(SOURCES.has("paper")).toBe(true);
     expect(SOURCES.has("book")).toBe(true);
+    expect(SOURCES.has("corporate")).toBe(true);
     // A word a comment quotes is not a source: one says ga4 can only answer "where".
     expect(SOURCES.has("where")).toBe(false);
-    expect(SOURCES.size).toBe(21);
+    expect(SOURCES.size).toBe(22);
     expect(namedSources('`sources: ["evidence"]`, then `["paper", "book"]`')).toEqual([
       "evidence",
       "paper",

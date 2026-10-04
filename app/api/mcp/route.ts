@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
+import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
@@ -493,6 +494,11 @@ export const SOURCES_FOR_TEST = [
   // we measure, a few a day from Europe PMC (brain-papers). OPT-IN like the books, for the
   // same reason: whole papers in our own vocabulary would crowd company answers out.
   "paper",
+  // appliedpsychometrics.org, the website of Applied Psychometrics UG (the company that runs
+  // LoveIQ): its GA4 traffic and Google searches, nightly (brain-ingest). OPT-IN like the
+  // books and papers: its traffic rows read like LoveIQ's `ga4` rows, and would otherwise
+  // answer "how many visitors did we have" with the wrong site's numbers.
+  "corporate",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -749,8 +755,8 @@ export const TOOLS = [
           type: "array",
           items: { type: "string", enum: SOURCES_FOR_TEST },
           description:
-            "Restrict to these sources. Omit for every source except `book` and `paper`, " +
-            "which are searched only when named here. Use it when you know where the " +
+            "Restrict to these sources. Omit for every source except `book`, `paper` and " +
+            "`corporate`, which are searched only when named here. Use it when you know where the " +
             "answer lives — a board task, a Slack day, a call note — rather than " +
             "hoping the wording matches.",
         },
@@ -758,7 +764,7 @@ export const TOOLS = [
           type: "array",
           items: { type: "string", enum: SOURCES_FOR_TEST },
           description:
-            "Everything EXCEPT these (books and papers stay out unless named in `sources`). Use it when " +
+            "Everything EXCEPT these (books, papers and the corporate website stay out unless named in `sources`). Use it when " +
             "one source keeps answering a question " +
             "it does not actually hold — the result says which source was held back and " +
             "by how much, so it tells you what to exclude.",
@@ -1951,6 +1957,30 @@ export const TOOLS = [
       "sheet begins, and the month still open. Lines typed in by hand are flagged when they " +
       "have not moved, and Google Ads is set beside what GA4 recorded. People's pay is left out.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "ux_signals",
+    title: "Marcus's 22 behaviour signals, measured on real visits, shown once proven",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "The UX checker: Marcus's 22 behaviour signals (time to first action, backtracking, dead " +
+      "and rage clicks, scroll, paywall dwell and escape, trust seeking, conversion blockers and " +
+      "the rest), each measured on the last days of real production visits from PostHog. A " +
+      "signal's number is shown only once its measure has been right on at least 80% of the " +
+      "nightly persona walks, on the walks where the behaviour happened and on those where it " +
+      "did not, because a walk knows exactly what it did. Unproven signals say why and where the " +
+      "measure went wrong; those the site cannot yet measure say what is missing. Use it for " +
+      "'where do people struggle', 'do people see the unlock offer', 'how do they leave the " +
+      "paywall'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "number",
+          description: "How many days of real visits to measure, 1 to 28. Default 7.",
+        },
+      },
+    },
   },
   {
     name: "check_answer",
@@ -3996,6 +4026,9 @@ async function callTool(
         : "") +
       (!opts.sources?.includes("paper") && (opts.meta?.kind === "paper" || opts.meta?.pmcid)
         ? ' Papers are left out unless `sources` names "paper".'
+        : "") +
+      (!opts.sources?.includes("corporate") && opts.meta?.site
+        ? ' The corporate website is left out unless `sources` names "corporate".'
         : "");
     const learnedSince =
       typeof args.learned_since === "string" && args.learned_since.trim()
@@ -4183,6 +4216,7 @@ async function callTool(
     // Books and papers are opt-in here too, as in search_company_context: listed only when named.
     if (!opts.sources?.includes("book")) qs.append("source", "neq.book");
     if (!opts.sources?.includes("paper")) qs.append("source", "neq.paper");
+    if (!opts.sources?.includes("corporate")) qs.append("source", "neq.corporate");
     if (opts.since) qs.append("period_end", `gte.${opts.since}`);
     if (opts.until) qs.append("period_end", `lte.${opts.until}`);
     if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
@@ -5689,6 +5723,16 @@ async function callTool(
     return textResult(renderCostWatch(parsed, now, ads, settled));
   }
 
+  if (name === "ux_signals") {
+    const raw = args.days === undefined ? 7 : Number(args.days);
+    if (!Number.isInteger(raw) || raw < 1 || raw > 28) {
+      return textResult("`days` must be a whole number from 1 to 28.", true);
+    }
+    const report = await buildUxSignalsReport(raw);
+    stats.sourceCount = 2;
+    return textResult(renderUxSignals(report), report.visits === null && report.walks === null);
+  }
+
   if (name === "explain_change") {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
@@ -5959,7 +6003,7 @@ async function callTool(
 
       return (
         `${source}: ${total} chunks · newest period ${period ?? "n/a (its records carry no date)"}` +
-        (source === "book" || source === "paper"
+        (source === "book" || source === "paper" || source === "corporate"
           ? ` · searched only when named: sources ["${source}"]`
           : "") +
         ` · last wrote ${ingested}${health(source)}`
@@ -6090,6 +6134,12 @@ export const MCP_INSTRUCTIONS =
   'Pass `sources: ["paper"]`; an ordinary search never returns them. They are other ' +
   "people's research, not LoveIQ's findings, so name the paper and its authors when you use " +
   'one. To see what the literature on a construct looks like as a whole, read its evidence card (`sources: ["evidence"]`) first.\n\n' +
+  "THE CORPORATE WEBSITE, searched only when you ask for it: appliedpsychometrics.org, the " +
+  "website of Applied Psychometrics UG, the company that operates LoveIQ. Its daily, weekly and " +
+  "monthly visits, channels and most-read pages, its clicks out to other sites (loveiq.org above all), and the Google " +
+  'searches that find it, refreshed nightly. Pass `sources: ["corporate"]`; an ordinary search ' +
+  "never returns it, so a question about LoveIQ's traffic is answered with LoveIQ's. Its visits " +
+  "count only people who accepted the site's cookie banner.\n\n" +
   "LIVE STATE, queried straight from the production database with full history and no " +
   "lag: payments and refunds, Resend email delivery and bounces, call invitations, " +
   "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
@@ -6129,6 +6179,8 @@ export const MCP_INSTRUCTIONS =
   "person, with any group under 5 hidden. Its measure picks what is counted: people (who " +
   "finished and paid), traits (the user graph: the 21 trait averages), emails (reminders sent, " +
   "unsubscribes, bounces) or answers (how a group answered one survey question).\n\n" +
+  "UX SIGNALS: ux_signals measures Marcus's 22 behaviour signals on real visits, and shows a " +
+  "signal's number only once its measure has been proven right on the nightly persona walks.\n\n" +
   "WHAT WE SPEND: cost_watch reads what we pay each month for tools and services from the " +
   "cost sheet, what moved, and which hand-typed lines may be stale.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +

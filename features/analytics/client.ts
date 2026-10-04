@@ -1199,6 +1199,13 @@ export const trackDeadClick = (params: {
   paywall_locked?: string;
 }) => track("dead_click", params);
 
+/**
+ * A call to action came into view: half of it inside the viewport, the first time on this
+ * page (features/analytics/useCtaSeen.ts). PostHog only. `locked_card_price_shown` cannot
+ * answer "did they see it": it fires when a locked report loads, wherever the card sits.
+ */
+export const trackCtaSeen = (params: { cta: "locked_chapter" }) => track("cta_seen", params);
+
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);
 

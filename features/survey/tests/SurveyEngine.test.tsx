@@ -395,4 +395,21 @@ describe("SurveyEngine completion phases", () => {
     expect(screen.getByText("Submission Interrupted")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
   });
+
+  it("Start Over on the error screen starts over, it does not take the success path", () => {
+    // It was wired to onComplete, which wiped the answers and opened
+    // /report/[object Object] for a submission that never happened (2026-10-03).
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockSubmitStatus = "error";
+    const onComplete = vi.fn();
+    const onStartOver = vi.fn();
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} onStartOver={onStartOver} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    fireEvent.click(screen.getByRole("button", { name: /start over/i }));
+
+    expect(onStartOver).toHaveBeenCalledTimes(1);
+    expect(onComplete).not.toHaveBeenCalled();
+  });
 });

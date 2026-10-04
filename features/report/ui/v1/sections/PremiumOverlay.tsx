@@ -1,6 +1,7 @@
 "use client";
 
-import { type FC } from "react";
+import { type FC, useRef } from "react";
+import { useCtaSeen } from "@features/analytics/useCtaSeen";
 import {
   formatReportPurchasePrice,
   getReportPurchaseBadgeFromPrice,
@@ -76,6 +77,9 @@ const FlaskIcon: FC = () => (
 );
 
 const PremiumOverlay: FC<Props> = ({ archetype, onUnlock, quote = null }) => {
+  // Whether a reader ever had an unlock offer in front of them, not just on the page.
+  const ctaRef = useRef<HTMLButtonElement>(null);
+  useCtaSeen(ctaRef, "locked_chapter");
   // ── Live pricing — identical computation to the paywall modal so the card
   //    and modal always agree. ────────────────────────────────────────────────
   const currentCents = quote?.currentPriceCents ?? 0;
@@ -198,7 +202,7 @@ const PremiumOverlay: FC<Props> = ({ archetype, onUnlock, quote = null }) => {
         {/* No own `onClick`: the overlay owns it. Both firing would double-count
             the unlock event; the button's click simply bubbles up. It keeps its
             semantics, so keyboard and screen-reader behaviour are unchanged. */}
-        <button type="button" className="report-premium-overlay__cta">
+        <button ref={ctaRef} type="button" className="report-premium-overlay__cta">
           Unlock your report
         </button>
       </div>

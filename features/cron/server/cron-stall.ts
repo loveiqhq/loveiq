@@ -117,6 +117,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
    */
   "ux-review-verify": 3 * 3_600_000,
   "ux-digest-audit": 26 * 3_600_000,
+  // The UX checker's proof walks (persona-walkers.yml `proof`), nightly at 02:41: a day and
+  // two hours is one night missed. Quiet, the proofs stop growing and nothing else says so.
+  "ux-proof-walks": 26 * 3_600_000,
   /**
    * EVERY FIVE MINUTES ON A LAPTOP, not a server (LAPTOP_JOBS below), so it pauses whenever the Mac is
    * closed, and only a successful run counts. Three days because a closed laptop only
@@ -160,6 +163,7 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-battery-mcp": "brain-daily.yml",
   "ux-review-verify": "ux-review-verify.yml",
   "ux-digest-audit": "ux-digest-audit.yml",
+  "ux-proof-walks": "persona-walkers.yml",
 };
 
 /**

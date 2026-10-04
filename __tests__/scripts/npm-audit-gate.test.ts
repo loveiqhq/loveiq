@@ -17,6 +17,8 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { acceptedAdvisories, unacceptedAdvisories } from "../../scripts/lib/npm-audit-gate.mjs";
+
 const CI = readFileSync(resolve(process.cwd(), ".github/workflows/ci.yml"), "utf8");
 const SECURITY = readFileSync(resolve(process.cwd(), ".github/workflows/security.yml"), "utf8");
 
@@ -65,7 +67,7 @@ describe("the npm audit gate", () => {
    * past, which costs more than it saves.
    */
   it("applies the same rule in security.yml, not just the blocking one", () => {
-    expect(SECURITY).toContain("metadata.vulnerabilities");
+    expect(SECURITY).toContain("node scripts/npm-audit-gate.mjs");
     expect(SECURITY).toMatch(/if \[ "\$high" = "unknown" \][\s\S]{0,300}?exit 0/);
     expect(SECURITY).toMatch(/if \[ "\$high" -gt 0 \][\s\S]{0,300}?exit 1/);
   });
@@ -88,5 +90,109 @@ describe("the npm audit gate", () => {
   it("does not use the deprecated --production flag", () => {
     // npm 11 warns on it and it will eventually stop working.
     expect(CI).not.toContain("npm audit --audit-level=high --production");
+  });
+});
+
+/**
+ * security.yml audits dev dependencies too, so it is the gate that meets
+ * advisories nobody can fix yet. On 2026-10-04 one for `braces` (every release
+ * affected, none fixed, reached only through build tooling) turned it red on
+ * every push. It now subtracts the reviewed exceptions in .osv-scanner.toml, the
+ * list the OSV step already reads, and nothing else.
+ */
+describe("security.yml's npm audit gate", () => {
+  const BRACES = "GHSA-vfj7-8cjw-p6xm";
+  const advisory = (id: string, severity = "high") => ({
+    source: 1,
+    name: "braces",
+    title: "a finding",
+    url: `https://github.com/advisories/${id}`,
+    severity,
+  });
+  // The real shape: the advisory object sits on the package it is filed
+  // against, and everything that depends on it names that package as a string.
+  // The totals count packages, as npm's do.
+  const report = (...advisories: ReturnType<typeof advisory>[]) => {
+    const severe = advisories.some((a) => a.severity === "high" || a.severity === "critical");
+    const severity = severe ? "high" : "moderate";
+    return JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: {
+        braces: { name: "braces", severity, via: advisories },
+        micromatch: { name: "micromatch", severity, via: ["braces"] },
+        "fast-glob": { name: "fast-glob", severity, via: ["micromatch"] },
+      },
+      metadata: {
+        vulnerabilities: { low: 0, moderate: severe ? 0 : 3, high: severe ? 3 : 0, critical: 0 },
+      },
+    });
+  };
+  const toml = (entry: string) => `[[IgnoredVulns]]\nid = "${BRACES}"\n${entry}\nreason = "r"\n`;
+  const NOW = new Date("2026-10-04T12:00:00Z");
+  const gate = (text: string, config = "") =>
+    unacceptedAdvisories(text, acceptedAdvisories(config), NOW).count;
+
+  it("counts each advisory once, not each package that depends on it", () => {
+    expect(gate(report(advisory(BRACES)))).toBe(1);
+    expect(gate(report(advisory(BRACES), advisory("GHSA-aaaa-bbbb-cccc", "critical")))).toBe(2);
+  });
+
+  it("does not count low or moderate advisories", () => {
+    expect(gate(report(advisory(BRACES, "moderate")))).toBe(0);
+  });
+
+  it("subtracts an accepted advisory, and only that one", () => {
+    expect(gate(report(advisory(BRACES)), toml("ignoreUntil = 2026-12-04"))).toBe(0);
+    expect(gate(report(advisory(BRACES)), toml(""))).toBe(0);
+    expect(
+      gate(
+        report(advisory(BRACES), advisory("GHSA-aaaa-bbbb-cccc")),
+        toml("ignoreUntil = 2026-12-04")
+      )
+    ).toBe(1);
+  });
+
+  it("counts an accepted advisory again once its date has passed", () => {
+    const result = unacceptedAdvisories(
+      report(advisory(BRACES)),
+      acceptedAdvisories(toml("ignoreUntil = 2026-10-01")),
+      NOW
+    );
+    expect(result.count).toBe(1);
+    expect(result.expired).toEqual([BRACES.toUpperCase()]);
+  });
+
+  it("treats a date it cannot read as passed, never as permanent", () => {
+    expect(gate(report(advisory(BRACES)), toml("ignoreUntil = soon"))).toBe(1);
+  });
+
+  it("says UNKNOWN on the same outage shapes as ci.yml", () => {
+    expect(gate("")).toBe("unknown");
+    expect(gate('{"message":"audit endpoint returned an error"}')).toBe("unknown");
+    expect(gate('{"metadata":{"vulner')).toBe("unknown");
+  });
+
+  it("fails closed on a report that flags something it cannot itemise", () => {
+    const opaque = JSON.stringify({ metadata: { vulnerabilities: { high: 2, critical: 0 } } });
+    expect(gate(opaque)).toBe(2);
+  });
+
+  it("reads every entry of the real .osv-scanner.toml", () => {
+    const config = readFileSync(resolve(process.cwd(), ".osv-scanner.toml"), "utf8");
+    const entries = config.match(/^\[\[IgnoredVulns\]\]$/gm) ?? [];
+    expect(acceptedAdvisories(config).size).toBe(entries.length);
+    expect(entries.length).toBeGreaterThan(0);
+  });
+
+  it("prints the count the workflow compares, from the real script", () => {
+    const run = (input: string) =>
+      execFileSync("node", ["scripts/npm-audit-gate.mjs"], {
+        input,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
+    expect(run(report(advisory("GHSA-aaaa-bbbb-cccc")))).toBe("1");
+    expect(run(report(advisory("GHSA-aaaa-bbbb-cccc", "moderate")))).toBe("0");
+    expect(run("")).toBe("unknown");
   });
 });
