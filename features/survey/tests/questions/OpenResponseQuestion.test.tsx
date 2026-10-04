@@ -128,6 +128,31 @@ describe("OpenResponseQuestion: the empty confirm box", () => {
     expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
   });
 
+  it("is tied to the confirm box for screen readers, and marks it invalid once red", () => {
+    renderEmail("jane@example.com", "");
+    let confirm = screen.getByRole("textbox", { name: "Confirm email address" });
+    const describedBy = confirm.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(PROMPT);
+    // A hint is not an error.
+    expect(confirm).not.toHaveAttribute("aria-invalid");
+    cleanup();
+
+    renderEmail("jane@example.com", "", true);
+    confirm = screen.getByRole("textbox", { name: "Confirm email address" });
+    expect(confirm).toHaveAttribute("aria-invalid", "true");
+    expect(document.getElementById(confirm.getAttribute("aria-describedby")!)).toHaveTextContent(
+      PROMPT
+    );
+    cleanup();
+
+    // Nothing to say, nothing referenced.
+    renderEmail("jane@example.com", "jane@example.com", true);
+    confirm = screen.getByRole("textbox", { name: "Confirm email address" });
+    expect(confirm).not.toHaveAttribute("aria-describedby");
+    expect(confirm).not.toHaveAttribute("aria-invalid");
+  });
+
   it("is only ever on the email question", () => {
     render(
       <OpenResponseQuestion

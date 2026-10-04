@@ -82,6 +82,9 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
    * one thing missing, and in red once they have tried to go on.
    */
   const confirmMissing = EMAIL_RE.test(currentValue) && confirmCurrent.trim().length === 0;
+  /** Red, and announced as an error, rather than a hint. */
+  const confirmInvalid = showConfirmError || (confirmMissing && !!forceValidation);
+  const confirmMessageId = `${question.qId}-confirm-message`;
 
   const white = useSurveyTheme() === "white";
   // White autofill: omit the dark autofill overpaint class (it forces white
@@ -158,6 +161,8 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             type="email"
             name={`${question.qId}-confirm`}
             aria-label="Confirm email address"
+            aria-describedby={showConfirmError || confirmMissing ? confirmMessageId : undefined}
+            aria-invalid={confirmInvalid || undefined}
             value={confirmCurrent}
             onChange={(e) => onConfirmChange?.(e.target.value)}
             onBlur={() => setConfirmTouched(true)}
@@ -165,7 +170,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             autoComplete="email"
             spellCheck={false}
             className={`${inputBase} ${
-              showConfirmError
+              confirmInvalid
                 ? "border-[#ef4444]"
                 : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
             }`}
@@ -175,7 +180,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
               ["--autofill-font-size-sm" as string]: "24px",
             }}
           />
-          <div className="flex items-center gap-1.5" aria-live="polite">
+          <div id={confirmMessageId} className="flex items-center gap-1.5" aria-live="polite">
             {showConfirmError && (
               <>
                 <span className="text-[#ef4444]">
