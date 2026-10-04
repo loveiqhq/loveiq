@@ -125,11 +125,18 @@ run_required "docs-truth.yml › Docs truth"           npm run docs:truth
 run_required "docs-truth.yml › Markdown prettier"    bash -c 'npx prettier --check "**/*.md"'
 
 # ─── security.yml › dependency-scan ────────────────────────────────────────
-step "security.yml › npm audit (high+)"
-if npm audit --audit-level=high; then
+# Same gate as security.yml: advisories accepted in .osv-scanner.toml are not
+# counted, and an unreadable report (the registry not answering) is not a finding.
+audit_count=$(npm audit --audit-level=high --json 2>/dev/null | node scripts/npm-audit-gate.mjs)
+if [ "$audit_count" = "unknown" ]; then
+  skip_with_reason "security.yml › npm audit (high+)" "npm audit could not be read (registry did not answer); not treated as a vulnerability"
+elif [ "$audit_count" = "0" ]; then
+  step "security.yml › npm audit (high+)"
   PASS_COUNT=$((PASS_COUNT+1))
 else
-  echo "❌ Required step failed: npm audit"
+  step "security.yml › npm audit (high+)"
+  npm audit --audit-level=high || true
+  echo "❌ Required step failed: npm audit (gate reported '${audit_count:-nothing}' high or critical advisories not accepted in .osv-scanner.toml)"
   FAIL_COUNT=$((FAIL_COUNT+1))
   FAIL_STEPS+=("security.yml › npm audit")
   summarize
