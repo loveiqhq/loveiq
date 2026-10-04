@@ -4,6 +4,7 @@ import { useState, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
+import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 
 interface OpenResponseQuestionProps {
   question: SurveyQuestion;
@@ -32,9 +33,12 @@ const AlertCircleIcon: FC = () => (
 );
 
 const MAX_LENGTH = 500;
-// Qs that render without a character limit or counter (email + name).
+// Qs that render without a character counter (email + name).
 const UNLIMITED_QIDS = new Set(["00000", "00001"]);
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// The server keeps 80 characters of a name. Typing past that used to be refused at the
+// final submit, 56 questions later, on every Retry; now the box stops there.
+const NAME_QID = "00001";
+const NAME_MAX_LENGTH = 80;
 
 function getValidationError(
   value: string,
@@ -43,7 +47,7 @@ function getValidationError(
 ): string | null {
   if (!value) return null;
   if (inputType === "email") {
-    if (!EMAIL_RE.test(value))
+    if (!isValidSurveyEmail(value))
       return "Hmm, that doesn\u2019t look like a valid email. Make sure it follows the format: name@example.com";
   }
   if (limited && value.length > MAX_LENGTH) return `Maximum ${MAX_LENGTH} characters allowed`;
@@ -71,7 +75,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
     isEmailField &&
     currentValue.trim().length > 0 &&
     confirmCurrent.trim().length > 0 &&
-    currentValue.trim().toLowerCase() !== confirmCurrent.trim().toLowerCase();
+    tidySurveyEmail(currentValue).toLowerCase() !== tidySurveyEmail(confirmCurrent).toLowerCase();
   const showConfirmError = (confirmTouched || forceValidation) && emailMismatch;
   /**
    * Next stays disabled until the confirm box matches, and a disabled button
@@ -81,7 +85,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
    * the keyboard's Go both ignored, no message. So say it as soon as it is the
    * one thing missing, and in red once they have tried to go on.
    */
-  const confirmMissing = EMAIL_RE.test(currentValue) && confirmCurrent.trim().length === 0;
+  const confirmMissing = isValidSurveyEmail(currentValue) && confirmCurrent.trim().length === 0;
   /** Red, and announced as an error, rather than a hint. */
   const confirmInvalid = showConfirmError || (confirmMissing && !!forceValidation);
   const confirmMessageId = `${question.qId}-confirm-message`;
@@ -112,7 +116,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
           placeholder={question.placeholder || "Type your answer…"}
           autoComplete={question.inputType === "email" ? "email" : "off"}
           spellCheck={question.inputType === "email" ? false : undefined}
-          maxLength={limited ? MAX_LENGTH : undefined}
+          maxLength={limited ? MAX_LENGTH : question.qId === NAME_QID ? NAME_MAX_LENGTH : undefined}
           className={`${inputBase} ${
             error
               ? "border-[#ef4444]"

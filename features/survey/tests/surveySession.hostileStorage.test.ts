@@ -102,7 +102,7 @@ describe("getSessionId under hostile storage", () => {
     try {
       vi.stubGlobal("crypto", {});
       const id = getSessionId();
-      expect(id).toMatch(/^s-[a-z0-9]+-[a-z0-9]+$/i);
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
       expect(id.length).toBeGreaterThan(8);
     } finally {
       vi.stubGlobal("crypto", realCrypto);

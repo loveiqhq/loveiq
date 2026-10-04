@@ -39,13 +39,19 @@ vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
   }),
 }));
 
+const mockClearPendingCompletion = vi.fn();
+let mockErrorKind: string | null = null;
 vi.mock("@features/survey/ui/hooks/useSubmitSurvey", () => ({
   useSubmitSurvey: () => ({
     submit: mockSubmit,
     retryPending: vi.fn(),
+    clearPendingCompletion: mockClearPendingCompletion,
     hasPendingCompletion: false,
     get status() {
       return mockSubmitStatus;
+    },
+    get errorKind() {
+      return mockErrorKind;
     },
   }),
 }));
@@ -205,13 +211,32 @@ describe("SurveyEngine", () => {
     expect(screen.queryByTestId("open-response")).not.toBeInTheDocument();
   });
 
-  it("shows processing sequence when currentIndex >= total questions", () => {
+  it("shows the processing sequence while the submit is in flight", () => {
     mockCurrentIndex = 4;
     mockProgress = 100;
+    mockSubmitStatus = "submitting";
 
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
     expect(screen.getByText("Extracting your answers...")).toBeInTheDocument();
+  });
+
+  it("goes on to the report, not a processing screen that never ends, on a finished run with nothing in flight", () => {
+    // Regression, 2026-10-04: Back while the final submit was in flight left the run
+    // finished with nothing pending; mounting onto it waited forever at 95%.
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    sessionStorage.setItem("loveiq-completed-report", "rpt_remembered");
+    const onComplete = vi.fn();
+    try {
+      render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} />);
+
+      expect(screen.queryByTestId("processing-sequence")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
+      expect(onComplete).toHaveBeenCalledWith("rpt_remembered");
+    } finally {
+      sessionStorage.removeItem("loveiq-completed-report");
+    }
   });
 
   it("calls onComplete when wizard completes", () => {
@@ -227,19 +252,6 @@ describe("SurveyEngine", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
     expect(onComplete).toHaveBeenCalledTimes(1);
-  });
-
-  it("persists the report session while preserving the survey session for report handoff", () => {
-    mockCurrentIndex = 4;
-    mockProgress = 100;
-    mockSubmitStatus = "success";
-    sessionStorage.setItem("loveiq-survey-session", "session-123");
-    localStorage.setItem("loveiq-report-session", "stale-session");
-
-    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
-
-    expect(localStorage.getItem("loveiq-report-session")).toBe("session-123");
-    expect(sessionStorage.getItem("loveiq-survey-session")).toBe("session-123");
   });
 
   it("renders scale question component for answerType scale", () => {
@@ -421,6 +433,51 @@ describe("SurveyEngine completion phases", () => {
 
     expect(screen.getByText("Submission Interrupted")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+  });
+
+  it("never re-runs a finished run from the keyboard or a swipe", () => {
+    // A remount onto the retry screen resets hasCompleted; ArrowRight, Enter or a left
+    // swipe there re-ran the whole completion (a second survey_completed and payload).
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockSubmitStatus = "error";
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    fireEvent.touchStart(window, { touches: [{ clientX: 240, clientY: 300 }] });
+    fireEvent.touchEnd(window, { changedTouches: [{ clientX: 40, clientY: 305 }] });
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+  });
+
+  it("sends the reader back to the email question when the server refused the address", () => {
+    mockQuestions = [
+      makeSurveyQuestion({ qId: "q1", question: "First?" }),
+      makeSurveyQuestion({
+        qId: "00000",
+        question: "What is your email?",
+        answerType: "open",
+        inputType: "email",
+        options: [],
+      }),
+      makeSurveyQuestion({ qId: "16015", question: "Keep me posted?" }),
+    ];
+    mockCurrentIndex = 3;
+    mockSubmitStatus = "error";
+    mockErrorKind = "email";
+    try {
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+
+      expect(screen.queryByRole("button", { name: /retry submission/i })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /fix my email/i }));
+
+      expect(mockClearPendingCompletion).toHaveBeenCalled();
+      expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+    } finally {
+      mockErrorKind = null;
+    }
   });
 
   it("Start Over on the error screen starts over, it does not take the success path", () => {

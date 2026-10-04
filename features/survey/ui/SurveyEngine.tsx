@@ -33,7 +33,8 @@ import {
   clearPersistedSurveyState,
   QUESTION_STATE_KEY,
 } from "./hooks/surveyStorage";
-import { copySurveySessionToReportSession } from "./hooks/surveySession";
+import { completedReportToken, copySurveySessionToReportSession } from "./hooks/surveySession";
+import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
@@ -87,10 +88,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const {
     submit: submitSurvey,
     retryPending,
+    clearPendingCompletion,
     hasPendingCompletion,
     reportToken,
     submissionId,
     status: submitStatus,
+    errorKind: submitErrorKind,
   } = useSubmitSurvey();
 
   // PreReportWizard fires wizard_slide_advanced via persistAnalyticsEvent, which
@@ -104,7 +107,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     }
   }, [submissionId]);
   const utmTracker = useUtmCapture();
-  const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
+  const { savePartial } = usePartialSave(
+    answers,
+    currentIndex,
+    startedAt,
+    utmTracker,
+    submitStatus === "success"
+  );
 
   const [animKey, setAnimKey] = useState(0);
   const [emailConfirmValue, setEmailConfirmValue] = useState("");
@@ -122,8 +131,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
   const [footerFloating, setFooterFloating] = useState(false);
-
-  const hasCleared = useRef(false);
 
   // Questions answered before the survey opened (the landing-page card) are
   // dropped from the flow so nobody is asked twice. Their answers stay in
@@ -166,9 +173,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   }, [surveyVariant]);
 
   // Post-survey completion phase management
-  const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() =>
-    currentIndex >= totalQuestions && hasPendingCompletion ? "done" : "processing"
-  );
+  // Mounting onto a finished run: a pending submission shows its retry screen. With none,
+  // nothing is in flight (it landed while the reader was elsewhere), so the screens that
+  // lead to the report. "processing" here waited for a submit that would never come, at
+  // 95%, with no button.
+  const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() => {
+    if (currentIndex < totalQuestions) return "processing";
+    if (hasPendingCompletion) return "done";
+    return submitStatus === "idle" ? "wizard" : "processing";
+  });
 
   // Track survey start once
   useEffect(() => {
@@ -220,20 +233,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     }
   }, []);
 
-  // Clear persisted storage after successful submission so future visits start fresh.
-  // Only clear localStorage/sessionStorage — NOT in-memory state, because the
-  // completion screens still need currentIndex >= totalQuestions and answers for name/email.
-  useEffect(() => {
-    if (submitStatus === "success" && !hasCleared.current) {
-      hasCleared.current = true;
-      copySurveySessionToReportSession();
-      clearPersistedSurveyState({
-        clearPendingCompletion: true,
-        clearSurveySession: false,
-      });
-    }
-  }, [submitStatus]);
-
   // Current answer — discard stale data whose type doesn't match the question
   const rawAnswer = question ? getAnswer(question.qId) : null;
   const currentAnswer = useMemo(() => {
@@ -265,10 +264,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const isEmailValid = useMemo(() => {
     if (question?.inputType !== "email") return true;
     if (!currentAnswer || typeof currentAnswer !== "string") return true;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentAnswer)) return false;
+    // The server's own rule (features/survey/email.ts): an address this let through and the
+    // server refused stranded the reader at the final submit.
+    if (!isValidSurveyEmail(currentAnswer)) return false;
     return (
       emailConfirmValue.trim().length > 0 &&
-      emailConfirmValue.trim().toLowerCase() === currentAnswer.trim().toLowerCase()
+      tidySurveyEmail(emailConfirmValue).toLowerCase() ===
+        tidySurveyEmail(currentAnswer).toLowerCase()
     );
   }, [question, currentAnswer, emailConfirmValue]);
 
@@ -326,6 +328,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   }, []);
 
   const goNext = useCallback(() => {
+    // Finished: the same guard as goPrev. A remount onto the retry screen resets
+    // hasCompleted, and ArrowRight, Enter or a left swipe there re-ran the whole
+    // completion: a second survey_completed, and a new payload under this tab's session.
+    if (currentIndex >= totalQuestions) return;
     if (!isEmailValid || !isSelectionCountValid) {
       /**
        * A blocked Next is the only "form error" this survey can produce, and
@@ -634,6 +640,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     await retryPending();
   }, [retryPending]);
 
+  // The server refused the email (an old page, or a rule that changed): back to that
+  // question with every other answer kept, where only Start Over was on offer.
+  const handleFixEmail = useCallback(() => {
+    const emailIndex = orderedQuestions.findIndex((q) => q.inputType === "email");
+    if (emailIndex < 0) return;
+    clearPendingCompletion();
+    hasCompleted.current = false;
+    setCompletionPhase("processing");
+    goTo(emailIndex);
+  }, [orderedQuestions, clearPendingCompletion, goTo]);
+
   if (!question || currentIndex >= totalQuestions) {
     // Processing sequence phase (5 animated steps)
     if (completionPhase === "processing") {
@@ -653,7 +670,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
 
     // Pre-report wizard phase
     if (completionPhase === "wizard") {
-      return <PreReportWizard onComplete={() => onComplete(reportToken)} />;
+      return (
+        <PreReportWizard onComplete={() => onComplete(reportToken ?? completedReportToken())} />
+      );
     }
 
     // Error confirmation only
@@ -661,7 +680,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       <SurveyConfirmation
         status={submitStatus === "idle" && hasPendingCompletion ? "error" : submitStatus}
         onExit={onExit}
+        errorKind={submitErrorKind}
         onRetry={handleRetry}
+        onFixEmail={handleFixEmail}
         onStartOver={onStartOver}
       />
     );

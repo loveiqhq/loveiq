@@ -2,15 +2,43 @@
 
 import type { FC } from "react";
 import { trackSurveyConfirmationCtaClicked } from "@features/analytics/client";
+import type { SubmitErrorKind } from "./hooks/useSubmitSurvey";
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
 
 interface SurveyConfirmationProps {
   status: SubmitStatus;
+  /** Why the submit failed. Every refusal used to read "we lost connection". */
+  errorKind?: SubmitErrorKind | null;
   onExit: () => void;
   onRetry?: () => void;
+  /** Back to the email question, every other answer kept. */
+  onFixEmail?: () => void;
   onStartOver?: () => void;
 }
+
+const ERROR_COPY: Record<SubmitErrorKind, { heading: string; body: string }> = {
+  connection: {
+    heading: "Submission Interrupted",
+    body: "We lost connection before your results could be submitted. Your answers are still on this device, so you can retry now or come back later.",
+  },
+  busy: {
+    heading: "Almost There",
+    body: "We\u2019re still finishing your last attempt. Wait a minute, then retry. Your answers are safe.",
+  },
+  paused: {
+    heading: "Submissions Are Paused",
+    body: "We\u2019ve paused new submissions for a moment. Your answers are still on this device, so retry a little later.",
+  },
+  email: {
+    heading: "Check Your Email Address",
+    body: "We couldn\u2019t use the email address you entered. Fix it and send your answers again; nothing else needs redoing.",
+  },
+  answers: {
+    heading: "Submission Interrupted",
+    body: "Some of your answers couldn\u2019t be saved. Retry, and if it keeps happening, write to hello@loveiq.org.",
+  },
+};
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 
@@ -142,13 +170,18 @@ const PulsingDots: FC = () => (
 
 const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
   status,
+  errorKind,
   onExit,
   onRetry,
+  onFixEmail,
   onStartOver,
 }) => {
   const isSuccess = status === "success";
   const isSubmitting = status === "submitting" || status === "idle";
   const isError = status === "error";
+  const error = ERROR_COPY[errorKind ?? "connection"];
+  // Resending the same address only fails again: fixing it is the way on.
+  const fixEmail = isError && errorKind === "email" && onFixEmail;
 
   return (
     <main
@@ -201,7 +234,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
         >
           {isSubmitting && "Processing Your Answers…"}
           {isSuccess && "Your Journey Begins"}
-          {isError && "Submission Interrupted"}
+          {isError && error.heading}
         </h2>
 
         {/* Body text */}
@@ -213,8 +246,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
             "We’re carefully analyzing your responses across 14 archetypes and 21 psychological dimensions."}
           {isSuccess &&
             "Thank you for sharing your story. Your personalized intimacy profile is being prepared — a deep, science-backed mirror of your desires, patterns, and potential."}
-          {isError &&
-            "We lost connection before your results could be submitted. Your answers are still on this device, so you can retry now or come back later."}
+          {isError && error.body}
         </p>
 
         {/* Decorative divider */}
@@ -276,7 +308,16 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
 
         {isError && (
           <div className="flex flex-wrap items-center justify-center gap-3" {...fadeUp(1200)}>
-            {onRetry && (
+            {fixEmail && (
+              <button
+                type="button"
+                onClick={onFixEmail}
+                className="rounded-full bg-gradient-brand px-6 py-3 font-sans text-[14px] font-bold text-white shadow-[0_4px_20px_rgba(254,104,57,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_6px_24px_rgba(254,104,57,0.4)] focus-visible-ring"
+              >
+                Fix My Email
+              </button>
+            )}
+            {onRetry && !fixEmail && (
               <button
                 type="button"
                 onClick={onRetry}
@@ -292,7 +333,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
             >
               Return to Site
             </button>
-            {onStartOver && (
+            {onStartOver && !fixEmail && (
               <button
                 type="button"
                 onClick={onStartOver}
