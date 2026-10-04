@@ -104,15 +104,12 @@ const ReportDesktopSidebar: FC<Props> = ({
         </div>
 
         <div className="report-sidebar__actions">
-          <button
-            className="report-sidebar__btn"
-            type="button"
-            onClick={() => onShareClick?.()}
-            disabled={!onShareClick}
-          >
-            <ShareReportIcon />
-            <span>Share Report</span>
-          </button>
+          {onShareClick && (
+            <button className="report-sidebar__btn" type="button" onClick={() => onShareClick()}>
+              <ShareReportIcon />
+              <span>Share Report</span>
+            </button>
+          )}
           {onReferFriend && (
             <button className="report-sidebar__btn" type="button" onClick={() => onReferFriend()}>
               <ReferFriendIcon />
