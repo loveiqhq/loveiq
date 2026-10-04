@@ -3122,7 +3122,10 @@ describe("conversion-digest: where sessions end, and paywall to payment", () => 
     const p = payloadOf(img) as {
       bars: Array<{ label: string; dropPct: number }>;
       windowLabel: string;
+      questions: number;
     };
+    // The chart says how many questions there are: today's 57, not the file's 58.
+    expect(p.questions).toBe(ASKED.length);
     // Every question that clears the floor, in survey order. The thin one is out.
     expect(p.bars).toHaveLength(ASKED.length - 1);
     expect(p.bars[0]!.label).toBe("Q1");

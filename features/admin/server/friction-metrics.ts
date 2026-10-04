@@ -183,6 +183,13 @@ const ASKED_POSITION = new Map(
     .map((q, i) => [q.qId, i])
 );
 
+/**
+ * How many questions the survey asks today: 57 since 2026-09-11. Not the length
+ * of survey-data.ts, which still holds the question that stopped being asked.
+ * Printed on the drop-off chart, so nobody has to count bars to know it.
+ */
+export const ASKED_QUESTION_COUNT = ASKED_POSITION.size;
+
 /** A question as asked today: its reads and its place in the survey. */
 interface AskedQuestion extends QuestionReach {
   position: number;

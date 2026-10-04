@@ -6,6 +6,7 @@ vi.mock("@features/admin/server/supabase", () => ({
 }));
 
 import {
+  ASKED_QUESTION_COUNT,
   WATCH_LIST_MAX,
   buildFrictionReport,
   buildFrictionWatchList,
@@ -19,7 +20,7 @@ import {
   type ReportFrictionSnapshot,
 } from "@features/admin/server/friction-metrics";
 import { surveyQuestions } from "@/data/survey-data";
-import { isHidden } from "@features/survey/questionFlags";
+import { HIDDEN_QIDS, isHidden } from "@features/survey/questionFlags";
 import { orderEmailLast } from "@features/survey/ui/questionOrder";
 
 function q(over: Partial<FrictionQuestion> & { question_index: number }): FrictionQuestion {
@@ -471,5 +472,13 @@ describe("fetchSessionEnds", () => {
   it("is null, not an empty chart, when the read fails", async () => {
     mockSupabaseFetch.mockResolvedValue(new Response("{}", { status: 500 }));
     expect(await fetchSessionEnds("2026-09-04T00:00:00Z", "2026-10-04T00:00:00Z")).toBeNull();
+  });
+});
+
+describe("ASKED_QUESTION_COUNT", () => {
+  it("is the questions the survey asks today, not the questions in the file", () => {
+    // 58 in survey-data.ts on 2026-10-04, one of them switched off (15011): 57.
+    expect(ASKED_QUESTION_COUNT).toBe(surveyQuestions.length - HIDDEN_QIDS.size);
+    expect(ASKED_QUESTION_COUNT).toBe(ASKED.length);
   });
 });

@@ -162,6 +162,8 @@ interface DropoutPayload {
   // (label + drop-off %) ride in the signed URL to stay under Slack's
   // ~3000-char image_url cap. `reached` is intentionally omitted.
   bars: Array<{ label: string; dropPct: number }>;
+  /** How many questions the survey asks today, printed under the plot. */
+  questions?: number;
 }
 
 /**
@@ -1134,8 +1136,11 @@ export function renderDropoutBars(p: DropoutPayload): {
         {/* What the axes MEAN, in words. A reader who has never seen this chart
             should not have to infer either one. */}
         <div style={{ display: "flex", marginTop: 4, fontSize: 12, color: COLORS.textMuted }}>
-          left: % of people who reach a question and leave there without finishing · bottom:
-          question order
+          {`left: % of people who reach a question and leave there without finishing · bottom: ${
+            typeof p.questions === "number" && p.questions > 0
+              ? `all ${p.questions} questions, in the order asked today`
+              : "question order"
+          }`}
         </div>
 
         <div

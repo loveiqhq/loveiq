@@ -9,6 +9,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { computeRate, type DailyMetrics } from "@features/admin/server/digest-metrics";
+import { ASKED_QUESTION_COUNT } from "@features/admin/server/friction-metrics";
 import {
   buildFunnelDigestBlocks,
   shortDate,
@@ -456,7 +457,10 @@ describe("drop-off payload precision", () => {
     const d = new URL(img!.image_url!).searchParams.get("d")!;
     const payload = JSON.parse(Buffer.from(d, "base64url").toString("utf8")) as {
       bars: Array<{ label: string; dropPct: number }>;
+      questions: number;
     };
+    // The same count as the daily chart: the questions asked today.
+    expect(payload.questions).toBe(ASKED_QUESTION_COUNT);
 
     const pcts = payload.bars.map((b) => b.dropPct);
     // At least one value carries a fraction — an all-integer payload is the bug.

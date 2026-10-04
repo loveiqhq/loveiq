@@ -238,4 +238,18 @@ describe("renderDropoutBars: what the bars measure", () => {
     );
     expect(all.join(" ")).not.toContain("do not continue");
   });
+
+  it("says how many questions the survey asks, when told", () => {
+    const all = stringsIn(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars: [
+          { label: "Q1", dropPct: 5 },
+          { label: "Q2", dropPct: 9 },
+        ],
+        questions: 57,
+      }).element
+    );
+    expect(all.join(" ")).toContain("bottom: all 57 questions, in the order asked today");
+  });
 });

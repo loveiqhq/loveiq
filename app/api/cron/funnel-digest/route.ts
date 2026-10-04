@@ -49,7 +49,11 @@ import {
   fetchBucketPerformance,
   PAYGATE_MEASURED_FROM,
 } from "@features/admin/server/digest-metrics";
-import { fetchSessionEnds, type SessionEnd } from "@features/admin/server/friction-metrics";
+import {
+  ASKED_QUESTION_COUNT,
+  fetchSessionEnds,
+  type SessionEnd,
+} from "@features/admin/server/friction-metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -513,7 +517,11 @@ async function buildDropoutChartBlock(
    * Math.round(dropPct).
    */
   const compact = ends.map((e) => ({ label: e.label, dropPct: e.pct }));
-  const url = await buildSignedImageUrl("dropout-funnel", { windowLabel, bars: compact });
+  const url = await buildSignedImageUrl("dropout-funnel", {
+    windowLabel,
+    bars: compact,
+    questions: ASKED_QUESTION_COUNT,
+  });
   if (!url) return null;
   return {
     type: "image",

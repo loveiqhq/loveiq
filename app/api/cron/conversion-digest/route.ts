@@ -58,6 +58,7 @@ import {
 } from "@features/admin/server/digest-metrics";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
+  ASKED_QUESTION_COUNT,
   buildFrictionReport,
   buildFrictionWatchList,
   surveyQuestionNames,
@@ -940,6 +941,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
             {
               windowLabel: chartWindow,
               bars: ends.map((e) => ({ label: e.label, dropPct: e.pct })),
+              questions: ASKED_QUESTION_COUNT,
             },
             "dropout-funnel"
           )
