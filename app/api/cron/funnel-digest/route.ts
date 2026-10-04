@@ -47,6 +47,7 @@ import {
   fetchWeeklyMetrics,
   fetchFunnelCvrSparklines,
   fetchBucketPerformance,
+  PAYGATE_MEASURED_FROM,
 } from "@features/admin/server/digest-metrics";
 import { fetchSessionEnds, type SessionEnd } from "@features/admin/server/friction-metrics";
 
@@ -463,26 +464,6 @@ function trailingRate(nums: number[], dens: number[]): Array<number | null> {
     return d >= TRAILING_MIN_DENOMINATOR ? computeRate(n, d) : null;
   });
 }
-
-/**
- * The day the paywall stage began being measured the way it is measured now.
- *
- * `paygate` in get_funnel_cvr_sparklines is a UNION of a client-posted
- * `paywall_initiated` analytics event (consent-gated, so lossy) and
- * `report_price_quote.paywall_reached_at` (server truth). The server column
- * shipped 2026-09-05 19:15 UTC and has no rows before it, so the union counts a
- * strictly larger population from that day on.
- *
- * Drawn unmasked, the completion→paygate line steps from ~5% to ~60% on 5 Sep
- * and paygate→purchase collapses from ~9% to ~1.6% on the same day — a 12x
- * "improvement" and a 6x "collapse" that are one measurement change, not two
- * product events. That is the single most misreadable thing this digest could
- * publish, so the unmeasured stretch is a GAP rather than a low number.
- *
- * 09-06 rather than 09-05: the 5th holds 4 rows from 21:15 Berlin onward, a
- * partial day that would read as a near-zero rate.
- */
-const PAYGATE_MEASURED_FROM = "2026-09-06";
 
 /**
  * Null every slot whose trailing window reaches back before `measuredFrom`.

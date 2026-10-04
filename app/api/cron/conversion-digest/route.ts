@@ -51,7 +51,11 @@ import {
   tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
-import { computeRate, fetchFunnelCvrSparklines } from "@features/admin/server/digest-metrics";
+import {
+  computeRate,
+  fetchFunnelCvrSparklines,
+  PAYGATE_MEASURED_FROM,
+} from "@features/admin/server/digest-metrics";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
   buildFrictionReport,
@@ -997,7 +1001,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           cvrDays,
           (d) => d.purchased ?? 0,
           (d) => d.paygate ?? 0,
-          paywall?.firstRowDay
+          // A fixed date, not the paywall read's first day: that read can fail
+          // while this one succeeds, and its first day is a partial one.
+          PAYGATE_MEASURED_FROM
         ),
         showCounts: true,
         headline: (latest) => `${latest}% of people at the paywall paid`,

@@ -3220,6 +3220,17 @@ describe("conversion-digest: where sessions end, and paywall to payment", () => 
     expect(p.first[8]).toBe(computeRate(2, 70));
   });
 
+  it("keeps the gap when the paywall read fails", async () => {
+    // The paywall count and this line come from two different reads. With only
+    // this one answering, the early weeks must still be gaps: before 6 Sep the
+    // paywall was counted by a lossy client event alone, and drawn, the switch
+    // reads as a collapse from ~9% to ~1.6% that never happened.
+    const { blocks } = await build({ cvrDays: paywallDays(), paywall: null });
+    const p = payloadOf(paywallChart(blocks)!) as { first: Array<number | null> };
+    expect(p.first.slice(0, 8)).toEqual(Array(8).fill(null));
+    expect(p.first[8]).toBe(computeRate(2, 70));
+  });
+
   it("draws no paywall line when nobody reached the paywall", async () => {
     const cvrDays = paywallDays().map((d) => ({ ...d, paygate: 0 }));
     const { blocks } = await build({ cvrDays, paywall: PAYWALL });
