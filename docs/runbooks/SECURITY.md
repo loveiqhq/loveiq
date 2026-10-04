@@ -522,8 +522,9 @@ the pipeline otherwise lacks (no SBOM signing / SLSA today).
 - **Dependency Review** is GHAS-gated and disabled; `npm audit --audit-level=high`
   (blocks merge) + OSV-Scanner cover dependency CVEs.
 - **E2E runs in CI but is not a required check**: `ci.yml` runs it on every push
-  to `main` and every pull request (Dependabot's included), and the merge gate
-  stays Lint, Test and Build.
+  to `main` and every pull request from a branch in this repository
+  (Dependabot's included; PRs from forks are skipped), and the merge gate stays
+  Lint, Test and Build.
 - **Prod deploy gating** (approvals / rollback) lives in Vercel project settings,
   not this repo — the revert runbook above is the rollback path.
 
