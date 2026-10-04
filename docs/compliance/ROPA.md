@@ -258,7 +258,7 @@ Detailed implementation lives in `docs/runbooks/SECURITY.md` and the residual-ri
 
 ## 7. Change log
 
-- 2026-10-04: activity 15 adds Microsoft Clarity on the corporate site, consent-gated like GA4 and PostHog, with ads consent denied and Microsoft as independent controller.
+- 2026-10-04: activity 15 adds Microsoft Clarity on the corporate site (its own repo and Clarity project), consent-gated like GA4 and PostHog, with ads consent denied and Microsoft as independent controller. Clarity on loveiq.org (activity 9) is unchanged and still not consent-gated; see the Consent section above.
 - 2026-10-04: activity 15 adds PostHog session recordings and heatmaps on the corporate site (consent-gated as before; typed text masked; recordings kept 30 days).
 - 2026-09-30: activity 15 now records the corporate site's consent banner (CookieYes), GA4 and PostHog, which went live the same evening and run only after consent.
 - 2026-09-30: added activity 15, the corporate website appliedpsychometrics.org (live since 2026-09-30, server logs only for now). Controller named as the registered company rather than "LoveIQ (Eman)".
