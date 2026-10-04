@@ -1352,11 +1352,13 @@ const SurveyPage: FC = () => {
     setStep(TOTAL_STEPS + 1); // jump to consent
   }, []);
 
-  const handleReturn = useCallback((clearAnswersArg?: boolean, reportToken?: string | null) => {
+  const handleReturn = useCallback((clearAnswersArg?: boolean, reportTokenArg?: string | null) => {
     // Guard against a caller wired straight to onClick: React would pass the
     // MouseEvent here, which is truthy, wiping answers and sending the user to
-    // the token-less /report ("Can't find your report") screen.
+    // the token-less /report ("Can't find your report") screen. The same event
+    // arriving as the token sent a reader to /report/[object Object] (2026-10-03).
     const clearAnswers = clearAnswersArg === true;
+    const reportToken = typeof reportTokenArg === "string" ? reportTokenArg : null;
     try {
       if (clearAnswers) {
         copySurveySessionToReportSession();
@@ -1374,6 +1376,17 @@ const SurveyPage: FC = () => {
     } else {
       window.location.href = clearAnswers ? "/report" : "/";
     }
+  }, []);
+
+  /**
+   * "Start Over" on the failed-submission screen: drop this run (its answers, the
+   * pending completion Retry keeps resending, and its session id, so the next run is
+   * a new submission) and begin again at the intro. It used to be wired to the
+   * success path, which wiped the answers and opened a report that did not exist.
+   */
+  const handleStartOver = useCallback(() => {
+    clearPersistedSurveyState({ clearPendingCompletion: true });
+    window.location.href = "/survey";
   }, []);
 
   const handleAgree = useCallback(() => {
@@ -1425,6 +1438,7 @@ const SurveyPage: FC = () => {
       <SurveyEngine
         onExit={() => handleReturn()}
         onComplete={(token) => handleReturn(true, token)}
+        onStartOver={handleStartOver}
       />
     );
   }

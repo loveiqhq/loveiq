@@ -164,17 +164,18 @@ a transcript. Filter on `surface` to tell the two apart.
 
 ### What feeds it
 
-| Source                                                                                | Where from                                                             | When                    |
-| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs                                                                             | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| GA4, call notes, funnel numbers, Slack                                                | `/api/cron/brain-fast`                                                 | every 15 min            |
-| Notion (board + pages)                                                                | `/api/cron/brain-notion`                                               | hourly, at :41          |
-| Gmail (every mailbox on the domain)                                                   | `/api/cron/brain-gmail`                                                | hourly, at :11          |
-| Search Console                                                                        | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
-| Shipped report copy, the chapter method, the glossary/survey/scoring vocabulary       | `/api/cron/brain-fast`                                                 | every 15 min            |
-| Books on love, desire and sex (eleven, whole; searched only when asked for)           | `npm run brain:books` → `scripts/brain-books.ts`                       | by hand, once           |
-| Research citation cards, one per construct (`evidence`)                               | `/api/cron/brain-evidence`                                             | daily, 04:20 UTC        |
-| Open-access papers, whole (`paper`; CC BY and CC0 only; searched only when asked for) | `/api/cron/brain-papers`                                               | daily, 04:50 UTC        |
+| Source                                                                                     | Where from                                                             | When                    |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs                                                                                  | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| GA4, call notes, funnel numbers, Slack                                                     | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Notion (board + pages)                                                                     | `/api/cron/brain-notion`                                               | hourly, at :41          |
+| Gmail (every mailbox on the domain)                                                        | `/api/cron/brain-gmail`                                                | hourly, at :11          |
+| Search Console                                                                             | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Shipped report copy, the chapter method, the glossary/survey/scoring vocabulary            | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Books on love, desire and sex (eleven, whole; searched only when asked for)                | `npm run brain:books` → `scripts/brain-books.ts`                       | by hand, once           |
+| Research citation cards, one per construct (`evidence`)                                    | `/api/cron/brain-evidence`                                             | daily, 04:20 UTC        |
+| Open-access papers, whole (`paper`; CC BY and CC0 only; searched only when asked for)      | `/api/cron/brain-papers`                                               | daily, 04:50 UTC        |
+| The corporate website appliedpsychometrics.org (`corporate`; searched only when asked for) | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
 
 Jira is **not** a source. Notion is the system of record for the team's work
 (decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
@@ -209,6 +210,18 @@ naming the paper, its authors and its license and saying it is not LoveIQ's clai
 authors are filed as `meta.first_author`, never `meta.author`, which is matched against
 colleagues. A retracted paper is never stored. The run alerts #brain when every search
 fails or when it crashes, and records what it skipped and why in `cron_run`.
+
+The corporate website is a source too, opt-in for a different reason (Eman, 2026-10-04).
+appliedpsychometrics.org is the website of Applied Psychometrics UG, the company that operates
+LoveIQ, and `brain-ingest` reads its GA4 property (556864746) and Search Console property
+(`sc-domain:appliedpsychometrics.org`) every night into `corporate`: daily, weekly and monthly
+visits with their channels, the most-read pages and clicks out to other sites (loveiq.org above all) each month, and
+the Google searches that find it. Those rows read like LoveIQ's own `ga4` and `gsc` rows, so
+without the opt-in a question about LoveIQ's traffic could be answered with the wrong site's
+numbers. It is its own source rather than more `ga4` and `gsc` rows because each ingester's
+sweep deletes the rows of its source that its run did not write. It re-reads the site's whole
+history every night, which is a few dozen rows; a failed night is re-read by the next. Its GA4
+counts only visitors who accepted the site's cookie banner, and every traffic row says so.
 
 A document that is rewritten SHORTER does not wait for the sweep: `upsertChunks`
 deletes the parts its new version no longer has in the same write (`leftoverParts`,

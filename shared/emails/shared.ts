@@ -14,8 +14,13 @@ import { escapeHtml } from "@shared/format/html-escape";
 export { escapeHtml };
 import { getEmailImageBaseUrl } from "./site-url";
 
+// Under /images/ because proxy.ts skips that folder. Every response it touches
+// carries Cross-Origin-Resource-Policy: same-origin, and browsers then refuse the
+// image inside a webmail page: Outlook on the web drew a broken logo (2026-10-04).
+export const EMAIL_LOGO_PATH = "/images/loveiq-mark-512.png";
+
 export function renderBrandHeader(siteUrl: string): string {
-  const logoUrl = `${getEmailImageBaseUrl(siteUrl)}/apple-touch-icon.png`;
+  const logoUrl = `${getEmailImageBaseUrl(siteUrl)}${EMAIL_LOGO_PATH}`;
   // "IQ" gradient: clients without -webkit-text-fill-color (e.g. Outlook desktop)
   // fall back to the solid `color` value.
   return `

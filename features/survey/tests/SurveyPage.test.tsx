@@ -33,10 +33,21 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@features/survey/ui/SurveyEngine", () => ({
-  default: ({ onExit, onComplete }: { onExit: () => void; onComplete: () => void }) => (
+  // Wired straight to onClick on purpose, as real buttons are: React then passes the
+  // click event as the first argument, which is exactly what broke Start Over.
+  default: ({
+    onExit,
+    onComplete,
+    onStartOver,
+  }: {
+    onExit: () => void;
+    onComplete: () => void;
+    onStartOver?: () => void;
+  }) => (
     <div data-testid="survey-engine">
       <button onClick={onExit}>Exit Survey</button>
       <button onClick={onComplete}>Complete Survey</button>
+      {onStartOver && <button onClick={onStartOver}>Start Over</button>}
     </div>
   ),
 }));
@@ -416,6 +427,61 @@ describe("SurveyPage", () => {
       expect(push).toHaveBeenCalledWith(expect.objectContaining({ surveyStep: 6 }), "");
     } finally {
       push.mockRestore();
+    }
+  });
+
+  function captureNavigation() {
+    const original = Object.getOwnPropertyDescriptor(window, "location");
+    const navigated: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        get href() {
+          return "/survey";
+        },
+        set href(value: string) {
+          navigated.push(value);
+        },
+      },
+    });
+    return {
+      navigated,
+      restore: () => original && Object.defineProperty(window, "location", original),
+    };
+  }
+
+  // Regression, 2026-10-03: the failed-submission screen's Start Over took the success
+  // path with the click event as the report token, so it wiped the answers and opened
+  // /report/[object Object]. A reader whose submission kept failing had to redo all
+  // 57 questions after a "Can't find your report" detour.
+  it("Start Over discards the failed run and reopens the survey", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    localStorage.setItem(PENDING_COMPLETION_KEY, JSON.stringify(pendingCompletion));
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage />);
+      await userEvent.click(await screen.findByRole("button", { name: /start over/i }));
+
+      expect(nav.navigated).toEqual(["/survey"]);
+      expect(localStorage.getItem(ANSWERS_STORAGE_KEY)).toBeNull();
+      expect(localStorage.getItem(PENDING_COMPLETION_KEY)).toBeNull();
+    } finally {
+      nav.restore();
+    }
+  });
+
+  it("never uses a click event as the report token", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage />);
+      await userEvent.click(await screen.findByRole("button", { name: /complete survey/i }));
+
+      expect(nav.navigated).toEqual(["/report"]);
+    } finally {
+      nav.restore();
     }
   });
 

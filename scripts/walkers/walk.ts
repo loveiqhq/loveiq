@@ -22,7 +22,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { chromium, devices, webkit, type Page } from "playwright";
+import { chromium, devices, webkit, type Locator, type Page } from "playwright";
 
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 
@@ -1401,9 +1401,9 @@ async function answerQuestion(
       for (const label of wanted) {
         const i = labels.indexOf(label.replace(/\s+/g, " ").trim());
         if (i === -1) missing.push(label);
-        else await cards.nth(i).click();
+        else await pressChoice(page, cards.nth(i));
       }
-      if (missing.length === wanted.length) await cards.first().click();
+      if (missing.length === wanted.length) await pressChoice(page, cards.first());
       return missing.length ? `option not on screen: ${missing.join(" | ")}` : undefined;
     }
     case "country":
@@ -1424,8 +1424,22 @@ async function answerQuestion(
   }
 }
 
+/**
+ * Presses a choice, first opening the collapsed category it sits in.
+ *
+ * C9 on staging (#411) groups its topics into categories, and a closed category's panel
+ * is `inert`. Its checkboxes still have a box, so `isVisible()` says yes, but a click
+ * waits out its 30s timeout and the walk stops on C9. The panel's id is what its header
+ * button's `aria-controls` names.
+ */
+async function pressChoice(page: Page, card: Locator): Promise<void> {
+  const closed = await card.evaluate((el) => el.closest("[inert]")?.id ?? null);
+  if (closed) await page.locator(`button[aria-controls="${closed}"]`).click();
+  await card.click();
+}
+
 /** A question this checkout does not know (staging can be ahead of main): the first option. */
-async function answerGenerically(page: Page): Promise<string> {
+export async function answerGenerically(page: Page): Promise<string> {
   const radio = page.locator('[role="radio"]').first();
   if (await radio.isVisible().catch(() => false)) {
     await radio.click();
@@ -1433,7 +1447,7 @@ async function answerGenerically(page: Page): Promise<string> {
   }
   const box = page.locator('[role="checkbox"]').first();
   if (await box.isVisible().catch(() => false)) {
-    await box.click();
+    await pressChoice(page, box);
     return "first option";
   }
   const scale = page.getByRole("button", { name: "4 of 7", exact: true });

@@ -3661,6 +3661,37 @@ describe("/api/mcp", () => {
       expect(urlOf()).toContain("source=neq.book");
     });
 
+    it("lists the corporate website only when it is named, like the papers", async () => {
+      // Its traffic rows read like LoveIQ's own, so an unnamed browse must never list them.
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.corporate");
+      wire([row(1)], 1);
+      await call({ sources: ["corporate"] });
+      expect(urlOf()).not.toContain("neq.corporate");
+      expect(urlOf()).toContain("source=neq.paper");
+    });
+
+    it("says the corporate website is opt-in when a site filter comes back empty", async () => {
+      wire([]);
+      const r = await call({ meta: { site: "appliedpsychometrics.org" } });
+      expect(r.content[0].text).toContain(
+        'The corporate website is left out unless `sources` names "corporate".'
+      );
+      wire([]);
+      const named = await call({
+        sources: ["corporate"],
+        meta: { site: "appliedpsychometrics.org" },
+      });
+      expect(named.content[0].text).not.toContain("The corporate website is left out");
+    });
+
     it("orders by when the brain learned it, and shows that date", async () => {
       wire([{ ...row(1), first_seen_at: "2026-09-09T07:05:27.724+00:00" }], 1);
       const r = await call({ order: "recently_learned", learned_since: "2026-09-08" });
