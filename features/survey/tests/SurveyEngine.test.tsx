@@ -108,7 +108,11 @@ vi.mock("@features/survey/ui/questions/CountryQuestion", () => ({
 }));
 
 vi.mock("@features/survey/ui/SurveyHeader", () => ({
-  default: () => <div data-testid="survey-header" />,
+  default: (props: { onPause?: () => void }) => (
+    <div data-testid="survey-header">
+      <button onClick={props.onPause}>Pause</button>
+    </div>
+  ),
 }));
 
 vi.mock("@features/survey/ui/SurveyNav", () => ({
@@ -146,6 +150,7 @@ vi.mock("@features/survey/ui/ProcessingSequence", () => ({
 }));
 
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
+import { __resetOverlayHistoryForTests } from "@shared/ui/overlay-history";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -562,5 +567,73 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
     fireEvent.click(screen.getByTestId("survey-nav-next"));
 
     expect(go).toHaveBeenCalledWith(-1);
+  });
+});
+
+describe("SurveyEngine — Back with the pause dialog open", () => {
+  // With an entry per question, Back would otherwise move "where you left off" while the
+  // dialog still promised it (found in review, 2026-10-04).
+  const q = (index: number, base: number) => ({ surveyQuestion: index, surveyQuestionBase: base });
+
+  beforeEach(() => {
+    __resetOverlayHistoryForTests();
+    window.history.replaceState(q(2, 0), "", "/survey");
+    mockCurrentIndex = 2;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("closes the dialog and keeps the question", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    // The reader's Back pops the dialog's entry: the browser lands on the question's own
+    // entry (the overlay helper reads where it landed), then fires popstate.
+    act(() => {
+      window.history.replaceState(q(2, 0), "");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: q(2, 0) }));
+    });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("does not move the question on ArrowLeft while the dialog is open", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("does not move the question on a swipe while the dialog is open", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+
+    // A right swipe is Previous everywhere else.
+    fireEvent.touchStart(window, { touches: [{ clientX: 40, clientY: 300 }] });
+    fireEvent.touchEnd(window, { changedTouches: [{ clientX: 240, clientY: 305 }] });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+
+  it("Exit leaves only after the dialog's Back entry is off the stack", () => {
+    const onExit = vi.fn();
+    const back = vi
+      .spyOn(window.history, "back")
+      .mockImplementation(() =>
+        window.dispatchEvent(new PopStateEvent("popstate", { state: q(2, 0) }))
+      );
+    render(<SurveyEngine onExit={onExit} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /go back to main page/i }));
+
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledTimes(1);
   });
 });

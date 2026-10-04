@@ -37,6 +37,8 @@ import {
 } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
+import { useCloseOnBack } from "@features/report/ui/hooks/useCloseOnBack";
 import { readCookie } from "@shared/observability/cookie";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
@@ -490,9 +492,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     setShowPauseModal(false);
   }, []);
 
+  // Back closes the pause dialog, as it does the report's overlays, instead of
+  // changing the question underneath it: with a history entry per question, Back
+  // would otherwise move "where you left off" while the dialog still promised it.
+  useCloseOnBack(showPauseModal, handleResumeFromPause);
+
   const handleExitFromPause = useCallback(() => {
-    setShowPauseModal(false);
-    onExit();
+    // Leave once the dialog's Back entry (Safari) is off the stack. Closing it here
+    // would release that entry with a history.back() racing the navigation home.
+    afterOverlayEntryGone(onExit);
   }, [onExit]);
 
   // Handle answer change
@@ -528,6 +536,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   // Keyboard navigation
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (showPauseModal) return; // the dialog has the keyboard
       if (e.key === "ArrowRight" || e.key === "Enter") {
         if (hasAnswer || !question?.required) {
           e.preventDefault();
@@ -540,7 +549,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [hasAnswer, question, goNext, goPrev]);
+  }, [hasAnswer, question, goNext, goPrev, showPauseModal]);
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
@@ -551,6 +560,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     };
     const handleTouchEnd = (e: TouchEvent) => {
       if (touchStartX.current === null || touchStartY.current === null) return;
+      if (showPauseModal) return; // a swipe on the dialog is not a question move
       const diffX = e.changedTouches[0]!.clientX - touchStartX.current;
       const diffY = e.changedTouches[0]!.clientY - touchStartY.current;
       touchStartX.current = null;
@@ -567,7 +577,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [hasAnswer, question, goNext, goPrev]);
+  }, [hasAnswer, question, goNext, goPrev, showPauseModal]);
 
   // Clean up auto-advance timer on unmount
   useEffect(() => {

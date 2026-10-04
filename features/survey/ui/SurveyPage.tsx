@@ -1304,6 +1304,10 @@ const SurveyPage: FC = () => {
       return;
     }
     if (step > 0) {
+      // A reload restores the step onto the entry it was saved from. Pushing another
+      // copy buried the questions' own entry (SurveyEngine), so the first Back after a
+      // reload landed on the same question and did nothing.
+      if (window.history.state?.surveyStep === step) return;
       window.history.pushState({ surveyStep: step }, "");
     }
   }, [step]);
