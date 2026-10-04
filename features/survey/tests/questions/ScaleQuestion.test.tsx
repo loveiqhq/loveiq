@@ -95,6 +95,11 @@ describe("ScaleQuestion", () => {
       screen.getByRole("button", { name: `${v} of 7` }).style.getPropertyValue("--ring")
     );
     expect(rings).toEqual(["46px", "38px", "31px", "27px", "31px", "38px", "46px"]);
+    // Phones use the landing page's scale (Figma 9200:32861), same shape.
+    const phone = [1, 2, 3, 4, 5, 6, 7].map((v) =>
+      screen.getByRole("button", { name: `${v} of 7` }).style.getPropertyValue("--ring-sm")
+    );
+    expect(phone).toEqual(["34px", "29px", "24px", "21px", "24px", "29px", "34px"]);
   });
 
   it("marks only the picked point as pressed", () => {

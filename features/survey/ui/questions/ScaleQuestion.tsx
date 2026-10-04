@@ -11,11 +11,13 @@ interface ScaleQuestionProps {
 }
 
 /**
- * Ring diameters in px, Figma 11303:174 (desktop). They shrink toward the neutral
- * middle and grow toward both ends, so the scale reads stronger at either pole.
- * Phones draw them at 0.62x, the ratio of the v2 phone frame 9184:313.
+ * Ring diameters in px. They shrink toward the neutral middle and grow toward both
+ * ends, so the scale reads stronger at either pole. From 640px: Figma 11303:174.
+ * Phones: the landing page's own scale (Figma 9200:32861, WQuestionCard), so the
+ * question asked there looks the same here. The tap target is the whole column.
  */
 const RING_PX = [46, 38, 31, 27, 31, 38, 46] as const;
+const PHONE_RING_PX = [34, 29, 24, 21, 24, 29, 34] as const;
 
 function splitHoverState(raw: string): { title: string; description: string | null } {
   const colonIndex = raw.indexOf(":");
@@ -75,10 +77,12 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                 aria-pressed={isSelected}
                 onClick={() => onChange(v)}
                 className="group relative z-10 flex h-12 flex-1 cursor-pointer items-center justify-center focus-visible:outline-none"
-                style={{ "--ring": `${ring}px` } as CSSProperties}
+                style={
+                  { "--ring": `${ring}px`, "--ring-sm": `${PHONE_RING_PX[i]}px` } as CSSProperties
+                }
               >
                 <span
-                  className={`flex size-[calc(var(--ring)*0.62)] items-center justify-center rounded-full border-2 bg-white transition-[border-color,box-shadow] duration-300 ease-out group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-[6px] group-focus-visible:outline-[#6b5b95] sm:size-[var(--ring)] ${
+                  className={`flex size-[var(--ring-sm)] items-center justify-center rounded-full border-2 bg-white transition-[border-color,box-shadow] duration-300 ease-out group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-[6px] group-focus-visible:outline-[#6b5b95] sm:size-[var(--ring)] ${
                     isLit
                       ? "border-[#6b5b95]"
                       : "border-[rgba(22,16,33,0.16)] group-hover:border-[rgba(107,91,149,0.55)]"
@@ -91,8 +95,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                   <span
                     className={`rounded-full bg-[#6b5b95] transition-[width,height] duration-300 ease-out ${
                       isSelected
-                        ? "size-[calc(var(--ring)*0.62*0.38)] sm:size-[calc(var(--ring)*0.38)]"
-                        : "size-[calc(var(--ring)*0.62*0.32)] sm:size-[calc(var(--ring)*0.32)]"
+                        ? "size-[calc(var(--ring-sm)*0.38)] sm:size-[calc(var(--ring)*0.38)]"
+                        : "size-[calc(var(--ring-sm)*0.32)] sm:size-[calc(var(--ring)*0.32)]"
                     }`}
                   />
                 </span>

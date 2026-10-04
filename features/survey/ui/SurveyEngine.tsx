@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
@@ -89,6 +89,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // The card's last pixel; while it is below the fold the sticky footer is
   // floating over content and gets a hairline to separate the two.
   const cardEndRef = useRef<HTMLDivElement | null>(null);
+  const cardWrapRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const footerRef = useRef<HTMLDivElement | null>(null);
   const [footerFloating, setFooterFloating] = useState(false);
 
   const hasCleared = useRef(false);
@@ -412,6 +416,59 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     };
   }, [hasAnswer, question, goNext, goPrev]);
 
+  // The country search opens a list under its box, which a phone keyboard would cover
+  // if the question sat lower: that one stays at the top on a phone.
+  const holdAtTop = question?.answerType === "country";
+
+  // No dead space. From 640px the card hugs its content and sits a little above the
+  // middle of the window; on a phone the question sits a little above the middle of
+  // the room left over the pinned buttons. Placed once as each question opens, then
+  // held: picking an answer or opening a row grows it downward instead of moving what
+  // was just pressed, and too tall to fit just starts at the top. Written to the
+  // elements directly, so placing costs no re-render.
+  useLayoutEffect(() => {
+    let placedWidth = -1;
+    const place = () => {
+      const wrap = cardWrapRef.current;
+      const card = cardRef.current;
+      const body = bodyRef.current;
+      const foot = footerRef.current;
+      if (!wrap || !card || !body || !foot) return;
+      placedWidth = window.innerWidth;
+      const banner =
+        parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--liq-consent-h")
+        ) || 0;
+      const room = window.innerHeight - banner;
+      const wide =
+        typeof window.matchMedia === "function" && window.matchMedia("(min-width: 640px)").matches;
+      wrap.style.paddingTop = "";
+      body.style.paddingTop = "";
+      if (wide) {
+        const free = room - card.offsetHeight;
+        wrap.style.paddingTop = `${Math.max(24, Math.floor(free * 0.4))}px`;
+        return;
+      }
+      if (holdAtTop) return;
+      const first = body.firstElementChild;
+      const last = body.lastElementChild;
+      if (!first || !last) return;
+      const content = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+      const top = parseFloat(getComputedStyle(body).paddingTop) || 0;
+      // 24px always kept between the content and the buttons.
+      const free = room - foot.offsetHeight - top - content - 24;
+      if (free > 0) body.style.paddingTop = `${top + Math.floor(free * 0.4)}px`;
+    };
+    // A phone's toolbar sliding away on scroll is a height-only resize: re-placing on
+    // it would shift the question under the reader's thumb. Re-place on width only.
+    const onResize = () => {
+      if (window.innerWidth !== placedWidth) place();
+    };
+    place();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [currentIndex, totalQuestions, holdAtTop]);
+
   // Hairline over the sticky footer only while it floats over the card's content.
   useEffect(() => {
     const end = cardEndRef.current;
@@ -494,18 +551,23 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
         </div>
 
         {/* Phones: the card is the screen. From 640px: a 720px card with a border. */}
-        <div className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col sm:flex-none sm:px-6 sm:pb-10 sm:pt-[clamp(24px,6vh,72px)]">
+        <div
+          ref={cardWrapRef}
+          className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col sm:flex-none sm:px-6 sm:pb-6"
+        >
           {/* Figma draws its 1px strokes INSIDE a frame; a CSS border adds 1px. So
               every bordered box here sits 1px in from the frame's padding (36 → 35). */}
           <section
+            ref={cardRef}
             aria-label={`Question ${currentIndex + 1} of ${totalQuestions}`}
-            className="relative flex flex-1 flex-col bg-white sm:min-h-[640px] sm:rounded-[22px] sm:border sm:border-[rgba(22,16,33,0.09)]"
+            className="relative flex flex-1 flex-col bg-white sm:rounded-[22px] sm:border sm:border-[rgba(22,16,33,0.09)]"
           >
             {/* Fill `backwards`, not `both`: a transform left in place after the
                 entrance would trap the country dropdown under the sticky footer. */}
             <div
               key={animKey}
-              className="flex flex-1 flex-col gap-5 px-[18.4px] pt-[22.4px] motion-safe:animate-[survey-fade-up_0.4s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:px-[35px] sm:pt-[33px]"
+              ref={bodyRef}
+              className="flex flex-1 flex-col gap-5 px-[18.4px] pt-[22.4px] motion-safe:animate-[survey-fade-up_0.4s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:px-[35px] sm:pb-3 sm:pt-[33px]"
             >
               {question.answerType === "open" && (
                 <OpenResponseQuestion
@@ -558,6 +620,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 question scrolls (above the cookie banner while it is up). Not on
                 a landscape phone, where they would cover half the screen. */}
             <div
+              ref={footerRef}
               className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
                 footerFloating
                   ? "shadow-[0_-1px_0_rgba(22,16,33,0.09),0_-12px_24px_-16px_rgba(22,16,33,0.2)]"
