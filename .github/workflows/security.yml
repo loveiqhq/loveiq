@@ -38,6 +38,12 @@ jobs:
         uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
         with:
           extra_args: --only-verified
+          # The action runs `docker run <image>:<version>`, and `version`
+          # defaults to `latest`: a movable tag, so the commit pin above would
+          # not pin the scanner that actually runs. Digest-pinned like every
+          # action. Dependabot does not update this line, so move it together
+          # with the `uses:` pin above.
+          version: 3.97.9@sha256:52e67fef4d054ecff5c2ce4b4ae376626d1ef54aa0898b53cac19c25e92e14db
 
   # SAST using Semgrep for security patterns
   sast-semgrep:
@@ -331,8 +337,8 @@ jobs:
 
           echo "✅ No secrets found in build output"
 
-  # NOTE: Playwright E2E tests (e2e/) are kept intact for local use and will be
-  # re-added to CI when the survey feature launches with proper test coverage.
+  # Playwright E2E runs in ci.yml (job `e2e`), on every push to main and every
+  # pull request from this repository, Dependabot's included.
 
   # Custom security rules check
   custom-security-rules:

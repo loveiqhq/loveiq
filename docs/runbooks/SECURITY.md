@@ -462,6 +462,10 @@ tag — found by hand on 2026-09-19, which is exactly the kind of check that
 should not depend on someone looking, so
 `__tests__/scripts/workflow-pinning.test.ts` now enforces it across every
 workflow. Commented-out `uses:` lines are ignored, since they execute nothing.
+The same goes for a container an action pulls: the TruffleHog action runs
+`ghcr.io/trufflesecurity/trufflehog:<version>` and defaults to `latest`, so
+`security.yml` pins `version` to a digest, which that test also checks.
+Dependabot does not update it; move it together with the action's `uses:` pin.
 
 ### Layer 1 — local pre-push gate (preventive)
 
@@ -517,8 +521,9 @@ the pipeline otherwise lacks (no SBOM signing / SLSA today).
   scheduled full-history (`fetch-depth: 0`) scan to catch older leaks.
 - **Dependency Review** is GHAS-gated and disabled; `npm audit --audit-level=high`
   (blocks merge) + OSV-Scanner cover dependency CVEs.
-- **E2E is intentionally not in CI** (deferred until the funnel stabilises) — do
-  not add it to the merge gate.
+- **E2E runs in CI but is not a required check**: `ci.yml` runs it on every push
+  to `main` and every pull request (Dependabot's included), and the merge gate
+  stays Lint, Test and Build.
 - **Prod deploy gating** (approvals / rollback) lives in Vercel project settings,
   not this repo — the revert runbook above is the rollback path.
 
