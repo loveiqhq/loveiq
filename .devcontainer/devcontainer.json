@@ -1,6 +1,6 @@
 {
   "name": "LoveIQ Dev",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
   "postCreateCommand": "npm install && cp -n .env.example .env.local || true",
   "forwardPorts": [3000],
   "customizations": {
