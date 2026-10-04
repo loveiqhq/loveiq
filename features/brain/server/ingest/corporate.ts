@@ -161,9 +161,13 @@ export async function ingestCorporateSite(
     { name: "screenPageViews" },
     { name: "engagedSessions" },
   ];
-  // A report that stops before its last page still returns rows, so the sweep must ask:
-  // deleting what a cut-short report did not list would delete real history.
-  const outcome: ReportOutcome = { truncated: false };
+  // A PARTIAL REPORT MUST NOT OVERWRITE A COMPLETE ROW, the rule google.ts keeps for LoveIQ.
+  // A report that stops before its last page still returns rows, so each group of rows is
+  // tracked on its own and written only from complete reports. A group that is not written
+  // keeps last night's rows, and the sweep is blocked so they survive.
+  const traffic: ReportOutcome = { truncated: false };
+  const extras: ReportOutcome = { truncated: false };
+  const search: ReportOutcome = { truncated: false };
   const report = (dimensions: string[], extra: Record<string, unknown> = {}) =>
     runGa4Report(
       token,
@@ -176,7 +180,7 @@ export async function ingestCorporateSite(
         ...extra,
       },
       isOutOfTime,
-      outcome
+      traffic
     );
 
   // Users are not additive, so each grain asks GA4 for its own unique counts; sessions,
@@ -220,12 +224,10 @@ export async function ingestCorporateSite(
     }
   }
 
-  // Best-effort extras for the monthly rows: the pages read most, and the clicks out to
-  // LoveIQ, which are the reason the site exists. Losing them must not lose the traffic.
+  // For the monthly rows: the pages read most, and the clicks out to LoveIQ, which are the
+  // reason the site exists. Losing them must not lose the daily and weekly traffic.
   const topPages = new Map<string, Map<string, number>>();
   const linkClicks = new Map<string, Map<string, number>>();
-  // Unknown is not zero: when this report fails, the monthly row says nothing about clicks
-  // rather than "none recorded".
   let extrasRead = false;
   try {
     for (const r of await runGa4Report(
@@ -238,7 +240,7 @@ export async function ingestCorporateSite(
         limit: 10_000,
       },
       isOutOfTime,
-      outcome
+      extras
     )) {
       const month = ga4Month(r.dimensionValues?.[0]?.value ?? "");
       const page = topPages.get(month) ?? new Map<string, number>();
@@ -256,7 +258,7 @@ export async function ingestCorporateSite(
         limit: 10_000,
       },
       isOutOfTime,
-      outcome
+      extras
     )) {
       const month = ga4Month(r.dimensionValues?.[0]?.value ?? "");
       const domain = r.dimensionValues?.[1]?.value;
@@ -283,14 +285,14 @@ export async function ingestCorporateSite(
       SITE,
       { ...body, dimensions: ["date"], rowLimit: 5000 },
       isOutOfTime,
-      outcome
+      search
     );
     searchQueries = await queryGsc(
       token,
       SITE,
       { ...body, dimensions: ["date", "query"], rowLimit: 5000 },
       isOutOfTime,
-      outcome
+      search
     );
   } catch (err) {
     searchError = err;
@@ -315,7 +317,11 @@ export async function ingestCorporateSite(
       period_end: periodEnd,
     });
 
-  for (const [day, t] of days) {
+  const writeTraffic = !traffic.truncated;
+  const writeMonths = writeTraffic && extrasRead && !extras.truncated;
+  const writeSearch = !searchError && !search.truncated;
+
+  for (const [day, t] of writeTraffic ? days : []) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
     const label = `${longDate(day)} (${day})${day === today ? ", so far" : ""}`;
     row(
@@ -326,7 +332,7 @@ export async function ingestCorporateSite(
       day
     );
   }
-  for (const [week, t] of weeks) {
+  for (const [week, t] of writeTraffic ? weeks : []) {
     if (!/^\d{4}-W\d{2}$/.test(week)) continue;
     const anyDay = [...days.keys()].find((d) => isoWeek(d) === week);
     if (!anyDay) continue;
@@ -340,7 +346,7 @@ export async function ingestCorporateSite(
       last < today ? last : today
     );
   }
-  for (const [month, t] of months) {
+  for (const [month, t] of writeMonths ? months : []) {
     if (!/^\d{4}-\d{2}$/.test(month)) continue;
     const last = monthEnd(month);
     const label = `${longMonth(month)} (${month})${last >= today ? ", so far" : ""}`;
@@ -356,9 +362,7 @@ export async function ingestCorporateSite(
           pages?.size
             ? `Most-viewed pages: ${listOf(pages, 8, (n) => (n === 1 ? " view" : " views"))}`
             : null,
-          extrasRead
-            ? `Clicks out to other websites: ${clicks?.size ? listOf(clicks, 8) : "none recorded"}`
-            : null,
+          `Clicks out to other websites: ${clicks?.size ? listOf(clicks, 8) : "none recorded"}`,
         ].filter((l): l is string => Boolean(l))
       ),
       { grain: "month", month, sessions: t.sessions, users: t.users },
@@ -400,7 +404,7 @@ export async function ingestCorporateSite(
       if (s) s.queries.set(query, (s.queries.get(query) ?? 0) + (r.impressions ?? 0));
     }
   }
-  for (const [day, s] of searchByDay) {
+  for (const [day, s] of writeSearch ? searchByDay : []) {
     row(
       `gsc-day:${day}`,
       `${SITE_NAME} Google searches — ${longDate(day)}`,
@@ -409,7 +413,7 @@ export async function ingestCorporateSite(
       day
     );
   }
-  for (const [week, s] of searchByWeek) {
+  for (const [week, s] of writeSearch ? searchByWeek : []) {
     const anyDay = [...searchByDay.keys()].find((d) => isoWeek(d) === week);
     if (!anyDay) continue;
     const { first, last } = isoWeekBounds(anyDay);
@@ -421,7 +425,7 @@ export async function ingestCorporateSite(
       last < today ? last : today
     );
   }
-  for (const [month, s] of searchByMonth) {
+  for (const [month, s] of writeSearch ? searchByMonth : []) {
     const last = monthEnd(month);
     row(
       `gsc-month:${month}`,
@@ -435,7 +439,7 @@ export async function ingestCorporateSite(
   const written = await upsertChunks(rows);
   if (searchError) throw searchError;
 
-  const complete = !outcome.truncated;
+  const complete = writeTraffic && writeMonths && writeSearch;
   const sweeping = complete && (await shouldSweep(SOURCE));
   if (sweeping) await recordSweep(SOURCE);
   const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written) : 0;

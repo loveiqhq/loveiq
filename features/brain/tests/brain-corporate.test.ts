@@ -46,6 +46,9 @@ const r = (dims: string[], metrics: number[]) => ({
 let failSearch = false;
 let failLinkClicks = false;
 let truncateDays = false;
+let truncateQueries = false;
+/** The run's clock, as the cron passes it: flipped once a full page of queries is served. */
+let outOfTime = false;
 
 /** Answers each report by the dimensions it asks for, like GA4 and Search Console do. */
 vi.mock("@shared/http/fetch-with-timeout", () => ({
@@ -68,6 +71,17 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     };
     if (String(url).includes("searchconsole")) {
       if (failSearch) return bad;
+      // A full page, so queryGsc asks for another, which the run's clock then refuses.
+      if (truncateQueries && dims === "date,query") {
+        outOfTime = true;
+        return ok({
+          rows: Array.from({ length: 5000 }, () => ({
+            keys: ["2026-10-02", "x"],
+            clicks: 0,
+            impressions: 1,
+          })),
+        });
+      }
       return ok({
         rows:
           dims === "date"
@@ -113,6 +127,8 @@ describe("the corporate website's traffic and searches", () => {
     failSearch = false;
     failLinkClicks = false;
     truncateDays = false;
+    truncateQueries = false;
+    outOfTime = false;
   });
 
   it("writes everything under `corporate`, never ga4 or gsc, so neither sweep deletes the other", async () => {
@@ -165,7 +181,7 @@ describe("the corporate website's traffic and searches", () => {
     expect(sweepStale).not.toHaveBeenCalled();
   });
 
-  it("does not sweep when a report stopped before its last page", async () => {
+  it("keeps last night's traffic rows when a traffic report stopped before its last page", async () => {
     truncateDays = true;
     const result = await ingestCorporateSite(STAMP);
     expect(result).toMatchObject({
@@ -175,14 +191,28 @@ describe("the corporate website's traffic and searches", () => {
       swept: 0,
     });
     expect(sweepStale).not.toHaveBeenCalled();
+    // Written from a partial report, these would overwrite complete rows from an earlier run.
+    expect(written.some((w) => w.source_id.startsWith("ga4-"))).toBe(false);
+    expect(byId("gsc-day:2026-10-02")).toBeDefined();
+  });
+
+  it("keeps last night's search rows when a search report stopped before its last page", async () => {
+    truncateQueries = true;
+    const result = await ingestCorporateSite(STAMP, () => outOfTime);
+    expect(result).toMatchObject({ complete: false, sweepBlocked: true, swept: 0 });
+    expect(sweepStale).not.toHaveBeenCalled();
+    expect(written.some((w) => w.source_id.startsWith("gsc-"))).toBe(false);
     expect(byId("ga4-day:2026-10-01")).toBeDefined();
   });
 
-  it("does not report zero clicks when the click report could not be read", async () => {
+  it("keeps last night's month rows when the click report could not be read", async () => {
     failLinkClicks = true;
-    await ingestCorporateSite(STAMP);
-    const month = byId("ga4-month:2026-10")?.body ?? "";
-    expect(month).toContain("Sessions: 16");
-    expect(month).not.toContain("Clicks out");
+    const result = await ingestCorporateSite(STAMP);
+    // Not rewritten without the clicks, and not reported as zero clicks either.
+    expect(byId("ga4-month:2026-10")).toBeUndefined();
+    expect(byId("ga4-day:2026-10-01")).toBeDefined();
+    expect(byId("ga4-week:2026-W40")).toBeDefined();
+    expect(result).toMatchObject({ complete: false, sweepBlocked: true });
+    expect(sweepStale).not.toHaveBeenCalled();
   });
 });
