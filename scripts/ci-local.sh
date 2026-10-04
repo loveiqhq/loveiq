@@ -127,7 +127,10 @@ run_required "docs-truth.yml › Markdown prettier"    bash -c 'npx prettier --c
 # ─── security.yml › dependency-scan ────────────────────────────────────────
 # Same gate as security.yml: advisories accepted in .osv-scanner.toml are not
 # counted, and an unreadable report (the registry not answering) is not a finding.
-audit_count=$(npm audit --audit-level=high --json 2>/dev/null | node scripts/npm-audit-gate.mjs)
+# npm audit exits non-zero whenever it lists anything, accepted or not; that
+# status is the gate's to judge, so it must not end the run under `bash -e`
+# with pipefail. A crash of the gate itself still fails (empty count below).
+audit_count=$({ npm audit --audit-level=high --json 2>/dev/null || true; } | node scripts/npm-audit-gate.mjs)
 if [ "$audit_count" = "unknown" ]; then
   skip_with_reason "security.yml › npm audit (high+)" "npm audit could not be read (registry did not answer); not treated as a vulnerability"
 elif [ "$audit_count" = "0" ]; then
@@ -136,7 +139,11 @@ elif [ "$audit_count" = "0" ]; then
 else
   step "security.yml › npm audit (high+)"
   npm audit --audit-level=high || true
-  echo "❌ Required step failed: npm audit (gate reported '${audit_count:-nothing}' high or critical advisories not accepted in .osv-scanner.toml)"
+  if [ -z "$audit_count" ]; then
+    echo "❌ Required step failed: npm audit (the gate printed no count; see its error above)"
+  else
+    echo "❌ Required step failed: npm audit ($audit_count high or critical advisories not accepted in .osv-scanner.toml)"
+  fi
   FAIL_COUNT=$((FAIL_COUNT+1))
   FAIL_STEPS+=("security.yml › npm audit")
   summarize
