@@ -6136,7 +6136,7 @@ export const MCP_INSTRUCTIONS =
   'one. To see what the literature on a construct looks like as a whole, read its evidence card (`sources: ["evidence"]`) first.\n\n' +
   "THE CORPORATE WEBSITE, searched only when you ask for it: appliedpsychometrics.org, the " +
   "website of Applied Psychometrics UG, the company that operates LoveIQ. Its daily, weekly and " +
-  "monthly visits, channels and most-read pages, its clicks out to loveiq.org, and the Google " +
+  "monthly visits, channels and most-read pages, its clicks out to other sites (loveiq.org above all), and the Google " +
   'searches that find it, refreshed nightly. Pass `sources: ["corporate"]`; an ordinary search ' +
   "never returns it, so a question about LoveIQ's traffic is answered with LoveIQ's. Its visits " +
   "count only people who accepted the site's cookie banner.\n\n" +

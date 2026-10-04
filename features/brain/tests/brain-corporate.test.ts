@@ -105,7 +105,10 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
         r(["20261002", "Direct"], [7]),
       ],
       "yearMonth,pagePath": [r(["202610", "/"], [14]), r(["202610", "/imprint"], [3])],
-      "yearMonth,linkDomain": [r(["202610", "loveiq.org"], [2])],
+      "yearMonth,linkDomain": [
+        r(["202610", "loveiq.org"], [2]),
+        r(["202610", "www.datenschutz-berlin.de"], [1]),
+      ],
     };
     if (dims === "yearMonth,linkDomain" && failLinkClicks) return bad;
     // More rows than any page returns, so the report pages until its ceiling and stops short.
@@ -158,7 +161,10 @@ describe("the corporate website's traffic and searches", () => {
     expect(month?.body).toContain("Users: 7");
     expect(month?.body).toContain("October 2026 (2026-10), so far");
     expect(month?.body).toContain("Most-viewed pages: / 14 views, /imprint 3 views");
-    expect(month?.body).toContain("Clicks out to other websites: loveiq.org 2");
+    // Every outside site is listed, LoveIQ first when it leads: the privacy page links out too.
+    expect(month?.body).toContain(
+      "Clicks out to other websites: loveiq.org 2, www.datenschutz-berlin.de 1"
+    );
   });
 
   it("writes Search Console rows with their queries, and skips days with no impressions", async () => {

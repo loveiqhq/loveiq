@@ -215,7 +215,7 @@ The corporate website is a source too, opt-in for a different reason (Eman, 2026
 appliedpsychometrics.org is the website of Applied Psychometrics UG, the company that operates
 LoveIQ, and `brain-ingest` reads its GA4 property (556864746) and Search Console property
 (`sc-domain:appliedpsychometrics.org`) every night into `corporate`: daily, weekly and monthly
-visits with their channels, the most-read pages and clicks out to loveiq.org each month, and
+visits with their channels, the most-read pages and clicks out to other sites (loveiq.org above all) each month, and
 the Google searches that find it. Those rows read like LoveIQ's own `ga4` and `gsc` rows, so
 without the opt-in a question about LoveIQ's traffic could be answered with the wrong site's
 numbers. It is its own source rather than more `ga4` and `gsc` rows because each ingester's
