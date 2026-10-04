@@ -1,5 +1,8 @@
 # Dependabot configuration for automated dependency updates
-# This helps keep dependencies secure and up-to-date
+# This helps keep dependencies secure and up-to-date.
+#
+# Reviewers come from .github/CODEOWNERS: GitHub removed dependabot.yml's own
+# `reviewers` option in 2025. Security updates are not affected by `ignore` below.
 
 version: 2
 updates:
@@ -11,12 +14,13 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    reviewers: # Valid field - IDE may show false warning
-      - "eman-cickusic"
     labels:
       - "dependencies"
-      - "security"
-    # Group minor and patch updates together
+    # Minor and patch updates arrive as two grouped PRs. Production minors used to
+    # be left out of their group, which did not give them PRs of their own: while a
+    # group PR is open, Dependabot marks every dependency of that type as handled
+    # and raises nothing else ("Found no dependencies to update", job log
+    # 2026-09-28). React 19.3, zod 4.6 and other minors never got a PR that way.
     groups:
       development-dependencies:
         dependency-type: "development"
@@ -26,8 +30,25 @@ updates:
       production-dependencies:
         dependency-type: "production"
         update-types:
+          - "minor"
           - "patch"
-    # Security updates always separate
+    ignore:
+      # Tailwind 4 rewrites the styling setup (the PostCSS plugin moved to
+      # @tailwindcss/postcss and utilities were renamed). That is a migration with a
+      # visual check of every page, not a version bump.
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      # ESLint 10 crashes with the plugins eslint-config-next brings (import,
+      # jsx-a11y, react and react-hooks all accept eslint 9 at most).
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # Every Stripe minor pins a newer API version, and checkout pins
+      # STRIPE_API_VERSION (features/checkout/server/stripeCheckout.ts) on purpose,
+      # so a minor alone fails the typecheck and would hold the whole production
+      # group red. Bump deliberately: SDK and constant together, then a sandbox
+      # checkout. Patches keep the API version and still arrive.
+      - dependency-name: "stripe"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     versioning-strategy: increase
     commit-message:
       prefix: "chore"
@@ -39,10 +60,17 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
-    reviewers: # Valid field - IDE may show false warning
-      - "eman-cickusic"
     labels:
       - "dependencies"
       - "github-actions"
+    # One PR for every action. codeql-action's init, analyze and autobuild must
+    # share a version (a split bump fails "Loaded a configuration file for version
+    # X, but running version Y"), and one PR per action filled Dependabot's default
+    # cap of five open PRs, after which it stopped proposing Actions updates
+    # (nothing from 2026-08-28 to 2026-10-04).
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     commit-message:
       prefix: "ci"
