@@ -26,7 +26,9 @@ Follow the "Working alongside other sessions" section of `CLAUDE.md` in full. In
 - Never force-push to `main`, `staging` or anyone else's branch, and never rewrite history
   another session uses. Re-read `git log -1` right before any history operation.
 - Discard (`git checkout --`, `git restore`, `git stash`, `git clean`) only your own changes.
-- Delete only the worktrees and branches you created, and only after they are merged.
+- Delete only the worktrees and branches you created, and only after they are merged. Delete a
+  remote branch with `gh api -X DELETE repos/loveiqhq/loveiq/git/refs/heads/<branch>`, not
+  `git push --delete`, which runs the pre-push hook in whatever checkout you are in.
 - Never run `npm install` in someone else's checkout, never stop a process you did not start,
   and run your own server on a free port.
 - Read live settings before changing them, and list every outside change in the PR. Run `--apply`
