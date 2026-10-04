@@ -151,9 +151,9 @@ interface StageConversionPayload {
 
 /**
  * Drop-out-by-question histogram: one bar per survey question, height = the
- * drop-off RATE at that question (% of people who saw it and did NOT advance).
- * Tall bar = a question where users quit. `worstLabels` flags the steepest few
- * for red highlight + annotation.
+ * share of the people who reached it who left there and never finished
+ * (`sessionEnds`). Tall bar = a question where users quit. The steepest few are
+ * red and annotated.
  */
 interface DropoutPayload {
   kind: "dropout-funnel";
@@ -162,12 +162,6 @@ interface DropoutPayload {
   // (label + drop-off %) ride in the signed URL to stay under Slack's
   // ~3000-char image_url cap. `reached` is intentionally omitted.
   bars: Array<{ label: string; dropPct: number }>;
-  /**
-   * What the bar height measures, in words. The daily message plots where
-   * sessions END, which is a different measure from the weekly default below,
-   * and a chart has to say which one it is drawing.
-   */
-  footnote?: string;
 }
 
 /**
@@ -1140,8 +1134,8 @@ export function renderDropoutBars(p: DropoutPayload): {
         {/* What the axes MEAN, in words. A reader who has never seen this chart
             should not have to infer either one. */}
         <div style={{ display: "flex", marginTop: 4, fontSize: 12, color: COLORS.textMuted }}>
-          {p.footnote ??
-            "left: % of people who reach a question and do not continue · bottom: question order"}
+          left: % of people who reach a question and leave there without finishing · bottom:
+          question order
         </div>
 
         <div

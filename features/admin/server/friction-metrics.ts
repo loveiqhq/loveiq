@@ -81,7 +81,19 @@ export interface FrictionQuestion {
    *  label is what most people saw, not what everyone saw. */
   q_id_variants?: number;
   visits: number;
+  /**
+   * 'abandon' EVENTS. The survey sends one every time the page is hidden, so this
+   * counts app and tab switches by people who came back and finished (292 of 924
+   * over the 30 days to 2026-10-03). Not a count of people who quit: see `quits`.
+   */
   abandons: number;
+  /** Sessions that reached this question. */
+  sessions: number;
+  /**
+   * Sessions whose last event is at this question and that never finished: the
+   * people who left the survey here for good. Finishing is never counted.
+   */
+  quits: number;
   backs: number;
   skipped: number;
   median_ms: number;
@@ -145,23 +157,39 @@ function secs(ms: number): string {
 /** Only rank questions with enough traffic for a rate to mean anything. */
 const FLOOR = 20;
 
-/** The share of sessions that reach a question and end there. */
-const endRate = (q: FrictionQuestion) => computeRate(q.abandons, q.visits);
+/** Of the people who reach a question, the share who leave there and never finish. */
+const endRate = (q: FrictionQuestion) => computeRate(q.quits, q.sessions);
+
+export interface SessionEnd {
+  label: string;
+  pct: number;
+}
 
 /**
- * Where sessions end, one bar per question, in question order.
+ * Where people quit the survey, one bar per question, in question order.
  *
  * The same floor and the same rate as the "end there" sentence, so the chart's
- * tallest bar is always the question that sentence names. The weekly drop-off
- * chart measures something else (reached a question, never reached the next)
- * and disagreed with the sentence by 6 points at Q58 on the 30 days to
- * 2026-09-18, so it is not reused here.
+ * tallest bar is always the question that sentence names. Both the daily and the
+ * weekly message draw it from here.
+ *
+ * People, not events, and never a finisher. The weekly chart used to count those
+ * who reached a question and not the next one, which on the last screen is
+ * everyone who finished: it drew ~300 finishers as a 76% drop-off.
  */
-export function sessionEnds(snap: FrictionSnapshot): Array<{ label: string; pct: number }> {
+export function sessionEnds(snap: FrictionSnapshot): SessionEnd[] {
   return (snap.questions ?? [])
-    .filter((q) => q.visits >= FLOOR)
+    .filter((q) => q.sessions >= FLOOR)
     .sort((a, b) => a.question_index - b.question_index)
     .map((q) => ({ label: `Q${q.question_index + 1}`, pct: endRate(q) }));
+}
+
+/** `sessionEnds` for a window, or null when the read fails. */
+export async function fetchSessionEnds(
+  sinceIso: string,
+  untilIso: string
+): Promise<SessionEnd[] | null> {
+  const snap = await fetchFrictionSnapshot(sinceIso, untilIso);
+  return snap ? sessionEnds(snap) : null;
 }
 
 /**
@@ -184,29 +212,24 @@ export function buildSurveySignals(
   const plain = (q: FrictionQuestion) => qPlain(q.question_index, q.q_id, questionNames);
 
   // --- Drop-off / exit point -------------------------------------------------
-  const worstDrop = ranked.map((q) => ({ q, pct: endRate(q) })).sort((a, b) => b.pct - a.pct)[0];
+  const worstDrop = qs
+    .filter((q) => q.sessions >= FLOOR)
+    .map((q) => ({ q, pct: endRate(q) }))
+    .sort((a, b) => b.pct - a.pct)[0];
   if (worstDrop) {
     signals.push({
       /**
-       * "Where sessions end", not "Drop-off point".
-       *
-       * This counts sessions whose LAST event is this question. The weekly
-       * funnel chart also says "drop-off" but measures something else — the
-       * share who reach a question and never reach the NEXT one. Someone who
-       * reaches Q58, goes back, and abandons at Q30 is in one and not the other,
-       * so the two legitimately disagree: on the 30 days to 2026-09-18 this read
-       * 22% at Q58 while the chart read 16% at Q58 and 25% at Q57.
-       *
-       * Both are right. Publishing both into #ops under the same word is what
-       * was wrong, so this one now names its own definition.
+       * "Where sessions end": the people whose last step was this question
+       * and who never finished. Both drop-off charts now draw the same
+       * measure (see `sessionEnds`), so the sentence and the bars agree.
        */
       label: "Where sessions end",
       group: "Survey",
       value: `${Math.round(worstDrop.pct)}%`,
       where: label(worstDrop.q),
-      n: worstDrop.q.visits,
+      n: worstDrop.q.sessions,
       status: worstDrop.pct >= 10 ? "watch" : "quiet",
-      // Of the sessions that REACH it: the rate divides by visits to this question.
+      // Of the sessions that REACH it: the rate divides by the people who got there.
       sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${plain(worstDrop.q)} end there.`,
     });
   }
@@ -467,8 +490,8 @@ export interface FrictionReport {
   /** How many raw rows the aggregate actually saw. Printed so a truncation
    *  like the PostgREST one can never hide again. */
   rowsRead: number;
-  /** Where sessions end, per question. See `sessionEnds`. */
-  ends?: Array<{ label: string; pct: number }>;
+  /** Where people quit, per question. See `sessionEnds`. */
+  ends?: SessionEnd[];
 }
 
 export async function buildFrictionReport(

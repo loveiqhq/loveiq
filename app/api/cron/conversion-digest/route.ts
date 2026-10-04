@@ -926,7 +926,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     /**
      * Every question's "end there" share as a bar, so the worst ones are seen
      * against the rest. Same numbers as the sentence above (`sessionEnds`), so
-     * the tallest red bar is always the question the sentence names.
+     * the tallest red bar is always the question the sentence names. People who
+     * finish are never counted, so the last screen is never a drop-off.
      */
     const ends = input.friction.ends ?? [];
     const endsUrl =
@@ -935,8 +936,6 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
             {
               windowLabel: chartWindow,
               bars: ends.map((e) => ({ label: e.label, dropPct: e.pct })),
-              footnote:
-                "left: % of sessions that reach a question and end there · bottom: question order",
             },
             "dropout-funnel"
           )

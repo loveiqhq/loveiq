@@ -3075,14 +3075,16 @@ describe("conversion-digest: where sessions end, and paywall to payment", () => 
       question_index: i,
       q_id: `q${i}`,
       visits: 1000 - i * 10,
-      abandons: i === 57 ? 76 : i === 55 ? 40 : i === 2 ? 59 : 10,
+      abandons: 10,
+      sessions: 1000 - i * 10,
+      quits: i === 57 ? 76 : i === 55 ? 40 : i === 2 ? 59 : 10,
       backs: 5,
       skipped: 0,
       median_ms: 9000,
       timed: 900,
     }));
     // 4 of 5 leaving is 80%, and would top the chart if the floor were missing.
-    questions[40] = { ...questions[40]!, visits: 5, abandons: 4, timed: 5 };
+    questions[40] = { ...questions[40]!, visits: 5, sessions: 5, quits: 4, timed: 5 };
     const snap = { questions, total_rows: 30_000, total_timed: 27_000, median_ms: 9000 };
     return {
       signals: buildSurveySignals(snap, new Map([["q57", "What is your email?"]])),
@@ -3101,7 +3103,6 @@ describe("conversion-digest: where sessions end, and paywall to payment", () => 
 
     const p = payloadOf(img) as {
       bars: Array<{ label: string; dropPct: number }>;
-      footnote: string;
       windowLabel: string;
     };
     // Every question that clears the floor, in question order. The thin one is out.
@@ -3114,8 +3115,6 @@ describe("conversion-digest: where sessions end, and paywall to payment", () => 
     expect(texts(blocks)[at]).toContain(
       `${Math.round(top.dropPct)}% of sessions that reach Q58 (What is your email?) end there.`
     );
-    // It names its own measure, which is not the weekly chart's.
-    expect(p.footnote).toContain("reach a question and end there");
     expect(p.windowLabel).toBe("30 days to 3 Oct");
     expect(img.alt_text).toBe("Where sessions end, by question. Highest: Q58 18%, Q56 9%, Q3 6%.");
   });

@@ -221,29 +221,21 @@ function stringsIn(node: unknown, out: string[] = []): string[] {
 }
 
 describe("renderDropoutBars: what the bars measure", () => {
-  const bars = [
-    { label: "Q1", dropPct: 5 },
-    { label: "Q2", dropPct: 9 },
-  ];
-
-  it("prints the measure the caller names", () => {
-    // The daily message plots where sessions END, a different measure from the
-    // weekly chart's, and the picture has to say which one it is.
+  it("says the bars are people who left and never finished", () => {
+    // Finishers are never counted, so the last screen is never a drop-off. The
+    // footnote has to say so, or the old reading ("did not continue") comes back.
     const all = stringsIn(
       renderDropoutBars({
         kind: "dropout-funnel",
-        bars,
-        footnote: "left: % of sessions that reach a question and end there",
+        bars: [
+          { label: "Q1", dropPct: 5 },
+          { label: "Q2", dropPct: 9 },
+        ],
       }).element
     );
-    expect(all).toContain("left: % of sessions that reach a question and end there");
-    expect(all.join(" ")).not.toContain("do not continue");
-  });
-
-  it("keeps the weekly chart's own measure when none is given", () => {
-    const all = stringsIn(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
-    expect(all).toContain(
-      "left: % of people who reach a question and do not continue · bottom: question order"
+    expect(all.join(" ")).toContain(
+      "left: % of people who reach a question and leave there without finishing · bottom: question order"
     );
+    expect(all.join(" ")).not.toContain("do not continue");
   });
 });
