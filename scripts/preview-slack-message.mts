@@ -397,6 +397,12 @@ async function main(): Promise<void> {
   const windowEnd = dayStart.toISOString();
 
   console.log(`reading production data for ${dayKey} (${WINDOW_DAYS}-day window)...`);
+  /**
+   * Real ad spend, read once. `adCostByDay` reads the `ga4` chunks out of
+   * Supabase, which this script already has a key for, so the preview shows the
+   * break-even figures and the spend-vs-sales chart the message will carry.
+   */
+  const ad = await adCostByDay().catch(() => null);
   const [
     funnel,
     cohorts,
@@ -420,14 +426,12 @@ async function main(): Promise<void> {
     fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
     fetchPaywallHits(windowStart, windowEnd),
     fetchEmailExperimentResults(windowStart, windowEnd),
-    /**
-     * Real ad spend. `adCostByDay` reads the `ga4` chunks out of Supabase, which
-     * this script already has a key for — no Google credential involved — so the
-     * preview shows the break-even figures the message will actually carry.
-     */
-    adCostByDay()
-      .catch(() => ({ byDay: new Map<string, number>(), from: null, to: null }))
-      .then((ad) => fetchUnitEconomics(ad, windowStart, windowEnd, WINDOW_DAYS)),
+    fetchUnitEconomics(
+      ad ?? { byDay: new Map<string, number>(), from: null, to: null },
+      windowStart,
+      windowEnd,
+      WINDOW_DAYS
+    ),
   ]);
 
   // adSpend deliberately null: GA4 needs a service-account credential this
@@ -445,6 +449,7 @@ async function main(): Promise<void> {
     paywall,
     emailExperiments,
     unitEconomics,
+    ad,
     now,
   });
 
