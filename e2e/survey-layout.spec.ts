@@ -41,7 +41,14 @@ test.describe("Survey — question layout", () => {
     await expect(
       page.getByRole("heading", { name: ASKED[SCALE_INDEX]!.question, exact: true })
     ).toBeVisible({ timeout: 15_000 });
-    await page.waitForTimeout(600); // the entrance animation
+    // The entrance animation must have finished, or "before" is read mid-flight.
+    await page.waitForFunction(() =>
+      document
+        .getAnimations()
+        .every(
+          (a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity
+        )
+    );
 
     const point = page.getByRole("button", { name: "5 of 7" });
     const before = (await point.boundingBox())!;
