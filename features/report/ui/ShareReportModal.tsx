@@ -177,7 +177,7 @@ const ShareReportModal: FC<Props> = ({ open, onClose, ownerToken, returnFocusRef
             <path d="M11.4534 18.0133L20.56 23.32" />
             <path d="M20.5467 8.68005L11.4534 13.9867" />
           </svg>
-          <span>They&apos;ll see your complete unlocked report</span>
+          <span>They&apos;ll see your report as you see it</span>
         </li>
       </ul>
     </div>
@@ -224,7 +224,7 @@ const ShareReportModal: FC<Props> = ({ open, onClose, ownerToken, returnFocusRef
           Share Your Report
         </h1>
         <p className="report-share-modal__subtitle">
-          Grant someone you trust access to your complete personalized report
+          Grant someone you trust access to your personalized report
         </p>
       </div>
 
@@ -399,7 +399,7 @@ const ShareReportModal: FC<Props> = ({ open, onClose, ownerToken, returnFocusRef
         <h1 className="report-share-modal__title">Report Sent!</h1>
         <p className="report-share-modal__subtitle">
           The recipient of your choosing will receive an email invitation with a unique link to view
-          your personalized report on this email address :{" "}
+          your personalized report on this email address:{" "}
           <strong className="report-share-modal__sent-email">{lastSentEmail}</strong>.
         </p>
       </div>

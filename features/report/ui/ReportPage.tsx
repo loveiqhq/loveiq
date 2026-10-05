@@ -2653,9 +2653,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works
   // cross-device); sessionId is the legacy in-storage one.
+  // A recipient's rating is not the owner's, and a share token identifies no reader of
+  // ours, so it is kept on screen and stored nowhere.
+  const isSharedView = data?.viewMode === "shared";
   const { feedbacks, submitted, rateSection, submitFeedback } = useSectionFeedback(
-    sessionId,
-    token
+    isSharedView ? null : sessionId,
+    isSharedView ? null : token
   );
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -2734,6 +2737,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const paywallReachedRef = useRef(false);
   const notifyPaywallReached = useCallback(() => {
     if (paywallReachedRef.current) return;
+    // A recipient reaching a lock is not the owner reaching the paywall (and the route
+    // takes only the owner's token).
+    if (isSharedView) return;
     if (!resolvedReportToken && !sessionId) return;
     paywallReachedRef.current = true;
     void fetch("/api/price", {
@@ -2745,14 +2751,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     }).catch(() => {
       // Best-effort: a missed ping costs one funnel step, never the reader's session.
     });
-  }, [resolvedReportToken, sessionId]);
+  }, [isSharedView, resolvedReportToken, sessionId]);
 
   const reportViewedFiredRef = useRef(false);
   useEffect(() => {
     if (reportViewedFiredRef.current) return;
     if (!data) return;
     reportViewedFiredRef.current = true;
-    setReportSubmissionContext(data.submissionId ?? null);
+    // Persisted events need a submission to count against. A recipient's visit is not the
+    // owner's, so it publishes none and theirs stay out of the owner's numbers.
+    setReportSubmissionContext(data.viewMode === "shared" ? null : (data.submissionId ?? null));
     trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
   }, [data, accessPlan]);
 

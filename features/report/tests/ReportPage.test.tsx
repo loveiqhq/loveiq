@@ -38,14 +38,20 @@ vi.mock("@features/report/ui/hooks/useReportData", () => ({
   useReportData: (...args: unknown[]) => mockUseReportData(...args),
 }));
 
-const { mockRateSection } = vi.hoisted(() => ({ mockRateSection: vi.fn() }));
+const { mockRateSection, mockFeedbackIdentity } = vi.hoisted(() => ({
+  mockRateSection: vi.fn(),
+  mockFeedbackIdentity: vi.fn(),
+}));
 vi.mock("@features/report/ui/hooks/useSectionFeedback", () => ({
-  useSectionFeedback: () => ({
-    feedbacks: {},
-    submitted: {},
-    rateSection: mockRateSection,
-    submitFeedback: vi.fn(),
-  }),
+  useSectionFeedback: (sessionId: string | null, token?: string | null) => (
+    mockFeedbackIdentity(sessionId, token ?? null),
+    {
+      feedbacks: {},
+      submitted: {},
+      rateSection: mockRateSection,
+      submitFeedback: vi.fn(),
+    }
+  ),
 }));
 
 const mockTrackReportViewed = vi.fn();
@@ -1616,6 +1622,7 @@ describe("ReportPage", () => {
       const article = REPORT_V4_LEARN_MORE[FVR]!;
       Object.assign(response.data as Record<string, unknown>, {
         viewMode,
+        submissionId: 42,
         ownerFirstName: "Eman",
         // /api/report prices nothing for a shared viewer.
         ...(viewMode === "shared" ? { pricingQuotes: null } : {}),
@@ -1666,6 +1673,43 @@ describe("ReportPage", () => {
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: FVR })
       );
+    });
+
+    it("counts nothing a recipient does against the owner: no paywall ping, no events, no ratings", async () => {
+      const user = userEvent.setup();
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+      mockGetReportSessionId.mockReturnValue("2f1c0b8e-3d4a-4c5b-8e6f-7a8b9c0d1e2f");
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(view("shared"));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-fvr__gate")!);
+
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("/api/price"))).toBe(false);
+      expect(vi.mocked(analytics.setReportSubmissionContext)).toHaveBeenLastCalledWith(null);
+      expect(mockFeedbackIdentity).toHaveBeenLastCalledWith(null, null);
+      fetchSpy.mockRestore();
+    });
+
+    it("counts the owner's, by the same lock", async () => {
+      const user = userEvent.setup();
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+      mockGetReportSessionId.mockReturnValue("2f1c0b8e-3d4a-4c5b-8e6f-7a8b9c0d1e2f");
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(view("owner"));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-fvr__gate")!);
+
+      await waitFor(() =>
+        expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("/api/price"))).toBe(true)
+      );
+      expect(vi.mocked(analytics.setReportSubmissionContext)).toHaveBeenLastCalledWith(42);
+      expect(mockFeedbackIdentity).toHaveBeenLastCalledWith(
+        "2f1c0b8e-3d4a-4c5b-8e6f-7a8b9c0d1e2f",
+        null
+      );
+      fetchSpy.mockRestore();
     });
 
     it("gives a recipient no sticky unlock bar, and the owner one", () => {
