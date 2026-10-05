@@ -1,6 +1,7 @@
 /**
- * The same-URL history entry that lets the back button close an open overlay,
- * on browsers without CloseWatcher (Safari). See
+ * The same-URL history entry that lets the back button close an open overlay
+ * when back is a history traversal: a desktop's Back and an iPhone's back
+ * swipe, on every engine, which a CloseWatcher never hears. See
  * features/report/ui/hooks/useCloseOnBack.ts for why that entry exists at all.
  *
  * ONE entry for whatever overlays are open, owned here rather than by each
@@ -97,10 +98,7 @@ export function acquireOverlayEntry(close: () => void): () => void {
   };
 }
 
-/**
- * Whether the entry on top is ours: a duplicate of the page beneath it.
- * False wherever CloseWatcher is used, because no entry is ever pushed there.
- */
+/** Whether the entry on top is ours: a duplicate of the page beneath it. */
 export function isOnOverlayEntry(): boolean {
   return typeof window !== "undefined" && Boolean(window.history.state?.[OVERLAY_ENTRY_KEY]);
 }
@@ -108,8 +106,8 @@ export function isOnOverlayEntry(): boolean {
 /**
  * Run `navigate` once our entry is off the stack, so the navigation takes its
  * place instead of stacking on top of it. Runs immediately when there is no
- * entry to remove. A chapter link uses this: on Safari the drawer's entry is on
- * top when it is tapped, and a fragment navigation pushed over it left a dead
+ * entry to remove. A chapter link uses this: the drawer's entry is on top when
+ * it is tapped, and a fragment navigation pushed over it left a dead
  * back press behind — or, racing the drawer's own release, undid the jump.
  */
 export function afterOverlayEntryGone(navigate: () => void): void {
