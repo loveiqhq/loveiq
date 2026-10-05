@@ -786,8 +786,10 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop. `data-invite-modal` lets the report hide its sticky footer, which would
+          otherwise draw over the modal (Mark, 04.10). */}
       <div
+        data-invite-modal=""
         className="fixed inset-0 z-50 bg-[rgba(217,217,217,0.1)] backdrop-blur-[3.75px]"
         style={{
           opacity: isVisible ? 1 : 0,
