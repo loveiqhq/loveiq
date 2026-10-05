@@ -273,14 +273,15 @@ describe("MultipleChoiceQuestion", () => {
       maxSelections: 1,
     });
 
-    // It answered a second tap with "You can select up to 1 options. Deselect one".
-    it("swaps to the new pick instead of refusing it", async () => {
+    // The work order (C7) keeps the cap with its explanation; it read "up to 1 options".
+    it("keeps the first pick and explains the cap in the singular", async () => {
       const user = userEvent.setup();
       render(<ControlledQuestion question={one} initialValue={["Time"]} />);
       await user.click(screen.getByTestId("choice-Money"));
-      expect(screen.getByTestId("choice-Money").getAttribute("aria-checked")).toBe("true");
-      expect(screen.getByTestId("choice-Time").getAttribute("aria-checked")).toBe("false");
-      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByTestId("choice-Time").getAttribute("aria-checked")).toBe("true");
+      expect(screen.getByTestId("choice-Money").getAttribute("aria-checked")).toBe("false");
+      expect(screen.getByRole("alert")).toHaveTextContent("You can select up to 1 option.");
+      expect(screen.getByRole("alert")).not.toHaveTextContent("1 options");
     });
   });
 });

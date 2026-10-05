@@ -19,6 +19,10 @@ import {
   setReportPricingSessionId,
   setReportSessionId,
 } from "@features/survey/ui/hooks/surveySession";
+import {
+  clearPersistedSurveyState,
+  saveLandingPrefill,
+} from "@features/survey/ui/hooks/surveyStorage";
 
 describe("surveySession", () => {
   beforeEach(() => {
@@ -63,6 +67,27 @@ describe("surveySession", () => {
       getSessionId();
       finalizeReportSession(ID);
       expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+    });
+
+    // Kept after a submit (the tab keeps its id for the report), it was adopted by the next
+    // run started from the homepage card in a new tab, and the server answered that run
+    // with the finished one's submission (#375).
+    it("goes with the draft at submit, so the next run from the card is a new session", () => {
+      localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      getSessionId();
+      clearPersistedSurveyState({ clearPendingCompletion: true, clearSurveySession: false });
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+      closeTheTab();
+      saveLandingPrefill("01001", 4);
+      expect(getSessionId()).not.toBe(ID);
+    });
+
+    it("is never adopted by a fresh draft from the homepage card", () => {
+      // A leftover from a run whose clean-up never ran (closed mid-wizard).
+      localStorage.setItem(SURVEY_SESSION_KEY, ID);
+      saveLandingPrefill("01001", 4);
+      expect(getSessionId()).not.toBe(ID);
     });
 
     it("ignores a saved value that is not a session id", () => {

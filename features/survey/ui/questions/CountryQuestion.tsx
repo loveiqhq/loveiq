@@ -24,6 +24,10 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
   const listRef = useRef<HTMLUListElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  // selectCountry blurs the box, and the blur runs handleBlur at once, with this render's
+  // state: the text typed before the choice. Typed "Niger" then clicked "Nigeria" stored
+  // "Niger". Set while a choice is being made.
+  const choosingRef = useRef(false);
 
   // Display: when editing show search text, otherwise show selected value
   const displayValue = isEditing ? search : (value ?? "");
@@ -44,12 +48,14 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
 
   const selectCountry = useCallback(
     (country: string) => {
+      choosingRef.current = true;
       onChange(country);
       setSearch("");
       setIsOpen(false);
       setIsEditing(false);
       setHighlightIndex(-1);
       inputRef.current?.blur();
+      choosingRef.current = false;
     },
     [onChange]
   );
@@ -95,7 +101,7 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
   // Leaving the box with a whole name typed ("germany", "UK") chooses it: Next stayed
   // disabled until the reader also tapped the name in the list.
   const handleBlur = () => {
-    if (!isEditing) return;
+    if (choosingRef.current || !isEditing) return;
     const exact = exactCountry(search);
     if (exact) selectCountry(exact);
   };

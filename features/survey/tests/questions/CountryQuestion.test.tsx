@@ -10,9 +10,19 @@ vi.mock("@/data/countries", () => {
     Germany: "DE",
     "United States": "US",
     "United Kingdom": "GB",
+    Niger: "NE",
+    Nigeria: "NG",
   };
   return {
-    COUNTRIES: ["Austria", "Australia", "Germany", "United States", "United Kingdom"],
+    COUNTRIES: [
+      "Austria",
+      "Australia",
+      "Germany",
+      "United States",
+      "United Kingdom",
+      "Niger",
+      "Nigeria",
+    ],
     COUNTRY_CODE_MAP: map,
     getCountryFlagUrl: (name: string) => {
       const code = map[name];
@@ -198,6 +208,26 @@ describe("CountryQuestion", () => {
       await user.type(input, "germany");
       fireEvent.pointerDown(document.body);
       expect(onChange).toHaveBeenLastCalledWith("Germany");
+    });
+
+    // Choosing blurs the box, and the blur ran with the text typed before the choice:
+    // typed "Niger", clicked "Nigeria", stored "Niger".
+    it("keeps the row the reader clicks over an exact name they typed", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
+      await user.type(screen.getByRole("combobox"), "Niger");
+      await user.click(screen.getByRole("option", { name: /Nigeria/ }));
+      expect(onChange).toHaveBeenLastCalledWith("Nigeria");
+    });
+
+    it("keeps the row the reader arrows to over an exact name they typed", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
+      await user.type(screen.getByRole("combobox"), "Niger");
+      await user.keyboard("{ArrowDown}{Enter}");
+      expect(onChange).toHaveBeenLastCalledWith("Nigeria");
     });
 
     // Tapping away mid-word wiped the text and left nothing selected.

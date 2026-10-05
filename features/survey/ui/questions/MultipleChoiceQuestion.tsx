@@ -33,9 +33,7 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
   const [attemptedOverLimit, setAttemptedOverLimit] = useState(false);
   const maxSelections = question.maxSelections;
   const isOverLimit = typeof maxSelections === "number" && selected.length > maxSelections;
-  // A list of one swaps on a new tap, so nothing is greyed out as unavailable.
-  const atLimit =
-    typeof maxSelections === "number" && maxSelections > 1 && selected.length >= maxSelections;
+  const atLimit = typeof maxSelections === "number" && selected.length >= maxSelections;
   const showLimitMessage =
     typeof maxSelections === "number" &&
     (attemptedOverLimit || isOverLimit || (forceValidation && isOverLimit));
@@ -48,9 +46,8 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
     }
 
     // "None of these" and any other pick exclude each other: both together was a
-    // contradiction the survey stored. A list of one swaps rather than asking the reader
-    // to deselect first.
-    if (isExclusive(option) || maxSelections === 1) {
+    // contradiction the survey stored.
+    if (isExclusive(option)) {
       setAttemptedOverLimit(false);
       onChange([option]);
       return;
@@ -79,7 +76,8 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
           aria-live="polite"
           className="font-sans text-[13px] font-medium text-[#ef4444]"
         >
-          You can select up to {maxSelections} options. Deselect one to choose another.
+          You can select up to {maxSelections} {maxSelections === 1 ? "option" : "options"}.
+          Deselect one to choose another.
         </p>
       )}
 
