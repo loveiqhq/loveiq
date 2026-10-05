@@ -964,18 +964,18 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                       noValidate
                       className="flex flex-col gap-6 border-t border-white/5 pt-8"
                     >
-                      {/* Name used in mail */}
+                      {/* The sender's full name, so the friend knows who sent it (Marcus, 04.10). */}
                       <div className="flex flex-col gap-2">
                         <label
                           htmlFor="invite-sender-name"
                           className="px-2 font-sans text-[16px] text-white"
                         >
-                          Name used in mail
+                          Your Full Name
                         </label>
                         <input
                           id="invite-sender-name"
                           type="text"
-                          placeholder="Your name"
+                          placeholder="Your full name"
                           value={senderName}
                           onChange={(e) => setSenderName(e.target.value)}
                           disabled={state === "sending"}

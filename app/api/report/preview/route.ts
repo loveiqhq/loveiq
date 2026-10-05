@@ -128,7 +128,8 @@ export async function GET(request: Request) {
   const payload = stripLockedEduBodyFromPayload({
     submissionId: null,
     accessPlan,
-    userName: "Preview",
+    // No reader behind a preview, so no name: Refer a friend starts empty (Marcus, 04.10).
+    userName: null,
     userEmail: null,
     ownerFirstName: null,
     ownerToken: null,

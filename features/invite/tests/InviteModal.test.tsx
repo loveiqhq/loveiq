@@ -58,6 +58,21 @@ describe("InviteModal", () => {
     cleanup();
   });
 
+  // Marcus (04.10): the field asks for "Your Full Name", so the friend knows who sent
+  // it. The owner's first name is only where it starts.
+  it("asks for the sender's full name, starting from the owner's name", () => {
+    render(
+      <InviteModal open onClose={vi.fn()} referrerEmail="alice@example.com" referrerName="Alice" />
+    );
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    const field = screen.getByLabelText("Your Full Name") as HTMLInputElement;
+    expect(field.placeholder).toBe("Your full name");
+    expect(field.value).toBe("Alice");
+    expect(screen.queryByText("Name used in mail")).toBeNull();
+  });
+
   it("hides the email form by default and reveals it when the Email tile is clicked", () => {
     render(
       <InviteModal open onClose={vi.fn()} referrerEmail="alice@example.com" referrerName="Alice" />
