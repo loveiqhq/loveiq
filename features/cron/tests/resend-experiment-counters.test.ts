@@ -408,3 +408,32 @@ describe("resend webhook: a suppression write that fails", () => {
     expect(mockAddToSuppression).not.toHaveBeenCalled();
   });
 });
+
+describe("resend webhook: which reason a suppression keeps", () => {
+  /**
+   * The upsert merges, so a bounce after a complaint used to relabel the address
+   * "hard_bounce" and the complaint, the reason that matters, was lost.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockAddToSuppression.mockResolvedValue(true);
+  });
+
+  it("a bounce only records an address not listed yet", async () => {
+    mockVerify.mockReturnValue({ type: "email.bounced", data: { to: ["a@example.com"] } });
+    expect((await POST(request())).status).toBe(200);
+    expect(mockAddToSuppression).toHaveBeenCalledWith("a@example.com", "hard_bounce", {
+      ifAbsent: true,
+    });
+  });
+
+  it("a complaint overwrites whatever was recorded", async () => {
+    mockVerify.mockReturnValue({ type: "email.complained", data: { to: ["a@example.com"] } });
+    expect((await POST(request())).status).toBe(200);
+    expect(mockAddToSuppression).toHaveBeenCalledWith("a@example.com", "complaint");
+  });
+});

@@ -113,13 +113,29 @@ async function fetchPaidCandidates(): Promise<PaidUserRow[]> {
 
 const REPORT_TOKEN_RE = /^rpt_[A-Za-z0-9]{20}$/;
 
+/** The newest token matching `filter` that /api/report would still accept. */
+async function liveReportToken(filter: string): Promise<string | null> {
+  // The same test as /api/report: not revoked, and not expired.
+  const live = `&revoked_at=is.null&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(new Date().toISOString())})`;
+  const res = await supabaseGet(
+    `/rest/v1/report_access_token?${filter}${live}&select=token&order=created_at.desc&limit=1`
+  );
+  if (!res.ok) return null;
+  const token = ((await res.json()) as Array<{ token?: string }>)[0]?.token;
+  return typeof token === "string" && REPORT_TOKEN_RE.test(token) ? token : null;
+}
+
 /**
- * The buyer's own report link. Checkout records it on the payment; older payments are
- * looked up through their report's submission, as fulfillment does.
+ * The buyer's own report link, one that still opens. Checkout records it on the payment;
+ * older payments, and a recorded token revoked since, are looked up through their
+ * report's submission, as fulfillment does.
  */
 async function reportTokenForPayment(row: PaidUserRow): Promise<string | null> {
   const recorded = row.metadata?.reportToken;
-  if (typeof recorded === "string" && REPORT_TOKEN_RE.test(recorded)) return recorded;
+  if (typeof recorded === "string" && REPORT_TOKEN_RE.test(recorded)) {
+    const token = await liveReportToken(`token=eq.${encodeURIComponent(recorded)}`);
+    if (token) return token;
+  }
   if (!row.personal_report_id) return null;
   const report = await supabaseGet(
     `/rest/v1/personal_report?id=eq.${row.personal_report_id}&select=survey_submission_id&limit=1`
@@ -128,12 +144,7 @@ async function reportTokenForPayment(row: PaidUserRow): Promise<string | null> {
   const submissionId = ((await report.json()) as Array<{ survey_submission_id?: number }>)[0]
     ?.survey_submission_id;
   if (!submissionId) return null;
-  const tokens = await supabaseGet(
-    `/rest/v1/report_access_token?survey_submission_id=eq.${submissionId}&select=token&order=created_at.desc&limit=1`
-  );
-  if (!tokens.ok) return null;
-  const token = ((await tokens.json()) as Array<{ token?: string }>)[0]?.token;
-  return typeof token === "string" && REPORT_TOKEN_RE.test(token) ? token : null;
+  return liveReportToken(`survey_submission_id=eq.${submissionId}`);
 }
 
 async function hasSentInvite(email: string): Promise<boolean> {
@@ -232,13 +243,6 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const bucket = reminder === 1 ? "invite-reminder-1" : "invite-reminder-2";
-      const cooldown = await checkCooldown(email, bucket, COOLDOWN_MS);
-      if (!cooldown.allowed) {
-        summary.skippedCooldown++;
-        continue;
-      }
-
       // Deep-link into the Refer-a-Friend modal on the buyer's OWN report. It was bare
       // /report, which works only in the browser that took the survey: anywhere else
       // (another device, a mail app's browser, storage Safari cleared after 7 days)
@@ -252,6 +256,15 @@ export async function GET(request: Request) {
         continue;
       }
       const inviteCtaUrl = `${siteUrl}/report/${encodeURIComponent(reportToken)}?invite=1&from=email`;
+
+      // After the link, never before: checkCooldown sets the year-long key as it checks,
+      // so a lookup that failed after it cost the buyer their reminder for a year.
+      const bucket = reminder === 1 ? "invite-reminder-1" : "invite-reminder-2";
+      const cooldown = await checkCooldown(email, bucket, COOLDOWN_MS);
+      if (!cooldown.allowed) {
+        summary.skippedCooldown++;
+        continue;
+      }
 
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret

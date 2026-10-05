@@ -161,13 +161,14 @@ async function bumpEmailEngagement(kind: "opened" | "clicked"): Promise<void> {
  */
 async function suppressFor(type: unknown, email: string): Promise<boolean> {
   switch (type) {
+    // A bounce (or a send Resend refused) only records an address not yet listed, so it
+    // never relabels a complaint; a complaint, the reason that matters most, overwrites.
+    // A bounce used to turn a recorded complaint into "hard_bounce".
     case "email.bounced":
-      return addToSuppression(email, "hard_bounce");
+    case "email.suppressed":
+      return addToSuppression(email, "hard_bounce", { ifAbsent: true });
     case "email.complained":
       return addToSuppression(email, "complaint");
-    case "email.suppressed":
-      // Only if absent, so an address recorded as a complaint keeps that label.
-      return addToSuppression(email, "hard_bounce", { ifAbsent: true });
     default:
       return true;
   }

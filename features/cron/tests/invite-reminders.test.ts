@@ -116,6 +116,8 @@ describe("GET /api/cron/invite-reminders", () => {
       candidates?: Array<ReturnType<typeof paidRow>>;
       hasInvite?: boolean;
       submissionToken?: string | null;
+      /** The token recorded on the payment has been revoked since. */
+      recordedRevoked?: boolean;
     } = {}
   ) {
     const candidates = opts.candidates ?? [paidRow()];
@@ -130,6 +132,14 @@ describe("GET /api/cron/invite-reminders", () => {
         return { ok: true, json: async () => [{ survey_submission_id: 555 }] };
       }
       if (typeof url === "string" && url.includes("/rest/v1/report_access_token")) {
+        const recorded = /[?&]token=eq\.([^&]+)/.exec(url)?.[1];
+        if (recorded) {
+          return {
+            ok: true,
+            json: async () =>
+              opts.recordedRevoked ? [] : [{ token: decodeURIComponent(recorded) }],
+          };
+        }
         return {
           ok: true,
           json: async () => (opts.submissionToken ? [{ token: opts.submissionToken }] : []),
@@ -166,6 +176,60 @@ describe("GET /api/cron/invite-reminders", () => {
     expect(mockResendSend.mock.calls[0]![0].html as string).toContain(
       "/report/rpt_ZyXwVuTsRqPoNmLkJiHg?invite=1"
     );
+  });
+
+  // checkCooldown sets the year-long key as it checks. Called before the lookup, a buyer
+  // whose link was not found lost their reminder for a year without being sent anything.
+  it("spends the reminder's cooldown only once a link is found", async () => {
+    const { checkCooldown } = await import("@shared/http/ratelimit");
+    vi.mocked(checkCooldown).mockClear();
+    mockSupabaseSequence({
+      candidates: [paidRow({ personal_report_id: 42 })],
+      submissionToken: null,
+    });
+    await GET(makeRequest("test-cron-secret"));
+    expect(checkCooldown).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the submission's live link when the recorded one was revoked", async () => {
+    mockResendSend.mockResolvedValue({ data: { id: "e1" } });
+    mockSupabaseSequence({
+      candidates: [
+        paidRow({
+          personal_report_id: 42,
+          metadata: { plan: "full_report", reportToken: "rpt_AbCdEfGhIjKlMnOpQrSt" },
+        }),
+      ],
+      recordedRevoked: true,
+      submissionToken: "rpt_ZyXwVuTsRqPoNmLkJiHg",
+    });
+    await GET(makeRequest("test-cron-secret"));
+    const html = mockResendSend.mock.calls[0]![0].html as string;
+    expect(html).toContain("/report/rpt_ZyXwVuTsRqPoNmLkJiHg?invite=1");
+    expect(html).not.toContain("rpt_AbCdEfGhIjKlMnOpQrSt");
+  });
+
+  it("asks only for links /api/report would still open (not revoked, not expired)", async () => {
+    mockResendSend.mockResolvedValue({ data: { id: "e1" } });
+    mockSupabaseSequence({
+      candidates: [
+        paidRow({
+          personal_report_id: 42,
+          metadata: { plan: "full_report", reportToken: "rpt_AbCdEfGhIjKlMnOpQrSt" },
+        }),
+      ],
+      recordedRevoked: true,
+      submissionToken: "rpt_ZyXwVuTsRqPoNmLkJiHg",
+    });
+    await GET(makeRequest("test-cron-secret"));
+    const lookups = mockFetchWithTimeout.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes("/rest/v1/report_access_token"));
+    expect(lookups).toHaveLength(2);
+    for (const u of lookups) {
+      expect(u).toContain("revoked_at=is.null");
+      expect(u).toContain("or=(expires_at.is.null,expires_at.gt.");
+    }
   });
 
   it("sends nothing to a buyer whose link cannot be found, rather than a dead link", async () => {
