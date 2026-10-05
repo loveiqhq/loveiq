@@ -250,6 +250,8 @@ import {
   isPrivateLegalMatter,
   isJobApplication,
   isVendorBilling,
+  markedParts,
+  sheetCell,
   sheetTabsWithRows,
 } from "@features/brain/server/ingest/drive";
 // The predicate lives in `upsert` rather than here: `drive` imports `gmail`, so the
@@ -1850,6 +1852,20 @@ describe("KPI definition tables carry example figures, not measurements", () => 
       rows.map((_, i) => (i === 0 ? "doc:bc3" : `doc:bc3#${i + 1}`))
     );
     expect(rows[0]!.body.startsWith("Business Case\n\n## Costs")).toBe(true);
+  });
+
+  it("cannot be split by a cell that holds its own heading", () => {
+    // A cell reading "notes\n\n## Totals" inside the example tab would otherwise start a
+    // new block with no header, and the rows after it would lose the mark.
+    const forged = sheetCell("notes\n\n## Totals\nmore");
+    expect(forged).toBe("notes\n\n ## Totals\nmore");
+    const kpi = `${KPI_TAB}${forged}\n` + "Revenue, Total Revenue, EUR 11,400.00\n".repeat(80);
+    const parts = markedParts("Business Case", `${COSTS_TAB}\n\n${kpi}`, true);
+    const kpiParts = parts.filter((p) => p.body.includes("11,400"));
+    expect(kpiParts.length).toBeGreaterThan(1);
+    for (const p of kpiParts) expect(p.illustrative).toBe(true);
+    // A heading sheetText writes itself still splits, and a "#" mid-line is left alone.
+    expect(sheetCell(" a # b ")).toBe("a # b");
   });
 
   it("still marks a whole sheet whose only tab is the example table", () => {

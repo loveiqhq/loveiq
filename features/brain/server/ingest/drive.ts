@@ -710,6 +710,17 @@ export async function sheetTabsWithRows(token: string, fileId: string): Promise<
   });
 }
 
+/**
+ * One cell as `sheetText` writes it. A line inside a cell that starts with "#" gets a
+ * leading space, so a cell can never forge the "## <tab>" heading `markedParts` splits a
+ * spreadsheet at; a forged one would cut an example tab's later rows away from its mark.
+ */
+export function sheetCell(cell: unknown): string {
+  return String(cell ?? "")
+    .trim()
+    .replace(/\n(?=#)/g, "\n ");
+}
+
 async function sheetText(token: string, fileId: string): Promise<string> {
   const titles = await sheetTabTitles(token, fileId);
   if (titles.length === 0) return "";
@@ -729,12 +740,7 @@ async function sheetText(token: string, fileId: string): Promise<string> {
   const parts: string[] = [];
   (payload.valueRanges ?? []).forEach((vr, i) => {
     const rows = (vr.values ?? [])
-      .map((row) =>
-        row
-          .map((cell) => String(cell ?? "").trim())
-          .join(", ")
-          .trim()
-      )
+      .map((row) => row.map(sheetCell).join(", ").trim())
       .filter((line) => line.replace(/,/g, "").trim().length > 0);
     if (rows.length === 0) return;
     // NAME THE TAB. Without it two tables run together and a reader cannot tell which
@@ -986,9 +992,7 @@ export function isIllustrativeFigures(text: string): boolean {
  * as before: the header is in part 1 and the figures in later parts, so the mark has to
  * reach parts that do not contain it.
  *
- * ponytail: a cell whose own text holds a blank line followed by "## " would read as a
- * tab heading here; no sheet in the Drive has one. Pass the tab blocks from `sheetText`
- * if one ever does.
+ * Only `sheetText` writes those headings: `sheetCell` keeps a cell from writing one.
  */
 export function markedParts(
   name: string,
