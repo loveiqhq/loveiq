@@ -1,4 +1,10 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 
 /**
  * Friend referral / invite — Variant B (Figma node 5319-1846).
@@ -110,6 +116,7 @@ export function inviteBEmail({
     "",
     "With kindness,",
     `${firstName || "A friend"} sent via LoveIQ`,
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

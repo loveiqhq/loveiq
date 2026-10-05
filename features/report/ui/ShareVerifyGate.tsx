@@ -46,15 +46,15 @@ const ShareVerifyGate: FC<Props> = ({
         setError("Too many attempts. Try again in a minute.");
         return;
       }
+      // The verify route answers 404 for a wrong email too (it never says which), and
+      // this gate only shows for a share that existed when the page loaded, so a 404
+      // here is almost always a typo. It used to say the report was gone.
       if (res.status === 404) {
-        setError("This shared report is no longer available.");
-        return;
-      }
-      try {
-        const json = (await res.json()) as { error?: string };
-        setError(json.error || "That email doesn't match this invite.");
-      } catch {
-        setError("That email doesn't match this invite.");
+        setError("That email doesn't match this invite. Use the address it was sent to.");
+      } else if (res.status === 400) {
+        setError("Enter the full email address the invite was sent to.");
+      } else {
+        setError("We couldn't check that just now. Try again in a moment.");
       }
     } catch {
       setError("Network error — please try again.");

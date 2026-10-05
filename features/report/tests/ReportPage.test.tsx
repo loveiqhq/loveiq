@@ -397,6 +397,37 @@ describe("ReportPage", () => {
     );
   });
 
+  it("says a withdrawn shared link is not available, not 'we emailed your report link'", () => {
+    // A share recipient never took the survey; the owner's copy sent them looking
+    // for an email that does not exist.
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 404, message: "Report not found." },
+    });
+
+    render(<ReportPage token="rpts_abcdefghijklmnopqrst" />);
+
+    expect(
+      screen.getByRole("heading", { name: "This shared report isn't available" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ask them to send it again/i)).toBeInTheDocument();
+    expect(screen.queryByText(/we emailed your report link/i)).toBeNull();
+  });
+
+  it("keeps the owner's not-found copy for an owner's link", () => {
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 404, message: "Report not found." },
+    });
+
+    render(<ReportPage token="rpt_abcdefghijklmnopqrst" />);
+
+    expect(screen.getByRole("heading", { name: /can.t find your report/i })).toBeInTheDocument();
+    expect(screen.getByText(/we emailed your report link/i)).toBeInTheDocument();
+  });
+
   it("treats a malformed report link (400) as not found, not as an outage", () => {
     mockUseReportData.mockReturnValue({
       data: null,

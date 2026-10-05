@@ -16734,7 +16734,8 @@
   font-size: 0.875rem;
   line-height: 1.45;
   background: rgba(251, 44, 54, 0.15);
-  color: #fecaca;
+  /* #fecaca was the old dark theme's; on this light card it read at ~1.1:1. */
+  color: #b42318;
   border: 1px solid rgba(251, 44, 54, 0.3);
 }
 
@@ -16996,7 +16997,8 @@
   font-size: 0.875rem;
   line-height: 1.4;
   background: rgba(251, 44, 54, 0.15);
-  color: #fecaca;
+  /* #fecaca was the old dark theme's; on this light card it read at ~1.1:1. */
+  color: #b42318;
   border: 1px solid rgba(251, 44, 54, 0.3);
 }
 
