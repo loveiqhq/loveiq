@@ -47,14 +47,19 @@ Mark asked for this on 2026-09-05: "a systematic way to thoroughly test" the pro
   - **Which report.** A night reads one report: the default one loveiq.org shows, and
     Fatih's V4 (`?v4=1`) on the next night. The rotation repeats every seven days, so each
     persona on each device reads both, a week apart.
-  - **Which plan.** Each walk buys one of the three plans, and the plan moves on by one each
-    week, so every persona buys all three over three weeks.
-  - "Just a snapshot" (`full_report`) is bought the way most people reach it: the sticky
-    "Unlock full report" bar, or, on the default report, the "Unlock the full report" button
-    under the archetype list. Both go straight to Stripe for that plan.
-  - The other two are bought from the plan picker, opened from an archetype row's "Unlock
-    report" ("Unlock Spark Seeker report" on a phone), a padlock on a locked chart (V4
-    only), or a chapter's "Unlock your report".
+  - **Which plan.** Each walk buys one of the two plans staging sells since Pricing 3.0
+    (2026-10-05), and the plan moves on by one each week, so every persona buys both over two
+    weeks. `core` is no longer sold there, so the rotation leaves it out (`ROTATION_PLANS`); a
+    walk asked for it by hand (`--plan core`) still tries it where it is sold.
+  - The single report (`full_report`: "Only Your Highest Archetype" on staging, "Just a
+    snapshot" on main) is bought the way most people reach it: the sticky "Unlock full
+    report" bar, or, on the default report, the "Unlock the full report" button under the
+    archetype list. Both go straight to Stripe for that plan.
+  - All 14 (`all_reports`: "All 14 Archetype Reports" on staging, "For you & your partner" on
+    main) is bought from the plan picker, opened from an archetype row's "Unlock report"
+    ("Unlock Spark Seeker report" on a phone), a padlock on a locked chart (V4 only), or a
+    chapter's "Unlock your report". The walk knows both catalogues' names and buttons
+    (`PLAN_TITLE`, `PLAN_CTA` in `walk.ts`).
   - The report also opens the picker by itself while a person reads. When it does, the walk
     buys from it, and `walk.json` says "the report, by itself".
 - **What a walk proves on its own** (`checks.ts`, posted whatever the judge says):

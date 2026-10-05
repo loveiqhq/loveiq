@@ -51,11 +51,15 @@ export const MAIN_ON_STAGING = "https://loveiq-staging-git-main-loveiq.vercel.ap
 /** Blocked in the browser: a walk is not a visitor and must never reach analytics. */
 export const ANALYTICS =
   /googletagmanager|google-analytics|googleadservices|doubleclick|posthog|clarity\.ms|facebook|hotjar/;
-/** Each plan's title, as the paywall card and the return page name it. */
+/**
+ * Each plan's title, as the paywall card and the return page name it. Two catalogues: main's
+ * (pricing 2.x) and the staging branch's Pricing 3.0, where all_reports is "All 14 Archetype
+ * Reports", full_report "Only Your Highest Archetype", and core is not sold.
+ */
 export const PLAN_TITLE: Record<Plan, RegExp> = {
-  full_report: /just a snapshot/i,
+  full_report: /just a snapshot|only your highest archetype/i,
   core: /all your core archetypes/i,
-  all_reports: /for you (?:&|and) your partner/i,
+  all_reports: /for you (?:&|and) your partner|all 14 archetype reports/i,
 };
 /**
  * The pre-report wizard's forward button, and its last slide's. That last button is "View
@@ -70,11 +74,14 @@ export const WIZARD_LAST = /view your report|continue to your report/i;
  * a phone pressed that one and went to Stripe for the wrong plan.
  */
 export const ARCHETYPE_ROW_UNLOCK = /^unlock (?!your |the |full |my )(?:[\w -]+ )?report$/i;
-/** Each plan's button on the paywall. */
-const PLAN_CTA: Record<Plan, RegExp> = {
-  full_report: /^unlock my report$/i,
+/**
+ * Each plan's button on the paywall, in both catalogues (see PLAN_TITLE). Pricing 3.0's single
+ * report says "Only Unlock This Report" when the paywall was opened from another archetype.
+ */
+export const PLAN_CTA: Record<Plan, RegExp> = {
+  full_report: /^unlock my report$|^only unlock (?:my highest scoring|this) report$/i,
   core: /^unlock now$/i,
-  all_reports: /^unlock us$/i,
+  all_reports: /^unlock us$|^continue$/i,
 };
 
 export interface Step {

@@ -29,12 +29,15 @@ import {
   allWalks,
   DEVICES,
   PLANS,
+  ROTATION_PLANS,
   WALKS_PER_NIGHT,
   walksFor,
 } from "../../scripts/walkers/rotation";
 import {
   answerFor,
   ARCHETYPE_ROW_UNLOCK,
+  PLAN_CTA,
+  PLAN_TITLE,
   findQuestion,
   redact,
   MAIN_ON_STAGING,
@@ -94,10 +97,16 @@ describe("tonight's walks", () => {
     expect(new Set(week.map(key)).size).toBe(names.length * DEVICES.length);
   });
 
-  it("buy every plan several times a week", () => {
-    for (const plan of PLANS) {
+  it("buy every plan on sale several times a week, and never the retired core", () => {
+    for (const plan of ROTATION_PLANS) {
       expect(allWalks(names).filter((w) => w.plan === plan).length, plan).toBeGreaterThanOrEqual(8);
     }
+    expect(ROTATION_PLANS).not.toContain("core");
+    for (const week of [0, 1, 2]) {
+      expect(allWalks(names, week).some((w) => w.plan === "core")).toBe(false);
+    }
+    // Still a plan a walk can be asked for by hand, where it is sold.
+    expect(PLANS).toContain("core");
   });
 
   it("has each persona buy a different plan on the phone and on the desktop", () => {
@@ -124,7 +133,7 @@ describe("tonight's walks", () => {
     }
   });
 
-  it("move each persona's plan on every week, so all three get bought", () => {
+  it("move each persona's plan on every week, so every plan on sale gets bought", () => {
     const plansOf = (name: string) =>
       new Set(
         [0, 1, 2].flatMap((week) =>
@@ -133,7 +142,7 @@ describe("tonight's walks", () => {
             .map((w) => w.plan)
         )
       );
-    for (const name of names) expect(plansOf(name).size, name).toBe(PLANS.length);
+    for (const name of names) expect(plansOf(name).size, name).toBe(ROTATION_PLANS.length);
   });
 
   it("are the same four when a night is run again", () => {
@@ -226,6 +235,40 @@ describe("a walk", () => {
     for (const other of ["Unlock your report", "Unlock the full report", "Unlock full report"]) {
       expect(ARCHETYPE_ROW_UNLOCK.test(other), other).toBe(false);
     }
+  });
+
+  it("knows each plan on both catalogues: main's, and Pricing 3.0's on staging", () => {
+    // Main's names are read from its catalogue; staging's 3.0 names are its
+    // features/checkout/server/reportPurchase.ts as of 2026-10-05, which main cannot read.
+    const plans = readFileSync(
+      join(process.cwd(), "features/checkout/server/reportPurchase.ts"),
+      "utf8"
+    );
+    const mainTitle = (plan: string) =>
+      new RegExp(`plan: "${plan}"[\\s\\S]*?title: "([^"]+)"`).exec(plans)?.[1] ?? "";
+    expect(PLAN_TITLE.full_report.test(mainTitle("full_report"))).toBe(true);
+    expect(PLAN_TITLE.all_reports.test(mainTitle("all_reports"))).toBe(true);
+    expect(PLAN_TITLE.full_report.test("Only Your Highest Archetype")).toBe(true);
+    expect(PLAN_TITLE.all_reports.test("All 14 Archetype Reports")).toBe(true);
+    // A receipt names one plan, and is read as that one.
+    expect(PLANS.find((p) => PLAN_TITLE[p].test("All 14 Archetype Reports"))).toBe("all_reports");
+    expect(PLANS.find((p) => PLAN_TITLE[p].test("Only Your Highest Archetype"))).toBe(
+      "full_report"
+    );
+    for (const name of [
+      "Unlock my report",
+      "Only Unlock My Highest Scoring Report",
+      "Only Unlock This Report",
+    ]) {
+      expect(PLAN_CTA.full_report.test(name), name).toBe(true);
+    }
+    for (const name of ["Unlock us", "Continue"]) {
+      expect(PLAN_CTA.all_reports.test(name), name).toBe(true);
+    }
+    // Never another plan's button, an archetype row's, or the wizard's "Continue to…".
+    expect(PLAN_CTA.all_reports.test("Continue to your report")).toBe(false);
+    expect(PLAN_CTA.full_report.test("Continue")).toBe(false);
+    expect(ARCHETYPE_ROW_UNLOCK.test("Only Unlock This Report")).toBe(false);
   });
 
   it("recognises every question by the words of its heading", () => {
