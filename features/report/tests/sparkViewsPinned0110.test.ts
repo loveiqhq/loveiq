@@ -17,7 +17,9 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
  * A&B lead lines, CiP's second example and finished practice sentence); a structural diff
  * of the eight views against the previous commit showed those changes and nothing else.
  * Then the belief-map H2 went from the lede (no doc has one): the old views minus that one
- * heading equal the new.
+ * heading equal the new. 05.10: Fantasy vs. Reality's "Common challenges" comes as free,
+ * ramp and rest (Sanjin: open through its first sentence); flattened back into one list,
+ * both views hash as before.
  */
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
@@ -28,8 +30,8 @@ const PINNED: Record<string, string> = {
   "accelerators:locked": "7becb3420063f7454d15222cbfb090790ffddb5c689e77a384a3c5c5d57f1c45",
   "partnership:open": "8bfc00eb582555e7d1d3552e159d446a3bc611292c7a1047a1d1899dbd243e3e",
   "partnership:locked": "1bce22c397122f9f5228345b8362341a866a9f404f108293554b7c234e433832",
-  "fantasy:open": "75422df86ad437ae8446a0de69eea9d681b0badb531cf685d672b248e42a3f9c",
-  "fantasy:locked": "9d35808a592a7025230aab7c2d1ab36645949915e0aef924966f36d94af84603",
+  "fantasy:open": "905067e47374273b57d651b472432a8c18f74851e3e35dea20b1e8537b7afb6c",
+  "fantasy:locked": "9c33a4ba206e387ddcf1fdf2f49012673f17d687debb9efdc78285c97fc9f19e",
 };
 
 const BUILDERS = {

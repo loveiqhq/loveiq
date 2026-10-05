@@ -25,8 +25,9 @@ import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
 import {
   gate,
   lockedBlurIsReal,
-  veilBlock,
+  splitFirstSentence,
   withCuts,
+  type Report3GatedCopy,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
 import { getFantasyMapDots, type FantasyMapDot } from "@features/report/server/fantasyMap";
@@ -46,8 +47,8 @@ const h = (text: string): Report3Block => ({ kind: "heading", text });
 
 /**
  * Where an archetype's paywall falls in the practice: blocks kept sharp. (The table's cuts
- * are the same for every archetype, and "Common challenges" is blurred whole.) Omitted,
- * Figma's: FANTASY_PRACTICE_FREE_BLOCKS.
+ * are the same for every archetype, and "Common challenges" opens on its heading and first
+ * sentence for everyone: gateChallenges.) Omitted, Figma's: FANTASY_PRACTICE_FREE_BLOCKS.
  */
 export interface Report3FantasyCuts {
   practiceFree: number;
@@ -301,8 +302,12 @@ export interface Report3FantasyView {
    */
   mapDots: FantasyMapDot[] | null;
   table: Report3FantasyTable;
-  /** 368:1920 open; scrambled whole when locked — 305:228 blurs it all. */
-  challenges: readonly Report3Block[];
+  /**
+   * 368:1920 open, all in `free`. Locked: the heading and the first sentence in `free`,
+   * the blur fading in over the next block (`ramp`), the rest under the full blur
+   * (gateChallenges).
+   */
+  challenges: Report3GatedCopy;
   practice: Report3PracticeView;
 }
 
@@ -372,6 +377,26 @@ const standIn = (row: ReportPracticeTendencyRow): Report3FantasyRow =>
     : { practice: scrambleLockedText(row.practice), pull: null, pleasure: null, description: null };
 
 /**
+ * "Common challenges" for a locked reader: its heading and first sentence sharp, and the
+ * blur fading in from the second sentence, as every other chapter's ramp (Sanjin, 05.10:
+ * "the common challenges tittle should remain open, and the paywall starts at the second
+ * sentence of the text, as in the docs"; until then 305:228 blurred it whole). A first
+ * paragraph longer than that sentence is cut there, its first part running flush into the
+ * ramp. A passage that does not open on a heading and a sentence fails closed: the heading
+ * alone stays sharp.
+ */
+const gateChallenges = (blocks: readonly Report3Block[], locked: boolean): Report3GatedCopy => {
+  if (!locked) return gate(blocks, blocks.length, false);
+  const [heading, first, ...after] = blocks;
+  const cut = heading?.kind === "heading" && first ? splitFirstSentence(first) : null;
+  if (!heading || !cut) return gate(blocks, heading?.kind === "heading" ? 1 : 0, true);
+  const [head, tail] = cut;
+  return tail
+    ? gate([heading, { ...head, tight: true }, tail, ...after], 2, true)
+    : gate([heading, head, ...after], 2, true);
+};
+
+/**
  * Server-side assembly. Returns null for an archetype nobody has written yet, which
  * is the signal ReportPage falls back to V2's section on.
  *
@@ -380,8 +405,10 @@ const standIn = (row: ReportPracticeTendencyRow): Report3FantasyRow =>
  * reader receives: the intro verbatim; the first three rows of the first three
  * categories verbatim; everything the page draws blurred — the two rows under each
  * of those, three rows in every other category, the map's dots, "Common challenges"
- * and the practice past its ramp (paragraph 4, Spark Seeker's) — as the copy itself
- * since 26.09, decoys (and no dots) in the switch's other position (lockedBlurCopy.ts);
+ * past its heading and first sentence (the next block is its ramp, sent as written, as
+ * every ramp is) and the practice past its ramp (paragraph 4, Spark Seeker's) — as the
+ * copy itself since 26.09, decoys (and no dots) in the switch's other position
+ * (lockedBlurCopy.ts);
  * no row past the ones drawn; and the closed teaser verbatim, because it is free copy.
  */
 export function buildFantasy(
@@ -421,7 +448,7 @@ export function buildFantasy(
     intro: copy.intro,
     mapDots: locked && !lockedBlurIsReal() ? null : getFantasyMapDots(archetype),
     table: { locked, categories },
-    challenges: locked ? copy.challenges.map(veilBlock) : copy.challenges,
+    challenges: gateChallenges(copy.challenges, locked),
     practice: {
       eyebrow: copy.practiceEyebrow ?? FANTASY_PRACTICE_EYEBROW,
       title: copy.practiceTitle ?? FANTASY_PRACTICE_TITLE,

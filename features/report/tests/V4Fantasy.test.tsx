@@ -96,6 +96,8 @@ describe("V4Fantasy — paywalled (305:217)", () => {
       "696:6063",
       "639:1905",
       "368:5447",
+      // Sanjin, 05.10: "Common challenges" opens through its first sentence, then 305:228.
+      "rv4-fvr__text rv4-fvr__free",
       "305:228",
       "696:6057",
     ]);
@@ -119,18 +121,28 @@ describe("V4Fantasy — paywalled (305:217)", () => {
     );
   });
 
-  it("blurs 'Common challenges' whole, with the Premium card on it", () => {
+  // Sanjin, 05.10: "the commen challenges tittle should remain open, and the paywall
+  // starts at the second sentence of the text, as in the docs" (305:228 blurred it whole).
+  it("keeps the heading and the first sentence sharp, then ramps and blurs the rest", () => {
     const { container } = render(<V4Fantasy view={LOCKED} onUnlock={() => {}} />);
-    const gate = body(container).querySelector<HTMLElement>(".rv4-fvr__gate")!;
-    expect(gate.getAttribute("data-node-id")).toBe("305:228");
-    const blurred = gate.querySelector<HTMLElement>(".rv4-fvr__blurred")!;
-    expect(blurred.getAttribute("aria-hidden")).toBe("true");
-    expect(blurred.hasAttribute("inert")).toBe(true);
-    expect(blurred.querySelectorAll(".rv4-prose__p")).toHaveLength(13);
-    // Under the blur and out of reach of assistive tech; since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
-    expect(blurred.textContent).toContain(
+    const free = body(container).querySelector<HTMLElement>(".rv4-fvr__free")!;
+    expect(free.closest("[inert]")).toBeNull();
+    expect(free.querySelector(".rv4-prose__h")).not.toBeNull();
+    // Spark Seeker's first paragraph is that one sentence.
+    expect(free.querySelectorAll(".rv4-prose__p")).toHaveLength(1);
+    expect(free.textContent).toContain(
       "A fantasy often works because reality has been edited out."
     );
+    const gate = body(container).querySelector<HTMLElement>(".rv4-fvr__gate")!;
+    expect(gate.getAttribute("data-node-id")).toBe("305:228");
+    const gated = gate.querySelector<HTMLElement>(".rv4-fvr__gated")!;
+    expect(gated.getAttribute("aria-hidden")).toBe("true");
+    expect(gated.hasAttribute("inert")).toBe(true);
+    // The blur fades in over the second paragraph, then holds over the other eleven;
+    // since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
+    expect(gated.querySelectorAll(".rv4-fvr__ramp .rv4-pblur > span")).toHaveLength(3);
+    expect(gated.querySelectorAll(".rv4-fvr__ramp .rv4-prose__p")).toHaveLength(1);
+    expect(gated.querySelectorAll(".rv4-fvr__blurred .rv4-prose__p")).toHaveLength(11);
     const card = gate.querySelector(".rv4-premium")!;
     expect(card).toHaveClass("rv4-premium--body");
     expect(card.getAttribute("data-node-id")).toBe("1015:1379");

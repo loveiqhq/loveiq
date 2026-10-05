@@ -758,9 +758,10 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
  * data/report3-copy). A name with no V4 copy gets null: the builders' own tests.
  */
 describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
-  // "Common challenges" and the practice past its ramp: only ever seen blurred.
+  // "Common challenges" and the practice past their ramps: only ever seen blurred. Since
+  // 05.10 "Common challenges" opens through its first sentence and ramps its next block,
+  // sent as written as every ramp is (Sanjin: "the paywall starts at the second sentence").
   const FVR_PROBES = [
-    "Imagine being watched. In fantasy, the attention is flattering",
     "Reality cannot assume any of it.",
     "Finally, think in terms of translation rather than reproduction.",
     "A fantasy does not have to become reality to improve reality.",

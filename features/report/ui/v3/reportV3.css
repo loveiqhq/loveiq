@@ -4765,6 +4765,7 @@
   .rv3 .rv4-trig__row.is-ramp,
   .rv3 .rv4-tb__ramp,
   .rv3 .rv4-ab__ramp,
+  .rv3 .rv4-fvr__ramp,
   .rv3 .rv4-try__ramp {
     filter: blur(calc(var(--rv4-veil, 5px) / 2));
   }
@@ -6855,8 +6856,12 @@ html {
 .rv3 .rv4-fvr .rv4-prose__p:has(+ .rv4-prose__h) {
   margin-bottom: 23.94px;
 }
-/* 305:228 — all of "Common challenges" under the full blur (Figma radius 5), at full
- * length so nothing moves on unlock. Mark, 25.09 (1941866053): "move this CTA down a
+/* 305:228 — "Common challenges" past its first sentence, at full length so nothing moves
+ * on unlock. Sanjin, 05.10: "the commen challenges tittle should remain open, and the
+ * paywall starts at the second sentence of the text, as in the docs" (305:228 blurred it
+ * whole, heading included). The heading and the first sentence stay sharp; the blur fades
+ * in over the next four lines (Mark: "have all paywall go through progression of 4
+ * lines"), then holds (Figma radius 5). Mark, 25.09 (1941866053): "move this CTA down a
  * bit so that it isnt immediately following the drop down", with a separator after
  * it; the card floats on the copy, centred (below). 305:225 also
  * spaced the table, that separator and the copy 16 apart — 76 in all, which Mark read
@@ -6866,9 +6871,18 @@ html {
   cursor: pointer;
   position: relative;
 }
+.rv3 .rv4-fvr__ramp {
+  --rv4-band: 102.4px;
+  position: relative;
+}
 .rv3 .rv4-fvr__blurred {
   filter: blur(var(--rv4-veil, 5px));
   user-select: none;
+}
+/* A first paragraph that is one whole sentence keeps its 16px over the ramp; one cut
+ * after its first sentence runs flush into it (the cut half is `tight`). */
+.rv3 .rv4-fvr__free > .rv4-prose__p:last-child:not(.is-tight) {
+  margin-bottom: 16px;
 }
 /* 1015:1379 (29.09): 258.27 into 305:228, this gate — 155 lower than the old card —
  * and never past its foot. */

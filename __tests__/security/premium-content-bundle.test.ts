@@ -60,9 +60,10 @@ const PREMIUM_DATA_MODULES = [
   // component importing the module would hand over exactly what the wall withholds.
   "@/data/report3-partnership",
   // Added 2026-09-25. The Fantasy vs. Reality chapter (Figma 304:281) — its prose,
-  // "Common challenges" and the practice. The paywalled frame (305:217) blurs
-  // "Common challenges" whole and most of the practice, so a client component
-  // importing the module would hand over exactly what the wall withholds.
+  // "Common challenges" and the practice. The paywalled page blurs "Common challenges"
+  // past its first sentence (Sanjin, 05.10; 305:217 blurred it whole) and most of the
+  // practice, so a client component importing the module would hand over exactly what
+  // the wall withholds.
   "@/data/report3-fantasy",
   // Added 2026-09-25. The fantasy map's dots are DERIVED from every archetype's
   // practice scores (fantasyMap.ts imports report-practice-tendencies at runtime), so

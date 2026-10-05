@@ -92,6 +92,50 @@ export const gate = (
   };
 };
 
+type Report3Para = Extract<Report3Block, { kind: "para" }>;
+
+/** A sentence's end: its stop, any closing quote or bracket, then a space or the end. */
+const SENTENCE_END = /[.!?][”’"')\]]*(?=\s|$)/;
+
+/**
+ * A paragraph cut after its first sentence, run by run: that sentence, and the rest with
+ * the space between them dropped, or null for a paragraph that is one sentence. Null when
+ * the block is not a paragraph or no sentence ends in it, so the caller can fail closed.
+ *
+ * Fantasy vs. Reality's wall falls here (Sanjin, 05.10: "the paywall starts at the second
+ * sentence of the text, as in the docs").
+ */
+export const splitFirstSentence = (
+  block: Report3Block
+): readonly [Report3Para, Report3Para | null] | null => {
+  if (block.kind !== "para") return null;
+  const text = block.runs.map((run) => run.text).join("");
+  const end = SENTENCE_END.exec(text);
+  if (!end) return null;
+  const cut = end.index + end[0].length;
+  if (!text.slice(cut).trim()) return [block, null];
+  const head: Report3Para["runs"][number][] = [];
+  const tail: Report3Para["runs"][number][] = [];
+  let start = 0;
+  for (const run of block.runs) {
+    const from = start;
+    start += run.text.length;
+    if (start <= cut) head.push(run);
+    else if (from >= cut) tail.push(run);
+    else {
+      head.push({ ...run, text: run.text.slice(0, cut - from) });
+      tail.push({ ...run, text: run.text.slice(cut - from) });
+    }
+  }
+  // The space between the two sentences goes with the cut.
+  while (tail.length && !tail[0]!.text.trim()) tail.shift();
+  if (tail.length) tail[0] = { ...tail[0]!, text: tail[0]!.text.trimStart() };
+  return [
+    { ...block, runs: head },
+    { ...block, runs: tail },
+  ];
+};
+
 /**
  * An archetype's own cuts over the chapter's defaults. A field the record writes as
  * `undefined` keeps its default, where a spread let it wipe the default out (final
