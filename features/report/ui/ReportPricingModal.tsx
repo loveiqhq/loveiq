@@ -73,10 +73,10 @@ interface Props {
    * "default" — original behaviour.
    * "offer" — discount email deep-link (?offer=1). Draws the same screen; the code is
    *   applied on Stripe's page.
-   * "share" — opened when a free-plan user taps the share button: the heading pivots
-   *   to the sharing pitch.
+   * "recipient" — someone reading a report that was shared with them. Only its owner can
+   *   unlock it, so no prices: the way forward is a report of their own.
    */
-  variant?: "default" | "offer" | "share";
+  variant?: "default" | "offer" | "recipient";
 }
 
 const FOCUSABLE_SELECTOR =
@@ -239,7 +239,7 @@ const ReportPricingModal: FC<Props> = ({
   const touchStartYRef = useRef<number | null>(null);
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
 
-  const isShare = variant === "share";
+  const isRecipient = variant === "recipient";
 
   // Dismiss tracking — openedAtRef captures when the modal became visible;
   // dismissReasonRef is set by the 3 dismiss code paths (escape / backdrop /
@@ -253,12 +253,16 @@ const ReportPricingModal: FC<Props> = ({
   // archetype_unlock, offer_link) should count toward intent. Those fire
   // trackPaywallInitiated from ReportPage at the click handler.
   const openedAtRef = useRef(0);
+  // The variant it opened as: ReportPage resets it to "default" in the same render that
+  // closes the modal, so by the time this effect sees the close it would read "default".
+  const openedVariantRef = useRef(variant);
   const dismissReasonRef = useRef<PaywallDismissSource | null>(null);
   const checkoutInitiatedRef = useRef(false);
   useEffect(() => {
     if (!open) {
       if (openedAtRef.current > 0) {
-        if (!checkoutInitiatedRef.current) {
+        // A recipient was never offered a price, so closing is not a paywall dismissal.
+        if (!checkoutInitiatedRef.current && openedVariantRef.current !== "recipient") {
           trackPaywallDismissed({
             source: dismissReasonRef.current ?? "browser_back",
             view_duration_ms: performance.now() - openedAtRef.current,
@@ -275,6 +279,7 @@ const ReportPricingModal: FC<Props> = ({
     // no-ops because openedAtRef stays non-zero until the next close.
     if (openedAtRef.current === 0) {
       openedAtRef.current = performance.now();
+      openedVariantRef.current = variant;
     }
     // scopeArchetype changes infrequently and would otherwise re-trigger this
     // effect on every prop change; reading via a ref keeps deps minimal.
@@ -447,7 +452,7 @@ const ReportPricingModal: FC<Props> = ({
           role={open ? "dialog" : undefined}
           aria-modal={open ? "true" : undefined}
           aria-labelledby={open ? "report-pricing-modal-title" : undefined}
-          aria-describedby={open && isShare ? "report-pricing-modal-copy" : undefined}
+          aria-describedby={open && isRecipient ? "report-pricing-modal-copy" : undefined}
           className="report-pricing-modal__dialog"
           tabIndex={-1}
           onPointerDown={() => setFocusMode("pointer")}
@@ -479,15 +484,15 @@ const ReportPricingModal: FC<Props> = ({
               <div className="rpg__top">
                 {/* 842:597 / 963:15 */}
                 <header className="rpg__hero">
-                  {isShare ? (
+                  {isRecipient ? (
                     <>
                       <h2 id="report-pricing-modal-title" className="rpg__title">
-                        Upgrade to <Gradient>Share Your Results</Gradient>
+                        Discover Your <br className="rpg__title-break" />
+                        <Gradient>Sexual Self</Gradient>
                       </h2>
                       <p id="report-pricing-modal-copy" className="rpg__copy">
-                        Your current plan does not include report sharing. Upgrade to learn more
-                        about yourself, share your insights, and spark honest, meaningful
-                        conversations.
+                        Only the person who shared this report can unlock it. Take the free test to
+                        get a report of your own.
                       </p>
                     </>
                   ) : (
@@ -497,7 +502,7 @@ const ReportPricingModal: FC<Props> = ({
                       <Gradient>Sexual Self</Gradient>
                     </h2>
                   )}
-                  {!quotes ? (
+                  {!quotes && !isRecipient ? (
                     <p className="rpg__copy rpg__copy--alert" role="alert">
                       Live pricing couldn&apos;t be loaded right now. Reload the page and try again.
                     </p>
@@ -506,72 +511,83 @@ const ReportPricingModal: FC<Props> = ({
 
                 {/* A grid, so the payment marks can sit between the cards on the phone
                     (842:672) and under both from 960px (963:76) in one DOM order. */}
-                <div className="rpg__tiers" role="group" aria-label="Pricing options">
-                  {REPORT_PURCHASE_PLANS.map((card) => (
-                    <PlanCard
-                      key={card.plan}
-                      card={card}
-                      isOwned={isPlanOwnedForArchetype({
-                        accessPlan,
-                        targetPlan: card.plan,
-                        unlockedTier,
-                      })}
-                      pricing={getCardPricing(quotes?.[card.plan])}
-                      targetArchetype={targetArchetype}
-                      onBuy={() => {
-                        // Mark conversion intent so the open→close effect doesn't
-                        // double-count this as a dismissal. begin_checkout is counted by
-                        // ReportPage.beginCheckout, which onUnlock reaches.
-                        checkoutInitiatedRef.current = true;
-                        onUnlock(
-                          card.plan,
-                          // The single report is per-archetype: if the modal wasn't opened
-                          // scoped to a specific tile, the buyer is unlocking their primary
-                          // archetype. all_reports is global and the parent strips it anyway.
-                          card.plan === "all_reports"
-                            ? null
-                            : (targetArchetype ?? primaryArchetype ?? archetype)
-                        );
-                      }}
-                    />
-                  ))}
+                {isRecipient ? (
+                  <a
+                    className="rpg-card__cta rpg-card__cta--filled rpg__recipient-cta"
+                    href="/survey"
+                  >
+                    Take the Free Test<span aria-hidden="true">{"\u00a0→"}</span>
+                  </a>
+                ) : (
+                  <div className="rpg__tiers" role="group" aria-label="Pricing options">
+                    {REPORT_PURCHASE_PLANS.map((card) => (
+                      <PlanCard
+                        key={card.plan}
+                        card={card}
+                        isOwned={isPlanOwnedForArchetype({
+                          accessPlan,
+                          targetPlan: card.plan,
+                          unlockedTier,
+                        })}
+                        pricing={getCardPricing(quotes?.[card.plan])}
+                        targetArchetype={targetArchetype}
+                        onBuy={() => {
+                          // Mark conversion intent so the open→close effect doesn't
+                          // double-count this as a dismissal. begin_checkout is counted by
+                          // ReportPage.beginCheckout, which onUnlock reaches.
+                          checkoutInitiatedRef.current = true;
+                          onUnlock(
+                            card.plan,
+                            // The single report is per-archetype: if the modal wasn't opened
+                            // scoped to a specific tile, the buyer is unlocking their primary
+                            // archetype. all_reports is global and the parent strips it anyway.
+                            card.plan === "all_reports"
+                              ? null
+                              : (targetArchetype ?? primaryArchetype ?? archetype)
+                          );
+                        }}
+                      />
+                    ))}
 
-                  {/* 842:672 / 963:76 — under All 14 on the phone, under both from 960px. */}
-                  <div className="rpg__payments">
-                    <p className="rpg__payments-label">Guaranteed Safe &amp; Secure Checkout</p>
-                    <div className="rpg__payments-row" aria-label="Accepted payment methods">
-                      {PAYMENT_MARKS.map(({ logo, label }) => (
-                        <span
-                          key={logo}
-                          className={`rpg__mark rpg__mark--${logo}`}
-                          role="img"
-                          aria-label={label}
-                        />
-                      ))}
+                    {/* 842:672 / 963:76 — under All 14 on the phone, under both from 960px. */}
+                    <div className="rpg__payments">
+                      <p className="rpg__payments-label">Guaranteed Safe &amp; Secure Checkout</p>
+                      <div className="rpg__payments-row" aria-label="Accepted payment methods">
+                        {PAYMENT_MARKS.map(({ logo, label }) => (
+                          <span
+                            key={logo}
+                            className={`rpg__mark rpg__mark--${logo}`}
+                            role="img"
+                            aria-label={label}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* 842:656 / 963:84 */}
-              <section className="rpg__why" aria-labelledby="rpg-why-title">
-                <h3 id="rpg-why-title" className="rpg__section-title">
-                  Why Unlock Your <Gradient>Report</Gradient>?
-                </h3>
-                <div className="rpg__why-grid">
-                  {WHY_CARDS.map(({ green, lead, emph, tail, body }) => (
-                    <article key={emph} className="rpg-why">
-                      <h4 className="rpg-why__title">
-                        {green ? <span className="rpg-why__green">{green} </span> : null}
-                        {lead}
-                        <Gradient>{emph}</Gradient>
-                        {tail}
-                      </h4>
-                      <p className="rpg-why__body">{body}</p>
-                    </article>
-                  ))}
-                </div>
-              </section>
+              {/* 842:656 / 963:84 — why to pay, so not for a recipient, who cannot. */}
+              {isRecipient ? null : (
+                <section className="rpg__why" aria-labelledby="rpg-why-title">
+                  <h3 id="rpg-why-title" className="rpg__section-title">
+                    Why Unlock Your <Gradient>Report</Gradient>?
+                  </h3>
+                  <div className="rpg__why-grid">
+                    {WHY_CARDS.map(({ green, lead, emph, tail, body }) => (
+                      <article key={emph} className="rpg-why">
+                        <h4 className="rpg-why__title">
+                          {green ? <span className="rpg-why__green">{green} </span> : null}
+                          {lead}
+                          <Gradient>{emph}</Gradient>
+                          {tail}
+                        </h4>
+                        <p className="rpg-why__body">{body}</p>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* 842:682 / 963:99 */}
               <section className="rpg__reviews" aria-labelledby="rpg-reviews-title">

@@ -91,7 +91,7 @@ export interface ReportExperienceV1Props {
   ownerToken: string | null;
   percentages: Record<string, number>;
   pricingTargetArchetype: string | null;
-  pricingVariant: "default" | "offer" | "share";
+  pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -240,6 +240,11 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
       section.accessTier === "essentials" || section.accessTier === "full_report"
         ? section.accessTier
         : "full_report";
+    // A recipient's click is nobody's intent to pay: only the owner can.
+    if (viewMode === "shared") {
+      onOpenPricingModal(null);
+      return;
+    }
     trackLockIconClicked({
       section_id: section.id,
       archetype: viewArchetype || null,
@@ -696,8 +701,6 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
           open={isShareModalOpen}
           onClose={onCloseShareModal}
           ownerToken={ownerToken}
-          initialPlan={accessPlan}
-          onUpgrade={onOpenPricingModal}
           returnFocusRef={mainContentRef}
         />
       ) : null}

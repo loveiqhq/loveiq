@@ -1,32 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { canSharePlan, getShareSeatLimit } from "@features/report/server/planAccess";
+import { SHARE_SEAT_LIMIT, sharePlanLabel } from "@features/report/server/planAccess";
 
-describe("getShareSeatLimit", () => {
-  it("free (null) plan has zero seats", () => {
-    expect(getShareSeatLimit(null)).toBe(0);
+// Marcus, 2026-10-05: every reader shares with up to two people, paid or not.
+describe("free sharing", () => {
+  it("gives every reader two seats", () => {
+    expect(SHARE_SEAT_LIMIT).toBe(2);
   });
 
-  it("essentials grants 1 seat", () => {
-    expect(getShareSeatLimit("essentials")).toBe(1);
-  });
-
-  it("full_report grants 2 seats", () => {
-    expect(getShareSeatLimit("full_report")).toBe(2);
-  });
-
-  it("all_reports grants 2 seats", () => {
-    expect(getShareSeatLimit("all_reports")).toBe(2);
-  });
-});
-
-describe("canSharePlan", () => {
-  it("returns false only for the free (null) plan", () => {
-    expect(canSharePlan(null)).toBe(false);
-  });
-
-  it("returns true for essentials, full_report, and all_reports", () => {
-    expect(canSharePlan("essentials")).toBe(true);
-    expect(canSharePlan("full_report")).toBe(true);
-    expect(canSharePlan("all_reports")).toBe(true);
+  it("records an unpaid owner's share as 'free' and a buyer's as their plan", () => {
+    expect(sharePlanLabel(null)).toBe("free");
+    expect(sharePlanLabel("essentials")).toBe("essentials");
+    expect(sharePlanLabel("full_report")).toBe("full_report");
+    expect(sharePlanLabel("core")).toBe("core");
+    expect(sharePlanLabel("all_reports")).toBe("all_reports");
   });
 });

@@ -14718,108 +14718,12 @@
   width: 100%;
 }
 
-.report-share-modal__locked .report-share-modal__hero {
-  gap: 1rem;
-}
-
 .report-share-modal__locked .report-share-modal__title {
   font-size: clamp(1.75rem, 3.4vw, 2.5rem);
 }
 
 .report-share-modal__locked .report-share-modal__subtitle {
   max-width: 32rem;
-}
-
-.report-share-modal__locked-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #a78bfa 0%, #fe6839 100%);
-  box-shadow: 0 16px 40px rgba(167, 139, 250, 0.3);
-}
-
-.report-share-modal__locked-icon svg {
-  width: 34px;
-  height: 34px;
-}
-
-.report-share-modal__locked-perks {
-  list-style: none;
-  margin: 0;
-  padding: 1.1rem 1.25rem;
-  width: 100%;
-  max-width: 28rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  border: 1px solid rgba(22, 16, 33, 0.1);
-  border-radius: 14px;
-  background: #f5f6f8;
-  text-align: left;
-}
-
-.report-share-modal__locked-perks li {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  color: #3f3a4d;
-}
-
-.report-share-modal__locked-check {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: rgba(167, 139, 250, 0.18);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 1px;
-}
-
-.report-share-modal__locked-check svg {
-  width: 12px;
-  height: 12px;
-}
-
-.report-share-modal__locked-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-  max-width: 20rem;
-}
-
-/* Desktop: compress CTAs inside the locked upsell so they read as a quiet pair,
-   not a triple-sized hero. Scope overrides __primary + __secondary defaults. */
-.report-share-modal__locked-actions .report-share-modal__primary,
-.report-share-modal__locked-actions .report-share-modal__secondary {
-  padding: 0.75rem 1.1rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-.report-share-modal__locked-actions .report-share-modal__primary svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* Mobile: expand back to thumb-friendly height on <=640px. */
-@media (max-width: 640px) {
-  .report-share-modal__locked-actions {
-    max-width: none;
-  }
-
-  .report-share-modal__locked-actions .report-share-modal__primary,
-  .report-share-modal__locked-actions .report-share-modal__secondary {
-    padding: 0.95rem 1.1rem;
-    font-size: 1rem;
-  }
 }
 
 /* Mobile: full-viewport sheet ─────────────────────────── */

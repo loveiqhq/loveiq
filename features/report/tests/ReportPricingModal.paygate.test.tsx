@@ -3,7 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReportPricingModal from "@features/report/ui/ReportPricingModal";
-import { trackPriceShown } from "@features/analytics/client";
+import { trackPaywallDismissed, trackPriceShown } from "@features/analytics/client";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 
 vi.mock("@features/analytics/client", async (importOriginal) => ({
@@ -161,10 +161,31 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
     );
   });
 
-  it("pitches sharing when opened from the share button", () => {
-    render(<ReportPricingModal {...base} quotes={quotes("A3")} variant="share" />);
-    expect(
-      screen.getByRole("heading", { name: "Upgrade to Share Your Results" })
-    ).toBeInTheDocument();
+  it("offers a recipient their own free test, never a price (Marcus, 2026-10-05)", async () => {
+    // /api/report sends a shared viewer no quotes.
+    render(<ReportPricingModal {...base} quotes={null} variant="recipient" />);
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+      "Only the person who shared this report can unlock it. Take the free test to get a report of your own."
+    );
+    expect(screen.getByRole("link", { name: "Take the Free Test" })).toHaveAttribute(
+      "href",
+      "/survey"
+    );
+    // No plans, no "couldn't load prices" alarm, no payment marks, no "why unlock".
+    expect(screen.queryByRole("group", { name: "Pricing options" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/€/)).toBeNull();
+    expect(screen.queryByRole("heading", { name: /Why Unlock/ })).toBeNull();
+  });
+
+  // A recipient was never offered a price, so closing is no paywall dismissal; a reader's is.
+  it.each([
+    ["default", 1],
+    ["recipient", 0],
+  ] as const)("counts closing the %s screen as %i dismissal(s)", (variant, times) => {
+    const { rerender } = render(<ReportPricingModal {...base} quotes={null} variant={variant} />);
+    // As ReportPage closes it: open and variant change in the same render.
+    rerender(<ReportPricingModal {...base} open={false} quotes={null} variant="default" />);
+    expect(trackPaywallDismissed).toHaveBeenCalledTimes(times);
   });
 });

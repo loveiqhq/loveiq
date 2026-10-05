@@ -876,3 +876,11 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* The recipient's one way forward ("recipient"): a test of their own, where the plans
+ * would be. The filled pill of 1052:3118, as a link. */
+.rpg__recipient-cta {
+  width: min(100%, 360px);
+  margin: 28px auto 0;
+  text-decoration: none;
+}

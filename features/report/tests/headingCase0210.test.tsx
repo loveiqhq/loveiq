@@ -198,7 +198,11 @@ describe("the paywall card and V4's sticky footer follow the 02.10 heading rule"
 });
 
 describe("the Pricing 3.0 paygate follows the 02.10 heading rule", () => {
-  it.each(["default", "share"] as const)("in every heading, title and badge (%s)", (variant) => {
+  // A recipient's has no plans and no "why", so only the hero and the reviews' title.
+  it.each([
+    ["default", 12],
+    ["recipient", 2],
+  ] as const)("in every heading, title and badge (%s)", (variant, count) => {
     vi.stubGlobal("requestAnimationFrame", () => 1);
     const { container } = render(
       <ReportPricingModal
@@ -223,7 +227,7 @@ describe("the Pricing 3.0 paygate follows the 02.10 heading rule", () => {
     );
     // The hero, the two section titles, four benefit cards, two titles on each card
     // (one per layout), and "Most Popular".
-    expect(heads).toHaveLength(12);
+    expect(heads).toHaveLength(count);
     heads.forEach(follows);
   });
 });

@@ -1527,6 +1527,80 @@ describe("ReportPage", () => {
   // reader has no access to is its head, its teaser and the gradient lock, and a tap
   // opens the paywall. Who is locked is the nav badges' answer. The four designed
   // chapters keep their own gates, and V2's previews where there is no V4 copy.
+  // Marcus, 2026-10-05: anyone may share, and a recipient sees the report as its owner
+  // does, locks included. Only the owner can unlock it, so a recipient's lock never prices.
+  describe("free sharing — a recipient's locked report", () => {
+    const FVR = "typical_sexual_fantasy_amp_practice_tendencies";
+    const view = (viewMode: "owner" | "shared") => {
+      const response = buildSuccessResponse();
+      const article = REPORT_V4_LEARN_MORE[FVR]!;
+      Object.assign(response.data as Record<string, unknown>, {
+        viewMode,
+        ownerFirstName: "Eman",
+        // /api/report prices nothing for a shared viewer.
+        ...(viewMode === "shared" ? { pricingQuotes: null } : {}),
+        primaryArchetype: "Spark Seeker",
+        percentages: { "Spark Seeker": 63, "Explorer of Edges": 37 },
+        fantasy: buildFantasy("Spark Seeker", { locked: true }),
+        fantasyArticle: { article: splitArticleForReader(article, true), locked: true },
+      });
+      return response;
+    };
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("opens the take-the-test screen from a lock, uncounted as intent to pay", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(view("shared"));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-fvr__gate")!);
+
+      const modal = container.querySelector(".report-pricing-modal")!;
+      expect(modal).toHaveAttribute("data-state", "open");
+      expect(modal).toHaveAttribute("data-variant", "recipient");
+      expect(
+        within(modal as HTMLElement).getByRole("link", { name: "Take the Free Test" })
+      ).toHaveAttribute("href", "/survey");
+      expect(vi.mocked(analytics.trackLockIconClicked)).not.toHaveBeenCalled();
+      expect(mockTrackPaywallInitiated).not.toHaveBeenCalled();
+      expect(mockStartReportCheckout).not.toHaveBeenCalled();
+    });
+
+    it("shows the owner the paygate from the same lock", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(view("owner"));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-fvr__gate")!);
+
+      const modal = container.querySelector(".report-pricing-modal")!;
+      expect(modal).toHaveAttribute("data-state", "open");
+      // "default" or "offer", whichever this fixture's ladder makes it: a priced one.
+      expect(modal).not.toHaveAttribute("data-variant", "recipient");
+      expect(modal.querySelector(".rpg__tiers")).not.toBeNull();
+      expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
+        expect.objectContaining({ section_id: FVR })
+      );
+    });
+
+    it("gives a recipient no sticky unlock bar, and the owner one", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(view("shared"));
+      const shared = render(<ReportPage />);
+      expect(shared.container.querySelector(".report-sticky-unlock")).toBeNull();
+      shared.unmount();
+
+      mockUseReportData.mockReturnValue(view("owner"));
+      const owner = render(<ReportPage />);
+      expect(owner.container.querySelector(".report-sticky-unlock")).not.toBeNull();
+    });
+  });
+
   describe("V4 — a chapter the reader has no access to is locked outright (review 26.09)", () => {
     const LIBIDO = "libido_challenges_in_relationships";
     const DESIGNED = [

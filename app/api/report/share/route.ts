@@ -13,9 +13,9 @@ import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsub
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
-  canSharePlan,
   getReportPlanByPersonalReportId,
-  getShareSeatLimit,
+  SHARE_SEAT_LIMIT,
+  sharePlanLabel,
 } from "@features/report/server/planAccess";
 import {
   REPORT_ACCESS_TOKEN_REGEX,
@@ -96,14 +96,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
-  if (!canSharePlan(plan)) {
-    return NextResponse.json(
-      { error: "Sharing is available after purchasing a report." },
-      { status: 403 }
-    );
-  }
-
-  const seatLimit = getShareSeatLimit(plan);
+  // Paid or not: the recipient sees the report as the owner does (planAccess.ts).
+  const seatLimit = SHARE_SEAT_LIMIT;
   const shareToken = generateShareToken();
 
   let result;
@@ -112,7 +106,7 @@ export async function POST(request: Request) {
       personalReportId: owner.personalReportId,
       recipientEmail,
       sharedByUserId: owner.ownerUserId,
-      plan: plan as "essentials" | "full_report" | "core" | "all_reports",
+      plan: sharePlanLabel(plan),
       seatLimit,
       shareToken,
       personalMessage,
@@ -275,7 +269,7 @@ export async function GET(request: Request) {
     logger.error({ err }, "report-share GET: plan lookup failed");
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
-  const seatLimit = getShareSeatLimit(plan);
+  const seatLimit = SHARE_SEAT_LIMIT;
 
   let shares;
   try {
