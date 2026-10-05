@@ -25,11 +25,12 @@ import { guardedUnlock } from "./v4Unlock";
  * wall included, so the browser never decides where it falls.
  *
  * THE PAYWALLED STATE — 305:217. The intro stays sharp; the map blurs its plot; the
- * table shows its locked rows; "Common challenges" sits under the full blur at full
- * length, as the server sends it (lockedBlurCopy.ts), with the chapter-body Premium
- * card on it. The frame's blurred block also repeats the practice, which has a gated
- * card of its own, so it is left out. The blurred copy owns the click, which is why
- * the card's CTA carries no handler.
+ * table shows its locked rows; "Common challenges" keeps its heading and first sentence
+ * sharp, and the blur fades in from the second sentence over four lines, then holds to
+ * its end (Sanjin, 05.10, "as in the docs"; 305:228 blurred it whole), as the server
+ * splits it, with the chapter-body Premium card on it. The frame's blurred block also
+ * repeats the practice, which has a gated card of its own, so it is left out. The
+ * blurred copy owns the click, which is why the card's CTA carries no handler.
  */
 
 interface Props {
@@ -70,16 +71,39 @@ const V4Fantasy: FC<Props> = ({ view, onUnlock }) => {
         <div className="rv4-sep rv4-sep--rule" aria-hidden="true" data-node-id="368:5447" />
 
         {locked ? (
-          /* 305:228 "Locked copy", its card 258.3 into it (1015:1379, 29.09). */
-          <div className="rv4-fvr__gate" data-node-id="305:228" onClick={guardedUnlock(onUnlock)}>
-            <div className="rv4-fvr__blurred" aria-hidden="true" inert>
-              <V4Prose blocks={view.challenges} />
+          <>
+            {/* Sanjin, 05.10: the heading and the first sentence stay sharp. */}
+            <div className="rv4-fvr__text rv4-fvr__free">
+              <V4Prose blocks={view.challenges.free} />
             </div>
-            <V4PremiumCard variant="body" nodeId="1015:1379" />
-          </div>
+            {view.challenges.ramp ? (
+              /* 305:228 "Locked copy", from the second sentence on; its card 258.3 into
+               * it (1015:1379, 29.09). Only the blurred copy owns the click. */
+              <div
+                className="rv4-fvr__gate"
+                data-node-id="305:228"
+                onClick={guardedUnlock(onUnlock)}
+              >
+                <div className="rv4-fvr__gated" aria-hidden="true" inert>
+                  <div className="rv4-fvr__ramp">
+                    <V4Prose blocks={[view.challenges.ramp]} />
+                    <span className="rv4-pblur" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                  </div>
+                  <div className="rv4-fvr__blurred">
+                    <V4Prose blocks={view.challenges.rest} />
+                  </div>
+                </div>
+                <V4PremiumCard variant="body" nodeId="1015:1379" />
+              </div>
+            ) : null}
+          </>
         ) : (
           <div className="rv4-fvr__text" data-node-id="368:1920">
-            <V4Prose blocks={view.challenges} />
+            <V4Prose blocks={view.challenges.free} />
           </div>
         )}
 

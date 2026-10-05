@@ -106,7 +106,9 @@ describe("Fantasy vs. Reality, locked — the blurred rows, their scores and the
   const payload = JSON.stringify(view);
 
   it("sends Common challenges as written", () => {
-    expect(view.challenges).toEqual(copy.challenges);
+    // Open through its first sentence (Sanjin, 05.10), the rest under the blur: all real.
+    const { free, ramp, rest } = view.challenges;
+    expect([...free, ramp, ...rest]).toEqual(copy.challenges);
   });
 
   it("sends the blurred rows' real names and scores, and no note for them", () => {

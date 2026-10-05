@@ -17,8 +17,9 @@ vi.mock("@features/report/server/lockedBlurCopy", () => ({ LOCKED_BLUR_COPY: "de
 /**
  * What a reader RECEIVES of the Fantasy vs. Reality chapter (Figma 304:281 open,
  * 305:217 paywalled). The paywalled frame keeps the intro sharp, shows three rows
- * of each open table category with two more blurred behind a lock badge, blurs
- * "Common challenges" whole and gates the practice; a CSS blur is paint only, so
+ * of each open table category with two more blurred behind a lock badge, keeps
+ * "Common challenges" open through its first sentence (Sanjin, 05.10) and blurs the rest,
+ * and gates the practice; a CSS blur is paint only, so
  * everything only ever seen blurred leaves the server scrambled (Fatih's rule,
  * 2026-09-23).
  */
@@ -260,23 +261,28 @@ describe("buildFantasy — the prose", () => {
     expect(view(false).intro).toEqual(SPARK.intro);
   });
 
-  it("scrambles 'Common challenges' whole for a locked reader: 305:228 blurs it all", () => {
-    const locked = view(true).challenges;
-    expect(locked).toHaveLength(SPARK.challenges.length);
-    locked.forEach((block, i) => {
-      const original = SPARK.challenges[i]!;
+  // Sanjin, 05.10: the heading and the first sentence stay open and the blur fades in from
+  // the second (305:228 blurred it whole). Spark Seeker's first paragraph is that one
+  // sentence. The ramp is sent as written, as every ramp is; the rest leaves scrambled.
+  it("keeps the heading and the first sentence, ramps the next block, scrambles the rest", () => {
+    const { free, ramp, rest } = view(true).challenges;
+    expect(free).toEqual(SPARK.challenges.slice(0, 2));
+    expect(ramp).toEqual(SPARK.challenges[2]);
+    expect(rest).toHaveLength(SPARK.challenges.length - 3);
+    rest.forEach((block, i) => {
+      const original = SPARK.challenges[i + 3]!;
       expect(block.kind).toBe(original.kind);
       expect(textOf(block)).toHaveLength(textOf(original).length);
       expect(textOf(block)).not.toBe(textOf(original));
     });
     const wire = payload(true);
-    for (const block of SPARK.challenges.slice(1)) {
+    for (const block of SPARK.challenges.slice(3)) {
       expect(wire).not.toContain(textOf(block).slice(0, 40));
     }
   });
 
   it("hands a paying reader 'Common challenges' verbatim", () => {
-    expect(view(false).challenges).toEqual(SPARK.challenges);
+    expect(view(false).challenges).toEqual({ free: SPARK.challenges, ramp: null, rest: [] });
   });
 });
 
