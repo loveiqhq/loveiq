@@ -41,8 +41,15 @@ function logMissingKvOnce(): void {
   // PRODUCTION deployment because main is that project's production branch (the proof walks
   // run there). Telling them apart by VERCEL_ENV missed the second, and its cold starts posted
   // this as an incident eight times on 2026-10-04. The site address tells the real one apart,
-  // as it does for every cron.
-  if (process.env.NODE_ENV === "production" && isProdCronHost()) {
+  // as it does for every cron. GitHub Actions is the other look-alike: the brain jobs run
+  // the routes there with production's address (so isProdCronHost lets them run) and no
+  // Redis, which they never needed, and this reached #brain as an incident whenever one
+  // of them used the limiter (about hourly on 2026-10-04 and 05).
+  if (
+    process.env.NODE_ENV === "production" &&
+    isProdCronHost() &&
+    process.env.GITHUB_ACTIONS !== "true"
+  ) {
     logger.error(
       "[ratelimit] KV_REST_API_URL / KV_REST_API_TOKEN missing in production — using in-memory fallback. Per-instance state will not coordinate across regions or warm containers, so rate limits may be under-enforced."
     );
