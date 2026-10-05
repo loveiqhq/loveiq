@@ -73,6 +73,7 @@ describe("resend webhook: per-arm experiment counters", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     // The idempotency claim and the counter both go through fetchWithTimeout.
     mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockAddToSuppression.mockResolvedValue(true);
   });
 
   it("records the arm Resend echoes back, stripping the email. prefix", async () => {
@@ -339,6 +340,7 @@ describe("resend webhook: a send Resend suppressed", () => {
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockAddToSuppression.mockResolvedValue(true);
     mockVerify.mockReturnValue({
       type: "email.suppressed",
       data: { to: ["Fake@Example.com"], suppressed: { type: "OnAccountSuppressionList" } },
@@ -353,5 +355,85 @@ describe("resend webhook: a send Resend suppressed", () => {
       ifAbsent: true,
     });
     expect(mockNotifySlack).not.toHaveBeenCalled();
+  });
+});
+
+describe("resend webhook: a suppression write that fails", () => {
+  /**
+   * The write used to come after the replay guard, and its failure was swallowed: the
+   * event was claimed and answered 200, so Resend never retried, and a complaint lost
+   * to a Supabase blip left the address on every list.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockVerify.mockReturnValue({
+      type: "email.complained",
+      data: { to: ["a@example.com"], tags: { exp: "invite", arm: "b" } },
+    });
+  });
+
+  const claimed = () =>
+    mockFetch.mock.calls.filter((c) => String(c[0]).includes("resend_webhook_event")).length;
+
+  it("answers 503 before claiming the event, so Resend redelivers it", async () => {
+    mockAddToSuppression.mockResolvedValue(false);
+    const res = await POST(request());
+    expect(res.status).toBe(503);
+    expect(claimed()).toBe(0);
+    expect(counterCall()).toBeNull();
+    expect(mockNotifySlack).not.toHaveBeenCalled();
+  });
+
+  it("processes the redelivery in full, once", async () => {
+    mockAddToSuppression.mockResolvedValueOnce(false).mockResolvedValue(true);
+    const req = request();
+    const retry = new Request(req.url, { method: "POST", headers: req.headers, body: "{}" });
+    expect((await POST(req)).status).toBe(503);
+    expect((await POST(retry)).status).toBe(200);
+    expect(mockAddToSuppression).toHaveBeenCalledTimes(2);
+    expect(mockAddToSuppression).toHaveBeenLastCalledWith("a@example.com", "complaint");
+    expect(claimed()).toBe(1);
+    expect(counterCall()).toMatchObject({ p_event_type: "complained" });
+    expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not hold up events that call for no suppression", async () => {
+    mockAddToSuppression.mockResolvedValue(false);
+    mockVerify.mockReturnValue({ type: "email.delivered", data: { to: ["a@example.com"] } });
+    expect((await POST(request())).status).toBe(200);
+    expect(mockAddToSuppression).not.toHaveBeenCalled();
+  });
+});
+
+describe("resend webhook: which reason a suppression keeps", () => {
+  /**
+   * The upsert merges, so a bounce after a complaint used to relabel the address
+   * "hard_bounce" and the complaint, the reason that matters, was lost.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockAddToSuppression.mockResolvedValue(true);
+  });
+
+  it("a bounce only records an address not listed yet", async () => {
+    mockVerify.mockReturnValue({ type: "email.bounced", data: { to: ["a@example.com"] } });
+    expect((await POST(request())).status).toBe(200);
+    expect(mockAddToSuppression).toHaveBeenCalledWith("a@example.com", "hard_bounce", {
+      ifAbsent: true,
+    });
+  });
+
+  it("a complaint overwrites whatever was recorded", async () => {
+    mockVerify.mockReturnValue({ type: "email.complained", data: { to: ["a@example.com"] } });
+    expect((await POST(request())).status).toBe(200);
+    expect(mockAddToSuppression).toHaveBeenCalledWith("a@example.com", "complaint");
   });
 });

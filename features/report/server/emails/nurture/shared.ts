@@ -1,4 +1,10 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 import { getTrustpilotConfig, TRUSTPILOT_FALLBACK_URL } from "@shared/ui/trustpilot/config";
 
 export interface NurtureBullet {
@@ -253,7 +259,10 @@ export function renderNurtureEmail({
   // sequence like `&amp;quot;` collapses to `&quot;`, not `"`.
   const stripTags = (s: string) =>
     s
+      // A <br> stripped to nothing glued sentences together ("guarantee.If you").
+      .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<[^>]+>/g, "")
+      .replace(/&mdash;/g, "—")
       .replace(/&quot;/g, '"')
       .replace(/&#0?39;/g, "'")
       .replace(/&nbsp;/g, " ")
@@ -278,6 +287,7 @@ export function renderNurtureEmail({
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ]
     .filter((line, idx, arr) => !(line === "" && arr[idx - 1] === ""))
     .join("\n");
