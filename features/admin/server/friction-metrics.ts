@@ -224,6 +224,8 @@ function questionEnds(snap: FrictionSnapshot): QuestionEnd[] {
 export interface SessionEnd {
   label: string;
   pct: number;
+  /** The question as worded today, shortened, so the worst bars can be named under the chart. */
+  question?: string;
 }
 
 /**
@@ -239,7 +241,24 @@ export interface SessionEnd {
  * everyone who finished: it drew ~300 finishers as a 76% drop-off.
  */
 export function sessionEnds(snap: FrictionSnapshot): SessionEnd[] {
-  return questionEnds(snap).map((e) => ({ label: `Q${e.position + 1}`, pct: e.pct }));
+  const names = surveyQuestionNames();
+  return questionEnds(snap).map((e) => ({
+    label: `Q${e.position + 1}`,
+    pct: e.pct,
+    question: names.get(e.q_id),
+  }));
+}
+
+/**
+ * The bars the drop-off chart draws red, worst first. The renderer's own rule
+ * (`renderDropoutBars`: top 3 by share, ties in survey order, never a zero), so the
+ * questions named under the chart are always its red bars.
+ */
+export function worstEnds(ends: SessionEnd[], n = 3): SessionEnd[] {
+  return [...ends]
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, n)
+    .filter((e) => e.pct > 0);
 }
 
 /** `sessionEnds` for a window, or null when the read fails. */

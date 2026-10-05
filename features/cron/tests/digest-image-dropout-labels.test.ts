@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ReactElement } from "react";
 
 import { renderDropoutBars } from "@/app/api/admin/digest-image/[kind]/route";
+import { worstEnds } from "@features/admin/server/friction-metrics";
 
 /**
  * Which drop-out bars get a number printed on them.
@@ -364,5 +365,39 @@ describe("renderDropoutBars: which bar is which question", () => {
       .map((b) => b.text);
     expect(names).toContain("Q5");
     expect(names).not.toContain("Q4, Q5");
+  });
+});
+
+describe("the questions named under the chart are its red bars", () => {
+  it("names exactly the bars drawn red, ties and zeros included", () => {
+    // Ties at the cut (two 9s for the last place) and a zero: the digest's list
+    // (worstEnds) and the picture's red bars (renderDropoutBars) must agree.
+    const pcts = [9, 4, 12, 9, 0, 9, 3];
+    const ends = pcts.map((pct, i) => ({ label: `Q${i + 1}`, pct }));
+    const red: string[] = [];
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const el = node as ReactElement<Record<string, unknown>> & { key?: string | null };
+      const props = (el.props ?? {}) as Record<string, unknown>;
+      const style = (props.style ?? {}) as Record<string, unknown>;
+      const key = String(el.key ?? "");
+      if (key.startsWith("bar-") && String(style.background).toLowerCase() === DANGER) {
+        red.push(key.split("-")[1]!);
+      }
+      if (props.children) walk(props.children);
+    };
+    walk(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars: ends.map((e) => ({ label: e.label, dropPct: e.pct })),
+      }).element
+    );
+    expect(red.length).toBe(3);
+    expect(
+      worstEnds(ends)
+        .map((e) => e.label)
+        .sort()
+    ).toEqual([...red].sort());
   });
 });

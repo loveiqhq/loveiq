@@ -111,6 +111,33 @@ describe("digest-image: the funnel picture", () => {
     expect(JSON.stringify(walk(element).map(textOf))).toContain("Awaiting data");
   });
 
+  it("prints % of visits beside % of the step above, each under its own name", () => {
+    // Marcus, 2026-10-05: every rate as % of the step before AND % of visits. The
+    // second one was dropped on 2026-09-19 for being misread, so both are named.
+    const visits = [null, 8.23, 3.48, 0.25, 0.015];
+    const { element } = renderFunnelSteps(
+      payload({
+        steps: payload().steps.map((s, i) => ({ ...s, pctVisits: visits[i] })),
+      })
+    );
+    const texts = walk(element).map(textOf);
+    expect(texts).toContain("of step above");
+    expect(texts).toContain("of visits");
+    // Row by row: the step share and the visit share, both printed.
+    for (const t of ["8.2%", "42.3%", "7.1%", "6.3%", "3.5%", "0.3%", "<0.1%"]) {
+      expect(texts, t).toContain(t);
+    }
+    // "Survey started" is 8.2% of both: the step above it IS the visits.
+    expect(texts.filter((t) => t === "8.2%")).toHaveLength(2);
+  });
+
+  it("still draws a link made before the visits column, with that column blank", () => {
+    // A chart URL already posted to Slack carries no pctVisits; it must not break.
+    const texts = walk(renderFunnelSteps(payload()).element).map(textOf);
+    expect(texts).toContain("7.1%");
+    expect(texts.filter((t) => /%$/.test(t))).toHaveLength(4);
+  });
+
   it("grows with the number of steps, so eight rows never clip", () => {
     const five = renderFunnelSteps(payload()).height;
     const eight = renderFunnelSteps(

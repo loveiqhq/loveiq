@@ -237,16 +237,16 @@ interface DropoutByArmPayload {
 
 /**
  * The daily conversion funnel, one row per step in Mark's order and wording
- * (2026-09-16 sync). `pct` is the share of the step ABOVE that got this far, the
- * one percentage the funnel carries; null on the first row, which has nothing
- * above it. `worst` is the row the message names as the biggest drop, so the red
- * bar and the caption cannot disagree.
+ * (2026-09-16 sync). `pct` is the share of the step ABOVE that got this far and
+ * `pctVisits` the share of all visits (Marcus, 2026-10-05: both, always); each is
+ * null on the first row, which has nothing above it. `worst` is the row drawn red,
+ * the biggest drop after the first step.
  */
 interface FunnelStepsPayload {
   kind: "funnel-steps";
   windowLabel?: string;
   title?: string;
-  steps: Array<{ label: string; count: number; pct: number | null }>;
+  steps: Array<{ label: string; count: number; pct: number | null; pctVisits?: number | null }>;
   worst?: number;
 }
 
@@ -1754,8 +1754,10 @@ const FUNNEL_ROW_GAP = 6;
 const FUNNEL_LABEL_W = 230;
 const FUNNEL_COUNT_W = 86;
 const FUNNEL_PCT_W = 70;
+const FUNNEL_VISITS_W = 84;
 const FUNNEL_BAR_H = 18;
 const FUNNEL_GAP = 14;
+const FUNNEL_HEAD_H = 22;
 const FUNNEL_FOOT_H = 44;
 
 /** "8.2%", "<0.1%" for a real but tiny share, never a bare "0%" beside a count. */
@@ -1788,6 +1790,10 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
       label: s.label,
       count: Math.max(0, Number(s.count) || 0),
       pct: s.pct == null || !Number.isFinite(Number(s.pct)) ? null : Math.max(0, Number(s.pct)),
+      pctVisits:
+        s.pctVisits == null || !Number.isFinite(Number(s.pctVisits))
+          ? null
+          : Math.max(0, Number(s.pctVisits)),
     }));
   if (steps.length === 0) {
     return {
@@ -1802,14 +1808,46 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
     };
   }
   const worst = typeof p.worst === "number" ? p.worst : -1;
-  // 28 = chartShell's padding, both sides; three gaps between the four columns.
-  const trackW = WIDTH - 2 * 28 - FUNNEL_LABEL_W - FUNNEL_COUNT_W - FUNNEL_PCT_W - 3 * FUNNEL_GAP;
-  const height = BODY_OVERHEAD + steps.length * (FUNNEL_ROW_H + FUNNEL_ROW_GAP) + FUNNEL_FOOT_H;
+  // 28 = chartShell's padding, both sides; four gaps between the five columns.
+  const trackW =
+    WIDTH -
+    2 * 28 -
+    FUNNEL_LABEL_W -
+    FUNNEL_COUNT_W -
+    FUNNEL_PCT_W -
+    FUNNEL_VISITS_W -
+    4 * FUNNEL_GAP;
+  const height =
+    BODY_OVERHEAD + FUNNEL_HEAD_H + steps.length * (FUNNEL_ROW_H + FUNNEL_ROW_GAP) + FUNNEL_FOOT_H;
+  /** The two percentage columns' names, over them, so neither is read as the other. */
+  const colHead = (text: string, width: number) => (
+    <div
+      style={{
+        display: "flex",
+        width,
+        justifyContent: "flex-end",
+        fontSize: 13,
+        color: COLORS.textMuted,
+      }}
+    >
+      {text}
+    </div>
+  );
 
   const element = chartShell(
     title,
     p.windowLabel ?? "",
     <div style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", height: FUNNEL_HEAD_H, gap: FUNNEL_GAP }}>
+        <div
+          style={{
+            display: "flex",
+            width: FUNNEL_LABEL_W + FUNNEL_COUNT_W + trackW + 2 * FUNNEL_GAP,
+          }}
+        />
+        {colHead("of step above", FUNNEL_PCT_W)}
+        {colHead("of visits", FUNNEL_VISITS_W)}
+      </div>
       {steps.map((s, i) => {
         const isWorst = i === worst && s.pct !== null;
         // A share over 100% is real here (a promo unlock needs no checkout), so
@@ -1875,6 +1913,17 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
               }}
             >
               {s.pct === null ? "" : funnelPct(s.pct)}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: FUNNEL_VISITS_W,
+                justifyContent: "flex-end",
+                fontSize: 17,
+                color: COLORS.textMuted,
+              }}
+            >
+              {s.pctVisits === null ? "" : funnelPct(s.pctVisits)}
             </div>
           </div>
         );

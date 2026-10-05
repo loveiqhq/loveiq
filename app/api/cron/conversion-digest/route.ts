@@ -62,6 +62,7 @@ import {
   buildFrictionReport,
   buildFrictionWatchList,
   surveyQuestionNames,
+  worstEnds,
   type FrictionReport,
 } from "@features/admin/server/friction-metrics";
 import {
@@ -772,10 +773,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       midway ? { reached: midway.overall.reached, index: midway.midwayIndex } : null,
       paywall?.hits ?? null
     );
-    // Skip the visits -> started step when naming the biggest drop. It is the
-    // largest drop by construction (most visitors never start a survey) and would
-    // be the headline every single day, which is how a digest becomes wallpaper.
-    // The chart still draws it; only the HEADLINE moves to a step someone can act on.
+    // Skip the visits -> started step when choosing the red bar. It is the largest
+    // drop by construction (most visitors never start a survey) and would be red
+    // every single day, which is how a chart becomes wallpaper.
     const leak = biggestLeak(steps.slice(1));
     // `leak.index` counts within the slice; +1 puts it back on `steps`.
     const worstIndex = leak ? leak.index + 1 : -1;
@@ -803,87 +803,53 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       if (raw > 0 && raw < 0.05) return "<0.1%";
       return `${Math.round(raw * 10) / 10}%`;
     };
-    /**
-     * Says so when the paywall step covers less of the window than the steps
-     * above it. Only when it actually does: once the instrument is older than the
-     * window this line disappears on its own rather than becoming furniture.
-     */
-    const paywallNote = (() => {
-      if (!paywall?.firstRowDay || !steps.some((x) => x.key === "paywall")) {
-        return null;
-      }
-      // The digest's own reporting day, not wall-clock: the same boundary the
-      // window is cut on, so the two cannot disagree across a DST change.
-      const windowEnd = reportingDayStart(reportingDay(now)).getTime();
-      const first = new Date(`${paywall.firstRowDay}T00:00:00Z`).getTime();
-      if (!Number.isFinite(first) || first <= windowEnd - WINDOW_DAYS * 86_400_000) return null;
-      const days = Math.max(1, Math.round((windowEnd - first) / 86_400_000));
-      return `_The paywall step covers ${days} days, not ${WINDOW_DAYS}: we only started counting it on ${escapeSlack(paywall.firstRowDay)}._`;
-    })();
-
-    /**
-     * The biggest drop as one sentence with both counts: "of 32 who started
-     * checkout, 2 unlocked the report (6.3%)". A percentage on its own is how an
-     * unsourceable 96.5% reached a meeting; two counts and the share between
-     * them cannot be misread.
-     */
     const count = (n: number) => n.toLocaleString("en-US");
-    const headline = (() => {
-      if (worstIndex < 1) return null;
-      // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
-      const to = steps[worstIndex]!;
-      const from = steps[worstIndex - 1]!;
-      return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${share(to.count, from.count)}).`;
-    })();
 
     /**
-     * The funnel as a picture. Asked for on the 2026-09-16 sync: Mark's step
-     * names, a white background, and one percentage that means the same thing on
-     * every row. That percentage is % OF THE STEP ABOVE, because it answers the
-     * question the funnel is read for (where are we losing people), and the
-     * chart's red bar is the step the headline names.
+     * Two percentages on every step: of the step above (where people are lost) and
+     * of all visits (what share of the people who came got this far). Marcus,
+     * 2026-10-05: "conversion rates need to always be expressed in % of previous
+     * step but also in percent of visits". The second one was taken out on
+     * 2026-09-19 because two unnamed percentages beside each other were misread,
+     * so both now carry their name in the picture, the alt text and the table.
      *
-     * The share is sent unrounded and uncapped: over 100 is real (see `share`)
-     * and the renderer prints it as it is. A zero denominator is null, a blank,
-     * never a "0%".
+     * Sent unrounded and uncapped: over 100 is real (see `share`) and the renderer
+     * prints it as it is. A zero denominator is null, a blank, never a "0%".
      */
-    const stepPct = (i: number): number | null => {
-      if (i === 0) return null;
-      const of = steps[i - 1]!.count;
+    const pctOf = (i: number, of: number): number | null =>
       // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
-      return of > 0 ? (steps[i]!.count / of) * 100 : null;
-    };
+      i === 0 ? null : of > 0 ? (steps[i]!.count / of) * 100 : null;
+    const visits = steps[0]?.count ?? 0;
     const funnelTitle = `The funnel, last ${WINDOW_DAYS} days`;
     const chartUrl = await signedChartUrl(
       {
         windowLabel: chartWindow,
         title: "The funnel",
-        steps: steps.map((s, i) => ({ label: s.step, count: s.count, pct: stepPct(i) })),
+        steps: steps.map((s, i) => ({
+          label: s.step,
+          count: s.count,
+          pct: pctOf(i, i > 0 ? steps[i - 1]!.count : 0),
+          pctVisits: pctOf(i, visits),
+        })),
         worst: worstIndex,
       },
       "funnel-steps"
     );
-    // Heading, headline and caveat in ONE block, above the picture. Split across
-    // two, Slack puts a paragraph gap between a title and what it titles; and
-    // fitBlocks drops from the tail, so a cut can lose the picture but never the
-    // numbers in the headline.
-    const caption = [
-      `*${funnelTitle}*`,
-      ...(headline ? [headline] : []),
-      ...(paywallNote ? [paywallNote] : []),
-    ];
+    const both = (i: number) =>
+      `${share(steps[i]!.count, steps[i - 1]!.count)} of the step above, ${share(steps[i]!.count, visits)} of visits`;
     if (chartUrl) {
-      blocks.push(section(caption.join("\n")));
+      /**
+       * The picture alone: no heading, no "Biggest drop" sentence, no caveat. Mark,
+       * 2026-10-05, on exactly those lines: "Not needed. More noise than anything".
+       * The chart carries its own title and window, and its red bar is the drop.
+       */
       blocks.push({
         type: "image",
         image_url: chartUrl,
         // Every step with its count, so a failed image load or a screen reader
         // still gets the whole funnel.
         alt_text: `${funnelTitle}: ${steps
-          .map(
-            (s, i) =>
-              `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${share(s.count, steps[i - 1]!.count)} of the step above)`}`
-          )
+          .map((s, i) => `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${both(i)})`}`)
           .join("; ")}.`,
       });
     } else {
@@ -893,10 +859,17 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        */
       const rows = steps.map((s, i) => {
         const stepShare = i === 0 ? "—" : share(s.count, steps[i - 1]!.count);
-        return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
+        const visitShare = i === 0 ? "—" : share(s.count, visits);
+        return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}  ${visitShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
       });
       blocks.push(
-        section([...caption, rows.join("\n"), "_people  ·  % of the step above them_"].join("\n"))
+        section(
+          [
+            `*${funnelTitle}*`,
+            rows.join("\n"),
+            "_people  ·  % of the step above  ·  % of visits_",
+          ].join("\n")
+        )
       );
     }
   }
@@ -947,7 +920,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           )
         : null;
     if (endsUrl) {
-      const worst = [...ends].sort((a, b) => b.pct - a.pct).slice(0, 3);
+      const worst = worstEnds(ends);
       blocks.push({
         type: "image",
         image_url: endsUrl,
@@ -955,6 +928,25 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           .map((e) => `${e.label} ${Math.round(e.pct)}%`)
           .join(", ")}.`,
       });
+      /**
+       * The red bars' questions, in words, under the chart (agreed on the
+       * 2026-10-05 sync). Marcus could not tell which question a bar was; printing
+       * all 57 on the chart is clutter, so the chart numbers them and this names
+       * the ones that need a look, worst first.
+       */
+      if (worst.length > 0) {
+        blocks.push({
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: worst
+                .map((e) => `*${e.label}*  ${Math.round(e.pct)}%  ${escapeSlack(e.question ?? "")}`)
+                .join("\n"),
+            },
+          ],
+        });
+      }
     }
   }
 

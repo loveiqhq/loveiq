@@ -14,6 +14,8 @@ import {
   buildSurveySignals,
   fetchSessionEnds,
   sessionEnds,
+  surveyQuestionNames,
+  worstEnds,
   type FrictionQuestion,
   type FrictionSnapshot,
   type QuestionReach,
@@ -328,6 +330,19 @@ describe("buildFrictionWatchList", () => {
   });
 });
 
+describe("worstEnds", () => {
+  const e = (label: string, pct: number) => ({ label, pct });
+  it("is the top three by share, worst first, ties in survey order, never a zero", () => {
+    expect(worstEnds([e("Q1", 5), e("Q2", 9), e("Q3", 5), e("Q4", 2), e("Q5", 9)])).toEqual([
+      e("Q2", 9),
+      e("Q5", 9),
+      e("Q1", 5),
+    ]);
+    expect(worstEnds([e("Q1", 0), e("Q2", 3)])).toEqual([e("Q2", 3)]);
+    expect(worstEnds([])).toEqual([]);
+  });
+});
+
 describe("sessionEnds", () => {
   it("is in survey order, skips thin questions, and peaks where the sentence points", () => {
     const s = snap([q({ question_index: 0 })], {
@@ -342,11 +357,19 @@ describe("sessionEnds", () => {
       ],
     });
     const ends = sessionEnds(s);
-    expect(ends).toEqual([
+    expect(ends.map(({ label, pct }) => ({ label, pct }))).toEqual([
       { label: qn("00001"), pct: 2 },
       { label: qn("16014"), pct: 16 },
       { label: qn("00000"), pct: 22.5 },
     ]);
+    // Each bar carries its question in today's words, for naming it under the chart.
+    const names = surveyQuestionNames();
+    expect(ends.map((e) => e.question)).toEqual([
+      names.get("00001"),
+      names.get("16014"),
+      names.get("00000"),
+    ]);
+    expect(ends.every((e) => typeof e.question === "string" && e.question.length > 0)).toBe(true);
     // The chart's tallest bar is the question the "end there" sentence names.
     const top = [...ends].sort((a, b) => b.pct - a.pct)[0]!;
     const drop = find(buildSurveySignals(s), "Where sessions end")!;
@@ -404,7 +427,7 @@ describe("where people quit counts people who left for good", () => {
         by_question: [reach("00001", 100, 5), reach("01002", 100, 0)],
       }
     );
-    expect(sessionEnds(s)).toEqual([
+    expect(sessionEnds(s).map(({ label, pct }) => ({ label, pct }))).toEqual([
       { label: qn("00001"), pct: 5 },
       { label: qn("01002"), pct: 0 },
     ]);
@@ -417,7 +440,7 @@ describe("where people quit counts people who left for good", () => {
     const s = snap([q({ question_index: 0 })], {
       by_question: [reach("00000", 447, 49), reach("16015", 397, 0)],
     });
-    expect(sessionEnds(s)).toEqual([
+    expect(sessionEnds(s).map(({ label, pct }) => ({ label, pct }))).toEqual([
       { label: qn("00000"), pct: 11 },
       { label: qn("16015"), pct: 0 },
     ]);
@@ -445,7 +468,7 @@ describe("buildFrictionReport", () => {
         : new Response("{}", { status: 500 })
     );
     const report = await buildFrictionReport("2026-09-04T00:00:00Z", "2026-10-04T00:00:00Z");
-    expect(report?.ends).toEqual([
+    expect(report?.ends?.map(({ label, pct }) => ({ label, pct }))).toEqual([
       { label: qn("00001"), pct: 2 },
       { label: qn("01002"), pct: 3 },
       { label: qn("00000"), pct: 19 },
