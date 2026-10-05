@@ -12,7 +12,10 @@ vi.mock("@shared/observability/logger", () => ({ default: logger }));
 
 async function limitOnce(env: Record<string, string | undefined>) {
   vi.resetModules();
-  for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v as string);
+  // CI runs these tests in GitHub Actions itself, so its own flag must not leak in.
+  for (const [k, v] of Object.entries({ GITHUB_ACTIONS: undefined, ...env })) {
+    vi.stubEnv(k, v as string);
+  }
   const { checkRateLimit } = await import("@shared/http/ratelimit");
   await checkRateLimit("203.0.113.9", { bucket: "missing-store-test", limit: 5, windowMs: 60_000 });
 }
@@ -53,6 +56,13 @@ describe("the limiter with no Redis", () => {
 
   it("is only a warning on the staging project's build of main, a production deployment", async () => {
     await limitOnce({ ...noStore, ...staging, NODE_ENV: "production", VERCEL_ENV: "production" });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  // The brain jobs run the routes in GitHub Actions with production's address and no Redis.
+  it("is only a warning in GitHub Actions, even with production's address", async () => {
+    await limitOnce({ ...noStore, ...prod, NODE_ENV: "production", GITHUB_ACTIONS: "true" });
     expect(logger.error).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
