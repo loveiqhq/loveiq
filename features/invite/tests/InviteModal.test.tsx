@@ -73,6 +73,17 @@ describe("InviteModal", () => {
     expect(screen.queryByText("Name used in mail")).toBeNull();
   });
 
+  // The report hides its sticky footer while this is open (Mark, 04.10: the footer drew
+  // over it), so the open modal marks itself.
+  it("marks itself while open, for the page around it", () => {
+    const { rerender } = render(
+      <InviteModal open onClose={vi.fn()} referrerEmail="" referrerName="" />
+    );
+    expect(document.querySelector("[data-invite-modal]")).not.toBeNull();
+    rerender(<InviteModal open={false} onClose={vi.fn()} referrerEmail="" referrerName="" />);
+    expect(document.querySelector("[data-invite-modal]")).toBeNull();
+  });
+
   it("hides the email form by default and reveals it when the Email tile is clicked", () => {
     render(
       <InviteModal open onClose={vi.fn()} referrerEmail="alice@example.com" referrerName="Alice" />

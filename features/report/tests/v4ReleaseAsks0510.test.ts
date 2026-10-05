@@ -53,3 +53,29 @@ describe("Core Archetype matches '3 Highest Scoring Archetypes' (Marcus, 04.10)"
     );
   });
 });
+
+describe("the phone drawer over the sticky footer (Mark, 04.10)", () => {
+  it("puts the footer under the drawer and the Refer a friend modal", () => {
+    const body = rule(
+      [
+        "body:has(.rv3.rv4 .report-chapter-drawer-root) .report-sticky-unlock",
+        "body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock",
+      ].join(",\n")
+    );
+    expect(body).toContain("visibility: hidden;");
+  });
+
+  it("opens the panel near the top, rising from the floating pill's place", () => {
+    const panel = rule(".rv3.rv4 .report-chapter-panel");
+    expect(panel).toContain("top: calc(env(safe-area-inset-top, 0px) + 16px);");
+    expect(panel).toContain("animation-name: rv4-panel-rise;");
+    expect(rule(".rv3.rv4 .report-chapter-panel--closing")).toContain(
+      "animation-name: rv4-panel-sink;"
+    );
+    // The pill sat 80px down; the panel now starts 16px down, so it rises the 64px between.
+    expect(css).toMatch(/@keyframes rv4-panel-rise \{\s*from \{[^}]*translate3d\(-50%, 64px, 0\)/);
+    expect(css).toMatch(
+      /@keyframes rv4-panel-sink \{[\s\S]*?to \{[^}]*translate3d\(-50%, 64px, 0\)/
+    );
+  });
+});
