@@ -1838,7 +1838,7 @@ the same as "as fast as possible".
 | Job            | Every   | Sources                                      | Measured                           |
 | -------------- | ------- | -------------------------------------------- | ---------------------------------- |
 | `brain-fast`   | 15 min  | ga4, drive, analytics, slack, **embeddings** | ~12s in production                 |
-| `brain-notion` | hourly  | notion                                       | ~29s in production                 |
+| `brain-notion` | hourly  | notion                                       | up to ~75s (its walk budget)       |
 | `brain-gmail`  | hourly  | gmail                                        | 621s first walk, incremental after |
 | `brain-ingest` | nightly | gsc                                          | seconds                            |
 
@@ -1851,12 +1851,15 @@ the same as "as fast as possible".
   visitors today" unanswerable until the next night. Its window now ends at `today`
   rather than `yesterday`. Today's row is partial by nature and is labelled
   `TODAY SO FAR, still accruing`, so a running total is never read as a closed day.
-- **Notion is hourly, not 15-minute, because it costs ~29s a run whether or not
-  anything changed** — it enumerates all 35 databases to find what moved. Every 15
-  minutes that is ~50 minutes of compute a day re-reading unchanged pages, against
-  Notion's rate limit, for nothing. Hourly is still 24x fresher than nightly. The
-  cheap alternative, a `/search`-by-last-edited crawl, can never notice a DELETED
-  page, and the sweep depends on knowing the full set.
+- **Notion is hourly, not 15-minute, because its crawl costs ~35-40s a run whether
+  or not anything changed** — it enumerates every database (39 on 2026-10-05) and
+  every page to find what moved. Every 15 minutes that is ~50 minutes of compute a
+  day re-reading unchanged pages, against Notion's rate limit, for nothing. Hourly is
+  still 24x fresher than nightly. The cheap alternative, a `/search`-by-last-edited
+  crawl, can never notice a DELETED page, and the sweep depends on knowing the full
+  set. The walk budget is 75s (40s until 2026-10-05, when the crawl alone had grown
+  to fill it). A crawl the clock cuts short is not an error while the deletion sweep
+  has run in the last 26 hours; past that it fails and alerts #brain.
 - **Search Console stays nightly because it genuinely lags.** Probed on 2026-08-29,
   its newest available day was 2026-08-26 — three days back. Asking every 15 minutes
   would refetch identical numbers 96 times a day. For GSC alone, nightly IS live.

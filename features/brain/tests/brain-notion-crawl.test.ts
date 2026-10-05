@@ -61,10 +61,16 @@ vi.mock("@features/admin/server/supabase", () => ({
 const notionCalls: string[] = [];
 /** What Notion answers for a page's content. Anything but 200 makes pageText throw. */
 let blocksStatus = 200;
+/** Answers the DATABASE search gives first, one per call, before it answers normally. */
+let databaseSearchAnswers: Array<() => Response> = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string, init?: RequestInit) => {
     notionCalls.push(url);
     const body = JSON.parse(String(init?.body ?? "{}")) as { filter?: { value?: string } };
+    if (url.endsWith("/search") && body.filter?.value === "database") {
+      const next = databaseSearchAnswers.shift();
+      if (next) return next();
+    }
 
     if (url.endsWith("/search") && body.filter?.value === "database") {
       return json({
@@ -129,7 +135,7 @@ const PAGE_STANDALONE = {
   properties: { title: { type: "title", title: [{ plain_text: "Positioning" }] } },
 };
 
-import { ingestNotion, taskToRow } from "@features/brain/server/ingest/notion";
+import { NOTION_RETRY_MAX_S, ingestNotion, taskToRow } from "@features/brain/server/ingest/notion";
 
 const STAMP = "2026-08-28T12:00:00.000Z";
 
@@ -494,5 +500,65 @@ describe("continuation parts must be confirmed, or the sweep eats them", () => {
     // planted orphans prove the sweep actually ran.
     expect(deleted()).not.toContain("task:row-lit-1#2");
     expect(deleted().length).toBeGreaterThan(0);
+  });
+});
+
+describe("one transient Notion answer must not fail the run", () => {
+  // 2026-10-01 11:41: a 500 ("Cross-cell memcached access is not allowed") on the crawl's
+  // search, uncaught, failed the whole run.
+  const dbSearches = () => notionCalls.filter((u) => u.endsWith("/search")).length - 1; // minus the page search
+  const answer =
+    (status: number, headers: Record<string, string> = {}) =>
+    () =>
+      new Response(JSON.stringify({ object: "error", status }), { status, headers });
+
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    existingChunks = [];
+    databaseSearchAnswers = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+  });
+
+  it("retries a 5xx once, and the crawl carries on", async () => {
+    databaseSearchAnswers = [answer(500)];
+    const res = await ingestNotion(STAMP);
+    expect(res.skipped).toBeUndefined();
+    expect(dbSearches()).toBe(2);
+    expect(written().map((r) => r.source_id)).toContain("task:row-lit-1");
+  });
+
+  it("waits out a 429's Retry-After before the one retry", async () => {
+    expect(NOTION_RETRY_MAX_S).toBe(5);
+    databaseSearchAnswers = [answer(429, { "retry-after": "2" })];
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const run = ingestNotion(STAMP);
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      const res = await run;
+      expect(res.skipped).toBeUndefined();
+      expect(dbSearches()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not wait out a long Retry-After, and never retries twice", async () => {
+    databaseSearchAnswers = [answer(429, { "retry-after": "30" })];
+    await expect(ingestNotion(STAMP)).rejects.toThrow(/\/search failed \(429\)/);
+    expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(1);
+
+    notionCalls.length = 0;
+    databaseSearchAnswers = [answer(502), answer(503)];
+    await expect(ingestNotion(STAMP)).rejects.toThrow(/\/search failed \(503\)/);
+    expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(2);
+  });
+
+  it("leaves a 4xx alone", async () => {
+    databaseSearchAnswers = [answer(400)];
+    await expect(ingestNotion(STAMP)).rejects.toThrow(/\/search failed \(400\)/);
+    expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(1);
   });
 });

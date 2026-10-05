@@ -741,23 +741,30 @@ const SWEEP_INTERVAL_MS = 20 * 60 * 60 * 1000;
  * A source with no row has never swept, so it sweeps on its next complete walk.
  */
 export async function shouldSweep(source: string, nowMs = Date.now()): Promise<boolean> {
+  const last = await sweptAt(source);
+  if (last === undefined) return false;
+  if (last === null) return true;
+  return nowMs - last >= SWEEP_INTERVAL_MS;
+}
+
+/** When `source` last swept (ms): null when it never has, undefined when unreadable. */
+export async function sweptAt(source: string): Promise<number | null | undefined> {
   try {
     const res = await supabaseFetch(
       `/rest/v1/brain_sweep_state?source=eq.${encodeURIComponent(source)}&select=swept_at`
     );
     if (!res.ok) {
       logger.warn({ source, status: res.status }, "brain sweep state unreadable, not sweeping");
-      return false;
+      return undefined;
     }
     const rows = (await res.json().catch(() => null)) as Array<{ swept_at?: string }> | null;
-    if (!Array.isArray(rows)) return false;
-    if (rows.length === 0) return true;
+    if (!Array.isArray(rows)) return undefined;
+    if (rows.length === 0) return null;
     const last = Date.parse(rows[0]?.swept_at ?? "");
-    if (!Number.isFinite(last)) return false;
-    return nowMs - last >= SWEEP_INTERVAL_MS;
+    return Number.isFinite(last) ? last : undefined;
   } catch (err) {
     logger.warn({ err, source }, "brain sweep state threw, not sweeping");
-    return false;
+    return undefined;
   }
 }
 
