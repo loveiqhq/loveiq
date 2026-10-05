@@ -101,7 +101,7 @@ describe("/api/cron/brain-notion: a partial crawl is judged by the sweep", () =>
     expect(notified[0]!.text).toMatch(/brain-notion skipped \(x-broke\)/);
   });
 
-  it("gives the walk 75 seconds, leaving the tail its room under the 120 s ceiling", async () => {
+  it("gives the walk 65 seconds: 65 + a 35 s retry + an 18 s tail stays under 120 s", async () => {
     let stop: (() => boolean) | undefined;
     mockIngest.mockImplementation(async (_at: string, isOutOfTime: () => boolean) => {
       stop = isOutOfTime;
@@ -111,9 +111,9 @@ describe("/api/cron/brain-notion: a partial crawl is judged by the sweep", () =>
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     try {
       await GET(req());
-      clock.mockReturnValue(now + 75_000);
+      clock.mockReturnValue(now + 65_000);
       expect(stop!()).toBe(false);
-      clock.mockReturnValue(now + 75_001);
+      clock.mockReturnValue(now + 65_001);
       expect(stop!()).toBe(true);
     } finally {
       clock.mockRestore();

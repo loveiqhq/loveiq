@@ -2377,10 +2377,11 @@ export const EXTERNAL_SERVICES: Record<
       "`depth=2` exceeds the 40,000-character result cap and comes back truncated. " +
       "`/images/<key>?ids=<node>` returns a URL to a render, which is a LINK and not a " +
       "picture — use `show_design` when you want to SEE a frame. " +
-      "RATE LIMIT: file, node and image reads share one small per-minute allowance across the " +
-      "whole team, so batch: `/files/<key>/nodes?ids=a,b,c` reads many nodes in ONE request, and " +
-      "`/images` takes several ids too. Never loop one id per call; render fewer ids, or at a " +
-      "lower `scale`, when a render times out.",
+      "RATE LIMIT: file, node and image reads share one small allowance across the whole team " +
+      "(per minute for a full or dev seat, per MONTH for a view or collab seat), so batch: " +
+      "`/files/<key>/nodes?ids=a,b,c` reads many nodes in ONE request, and `/images` takes " +
+      "several ids too. Never loop one id per call; render fewer ids, or at a lower `scale`, " +
+      "when a render times out.",
   },
   trustpilot: {
     base: "https://api.trustpilot.com/v1",

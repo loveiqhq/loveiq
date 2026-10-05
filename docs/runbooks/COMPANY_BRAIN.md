@@ -591,7 +591,8 @@ later `date:` is the current decision.
 
 **Figma's rate limit is one allowance for the whole team.** Figma counts per user and
 plan, so every tool on the token shares it (file, node and image reads: 15 a minute on
-Professional, 20 on Organization). `show_design` and the gateway's Figma reads both go
+Professional and 20 on Organization for a full or dev seat; a seat that can only view or
+comment on design files gets 20 a month). `show_design` and the gateway's Figma reads both go
 through `figmaFetch` in `features/brain/server/see/figma.ts`: a 429 whose `Retry-After`
 is 10 seconds or less is waited out once, and a longer one is answered with the wait,
 the plan tier Figma reports, and how to ask for less (several node ids in one
@@ -1838,7 +1839,7 @@ the same as "as fast as possible".
 | Job            | Every   | Sources                                      | Measured                           |
 | -------------- | ------- | -------------------------------------------- | ---------------------------------- |
 | `brain-fast`   | 15 min  | ga4, drive, analytics, slack, **embeddings** | ~12s in production                 |
-| `brain-notion` | hourly  | notion                                       | up to ~75s (its walk budget)       |
+| `brain-notion` | hourly  | notion                                       | up to ~65s (its walk budget)       |
 | `brain-gmail`  | hourly  | gmail                                        | 621s first walk, incremental after |
 | `brain-ingest` | nightly | gsc                                          | seconds                            |
 
@@ -1857,8 +1858,9 @@ the same as "as fast as possible".
   day re-reading unchanged pages, against Notion's rate limit, for nothing. Hourly is
   still 24x fresher than nightly. The cheap alternative, a `/search`-by-last-edited
   crawl, can never notice a DELETED page, and the sweep depends on knowing the full
-  set. The walk budget is 75s (40s until 2026-10-05, when the crawl alone had grown
-  to fill it). A crawl the clock cuts short is not an error while the deletion sweep
+  set. The walk budget is 65s (40s until 2026-10-05, when the crawl alone had grown
+  to fill it), so a request that starts just inside it, with its one capped retry
+  (up to 35s) and the tail (up to ~18s), still ends under the 120s ceiling. A crawl the clock cuts short is not an error while the deletion sweep
   has run in the last 26 hours; past that it fails and alerts #brain.
 - **Search Console stays nightly because it genuinely lags.** Probed on 2026-08-29,
   its newest available day was 2026-08-26 — three days back. Asking every 15 minutes

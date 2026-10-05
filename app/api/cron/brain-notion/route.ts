@@ -67,13 +67,14 @@ export async function GET(request: Request) {
   // Notion's tail (upsert of up to 1,400 rows, touch batches, sweep) runs after
   // this expires and cannot be interrupted, so leave it room.
   //
-  // 75 s, up from 40. The crawl alone now takes most of 40 s (39 databases plus a full page
+  // 65 s, up from 40. The crawl alone now takes most of 40 s (39 databases plus a full page
   // listing, ~63 requests in sequence), so seven runs in the fortnight to 2026-10-05 stopped
   // DURING the crawl at 40.4-40.9 s, and the rest left the fetch only a few seconds: runs
   // wrote 1-18 pages each, and a database created that morning was still unindexed three
-  // runs later. The tail measured at most ~18 s; 75 + 18 + one in-flight request with its
-  // capped retry stays under the 120 s ceiling.
-  const isOutOfTime = () => Date.now() - startedAtMs > 75_000;
+  // runs later. The clock is checked between requests, so one that starts just inside the
+  // budget can still cost 35 s (a slow 15 s answer, the capped 5 s wait, a 15 s retry), and
+  // the tail after it measured at most ~18 s: 65 + 35 + 18 = 118 s, under the 120 s ceiling.
+  const isOutOfTime = () => Date.now() - startedAtMs > 65_000;
 
   const dayKey = new Date().toISOString().slice(0, 10);
   const alertOnce = async (name: string, text: string) => {
