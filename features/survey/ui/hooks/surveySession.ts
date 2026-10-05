@@ -100,6 +100,21 @@ function writeSessionMirror(id: string | null): void {
   }
 }
 
+/**
+ * Drop the copy only if it is this run's. localStorage is shared by every tab, so the
+ * copy may belong to a draft open in another tab, which a report finishing here must not
+ * cost its id.
+ */
+function forgetSessionMirrorOf(id: string | null): void {
+  if (!id) return;
+  try {
+    if (localStorage.getItem(SURVEY_SESSION_KEY) === id)
+      localStorage.removeItem(SURVEY_SESSION_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export function getSessionId(): string {
   if (!canUseStorage()) return "";
   try {
@@ -181,7 +196,7 @@ export function finalizeReportSession(sessionId: string): void {
 
     if (sessionStorage.getItem(SURVEY_SESSION_KEY) === sessionId) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
-      writeSessionMirror(null);
+      forgetSessionMirrorOf(sessionId);
     }
   } catch {
     /* storage unavailable */
@@ -349,8 +364,8 @@ export function forgetCompletedReport(): void {
   if (!canUseStorage()) return;
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
+    forgetSessionMirrorOf(sessionStorage.getItem(SURVEY_SESSION_KEY));
     sessionStorage.removeItem(SURVEY_SESSION_KEY);
-    writeSessionMirror(null);
   } catch {
     /* ignore */
   }

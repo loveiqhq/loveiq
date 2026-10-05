@@ -90,6 +90,18 @@ describe("surveySession", () => {
       expect(getSessionId()).not.toBe(ID);
     });
 
+    // localStorage is shared by every tab; the copy may be a draft's in another tab.
+    it("is left alone when a report finishing in this tab belongs to another run", () => {
+      const OTHER = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+      localStorage.setItem(SURVEY_SESSION_KEY, OTHER);
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      finalizeReportSession(ID);
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBe(OTHER);
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      forgetCompletedReport();
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBe(OTHER);
+    });
+
     it("ignores a saved value that is not a session id", () => {
       localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
       localStorage.setItem(SURVEY_SESSION_KEY, "s-123-old");

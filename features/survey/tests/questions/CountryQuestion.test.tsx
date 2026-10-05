@@ -165,7 +165,8 @@ describe("CountryQuestion", () => {
     render(<CountryQuestion question={QUESTION} value={null} onChange={vi.fn()} />);
     const input = screen.getByPlaceholderText("Search for a country...");
     await user.type(input, "Zzzzz");
-    expect(screen.getByText("No countries found")).toBeInTheDocument();
+    // The visible box (the status line under it is for screen readers).
+    expect(screen.getByText("No countries found", { selector: "div" })).toBeInTheDocument();
   });
 
   describe("finding a country by what people type", () => {
@@ -246,6 +247,15 @@ describe("CountryQuestion", () => {
       expect(input).toHaveValue("Germ");
       expect(onChange).not.toHaveBeenCalledWith("Germany");
       expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("tells a screen reader when nothing matches", async () => {
+      const user = userEvent.setup();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={vi.fn()} />);
+      const status = screen.getByRole("status");
+      expect(status).toHaveTextContent("");
+      await user.type(screen.getByRole("combobox"), "Zzzzz");
+      expect(status).toHaveTextContent("No countries found");
     });
 
     it("is a combobox a screen reader can follow", async () => {

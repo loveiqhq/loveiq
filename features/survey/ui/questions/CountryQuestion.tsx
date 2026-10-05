@@ -287,9 +287,16 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
           </ul>
         )}
 
+        {/* Read out when nothing matches: the list just disappears, which a screen reader
+            does not announce. Always rendered, so the change is heard. */}
+        <p className="sr-only" role="status">
+          {isOpen && isEditing && search && filtered.length === 0 ? "No countries found" : ""}
+        </p>
+
         {/* No results */}
         {isOpen && isEditing && search && filtered.length === 0 && (
           <div
+            aria-hidden="true"
             className={`absolute z-50 mt-2 w-full rounded-xl border px-4 py-3 font-sans text-[14px] ${
               white
                 ? "border-black/[0.08] bg-white text-[#6b6678] shadow-[0_16px_40px_rgba(0,0,0,0.12)]"
