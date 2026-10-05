@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
@@ -184,6 +184,18 @@ describe("CountryQuestion", () => {
       );
       await user.type(screen.getByRole("combobox"), "germany");
       await user.click(screen.getByRole("button", { name: "elsewhere" }));
+      expect(onChange).toHaveBeenLastCalledWith("Germany");
+    });
+
+    // WebKit keeps the box focused when a tap lands on something that cannot take focus,
+    // so on an iPhone no blur came: the tap outside itself must choose the name.
+    it("chooses a whole name typed on a tap outside, with no blur", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
+      const input = screen.getByRole("combobox");
+      await user.type(input, "germany");
+      fireEvent.mouseDown(document.body);
       expect(onChange).toHaveBeenLastCalledWith("Germany");
     });
 

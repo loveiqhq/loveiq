@@ -32,18 +32,6 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
   const filterText = isEditing ? search : "";
   const filtered = useMemo(() => searchCountries(filterText), [filterText]);
 
-  // Close dropdown on outside click. The typed text stays: it was wiped, so a reader who
-  // tapped away mid-word lost it and found nothing selected.
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   // Scroll highlighted item into view
   useEffect(() => {
     if (highlightIndex >= 0 && listRef.current) {
@@ -65,6 +53,22 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
     },
     [onChange]
   );
+
+  // A tap outside closes the list. The typed text stays (it was wiped, so a reader who
+  // tapped away mid-word lost it), and a whole name typed is chosen: here as well as on
+  // blur, because WebKit keeps the box focused when the tap lands on something that
+  // cannot take focus, so on an iPhone the blur never came.
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        const exact = isEditing ? exactCountry(search) : null;
+        if (exact) selectCountry(exact);
+        else setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isEditing, search, selectCountry]);
 
   const clearSelection = useCallback(() => {
     onChange("" as string);
