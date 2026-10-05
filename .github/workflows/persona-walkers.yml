@@ -156,19 +156,18 @@ jobs:
           fi
           exit $rc
 
-      - name: Fail on a walk asked for wrongly, or a stopped walk nobody judged
+      - name: Fail on a walk asked for wrongly, or a stopped walk
         if: ${{ !cancelled() }}
         env:
           WALK_OUT: ${{ runner.temp }}/walks
-          JUDGED: ${{ inputs.judge }}
         run: |
           if [ -f "$WALK_OUT/.bad-request" ]; then
             echo "::error::A walk was asked for with an unknown persona, device, plan or report"
             exit 1
           fi
-          # Judged, a stopped walk is in the night's message. Walk-only, nothing is posted, so
-          # this is the only place it shows.
-          if [ "$JUDGED" != "true" ] && [ -f "$WALK_OUT/.walk-failed" ]; then
+          # Judged or not: the night's message says it too, but from 2 to 5 October 2026 it said
+          # "0 of 4 reached the end" four nights running with the run green, and nobody looked.
+          if [ -f "$WALK_OUT/.walk-failed" ]; then
             echo "::error::A walk stopped before the end; the log above says where"
             exit 1
           fi

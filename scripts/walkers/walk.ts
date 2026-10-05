@@ -21,6 +21,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 import { chromium, devices, webkit, type Locator, type Page } from "playwright";
 
@@ -56,6 +57,19 @@ export const PLAN_TITLE: Record<Plan, RegExp> = {
   core: /all your core archetypes/i,
   all_reports: /for you (?:&|and) your partner/i,
 };
+/**
+ * The pre-report wizard's forward button, and its last slide's. That last button is "View
+ * your report" on main and "Continue to your report" on the staging branch (since 1 October
+ * 2026); knowing only main's name, every walk on staging stopped there from 2 to 5 October.
+ */
+export const WIZARD_FORWARD = /continue to next slide|view your report|continue to your report/i;
+export const WIZARD_LAST = /view your report|continue to your report/i;
+/**
+ * An archetype row's "Unlock report" ("Unlock Spark Seeker report" on a phone), and never the
+ * price picker's "Unlock my report", which buys the full report: on 2026-10-05 a core walk on
+ * a phone pressed that one and went to Stripe for the wrong plan.
+ */
+export const ARCHETYPE_ROW_UNLOCK = /^unlock (?!your |the |full |my )(?:[\w -]+ )?report$/i;
 /** Each plan's button on the paywall. */
 const PLAN_CTA: Record<Plan, RegExp> = {
   full_report: /^unlock my report$/i,
@@ -148,6 +162,18 @@ export function findQuestion(headings: string[]): SurveyQuestion | null {
  * post, with the tokens taken out: report tokens, Stripe sessions, and every query string.
  * A navigation error's first line can carry the whole URL of the return page.
  */
+/**
+ * Why a walk stopped, for the log and the night's message: Playwright's first line, plus
+ * what it was waiting for. The first line alone ("locator.click: Timeout 30000ms exceeded.")
+ * hid for four nights which button was missing.
+ */
+export function stoppedAtOf(err: unknown): string {
+  const message = stripVTControlCharacters(String((err as Error)?.message ?? err));
+  const waitingFor = /waiting for (.+)/.exec(message)?.[1]?.trim();
+  const first = message.split("\n")[0]!;
+  return redact(waitingFor ? `${first} (waiting for ${waitingFor})` : first).slice(0, 200);
+}
+
 export function redact(text: string): string {
   return text
     .replace(/(https?:\/\/[^\s?"')]+|\/[\w./-]*)\?[^\s"')]*/g, "$1")
@@ -545,8 +571,11 @@ async function main(argv: string[]): Promise<number> {
     page
       .evaluate(() => {
         const text = document.body?.innerText ?? "";
+        // The default report's locks, then V4's (staging branch): its premium content card
+        // and the lock tile on a visual. Measured 2026-10-05: 4 cards and 17 tiles on an
+        // unpaid V4 report, none once paid; with only the first two, V4 counted 0 and 0.
         const badges = document.querySelectorAll(
-          '[aria-label="Unlock the full report"], .report-premium-overlay'
+          '[aria-label="Unlock the full report"], .report-premium-overlay, .rv4-premium, .rv4-lockbadge'
         ).length;
         return badges + (text.match(/Unlock it to keep reading/g) ?? []).length;
       })
@@ -777,13 +806,11 @@ async function main(argv: string[]): Promise<number> {
 
     // Processing, then the pre-report slides, then the report.
     await record("processing");
-    const wizard = page
-      .getByRole("button", { name: /continue to next slide|view your report/i })
-      .first();
+    const wizard = page.getByRole("button", { name: WIZARD_FORWARD }).first();
     await wizard.waitFor({ state: "visible", timeout: 90_000 });
     for (let i = 1; i <= 8 && !page.url().includes("/report/"); i++) {
       await record(`pre-report-${i}`);
-      const finalSlide = await visible(/view your report/i);
+      const finalSlide = await visible(WIZARD_LAST);
       await wizard.click();
       if (finalSlide) break;
       await page.waitForTimeout(900);
@@ -1171,10 +1198,7 @@ async function main(argv: string[]): Promise<number> {
           ]
         : [
             // "Unlock report" on a desktop, "Unlock Spark Seeker report" on a phone.
-            [
-              () => button(/^unlock (?!your |the |full )(?:[\w -]+ )?report$/i),
-              "an archetype row's Unlock report",
-            ],
+            [() => button(ARCHETYPE_ROW_UNLOCK), "an archetype row's Unlock report"],
             [
               () => page.locator("button.rv4-lockbadge").filter({ visible: true }).first(),
               "a padlock on a locked chart",
@@ -1219,6 +1243,10 @@ async function main(argv: string[]): Promise<number> {
             .evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
             .catch(() => {});
           await page.waitForTimeout(400);
+          // Bringing the way up is a scroll, and the report can open the picker on a scroll.
+          // The page behind the picker is then hidden, so the way's pattern finds the picker's
+          // own buttons instead. The next round sees the picker, opened by the report.
+          if (await pricesOpen()) break;
           if (
             !(await way()
               .click({ timeout: 10_000 })
@@ -1352,7 +1380,7 @@ async function main(argv: string[]): Promise<number> {
     walk.finished = true;
     return 0;
   } catch (err) {
-    walk.stoppedAt = redact(String((err as Error).message).split("\n")[0]!).slice(0, 200);
+    walk.stoppedAt = stoppedAtOf(err);
     await record("failed").catch(() => {});
     // What a screen reader would have been given at the point the walk gave up.
     await page
