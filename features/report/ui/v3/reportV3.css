@@ -7900,6 +7900,8 @@ html {
     font-size: 16px;
     line-height: 25.6px;
   }
+  /* Marcus (04.10): Core Archetype is set like the top three heading above it. */
+  .rv3.rv4 .rv4-corehead__title,
   .rv3.rv4 .rv4-top3__heading {
     font-size: 28px;
     letter-spacing: -0.9px;
@@ -9398,4 +9400,16 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   .rv3.rv4 .rv3-deck__slot.is-peeking:hover {
     translate: 0 -2px;
   }
+}
+
+/* ── Release asks — 05.10 ──────────────────────────────────────────────────────
+ * Marcus (04.10): Other Archetypes' "You're a Constellation, Not a Type" is an H2, so it
+ * sits under its H1 instead of over it. Report 2.0's heading kept its 28px / 40px; Mark:
+ * "we pulled in the V2 report element without changing it". V4's in-chapter H2, as
+ * .rv4-tb__h2. */
+.rv3.rv4 .report-constellation__heading {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 21.6px;
 }
