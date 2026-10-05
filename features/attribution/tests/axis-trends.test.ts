@@ -8,6 +8,7 @@ import {
   rowsForAxis,
   type AxisFunnelRow,
 } from "@features/attribution/server/axis-trends";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 
 /** Days of rows for one axis+arm, ending on `lastDay`. */
 function rows(
@@ -27,22 +28,19 @@ function rows(
 }
 
 describe("axis trend charts — which experiments may be drawn", () => {
-  it("never charts a concluded experiment — paywall, survey theme or pricing", () => {
+  it("never charts a concluded experiment — paywall or survey theme", () => {
     // Three independent layers, because the way this bug actually happens is a
     // developer writing `Object.keys(AXIS_TITLES)` — which contains all of them.
     expect([...CHART_AXES]).not.toContain("paywall");
     expect([...CHART_AXES]).not.toContain("survey");
-    expect([...CHART_AXES]).not.toContain("pricing");
-    expect([...CHART_AXES]).toEqual(["landing"]);
+    expect([...CHART_AXES]).toEqual(["landing", "pricing"]);
 
-    // Even if the RPC regressed and started emitting rows for any of them, nothing
+    // Even if the RPC regressed and started emitting rows for either, nothing
     // reaches Slack — not a chart, not a counts block, not a skip caption. The RPC
-    // DOES still emit `pricing` and `survey`, so this is a live guard, not a
-    // hypothetical one.
+    // DOES still emit `survey`, so this is a live guard, not a hypothetical one.
     for (const [axis, a, b] of [
       ["paywall", "treatment", "control"],
       ["survey", "white", "dark"],
-      ["pricing", "A", "B"],
     ] as const) {
       const trends = buildAxisTrends(
         [
@@ -55,6 +53,43 @@ describe("axis trend charts — which experiments may be drawn", () => {
       expect(trends.counts.map((c) => c.axis)).not.toContain(axis);
       expect(trends.skipped.map((s) => s.axis)).not.toContain(axis);
     }
+  });
+
+  it("reads the price test from Pricing 3.0's own arms and launch day only", () => {
+    expect(AXIS_VALID_FROM.pricing?.day).toBe(PRICING_3_LAUNCH_DAY);
+    const launch = PRICING_3_LAUNCH_DAY;
+    const input = [
+      // The concluded 2.x arms, still in the data for everyone who bought under them.
+      ...rows("pricing", "A", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
+      ...rows("pricing", "B", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
+      // 3.0 arms on days BEFORE the launch: readers re-priced by the launch re-sync.
+      ...rows("pricing", "A3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
+      ...rows("pricing", "B3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 2 }),
+    ];
+    const { rows: scoped, validFrom } = rowsForAxis(input, "pricing");
+    expect(validFrom).toBe(launch);
+    expect(new Set(scoped.map((r) => r.arm))).toEqual(new Set(["A3", "B3"]));
+    expect(scoped.every((r) => r.day >= launch)).toBe(true);
+    expect(scoped.length).toBeGreaterThan(0);
+
+    // 16 days from the launch to 20 Oct, 20 finished a day per arm: a chart, labelled
+    // as the 3.0 lists, off the post-launch days alone.
+    const trends = buildAxisTrends(input, "2026-10-20");
+    const chart = trends.charted.find((c) => c.axis === "pricing");
+    expect(chart?.legendFirst).toBe("Pricing 3.0 A");
+    expect(chart?.legendLast).toBe("Pricing 3.0 B");
+    expect(chart?.headline).toContain("64/320");
+    expect(chart?.headline).toContain("32/320");
+
+    // Only the 2.x arms: a live axis with nothing to compare says so; it is never
+    // drawn from the concluded test's rows.
+    const legacy = buildAxisTrends(
+      input.filter((r) => r.arm === "A" || r.arm === "B"),
+      "2026-10-20"
+    );
+    expect(legacy.charted.map((c) => c.axis)).not.toContain("pricing");
+    expect(legacy.counts.map((c) => c.axis)).not.toContain("pricing");
+    expect(legacy.skipped.find((s) => s.axis === "pricing")?.caption).toContain("no arm has data");
   });
 
   it("charts an axis with enough history and computes the rate from the rows", () => {

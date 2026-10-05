@@ -33,8 +33,7 @@ import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
 import { buildReport2ChapterCopies } from "@features/report/server/report2ChapterCopies";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
-import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import {
   REPORT_SHARE_TOKEN_REGEX,
   markShareViewed,
@@ -82,7 +81,7 @@ interface SnapshotAnswers {
   importanceOfSex: number | null;
 }
 
-type ReportPricingQuotesResponse = Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+type ReportPricingQuotesResponse = ReportPriceQuotes | null;
 
 function getSubmissionUserName(submission: SubmissionRow): string | null {
   if (Array.isArray(submission.app_user)) {

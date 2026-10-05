@@ -21,7 +21,7 @@ import {
 } from "@shared/experiments/popupArm";
 import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import { canSharePlan } from "@features/report/server/planAccess";
 import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
@@ -178,6 +178,13 @@ import {
 } from "@features/analytics/client";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
+import {
+  captureUnlockAnchor,
+  parseUnlockAnchor,
+  restoreUnlockAnchor,
+  serializeUnlockAnchor,
+  type UnlockAnchor,
+} from "./unlockAnchor";
 import "./report.css";
 import "./v3/reportV3.css";
 
@@ -205,6 +212,11 @@ const REPORT_PART_DIVIDER_BY_SECTION: Record<string, ReportPartDividerProps> = {
   [REPORT_PART_FIRST_SECTION.partIII]: { part: "Part III", lead: "Your erotic ", accent: "engine" },
   [REPORT_PART_FIRST_SECTION.partIV]: { part: "Part IV", lead: "Your growth edges" },
 };
+
+/** The element just tapped, if the tap was recent enough to be what opened the paywall. */
+function recentTapTarget(tap: { at: number; el: Element | null }): Element | null {
+  return Date.now() - tap.at < 1_500 ? tap.el : null;
+}
 
 function getScalarOverlay(diagnostics: Record<string, unknown> | null, key: string) {
   const overlays = diagnostics?.overlaysScalar;
@@ -435,7 +447,7 @@ interface ReportExperienceProps {
    * another's name.
    */
   contentArchetype: string;
-  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  pricingQuotes: ReportPriceQuotes | null;
   archetypeContent: Record<string, Record<string, string>>;
   practiceTendencies: Record<
     string,
@@ -2791,6 +2803,47 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     isPricingModalOpenRef.current = isPricingModalOpen;
   }, [isPricingModalOpen]);
 
+  /**
+   * Where the reader was when they started a checkout, so Stripe's return puts them
+   * back there (unlockAnchor.ts, Figma 1382:2010). The last tap is remembered for a
+   * moment because the paywall is opened by callbacks that never see the event; a
+   * pop-up that opened on its own finds no recent tap and records the reading line.
+   */
+  const lastTapRef = useRef<{ at: number; el: Element | null }>({ at: 0, el: null });
+  useEffect(() => {
+    const onTap = (event: Event) => {
+      lastTapRef.current = {
+        at: Date.now(),
+        el: event.target instanceof Element ? event.target : null,
+      };
+    };
+    document.addEventListener("click", onTap, true);
+    return () => document.removeEventListener("click", onTap, true);
+  }, []);
+  const unlockAnchorRef = useRef<UnlockAnchor | null>(null);
+  useEffect(() => {
+    if (!isPricingModalOpen) return;
+    unlockAnchorRef.current = captureUnlockAnchor(recentTapTarget(lastTapRef.current));
+  }, [isPricingModalOpen]);
+
+  // Back from Stripe with `?anchor=`: once the report has rendered, return the reader
+  // to that spot and drop the parameter, so a reload or a copied link does not jump.
+  const anchorFromUrl = searchParams.get("anchor");
+  const anchorRestoredRef = useRef(false);
+  useEffect(() => {
+    if (anchorRestoredRef.current || !anchorFromUrl || status !== "success") return;
+    anchorRestoredRef.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("anchor");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
+    const anchor = parseUnlockAnchor(anchorFromUrl);
+    if (anchor) restoreUnlockAnchor(anchor);
+  }, [anchorFromUrl, status]);
+
   useEffect(() => {
     if (!data) return;
     if (accessPlan !== null) return;
@@ -3076,7 +3129,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // repeated this price and then auto-forwarded anyway; it is gone, so the
     // pending state it used to show has to live here instead.
     setCheckoutHandoff({ status: "redirecting", message: null });
+    // From the pay screen, the spot it was opened from; from the sticky footer, here.
+    const anchor = serializeUnlockAnchor(
+      isPricingModalOpenRef.current
+        ? unlockAnchorRef.current
+        : captureUnlockAnchor(recentTapTarget(lastTapRef.current))
+    );
     void startReportCheckout({
+      anchor,
       archetype: archetypeForCheckout,
       plan,
       quote: quote ?? null,

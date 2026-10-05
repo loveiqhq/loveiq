@@ -7,8 +7,7 @@ import { getReportTheme, getReportThemeStyle } from "@features/report/ui/reportT
 import { v4InkStyle } from "@features/report/ui/v3/v4ArchetypeColors";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import type { ReportAccessPlan } from "@features/report/server/access";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
-import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import type { Report3CardCopy } from "@/data/report3-archetype-card";
 import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
@@ -36,7 +35,7 @@ interface Props {
   /** The same, named in the preview bar. */
   accessPlanLabel: string;
   /** List prices, built from the repo's price table — see previewQuotes.ts. */
-  quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>;
+  quotes: ReportPriceQuotes;
   /** The Typical Beliefs chapter body, assembled on the server. */
   typicalBeliefs: Report3TypicalBeliefsView | null;
   /** The Accelerator & Brakes chapter body, assembled on the server. */

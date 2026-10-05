@@ -36,12 +36,15 @@ export function reportFullEmail({
     ? `Thank you for unlocking the ${trimmedArchetype} full report.`
     : "Thank you for trusting us. Your Full Report is inside.";
 
+  // Figma 1382:2556 (Pricing 3.0). It names no archetype: on the main path the reader
+  // buys their own, and fulfillment then passes none. One bought from another
+  // archetype's tile still says which.
   const heroHeading = trimmedArchetype
     ? `You&rsquo;ve unlocked the ${safeArchetype} full report.`
-    : "You went deeper. Here&rsquo;s what you unlocked.";
+    : "You&rsquo;ve unlocked your full report.";
   const insideLine = trimmedArchetype
-    ? `<strong style="font-weight:700;">Your ${safeArchetype} Full Report is inside.</strong>`
-    : `<strong style="font-weight:700;">Your Full Report is inside.</strong>`;
+    ? `<strong style="font-weight:700;">Your ${safeArchetype} Full Report is unlocked.</strong>`
+    : `<strong style="font-weight:700;">Your Full Report is unlocked.</strong>`;
   const ctaLabel = trimmedArchetype
     ? `View your ${trimmedArchetype} full report`
     : "View your full report";
@@ -66,7 +69,7 @@ export function reportFullEmail({
         ${insideLine}
       </p>
       <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        It reflects the patterns in your responses across <strong style="font-weight:700;">18 analysed dimensions</strong> &mdash; your archetype probabilities, core motivation, relational stage, desire drivers, attachment style, and more. Most people are surprised by at least one of them.
+        It reflects the patterns in your responses across <strong style="font-weight:700;">every dimension we analyse</strong> &mdash; your archetype probabilities, core motivation, relational stage, desire drivers, attachment style, and more. Most people are surprised by at least one of them.
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         You can <strong style="font-weight:700;">share this report</strong> with up to two people you trust. Some of the most interesting conversations start here.
@@ -85,7 +88,7 @@ export function reportFullEmail({
       </p>
       <ul style="margin:0 0 16px 0; padding-left:22px; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         <li style="margin:0 0 6px 0;">Built on psychology + real response patterns</li>
-        <li style="margin:0 0 6px 0;">18 dimensions of insight you can actually use</li>
+        <li style="margin:0 0 6px 0;">Dimensions of insight you can actually use</li>
         <li style="margin:0 0 6px 0;">Private by design &mdash; your data stays yours</li>
       </ul>
       <p style="margin:16px 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
@@ -118,10 +121,10 @@ export function reportFullEmail({
     "Thank you for trusting us with something this personal. That means a lot to us.",
     "",
     trimmedArchetype
-      ? `Your ${trimmedArchetype} Full Report is inside.`
-      : "Your Full Report is inside.",
+      ? `Your ${trimmedArchetype} Full Report is unlocked.`
+      : "Your Full Report is unlocked.",
     "",
-    "It reflects the patterns in your responses across 18 analysed dimensions — your archetype probabilities, core motivation, relational stage, desire drivers, attachment style, and more. Most people are surprised by at least one of them.",
+    "It reflects the patterns in your responses across every dimension we analyse — your archetype probabilities, core motivation, relational stage, desire drivers, attachment style, and more. Most people are surprised by at least one of them.",
     "",
     "You can share this report with up to two people you trust. Some of the most interesting conversations start here.",
     "",
@@ -129,7 +132,7 @@ export function reportFullEmail({
     "",
     "Why it's worth a look:",
     "- Built on psychology + real response patterns",
-    "- 18 dimensions of insight you can actually use",
+    "- Dimensions of insight you can actually use",
     "- Private by design — your data stays yours",
     "",
     "Curious minds tend to get the most out of this.",

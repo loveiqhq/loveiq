@@ -101,9 +101,15 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     // A was the CHEAPER arm until the 2.1 flip on 2026-08-24 and the dearer one after
     // it, which is why the label says neither.
     A: { short: "Pricing A", long: "Pricing: group A", retired: true },
-    B: { short: "Pricing B", long: "Pricing: group B" },
+    // The surviving 2.x list from 2026-08-31 until Pricing 3.0 replaced it.
+    B: { short: "Pricing B", long: "Pricing: group B", retired: true },
     // Retired 2026-06 in the 3-bucket → 2-bucket cut. Legacy quotes still read back as C.
     C: { short: "Pricing C", long: "Pricing: group C", retired: true },
+    // Pricing 3.0: "All 14" and the single report on two price lists, 50/50. New
+    // letters rather than A and B again, so the concluded 2.x test's rows can never
+    // pool into this one (reportPricing.ts, PLAN_BUCKETS).
+    A3: { short: "Pricing 3.0 A", long: "Pricing 3.0: list A" },
+    B3: { short: "Pricing 3.0 B", long: "Pricing 3.0: list B" },
   },
   // Whole axis concluded, and the forced wall itself was removed on 2026-08-31,
   // so NEITHER arm is assigned any more — both carry `retired` for the same

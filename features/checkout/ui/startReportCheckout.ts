@@ -38,12 +38,15 @@ export interface StartReportCheckoutFailure {
 }
 
 export async function startReportCheckout({
+  anchor,
   archetype,
   plan,
   quote,
   reportSessionId,
   token,
 }: {
+  /** Where on the report the reader was (unlockAnchor.ts), so Stripe returns them there. */
+  anchor?: string | null;
   archetype?: string | null;
   plan: ReportPurchasePlanId;
   /** The quote the reader was actually shown. */
@@ -78,6 +81,7 @@ export async function startReportCheckout({
       method: "POST",
       headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() },
       body: JSON.stringify({
+        anchor: anchor ?? undefined,
         archetype: archetype ?? undefined,
         gaClientId: ga.clientId ?? undefined,
         gaConsent: ga.consent,

@@ -10,6 +10,7 @@ import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildPartnership } from "@/data/report3-partnership";
 import { REPORT_V4_TYPICAL_BELIEFS, buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { titleCase } from "@features/report/logic/titleCase";
+import ReportPricingModal from "@features/report/ui/ReportPricingModal";
 import ReportStickyUnlockBar from "@features/report/ui/ReportStickyUnlockBar";
 import { reportThemes } from "@features/report/ui/reportTheme";
 import {
@@ -192,6 +193,37 @@ describe("the paywall card and V4's sticky footer follow the 02.10 heading rule"
     const { container } = render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} v4 />);
     const heads = texts(container, ".report-sticky-unlock__badge-head");
     expect(heads).toHaveLength(2);
+    heads.forEach(follows);
+  });
+});
+
+describe("the Pricing 3.0 paygate follows the 02.10 heading rule", () => {
+  it.each(["default", "share"] as const)("in every heading, title and badge (%s)", (variant) => {
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+    const { container } = render(
+      <ReportPricingModal
+        archetype="Spark Seeker"
+        onClose={() => {}}
+        onUnlock={() => {}}
+        open
+        quotes={null}
+        variant={variant}
+      />
+    );
+    const heads = texts(
+      container,
+      [
+        ".rpg__title",
+        ".rpg__section-title",
+        ".rpg-why__title",
+        ".rpg-card__title .rpg-card__wide",
+        ".rpg-card__title .rpg-card__stacked",
+        ".rpg-card__badge",
+      ].join(", ")
+    );
+    // The hero, the two section titles, four benefit cards, two titles on each card
+    // (one per layout), and "Most Popular".
+    expect(heads).toHaveLength(12);
     heads.forEach(follows);
   });
 });

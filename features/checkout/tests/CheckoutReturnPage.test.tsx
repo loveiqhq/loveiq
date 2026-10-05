@@ -26,6 +26,14 @@ import {
   trackPaywallUnlocked,
 } from "@features/analytics/client";
 
+/** The paid line, read across the green "Payment complete." that opens it. */
+const paidLine = () =>
+  screen.getByText(
+    (_, el) =>
+      el?.tagName === "P" &&
+      /payment complete\. your report is unlocked\. redirecting you now/i.test(el.textContent ?? "")
+  );
+
 describe("CheckoutReturnPage", () => {
   let originalFetch: typeof globalThis.fetch;
 
@@ -84,11 +92,7 @@ describe("CheckoutReturnPage", () => {
 
     expect(screen.getByText(/verifying your checkout session/i)).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
-      ).toBeInTheDocument()
-    );
+    await waitFor(() => expect(paidLine()).toBeInTheDocument());
     // Wrap in waitFor: the trackReportPurchase effect runs in a separate
     // microtask after the success-state render. Under CI CPU pressure, the
     // effect can lag the DOM update by a tick or two — polling avoids the
@@ -98,7 +102,7 @@ describe("CheckoutReturnPage", () => {
         value: 27.49,
         currency: "EUR",
         transaction_id: "cs_test_123",
-        item_name: "Just a snapshot",
+        item_name: "Only Your Highest Archetype",
         pricing_cluster_id: "cluster",
         base_price_bucket: "full_center",
         experiment_group: "B",
@@ -157,17 +161,13 @@ describe("CheckoutReturnPage", () => {
       />
     );
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
-      ).toBeInTheDocument()
-    );
+    await waitFor(() => expect(paidLine()).toBeInTheDocument());
     await waitFor(() =>
       expect(mockTrackReportPurchase).toHaveBeenCalledWith({
         value: 0,
         currency: "EUR",
         transaction_id: "cs_test_free_123",
-        item_name: "Just a snapshot",
+        item_name: "Only Your Highest Archetype",
         promotion_code: "LOVEIQ100",
         coupon_percent_off: 100,
         discount_amount: 24.49,
@@ -221,20 +221,14 @@ describe("CheckoutReturnPage", () => {
     // Polling re-fetches every UNLOCK_CHECK_DELAY_MS (2000ms in component).
     // waitFor with a generous timeout lets the second poll fire and resolve
     // without sleeping past it.
-    await waitFor(
-      () =>
-        expect(
-          screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
-        ).toBeInTheDocument(),
-      { timeout: 5000 }
-    );
+    await waitFor(() => expect(paidLine()).toBeInTheDocument(), { timeout: 5000 });
     await waitFor(() => {
       expect(mockTrackReportPurchase).toHaveBeenCalledTimes(1);
       expect(mockTrackReportPurchase).toHaveBeenCalledWith({
         value: 114.99,
         currency: "EUR",
         transaction_id: "cs_test_456",
-        item_name: "For you & your partner",
+        item_name: "All 14 Archetype Reports",
       });
     });
 

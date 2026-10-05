@@ -26,6 +26,10 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
   markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@features/checkout/server/fulfillment", () => ({
+  lookupPrimaryArchetypeForSubmission: vi.fn().mockResolvedValue(null),
+}));
+
 // No Supabase round-trip in these assertions.
 vi.mock("@features/report/server/personalReport", () => ({
   resolveSubmissionAccessContext: vi.fn().mockResolvedValue(null),
@@ -49,6 +53,7 @@ import {
   lookupReportTokenBySubmissionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
+import { lookupPrimaryArchetypeForSubmission } from "@features/checkout/server/fulfillment";
 
 /** The quote the route resolves: full report, €27.49, urgency window still open. */
 const BASE_QUOTE = {
@@ -468,7 +473,7 @@ describe("Stripe return URLs identify the report without storage", () => {
     await POST(
       makeRequest({
         archetype: "Spark Seeker",
-        plan: "essentials",
+        plan: "full_report",
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
       })
     );
@@ -529,4 +534,128 @@ describe("Stripe return URLs identify the report without storage", () => {
       "http://localhost/report?archetype=spark-seeker"
     );
   });
+});
+
+describe("Pricing 3.0 — what Stripe is asked to sell", () => {
+  function enableStripe() {
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_30",
+      url: "https://checkout.stripe.com/c/pay/cs_test_30",
+    });
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: createSession } },
+    } as never);
+    return createSession;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      resetAt: new Date(),
+    });
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 568,
+      userEmail: null,
+      userId: null,
+    });
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_ABCDEFGHIJKLMNOPQRST");
+    vi.mocked(lookupPrimaryArchetypeForSubmission).mockResolvedValue("Spark Seeker");
+    vi.mocked(getReportPriceQuoteForContext).mockImplementation(async ({ plan }) => ({
+      ...BASE_QUOTE,
+      plan,
+      experimentGroup: "A3",
+      basePriceBucket: "A3",
+    }));
+  });
+
+  it.each(["essentials", "core"] as const)(
+    "refuses %s, which the paygate no longer sells",
+    async (plan) => {
+      const createSession = enableStripe();
+      const res = await POST(
+        makeRequest({
+          archetype: "Spark Seeker",
+          plan,
+          reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        })
+      );
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({
+        error: "This plan is no longer available. Reload the page to see the current options.",
+      });
+      expect(createSession).not.toHaveBeenCalled();
+      expect(getReportPriceQuoteForContext).not.toHaveBeenCalled();
+    }
+  );
+
+  it("names All 14 the way Figma 1382:2562 does, with no line under it, and stamps the catalogue", async () => {
+    const createSession = enableStripe();
+    const res = await POST(
+      makeRequest({ plan: "all_reports", reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848" })
+    );
+    expect(res.status).toBe(200);
+    const session = createSession.mock.calls[0]![0];
+    const productData = session.line_items[0].price_data.product_data;
+    expect(productData).toEqual({ name: "Unlock All 14 Archetype Reports" });
+    expect(session.metadata.pricingCatalog).toBe("3.0");
+  });
+
+  it("calls the single report the reader's highest only when it is", async () => {
+    const createSession = enableStripe();
+    const buy = async (archetype: string) => {
+      createSession.mockClear();
+      await POST(
+        makeRequest({
+          archetype,
+          plan: "full_report",
+          reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        })
+      );
+      return createSession.mock.calls[0]![0].line_items[0].price_data.product_data.name;
+    };
+    expect(await buy("Spark Seeker")).toBe("Unlock Only Your Highest Archetype");
+    // Bought from another archetype's tile, it names that archetype.
+    expect(await buy("Tender Devotee")).toBe("Unlock the Tender Devotee report");
+    // A primary that cannot be read is never assumed to match.
+    vi.mocked(lookupPrimaryArchetypeForSubmission).mockResolvedValue(null);
+    expect(await buy("Spark Seeker")).toBe("Unlock the Spark Seeker report");
+  });
+
+  it("carries the unlock position through both return URLs", async () => {
+    const createSession = enableStripe();
+    const anchor = "desire_drivers~2~-120~340";
+    await POST(
+      makeRequest({
+        anchor,
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+    const session = createSession.mock.calls[0]![0];
+    expect(new URL(session.success_url).searchParams.get("anchor")).toBe(anchor);
+    expect(new URL(session.cancel_url).searchParams.get("anchor")).toBe(anchor);
+    expect(new URL(session.cancel_url).searchParams.get("archetype")).toBe("spark-seeker");
+  });
+
+  it.each(["<script>", "a~1~2", "x".repeat(65) + "~0~0~0", "sec~100~0~0"])(
+    "rejects a malformed anchor (%s) rather than pass it to Stripe",
+    async (anchor) => {
+      const createSession = enableStripe();
+      const res = await POST(
+        makeRequest({
+          anchor,
+          plan: "full_report",
+          reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        })
+      );
+      expect(res.status).toBe(400);
+      expect(createSession).not.toHaveBeenCalled();
+    }
+  );
 });

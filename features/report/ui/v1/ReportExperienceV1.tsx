@@ -37,7 +37,7 @@ import {
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import { SUMMARY_BLOCK_ID } from "@features/report/server/contentGating";
 import {
   doesAccessPlanCover,
@@ -101,7 +101,7 @@ export interface ReportExperienceV1Props {
     userName: string;
   };
   primaryArchetype: string;
-  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  pricingQuotes: ReportPriceQuotes | null;
   archetypeContent: Record<string, Record<string, string>>;
   practiceTendencies: Record<string, ReportPracticeTendencyContentForUser>;
   ranking: string[];

@@ -1,4 +1,5 @@
 import posthog from "posthog-js";
+import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import {
@@ -682,8 +683,11 @@ export interface PriceShownParams {
   pricing_cluster_id: string;
   /** Discount ladder step: 0 = initial, 1–4 = ladder. */
   discount_step: number;
-  /** A/B experiment group: "A" (baseline) or "B" (full dynamic). */
-  experiment_group?: "A" | "B";
+  /**
+   * The quote's pricing arm: "A3" | "B3" since Pricing 3.0; "A" | "B" on a quote from
+   * the concluded 2.x test (see PricingExperimentGroup).
+   */
+  experiment_group?: PricingExperimentGroup;
   /** MSRP anchor (struck-out reference price). */
   msrp?: number;
   /** Initial price before ladder discount. */
@@ -757,16 +761,6 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
   } as unknown as Record<string, unknown>;
   track("locked_card_price_shown", payload);
   persistAnalyticsEvent("locked_card_price_shown", payload);
-};
-
-/**
- * Testimonial carousel engagement in the pricing modal (pause/resume, arrow
- * nudge, drag). GA4-only — low-signal interaction, intentionally NOT persisted
- * to `analytics_event` (same row-volume policy as section navigation).
- */
-export type TestimonialAction = "pause" | "resume" | "prev" | "next" | "drag";
-export const trackTestimonialInteraction = (action: TestimonialAction) => {
-  track("testimonial_interaction", { action });
 };
 
 /**

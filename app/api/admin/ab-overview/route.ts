@@ -40,6 +40,7 @@ import {
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
 import { readStampedArms } from "@features/attribution/server/traffic";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 import { surveyQuestions } from "@/data/survey-data";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -495,13 +496,21 @@ export async function GET(request: Request) {
      * Two axes left on 2026-08-31 and both are in `concluded` below rather than
      * here, so a finished test cannot be mistaken for a live one. The forced
      * paywall was REMOVED from the product, so nothing stamps an arm at all. The
-     * price test was settled by dropping the higher-priced arm, so every new quote
-     * is stamped with the surviving group — which is not the same thing as a
-     * randomised arm, and comparing it against the retired one would be comparing
-     * two time periods.
+     * 2.x price test was settled by dropping the higher-priced arm.
+     *
+     * Pricing is back with Pricing 3.0 (A3 vs B3), counting only readers who
+     * finished from its launch day: everyone before it was re-priced at launch,
+     * after seeing the 2.x prices, so they sit in "unattributed" rather than in
+     * either list.
      */
+    const finishedOn = new Map(submissions.map((row) => [row.id, row.created_date_time]));
     const experiments: ExperimentReadout[] = [
       tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
+      tally("pricing", (id) =>
+        (finishedOn.get(id) ?? "") >= PRICING_3_LAUNCH_DAY
+          ? (bySubmission.get(id)?.pricing ?? null)
+          : null
+      ),
     ];
 
     /*

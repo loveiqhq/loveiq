@@ -200,35 +200,49 @@ describe("the two numbers the team scans for", () => {
   });
 });
 
-describe("pricing arm — no longer shown", () => {
+describe("pricing arm — the Pricing 3.0 test", () => {
   /**
-   * This block used to assert the pricing row spelled out which SIDE of the price
-   * test a buyer was on ("dearer, base EUR 39.99 vs EUR 29.00"), derived from
-   * PLAN_BUCKETS so a repricing could not make the label lie. The A/B price test
-   * was concluded on 2026-08-31 by retiring the higher-priced arm, so there is no
-   * side to be on: every reader sees one list. The row goes for the same reason
-   * the paywall and survey-theme rows went — a permanent constant on every
-   * message is noise, and presenting it as an experiment is worse than noise.
+   * The 2.x price test was concluded on 2026-08-31 and the row went with it. Pricing
+   * 3.0 brought it back: every new quote is stamped A3 or B3, two price lists 50/50.
+   * The label names the list, never which side is dearer: the amount paid carries
+   * that, and a direction baked into a name goes stale silently when a test flips.
    */
-  it("shows no pricing row, even for a purchase that carries an arm", () => {
-    const message = buildJourneyMessage(
-      journey({
-        arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
-        money: { plan: "full_report", amount: 39.99, currency: "EUR" },
-        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
-      }),
-      { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 39.99" }
+  const purchase = (pricing: string | null) =>
+    JSON.stringify(
+      buildJourneyMessage(
+        journey({
+          arms: { landing: "white", survey: "white", pricing, paywall: null },
+          money: { plan: "all_reports", amount: 39.99, currency: "EUR" },
+          milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" },
+        }),
+        {
+          kind: "purchase",
+          planLabel: "All 14 Archetype Reports",
+          archetype: null,
+          amountText: "EUR 39.99",
+        }
+      ).blocks
     );
-    const text = JSON.stringify(message.blocks);
-    // The fixture DOES carry a pricing arm, so this asserts the axis list is what
-    // excludes it, not an absent value.
-    expect(text).not.toContain("Report pricing");
-    expect(text).not.toContain("Pricing A");
+
+  it("names the 3.0 list a buyer was on", () => {
+    const text = purchase("A3");
+    expect(text).toContain("*Report pricing*\\nPricing 3.0 A");
+    expect(text).not.toContain("retired arm");
     expect(text).not.toContain("dearer");
     expect(text).not.toContain("cheaper");
-    // The amount paid is still there — that is the number the row existed to
-    // contextualise, and it never came from the arm.
     expect(text).toContain("EUR 39.99");
+    expect(purchase("B3")).toContain("*Report pricing*\\nPricing 3.0 B");
+  });
+
+  it("marks a concluded 2.x arm as retired rather than presenting it as live", () => {
+    expect(purchase("A")).toContain("Pricing A _(retired arm)_");
+    expect(purchase("B")).toContain("Pricing B _(retired arm)_");
+  });
+
+  it("shows no pricing row before the report has quoted a price", () => {
+    const text = purchase(null);
+    expect(text).not.toContain("Report pricing");
+    expect(text).toContain("*Landing page design*");
   });
 });
 

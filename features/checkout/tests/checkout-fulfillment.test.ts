@@ -240,7 +240,7 @@ describe("checkout fulfillment", () => {
     );
     expect(paymentItemPayload).toEqual(
       expect.objectContaining({
-        item_name: "Just a snapshot",
+        item_name: "Only Your Highest Archetype",
         quantity: 1,
         total_price: 0,
         unit_price: 0,
@@ -536,6 +536,94 @@ describe("checkout fulfillment", () => {
     expect(quoteLookupUrl).not.toBeNull();
     expect(quoteLookupUrl).toContain("survey_submission_id=eq.");
     expect(quoteLookupUrl).not.toContain("plan=eq.full_report");
+  });
+
+  it("a Pricing 3.0 all_reports sale mints no partner code — that perk was the old tier's", async () => {
+    // all_reports was "For you & your partner" before Pricing 3.0, and its buyers got a
+    // free partner code. "All 14 Archetype Reports" does not offer one, so a session the
+    // 3.0 paygate opened (metadata.pricingCatalog "3.0") must not mint it. The test
+    // above, with no catalogue stamp, is the pre-3.0 session that still keeps its
+    // promise. Same wiring, so only the stamp differs.
+    process.env.STRIPE_COUPON_100 = "nurture_100";
+    let quoteLookupUrl: string | null = null;
+
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (
+          url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          return createJsonResponse([{ id: 99 }]);
+        }
+        if (url.includes("/rest/v1/payment_item?payment_id=eq.99")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+          return createJsonResponse([{ id: 9 }]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          return createJsonResponse([{ id: 100 }]);
+        }
+        // The partner-code carrier lookup inside mintAndEmailPartnerCode.
+        if (url.includes("/rest/v1/report_price_quote?survey_submission_id=eq.")) {
+          quoteLookupUrl = url;
+          return createJsonResponse([{ id: 55, metadata: {} }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_all_reports_30",
+            amount_total: 4900,
+            currency: "eur",
+            customer: null,
+            metadata: {
+              plan: "all_reports",
+              pricingCatalog: "3.0",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              requestIp: "127.0.0.1",
+              requestUserAgent: "Mozilla/5.0 (Vitest)",
+            },
+            payment_intent: null,
+            payment_status: "paid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_all_reports_30",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_all_reports_30",
+            metadata: { plan: "all_reports", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    // The partner-code carrier lookup never ran: no code was minted or emailed.
+    expect(quoteLookupUrl).toBeNull();
+    expect(unlockAllArchetypesForPersonalReport).toHaveBeenCalledWith(5);
   });
 
   it("does not append unlocked archetype when metadata.archetype is unknown", async () => {
@@ -948,7 +1036,7 @@ describe("checkout fulfillment", () => {
       // so the masked output is also lowercase. It is rendered as a code span so
       // Slack does not treat the mask's asterisks as bold markers.
       expect(all).toContain("`e***@loveiq.org`");
-      expect(all).toContain("Just a snapshot");
+      expect(all).toContain("Only Your Highest Archetype");
       expect(all).toContain("Relational Nurturer");
       expect(all).toContain("EUR 19.99");
       // The fallback text must stand alone: it is all that gets dead-lettered on a
@@ -1076,7 +1164,7 @@ describe("checkout fulfillment", () => {
 
       expect(slackCalls).toHaveLength(1);
       const all = rendered(slackCalls[0]!.body);
-      expect(all).toContain("For you & your partner");
+      expect(all).toContain("All 14 Archetype Reports");
       // all_reports unlocks every archetype, so naming one would mislead.
       expect(all).not.toContain("Relational Nurturer");
 

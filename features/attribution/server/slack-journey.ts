@@ -156,7 +156,10 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * axis rather than the arm.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  const axes: ExperimentAxis[] = ["landing"];
+  // Pricing (the Pricing 3.0 test) is assigned when the report first quotes a price,
+  // after the survey, so a survey-completed message has no arm for it yet. That is not
+  // a missing record, and a permanent "Not recorded" row on every one would be noise.
+  const axes: ExperimentAxis[] = journey.arms.pricing ? ["landing", "pricing"] : ["landing"];
   return fields(
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.

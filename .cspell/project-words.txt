@@ -73,6 +73,7 @@ notion
 nvme
 organisational
 passwordless
+paygate
 paywalled
 PGRST
 Pitchbook

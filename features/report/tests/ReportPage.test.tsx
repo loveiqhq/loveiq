@@ -89,6 +89,7 @@ vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
 });
 
 import ReportPage from "@features/report/ui/ReportPage";
+import { UNLOCK_ANCHOR_REGEX } from "@features/checkout/server/reportPurchase";
 import * as analytics from "@features/analytics/client";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
@@ -471,8 +472,14 @@ describe("ReportPage", () => {
       render(<ReportPage />);
 
       expect(screen.getByText(/live pricing couldn't be loaded right now/i)).toBeInTheDocument();
-      expect(screen.queryByText("€59.00")).not.toBeInTheDocument();
-      expect(screen.getAllByRole("button", { name: /pricing unavailable/i })).toHaveLength(3);
+      // Both plans say so where the price would be, and neither can start a checkout
+      // on a price nobody was quoted — not even the catalogue's fallback figure.
+      expect(screen.getAllByText("Pricing unavailable")).toHaveLength(2);
+      expect(screen.queryByText("€39.99")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^continue$/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /^only unlock my highest scoring report$/i })
+      ).toBeDisabled();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
@@ -485,7 +492,9 @@ describe("ReportPage", () => {
 
       const { container } = render(<ReportPage />);
 
-      expect(screen.getByRole("heading", { name: /unlock your reports/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /discover your full sexual self/i })
+      ).toBeInTheDocument();
       expect(container.querySelector(".report-pricing-modal__scroll-region")).toBeInTheDocument();
 
       // Auto-mount paywalls no longer fire paywall_view (founder's "forced"
@@ -589,7 +598,9 @@ describe("ReportPage", () => {
 
       const { container } = render(<ReportPage />);
 
-      await user.click(screen.getByRole("button", { name: /^unlock my report$/i }));
+      await user.click(
+        screen.getByRole("button", { name: /^only unlock my highest scoring report$/i })
+      );
 
       // Price must be a positive, finite EUR amount (matches the pricingQuotes fixture).
       expect(mockTrackBeginCheckout).toHaveBeenCalledTimes(1);
@@ -603,13 +614,17 @@ describe("ReportPage", () => {
       // reader was shown is handed over rather than re-fetched on another page.
       expect(mockRouterPush).not.toHaveBeenCalled();
       await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
-      expect(mockStartReportCheckout).toHaveBeenCalledWith({
+      const { anchor, ...checkout } = mockStartReportCheckout.mock.calls[0][0];
+      expect(checkout).toEqual({
         archetype: "Emotional Voyeur",
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
         token: undefined,
       });
+      // Where the reader was when the paygate opened, for Stripe's return to put them
+      // back (Figma 1382:2010). Nothing to measure in jsdom, but never a malformed one.
+      expect(anchor === null || UNLOCK_ANCHOR_REGEX.test(anchor)).toBe(true);
       expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
@@ -654,7 +669,9 @@ describe("ReportPage", () => {
       await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
       const modalRoot = container.querySelector(".report-pricing-modal");
       expect(modalRoot?.getAttribute("data-variant")).toBe("default");
-      expect(container.querySelector(".report-pricing-card__extra-pill")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /discover your full sexual self/i })
+      ).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
@@ -712,7 +729,9 @@ describe("ReportPage", () => {
     render(<ReportPage />);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /unlock your reports/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /discover your full sexual self/i })
+    ).not.toBeInTheDocument();
   });
 
   it(
@@ -890,7 +909,9 @@ describe("ReportPage", () => {
       mockUseReportData.mockReturnValue(buildSuccessResponse());
 
       render(<ReportPage />);
-      await user.click(screen.getByRole("button", { name: /^unlock my report$/i }));
+      await user.click(
+        screen.getByRole("button", { name: /^only unlock my highest scoring report$/i })
+      );
 
       // The pre-2.0 report navigated to a /checkout page that c37514d3 deleted.
       // Restoring the old UI must not restore that hop.

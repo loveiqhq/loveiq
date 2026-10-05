@@ -73,6 +73,7 @@ import {
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
 import { armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,24 +83,42 @@ export const maxDuration = 60;
 const WINDOW_DAYS = 30;
 
 /**
- * The axes worth a verdict. `paywall`, `survey` and `pricing` are deliberately
- * absent — all three experiments are concluded (the paywall in favour of the
- * forced wall and then removed entirely, the survey theme in favour of white on
- * 2026-08-25, the price test in favour of the lower arm on 2026-08-31) and
- * nothing randomises any of them any more, so presenting one as a live test is
- * exactly the mistake the /admin dashboard made before it was corrected.
+ * The axes worth a verdict. `paywall` and `survey` are deliberately absent — both
+ * experiments are concluded (the paywall in favour of the forced wall and then
+ * removed entirely, the survey theme in favour of white on 2026-08-25) and nothing
+ * randomises either any more, so presenting one as a live test is exactly the
+ * mistake the /admin dashboard made before it was corrected. `pricing` is the
+ * Pricing 3.0 test (A3 vs B3), but only once the whole window lies after its launch
+ * (`verdictAxesFor`).
  */
-const VERDICT_AXES: ExperimentAxis[] = ["landing"];
+const VERDICT_AXES: ExperimentAxis[] = ["landing", "pricing"];
+
+/**
+ * The cohorts behind a verdict span the whole window. Before the window lies wholly
+ * inside Pricing 3.0 they include readers who finished under the 2.x prices and were
+ * re-priced at launch, and a verdict pooled over them would call that a result. The
+ * price test is still in *The tests* meanwhile, cut to its launch day.
+ */
+function verdictAxesFor(dayKey: string): ExperimentAxis[] {
+  const windowStartDay = new Date(
+    Date.parse(`${dayKey}T00:00:00Z`) - (WINDOW_DAYS - 1) * 86_400_000
+  )
+    .toISOString()
+    .slice(0, 10);
+  return VERDICT_AXES.filter(
+    (axis) => axis !== "pricing" || windowStartDay >= PRICING_3_LAUNCH_DAY
+  );
+}
 
 /**
  * When report prices last changed. `buildAlerts` uses it to suppress the
  * "conversion dropped" alert around a repricing, where a rate change is expected
  * rather than a regression. Update this on the next price change.
  *
- * 2026-08-31: the higher-priced arm was retired, so every reader moved to the
- * lower price list. That is a repricing for most visitors, hence the new date.
+ * Pricing 3.0: two new products on two new price lists, for every reader who had not
+ * bought yet.
  */
-const PRICING_CUTOVER_ISO = "2026-08-31T00:00:00Z";
+const PRICING_CUTOVER_ISO = `${PRICING_3_LAUNCH_DAY}T00:00:00Z`;
 
 /**
  * Makes each preview's Slack `kind` distinct so notifySlack's 60-second dedup
@@ -345,7 +364,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
-    for (const axis of VERDICT_AXES) {
+    for (const axis of verdictAxesFor(dayKey)) {
       const rows = cohorts
         .filter((c) => c.axis === axis && c.arm !== "unknown")
         .map((c) => ({ arm: c.arm, n: c.n, conversions: c.conversions }));

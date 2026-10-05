@@ -2095,19 +2095,22 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
 }
 
+/* The return page sits on the white checkout background above, so its copy is dark
+   too. It kept the dark theme's white text until 2026-10-02, which left "Payment
+   complete" and every error on this page unreadable. */
 .checkout-return {
   width: min(100%, 576px);
   margin: 68px auto 0;
   padding: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(22, 16, 33, 0.08);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #ffffff;
   text-align: center;
 }
 
 .checkout-return__eyebrow {
   margin: 0 0 10px;
-  color: rgba(255, 255, 255, 0.55);
+  color: #6b6678;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -2116,7 +2119,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .checkout-return__title {
   margin: 0;
-  color: #fff;
+  color: #161021;
   font-family: var(--font-lora), "Lora", serif;
   font-size: clamp(30px, 4vw, 40px);
   font-weight: 500;
@@ -2125,14 +2128,20 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .checkout-return__copy {
   margin: 14px auto 0;
-  color: rgba(255, 255, 255, 0.72);
+  color: #4a4458;
   font-size: 16px;
   line-height: 1.7;
 }
 
 .checkout-return__copy strong {
-  color: #fff;
+  color: #161021;
   font-weight: 600;
+}
+
+/* 1382:1212 — the paid state's first words in the guarantee’s green (4.55:1 on the white card). */
+.checkout-return__copy .checkout-return__done {
+  color: #00892f;
+  font-weight: 700;
 }
 
 .checkout-return__actions {
@@ -2142,14 +2151,14 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .checkout-return__link {
-  color: rgba(255, 255, 255, 0.68);
+  color: #6b6678;
   font-size: 14px;
   line-height: 1.5;
   text-decoration: none;
 }
 
 .checkout-return__link:hover {
-  color: rgba(255, 255, 255, 0.9);
+  color: #161021;
 }
 
 @media (max-width: 720px) {

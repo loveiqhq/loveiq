@@ -703,10 +703,11 @@ Two consequences worth keeping in view rather than rediscovering:
   "Field reports" section (`white/WTestimonials.tsx`, the former on-site
   testimonials, pixel-matched to Figma 7828:9430) instead of Trustpilot, and
   stays that way even after the flag flips — it's the A/B counterpart to the dark
-  arm. (3) the report **pricing modal** (`ReportPricingModal`) renders no
-  Trustpilot block when off — it shows the curated `PaywallTestimonials` carousel
-  instead. (The second paywall modal this note used to name, `ScrollPricingModal`,
-  was the forced wall and was deleted on 2026-08-31.) (4) the nurture **emails**
+  arm. (3) the report **pricing modal** (`ReportPricingModal`, the Pricing 3.0
+  paygate) always shows its four curated reviews (Figma 842:682) and adds the
+  Trustpilot carousel under them only when the flag is on. (The second paywall
+  modal this note used to name, `ScrollPricingModal`, was the forced wall and was
+  deleted on 2026-08-31.) (4) the nurture **emails**
   still reference Trustpilot copy; the flag does not touch emails (they're not
   "the website" and staging crons are short-circuited) — revisit separately.
 
