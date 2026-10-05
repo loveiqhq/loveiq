@@ -103,6 +103,29 @@ describe("V3Chapter under ?v4=1", () => {
     expect(body.hasAttribute("inert")).toBe(false);
   });
 
+  // Marcus (04.10) and Sanjin (05.10): "the other archetypes should now be opened by
+  // default". Only that chapter: every other one still opens when the reader asks.
+  it("opens Other Archetypes by default, and only that chapter", () => {
+    const constellation = renderV4({
+      id: "constellation",
+      number: "5.4",
+      title: "Other Archetypes",
+    });
+    const button =
+      constellation.container.querySelector<HTMLButtonElement>(".rv4-chapter__button")!;
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(constellation.container.querySelector("section")!.className).toContain("is-open");
+    expect(constellation.container.querySelector(".rv3-chapter__body")!.hasAttribute("inert")).toBe(
+      false
+    );
+    constellation.unmount();
+
+    const other = renderV4();
+    expect(
+      other.container.querySelector(".rv4-chapter__button")!.getAttribute("aria-expanded")
+    ).toBe("false");
+  });
+
   it("sets the feedback in the same rating row, and 44px tail, as Typical Beliefs", () => {
     const { container } = renderV4();
     const rating = container.querySelector(".rv3-chapter__body-inner > .rv4-rating")!;
