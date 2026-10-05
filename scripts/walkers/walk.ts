@@ -1012,8 +1012,8 @@ async function main(argv: string[]): Promise<number> {
       const rest = plants.dwellMs - (Date.now() - openedAt);
       if (rest > 0) await page.waitForTimeout(rest);
       let how = plants.escape as Escape;
-      // Back closes the paywall only where it added a history entry (Safari); elsewhere
-      // it would leave the report, which is not this plant.
+      // Back closes the paywall only where it added a history entry (every engine since
+      // 2026-10-05); without one it would leave the report, which is not this plant.
       if (
         how === "browser_back" &&
         !(await page

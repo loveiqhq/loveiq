@@ -230,7 +230,7 @@ describe("startReportCheckout", () => {
   });
 
   /**
-   * On Safari the open pricing modal owns a duplicate same-URL history entry
+   * The open pricing modal owns a duplicate same-URL history entry
    * (useCloseOnBack). Stripe must REPLACE it: pushed on top, it left the
    * duplicate behind, and after an abandoned checkout the reader needed an
    * extra back press to leave the report, which is served no-store and so is

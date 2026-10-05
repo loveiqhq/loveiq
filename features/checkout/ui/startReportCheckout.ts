@@ -143,14 +143,14 @@ export async function startReportCheckout({
     /**
      * Replace, not push, when the entry on top is the pricing modal's own.
      *
-     * On Safari the open modal sits on a duplicate, same-URL entry so the back
-     * button can close it (useCloseOnBack), and the report is served no-store,
-     * so it never survives in the back-forward cache. Pushing Stripe on top left
-     * that duplicate behind: back from an abandoned checkout reloaded the report
-     * onto it, and the next back reloaded the report again instead of leaving —
+     * The open modal sits on a duplicate, same-URL entry so the back button can
+     * close it (useCloseOnBack), and the report is served no-store, so it never
+     * survives in the back-forward cache. Pushing Stripe on top left that
+     * duplicate behind: back from an abandoned checkout reloaded the report onto
+     * it, and the next back reloaded the report again instead of leaving —
      * measured on WebKit. Replacing it leaves history as it was before the modal
-     * opened. Everywhere else there is no such entry, and this is the assign()
-     * it has always been.
+     * opened. With no such entry on top, this is the assign() it has always
+     * been.
      */
     if (isOnOverlayEntry()) window.location.replace(json.url);
     else window.location.assign(json.url);

@@ -58,9 +58,10 @@ export function draw(seed: string, name: string): number {
 
 /**
  * Tonight's plants for one walk. Each behaviour is on for about half the walks, so the
- * proof sees both sides within a few nights. The Back button only closes the paywall on
- * Safari, where the paywall adds a history entry (useCloseOnBack); elsewhere Back leaves the
- * report. A tap outside needs room outside, which a phone's full-width paywall barely has.
+ * proof sees both sides within a few nights. Back closes the paywall where the paywall added a
+ * history entry (useCloseOnBack), which it does on every engine since 2026-10-05; the walk
+ * checks for the entry before pressing it. A tap outside needs room outside, which a phone's
+ * full-width paywall barely has.
  */
 export function plantsFor(seed: string, opts: { phone: boolean; quit?: Quit }): Plants {
   const d = (name: string) => draw(seed, name);

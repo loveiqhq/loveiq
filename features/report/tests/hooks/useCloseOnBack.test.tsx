@@ -41,7 +41,7 @@ afterEach(async () => {
   }
 });
 
-describe("useCloseOnBack — the shared history entry (Safari)", () => {
+describe("useCloseOnBack — the shared history entry (all of it without CloseWatcher)", () => {
   it("adds one entry while open and closes when back takes it off", async () => {
     const close = vi.fn();
     const before = window.history.length;
@@ -175,13 +175,14 @@ describe("useCloseOnBack — the shared history entry (Safari)", () => {
 });
 
 /**
- * Chromium: the close request goes to a CloseWatcher, with NO history entry.
- *
- * Chrome's back button skips entries a page added before the reader interacted
- * with it, and the modal opens on scroll, which is not an interaction. A
- * history entry there would be skipped and back would still leave the report.
+ * Chromium and Firefox: BOTH. The close request goes to a CloseWatcher, because
+ * Chrome's back button skips an entry a page added before the reader
+ * interacted with it, and the modal opens on scroll, which is not an
+ * interaction. The entry is there too, because a desktop's toolbar Back is a
+ * history traversal that a CloseWatcher never hears: with the watcher alone it
+ * took a reader out of the report with the paywall open (#493).
  */
-describe("useCloseOnBack — CloseWatcher (Chromium, Firefox)", () => {
+describe("useCloseOnBack — CloseWatcher and the entry (Chromium, Firefox)", () => {
   const watchers: Array<{ onclose: (() => void) | null; destroyed: boolean }> = [];
   class FakeCloseWatcher {
     onclose: (() => void) | null = null;
@@ -201,24 +202,45 @@ describe("useCloseOnBack — CloseWatcher (Chromium, Firefox)", () => {
     delete (window as unknown as { CloseWatcher?: unknown }).CloseWatcher;
   });
 
-  it("takes the close request without adding a history entry", () => {
+  it("takes the close request, then takes its entry back off without closing again", async () => {
     withWatcher();
     const close = vi.fn();
-    const before = window.history.length;
-    renderHook(() => useCloseOnBack(true, close));
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close), {
+      initialProps: { open: true },
+    });
     expect(watchers).toHaveLength(1);
-    expect(window.history.length).toBe(before);
+    expect(onEntry(), "the entry for the toolbar's Back").toBe(true);
+
     act(() => watchers[0]!.onclose?.());
+    expect(close).toHaveBeenCalledTimes(1);
+
+    // Closed by the close request, the entry must go, or the next back would be
+    // a dead press on a duplicate of the report.
+    const done = traversal();
+    rerender({ open: false });
+    await settle();
+    await done;
+    expect(watchers[0]!.destroyed).toBe(true);
+    expect(onEntry()).toBe(false);
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("stops watching once closed, and never touches history", () => {
+  it("closes on the toolbar's Back, which the CloseWatcher never hears", async () => {
     withWatcher();
-    const back = vi.spyOn(window.history, "back");
-    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, vi.fn()), {
+    const close = vi.fn();
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close), {
       initialProps: { open: true },
     });
+
+    const done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(close).toHaveBeenCalledTimes(1);
+
+    // The traversal already took the entry off: going back again would leave.
+    const back = vi.spyOn(window.history, "back");
     rerender({ open: false });
+    await settle();
     expect(watchers[0]!.destroyed).toBe(true);
     expect(back).not.toHaveBeenCalled();
     back.mockRestore();
@@ -228,5 +250,6 @@ describe("useCloseOnBack — CloseWatcher (Chromium, Firefox)", () => {
     withWatcher();
     renderHook(() => useCloseOnBack(false, vi.fn()));
     expect(watchers).toHaveLength(0);
+    expect(onEntry()).toBe(false);
   });
 });
