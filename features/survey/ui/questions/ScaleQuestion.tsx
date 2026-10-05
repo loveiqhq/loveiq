@@ -125,7 +125,7 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
               </p>
             )}
             {selectedExplanation && (
-              <p className="font-sans text-[13.5px] leading-[19.6px] text-[#4a4458]">
+              <p className="text-center font-sans text-[13.5px] leading-[19.6px] text-[#4a4458]">
                 {selectedExplanation}
               </p>
             )}

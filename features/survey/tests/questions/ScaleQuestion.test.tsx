@@ -138,4 +138,18 @@ describe("ScaleQuestion", () => {
     expect(screen.getByText("Slightly true")).toBeInTheDocument();
     expect(screen.getByText("More satisfying than not.")).toBeInTheDocument();
   });
+
+  // Marcus, LoveIQ Sync 2026-10-05: the title was centred and what it means sat left-aligned.
+  it("centres what the picked point means, as it centres the title", () => {
+    const q = {
+      ...QUESTION,
+      hoverStates: { 3: "Slightly not true: Emotional connection matters somewhat." } as Record<
+        number,
+        string
+      >,
+    };
+    render(<ScaleQuestion question={q} value={3} onChange={vi.fn()} />);
+    expect(screen.getByText("Slightly not true")).toHaveClass("text-center");
+    expect(screen.getByText("Emotional connection matters somewhat.")).toHaveClass("text-center");
+  });
 });
