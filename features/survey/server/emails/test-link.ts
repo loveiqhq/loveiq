@@ -1,4 +1,9 @@
-import { EMAIL_FONT, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 
 export interface TestLinkEmailParams {
   testUrl: string;
@@ -65,6 +70,7 @@ export function testLinkEmail({ testUrl, siteUrl, unsubscribeUrl }: TestLinkEmai
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

@@ -1,4 +1,10 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 
 /**
  * Refer-a-friend reminder #1 (Figma node 6190-1182).
@@ -91,6 +97,7 @@ export function inviteReminder1Email({
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

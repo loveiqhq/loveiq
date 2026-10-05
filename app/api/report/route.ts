@@ -55,9 +55,15 @@ const tokenSchema = z.object({
   token: z.string().regex(/^(rpt_[a-zA-Z0-9]{20}|rpts_[A-Za-z0-9]{20})$/),
 });
 
+/**
+ * Per IP. It was 10, and every archetype a reader switches to is a fetch, so an
+ * all-reports buyer looking through their 14 got "Too many attempts" on the 11th within
+ * a minute, as did people sharing one address (a mobile carrier's, an office's). The
+ * links are 20 random characters, so the limit guards load, not guessing.
+ */
 const RATE_LIMIT_CONFIG = {
   bucket: "report-view",
-  limit: 10,
+  limit: 60,
   windowMs: 60_000,
 };
 

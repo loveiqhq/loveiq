@@ -1,4 +1,9 @@
-import { EMAIL_FONT, escapeHtml, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 
 export interface PartnerCodeEmailParams {
   firstName?: string | null;
@@ -116,6 +121,7 @@ export function partnerCodeEmail({
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

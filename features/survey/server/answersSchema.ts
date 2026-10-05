@@ -35,10 +35,10 @@ export const surveyAnswersSchema = z
   .record(
     z.string().min(1).max(16),
     z.union([
-      z
-        .string()
-        .max(20_000)
-        .transform((s) => s.slice(0, 1000)),
+      // No upper bound before the cut: the body is already parsed, so a bound protects
+      // nothing, and an Other box filled before its 500-character limit (still in an old
+      // client's pending submit) was refused at 20,000, a dead end Retry cannot leave.
+      z.string().transform((s) => s.slice(0, 1000)),
       z
         .array(
           z
