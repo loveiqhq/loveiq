@@ -20,7 +20,8 @@ test.describe("Pricing modal — offer variant gated to 24h+", () => {
       timeout: 5000,
     });
 
-    const lockedCta = page.locator(".report-section .report-premium-overlay__cta").first();
+    // Report 3.0 locks a chapter outright; its head opens the paywall.
+    const lockedCta = page.locator(".rv4-chapter.is-locked .rv4-chapter__button").first();
     await expect(lockedCta).toBeVisible();
     await lockedCta.click();
 
