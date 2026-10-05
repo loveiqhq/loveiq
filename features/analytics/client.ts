@@ -38,6 +38,11 @@ declare global {
     __loveiqSurveyVariant?: "white" | "dark" | null;
     /** Dev-only: tracks event_types we've already warned about for missing context. */
     __loveiqPersistSkipWarned?: Set<string>;
+    /**
+     * Set only by a persona walk's own browser (scripts/walkers/walk.ts). A visitor's page
+     * never has it, so for them `track()` is unchanged.
+     */
+    __loveiqEventTap?: (name: string, params: Record<string, unknown>) => void;
   }
 }
 
@@ -111,46 +116,29 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
 };
 
 /**
- * Events that were fired before the visitor answered the consent banner, held
- * until they accept. There is no CookieYes consent-change event wired up here,
- * so a bounded poll drains the queue instead.
+ * Writes the event to OUR OWN `analytics_event` table, and nowhere else.
  *
- * Why this exists: an event fired pre-consent used to be dropped on the floor,
- * and callers with a one-shot ref (`locked_card_price_shown`) burned that ref on
- * the dropped attempt and never tried again. The banner covers the page for the
- * first seconds of every visit, so a mount-time persisted event essentially
- * never survived — 331 of them reached PostHog while writing ZERO durable rows
- * for five weeks, which made the funnel read as though 39% of report readers
- * never saw a price when 89% did.
+ * NOT CONSENT-GATED since 2026-09-18, on Marcus and Mark's call. This is a
+ * first-party POST to our own server: it sets no cookie, reads nothing off the
+ * device, and sends nothing to a third party, so it is not the category the
+ * cookie banner governs. The banner's answer still decides GA4, Google Ads,
+ * Meta and TikTok — every one of those gates is untouched, and `track()` above
+ * holds the dataLayer push behind its own check, so nothing here can reach
+ * Google. It is the same posture the site already takes for Microsoft Clarity
+ * ("loaded on all visits", disclosed in the privacy policy) and PostHog.
+ *
+ * What the gate was costing: 107 of the 406 people who opened a report over 30
+ * days — 26.4% — produced no durable row at all, so the funnel could not see
+ * them past the server-side open. An earlier note on the queue this replaced
+ * measured the same wound from the other side: 331 events reached PostHog while
+ * writing ZERO rows for five weeks, which made the funnel read as though 39% of
+ * readers never saw a price when 89% did.
+ *
+ * The pre-consent holding queue went with the gate. It existed to replay events
+ * fired while the banner was still covering the page; with nothing to wait for,
+ * a two-minute poll that dropped whatever the visitor never answered is strictly
+ * worse than writing the row when it happens.
  */
-const consentPendingQueue: Array<{
-  eventType: string;
-  metadata: Record<string, unknown> | undefined;
-  durationMs?: number;
-}> = [];
-let consentPollId: ReturnType<typeof setInterval> | null = null;
-const CONSENT_POLL_MS = 1_500;
-// A visitor who never answers the banner must not leave a timer running for the
-// life of the tab, and an event held longer than this is no longer worth a row.
-const CONSENT_POLL_ATTEMPTS = 80; // ~2 minutes
-
-const drainWhenConsentArrives = () => {
-  if (consentPollId) return;
-  let attempts = 0;
-  consentPollId = setInterval(() => {
-    attempts += 1;
-    const granted = hasCookieYesConsent("analytics");
-    if (!granted && attempts < CONSENT_POLL_ATTEMPTS) return;
-    if (consentPollId) clearInterval(consentPollId);
-    consentPollId = null;
-    const queued = consentPendingQueue.splice(0, consentPendingQueue.length);
-    if (!granted) return; // gave up — dropped, not persisted without consent
-    for (const item of queued) {
-      persistAnalyticsEvent(item.eventType, item.metadata, item.durationMs);
-    }
-  }, CONSENT_POLL_MS);
-};
-
 const persistAnalyticsEvent = (
   eventType: string,
   metadata: Record<string, unknown> | undefined,
@@ -158,16 +146,6 @@ const persistAnalyticsEvent = (
 ) => {
   if (typeof window === "undefined") return;
   if (!PERSISTED_EVENTS.has(eventType)) return;
-  if (!hasCookieYesConsent("analytics")) {
-    // Hold it rather than drop it — the caller may never fire again. Only
-    // events with a submission context are worth queueing; UX signals on the
-    // landing page legitimately have none and would queue forever.
-    if (window.__loveiqReportSubmissionId) {
-      consentPendingQueue.push({ eventType, metadata, durationMs });
-      drainWhenConsentArrives();
-    }
-    return;
-  }
 
   const submissionId = window.__loveiqReportSubmissionId ?? null;
   // No submission context = nothing to persist (the timeline keys off
@@ -423,6 +401,15 @@ export const track = (name: string, params?: Record<string, unknown>) => {
   // for visitors who declined analytics while PostHog autocapture kept
   // recording them. Placed here rather than at the ~33 call sites so a new
   // trackX() helper is mirrored automatically and can never be forgotten.
+  //
+  // A persona walk listens on the same call, so the behaviour signals it checks are
+  // measured from exactly what PostHog is sent (features/ux-signals). Guarded: a listener
+  // must never be able to stop the event reaching PostHog.
+  try {
+    window.__loveiqEventTap?.(name, params ?? {});
+  } catch {
+    // The walk loses one event; the visitor loses nothing.
+  }
   posthog.capture(name, params);
 
   /**
@@ -804,10 +791,6 @@ export const trackReportEngagement = (
   persistAnalyticsEvent(eventName, params, thresholdSeconds * 1000);
 };
 
-export const trackSurveyPause = (qId: string, progress: number) => {
-  track("survey_pause", { question_id: qId, progress_pct: progress });
-};
-
 export const trackSurveyInvite = (method: string = "email") => {
   track("survey_invite", { method });
 };
@@ -1072,16 +1055,12 @@ export const trackChapterFeedbackSubmitted = (params: {
 /*  Phase B.2 — Survey funnel events (GA4-only + persisted)     */
 /* ============================================================ */
 
-export const trackSurveyPauseModalOpened = (params: {
+/** One of the question's two guidance rows opened or closed ("info" | "why"). */
+export const trackSurveyGuidanceExpanded = (params: {
   question_id: string;
-  progress_pct: number;
-}) => track("survey_pause_modal_opened", params);
-
-export const trackSurveyAutoAdvanceToggled = (params: { enabled: boolean; question_id?: string }) =>
-  track("survey_auto_advance_toggled", params);
-
-export const trackSurveyGuidanceExpanded = (params: { question_id: string; expanded: boolean }) =>
-  track("survey_guidance_expanded", params);
+  section: "info" | "why";
+  expanded: boolean;
+}) => track("survey_guidance_expanded", params);
 
 export const trackSurveyFormError = (params: {
   question_id: string;
@@ -1202,13 +1181,38 @@ export const trackRageClick = (params: {
   target_selector: string;
   click_count: number;
   window_ms: number;
+  /** Set when the tap was inside a locked paywall surface (`data-paywall-locked`). */
+  paywall_locked?: string;
 }) => {
   track("rage_click", params);
   persistAnalyticsEvent("rage_click", params);
 };
 
-export const trackDeadClick = (params: { pathname: string; target_selector: string }) =>
-  track("dead_click", params);
+export const trackDeadClick = (params: {
+  pathname: string;
+  target_selector: string;
+  /**
+   * Which of the two things this was. `disabled_control` is a control that
+   * looks live and does nothing; `non_interactive` is a tap on prose or a
+   * container, which is 95% of the volume and mostly just reading.
+   */
+  reason?: "disabled_control" | "non_interactive";
+  /**
+   * How many times this selector had been dead-tapped in this pageview when the
+   * event fired. 1 on the first, 3 on the repeat — the signal that separates a
+   * reader who kept trying from a thumb resting on a paragraph.
+   */
+  repeat_count?: number;
+  /** Set when the tap was inside a locked paywall surface (`data-paywall-locked`). */
+  paywall_locked?: string;
+}) => track("dead_click", params);
+
+/**
+ * A call to action came into view: half of it inside the viewport, the first time on this
+ * page (features/analytics/useCtaSeen.ts). PostHog only. `locked_card_price_shown` cannot
+ * answer "did they see it": it fires when a locked report loads, wherever the card sits.
+ */
+export const trackCtaSeen = (params: { cta: "locked_chapter" }) => track("cta_seen", params);
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);

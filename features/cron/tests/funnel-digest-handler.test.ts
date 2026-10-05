@@ -3,8 +3,8 @@
  *
  * Mocks every external boundary (Slack, dedup table, env probes, cron auth,
  * metric + chart fetchers) so the test exercises the full GET-handler path:
- *  - single daily_digest message (chart rail + Revenue/Alerts footer)
- *  - Monday weekly_digest recap
+ *  - the daily arm stays silent (DAILY_ENABLED is false)
+ *  - a single Monday weekly_digest message (chart rail + Revenue/Alerts footer)
  *  - image blocks point at the new /api/admin/digest-image/<kind> URLs
  */
 
@@ -158,9 +158,26 @@ function buildWeekly(): WeeklyMetrics {
   };
 }
 
+/**
+ * Thirty days ending 2026-09-18.
+ *
+ * Was three days, which is fewer than the seven a trailing average needs, so
+ * every cvr series came back entirely null and the charts these tests assert on
+ * were empty frames carrying a title and a "now —" readout. Nothing checked
+ * that a chart contained a line, so the assertions passed anyway.
+ *
+ * September rather than May so the two paygate-derived charts sit after
+ * PAYGATE_MEASURED_FROM; before that boundary they are deliberately suppressed.
+ * The dates here are what the MOCKED fetcher returns and are independent of the
+ * faked clock, which the window-bounds tests below assert separately.
+ */
+const SNAP_DAYS = 30;
+const snapDay = (i: number) =>
+  new Date(Date.UTC(2026, 7, 20) + i * 86_400_000).toISOString().slice(0, 10);
+
 const cvrSnap: FunnelCvrSnapshot = {
-  days: Array.from({ length: 3 }, (_, i) => ({
-    day: `2026-05-2${i + 5}`,
+  days: Array.from({ length: SNAP_DAYS }, (_, i) => ({
+    day: snapDay(i),
     visitors: 100,
     visitors_control: 100,
     starts: 40,
@@ -173,7 +190,10 @@ const cvrSnap: FunnelCvrSnapshot = {
   })),
 };
 const bucketSnap: BucketPerfSnapshot = {
-  days: [{ day: "2026-05-27", buckets: { a: { shown: 10, purchases: 2, revenue: 60 } } }],
+  days: Array.from({ length: SNAP_DAYS }, (_, i) => ({
+    day: snapDay(i),
+    buckets: { a: { shown: 10, purchases: 2, revenue: 60 } },
+  })),
 };
 const dropoutSnap: DropoutFunnelSnapshot = {
   questions: [
@@ -229,13 +249,32 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
     expect(mockNotifySlack).not.toHaveBeenCalled();
   });
 
-  it("daily path sends ONE daily_digest message with chart images + Revenue footer", async () => {
-    vi.setSystemTime(new Date("2026-05-26T09:00:00Z")); // Tuesday → no weekly
+  it("sends NOTHING on a weekday — this digest is weekly now", async () => {
+    /**
+     * Re-enabled 2026-09-19 as a WEEKLY message, not the daily it used to be.
+     * It was unscheduled on 2026-07-26 for being a rail of pictures with no
+     * decision attached, and the daily and weekly paths post the SAME 30-day
+     * chart rail — only the revenue cadence differs. Daily would put a second
+     * nine-chart message in #ops every morning beside `conversion-digest`, which
+     * already leads with a decision and carries the per-experiment charts, with
+     * two of the charts being the same metric twice.
+     */
+    vi.setSystemTime(new Date("2026-05-26T09:00:00Z")); // Tuesday
+    try {
+      await GET(newRequest());
+      expect(mockNotifySlack).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("on Monday sends ONE weekly_digest with chart images + Revenue footer", async () => {
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday
     try {
       await GET(newRequest());
       expect(mockNotifySlack).toHaveBeenCalledOnce();
       const call = mockNotifySlack.mock.calls[0][0];
-      expect(call.kind).toBe("daily_digest");
+      expect(call.kind).toBe("weekly_digest");
       expect(call.channel).toBe("ops");
 
       const imageBlocks = call.blocks.filter((b: { type: string }) => b.type === "image");
@@ -256,20 +295,40 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
     }
   });
 
-  it("monday path sends TWO messages: daily_digest + weekly_digest", async () => {
+  it("sends exactly one message on Monday, never a daily beside it", async () => {
+    // It used to send two — daily_digest AND weekly_digest — carrying the same
+    // chart rail twice in one morning.
     vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday
     try {
       await GET(newRequest());
-      expect(mockNotifySlack).toHaveBeenCalledTimes(2);
-      const kinds = mockNotifySlack.mock.calls.map((c) => c[0].kind);
-      expect(kinds).toEqual(["daily_digest", "weekly_digest"]);
+      expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+      expect(mockNotifySlack.mock.calls.map((c) => c[0].kind)).toEqual(["weekly_digest"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("no longer charts the retired email-position experiment", async () => {
+    /**
+     * `survey-email-position-ab` was retired 2026-08-16 and `email_position` has
+     * not been written since — all 1,055 survey_partial_save rows carry NULL. The
+     * chart could only draw two empty curves under a title naming a live test.
+     */
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
+    try {
+      await GET(newRequest());
+      const call = mockNotifySlack.mock.calls[0][0];
+      const urls = call.blocks
+        .filter((b: { type: string }) => b.type === "image")
+        .map((b: { image_url: string }) => b.image_url);
+      expect(urls.some((u: string) => u.includes("/dropout-by-arm"))).toBe(false);
     } finally {
       vi.useRealTimers();
     }
   });
 
   it("emits the cvr-paygate-purchase chart even though paygate→purchase is low", async () => {
-    vi.setSystemTime(new Date("2026-05-26T09:00:00Z"));
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday — the only send day
     try {
       await GET(newRequest());
       const call = mockNotifySlack.mock.calls[0][0];
@@ -283,7 +342,7 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
   });
 
   it("still sends (revenue footer only) when every chart snapshot is null", async () => {
-    vi.setSystemTime(new Date("2026-05-26T09:00:00Z"));
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday — the only send day
     try {
       mockFetchCvr.mockResolvedValue(null);
       mockFetchBucket.mockResolvedValue(null);
@@ -300,6 +359,55 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
           b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
       );
       expect(hasRevenue).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * The window is a BERLIN day, and nothing asserted that until now.
+   *
+   * Every daily series this digest charts is bucketed on a Berlin day. A
+   * UTC-midnight window end cut those series two hours short: rows between 22:00
+   * and 24:00 UTC belong to the NEXT Berlin day, which is past the last day the
+   * RPC generates, so they vanished from the chart rather than landing on the
+   * wrong bar. Measured against production on 2026-09-19, the UTC bound charted
+   * 414 of 416 completions; the Berlin bound charted 417 of 417.
+   *
+   * Exact instants rather than "is a Monday", because the whole bug is a
+   * two-hour offset and any assertion coarser than the instant passes under it.
+   */
+  it("ends the window at BERLIN midnight, not UTC midnight", async () => {
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday, CEST (UTC+2)
+    try {
+      await GET(newRequest());
+      expect(mockFetchCvr).toHaveBeenCalled();
+      const [sinceIso, untilIso] = mockFetchCvr.mock.calls[0];
+      expect(untilIso).toBe("2026-05-24T22:00:00.000Z"); // Berlin midnight of the 25th
+      expect(untilIso).not.toBe("2026-05-25T00:00:00.000Z"); // what a UTC day would give
+      expect(sinceIso).toBe("2026-04-24T22:00:00.000Z"); // 30 Berlin days earlier
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * Berlin is UTC+1 in November and UTC+2 in October, so a 30-day chart ending in
+   * November spans the changeover. Subtracting a fixed 30 x 86_400_000 lands an
+   * hour inside the first day instead of on its midnight; snapping through
+   * reportingDay does not. One hour is small but it is the same class of silent
+   * edge-loss, and this is the only day of the year that can catch it.
+   */
+  it("snaps the 30-day start across the autumn DST change", async () => {
+    vi.setSystemTime(new Date("2026-11-02T09:00:00Z")); // Monday, CET (UTC+1)
+    try {
+      await GET(newRequest());
+      const [sinceIso, untilIso] = mockFetchCvr.mock.calls[0];
+      expect(untilIso).toBe("2026-11-01T23:00:00.000Z"); // Berlin midnight, UTC+1
+      // 2026-10-03 Berlin midnight is UTC+2 -> 22:00Z. A naive subtraction of
+      // 30 fixed days would give 23:00Z.
+      expect(sinceIso).toBe("2026-10-02T22:00:00.000Z");
+      expect(sinceIso).not.toBe("2026-10-02T23:00:00.000Z");
     } finally {
       vi.useRealTimers();
     }

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import GlossaryPage from "@features/glossary/ui/GlossaryPage";
+import { jsonLdString } from "@shared/seo/json-ld";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -54,7 +55,7 @@ export default function Page() {
       <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(definedTermSetSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdString(definedTermSetSchema) }}
       />
       <Suspense fallback={null}>
         <GlossaryPage />

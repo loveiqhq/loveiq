@@ -3,6 +3,8 @@ import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
 import {
+  isJobApplication,
+  isLegalInstrument,
   chunkPage,
   recordSweep,
   shouldSweep,
@@ -27,11 +29,86 @@ import {
  * one-line chunks from crowding out every other source.
  *
  * BOT MESSAGES ARE EXCLUDED, which is why joining every public channel is safe.
- * `#commits-prod-staging` and `#prod-alerts` are almost entirely machine output,
- * and the commits are already indexed from git — 1,537 of them. Filtering on
+ * `#commits-prod-staging` and `#prod-alerts` are almost entirely machine output.
+ * (This once read "the commits are already indexed from git — 1,537 of them"; they
+ * are not, and have not been since 2026-09-09, when they were measured to drown
+ * retrieval and removed — see `scripts/brain-ingest-repo.mjs`. The exclusion stands
+ * on its own: a commit bot posting into Slack is machine output either way.) Filtering on
  * authorship rather than on a channel allow-list means a human comment in an alerts
  * channel is still kept, and a new bot channel needs no configuration.
  */
+
+/**
+ * Channels that are NEVER indexed, whatever the bot has been invited to.
+ *
+ * Membership is normally the whole boundary, and for a team channel that is right. It is
+ * not enough for a channel that receives CUSTOMER mail. `#email-inbox` exists to forward
+ * whatever arrives at the company address into Slack — in the words of the person who
+ * created it, "only to serve as a faster way to receive an email ... since some messages
+ * may be sensitive", restricted to three people on purpose. The brain's corpus is
+ * undifferentiated and readable by anyone holding one shared token, so indexing that
+ * channel turns every inbound customer email into a searchable document.
+ *
+ * That crosses the one line this system does not move (CLAUDE.md, "Who can see what"):
+ * `brain_chunk` must never index user-level rows — survey answers, individual reports,
+ * email addresses. Open access among the team is a choice the company made; publishing
+ * what a customer wrote to us privately is not the same choice.
+ *
+ * Found 2026-09-14: the channel had two days indexed, both benign internal chatter about
+ * setting the channel up. Nothing had leaked — but the ingest was live, so the next
+ * customer email would have.
+ *
+ * Names, not ids, because a channel can be recreated and the intent follows the name.
+ */
+// `hr` is the recruiting channel: it names and assesses candidates (owner's decision,
+// 2026-09-23). `purgeDenylistedChannels` removes what is already stored on the next run.
+const NEVER_INDEX = new Set(["email-inbox", "hr"]);
+
+/**
+ * Remove anything already indexed from a channel that is now on the denylist.
+ *
+ * FILTERING THE WALK IS ONLY HALF THE FIX, and the other half was missing for three days.
+ * When `#email-inbox` was denylisted on 2026-09-14 the two days already in the corpus were
+ * noticed, written down in the comment above, and then left there. Slack is one of the
+ * sources that never sweeps, so nothing would ever have removed them — and `touchChunks`
+ * re-stamps `updated_at` daily, so they read as freshly maintained rather than as orphans.
+ * Audited 2026-09-17: both were still present and still searchable.
+ *
+ * Runs every ingest rather than once, so adding a channel to the list is all anyone has to
+ * do — the corpus catches up by itself instead of needing a manual delete nobody
+ * remembers. Returns the number removed; failure is logged and never aborts the run,
+ * because a purge that cannot reach the database must not also stop the indexing.
+ */
+export async function purgeDenylistedChannels(
+  names: Iterable<string> = NEVER_INDEX
+): Promise<number> {
+  let removed = 0;
+  for (const name of names) {
+    try {
+      const res = await supabaseFetch(
+        `/rest/v1/brain_chunk?source=eq.${SOURCE}&meta->>channel=eq.${encodeURIComponent(name)}`,
+        { method: "DELETE", headers: { Prefer: "return=headers-only,count=exact" } }
+      );
+      if (!res.ok) {
+        logger.warn(
+          { status: res.status, channel: name },
+          "slack: could not purge a denylisted channel"
+        );
+        continue;
+      }
+      const range = res.headers.get("content-range");
+      const n = range ? Number(range.split("/")[0]?.split("-")[1]) : NaN;
+      // `count=exact` puts the total after the slash; the prefix is the range. Either way a
+      // non-numeric header must not be reported as rows removed.
+      const total = range ? Number(range.split("/")[1]) : NaN;
+      removed += Number.isFinite(total) ? total : Number.isFinite(n) ? n : 0;
+    } catch (err) {
+      logger.warn({ err, channel: name }, "slack: purge of a denylisted channel threw");
+    }
+  }
+  if (removed > 0) logger.warn({ removed }, "slack: removed chunks from denylisted channels");
+  return removed;
+}
 
 const SOURCE = "slack";
 const API = "https://slack.com/api";
@@ -55,7 +132,11 @@ const MAX_RETRIES = 4;
 // v3: v1-v2 stored every thread reply BEFORE its parent and in reverse order.
 // v2: v1 wrote days whose thread replies had been dropped by a 429 without
 // recording the gap, so every v1 row must be rebuilt rather than trusted.
-export const SLACK_BUILDER_VERSION = 8;
+// v9: v1-v8 dropped any message with no text, so an upload posted without a caption
+// left NO trace — not the file, not even that one was shared. File names are now
+// rendered (no extra scope), and content is read when `files:read` is granted.
+// v10: uploads that are signed legal instruments are no longer read.
+export const SLACK_BUILDER_VERSION = 10;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -87,6 +168,15 @@ interface SlackMessage {
   reply_count?: number;
   /** Already on every `conversations.history` message; simply never read until now. */
   reactions?: Array<{ name?: string; count?: number }>;
+  /** Uploads. Metadata needs no extra scope; the CONTENT needs `files:read`. */
+  files?: Array<{
+    id?: string;
+    name?: string;
+    filetype?: string;
+    mimetype?: string;
+    size?: number;
+    url_private?: string;
+  }>;
 }
 
 interface SlackChannel {
@@ -153,6 +243,39 @@ async function slackGet(
   return json;
 }
 
+/**
+ * Every conversation, not the first page of them.
+ *
+ * This was a single `limit: 200` call. The workspace shows 11 conversations
+ * today so it fits, but the `is_member` filter runs on the RESULT — so past 200
+ * the bot's own channels could fall off the end and simply stop being ingested,
+ * with no error and nothing in the corpus to notice. `users.list` and
+ * `conversations.history` in this same file already loop on `next_cursor`;
+ * this was the odd one out, which is exactly how the next reader assumes it is
+ * handled everywhere.
+ *
+ * Returns null on failure so the caller can keep its scope-fallback: an empty
+ * page and a refused call must not look the same, or a missing scope would read
+ * as "the bot is in no channels" and sweep the corpus.
+ */
+async function listConversations(token: string, types: string): Promise<SlackChannel[] | null> {
+  const out: SlackChannel[] = [];
+  let cursor = "";
+  for (let page = 0; page < 20; page++) {
+    const json = await slackGet(token, "conversations.list", {
+      types,
+      limit: 200,
+      exclude_archived: "true",
+      ...(cursor ? { cursor } : {}),
+    });
+    if (!json) return page === 0 ? null : out;
+    out.push(...((json.channels as SlackChannel[]) ?? []));
+    cursor = ((json.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
+    if (!cursor) break;
+  }
+  return out;
+}
+
 /** display name per user id, so a chunk reads "Marcus: …" not "<@U0B…>: …". */
 async function userNames(token: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();
@@ -197,6 +320,104 @@ function reactionSuffix(m: SlackMessage): string {
   return `  [reactions: ${rs.map((r) => `${r.name} x${r.count}`).join(", ")}]`;
 }
 
+/**
+ * Uploads worth reading. Images dominate what Slack actually holds — 25 of 36 files
+ * shared since June 2026 are screenshots — and there is no OCR here, so they are
+ * named by `renderMessage` and never fetched.
+ */
+const SLACK_FILE_TYPES = new Set(["pdf", "docx", "csv", "text", "markdown", "javascript", "json"]);
+export const MAX_SLACK_FILE_BYTES = 4_000_000;
+export const MAX_SLACK_FILE_CHARS = 20_000;
+
+/** Pure: which of a message's uploads this ingester would try to read. */
+export function readableFiles(m: SlackMessage): NonNullable<SlackMessage["files"]> {
+  return (m.files ?? []).filter(
+    (f) =>
+      f.url_private &&
+      SLACK_FILE_TYPES.has((f.filetype ?? "").toLowerCase()) &&
+      (f.size ?? 0) > 0 &&
+      (f.size ?? 0) <= MAX_SLACK_FILE_BYTES &&
+      // The third door the same contract comes through. Drive and mail were closed
+      // first; this one was found by asking the brain "what is in the confidentiality
+      // agreement people signed" and reading what came back — two days of #all-loveiq
+      // carrying the signed agreement in full, one of them with a colleague's home
+      // address. `renderMessage` still NAMES the upload, so the channel still records
+      // that a document was shared and signed; only its contents stop being read.
+      !isLegalInstrument(f.name) &&
+      !isJobApplication(f.name)
+  );
+}
+
+/**
+ * Set once per process when Slack refuses a download.
+ *
+ * Reading file CONTENT needs the `files:read` scope, which this bot did not have on
+ * 2026-09-19 — a real download returned 403. Without this latch every upload in every
+ * channel would retry and log on every run, which is how a missing scope turns into
+ * noise that gets ignored. One warning, then the walk stops asking.
+ */
+let filesReadDenied = false;
+
+/** Text out of one Slack upload. Returns "" for anything unreadable; never throws. */
+async function slackFileText(
+  token: string,
+  file: NonNullable<SlackMessage["files"]>[number]
+): Promise<string> {
+  if (filesReadDenied || !file.url_private) return "";
+  try {
+    const res = await fetchWithTimeout(file.url_private, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeoutMs: 20_000,
+    });
+    if (res.status === 403 || res.status === 401) {
+      filesReadDenied = true;
+      logger.warn(
+        { file: file.name, status: res.status },
+        "brain-ingest slack: cannot read file content — the bot is missing the files:read scope"
+      );
+      return "";
+    }
+    if (!res.ok) return "";
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength === 0) return "";
+    const type = (file.filetype ?? "").toLowerCase();
+    let text = "";
+    if (type === "pdf") {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      const doc = await getDocumentProxy(new Uint8Array(buf));
+      const out = await extractText(doc, { mergePages: true });
+      text = Array.isArray(out.text) ? out.text.join("\n") : out.text;
+    } else if (type === "docx") {
+      const mammoth = await import("mammoth");
+      text = (await mammoth.extractRawText({ buffer: buf })).value;
+    } else {
+      text = buf.toString("utf8");
+    }
+    const cleaned = text.replace(/\r\n/g, "\n").trim();
+    return cleaned.length > MAX_SLACK_FILE_CHARS
+      ? `${cleaned.slice(0, MAX_SLACK_FILE_CHARS)}\n[truncated: this file is longer than the brain indexes]`
+      : cleaned;
+  } catch (err) {
+    logger.warn({ err, file: file.name }, "brain-ingest slack: file unreadable");
+    return "";
+  }
+}
+
+/** Every readable upload on a message, rendered under its own heading. */
+export async function messageFileText(token: string, m: SlackMessage): Promise<string> {
+  const parts: string[] = [];
+  for (const f of readableFiles(m)) {
+    const text = await slackFileText(token, f);
+    if (text) parts.push(`## File: ${f.name ?? "untitled"}\n${text}`);
+  }
+  return parts.join("\n\n");
+}
+
+/** Test seam: the 403 latch is process-wide, so a test must be able to clear it. */
+export function resetFilesReadLatchForTest(): void {
+  filesReadDenied = false;
+}
+
 export function renderMessage(
   m: SlackMessage,
   names: Map<string, string>,
@@ -205,7 +426,18 @@ export function renderMessage(
   if (m.bot_id || !m.user) return null;
   if (m.subtype && NOISE_SUBTYPES.has(m.subtype)) return null;
   const text = (m.text ?? "").trim();
-  if (!text) return null;
+  /**
+   * A FILE-ONLY MESSAGE IS STILL A MESSAGE.
+   *
+   * Dropping anything without text meant someone posting a deck with no caption
+   * left no trace at all — not the file, not even the fact that they shared one.
+   * Measured 2026-09-19: 36 files were shared in channels since June, and 25 of
+   * them are screenshots that will never be readable. Naming them still makes
+   * "who sent the refactor deck" answerable, and the name costs no extra scope:
+   * `files` is already on every history message.
+   */
+  const shared = (m.files ?? []).map((f) => (f.name ?? "").trim()).filter(Boolean);
+  if (!text && shared.length === 0) return null;
 
   // Rewrite <@Uxxxx> mentions inline too — a message about a person is only
   // searchable by that person's name if the name is actually in the text.
@@ -217,7 +449,8 @@ export function renderMessage(
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
   const who = names.get(m.user) ?? m.user;
-  return `${indent ? "  ↳ " : ""}${who}: ${body}${reactionSuffix(m)}`;
+  const files = shared.length ? ` [shared: ${shared.join(", ")}]` : "";
+  return `${indent ? "  ↳ " : ""}${who}: ${body}${files}${reactionSuffix(m)}`;
 }
 
 /**
@@ -372,18 +605,10 @@ export async function ingestSlack(
    * bot has been added to, whatever the scopes say. Adding scopes grants nothing on
    * its own -- somebody has to invite the bot.
    */
-  let listed = await slackGet(token, "conversations.list", {
-    types: "public_channel,private_channel,mpim",
-    limit: 200,
-    exclude_archived: "true",
-  });
+  let listed = await listConversations(token, "public_channel,private_channel,mpim");
   let privateScopesMissing = false;
   if (!listed) {
-    listed = await slackGet(token, "conversations.list", {
-      types: "public_channel",
-      limit: 200,
-      exclude_archived: "true",
-    });
+    listed = await listConversations(token, "public_channel");
     privateScopesMissing = Boolean(listed);
     if (privateScopesMissing) {
       logger.warn(
@@ -394,8 +619,12 @@ export async function ingestSlack(
   }
   if (!listed) return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-list-failed" };
 
-  const channels = ((listed.channels as SlackChannel[]) ?? []).filter(
-    (c) => c.is_member && !c.is_archived && c.id && c.name
+  // Before anything is written: a channel that should never have been indexed must not
+  // survive in the corpus just because the denylist arrived after it did.
+  await purgeDenylistedChannels();
+
+  const channels = (listed ?? []).filter(
+    (c) => c.is_member && !c.is_archived && c.id && c.name && !NEVER_INDEX.has(c.name)
   );
   // Membership is the boundary: the bot reads only channels somebody added it to,
   // and Slack enforces that regardless of scope.
@@ -434,10 +663,25 @@ export async function ingestSlack(
     .toISOString()
     .slice(0, 10);
   let complete = true;
+  /**
+   * WHY the walk did not finish, first cause winning — the shape gmail already uses.
+   *
+   * Four different things set `complete = false`: the clock running out, an API call
+   * failing, a channel hitting the page cap, and a thread whose replies were
+   * rate-limited away. Collapsing them into one word made a version-bump backfill —
+   * which is expected to run out of clock for hours — indistinguishable from Slack
+   * being down. Measured 2026-09-19: the v9 bump put brain-fast into `status=error`
+   * on every run, which is how a real outage gets ignored.
+   */
+  let incomplete: string | null = null;
+  const stopped = (why: string) => {
+    complete = false;
+    incomplete ??= why;
+  };
 
   for (const ch of channels) {
     if (isOutOfTime()) {
-      complete = false;
+      stopped("time-budget");
       break;
     }
     /**
@@ -522,7 +766,7 @@ export async function ingestSlack(
         isOutOfTime
       );
       if (!json) {
-        complete = false;
+        stopped("api-refused");
         break;
       }
       const messages = (json.messages as SlackMessage[]) ?? [];
@@ -554,7 +798,16 @@ export async function ingestSlack(
         const seen = firstTs.get(day);
         if (!seen || m.ts < seen) firstTs.set(day, m.ts);
         const bucket = byDay.get(day) ?? [];
-        const entry = { line, replies: [] as string[] };
+        /**
+         * File CONTENT, appended to the line that shared it so the two stay together.
+         * Needs `files:read`; without it `messageFileText` returns "" after one warning
+         * and the name rendered by `renderMessage` is all that survives.
+         */
+        const fileText = await messageFileText(token, m);
+        const entry = {
+          line: fileText ? `${line ?? ""}\n${fileText}`.trim() : line,
+          replies: [] as string[],
+        };
 
         // Thread replies do NOT appear in channel history, and a thread is usually
         // where the actual argument happens — fetching only the parent would index
@@ -613,7 +866,7 @@ export async function ingestSlack(
       }
       cursor = ((json.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
       if (!cursor) break;
-      if (page === MAX_PAGES - 1) complete = false;
+      if (page === MAX_PAGES - 1) stopped("page-cap");
     }
 
     for (const [day, entries] of byDay) {
@@ -622,7 +875,7 @@ export async function ingestSlack(
       // day recorded with a thread gap is rebuilt until it is whole.
       if (day < yesterday && known.get(`ch:${ch.name}:${day}`) === true) continue;
       const whole = !threadGaps.has(day);
-      if (!whole) complete = false;
+      if (!whole) stopped("thread-replies-rate-limited");
       // Reverse the top-level sequence only, then flatten each thread back in
       // order, so replies follow their parent and read oldest-first.
       const lines = [...entries]
@@ -684,7 +937,21 @@ export async function ingestSlack(
     sweeping
   );
   // Only sweep a complete walk; a truncated one makes past days look deleted.
-  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  const swept = sweeping
+    ? await sweepStale(SOURCE, stampedAt, written + touched, {
+        scopeKey: "channel",
+        /**
+         * Only the channels this run walked. `sweepStale` deletes everything
+         * older than the run stamp, and every slack row is re-touched every
+         * run, so a channel the bot is removed from goes stale and is deleted
+         * whole — 9 of the 10 channels here sit under the majority guard, which
+         * was the only thing standing in the way. Losing access is not the same
+         * as the history being deleted; removing a channel deliberately is what
+         * `purgeDenylistedChannels()` above is for.
+         */
+        walkedScopes: new Set(channels.map((c) => c.name).filter((n): n is string => Boolean(n))),
+      })
+    : 0;
 
   logger.info(
     { channels: channels.length, namesResolved: names.size, written, touched, complete },
@@ -700,7 +967,16 @@ export async function ingestSlack(
    * `slack-walk-incomplete` is not in the cron's DELIBERATE_SKIPS, so it alerts.
    */
   if (!complete) {
-    return { source: SOURCE, rows: written + touched, swept, skipped: "slack-walk-incomplete" };
+    /**
+     * A clock-bound walk is a backfill in progress and must not alert; anything else
+     * is a fault and must. `slack-time-budget` is in the cron's DELIBERATE_SKIPS for
+     * the same reason `ga4-time-budget` already is.
+     */
+    const skipped =
+      incomplete === "time-budget"
+        ? "slack-time-budget"
+        : `slack-walk-incomplete:${incomplete ?? "unknown"}`;
+    return { source: SOURCE, rows: written + touched, swept, skipped };
   }
   return { source: SOURCE, rows: written + touched, swept };
 }

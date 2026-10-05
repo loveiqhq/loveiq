@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 interface BehaviorEvent {
@@ -151,49 +151,63 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Please try again later." }, { status: 429 });
   }
 
+  /**
+   * A WINDOW, because this is a fraud view and it had none.
+   *
+   * It read `survey_behavior_event` with `Range: 0-49999` and
+   * `order=event_time.asc`. PostgREST caps a response at 1,000 rows with no
+   * error, so what came back was the OLDEST thousand events in the table — a
+   * fixed nine-day slice from the product's launch, and nothing since. Every
+   * signal here was computed on it: the per-session risk scores, the
+   * `ipCounts >= 12` repeat-IP rule over 1,000 of 133,753 events, and the
+   * duplicate answer signatures. Recent fraud was structurally invisible.
+   *
+   * Newest first and paged, so the window is what bounds the data rather than
+   * a cap nobody could see.
+   *
+   * Fourteen days by default because fraud is only actionable while it is
+   * recent, and because paging costs real time: measured against production,
+   * 14 days is 13,686 events in ~2.5s and 30 days is 26,564 in ~5.0s. `days`
+   * is a query parameter, clamped to 90, so an investigation can widen it
+   * without a deploy.
+   */
+  const days = Math.min(
+    Math.max(Number(new URL(request.url).searchParams.get("days")) || 14, 1),
+    90
+  );
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+
   try {
-    const [eventsRes, submissionsRes, usersRes, partialsRes] = await Promise.all([
-      supabaseFetch(
-        `/rest/v1/survey_behavior_event?select=session_id,q_id,question_index,time_spent_ms,answered,direction,event_time,client_ip&order=event_time.asc`,
-        { headers: { Range: "0-49999" } }
+    const [events, submissions, users, partials] = await Promise.all([
+      fetchAllRows<BehaviorEvent & { client_ip: string | null }>(
+        `/rest/v1/survey_behavior_event?select=session_id,q_id,question_index,time_spent_ms,answered,direction,event_time,client_ip&event_time=gte.${since}&order=event_time.desc`
       ),
-      supabaseFetch(
-        `/rest/v1/survey_submission?select=id,user_id,session_id,status,created_date_time`,
-        {
-          headers: { Range: "0-49999" },
-        }
+      // The lookup tables are small enough to take whole — a session in the
+      // window can have a submission just outside it, and a partial mapping
+      // would silently drop that session's email and status.
+      fetchAllRows<{
+        id: number;
+        user_id: number | null;
+        session_id: string | null;
+        status: string;
+        created_date_time: string;
+      }>(
+        `/rest/v1/survey_submission?select=id,user_id,session_id,status,created_date_time&order=id.asc`
       ),
-      supabaseFetch(`/rest/v1/app_user?select=id,email`, {
-        headers: { Range: "0-49999" },
-      }),
-      supabaseFetch(`/rest/v1/survey_partial_save?select=session_id,answers,client_ip`, {
-        headers: { Range: "0-49999" },
-      }),
+      fetchAllRows<{ id: number; email: string | null }>(
+        `/rest/v1/app_user?select=id,email&order=id.asc`
+      ),
+      fetchAllRows<{
+        session_id: string;
+        answers: Record<string, unknown> | null;
+        client_ip: string | null;
+      }>(`/rest/v1/survey_partial_save?select=session_id,answers,client_ip&order=session_id.asc`),
     ]);
 
-    if (!eventsRes.ok || !submissionsRes.ok || !usersRes.ok || !partialsRes.ok) {
+    if (events === null || submissions === null || users === null || partials === null) {
       logger.error("Risk score: Supabase query failed");
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
-
-    const events = (await eventsRes.json()) as Array<
-      BehaviorEvent & {
-        client_ip: string | null;
-      }
-    >;
-    const submissions = (await submissionsRes.json()) as Array<{
-      id: number;
-      user_id: number | null;
-      session_id: string | null;
-      status: string;
-      created_date_time: string;
-    }>;
-    const users = (await usersRes.json()) as Array<{ id: number; email: string | null }>;
-    const partials = (await partialsRes.json()) as Array<{
-      session_id: string;
-      answers: Record<string, unknown> | null;
-      client_ip: string | null;
-    }>;
 
     // Group by session
     const sessionMap = new Map<string, BehaviorEvent[]>();

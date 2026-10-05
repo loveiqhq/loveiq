@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Hoisted so the vi.mock factory below can close over the same spies.
 const ph = vi.hoisted(() => ({
@@ -29,6 +29,44 @@ beforeEach(async () => {
   track = mod.track;
   setSurveyVariant = mod.setSurveyVariant;
   window.gtag = vi.fn() as unknown as typeof window.gtag;
+});
+
+describe("the persona walks' tap", () => {
+  // Here, not at each test's end: a failed expect would skip that line and leak the tap
+  // into the next test, the "visitor has no tap" one included.
+  afterEach(() => {
+    delete window.__loveiqEventTap;
+  });
+
+  it("hears every event PostHog is sent, with the same params, before PostHog does", () => {
+    // How many PostHog calls had happened when the tap heard each event. Recorded, not
+    // asserted in here: track() swallows whatever the tap throws, an expect() included.
+    const heard: Array<[string, Record<string, unknown>, number]> = [];
+    window.__loveiqEventTap = (name, params) => {
+      heard.push([name, params, ph.capture.mock.calls.length]);
+    };
+    track("survey_progress", { question_id: "Q3", question_index: 3 });
+    track("report_viewed");
+    expect(heard).toEqual([
+      ["survey_progress", { question_id: "Q3", question_index: 3 }, 0],
+      ["report_viewed", {}, 1],
+    ]);
+    expect(ph.capture).toHaveBeenCalledTimes(2);
+  });
+
+  it("cannot stop an event reaching PostHog when it throws", () => {
+    window.__loveiqEventTap = () => {
+      throw new Error("a broken listener");
+    };
+    expect(() => track("begin_checkout", { plan: "core" })).not.toThrow();
+    expect(ph.capture).toHaveBeenCalledWith("begin_checkout", { plan: "core" });
+  });
+
+  it("changes nothing for a visitor, whose page has no tap", () => {
+    expect(window.__loveiqEventTap).toBeUndefined();
+    track("cta_click", { cta: "start_survey" });
+    expect(ph.capture).toHaveBeenCalledWith("cta_click", { cta: "start_survey" });
+  });
 });
 
 describe("PostHog mirror of the GA4 event taxonomy", () => {

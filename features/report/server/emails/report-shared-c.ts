@@ -1,4 +1,10 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 
 /**
  * Shared-report invitation — Variant C (Figma node 5813-467).
@@ -122,6 +128,7 @@ export function reportSharedCEmail({
     "",
     "With kindness,",
     `${owner.plain} sent via LoveIQ`,
+    ...renderBrandFooterText(unsubscribeUrl),
   ]
     .filter((line, idx, arr) => !(line === "" && arr[idx - 1] === ""))
     .join("\n");

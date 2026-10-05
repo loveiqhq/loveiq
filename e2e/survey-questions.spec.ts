@@ -4,6 +4,7 @@ import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { optionGroupsFor } from "../features/survey/optionGroups";
 import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
 import { orderAskedQuestions, orderedOptions } from "../features/survey/ui/questionOrder";
+import { instantScroll } from "./fixtures/instant-scroll";
 import { pinSurveySession } from "./surveyArm";
 import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
 
@@ -56,6 +57,8 @@ const WRITE_ROUTES = [
 ];
 
 async function blockWrites(page: Page) {
+  // Every test here also taps through the survey, and calls this first.
+  await instantScroll(page);
   for (const pattern of WRITE_ROUTES) {
     await page.route(pattern, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
@@ -93,11 +96,8 @@ async function renderedOptions(page: Page, role: "radio" | "checkbox"): Promise<
 }
 
 /**
- * Answer whichever question is on screen, then make sure we land on the next one.
- *
- * single / scale / country auto-advance after 350ms; open and multiple do not. Rather
- * than encode that per type, answer and then wait for the heading to change — falling
- * back to Next when it does not. That keeps the driver correct if auto-advance changes.
+ * Answer whichever question is on screen, press Next, and make sure we land on the next
+ * one. Every question needs Next: auto-advance left with the 2026-10-04 redesign.
  */
 async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: string | null) {
   switch (q.answerType) {
@@ -129,13 +129,11 @@ async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: stri
   }
 
   if (!nextHeading) return;
-  const next = page.getByRole("heading", { name: nextHeading, exact: true });
-  try {
-    await next.waitFor({ state: "visible", timeout: 1200 });
-  } catch {
-    await page.getByRole("button", { name: /next/i }).click();
-    await next.waitFor({ state: "visible", timeout: 5000 });
-  }
+  // A Next that stays disabled is an answer that did not register: fail on the click.
+  await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
+  await page
+    .getByRole("heading", { name: nextHeading, exact: true })
+    .waitFor({ state: "visible", timeout: 12_000 });
 }
 
 test.describe("Survey — the questions the work order changed", () => {
@@ -250,5 +248,72 @@ test.describe("Survey — the questions the work order changed", () => {
 
     // The walk ended on the last question without ever submitting.
     expect(ASKED[ASKED.length - 1]!.qId).toBe("16015");
+  });
+});
+
+/**
+ * A browser that refuses storage still gets a survey.
+ *
+ * Safari with "Block All Cookies", and WebViews with DOM storage switched off,
+ * throw a SecurityError on EVERY localStorage / sessionStorage access. That was
+ * checked once, by hand, on 2026-09-09 by a probe nothing ever ran (deleted
+ * 2026-09-24). By 2026-09-24 it could not get past the intro even
+ * with storage working, so it had been reporting a failure about itself. This
+ * replaces it and runs on every push.
+ *
+ * Only errors from OUR bundles count (a /_next/ frame). A third-party script
+ * that trips over the same storage is someone else's problem, and an error with
+ * no stack cannot be attributed; see features/ux-review "an error with no
+ * source is not ours".
+ */
+test.describe("Survey — a browser that refuses storage", () => {
+  test("still opens, and answering moves the reader forward", async ({ page }) => {
+    await page.addInitScript(() => {
+      const boom = () => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      };
+      const refused = {
+        getItem: boom,
+        setItem: boom,
+        removeItem: boom,
+        clear: boom,
+        key: boom,
+        get length(): number {
+          return boom();
+        },
+      };
+      Object.defineProperty(window, "localStorage", { configurable: true, get: () => refused });
+      Object.defineProperty(window, "sessionStorage", { configurable: true, get: () => refused });
+    });
+    const ours: string[] = [];
+    page.on("pageerror", (e) => {
+      const stack = String(e.stack ?? "");
+      if (stack.includes("/_next/")) ours.push(`${e.message} :: ${stack.split("\n")[1] ?? ""}`);
+    });
+    await blockWrites(page);
+
+    // The mechanism the test relies on: storage really does throw on this page.
+    await page.goto("/survey");
+    const threw = await page.evaluate(() => {
+      try {
+        localStorage.getItem("x");
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(threw, "the storage refusal did not take effect in this engine").toBe(true);
+
+    await enterEngine(page);
+    for (let i = 0; i < 2; i += 1) {
+      await expect(
+        page.getByRole("heading", { name: ASKED[i]!.question, exact: true })
+      ).toBeVisible({ timeout: 10_000 });
+      await answerAndAdvance(page, ASKED[i]!, ASKED[i + 1]!.question);
+    }
+    await expect(
+      page.getByRole("heading", { name: ASKED[2]!.question, exact: true })
+    ).toBeVisible();
+    expect(ours, "our own code threw with storage refused").toEqual([]);
   });
 });

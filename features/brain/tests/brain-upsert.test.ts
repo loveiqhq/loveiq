@@ -22,7 +22,12 @@ vi.mock("@features/admin/server/supabase", () => ({
   }),
 }));
 
-import { chunkPage, upsertChunks, type BrainRow } from "@features/brain/server/ingest/upsert";
+import {
+  chunkPage,
+  redactUrlSecrets,
+  type BrainRow,
+  upsertChunks,
+} from "@features/brain/server/ingest/upsert";
 
 function row(over: Partial<BrainRow> = {}): BrainRow {
   return {
@@ -62,6 +67,22 @@ describe("upsertChunks payload shape", () => {
     expect(keySets.size).toBe(1);
     expect(objects.every((o) => "period_end" in o)).toBe(true);
     expect(objects[1].period_end).toBeNull();
+  });
+
+  it("never writes half of a character that the 2,400 cut splits", async () => {
+    // An emoji is two UTF-16 halves; cutting between them left a lone half, which Postgres
+    // rejects (22P02), failing the whole batch.
+    await upsertChunks([row({ body: `${"a".repeat(2399)}😀 and more` })]);
+    const [written] = JSON.parse(posted[0]!) as Array<{ body: string }>;
+    expect(written!.body).toHaveLength(2400);
+    expect(written!.body.isWellFormed()).toBe(true);
+  });
+
+  it("never writes half a character in a title either", async () => {
+    // Builders cut titles too: the Night Shift's is its question at 300 characters.
+    await upsertChunks([row({ title: `${"q".repeat(299)}😀`.slice(0, 300) })]);
+    const [written] = JSON.parse(posted[0]!) as Array<{ title: string }>;
+    expect(written!.title.isWellFormed()).toBe(true);
   });
 
   it("keeps a supplied period_end untouched", async () => {
@@ -471,7 +492,7 @@ describe("the repo ingester redacts the same things the shared write path does",
 describe("every section heading stays findable after packing", () => {
   /** The chunker's functions, without the top-level script that talks to the database. */
   async function loadChunker() {
-    const { readFileSync, writeFileSync, mkdtempSync } = await import("node:fs");
+    const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, cpSync } = await import("node:fs");
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");
     const src = readFileSync("scripts/brain-ingest-repo.mjs", "utf8").split("\n");
@@ -480,6 +501,14 @@ describe("every section heading stays findable after packing", () => {
     const dir = mkdtempSync(join(tmpdir(), "chunker-"));
     const file = join(dir, "chunker.mjs");
     writeFileSync(file, src.slice(0, end).join("\n"));
+    /**
+     * The script's own `scripts/lib` imports have to come with it. Adding one relative
+     * import to the script broke this loader with "Cannot find module
+     * ./lib/legal-page-text.mjs" — the copy had no `lib/` beside it. Copying the whole
+     * directory keeps the next such import working without anyone rediscovering this.
+     */
+    mkdirSync(join(dir, "lib"), { recursive: true });
+    cpSync("scripts/lib", join(dir, "lib"), { recursive: true });
     return (await import(file)) as {
       chunkMarkdown: (
         path: string,
@@ -539,5 +568,78 @@ describe("every section heading stays findable after packing", () => {
       }
     }
     expect(lost, `headings searchable nowhere: ${lost.slice(0, 5).join(", ")}`).toHaveLength(0);
+  });
+});
+
+describe("redactUrlSecrets is idempotent", () => {
+  /**
+   * THE BUG THIS EXISTS FOR, found by audit on 2026-09-17.
+   *
+   * The value class excludes `]` so a URL inside brackets is not swallowed whole. That
+   * means `&token=abc]` masks to `&token=[redacted]]` — and the same rule then matched
+   * `[redacted` on the next pass, stopping at that first `]`, and masked it AGAIN. Four
+   * passes over one calendar chunk added four brackets. Bodies are capped, so a chunk
+   * re-ingested often would have real text pushed off the end one character per run,
+   * invisibly and permanently.
+   */
+  it("does not grow a bracket every time it runs", () => {
+    const once = redactUrlSecrets('a "https://x.de/b?id=1&token=SECRETVALUE123]&lang=de" b');
+    expect(redactUrlSecrets(once)).toBe(once);
+    expect(redactUrlSecrets(redactUrlSecrets(once))).toBe(once);
+    // And the secret really is gone, not merely stable.
+    expect(once).not.toContain("SECRETVALUE123");
+  });
+
+  it.each([
+    "?token=abc123456789",
+    "?access_token=abcdef&next=1",
+    "https://www.loveiq.org/report/rpt_ABCDEFGHIJKLMNOPQRST",
+    "https://calendly.com/cancellations/abcdefgh12345678",
+    "plain text with no secret at all",
+  ])("is stable across repeated passes for %j", (input) => {
+    const once = redactUrlSecrets(input);
+    expect(redactUrlSecrets(once)).toBe(once);
+  });
+
+  it("still masks a real value that merely starts like the mask", () => {
+    /**
+     * The lookahead refuses only the exact mask. A value that merely begins with "[" is a
+     * real value and must still be masked — otherwise anyone could evade redaction by
+     * prefixing a bracket.
+     *
+     * `morevalue` survives, and that is the value class rather than the lookahead: it
+     * stops at `]` on purpose, so a URL written inside brackets or markdown is not
+     * swallowed whole along with the prose after it.
+     */
+    const out = redactUrlSecrets("?token=[notthemask]morevalue");
+    expect(out).toContain("[redacted]");
+    expect(out).not.toContain("notthemask");
+    // And still stable on a second pass.
+    expect(redactUrlSecrets(out)).toBe(out);
+  });
+});
+
+describe("JSON Web Tokens are redacted whoever issued them", () => {
+  it("masks a token and keeps the prose around it", () => {
+    // `eyJ` is base64url for `{"`, so this shape is a token by construction — masking it
+    // loses no meaning, which is why a generic rule is safe here and not elsewhere.
+    const out = redactUrlSecrets(
+      "click https://x.com/r?t=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig to read"
+    );
+    expect(out).not.toContain("eyJzdWIiOiIxMjM0NTY3ODkw");
+    expect(out).toContain("click");
+    expect(out).toContain("to read");
+  });
+
+  it("is stable on a second pass", () => {
+    const once = redactUrlSecrets("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0");
+    expect(redactUrlSecrets(once)).toBe(once);
+  });
+
+  it("leaves ordinary words that merely start with the same letters", () => {
+    // A guard that eats real content is worse than no guard — the rule needs the dot and
+    // the second base64 run, not just the prefix.
+    const text = "eyjafjallajokull erupted and eyJ alone is not a token";
+    expect(redactUrlSecrets(text)).toBe(text);
   });
 });

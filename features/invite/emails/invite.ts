@@ -1,4 +1,10 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 import { SHARE_MESSAGE_BODY } from "@shared/url/share-message";
 
 export interface InviteEmailParams {
@@ -77,6 +83,7 @@ export function inviteEmail({
     "",
     "With kindness,",
     `${senderName || "A friend"} sent via LoveIQ`,
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

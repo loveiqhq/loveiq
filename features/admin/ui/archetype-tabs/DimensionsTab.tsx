@@ -39,7 +39,7 @@ export default function DimensionsTab({ slug, days }: { slug: string; days: numb
   return (
     <div className="rounded-xl border border-white/10 bg-surface p-5">
       <h3 className="mb-4 text-sm font-medium text-text-primary">
-        Average Score per Dimension (19 dimensions)
+        Average Score per Dimension ({items.length} dimensions)
       </h3>
       <BarChart items={items} direction="horizontal" />
     </div>

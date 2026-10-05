@@ -1,7 +1,12 @@
 
 -- Add duration_ms column to survey_submission
+-- IF NOT EXISTS because 20260307100000_normalized_schema.sql already creates this
+-- column (line 175). That file was regenerated from a later live schema, so on a
+-- REPLAY the column is already there and a bare ADD COLUMN aborts the whole push
+-- with `column "duration_ms" of relation "survey_submission" already exists`.
+-- Found 2026-09-20 by the first real replay this repo has ever had.
 ALTER TABLE survey_submission
-  ADD COLUMN duration_ms BIGINT;
+  ADD COLUMN IF NOT EXISTS duration_ms BIGINT;
 
 -- Replace submit_survey to store p_duration_ms
 CREATE OR REPLACE FUNCTION submit_survey(

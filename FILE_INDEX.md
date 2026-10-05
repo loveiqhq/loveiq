@@ -144,31 +144,38 @@
 
 ## Company Brain
 
-| Task                            | Files                                                                       |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| Ask a question (answer core)    | `features/brain/server/answer.ts`                                           |
-| Change retrieval / ranking      | `features/brain/server/retrieve.ts`, `supabase/migrations/*brain_search*`   |
-| Swap the language model         | `features/brain/server/llm.ts` (`BRAIN_LLM_BASE_URL`, `BRAIN_LLM_MODEL`)    |
-| Slack front door                | `app/api/slack/events/route.ts`, `features/brain/server/slack.ts`           |
-| Nightly ingest (Notion/GA4/GSC) | `app/api/cron/brain-ingest/route.ts`, `features/brain/server/ingest/`       |
-| Connect Claude (MCP server)     | `app/api/mcp/route.ts` (`LOVEIQ_MCP_TOKEN`)                                 |
-| Notion board + pages ingest     | `features/brain/server/ingest/notion.ts` (`NOTION_TOKEN`)                   |
-| Refuse to index a credential    | `features/brain/server/ingest/upsert.ts` (`credentialKind`)                 |
-| Operator runbook                | `docs/runbooks/COMPANY_BRAIN.md`                                            |
-| Docs + commits ingest           | `scripts/brain-ingest-repo.mjs`, `.github/workflows/brain-ingest.yml`       |
-| Business-number chunks          | `features/brain/server/ingest/analytics.ts`, `supabase/migrations/*rollup*` |
-| Ask from the CLI                | `scripts/brain-ask.ts`                                                      |
-| Adversarial question battery    | `scripts/brain-battery.ts`                                                  |
+| Task                            | Files                                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Ask a question (answer core)    | `features/brain/server/answer.ts`                                                                                        |
+| Change retrieval / ranking      | `features/brain/server/retrieve.ts`, `supabase/migrations/*brain_search*`                                                |
+| Swap the language model         | `features/brain/server/llm.ts` (`BRAIN_LLM_BASE_URL`, `BRAIN_LLM_MODEL`)                                                 |
+| Slack front door                | `app/api/slack/events/route.ts`, `features/brain/server/slack.ts`                                                        |
+| Nightly ingest (Notion/GA4/GSC) | `app/api/cron/brain-ingest/route.ts`, `features/brain/server/ingest/`                                                    |
+| Connect Claude (MCP server)     | `app/api/mcp/route.ts` (`LOVEIQ_MCP_TOKEN`)                                                                              |
+| Jarvis sign-in (per person)     | `features/brain/server/sign-in.ts`, `features/brain/server/connect.ts`, `app/jarvis/connect/page.tsx`, `app/api/jarvis/` |
+| Notion board + pages ingest     | `features/brain/server/ingest/notion.ts` (`NOTION_TOKEN`)                                                                |
+| Refuse to index a credential    | `features/brain/server/ingest/upsert.ts` (`credentialKind`)                                                              |
+| Operator runbook                | `docs/runbooks/COMPANY_BRAIN.md`                                                                                         |
+| Docs + commits ingest           | `scripts/brain-ingest-repo.mjs`, `.github/workflows/brain-ingest.yml`                                                    |
+| Business-number chunks          | `features/brain/server/ingest/analytics.ts`, `supabase/migrations/*rollup*`                                              |
+| Ask from the CLI                | `scripts/brain-ask.ts`                                                                                                   |
+| Adversarial question battery    | `scripts/brain-battery.ts`                                                                                               |
 
 ## Testing
 
-| Task             | Files                                                                 |
-| ---------------- | --------------------------------------------------------------------- |
-| Unit test config | `vitest.config.ts`                                                    |
-| Unit test setup  | `__tests__/setup.ts`                                                  |
-| Unit tests       | colocated `*/tests/` + `__tests__/` (see `__tests__/AGENT_README.md`) |
-| E2E test config  | `playwright.config.ts`                                                |
-| E2E tests        | `e2e/*.spec.ts`                                                       |
+| Task                                      | Files                                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| Unit test config                          | `vitest.config.ts`                                                                    |
+| Unit test setup                           | `__tests__/setup.ts`                                                                  |
+| Unit tests                                | colocated `*/tests/` + `__tests__/` (see `__tests__/AGENT_README.md`)                 |
+| E2E test config                           | `playwright.config.ts`                                                                |
+| E2E tests                                 | `e2e/*.spec.ts`                                                                       |
+| Device probes (real finger, real browser) | `scripts/probes/` — read its `README.md` first: exit 0/1/3 contract and the trap list |
+| Verify an AI UX finding                   | `scripts/verify-ux-findings.mjs` (maps a finding to a criterion, runs its probe)      |
+| UX review criteria                        | `.agents/skills/replay-triage/references/review-protocol.md`                          |
+| UX review benchmark                       | `scripts/replay-bench/` — fixtures, scorer, committed `results/`                      |
+| UX review triage workflow                 | `.agents/skills/replay-triage/SKILL.md`                                               |
+| PostHog scanner prompts                   | `features/ux-review/server/scanners.ts` (see `features/ux-review/AGENT_README.md`)    |
 
 ## CI/CD & Infrastructure
 

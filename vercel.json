@@ -27,6 +27,10 @@
       "schedule": "38 * * * *"
     },
     {
+      "path": "/api/cron/start-github-jobs",
+      "schedule": "41 * * * *"
+    },
+    {
       "path": "/api/cron/conversion-digest",
       "schedule": "0 9 * * *"
     },
@@ -51,10 +55,6 @@
       "schedule": "11 * * * *"
     },
     {
-      "path": "/api/cron/brain-brief",
-      "schedule": "10 6 * * *"
-    },
-    {
       "path": "/api/cron/brain-calendar",
       "schedule": "26 * * * *"
     },
@@ -63,8 +63,36 @@
       "schedule": "52 * * * *"
     },
     {
-      "path": "/api/cron/brain-mine",
+      "path": "/api/cron/brain-crm",
+      "schedule": "17 */2 * * *"
+    },
+    {
+      "path": "/api/cron/brain-clarity",
       "schedule": "40 5 * * *"
+    },
+    {
+      "path": "/api/cron/brain-evidence",
+      "schedule": "20 4 * * *"
+    },
+    {
+      "path": "/api/cron/brain-papers",
+      "schedule": "50 4 * * *"
+    },
+    {
+      "path": "/api/cron/brain-reconcile",
+      "schedule": "20 9 * * *"
+    },
+    {
+      "path": "/api/cron/ux-review",
+      "schedule": "17,47 * * * *"
+    },
+    {
+      "path": "/api/cron/funnel-digest",
+      "schedule": "40 8 * * 1"
+    },
+    {
+      "path": "/api/cron/file-invoices",
+      "schedule": "40 6 3 * *"
     }
   ],
   "functions": {
@@ -138,6 +166,21 @@
       "maxDuration": 120
     },
     "app/api/cron/brain-brief/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/brain-clarity/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/brain-evidence/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/brain-papers/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/ux-review/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/cron/brain-reconcile/route.ts": {
       "maxDuration": 120
     }
   }

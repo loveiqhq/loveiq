@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 
@@ -31,6 +35,61 @@ import logger from "@shared/observability/logger";
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
 const DEFAULT_MODEL = "gemini-3.6-flash";
 
+/**
+ * CLAUDE SPEAKS ITS OWN SHAPE.
+ *
+ * Anthropic's OpenAI-compatible endpoint would accept the request below as it stands,
+ * but Anthropic documents it as "not considered a long-term or production-ready
+ * solution", so a base URL on api.anthropic.com gets the native Messages API: still one
+ * POST and no SDK. Switching provider stays an env change and no deploy: point
+ * BRAIN_LLM_BASE_URL at Anthropic's v1 base, put a Claude key in BRAIN_LLM_KEY, and
+ * optionally name the model in BRAIN_LLM_MODEL (`.env.example` has the exact values).
+ *
+ * Thinking is on by default on Claude 5 models and its tokens count toward max_tokens,
+ * and the docs never say temperature may be combined with it. So the Claude request
+ * carries no temperature, no thinking config and no reasoning_effort (the model's own
+ * defaults), and a bigger budget than the OpenAI path, so the answer still has room
+ * after the thinking.
+ */
+const CLAUDE_DEFAULT_MODEL = "claude-sonnet-5";
+const CLAUDE_MAX_TOKENS = 8000;
+const CLAUDE_API_VERSION = "2023-06-01";
+
+/**
+ * CLAUDE CODE AS THE MODEL, ON THE TEAM SUBSCRIPTION WE ALREADY PAY FOR.
+ *
+ * `BRAIN_LLM_CLI=claude` sends every call through the `claude -p` binary instead of an
+ * HTTP API. In GitHub Actions (`.github/workflows/brain-daily.yml`) that binary signs in
+ * with CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, so the brief and the miner cost
+ * nothing beyond a Team seat; on a laptop it uses whoever is logged in. The token is for
+ * the unmodified binary only: Anthropic's terms forbid sending it to the API from our own
+ * code, which is why this is a subprocess and not a different header on the fetch below.
+ * Vercel has no `claude` binary, so this lane only works where one is installed.
+ *
+ * One turn, text in and text out: no tools, no MCP servers, no user settings, our own
+ * system prompt in place of Claude Code's, run from an empty directory so nothing in a
+ * checkout (CLAUDE.md, hooks, .mcp.json) loads. Measured 2026-09-24 on a laptop: 514
+ * input tokens for a one-word prompt, 3s end to end. Letting user settings load as well
+ * (plugins, hooks, output styles) made the same call 10,645 tokens.
+ */
+const CLI_DEFAULT_MODEL = "sonnet";
+
+export function cliBinary(): string | null {
+  return process.env.BRAIN_LLM_CLI?.trim() || null;
+}
+
+export function isClaudeBase(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname === "api.anthropic.com";
+  } catch {
+    return false;
+  }
+}
+
+function llmBaseUrl(): string {
+  return (process.env.BRAIN_LLM_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
+
 // Generation runs after the Slack ack, not inside it, so this can be generous.
 // Still bounded: a hung request holds the function open until the platform kills
 // it, losing the reply entirely. Set well above the observed worst case — a
@@ -57,14 +116,81 @@ export interface LlmMessage {
 
 export type LlmResult =
   | { ok: true; text: string; truncated: boolean }
-  | { ok: false; reason: "unconfigured" | "rate_limited" | "error"; detail?: string };
+  | {
+      ok: false;
+      reason: "unconfigured" | "rate_limited" | "overloaded" | "error";
+      detail?: string;
+      /** How long the provider asked us to wait, when it said. Only ever set on
+       *  `rate_limited`. A caller that can afford to wait (a cron) should; one that
+       *  cannot (anything with a person attached) should keep treating 429 as final. */
+      retryAfterMs?: number;
+      /**
+       * On `rate_limited`: is the DAILY allowance gone, rather than the per-minute one?
+       *
+       * The two are the same status with the same shape, and the difference decides
+       * everything a caller does: a per-minute limit clears in ~30 seconds, the daily one
+       * not until midnight Pacific. Callers already branch on `retryAfterMs` being
+       * absent, but absent has two meanings -- daily, or a provider that simply sent no
+       * hint -- so a caller that reports which limit it hit cannot get it from that.
+       * `mine-decisions` writes this into `cron_run`, which is the only way to tell from
+       * the outside whether the miner needs a later schedule or a bigger budget.
+       */
+      dailyQuota?: boolean;
+    };
+
+/** Longest wait the provider is allowed to talk us into. A provider that answers
+ *  "retry in an hour" must not park a cron for an hour; past this we treat the
+ *  limit as final and stop, exactly as before. */
+const MAX_RETRY_AFTER_MS = 120_000;
+
+/**
+ * How long to wait after a 429, from the `retry-after` header or, failing that, the
+ * `RetryInfo.retryDelay` Google puts in the body ("32s"). Returns undefined when
+ * neither is present or parseable -- an absent hint must not become a zero-length
+ * wait, which would spin.
+ */
+/**
+ * Is this 429 the DAILY allowance rather than the per-minute one?
+ *
+ * The free tier enforces both — 5 requests a minute and 20 a day, per model — and sends
+ * the same shape for each, `retryDelay` included. On the daily limit that delay is a lie
+ * of omission: it counts down to the next per-minute window, which will refuse again,
+ * and again, until midnight Pacific. Waiting on it burns the caller's whole budget to
+ * make zero progress. So the daily limit stays terminal, as every 429 used to be.
+ */
+export function isDailyQuota(body: string): boolean {
+  return /PerDayPer|RequestsPerDay/i.test(body);
+}
+
+export function parseRetryAfterMs(header: string | null, body: string): number | undefined {
+  if (isDailyQuota(body)) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
+  // Two shapes, because Google sends both and the cheaper one comes first:
+  //   message  "...Please retry in 32.652110245s."      (~380 chars in)
+  //   details  {"@type": ...RetryInfo, "retryDelay": "32s"}   (~900 chars in)
+  // Seconds only; Google does not emit other units on either.
+  const match =
+    /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(body) ?? /retry in (\d+(?:\.\d+)?)s/i.exec(body);
+  if (!match) return undefined;
+  const parsed = Number(match[1]);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.min(Math.ceil(parsed * 1000), MAX_RETRY_AFTER_MS);
+}
 
 export function isLlmConfigured(): boolean {
-  return Boolean(process.env.BRAIN_LLM_KEY);
+  return Boolean(process.env.BRAIN_LLM_KEY || cliBinary());
 }
 
 export function llmModel(): string {
-  return process.env.BRAIN_LLM_MODEL || DEFAULT_MODEL;
+  return (
+    process.env.BRAIN_LLM_MODEL ||
+    (cliBinary()
+      ? CLI_DEFAULT_MODEL
+      : isClaudeBase(llmBaseUrl())
+        ? CLAUDE_DEFAULT_MODEL
+        : DEFAULT_MODEL)
+  );
 }
 
 /**
@@ -76,6 +202,9 @@ export function llmModel(): string {
  * Left unset the field is omitted entirely, so a provider that rejects unknown
  * parameters (Groq, older OpenAI-compatible servers) is unaffected.
  */
+/** How long to wait out a provider overload. Short: it is a blip, not a quota. */
+const OVERLOAD_RETRY_MS = 5_000;
+
 function reasoningEffort(): string | null {
   const value = process.env.BRAIN_LLM_REASONING_EFFORT?.trim();
   return value ? value : null;
@@ -97,27 +226,41 @@ export async function complete(
    */
   timeoutMs: number = TIMEOUT_MS
 ): Promise<LlmResult> {
+  const cli = cliBinary();
+  if (cli) return cliComplete(cli, messages, timeoutMs);
+
   const key = process.env.BRAIN_LLM_KEY;
   if (!key) return { ok: false, reason: "unconfigured" };
 
-  const baseUrl = (process.env.BRAIN_LLM_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const baseUrl = llmBaseUrl();
+  const claude = isClaudeBase(baseUrl);
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
+    res = await fetchWithTimeout(claude ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: llmModel(),
-        messages,
-        temperature: TEMPERATURE,
-        max_tokens: MAX_TOKENS,
-        stream: false,
-        ...(reasoningEffort() ? { reasoning_effort: reasoningEffort() } : {}),
-      }),
+      headers: claude
+        ? {
+            "x-api-key": key,
+            "anthropic-version": CLAUDE_API_VERSION,
+            "Content-Type": "application/json",
+          }
+        : {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+      body: JSON.stringify(
+        claude
+          ? claudeBody(messages)
+          : {
+              model: llmModel(),
+              messages,
+              temperature: TEMPERATURE,
+              max_tokens: MAX_TOKENS,
+              stream: false,
+              ...(reasoningEffort() ? { reasoning_effort: reasoningEffort() } : {}),
+            }
+      ),
       timeoutMs,
     });
   } catch (err) {
@@ -129,8 +272,60 @@ export async function complete(
   // actually hit, and it needs a different answer in Slack: "we are out of
   // questions for today", not "something broke".
   if (res.status === 429) {
-    logger.warn({ retryAfter: res.headers.get("retry-after") }, "brain llm rate limited");
-    return { ok: false, reason: "rate_limited" };
+    // The BODY, not the status, says which limit was hit and for how long. Every other
+    // failure branch below reads it; this one used to throw it away, so
+    // "stopped early: rate_limited" could never distinguish "out for the next 30
+    // seconds" from "out for the day" -- and the miner assumed the worst, nightly.
+    // Free tier is 5 requests per minute per model, and says so here:
+    //   QuotaFailure.quotaId  GenerateRequestsPerMinutePerProjectPerModel-FreeTier
+    //   RetryInfo.retryDelay  "32s"
+    // Parse the WHOLE body, then truncate for logging. `RetryInfo` is the last of three
+    // `details` entries and sits ~900 characters in, so parsing a truncated copy finds
+    // nothing and silently answers "no hint" -- which reads exactly like a provider that
+    // did not send one.
+    const body = await res.text().catch(() => "");
+    const dailyQuota = isDailyQuota(body);
+    const retryAfterMs = parseRetryAfterMs(res.headers.get("retry-after"), body);
+    logger.warn({ dailyQuota, retryAfterMs, detail: body.slice(0, 300) }, "brain llm rate limited");
+    return {
+      ok: false,
+      reason: "rate_limited",
+      detail: body.slice(0, 300),
+      retryAfterMs,
+      dailyQuota,
+    };
+  }
+
+  /**
+   * 503 IS "COME BACK IN A MOMENT", NOT "THIS FAILED".
+   *
+   * Gemini answers 503 when the model is momentarily overloaded, and 502/504 are the
+   * gateway saying the same thing. Every one of these used to land in the terminal
+   * branch below, so a caller that could happily have waited two seconds instead
+   * stopped its whole run.
+   *
+   * Measured 2026-09-20: `brain-mine` closed with `stopped early: error:HTTP 503` on
+   * two consecutive days, 1.5s runs that read zero meetings, while `brain-brief` used
+   * the SAME key and model successfully two hours earlier. The key was never the
+   * problem — the miner sends far longer prompts, which is exactly when a provider
+   * sheds load.
+   *
+   * Named separately from `rate_limited` on purpose: a quota says WHEN to come back
+   * and may mean "not until tomorrow", while an overload is transient and carries no
+   * such promise. Collapsing the two is the mistake this file spends its comments
+   * undoing elsewhere.
+   */
+  // 529 is Anthropic's `overloaded_error`; no other provider here uses it.
+  if (res.status === 503 || res.status === 502 || res.status === 504 || res.status === 529) {
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    logger.warn({ status: res.status, detail }, "brain llm is overloaded, worth retrying");
+    return {
+      ok: false,
+      reason: "overloaded",
+      detail: `HTTP ${res.status}`,
+      // No promise from the provider, so suggest a short wait rather than invent one.
+      retryAfterMs: OVERLOAD_RETRY_MS,
+    };
   }
 
   if (!res.ok) {
@@ -141,21 +336,15 @@ export async function complete(
     return { ok: false, reason: "error", detail: `HTTP ${res.status}` };
   }
 
-  const json = (await res.json().catch(() => null)) as {
-    choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
-  } | null;
-
-  const content = json?.choices?.[0]?.message?.content;
-  const finishReason = json?.choices?.[0]?.finish_reason;
+  const { content, finishReason, hasOutput } = claude
+    ? claudeOutput(await res.json().catch(() => null))
+    : openAiOutput(await res.json().catch(() => null));
   if (typeof content !== "string" || !content.trim()) {
     // A thinking model that spends its whole budget reasoning answers 200 with an
     // EMPTY message and finish_reason "length" — not an error status. Naming that
     // separately matters because the fix is a bigger `max_tokens` or a lower
     // reasoning effort, not a retry.
-    logger.error(
-      { hasChoices: Boolean(json?.choices?.length), finish: finishReason },
-      "brain llm returned no content"
-    );
+    logger.error({ hasOutput, finish: finishReason }, "brain llm returned no content");
     return {
       ok: false,
       reason: "error",
@@ -175,4 +364,191 @@ export async function complete(
     logger.warn({ chars: content.length }, "brain llm answer was truncated by the token budget");
   }
   return { ok: true, text: content.trim(), truncated: finishReason === "length" };
+}
+
+/** Messages API body: system messages hoisted into `system`, the rest as turns. */
+function claudeBody(messages: LlmMessage[]) {
+  const system = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  return {
+    model: llmModel(),
+    max_tokens: CLAUDE_MAX_TOKENS,
+    ...(system ? { system } : {}),
+    messages: messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({ role: m.role, content: m.content })),
+  };
+}
+
+interface ModelOutput {
+  content: unknown;
+  /** Normalised to the OpenAI vocabulary, so "length" means the budget ran out. */
+  finishReason?: string;
+  hasOutput: boolean;
+}
+
+function openAiOutput(raw: unknown): ModelOutput {
+  const json = raw as {
+    choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
+  } | null;
+  return {
+    content: json?.choices?.[0]?.message?.content,
+    finishReason: json?.choices?.[0]?.finish_reason,
+    hasOutput: Boolean(json?.choices?.length),
+  };
+}
+
+/** Text blocks only: thinking blocks precede the answer and are not part of it. */
+function claudeOutput(raw: unknown): ModelOutput {
+  const json = raw as {
+    content?: Array<{ type?: string; text?: unknown }>;
+    stop_reason?: string;
+  } | null;
+  const blocks = json?.content ?? [];
+  const text = blocks
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+  return {
+    content: text,
+    finishReason: json?.stop_reason === "max_tokens" ? "length" : json?.stop_reason,
+    hasOutput: blocks.length > 0,
+  };
+}
+
+/** Made once per process: an empty directory, so no project context loads. */
+let cliCwd: string | null = null;
+
+/** One call through `claude -p`. See CLI_DEFAULT_MODEL for why a subprocess. */
+function cliComplete(
+  binary: string,
+  messages: LlmMessage[],
+  timeoutMs: number
+): Promise<LlmResult> {
+  const system = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  const prompt = messages
+    .filter((m) => m.role !== "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  const effort = reasoningEffort();
+  const args = [
+    "-p",
+    "--output-format",
+    "json",
+    "--model",
+    llmModel(),
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--setting-sources",
+    "project",
+    "--disable-slash-commands",
+    "--no-session-persistence",
+    ...(system ? ["--system-prompt", system] : []),
+    ...(effort ? ["--effort", effort] : []),
+  ];
+  cliCwd ??= mkdtempSync(join(tmpdir(), "brain-llm-"));
+  return runClaude(binary, args, prompt, timeoutMs, cliCwd);
+}
+
+/**
+ * Run the `claude` binary once with `input` on stdin and read its one JSON result. Shared
+ * by the single completion above and the Night Shift's research agent, which differ only
+ * in their arguments.
+ */
+export function runClaude(
+  binary: string,
+  args: string[],
+  input: string,
+  timeoutMs: number,
+  cwd: string,
+  /** The child's whole environment. Default: this process's, secrets and all. */
+  env?: NodeJS.ProcessEnv
+): Promise<LlmResult> {
+  return new Promise((resolve) => {
+    // stderr ignored rather than piped: an unread pipe that fills up blocks the child, and
+    // every failure is printed as JSON on stdout anyway.
+    const child = spawn(binary, args, {
+      cwd,
+      env: env ?? process.env,
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    let stdout = "";
+    // Resolves on the timer, not on the child's exit: Claude Code handles SIGTERM itself
+    // (it exits 143 after running its SessionEnd hooks), so the exit can lag the kill.
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve({ ok: false, reason: "error", detail: `no answer within ${timeoutMs} ms` });
+    }, timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => (stdout += chunk));
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      logger.error({ err }, "brain llm: the claude CLI did not start");
+      resolve({ ok: false, reason: "error", detail: "the claude CLI did not start" });
+    });
+    child.on("close", () => {
+      clearTimeout(timer);
+      resolve(cliOutcome(stdout));
+    });
+    // A child that never started closes its stdin, and writing to it then raises EPIPE as
+    // an unhandled 'error' event. The 'error' handler above already reports the failure.
+    child.stdin.on("error", () => {});
+    child.stdin.end(input);
+  });
+}
+
+/**
+ * What `claude -p --output-format json` printed, as an LlmResult.
+ *
+ * Measured 2026-09-24 on v2.1.281: EVERY outcome prints one JSON object on stdout, errors
+ * included. A failure carries `is_error: true`, the message in `result` and the HTTP status
+ * in `api_error_status` (404 for an unknown model, null for "Not logged in"), while
+ * `subtype` still reads "success", so `is_error` is the only field that separates them.
+ */
+export function cliOutcome(stdout: string): LlmResult {
+  let json: {
+    is_error?: unknown;
+    result?: unknown;
+    stop_reason?: unknown;
+    api_error_status?: unknown;
+  } | null = null;
+  try {
+    json = JSON.parse(stdout);
+  } catch {
+    json = null;
+  }
+  if (!json || typeof json !== "object") {
+    logger.error({ chars: stdout.length }, "brain llm: the claude CLI printed no result");
+    return { ok: false, reason: "error", detail: "the claude CLI printed no result" };
+  }
+  const text = typeof json.result === "string" ? json.result : "";
+  if (json.is_error) {
+    const detail = text.slice(0, 300) || "the claude CLI reported an error";
+    logger.warn({ status: json.api_error_status, detail }, "brain llm: the claude CLI failed");
+    /**
+     * A SUBSCRIPTION LIMIT RESETS IN HOURS, so it is reported as the daily kind: no caller
+     * should wait for it. Claude Code has already retried a passing 429 itself before it
+     * gives up and prints this. The words are matched as well as the status because the
+     * one seen in production, "You've hit your session limit · resets 9:40pm (UTC)"
+     * (generate-fix, 2026-09-19), was only ever read as text.
+     */
+    if (json.api_error_status === 429 || /hit your .*limit|usage limit/i.test(text)) {
+      return { ok: false, reason: "rate_limited", detail, dailyQuota: true };
+    }
+    if (json.api_error_status === 529 || /overloaded/i.test(text)) {
+      return { ok: false, reason: "overloaded", detail, retryAfterMs: OVERLOAD_RETRY_MS };
+    }
+    return { ok: false, reason: "error", detail };
+  }
+  if (!text.trim()) {
+    logger.error({}, "brain llm: the claude CLI returned no content");
+    return { ok: false, reason: "error", detail: "empty completion" };
+  }
+  return { ok: true, text: text.trim(), truncated: json.stop_reason === "max_tokens" };
 }

@@ -9,7 +9,7 @@ import {
   sourceLabel,
 } from "@features/admin/server/next-level";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 export async function GET(request: Request) {
@@ -58,9 +58,10 @@ export async function GET(request: Request) {
         `/rest/v1/personal_report?select=id,survey_submission_id,created_date_time&created_date_time=gte.${since}&order=created_date_time.desc`,
         { headers: { Range: "0-49999" } }
       ),
-      supabaseFetch(`/rest/v1/report_session?select=personal_report_id,started_at`, {
-        headers: { Range: "0-49999" },
-      }),
+      // Paged: 11,224 sessions, past the 1,000-row cap.
+      fetchAllRows<{ personal_report_id: number; started_at: string }>(
+        `/rest/v1/report_session?select=personal_report_id,started_at&order=personal_report_id.asc`
+      ),
       supabaseFetch(`/rest/v1/report_access_email?select=id,personal_report_id`, {
         headers: { Range: "0-49999" },
       }),
@@ -83,7 +84,7 @@ export async function GET(request: Request) {
       !waitlistRes.ok ||
       !submissionsRes.ok ||
       !reportsRes.ok ||
-      !sessionsRes.ok ||
+      sessionsRes === null ||
       !sharedRes.ok ||
       !partialsRes.ok ||
       !scoringRes.ok ||
@@ -110,10 +111,7 @@ export async function GET(request: Request) {
       survey_submission_id: number;
       created_date_time: string;
     }>;
-    const sessions = (await sessionsRes.json()) as Array<{
-      personal_report_id: number;
-      started_at: string;
-    }>;
+    const sessions = sessionsRes;
     const shared = (await sharedRes.json()) as Array<{
       id: number;
       personal_report_id: number;

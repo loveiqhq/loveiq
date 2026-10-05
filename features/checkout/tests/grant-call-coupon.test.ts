@@ -53,7 +53,7 @@ vi.mock("@shared/emails/unsubscribe-token", async (importOriginal) => ({
 vi.mock("@features/report/server/emails/nurture/post-call-coupon", () => ({
   postCallCouponEmail: (...args: unknown[]) => mockPostCallCouponEmail(...args),
 }));
-vi.mock("@features/booking/server/calendly", () => ({
+vi.mock("@features/booking/server/events", () => ({
   insertBookingEvent: (...args: unknown[]) => mockInsertBookingEvent(...args),
 }));
 vi.mock("resend", () => ({

@@ -13,7 +13,7 @@ import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
 import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
 import { getCouponIdForStage, mintUserPromoCode } from "@features/checkout/server/promoCodes";
-import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
@@ -267,10 +267,14 @@ async function sendPurchaseEmail({
   // single report CTA inside the template).
   const coreArchetypes =
     plan === "core" ? await lookupTopThreeArchetypesForSubmission(submissionId) : undefined;
-  const variant =
-    plan === "essentials" || plan === "core"
-      ? "a"
-      : pickEmailVariant(recipient.email, `purchase-${plan}`);
+  /**
+   * `essentials` and `core` are NOT under test — they have one template, and the
+   * "a" here is a default, not an arm. Tagging them as an experiment would put a
+   * one-armed test in the results with a 100% share and no comparison, which
+   * reads as a winner.
+   */
+  const purchaseExperiment = plan === "essentials" || plan === "core" ? null : `purchase-${plan}`;
+  const variant = purchaseExperiment ? pickEmailVariant(recipient.email, purchaseExperiment) : "a";
 
   // The A copy (Figma 1382:2556) names no archetype, because on the main path the
   // reader buys their own ("Only Your Highest Archetype"); one bought from another
@@ -329,6 +333,8 @@ async function sendPurchaseEmail({
         subject: tpl.subject,
         html: tpl.html,
         text: tpl.text,
+        // Echoed back on every Resend webhook, which is how the A/B result is read.
+        ...(purchaseExperiment ? { tags: emailExperimentTags(purchaseExperiment, variant) } : {}),
         headers: {
           "X-LoveIQ-Variant": variant,
           ...(unsubscribeUrl && {
@@ -1185,6 +1191,22 @@ async function syncCheckoutSessionPayment({
   }
 
   const amount = toAmount(settledSession.amount_total);
+
+  /**
+   * Whether this payment is one of OURS rather than a customer's — the same test that
+   * decides the `is_test` column, so the Slack line and the database never disagree.
+   *
+   * It is computed here rather than at each call site because three of them already
+   * recomputed it independently and the Slack alerts did not compute it at all: in the
+   * fortnight to 2026-09-14, THIRTY-FIVE of thirty-eight ":tag: Promo redeemed (100%
+   * off)" pings in #prod-alerts were internal sandbox runs, indistinguishable from a
+   * real one. A channel that cries wolf 92% of the time is a channel nobody reads.
+   */
+  const isInternalPayment = isStaffEmail(
+    settledSession.customer_details?.email ?? settledSession.customer_email ?? null
+  );
+  /** Prefix for any ops line about this payment. Empty for real money. */
+  const internalTag = isInternalPayment ? ":test_tube: [internal] " : "";
   const pricingQuoteIdRaw = settledSession.metadata?.pricingQuoteId;
   const pricingQuoteId =
     typeof pricingQuoteIdRaw === "string" && /^\d+$/.test(pricingQuoteIdRaw)
@@ -1444,9 +1466,7 @@ async function syncCheckoutSessionPayment({
         consentGranted: settledSession.metadata?.gaAnalyticsConsent === "1",
         transactionId: settledSession.id,
         value: amount ?? 0,
-        isTest: isStaffEmail(
-          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
-        ),
+        isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         itemName: getReportPurchasePlanTitle(plan),
         params: {
@@ -1472,9 +1492,7 @@ async function syncCheckoutSessionPayment({
         email: recipient.email,
         transactionId: settledSession.id,
         value: amount ?? 0,
-        isTest: isStaffEmail(
-          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
-        ),
+        isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         plan,
         itemName: getReportPurchasePlanTitle(plan),
@@ -1501,7 +1519,7 @@ async function syncCheckoutSessionPayment({
         await notifySlack({
           channel: "ops",
           kind: `stripe_risk_${chargeDetails.riskLevel}`,
-          text: `${urgentIcon} Stripe Radar *${chargeDetails.riskLevel}* risk on payment #${paymentId} (score ${chargeDetails.riskScore ?? "?"}). Fulfilled; review for proactive refund / contact.`,
+          text: `${internalTag}${urgentIcon} Stripe Radar *${chargeDetails.riskLevel}* risk on payment #${paymentId} (score ${chargeDetails.riskScore ?? "?"}). Fulfilled; review for proactive refund / contact.`,
           username: "ops_alerts",
         });
       }
@@ -1522,7 +1540,7 @@ async function syncCheckoutSessionPayment({
         await notifySlack({
           channel: "ops",
           kind: "promo_redeemed",
-          text: `:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
+          text: `${internalTag}:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
           username: "ops_alerts",
         });
       }
@@ -1534,7 +1552,7 @@ async function syncCheckoutSessionPayment({
     await notifySlack({
       channel: "ops",
       kind: "stripe_payment_failed",
-      text: `:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
+      text: `${internalTag}:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
       username: "ops_alerts",
     });
   }

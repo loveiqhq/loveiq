@@ -11,19 +11,24 @@ import { expandRelativePeriods, periodAnchor } from "@features/brain/server/peri
  * 20260825215317_brain_chunk.sql). What lives HERE is the shaping that SQL is a
  * clumsy place for, and that measurably changes answer quality:
  *
- *   1. DEDUPE BY PARENT. Long docs and long commit messages are stored as several
- *      chunks, and a query that matches one part usually matches its siblings.
- *      Measured on this corpus, "how do I add a new landing section" returned the
- *      same commit at ranks 2 AND 3 -- which wastes prompt budget on a duplicate
- *      and shows the reader the same citation twice.
- *   2. SOURCE DIVERSITY. There are 1,475 commit chunks against 454 doc chunks, and
- *      commit titles are short subject lines that score well on word-similarity.
- *      So commits crowd the top even when the authoritative answer is a doc: for
- *      "why is the data retention purge turned off" the CLAUDE.md
- *      "Postponed / TODO" section -- which literally answers it -- placed 4th
- *      behind three commits. Rather than invent a fudge factor per source, this
- *      caps how much of the result set any one source may take, so the model sees
- *      the policy doc AND the history and can pick.
+ *   1. DEDUPE BY PARENT. A long document is stored as several chunks, and a query
+ *      that matches one part usually matches its siblings. Measured, "how do I add
+ *      a new landing section" returned the same document at ranks 2 AND 3 -- which
+ *      wastes prompt budget on a duplicate and shows the reader the same citation
+ *      twice.
+ *   2. SOURCE DIVERSITY. One source can crowd the top even when the authoritative
+ *      answer is elsewhere: for "why is the data retention purge turned off" the
+ *      CLAUDE.md "Postponed / TODO" section -- which literally answers it --
+ *      placed 4th. Rather than invent a fudge factor per source, this caps how
+ *      much of the result set any one source may take.
+ *
+ *      BOTH EXAMPLES ABOVE WERE MEASURED AGAINST GIT COMMITS, which this corpus no
+ *      longer holds: `ce785e83` stopped indexing them on 2026-09-09, after finding
+ *      that six of eight questions a founder actually asks had a commit as their
+ *      top hit and not one of those commits contained the answer. The shaping is
+ *      kept because the failure mode is not specific to commits -- `ga4` took 12 of
+ *      14 slots on one measured question -- but the numbers that motivated it are
+ *      history, not a description of what is in there now.
  */
 
 export interface BrainChunk {
@@ -272,6 +277,14 @@ export interface RetrieveShaping {
   /** Source -> how many of its matches were cut to make room for other sources. */
   heldBack?: Map<string, number>;
   /**
+   * Source -> its best-scoring row among those cut. A count says "drive had one more";
+   * this says the one more scored 2.52 when the page went down to 1.73, which is the
+   * difference between a reader shrugging and a reader fetching it. Measured 2026-09-23:
+   * the answer to "what is the record label strategy for therapists" was exactly such a
+   * row, and four attempts to fix the ranking itself each broke other questions.
+   */
+  heldBackBest?: Map<string, { sourceId: string; score: number }>;
+  /**
    * How many candidates were dropped as another part or occurrence of something already
    * in the list.
    *
@@ -326,6 +339,19 @@ export const ARRAY_META_KEYS = new Set([
   // `mcp-array-keys-all-handled` probe reads the live corpus and fails when one is
   // missing, so this cannot drift again unnoticed.
   "links",
+]);
+
+/**
+ * Array keys a filter cannot usefully reach, each with where to go instead.
+ *
+ * `disputed_by` (the decision radar, 2026-09-26) holds {id, on, why} objects, so a bare
+ * value never matches it by containment and wrapping it in an array does not help either.
+ * A filter on it is refused with this pointer rather than run, because an empty result
+ * would read as "no decision is disputed". The MCP battery's metadata-shapes probe accepts
+ * a key listed here as handled.
+ */
+export const UNFILTERABLE_META_KEYS = new Map<string, string>([
+  ["disputed_by", "decision_conflicts lists the recorded decisions that may not both stand"],
 ]);
 
 export function normaliseMetaFilter(
@@ -552,8 +578,14 @@ export async function retrieve(
   const cut = deferred.slice(backfilled);
   if (cut.length > 0) {
     const byySource = new Map<string, number>();
-    for (const row of cut) byySource.set(row.source, (byySource.get(row.source) ?? 0) + 1);
+    const best = new Map<string, { sourceId: string; score: number }>();
+    for (const row of cut) {
+      byySource.set(row.source, (byySource.get(row.source) ?? 0) + 1);
+      // `cut` is in score order, so the first row seen per source is its best.
+      if (!best.has(row.source)) best.set(row.source, { sourceId: row.sourceId, score: row.score });
+    }
     shaping.heldBack = byySource;
+    shaping.heldBackBest = best;
   }
 
   const page = offset > 0 ? picked.slice(offset) : picked;

@@ -325,6 +325,13 @@ export function orderedOptionGroups(
  * Pure and total: returns a permutation of the input — same length, same members, no
  * duplicates — so callers can treat it as a reordering and nothing else.
  */
+/**
+ * Answers that stay at the bottom of a shuffled list: "None of these", "Something else",
+ * "Other", "Nothing major…". Shuffled in among the rest they read as one more option, and
+ * a reader scanning for "none" has to read every line to find it.
+ */
+const ANCHORED = /^(none of these|nothing major|something else|other)\b/i;
+
 export function orderedOptions(question: SurveyQuestion, sessionId: string): string[] {
   const groups = orderedOptionGroups(question, sessionId);
   if (groups) return groups.flatMap((group) => group.options);
@@ -336,5 +343,9 @@ export function orderedOptions(question: SurveyQuestion, sessionId: string): str
   if (!sessionId) return question.options;
   if (!isRandomised(question.qId) || question.options.length < 2) return question.options;
 
-  return shuffled(question.options, `${sessionId}:${question.qId}`);
+  const shuffledRest = shuffled(
+    question.options.filter((o) => !ANCHORED.test(o)),
+    `${sessionId}:${question.qId}`
+  );
+  return [...shuffledRest, ...question.options.filter((o) => ANCHORED.test(o))];
 }

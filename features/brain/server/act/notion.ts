@@ -327,6 +327,11 @@ export async function createNotionPage(input: {
   title: string;
   content?: string;
   properties?: Record<string, unknown>;
+  /**
+   * Properties already in Notion's own shape, for code that knows the ids a caller cannot:
+   * a relation to a page it just looked up. Never filled from what a person typed.
+   */
+  rawProperties?: Record<string, unknown>;
 }): Promise<CreatedPage> {
   const given = input.parent.trim();
   const { blocks, dropped } = input.content ? toBlocks(input.content) : { blocks: [], dropped: 0 };
@@ -343,7 +348,10 @@ export async function createNotionPage(input: {
   const body = db
     ? {
         parent: { database_id: db.id },
-        properties: buildProperties(db, input.title, input.properties ?? {}),
+        properties: {
+          ...buildProperties(db, input.title, input.properties ?? {}),
+          ...input.rawProperties,
+        },
         ...(blocks.length ? { children: blocks } : {}),
       }
     : {
@@ -352,7 +360,7 @@ export async function createNotionPage(input: {
         ...(blocks.length ? { children: blocks } : {}),
       };
 
-  if (!db && input.properties && Object.keys(input.properties).length > 0) {
+  if (!db && [input.properties, input.rawProperties].some((p) => p && Object.keys(p).length > 0)) {
     // A page has no properties but a title, so silently dropping them would lose the
     // status or due date the caller believed they had set.
     throw new NotionTargetError(
@@ -368,4 +376,31 @@ export async function createNotionPage(input: {
     parentLabel: db ? `${db.title} (database)` : "page",
     droppedBlocks: dropped,
   };
+}
+
+/** Every row of one database, a page of 100 at a time, as Notion returns them. */
+export async function queryNotionDatabase(
+  databaseId: string
+): Promise<Array<{ id: string; url?: string; properties: Record<string, unknown> }>> {
+  const rows: Array<{ id: string; url?: string; properties: Record<string, unknown> }> = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 50; page++) {
+    const res = await notion(`/databases/${databaseId}/query`, {
+      method: "POST",
+      body: { page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) },
+    });
+    rows.push(...((res.results as typeof rows | undefined) ?? []));
+    if (!res.has_more) return rows;
+    cursor = String(res.next_cursor);
+  }
+  // 5,000 rows is far past any database here; a partial read is refused, not returned.
+  throw new Error(`notion_query_too_large:${databaseId}`);
+}
+
+/** Set properties on an existing page, in Notion's own shape. */
+export async function updateNotionPage(
+  pageId: string,
+  properties: Record<string, unknown>
+): Promise<void> {
+  await notion(`/pages/${pageId}`, { method: "PATCH", body: { properties } });
 }

@@ -144,18 +144,17 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(body.summaries["72h_no_unlock"].sent).toBe(0);
   });
 
-  // The 3 fetchCandidatesByAge calls are dispatched via Promise.all in fixed
-  // order: 6h, 72h, 78h. We mock by call-index — robust against URL encoding
-  // of the timestamp differences.
+  // ONE candidate window remains. The 78h call-invite stage was removed with the
+  // Calendly integration on 2026-09-14, so `fetchCandidatesByAge` is called once
+  // rather than dispatched through Promise.all. Still mocked by call-index, which
+  // is robust against URL encoding of the timestamp.
   function mockCandidateWindows({
     seventyTwoHour,
-    seventyEightHour = [],
     quoteMetadata = {},
     accessToken = "rpt_AbCdEfGhIjKlMnOpQrSt",
     patchSpy,
   }: {
     seventyTwoHour: unknown[];
-    seventyEightHour?: unknown[];
     quoteMetadata?: Record<string, unknown>;
     accessToken?: string | null;
     patchSpy?: () => unknown;
@@ -164,9 +163,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
       if (url.includes("/rest/v1/personal_report")) {
         personalReportCalls += 1;
-        // Promise.all order (pricing 2.0): 1 = 72h window, 2 = 78h window.
         if (personalReportCalls === 1) return Promise.resolve(jsonResponse(seventyTwoHour));
-        if (personalReportCalls === 2) return Promise.resolve(jsonResponse(seventyEightHour));
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes("/rest/v1/report_price_quote") && init?.method !== "PATCH") {
@@ -370,121 +367,5 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.summaries["72h_no_unlock"].sent).toBe(1);
-  });
-
-  it("78h candidate sends the Calendly call invite, mints NO promo, logs booking_event", async () => {
-    // The 78h call-invite stage is gated off by default; enable it + provide the
-    // operator Calendly URL (now env-driven, no longer hardcoded) for this test.
-    process.env.NURTURE_78H_CALL_ENABLED = "true";
-    process.env.NURTURE_78H_CALENDLY_URL = "https://calendly.com/loveiq-team/20min";
-    const candidate = {
-      id: 78,
-      survey_submission_id: 780,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "call@example.com", first_name: "Cal" } },
-    };
-    mockCandidateWindows({
-      seventyTwoHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(1);
-
-    // No discount stage → no Stripe promo minted.
-    expect(mockStripePromoCreate).not.toHaveBeenCalled();
-
-    expect(mockResendSend).toHaveBeenCalledTimes(1);
-    const sent = mockResendSend.mock.calls[0][0];
-    expect(sent.to).toBe("call@example.com");
-    expect(sent.headers["X-LoveIQ-Stage"]).toBe("78h_no_unlock");
-    expect(sent.html).toContain("calendly.com/loveiq-team/20min");
-    expect(sent.html).toContain("utm_campaign=78h_no_unlock");
-    expect(sent.html).toContain("email=call%40example.com");
-
-    // A booking_event call_invite_sent row was written.
-    const bookingCall = mockFetchWithTimeout.mock.calls.find(
-      ([url, init]) =>
-        String(url).includes("/rest/v1/booking_event") &&
-        (init as { method?: string } | undefined)?.method === "POST"
-    );
-    expect(bookingCall).toBeTruthy();
-    const bookingBody = JSON.parse((bookingCall![1] as { body: string }).body);
-    expect(bookingBody.event_type).toBe("call_invite_sent");
-    expect(bookingBody.survey_submission_id).toBe(780);
-    expect(bookingBody.personal_report_id).toBe(78);
-  });
-
-  it("78h candidate already sent is skipped (idempotent)", async () => {
-    process.env.NURTURE_78H_CALL_ENABLED = "true";
-    process.env.NURTURE_78H_CALENDLY_URL = "https://calendly.com/loveiq-team/20min";
-    const candidate = {
-      id: 79,
-      survey_submission_id: 790,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "again@example.com", first_name: "Ag" } },
-    };
-    mockCandidateWindows({
-      seventyTwoHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: ["78h_no_unlock"] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
-    expect(body.summaries["78h_no_unlock"].skippedAlreadySent).toBe(1);
-    expect(mockResendSend).not.toHaveBeenCalled();
-  });
-
-  it("78h call invite is paused by default (NURTURE_78H_CALL_ENABLED unset)", async () => {
-    // No product person to take the calls → the stage is gated off unless the
-    // env flag is explicitly "true". A fresh 78h candidate must NOT be emailed.
-    const candidate = {
-      id: 81,
-      survey_submission_id: 810,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "paused@example.com", first_name: "Pz" } },
-    };
-    mockCandidateWindows({
-      seventyTwoHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
-    expect(mockResendSend).not.toHaveBeenCalled();
-  });
-
-  it("78h stays paused when enabled but NURTURE_78H_CALENDLY_URL is unset (no dead link)", async () => {
-    // Belt-and-braces after the call host was offboarded: even with the stage
-    // flag flipped on, a missing booking URL must NOT send an email pointing at
-    // a dead/empty Calendly link. Set NURTURE_78H_CALENDLY_URL to re-enable.
-    process.env.NURTURE_78H_CALL_ENABLED = "true";
-    delete process.env.NURTURE_78H_CALENDLY_URL;
-    const candidate = {
-      id: 82,
-      survey_submission_id: 820,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "nourl@example.com", first_name: "No" } },
-    };
-    mockCandidateWindows({
-      seventyTwoHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
-    expect(mockResendSend).not.toHaveBeenCalled();
   });
 });

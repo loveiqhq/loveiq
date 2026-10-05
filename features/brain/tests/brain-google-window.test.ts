@@ -69,6 +69,8 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 import { ingestGa4 } from "@features/brain/server/ingest/google";
 
 const STAMP = "2026-08-28T04:47:00.000Z";
+/** `isoDaysAgo` counts back from the real clock, so the span is measured from today. */
+const TODAY = new Date().toISOString().slice(0, 10);
 
 describe("the nightly window must not delete the history", () => {
   beforeEach(() => {
@@ -155,9 +157,23 @@ describe("the nightly window must not delete the history", () => {
     // totalled from the fetched rows and a mid-period start produced a mid-period
     // "month". Measured in production 2026-08-28: August read 23 clicks against a
     // true 70. So assert the floor and the period boundary, not an exact number.
-    const nightlyDays = nightly
-      .flatMap((b) => [...b.matchAll(/(\d+)daysAgo/g)].map((m) => Number(m[1])))
-      .filter((n) => Number.isFinite(n));
+    /**
+     * ABSOLUTE START DATES, NOT `NdaysAgo`. GA4 resolves a relative date in the
+     * property's timezone, which is ahead of UTC, while every day count here is UTC —
+     * so between the property rolling over and UTC doing the same, `NdaysAgo` landed a
+     * day late and cut the 1st off the month. Measured in production 2026-09-20:
+     * `monthly:2026-09` read 6,404 sessions against 6,508 in September's own daily
+     * chunks, exactly the 104 of 1 September.
+     */
+    const spanDays = (bodies: string[]) =>
+      bodies
+        .flatMap((b) => [...b.matchAll(/"startDate":"(\d{4}-\d{2}-\d{2})"/g)].map((m) => m[1]!))
+        .map((d) =>
+          Math.round((Date.parse(`${TODAY}T00:00:00Z`) - Date.parse(`${d}T00:00:00Z`)) / 86_400_000)
+        );
+
+    expect(nightly.some((b) => /daysAgo/.test(b))).toBe(false);
+    const nightlyDays = spanDays(nightly);
     expect(nightlyDays.length).toBeGreaterThan(0);
     expect(Math.max(...nightlyDays)).toBeGreaterThanOrEqual(10);
     // …and never so wide that the nightly run turns into a backfill.
@@ -168,9 +184,29 @@ describe("the nightly window must not delete the history", () => {
     const back = vi
       .mocked(fetchWithTimeout)
       .mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""));
-    const backDays = back
-      .flatMap((b) => [...b.matchAll(/(\d+)daysAgo/g)].map((m) => Number(m[1])))
-      .filter((n) => Number.isFinite(n));
+    expect(back.some((b) => /daysAgo/.test(b))).toBe(false);
+    const backDays = spanDays(back);
     expect(Math.max(...backDays)).toBeGreaterThanOrEqual(480);
+  });
+
+  /**
+   * THE BUG THIS WHOLE ARRANGEMENT EXISTS FOR.
+   *
+   * A monthly chunk is totalled from the rows the run fetched, so a window that starts
+   * on the 2nd produces a "September total" missing 1 September — and it did, nightly:
+   * `monthly:2026-09` read 6,404 against 6,508 in September's own daily chunks. The
+   * start date has to reach the 1st of the current month, whatever the hour.
+   */
+  it("always reaches the first of the current month", async () => {
+    const { fetchWithTimeout } = await import("@shared/http/fetch-with-timeout");
+    vi.mocked(fetchWithTimeout).mockClear();
+    await ingestGa4(STAMP, () => false);
+    const starts = vi
+      .mocked(fetchWithTimeout)
+      .mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""))
+      .flatMap((b) => [...b.matchAll(/"startDate":"(\d{4}-\d{2}-\d{2})"/g)].map((m) => m[1]!));
+    expect(starts.length).toBeGreaterThan(0);
+    const monthStart = `${TODAY.slice(0, 7)}-01`;
+    for (const start of starts) expect(start <= monthStart).toBe(true);
   });
 });

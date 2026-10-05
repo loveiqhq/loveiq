@@ -6,6 +6,7 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfToken } from "@shared/http/csrf";
+import { maskEmail } from "@shared/observability/slack";
 import logger from "@shared/observability/logger";
 
 const RESEND_TIMEOUT_MS = 5_000;
@@ -102,7 +103,7 @@ const sendSlackContactNotification = async (payload: {
   }
 
   // Mask PII to avoid sending full details to Slack
-  const maskedEmail = payload.email.replace(/^(.).+(@.+)$/, "$1***$2");
+  const maskedEmail = maskEmail(payload.email);
   const maskedPhone = payload.phone
     ? payload.phone.length > 6
       ? payload.phone.slice(0, 3) + "***" + payload.phone.slice(-2)

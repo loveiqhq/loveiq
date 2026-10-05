@@ -31,12 +31,13 @@ export class GoogleDocRefusal extends Error {}
 export class DelegationNotGranted extends Error {
   constructor(scope: string) {
     super(
-      `Google refused a delegated token for ${scope} even with a working credential, so ` +
-        `the scope is not authorised for this workspace. Someone with Workspace admin ` +
-        `access adds it under Security → Access and data control → API controls → Manage ` +
-        `Domain Wide Delegation, for client id 116552495667268648554. TWO SEPARATE ` +
-        `SWITCHES are needed and this is only one of them: the other is the Docs API ` +
-        `being enabled on the Cloud project. Nothing was written.`
+      `Google gave no delegated token for ${scope}. The server log ` +
+        `names the step. A refused token exchange means the scope is not authorised for this ` +
+        `workspace: someone with Workspace admin access adds it under Security → Access and ` +
+        `data control → API controls → Manage Domain Wide Delegation, for client id ` +
+        `116552495667268648554, and the Docs API must also be enabled on the Cloud project ` +
+        `(TWO SEPARATE SWITCHES). A refused signJwt means the service account may not sign. ` +
+        `A timeout clears on its own; try again. Nothing was written.`
     );
   }
 }

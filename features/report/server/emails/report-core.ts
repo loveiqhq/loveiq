@@ -1,4 +1,9 @@
-import { EMAIL_FONT, escapeHtml, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 import { isArchetypeName, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 function buildArchetypeUrl(reportUrl: string, archetype: string): string {
@@ -134,6 +139,7 @@ export function reportCoreEmail({
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

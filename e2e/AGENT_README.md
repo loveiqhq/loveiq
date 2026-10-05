@@ -6,6 +6,7 @@ End-to-end browser tests using Playwright. Tests run against a production build 
 
 - Run with `npm run test:e2e` (builds prod, starts server, runs all browsers).
 - E2E tests belong in CI only, never in pre-push hooks (they take 3-6 minutes).
+- A spec that taps its way through a page calls `instantScroll(page)` (`fixtures/instant-scroll.ts`) before navigating. Playwright scrolls a target into view before each click, the site's smooth scrolling animates that scroll, and in WebKit the release can land after the page has moved, so the click is lost.
 - Use `data-testid` attributes for stable selectors. When a locator matches multiple elements (e.g., nav links in desktop + mobile menus), use `.first()` or scope to a container.
 
 ## Test Files

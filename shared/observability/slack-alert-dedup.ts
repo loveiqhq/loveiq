@@ -47,10 +47,14 @@ export async function tryClaimSlackAlert(
       timeoutMs: 5000,
     });
 
+    // ERROR, not warn, on both failure paths: a failed claim drops the alert, so
+    // a broken claim table silences every alert that dedups through it at once.
+    // Error logs reach #prod-alerts through logger.ts, which does not claim.
+    // 471 claims in the 24h to 2026-09-25 and none failed, so this is not noise.
     if (!response.ok) {
-      logger.warn(
+      logger.error(
         { kind, entityType, entityId, status: response.status },
-        "tryClaimSlackAlert: RPC non-2xx"
+        `tryClaimSlackAlert: RPC non-2xx, so the ${kind} alert was dropped`
       );
       return false;
     }
@@ -59,7 +63,10 @@ export async function tryClaimSlackAlert(
     const body = await response.json().catch(() => false);
     return body === true;
   } catch (err) {
-    logger.warn({ err, kind, entityType, entityId }, "tryClaimSlackAlert: error");
+    logger.error(
+      { err, kind, entityType, entityId },
+      `tryClaimSlackAlert: claim table unreachable, so the ${kind} alert was dropped`
+    );
     return false;
   }
 }
@@ -136,7 +143,8 @@ export function startCronTimer(cronName: string, maxDurationSec: number): () => 
     if (!claimed) return;
     const pct = Math.round((elapsedMs / budgetMs) * 100);
     await notifySlack({
-      channel: "ops",
+      // Brain crons keep their noise in their own channel. See FALLBACK_BY_CHANNEL.
+      channel: cronName.startsWith("brain-") ? "brain" : "ops",
       kind: "cron_slow",
       text: `:warning: Cron *${cronName}* used ${pct}% of its ${maxDurationSec}s budget (${Math.round(elapsedMs / 1000)}s). Approaching timeout — investigate slowness.`,
       username: "ops_alerts",

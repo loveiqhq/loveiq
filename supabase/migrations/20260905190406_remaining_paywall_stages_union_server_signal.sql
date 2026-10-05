@@ -68,6 +68,19 @@ BEGIN
   IF def IS NULL THEN RAISE EXCEPTION 'velocity not found'; END IF;
   old_t := E'    SELECT survey_submission_id, MIN(event_time) AS first_at\n    FROM analytics_event\n    WHERE event_type = ''paywall_initiated'' AND survey_submission_id IS NOT NULL\n    GROUP BY survey_submission_id';
   new_t := E'    SELECT survey_submission_id, MIN(reached_at) AS first_at\n    FROM (\n      SELECT survey_submission_id, event_time AS reached_at FROM analytics_event\n       WHERE event_type = ''paywall_initiated'' AND survey_submission_id IS NOT NULL\n      UNION ALL\n      SELECT survey_submission_id, paywall_reached_at AS reached_at FROM report_price_quote\n       WHERE paywall_reached_at IS NOT NULL AND survey_submission_id IS NOT NULL\n    ) paywall_hits\n    GROUP BY survey_submission_id';
+
+  -- Fall back to the shape 20260529154209_funnel_v3_more_charts.sql actually
+  -- writes. The anchor above keeps `WHERE ... AND survey_submission_id IS NOT
+  -- NULL` on one line; the migration that defines this function splits it
+  -- across two. So on a replay the anchor matches nothing and this aborts the
+  -- push with 'velocity: first_paywall CTE matched neither shape'.
+  --
+  -- Production's body therefore did not come from that migration. That gap is
+  -- real and is NOT fixed here; this only stops the formatting assumption from
+  -- breaking a rebuild. The RAISE below still fires if neither shape matches.
+  IF position(old_t in def) = 0 AND position(new_t in def) = 0 THEN
+    old_t := E'    SELECT survey_submission_id, MIN(event_time) AS first_at\n    FROM analytics_event\n    WHERE event_type = ''paywall_initiated''\n      AND survey_submission_id IS NOT NULL\n    GROUP BY survey_submission_id';
+  END IF;
   IF position(new_t in def) = 0 THEN
     IF position(old_t in def) = 0 THEN RAISE EXCEPTION 'velocity: first_paywall CTE matched neither shape'; END IF;
     newdef := replace(def, old_t, new_t);

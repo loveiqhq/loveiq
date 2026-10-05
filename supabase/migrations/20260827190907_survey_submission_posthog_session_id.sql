@@ -25,7 +25,7 @@ COMMENT ON COLUMN survey_submission.posthog_session_id IS
 --  that is NULL in every existing row — the build is empty and the lock is
 --  momentary on 1,748 rows. CONCURRENTLY is not an option regardless: Supabase runs
 --  each migration inside a transaction, and CREATE INDEX CONCURRENTLY is illegal
---  there. Same shape as 20260506120000_survey_submission_hotjar_user_id.sql.)
+--  there. Same shape as 20260506082904_survey_submission_hotjar_user_id.sql.)
 
 -- Partial index: only the rows that have a value, matching the hotjar_user_id
 -- precedent. Supports looking a submission up FROM a recording id, which is the

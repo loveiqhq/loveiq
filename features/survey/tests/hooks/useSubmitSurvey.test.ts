@@ -320,3 +320,83 @@ describe("useSubmitSurvey does not double-count completion", () => {
     expect(completions).toHaveLength(0);
   });
 });
+
+describe("useSubmitSurvey — the end of a run", () => {
+  let originalFetch: typeof globalThis.fetch;
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    document.cookie = "__csrf=test-csrf-token; path=/";
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("clears the run's saved state on success itself, even with no engine left to do it", async () => {
+    // Regression, 2026-10-04: the cleanup lived in the engine. Back while the submit was in
+    // flight unmounted it, the finished draft stayed, and the next visit sat on a
+    // processing screen that never finished.
+    sessionStorage.setItem("loveiq-survey-session", "session-123");
+    localStorage.setItem("loveiq-report-session", "stale-session");
+    localStorage.setItem("loveiq-survey-answers", JSON.stringify({ answers: { q1: "a" } }));
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, reportToken: "rpt_abc", submissionId: 1 }),
+    });
+    const { result, unmount } = renderHook(() => useSubmitSurvey());
+    const pending = act(async () => {
+      await result.current.submit(makeAnswers(), new Date().toISOString());
+    });
+    unmount(); // the reader pressed Back
+    await pending;
+
+    expect(localStorage.getItem("loveiq-survey-answers")).toBeNull();
+    expect(localStorage.getItem("loveiq-survey-pending-completion")).toBeNull();
+    expect(localStorage.getItem("loveiq-report-session")).toBe("session-123");
+    expect(sessionStorage.getItem("loveiq-survey-session")).toBe("session-123");
+  });
+
+  it("turns a request that never answers into an error after 30 seconds", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn(
+      (_url: string, init?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError"))
+          );
+        })
+    ) as unknown as typeof fetch;
+    const { result } = renderHook(() => useSubmitSurvey());
+
+    let done: Promise<void>;
+    act(() => {
+      done = result.current.submit(makeAnswers(), new Date().toISOString());
+    });
+    expect(result.current.status).toBe("submitting");
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await done;
+    });
+
+    expect(result.current.status).toBe("error");
+    expect(result.current.errorKind).toBe("connection");
+  });
+
+  it.each([
+    [429, {}, "busy"],
+    [409, {}, "paused"],
+    [400, { error: "Invalid input", field: "email" }, "email"],
+    [400, { error: "Invalid input" }, "answers"],
+    [500, {}, "connection"],
+  ])("names why a %i failed", async (status, body, kind) => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status, json: async () => body });
+    const { result } = renderHook(() => useSubmitSurvey());
+    await act(async () => {
+      await result.current.submit(makeAnswers(), new Date().toISOString());
+    });
+    expect(result.current.errorKind).toBe(kind);
+  });
+});

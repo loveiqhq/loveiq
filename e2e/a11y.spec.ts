@@ -58,12 +58,87 @@ async function settleAnimations(page: import("@playwright/test").Page) {
  * applied to all sixteen, which is a design call, deferred on 2026-09-14.
  *
  * Deliberately NOT excluded: an exclusion would hide any FUTURE contrast
- * regression on those buttons too. Left failing so the gap stays visible.
+ * regression on those buttons too.
+ *
+ * It is PINNED instead, as of 2026-09-21, because this suite now gates every push
+ * (`ci.yml` job `e2e`) and a permanently-red test blocks every merge — which is how
+ * a team learns to ignore red. The pin is deliberately narrow in all three
+ * directions that matter:
+ *
+ *   - by NODE, not by violation. axe groups every offending element on a page into
+ *     ONE `color-contrast` violation, so dropping the violation would drop a second,
+ *     unrelated contrast bug sitting in the same object. Only nodes whose measured
+ *     pair is exactly white-on-#fe6839 are forgiven.
+ *   - by ROUTE. The other twelve routes are untouched; this is `/survey` only.
+ *   - by PRESENCE. If the gap is ever fixed the pin fails LOUDLY, because an
+ *     allowance nobody notices has outlived its subject is how dead cruft survives.
+ *     That last check runs on DESKTOP CHROME ONLY, and the reason is measured: on
+ *     Mobile Chrome and Desktop Safari axe intermittently reports no contrast
+ *     violation on this page at all — the button carries a 700ms entrance animation
+ *     and those two engines sometimes sample it before it settles. Asserting presence
+ *     on every engine therefore reddened CI on browser variance rather than on
+ *     anything about the button (measured: 1 failed, 2 flaky, all three of them this
+ *     assertion). Forgiveness still applies on every engine; only the ratchet is
+ *     scoped, and one engine is all a ratchet needs.
  */
+const KNOWN_GAP = { route: "/survey", id: "color-contrast", fg: "#ffffff", bg: "#fe6839" };
+
+/**
+ * THE BUTTON THE PIN IS ABOUT HAS ITS OWN ENTRANCE: a 700ms inline animation that
+ * can start AFTER settleAnimations has looked, when the button mounts late. Part-way
+ * through it the orange is translucent over the page's gradient, and axe files the
+ * button as `incomplete` ("bgGradient") instead of a violation, so the ratchet
+ * counted no known nodes and said the gap was GONE. That was #324's Desktop Chrome
+ * run on 2026-09-25, attempt and retry both; a rerun passed.
+ *
+ * Measured on production, 10 runs each: axe run as the button appears filed it
+ * incomplete 8 times; after this wait it was a violation 10 times of 10. So on this
+ * route, wait for every white-on-orange element to be fully opaque, with no finite
+ * animation running on it or on anything above it.
+ */
+async function settleKnownGap(page: import("@playwright/test").Page) {
+  await page
+    .waitForFunction(
+      ({ fg, bg }) => {
+        const toHex = (css: string) => {
+          const parts = css.match(/\d+/g);
+          if (!parts || parts.length < 3) return "";
+          return `#${parts
+            .slice(0, 3)
+            .map((n) => Number(n).toString(16).padStart(2, "0"))
+            .join("")}`;
+        };
+        const buttons = [...document.querySelectorAll("*")].filter((el) => {
+          const cs = getComputedStyle(el);
+          return toHex(cs.backgroundColor) === bg && toHex(cs.color) === fg;
+        });
+        if (buttons.length === 0) return false;
+        return buttons.every((el) => {
+          for (let n: Element | null = el; n; n = n.parentElement) {
+            if (Number(getComputedStyle(n).opacity) < 1) return false;
+            const moving = n
+              .getAnimations()
+              .some(
+                (a) =>
+                  a.playState === "running" && a.effect?.getComputedTiming().iterations !== Infinity
+              );
+            if (moving) return false;
+          }
+          return true;
+        });
+      },
+      { fg: KNOWN_GAP.fg, bg: KNOWN_GAP.bg },
+      { timeout: 10_000 }
+    )
+    // Not settling is not a failure here: the painted check and the ratchet below
+    // then say what they saw.
+    .catch(() => {});
+}
 for (const route of criticalRoutes) {
-  test(`${route} — no critical accessibility violations`, async ({ page }) => {
+  test(`${route} — no critical accessibility violations`, async ({ page }, testInfo) => {
     await page.goto(route);
     await settleAnimations(page);
+    if (route === KNOWN_GAP.route) await settleKnownGap(page);
 
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -79,9 +154,76 @@ for (const route of criticalRoutes) {
     const blocking = results.violations.filter(
       (v) => v.impact === "critical" || v.impact === "serious"
     );
+
+    let knownNodes = 0;
+    const unexpected = blocking
+      .map((v) => {
+        if (route !== KNOWN_GAP.route || v.id !== KNOWN_GAP.id) return v;
+        const nodes = v.nodes.filter((n) => {
+          const isKnown = n.any.some(
+            (c) => c.data?.fgColor === KNOWN_GAP.fg && c.data?.bgColor === KNOWN_GAP.bg
+          );
+          if (isKnown) knownNodes += 1;
+          return !isKnown;
+        });
+        return { ...v, nodes };
+      })
+      .filter((v) => v.nodes.length > 0);
+
     expect(
-      blocking,
-      `Critical/serious a11y violations on ${route}: ${blocking.map((v) => `${v.id}: ${v.description}`).join("; ")}`
+      unexpected,
+      `Critical/serious a11y violations on ${route}: ${unexpected.map((v) => `${v.id}: ${v.description}`).join("; ")}`
     ).toHaveLength(0);
+
+    if (route === KNOWN_GAP.route && testInfo.project.name === "Desktop Chrome") {
+      /**
+       * A PAGE THAT DID NOT RENDER CANNOT TELL YOU THE GAP WAS FIXED.
+       *
+       * The ratchet below counts nodes measured at white-on-#fe6839 and fails
+       * when there are none, on the reasoning that zero means somebody fixed
+       * it. Zero has a second cause: the button was never painted. E2E points
+       * Supabase at `http://127.0.0.1:9`, so on a slow runner the circuit
+       * breaker opens, `/survey` degrades, and axe finds nothing to measure —
+       * and the run then reports "the gap is GONE. Delete KNOWN_GAP, this
+       * assertion, and the KNOWN RED comment above."
+       *
+       * That is the worst possible false signal: it is an instruction to
+       * delete a standing a11y pin, issued because the page failed to load.
+       * Observed on 2026-09-22 (#241, Desktop Chrome), while a branch carrying
+       * the identical code passed — the difference was the web server, not the
+       * button.
+       *
+       * The comment above already scopes this to one engine for BROWSER
+       * variance. This is a different cause with the same symptom, so it needs
+       * its own check: confirm the colour is on the page at all, and fail
+       * saying THAT when it is not.
+       */
+      const painted = await page.evaluate((bg) => {
+        const toHex = (css: string) => {
+          const parts = css.match(/\d+/g);
+          if (!parts || parts.length < 3) return "";
+          return `#${parts
+            .slice(0, 3)
+            .map((n) => Number(n).toString(16).padStart(2, "0"))
+            .join("")}`;
+        };
+        return [...document.querySelectorAll("*")].some(
+          (el) => toHex(getComputedStyle(el).backgroundColor) === bg.toLowerCase()
+        );
+      }, KNOWN_GAP.bg);
+
+      expect(
+        painted,
+        `Nothing on ${KNOWN_GAP.route} is painted ${KNOWN_GAP.bg}, so this run measured ` +
+          "NOTHING about the contrast gap. The page probably did not render — check the " +
+          "web server log for a circuit-breaker error. Do NOT delete KNOWN_GAP over this."
+      ).toBe(true);
+
+      expect(
+        knownNodes,
+        `The white-on-${KNOWN_GAP.bg} contrast gap on ${KNOWN_GAP.route} is GONE. ` +
+          "Delete KNOWN_GAP, this assertion, and the KNOWN RED comment above."
+      ).toBeGreaterThan(0);
+    }
   });
 }

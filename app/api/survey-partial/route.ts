@@ -7,27 +7,21 @@ import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
+import { stampLandingArm } from "@shared/experiments/stampArm";
+import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 
 const partialSchema = z.object({
   sessionId: z.string().uuid(),
-  // Keys are question IDs (numeric, ≤~12 chars). Bound key length AND key count
-  // so a body of thousands of long junk keys can't bloat the survey_partial_save
-  // JSONB column (values were already bounded; keys/count were not). [Audit L1]
-  answers: z
-    .record(
-      z.string().min(1).max(16),
-      z.union([
-        z.string().max(1000),
-        z.array(z.string().max(500)).max(20),
-        z.number().int().min(1).max(7),
-      ])
-    )
-    .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" }),
+  // The submit's own rules (features/survey/server/answersSchema.ts): key length and
+  // count bounded [Audit L1], everything else tidied rather than refused. Refusing a
+  // draft over a long "Other" text lost the reader's only server-side copy.
+  answers: surveyAnswersSchema,
   currentIndex: z.number().int().min(0).max(200),
   startedAt: z.string().datetime(),
   // 1000 (not 500) so a Google Ads click id (gclid) captured with utm params
   // fits; column is `text`, so this is only an anti-abuse bound. See utm.ts.
-  utmTracker: z.string().max(1000).optional().nullable(),
+  // Over the bound, dropped rather than the draft refused (as on the submit).
+  utmTracker: z.string().max(1000).optional().nullable().catch(null),
   _csrf: z.string().optional(),
 });
 
@@ -94,7 +88,13 @@ export async function POST(request: Request) {
     answers: parsed.data.answers,
     current_index: parsed.data.currentIndex,
     started_at: parsed.data.startedAt,
-    utm_tracker: parsed.data.utmTracker || null,
+    /**
+     * The arm comes from the COOKIE, not from the body. A draft save is the only
+     * record that exists for someone who never finishes, so without this the
+     * mid-funnel cannot be split by experiment at all — which is exactly what
+     * "Midway Progress has no source" turned out to mean.
+     */
+    utm_tracker: await stampLandingArm(parsed.data.utmTracker),
     client_ip: ip,
     saved_at: new Date().toISOString(),
   };

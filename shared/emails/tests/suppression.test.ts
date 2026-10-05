@@ -9,7 +9,15 @@ vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
+const { mockContactsUpdate } = vi.hoisted(() => ({ mockContactsUpdate: vi.fn() }));
+vi.mock("resend", () => ({
+  Resend: class {
+    contacts = { update: mockContactsUpdate };
+  },
+}));
+
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 
 const mockFetch = vi.mocked(fetchWithTimeout);
 
@@ -22,6 +30,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   process.env.SUPABASE_URL = ENV.SUPABASE_URL;
   process.env.SUPABASE_SERVICE_ROLE_KEY = ENV.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_AUDIENCE_ID;
 });
 
 describe("isEmailSuppressed", () => {
@@ -118,14 +128,112 @@ describe("addToSuppression", () => {
     expect(body.source_channel).toBe("footer");
   });
 
-  it("does nothing when env vars are missing", async () => {
+  it("ifAbsent inserts without touching an existing row", async () => {
+    // One statement (ON CONFLICT DO NOTHING), so a refused send recorded as a
+    // bounce can never relabel a complaint, even when both land at once.
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
+    await addToSuppression("c@example.com", "hard_bounce", { ifAbsent: true });
+    const [, init] = mockFetch.mock.calls[0];
+    expect((init?.headers as Record<string, string>).Prefer).toBe("resolution=ignore-duplicates");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      email: "c@example.com",
+      reason: "hard_bounce",
+    });
+  });
+
+  it("without ifAbsent, a later write still merges into the existing row", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
+    await addToSuppression("c@example.com", "hard_bounce");
+    const [, init] = mockFetch.mock.calls[0];
+    expect((init?.headers as Record<string, string>).Prefer).toBe("resolution=merge-duplicates");
+  });
+
+  it("does nothing, and says so, when env vars are missing", async () => {
     delete process.env.SUPABASE_URL;
-    await addToSuppression("x@example.com", "complaint");
+    expect(await addToSuppression("x@example.com", "complaint")).toBe(false);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("logs error but does not throw on fetch failure", async () => {
+  it("reports a written row", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 201 } as Response);
+    expect(await addToSuppression("x@example.com", "unsubscribed")).toBe(true);
+  });
+
+  it("warns, does not throw, and reports false on a network failure", async () => {
     mockFetch.mockRejectedValueOnce(new Error("db down"));
-    await expect(addToSuppression("x@example.com", "unsubscribed")).resolves.toBeUndefined();
+    await expect(addToSuppression("x@example.com", "unsubscribed")).resolves.toBe(false);
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  /**
+   * fetch resolves on a refusal, so a refused insert used to read as success: the
+   * unsubscribe page said "you've been unsubscribed" and the address stayed on the list.
+   */
+  it("reports false and pages on a refused insert (4xx: refuses every write until fixed)", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 400 } as Response);
+    expect(await addToSuppression("x@example.com", "unsubscribed")).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 400 }),
+      "Suppression insert refused"
+    );
+  });
+
+  it("reports false and only warns on a 5xx (a blip the caller retries)", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 503 } as Response);
+    expect(await addToSuppression("x@example.com", "hard_bounce")).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 503 }),
+      "Suppression insert refused"
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("addToSuppression → Resend (R-05)", () => {
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.RESEND_AUDIENCE_ID = "aud_test";
+    mockFetch.mockResolvedValue({ ok: true } as Response);
+  });
+
+  it("marks the contact unsubscribed, which covers every list", async () => {
+    mockContactsUpdate.mockResolvedValue({ data: { id: "c1" }, error: null });
+    await addToSuppression("u@example.com", "unsubscribed");
+    expect(mockContactsUpdate).toHaveBeenCalledWith({ email: "u@example.com", unsubscribed: true });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when the address was never a contact", async () => {
+    mockContactsUpdate.mockResolvedValue({
+      data: null,
+      error: { name: "not_found", message: "Contact not found", statusCode: 404 },
+    });
+    await addToSuppression("u@example.com", "hard_bounce");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs any other error, which the SDK returns instead of throwing", async () => {
+    mockContactsUpdate.mockResolvedValue({
+      data: null,
+      error: { name: "application_error", message: "boom", statusCode: 500 },
+    });
+    await addToSuppression("u@example.com", "complaint");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.objectContaining({ name: "application_error" }) }),
+      "Failed to unsubscribe email in Resend"
+    );
+  });
+
+  it("still unsubscribes when no marketing list is configured: a contact outlives the config", async () => {
+    delete process.env.RESEND_AUDIENCE_ID;
+    mockContactsUpdate.mockResolvedValue({ data: { id: "c1" }, error: null });
+    await addToSuppression("u@example.com", "unsubscribed");
+    expect(mockContactsUpdate).toHaveBeenCalledWith({ email: "u@example.com", unsubscribed: true });
+  });
+
+  it("does nothing in Resend without an API key", async () => {
+    delete process.env.RESEND_API_KEY;
+    await addToSuppression("u@example.com", "unsubscribed");
+    expect(mockContactsUpdate).not.toHaveBeenCalled();
   });
 });

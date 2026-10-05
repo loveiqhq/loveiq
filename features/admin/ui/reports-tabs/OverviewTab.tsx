@@ -9,7 +9,7 @@ interface ReportsData {
   totalReports: number;
   totalSessions: number;
   viewRate: number;
-  avgSessionDurationSec: number;
+  avgSessionDurationSec: number | null;
   dailyOpens: Array<{ date: string; count: number }>;
 }
 
@@ -36,7 +36,9 @@ export default function OverviewTab({ days }: { days: number }) {
     );
   }
 
-  const durationMin = Math.round(data.avgSessionDurationSec / 60);
+  // Nothing closes a report session, so this is null in practice — see the route.
+  const durationMin =
+    data.avgSessionDurationSec == null ? null : Math.round(data.avgSessionDurationSec / 60);
   const chartItems = data.dailyOpens.map((d) => ({ label: d.date.slice(5), value: d.count }));
 
   return (
@@ -45,7 +47,10 @@ export default function OverviewTab({ days }: { days: number }) {
         <StatCard label="Reports Generated" value={data.totalReports} />
         <StatCard label="View Rate" value={`${data.viewRate}%`} />
         <StatCard label="Total Sessions" value={data.totalSessions} />
-        <StatCard label="Avg Session Duration" value={`${durationMin}m`} />
+        <StatCard
+          label="Avg Session Duration"
+          value={durationMin == null ? "—" : `${durationMin}m`}
+        />
       </div>
 
       {chartItems.length > 0 && (

@@ -1,0 +1,1026 @@
+/**
+ * Monthly vendor-invoice filing, reconciliation and cost-sheet update.
+ *
+ * WHY THIS EXISTS. On 2026-09-19 an audit of the Business Case cost sheet found
+ * it understated the monthly run rate by EUR 1,175 — Claude was recorded as a
+ * 2-seat Pro plan at EUR 42.84 while the real invoice was EUR 450.78, Google
+ * Workspace had carried EUR 111.87 flat for eleven months against a real
+ * EUR 149.60, and seven vendors were absent entirely. Nothing recomputes that
+ * sheet, so a line stays whatever it was the day someone typed it. This cron is
+ * the thing that recomputes it.
+ *
+ * WHAT IT DOES, in order:
+ *   1. Walks the company mailboxes for vendor invoice emails with a PDF.
+ *   2. Files each PDF into Drive under the existing convention,
+ *      `Finance / Invoices and Receipts / <Vendor> / <YYYY/MM>/`.
+ *   3. Reads the charged total out of the PDF (falling back to the email body).
+ *   4. Writes that total into the Costs tab of the Business Case, and carries it
+ *      forward across the forecast months, which is how that sheet models a rate.
+ *   5. Posts to #ops what it filed and, separately, every amount that MOVED.
+ *
+ * IT IS NEVER SILENT ABOUT A CHANGE. Updating the sheet automatically is a
+ * deliberate choice (Eman, 2026-09-19) and the risk it carries is that a vendor
+ * changes seats and a line is rewritten with nobody reading it. The mitigation is
+ * that every write is also a Slack line naming the old and new value, so the
+ * change is announced even though it is not gated.
+ *
+ * WHAT IT WILL NEVER SEE, and why silence from these is not evidence of zero:
+ *   - Figma emails a receipt LINK, never a PDF.
+ *   - Upwork sends an HTML summary, and is hourly rather than a fixed fee.
+ *   - The domain registrar (united-domains, Kunden-Nr 724754-8) sends order and
+ *     renewal confirmations ONLY to the portfolio owner's personal account, so no
+ *     domain invoice can ever reach a loveiq.org mailbox. That is by design, not
+ *     a lost email — do not "fix" it by widening the search.
+ * These, and Google Ads (billed in its own console), are reported as "no invoice seen"
+ * rather than omitted, because an absent line is indistinguishable from a working one at a
+ * glance.
+ *
+ * Schedule: 06:40 UTC on the 3rd of each month — late enough that the vendors
+ * billing on the 1st and 2nd (Google, CookieYes) have sent, early enough to be
+ * read with the morning digests.
+ */
+
+import { timingSafeEqual } from "crypto";
+import { NextResponse } from "next/server";
+import { getDelegatedToken, GMAIL_SCOPE, DRIVE_WRITE_SCOPE } from "@shared/http/google-oauth";
+import {
+  COST_SHEET_ID,
+  COST_SHEET_READ_URL,
+  COST_SHEET_TAB,
+  monthColumns,
+  NEVER_ATTACHES,
+  serialMonth,
+} from "@features/brain/server/cost-sheet";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { notifySlack, escapeSlack } from "@shared/observability/slack";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
+import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
+import logger from "@shared/observability/logger";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
+
+/**
+ * Google Ads bills this account by card, and a card-paid account gets no invoice by email and
+ * none from the invoice API ("not on monthly invoicing"). So the line kept whatever was typed
+ * last: July's EUR 1,129 stood for August and September, found only on 2026-10-04. The
+ * closed month's spend now comes from the Google Ads API as a stand-in until someone enters the
+ * invoice, which differs from it: lower by Google's credits (EUR 252.91 in May 2026, 405.87 in
+ * June) and higher by country fees (3 to 7 a month). Read as ec@loveiq.org, a user of the
+ * account; the Cloud project has had Basic access since 2026-10-04. Google retires an API
+ * version about a year after it ships, so a 404 here means moving to the current one.
+ */
+const GOOGLE_ADS_SEARCH =
+  "https://googleads.googleapis.com/v25/customers/3087717405/googleAds:search";
+const ADWORDS_SCOPE = "https://www.googleapis.com/auth/adwords";
+
+/** Finance / Invoices and Receipts. */
+// eslint-disable-next-line no-secrets/no-secrets -- Drive folder id, not a credential
+const DRIVE_ROOT = "1ml7y_fMcGB8YFpelnQJzWWcpEgTExBBO";
+const SHEET_ID = COST_SHEET_ID;
+const SHEET_TAB = COST_SHEET_TAB;
+
+/**
+ * Gmail lookback. Wider than a month so a failed run still catches up next time, and under
+ * 59 days on purpose: then at most ONE closed month is ever wholly inside the window (two
+ * need 59 or more), so a write carried forward can only run into the month in progress. A
+ * wider window would let an earlier month's carry overwrite a later closed month that was
+ * left for a person to enter.
+ */
+export const LOOKBACK_DAYS = 45;
+
+/** Write the reconciled figures only from a complete walk (see the write below). */
+export function shouldWriteSheet(updates: unknown[], incomplete: string[]): boolean {
+  return updates.length > 0 && incomplete.length === 0;
+}
+
+/**
+ * True only when EVERY day of that month is inside the lookback window.
+ *
+ * Without this the cron corrupts the very data it exists to fix. A 45-day window
+ * read on 3 October reaches back to 19 August, so August is only PARTIALLY
+ * visible — invoices dated the 1st to the 18th are missing. Summing what is
+ * visible and writing it would overwrite a correct August total with a smaller,
+ * partial one, and then carry that wrong figure forward across every forecast
+ * month. A partial month must be filed but never reconciled.
+ */
+export function monthFullyCovered(year: number, month: number, windowStartMs: number): boolean {
+  return Date.UTC(year, month - 1, 1) >= windowStartMs;
+}
+
+/**
+ * ECB euro reference rates, USD per EUR, by date.
+ *
+ * The Costs tab is denominated in euros and most vendors invoice in dollars, so
+ * something has to convert. The ECB's daily reference rate is the
+ * published one, needs no credential, and — crucially — is dated: a charge is
+ * converted at the rate on ITS OWN invoice date, not at today's. Converting
+ * everything at a single current rate would silently restate history every month.
+ *
+ * The feed covers 90 days and the lookback is 45, so every invoice this cron sees
+ * is inside it.
+ */
+async function ecbUsdRates(): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const res = await fetchWithTimeout(
+    "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml",
+    {
+      timeoutMs: 20_000,
+    }
+  );
+  if (!res.ok) throw new Error(`ecb rates -> ${res.status}`);
+  const xml = await res.text();
+  for (const m of xml.matchAll(
+    /time=['"]([\d-]+)['"]([\s\S]*?)(?=<Cube time=|<\/Cube>\s*<\/Cube>)/g
+  )) {
+    const rate = /currency=['"]USD['"]\s+rate=['"]([\d.]+)['"]/.exec(m[2] ?? "");
+    if (m[1] && rate?.[1]) out.set(m[1], Number(rate[1]));
+  }
+  return out;
+}
+
+/**
+ * The rate on `isoDate`, walking BACK to the most recent published day.
+ *
+ * The ECB publishes on business days only, so an invoice dated a Saturday, a
+ * Sunday or a TARGET holiday has no rate of its own. Walking back uses the last
+ * rate actually in force, which is what a bank does. Walking forward would
+ * convert a charge at a rate that did not exist when it was made.
+ */
+export function rateOn(
+  rates: Map<string, number>,
+  isoDate: string,
+  maxBackDays = 8
+): number | null {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  for (let i = 0; i < maxBackDays; i++) {
+    const key = d.toISOString().slice(0, 10);
+    const r = rates.get(key);
+    if (r) return r;
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return null;
+}
+
+/**
+ * Converts a charge to euros at the rate in force on its invoice date.
+ *
+ * A charge already in euros is returned untouched — never round-tripped through a
+ * rate. `OTHER` means no currency marker was found beside the total, and guessing
+ * it is euros is exactly the mistake this whole path exists to prevent, so it
+ * stays unconverted and gets reported.
+ */
+export function toEur(charge: Charge, rates: Map<string, number>, isoDate: string): Charge | null {
+  if (charge.currency === "EUR") return charge;
+  if (charge.currency !== "USD") return null;
+  const rate = rateOn(rates, isoDate);
+  if (!rate) return null;
+  return { value: Math.round((charge.value / rate) * 100) / 100, currency: "EUR" };
+}
+
+/**
+ * Is `next` a better reading of the same charge than `best` so far?
+ *
+ * Euros win outright. One email carries the invoice AND the receipt for a single
+ * charge, and those two documents do not always state it in the same currency —
+ * picking the larger number would discard a euro figure in favour of a dollar
+ * one, and a dollar figure is the one we cannot write.
+ */
+export function betterCharge(next: Charge, best: Charge | null): boolean {
+  if (!best) return true;
+  if (next.currency === "EUR" && best.currency !== "EUR") return true;
+  if (best.currency === "EUR" && next.currency !== "EUR") return false;
+  return next.value > best.value;
+}
+
+/** Drive query strings are single-quoted, so a name containing one ends the literal. */
+export function driveQuoteEscape(name: string): string {
+  return name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+/**
+ * The mailbox a vendor bills is not guessable and has bitten us: Supabase mails
+ * mo@, Google and Slack mail mb@, everything else mails ec@. Walking all of them
+ * is cheaper than maintaining a map that goes stale when somebody is offboarded.
+ *
+ * Not admin@: it is an alias of teamwork@ (its Gmail profile IS teamwork@), so walking
+ * both read one mailbox twice. An email that still reaches two mailboxes is counted once,
+ * by its Message-ID, in the walk below.
+ */
+const MAILBOXES = ["ec@loveiq.org", "mb@loveiq.org", "mo@loveiq.org", "teamwork@loveiq.org"];
+
+/**
+ * `sheetName` must match column A of the Costs tab exactly — the row is looked up
+ * by name rather than hardcoded, so inserting a row above does not silently
+ * redirect a write to the wrong vendor.
+ */
+interface Vendor {
+  sheetName: string;
+  match: RegExp;
+  /** Google bills Workspace and Ads from ONE sender, so the sender alone is ambiguous. */
+  subject?: RegExp;
+}
+
+const VENDORS: Vendor[] = [
+  { sheetName: "Claude", match: /anthropic\.com/i },
+  { sheetName: "ChatGPT", match: /openai\.com/i },
+  { sheetName: "Vercel", match: /vercel\.com/i },
+  { sheetName: "Resend", match: /resend\.com/i },
+  { sheetName: "CookieYes", match: /cookieyes\.com/i },
+  { sheetName: "Contentsquare", match: /contentsquare\.com/i },
+  { sheetName: "Jira", match: /atlassian\.com/i },
+  { sheetName: "Github", match: /github\.com/i },
+  { sheetName: "Slack", match: /slack\.com/i },
+  { sheetName: "Supabase", match: /supabase\.(io|com)/i },
+  // Both of Google's billing mails come from payments-noreply@google.com, so this
+  // one MUST also match on subject or Ads mail would be filed as Workspace.
+  {
+    sheetName: "Google Workspace",
+    match: /google\.com/i,
+    subject: /Google Workspace/i,
+  },
+];
+
+// Vendors that bill us but never attach a PDF (NEVER_ATTACHES, shared with cost_watch):
+// reported, never silently dropped.
+
+function safeCompare(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+export function colLetter(index0: number): string {
+  let s = "";
+  let i = index0 + 1;
+  while (i > 0) {
+    const r = (i - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    i = Math.floor((i - 1) / 26);
+  }
+  return s;
+}
+
+/**
+ * The 0-based column of a month inside that run, or null when the sheet does not model it.
+ * Counting from a fixed "column I is November 2025" sent every write to the wrong month the
+ * day a column was inserted.
+ */
+export function columnForMonth(header: unknown[], year: number, month: number): number | null {
+  const run = monthColumns(header);
+  const want = `${year}-${String(month).padStart(2, "0")}`;
+  for (let i = run?.first ?? 0; run && i <= run.last; i++) {
+    if (serialMonth(header[i] as number) === want) return i;
+  }
+  return null;
+}
+
+/**
+ * Whether the closed month's Adwords cell may take the spend: blank, not a number, the month
+ * before's figure carried forward, or the month before's SPEND that this filing carried forward
+ * last month (`carriedSpend`). The last matters because a person corrects the month before by
+ * typing its invoice into that one cell, which leaves this month holding the old spend; without
+ * it, that spend read as an entered figure and was never replaced. An invoice total entered for
+ * this month differs from all of them, and is never replaced by the spend.
+ */
+export function adsCellTakesSpend(
+  row: unknown[],
+  colIndex: number,
+  carriedSpend?: number
+): boolean {
+  const raw = row[colIndex];
+  const current = raw === undefined || raw === "" ? NaN : Number(raw);
+  if (!Number.isFinite(current)) return true;
+  const same = (v: number) => Number.isFinite(v) && Math.abs(current - v) < 0.005;
+  return same(Number(row[colIndex - 1])) || (carriedSpend !== undefined && same(-carriedSpend));
+}
+
+/**
+ * Google Ads spend in euros for each month from `from` to `to` ("2026-08", "2026-09"), months
+ * with no spend as 0; null when it cannot be read in euros.
+ */
+async function googleAdsSpend(from: string, to: string): Promise<Map<string, number> | null> {
+  const token = await getDelegatedToken("ec@loveiq.org", ADWORDS_SCOPE);
+  if (!token) return null;
+  const [y = 0, m = 0] = to.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  try {
+    const res = await gapi<{
+      results?: Array<{
+        customer?: { currencyCode?: string };
+        segments?: { month?: string };
+        metrics?: { costMicros?: string };
+      }>;
+    }>(GOOGLE_ADS_SEARCH, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `SELECT customer.currency_code, segments.month, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${from}-01' AND '${lastDay}'`,
+      }),
+    });
+    const rows = res.results ?? [];
+    // The Costs tab is in euros, and no rate is invented here.
+    if (rows.some((r) => r.customer?.currencyCode && r.customer.currencyCode !== "EUR"))
+      return null;
+    const micros = new Map<string, number>([
+      [from, 0],
+      [to, 0],
+    ]);
+    for (const r of rows) {
+      const month = String(r.segments?.month ?? "").slice(0, 7);
+      micros.set(month, (micros.get(month) ?? 0) + Number(r.metrics?.costMicros ?? 0));
+    }
+    const euros = new Map<string, number>();
+    for (const [month, v] of micros) {
+      if (!Number.isFinite(v)) return null;
+      euros.set(month, Math.round(v / 10_000) / 100);
+    }
+    return euros;
+  } catch (err) {
+    logger.warn({ err }, "file-invoices: the Google Ads spend could not be read");
+    return null;
+  }
+}
+
+async function gapi<T>(url: string, token: string, init?: RequestInit): Promise<T> {
+  const res = await fetchWithTimeout(url, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...(init?.headers || {}) },
+    timeoutMs: 30_000,
+  });
+  if (!res.ok)
+    throw new Error(`${url.split("?")[0]} -> ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return (await res.json()) as T;
+}
+
+/**
+ * A charged total, WITH the currency it was charged in.
+ *
+ * The currency is not decoration. The Costs tab is denominated in euros, but
+ * Vercel, Resend, GitHub, CookieYes and Atlassian all invoice in dollars.
+ * Returning a bare number let the first version write "20.00" into a euro column
+ * for a USD 20 charge, which is not a rounding error, it is the wrong number.
+ *
+ * Dollars are converted at the ECB rate on the invoice's own date (toEur). A total
+ * with no currency marker beside it is reported to #ops for a person, never guessed.
+ */
+export interface Charge {
+  value: number;
+  currency: "EUR" | "USD" | "OTHER";
+}
+
+/**
+ * Largest match wins: a multi-page invoice repeats net, per-line and gross totals.
+ *
+ * A match preceded by "exclusive"/"excl." is DROPPED. Atlassian's invoice states
+ * "The VAT exclusive total on this invoice is EUR 46.64" and nowhere prints the
+ * EUR gross — taking that figure would quietly book a EUR 55.50 charge as 46.64,
+ * every month, and it would look entirely plausible.
+ */
+function largest(text: string, pattern: RegExp): number | null {
+  const nums: number[] = [];
+  for (const m of text.matchAll(pattern)) {
+    const before = text.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0);
+    if (/exclusi|excl\./i.test(before)) continue;
+    const n = Number((m[1] ?? "").replace(/,/g, ""));
+    // Zero kept: "Total €0.00" is a total (a free month, a credit), not an unreadable one.
+    if (Number.isFinite(n) && n >= 0) nums.push(n);
+  }
+  return nums.length ? Math.max(...nums) : null;
+}
+
+/**
+ * Pulls the charged total out of an invoice. The PDF is authoritative — Google
+ * Workspace puts the figure NOWHERE else, which is precisely why the audit of
+ * 2026-09-19 could not verify that line from email text alone.
+ *
+ * A euro figure is preferred wherever the document states a gross one, because a
+ * stated figure always beats a rate we would have to invent.
+ */
+export async function amountFrom(pdf: Uint8Array | null, body: string): Promise<Charge | null> {
+  let text = body;
+  if (pdf) {
+    try {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      // A plain Uint8Array, never the Buffer the caller holds: pdf.js refuses a Buffer
+      // ("Please provide binary data as `Uint8Array`"), and the catch below then read the
+      // email body instead. Every PDF failed that way from the first run (#209), which
+      // left Contentsquare, CookieYes and Google Workspace, whose totals are only in the
+      // PDF, never reconciled.
+      const doc = await getDocumentProxy(new Uint8Array(pdf));
+      const extracted = await extractText(doc, { mergePages: true });
+      text = String(extracted.text);
+    } catch (err) {
+      logger.warn({ err }, "file-invoices: pdf parse failed, falling back to body");
+    }
+  }
+
+  // `\s*` and not `\s?`: Contentsquare's extracted text reads "Total cost € EUR  58.31"
+  // with a space after the symbol AND two before the number. Allowing exactly one
+  // made a euro invoice look currency-less and blocked it from ever being written.
+  // Control characters are stripped from BOTH sources, not just the PDF one.
+  // Extraction embeds them mid-number: Contentsquare's invoice comes out as
+  // "Total cost \u20ac\0EUR\0 58.31", with NUL bytes either side of the currency
+  // code. A NUL is not whitespace, so widening the whitespace class never reaches
+  // the figure, and a euro invoice that cannot be recognised as euros is never
+  // written at all. Doing this only on the PDF branch left the body fallback
+  // broken in exactly the same way.
+  text = text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, " ");
+
+  const TOTAL = String.raw`(?:Total(?:\s+in\s+EUR)?|Amount paid|Total cost|Amount due|Invoice Total)`;
+  const eur = largest(
+    text,
+    new RegExp(TOTAL + String.raw`[^\d]{0,28}?(?:€|EUR)[\s€]*([\d,]+\.\d{2})`, "gi")
+  );
+  const usd = largest(
+    text,
+    new RegExp(TOTAL + String.raw`[^\d]{0,28}?(?:\$|USD)[\s$]*([\d,]+\.\d{2})`, "gi")
+  );
+  // No currency marker beside the total, so we cannot claim it is euros.
+  const bare = largest(text, new RegExp(TOTAL + String.raw`[^\d]{0,28}?([\d,]+\.\d{2})`, "gi"));
+  const readings: Charge[] = [
+    ...(eur !== null ? [{ value: eur, currency: "EUR" as const }] : []),
+    ...(usd !== null ? [{ value: usd, currency: "USD" as const }] : []),
+    ...(bare !== null ? [{ value: bare, currency: "OTHER" as const }] : []),
+  ];
+  // A zero is the answer only when nothing else was charged: "Total VAT €0.00" beside
+  // "Total $20.00" must not read as a free month and hide the 20.
+  return readings.find((r) => r.value > 0) ?? readings[0] ?? null;
+}
+
+interface Filed {
+  vendor: string;
+  month: string;
+  file: string;
+  amount: Charge | null;
+}
+
+export async function GET(request: Request) {
+  const expected = process.env.CRON_SECRET;
+  if (!expected) {
+    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  }
+  const auth = request.headers.get("authorization") || "";
+  if (!safeCompare(auth, `Bearer ${expected}`)) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 401 });
+  }
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
+  }
+
+  const trackDuration = startCronTimer("file-invoices", 280);
+  const startMs = Date.now();
+  let cronError: string | undefined;
+
+  try {
+    const driveToken = await getDelegatedToken("ec@loveiq.org", DRIVE_WRITE_SCOPE);
+    const sheetToken = await getDelegatedToken("ec@loveiq.org", SHEETS_SCOPE);
+    if (!driveToken || !sheetToken) {
+      throw new Error(
+        "delegation unavailable: Google refused or did not answer (the log says which); if refused, check GOOGLE_IMPERSONATE_SERVICE_ACCOUNT and the domain-wide grant"
+      );
+    }
+
+    const filed: Filed[] = [];
+    let convertedAny = false;
+    /**
+     * vendor|month -> EVERY charge of that month as it was charged, for the line a person
+     * must enter by hand. All of them, not just the ones that failed to convert: a month
+     * with a EUR 450.78 invoice and a 66.82 one with no currency listed only the 66.82, so
+     * whoever typed it in would have understated the month by the 450.78.
+     */
+    const chargesAs = new Map<string, string[]>();
+    // One email can reach two walked mailboxes (a vendor addressing two of us); counted once.
+    const seenMessageIds = new Set<string>();
+    // The PDF names each vendor's month has counted: one invoice can come in two emails.
+    const countedPdfs = new Map<string, Set<string>>();
+    /**
+     * Vendor+month -> summed charge. BOTH halves matter.
+     *
+     * SUMMED, because a vendor can invoice several times in one month and the last
+     * one is not the month's rate: Anthropic billed three times in August 2026 (450.78
+     * renewal, then 20.28 and 66.82 seat prorations). Taking the last would have
+     * written 66.82 into a line whose real cost was 537.88, and then carried that
+     * wrong figure across every forecast month.
+     *
+     * Counted even when the PDF is ALREADY in Drive, because otherwise a re-run
+     * reconciles nothing — and the very first run after this ships would skip all
+     * 69 back-filled PDFs and update the sheet not at all.
+     */
+    const charged = new Map<string, Charge>();
+    const folderCache = new Map<string, string>();
+
+    async function ensureFolder(parent: string, name: string): Promise<string> {
+      const key = `${parent}/${name}`;
+      const cached = folderCache.get(key);
+      if (cached) return cached;
+      const q = encodeURIComponent(
+        `'${parent}' in parents and name='${driveQuoteEscape(name)}' and trashed=false`
+      );
+      const found = await gapi<{ files?: Array<{ id: string }> }>(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=2`,
+        driveToken!
+      );
+      let id = found.files?.[0]?.id;
+      if (!id) {
+        const made = await gapi<{ id: string }>(
+          "https://www.googleapis.com/drive/v3/files",
+          driveToken!,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name,
+              mimeType: "application/vnd.google-apps.folder",
+              parents: [parent],
+            }),
+          }
+        );
+        id = made.id;
+      }
+      folderCache.set(key, id);
+      return id;
+    }
+
+    // Fetched once for the whole run. A failure here must not lose the filing:
+    // PDFs still get filed, and a charge that cannot be converted is reported.
+    let rates = new Map<string, number>();
+    try {
+      rates = await ecbUsdRates();
+    } catch (err) {
+      logger.warn(
+        { err },
+        "file-invoices: ECB rates unavailable, foreign charges will be reported not converted"
+      );
+    }
+
+    let outOfTime = false;
+    // A walk that did not cover every mailbox cannot vouch for the months it wrote: recorded
+    // as an error and said in #ops, where both cases used to record "success" in silence.
+    const incomplete: string[] = [];
+    for (const mailbox of MAILBOXES) {
+      if (outOfTime) break;
+      const gmailToken = await getDelegatedToken(mailbox, GMAIL_SCOPE);
+      if (!gmailToken) {
+        logger.warn({ mailbox }, "file-invoices: no gmail token, skipping mailbox");
+        incomplete.push(`no Gmail access to ${mailbox}`);
+        continue;
+      }
+      const q = encodeURIComponent(`has:attachment filename:pdf newer_than:${LOOKBACK_DAYS}d`);
+      // Every page: one page of 100 silently dropped the oldest invoices in a busy mailbox.
+      const refs: Array<{ id: string }> = [];
+      let pageToken: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        const list = await gapi<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100` +
+            (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
+          gmailToken
+        );
+        refs.push(...(list.messages || []));
+        pageToken = list.nextPageToken;
+        if (!pageToken) break;
+      }
+      if (pageToken) incomplete.push(`more than 1,000 invoice emails in ${mailbox}`);
+
+      for (const ref of refs) {
+        if (Date.now() - startMs > 240_000) {
+          // Stops the whole walk, not just this mailbox. Breaking only the inner
+          // loop would start the next mailbox with no budget left and blow the
+          // 300s ceiling, which leaves NO cron_run row at all to debug from.
+          outOfTime = true;
+          incomplete.push(`ran out of time before reading every mailbox (stopped in ${mailbox})`);
+          break;
+        }
+
+        const msg = await gapi<{
+          internalDate: string;
+          payload: { headers?: Array<{ name: string; value: string }> };
+        }>(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${ref.id}?format=full`,
+          gmailToken
+        );
+
+        const headers = Object.fromEntries(
+          (msg.payload.headers || []).map((h) => [h.name, h.value])
+        );
+        const from = headers["From"] || "";
+        const subject = headers["Subject"] || "";
+
+        // Our own outgoing customer receipts are billed BY us, not TO us. They
+        // outnumber real vendor invoices roughly four to one, so this is the
+        // difference between a useful report and noise.
+        if (/Applied Psychometrics/i.test(subject)) continue;
+
+        const vendor = VENDORS.find(
+          (v) => v.match.test(from) && (!v.subject || v.subject.test(subject))
+        );
+        if (!vendor) continue;
+
+        // Only now is this copy known to be usable: a copy relayed through a group, whose
+        // sender line no longer names the vendor, must not shadow the direct one.
+        // The header's case varies by sender ("Message-ID", "Message-Id").
+        const messageId = (msg.payload.headers || []).find(
+          (h) => h.name.toLowerCase() === "message-id"
+        )?.value;
+        if (messageId) {
+          if (seenMessageIds.has(messageId)) continue;
+          seenMessageIds.add(messageId);
+        }
+
+        const parts: Array<{
+          filename?: string;
+          body?: { attachmentId?: string; data?: string };
+          parts?: unknown[];
+        }> = [];
+        const walk = (p: Record<string, unknown>) => {
+          parts.push(p as never);
+          for (const c of (p.parts as Record<string, unknown>[]) || []) walk(c);
+        };
+        walk(msg.payload as unknown as Record<string, unknown>);
+
+        const bodyText = parts
+          .map((p) => (p.body?.data ? Buffer.from(p.body.data, "base64url").toString("utf8") : ""))
+          .join("\n");
+
+        const date = new Date(Number(msg.internalDate));
+        const month = `${date.getUTCFullYear()}/${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+
+        /**
+         * The charge this ONE email represents, counted once however many PDFs
+         * it carries.
+         *
+         * Vendors routinely attach the invoice AND the receipt for the same
+         * transaction — Resend, Vercel and Anthropic all do, and Slack adds a
+         * fair-billing statement on top. Summing per attachment double-counted
+         * every one of them: a live dry run on 2026-09-19 produced Resend 40.00
+         * against a real USD 20, Slack 157.54 against 78.77, and Claude August
+         * 1,075.76 against 537.88 — exactly twice, across the board. The unit
+         * tests could not see this; only running it against real mail could.
+         *
+         * Max rather than first, because the two documents state the same gross
+         * figure and the larger is the one that survives a partial parse.
+         */
+        let messageAmount: Charge | null = null;
+        let sawPdf = false;
+        const pdfFiles: string[] = [];
+
+        for (const p of parts) {
+          if (!p.filename?.toLowerCase().endsWith(".pdf") || !p.body?.attachmentId) continue;
+          sawPdf = true;
+          pdfFiles.push(p.filename);
+
+          // The attachment is fetched BEFORE the duplicate check, because its
+          // total has to be counted whether or not the file is new. Skipping
+          // early here is what made the first version reconcile nothing on a
+          // re-run.
+          const att = await gapi<{ data: string }>(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${ref.id}/attachments/${p.body.attachmentId}`,
+            gmailToken
+          );
+          const bytes = Buffer.from(att.data, "base64url");
+
+          const amount = await amountFrom(bytes, bodyText);
+          // ONE amount per EMAIL, never per attachment — see messageAmount above.
+          // A EUR reading always beats a USD one, whatever their sizes: comparing
+          // on value alone would let a USD 64.62 invoice displace a EUR 58.31
+          // receipt for the same charge, throwing away the only figure we can
+          // actually write into a euro column.
+          if (amount !== null && betterCharge(amount, messageAmount)) {
+            messageAmount = amount;
+          }
+
+          const vendorFolder = await ensureFolder(DRIVE_ROOT, vendor.sheetName);
+          const monthFolder = await ensureFolder(vendorFolder, month);
+          const nq = encodeURIComponent(
+            `'${monthFolder}' in parents and name='${driveQuoteEscape(p.filename)}' and trashed=false`
+          );
+          const dup = await gapi<{ files?: unknown[] }>(
+            `https://www.googleapis.com/drive/v3/files?q=${nq}&fields=files(id)&pageSize=1`,
+            driveToken
+          );
+          if (dup.files?.length) continue;
+
+          const boundary = `b${Date.now().toString(36)}`;
+          const multipart = Buffer.concat([
+            Buffer.from(
+              `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+                JSON.stringify({ name: p.filename, parents: [monthFolder] }) +
+                `\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`
+            ),
+            bytes,
+            Buffer.from(`\r\n--${boundary}--\r\n`),
+          ]);
+          await gapi(
+            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+            driveToken,
+            {
+              method: "POST",
+              headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+              body: multipart as unknown as BodyInit,
+            }
+          );
+
+          filed.push({ vendor: vendor.sheetName, month, file: p.filename, amount });
+        }
+
+        // One invoice, two emails: Supabase mails "New invoice" and then "Payment received", each
+        // with Invoice-<number>.pdf, and adding both doubled the month. A PDF name this vendor's
+        // month has already counted is the same document (the rule the Drive filing above uses),
+        // so the email's amount is not added again.
+        const monthKey = `${vendor.sheetName}|${month}`;
+        const counted = countedPdfs.get(monthKey) ?? new Set<string>();
+        countedPdfs.set(monthKey, counted);
+        const repeats = pdfFiles.some((f) => counted.has(f));
+        for (const f of pdfFiles) counted.add(f);
+        if (repeats) continue;
+
+        // A stated zero charged nothing: neither written nor left for a person. Written, it
+        // would carry EUR 0 into every forecast month of a vendor that bills again next month.
+        if (messageAmount !== null && messageAmount.value > 0) {
+          // Converted HERE, where the invoice's own date is still in hand. Doing it
+          // later, from the month key alone, would convert a 3 September charge at
+          // a 30 September rate.
+          const isoDate = date.toISOString().slice(0, 10);
+          const eur = toEur(messageAmount, rates, isoDate);
+          const key = `${vendor.sheetName}|${month}`;
+          const prior = charged.get(key);
+          const as = `${messageAmount.currency} ${messageAmount.value.toFixed(2)}`;
+          chargesAs.set(key, [
+            ...(chargesAs.get(key) ?? []),
+            !eur
+              ? messageAmount.currency === "OTHER"
+                ? `${messageAmount.value.toFixed(2)} with no currency beside the total`
+                : `${as} on ${isoDate}, no ECB rate for it`
+              : messageAmount.currency === "EUR"
+                ? as
+                : `${as} (EUR ${eur.value.toFixed(2)} at the ECB rate)`,
+          ]);
+          if (!eur) {
+            // Poison the month so a half-converted sum is never written.
+            charged.set(key, {
+              value: (prior?.value ?? 0) + messageAmount.value,
+              currency: "OTHER",
+            });
+          } else {
+            if (messageAmount.currency !== "EUR") convertedAny = true;
+            charged.set(key, {
+              value: (prior?.value ?? 0) + eur.value,
+              currency: prior?.currency === "OTHER" ? "OTHER" : "EUR",
+            });
+          }
+        } else if (
+          messageAmount === null &&
+          sawPdf &&
+          // Only mail that says it is a bill. The vendor matchers cover a whole sender
+          // domain, so a brochure or a terms PDF from the same address must not block a month.
+          /invoice|receipt|rechnung|factur|bill/i.test(`${subject} ${pdfFiles.join(" ")}`)
+        ) {
+          // An invoice whose total cannot be read still charged us. Dropped, the month was
+          // written as the sum of the OTHER invoices, or left stale as "already matched".
+          // Poisoned like an unconvertible one, so a person enters it.
+          const key = `${vendor.sheetName}|${month}`;
+          chargesAs.set(key, [
+            ...(chargesAs.get(key) ?? []),
+            `a total that could not be read (${date.toISOString().slice(0, 10)})`,
+          ]);
+          charged.set(key, { value: charged.get(key)?.value ?? 0, currency: "OTHER" });
+        }
+      }
+    }
+
+    // ---- reconcile against the sheet ------------------------------------
+    const grid = await gapi<{ values?: string[][] }>(COST_SHEET_READ_URL, sheetToken);
+    const rows = grid.values || [];
+    // A carry-forward ends at the last month of row 1's month run (monthColumns), never at
+    // the widest row: one stray cell out near AZ would have written twenty-odd columns past
+    // February 2027, and a total or note column after the last month would be overwritten.
+    const lastIndex = monthColumns(rows[0] ?? [])?.last ?? -1;
+    const rowOf = (name: string) => rows.findIndex((r) => String(r?.[0] ?? "").trim() === name) + 1;
+
+    const changes: string[] = [];
+    const skippedPartial: string[] = [];
+    // Only a closed month is entered. On the 3rd the month in progress holds only the invoices
+    // of the 1st and 2nd, and a proration dated then was carried into every forecast month
+    // until the next run corrected it (Eman left this call to us, 2026-09-30). Its PDFs are
+    // filed as usual; the next run enters the whole month.
+    const inProgress: string[] = [];
+    const noColumn: string[] = [];
+    const noRow: string[] = [];
+    // A closed month with no column fails the run. The month in progress does not: on the 3rd
+    // it holds only the invoices of the 1st and 2nd, and failing for it would tell cost_watch
+    // the whole run settled nothing.
+    const noColumnClosed: string[] = [];
+    // A closed month the sheet could not take (no row, or a total to enter by hand) fails the
+    // run too: cost_watch counts a month settled once any run succeeds, and this one did not.
+    const unwrittenClosed: string[] = [];
+    const thisMonth = new Date().toISOString().slice(0, 7).replace("-", "/");
+    const foreignCurrency: string[] = [];
+    const updates: Array<{ range: string; values: number[][] }> = [];
+    const windowStartMs = Date.now() - LOOKBACK_DAYS * 86_400_000;
+
+    // Chronological, and it matters. Each write carries its value forward to the
+    // last column, so two months for one vendor produce OVERLAPPING ranges. Map
+    // order is mailbox-then-message order, not time — applying October before
+    // September would let September's figure overwrite October's tail.
+    const chargedRows = [...charged.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    for (const [key, total] of chargedRows) {
+      const [vendorName = "", monthKey = ""] = key.split("|");
+      const ym = monthKey.split("/");
+      const y = Number(ym[0]);
+      const m = Number(ym[1]);
+      if (!Number.isFinite(y) || !Number.isFinite(m)) continue;
+      if (monthKey >= thisMonth) {
+        inProgress.push(`${vendorName} ${monthKey}`);
+        continue;
+      }
+      const row = rowOf(vendorName);
+      if (row === 0) {
+        // Listed apart from the changes: counted among them, it read "Cost sheet updated (1)".
+        noRow.push(vendorName);
+        // Only a month a run could write: a partial one would fail every re-run for ever.
+        if (monthKey < thisMonth && monthFullyCovered(y, m, windowStartMs)) {
+          unwrittenClosed.push(`${vendorName} ${monthKey}`);
+        }
+        continue;
+      }
+      if (!monthFullyCovered(y, m, windowStartMs)) {
+        // Filed, deliberately not reconciled — see monthFullyCovered.
+        skippedPartial.push(`${vendorName} ${monthKey}`);
+        continue;
+      }
+      const colIndex = columnForMonth(rows[0] ?? [], y, m);
+      if (colIndex === null) {
+        // Never silent: from March 2027 every invoice lands here until the sheet grows.
+        noColumn.push(`${vendorName} ${monthKey}`);
+        if (monthKey < thisMonth) noColumnClosed.push(`${vendorName} ${monthKey}`);
+        continue;
+      }
+      const col = colLetter(colIndex);
+      const cell = rows[row - 1]?.[colIndex];
+      // An empty cell is blank, not zero.
+      const current = cell === undefined || cell === "" ? NaN : Number(cell);
+      if (total.currency !== "EUR") {
+        // The Costs tab is in euros and we do not invent an FX rate. Reported so
+        // a person can enter the converted figure; never written blind.
+        foreignCurrency.push(
+          `${vendorName} ${monthKey}: ${chargesAs.get(key)?.join(" + ") ?? `${total.currency} ${total.value.toFixed(2)}`}`
+        );
+        if (monthKey < thisMonth) unwrittenClosed.push(`${vendorName} ${monthKey}`);
+        continue;
+      }
+      const next = -Math.abs(total.value);
+      if (Number.isFinite(current) && Math.abs(current - next) < 0.005) continue;
+
+      // Carry the new rate across this month and every forecast month after it:
+      // that is how this sheet models a recurring cost, and leaving the tail at the
+      // old figure is what let Claude sit at EUR 42.84 for seven months.
+      const span = lastIndex - colIndex + 1;
+      updates.push({
+        range: `${SHEET_TAB}!${col}${row}:${colLetter(lastIndex)}${row}`,
+        values: [Array.from({ length: span }, () => next)],
+      });
+      changes.push(
+        `${vendorName} ${monthKey}: ${Number.isFinite(current) ? current.toFixed(2) : "(blank)"} → ${next.toFixed(2)}`
+      );
+      // The sheet as this run leaves it. The next month is compared with the figure just
+      // carried into it: compared with the read from before the batch, a month whose own
+      // total matched its old cell was skipped and kept the earlier month's new figure.
+      const carried = (rows[row - 1] ??= []) as unknown[];
+      for (let c = colIndex; c <= lastIndex; c++) carried[c] = next;
+    }
+
+    // ---- Google Ads: the closed month's spend, until its invoice is entered ----
+    let adsNote = "";
+    const adsRow = rowOf("Adwords");
+    const today = new Date();
+    const closed = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+    const closedKey = closed.toISOString().slice(0, 7);
+    const adsCol = adsRow
+      ? columnForMonth(rows[0] ?? [], closed.getUTCFullYear(), closed.getUTCMonth() + 1)
+      : null;
+    if (adsRow && adsCol !== null && adsCol <= lastIndex) {
+      const adsCells = (rows[adsRow - 1] ??= []) as unknown[];
+      const label = closedKey.replace("-", "/");
+      const shown = Number.isFinite(Number(adsCells[adsCol]))
+        ? Number(adsCells[adsCol]).toFixed(2)
+        : "(blank)";
+      const before = new Date(Date.UTC(closed.getUTCFullYear(), closed.getUTCMonth() - 1, 1));
+      const beforeKey = before.toISOString().slice(0, 7);
+      const spends = await googleAdsSpend(beforeKey, closedKey);
+      if (spends === null) {
+        // Left stale, the month is not settled, and a run that records success says it is.
+        unwrittenClosed.push(`Adwords ${label}`);
+        adsNote = `:warning: *Google Ads ${label} could not be read from the Google Ads API*, so its line still shows ${shown}: if that is not the invoice, enter the invoice by hand.`;
+      } else if (!adsCellTakesSpend(adsCells, adsCol, spends.get(beforeKey))) {
+        adsNote = `_Google Ads ${label}: ${shown} on the sheet, entered from the invoice, so left as is._`;
+      } else {
+        const spend = spends.get(closedKey) ?? 0;
+        if (spend > 0) {
+          const next = -spend;
+          updates.push({
+            range: `${SHEET_TAB}!${colLetter(adsCol)}${adsRow}:${colLetter(lastIndex)}${adsRow}`,
+            values: [Array.from({ length: lastIndex - adsCol + 1 }, () => next)],
+          });
+          changes.push(
+            `Adwords ${label}: ${shown} → ${next.toFixed(2)} (spend, until the invoice)`
+          );
+          for (let c = adsCol; c <= lastIndex; c++) adsCells[c] = next;
+          // From an incomplete walk nothing is written (below), and the changes say so.
+          if (!incomplete.length)
+            adsNote =
+              `:information_source: *Google Ads ${label} is the month's spend, standing in for the invoice.* ` +
+              `Card payments get no invoice by email: download it in Google Ads (Billing, Documents) and send it to Claude, who files it and enters the exact total.`;
+        } else {
+          adsNote = `_Google Ads ${label}: no spend that month, so its line was left as is._`;
+        }
+      }
+    }
+
+    // Nothing is written from an incomplete walk: a month summed from part of a mailbox would
+    // overwrite the right total with a smaller one, carried into every forecast month, and
+    // after about the 15th a re-run can no longer reconcile that month to repair it.
+    if (shouldWriteSheet(updates, incomplete)) {
+      await gapi(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
+        sheetToken,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ valueInputOption: "USER_ENTERED", data: updates }),
+        }
+      );
+    }
+
+    const lines = [
+      `:page_facing_up: *Invoice filing* — ${filed.length} PDF${filed.length === 1 ? "" : "s"} filed to Drive`,
+      ...filed.map((f) => `• ${escapeSlack(f.vendor)}/${f.month}/${escapeSlack(f.file)}`),
+      "",
+      changes.length
+        ? (incomplete.length
+            ? `:no_entry: *Cost sheet NOT updated, these would have changed* (${changes.length})\n`
+            : `:heavy_dollar_sign: *Cost sheet updated* (${changes.length})\n`) +
+          changes.map((c) => `• ${escapeSlack(c)}`).join("\n")
+        : incomplete.length ||
+            noColumn.length ||
+            noRow.length ||
+            foreignCurrency.length ||
+            skippedPartial.length ||
+            inProgress.length
+          ? "" // it cannot say every invoice matched; the lines below say which did not
+          : charged.size
+            ? ":white_check_mark: Cost sheet already matched every invoice."
+            : "No invoice total was found to compare with the cost sheet.",
+      convertedAny
+        ? `_Dollar invoices are converted to EUR at the ECB reference rate on each invoice's own date._`
+        : "",
+      adsNote,
+      foreignCurrency.length
+        ? `:currency_exchange: *Not written — could not be read or converted, enter by hand:*\n` +
+          foreignCurrency.map((f) => `• ${escapeSlack(f)}`).join("\n")
+        : "",
+      noRow.length
+        ? `:warning: *No row in the cost sheet for:* ${escapeSlack([...new Set(noRow)].join(", "))}. The PDFs are filed; add the row and run this again.`
+        : "",
+      noColumn.length
+        ? `:warning: *No month column in the cost sheet, so nothing written for:* ${escapeSlack(noColumn.join(", "))}. Row 1 must list the months as one unbroken run of dates: add the month to it, or move what breaks it, and run this again.`
+        : "",
+      skippedPartial.length
+        ? `_Filed but not reconciled (month only partly inside the ${LOOKBACK_DAYS}-day window): ${escapeSlack(skippedPartial.join(", "))}._`
+        : "",
+      inProgress.length
+        ? `_Filed, and entered next month once the month is complete: ${escapeSlack(inProgress.join(", "))}._`
+        : "",
+      "",
+      `_No invoice expected by email from: ${NEVER_ATTACHES.map((n) => `${n.sheetName} (${n.why})`).join("; ")}._`,
+      incomplete.length
+        ? `:warning: *Incomplete run, so the cost sheet was NOT updated:* ${escapeSlack(incomplete.join("; "))}. Run it again before the 15th.`
+        : "",
+    ];
+    if (incomplete.length) cronError = `incomplete: ${incomplete.join("; ")}`;
+    else if (noColumnClosed.length) {
+      cronError = `no sheet column for ${noColumnClosed.join(", ")}`;
+    } else if (unwrittenClosed.length) {
+      cronError = `not written, needs a person: ${unwrittenClosed.join(", ")}`;
+    }
+
+    await notifySlack({
+      channel: "ops",
+      kind: "file-invoices",
+      text: lines.join("\n"),
+    });
+
+    return NextResponse.json({ filed: filed.length, changed: changes.length });
+  } catch (err) {
+    cronError = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, "file-invoices: run failed");
+    return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  } finally {
+    await trackDuration();
+    await recordCronRun("file-invoices", startMs, cronError ? "error" : "success", cronError);
+  }
+}

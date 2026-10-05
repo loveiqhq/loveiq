@@ -24,7 +24,9 @@ const FIELD_HARD_LIMIT = 2000;
 const MESSAGE_HARD_LIMIT = 40_000;
 
 /** Our own ceilings, kept below Slack's so rounding and escaping can't tip us over. */
-const SECTION_BUDGET = 2900;
+// Exported so a builder that puts its most important line LAST can reserve room
+// for it, rather than discovering at clamp time that it was the part that gave.
+export const SECTION_BUDGET = 2900;
 const MESSAGE_BUDGET = 38_000;
 
 /**
@@ -157,8 +159,10 @@ export function fitBlocks(input: SlackBlock[], text: string): FitResult {
   });
 
   // 2. Block count, and 3. whole-message size. Keep from the front; the first
-  // block is the header and is always kept even if it alone is over budget
-  // (Slack would reject an empty blocks array, and a header is tiny).
+  // block is always kept even if it alone is over budget, because Slack would
+  // reject an empty blocks array. That used to be safe because blocks[0] was a
+  // tiny header — the compact survey message makes it the WHOLE message, so the
+  // safety now comes from step 1 having already clamped it to SECTION_BUDGET.
   if (blocks.length > BLOCK_HARD_LIMIT || serializedSize(blocks, text) > MESSAGE_BUDGET) {
     const notice = section("_…some detail omitted to fit Slack's message limit._");
     const kept: SlackBlock[] = blocks.length > 0 ? [blocks[0]!] : [];

@@ -39,6 +39,40 @@ const CLICK_ID_KEYS = ["gclid", "gbraid", "wbraid"] as const;
  */
 const VALUE_TRACK_KEYS = ["matchtype", "network"] as const;
 
+/**
+ * A path with its campaign and ad-click parameters taken out — the keys this
+ * file captures, plus the ones other networks send.
+ *
+ * For a path that is STORED or REPLAYED, not for attribution (which reads the
+ * URL itself, above). The tap tracker's `pathname` used to carry them, so a
+ * Google Ads landing put the visitor's `gclid` and search words into
+ * `ux_finding.url_path`, and the dead-control probe opened production with
+ * them. Everything else is kept, because some of it changes the page — the
+ * report's `?v2=1` arm, for one.
+ *
+ * `utm_` and `gad_` are matched as prefixes: both families grow (`utm_id`,
+ * `gad_campaignid`), and a list of today's members is one new parameter away
+ * from leaking again.
+ */
+const TRACKING_KEYS: ReadonlySet<string> = new Set([
+  ...CLICK_ID_KEYS,
+  ...VALUE_TRACK_KEYS,
+  "fbclid",
+  "msclkid",
+]);
+
+export function withoutTrackingParams(path: string): string {
+  const q = path.indexOf("?");
+  if (q === -1) return path;
+  const params = new URLSearchParams(path.slice(q + 1));
+  for (const key of [...params.keys()]) {
+    const k = key.toLowerCase();
+    if (k.startsWith("utm_") || k.startsWith("gad_") || TRACKING_KEYS.has(k)) params.delete(key);
+  }
+  const kept = params.toString();
+  return path.slice(0, q) + (kept ? `?${kept}` : "");
+}
+
 /** Current global storage key. */
 export const GLOBAL_UTM_KEY = "loveiq-utm";
 

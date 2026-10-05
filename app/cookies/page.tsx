@@ -34,7 +34,7 @@ export default function CookiesPage() {
 
             <p>
               <span className="font-semibold text-gray-900">
-                Applied Psychometrics UG (in formation) (haftungsbeschränkt)
+                Applied Psychometrics UG (haftungsbeschränkt)
               </span>
               <br />
               Hasenheide 62
@@ -141,7 +141,12 @@ export default function CookiesPage() {
                 <li>retargeting</li>
                 <li>conversion tracking</li>
               </ul>
-              <p className="mb-2">These are only activated after explicit consent.</p>
+              <p className="mb-2">
+                Conversion events are only sent to Google Ads if you accept marketing cookies.
+                Google&rsquo;s advertising tag itself loads on every visit and may set a measurement
+                cookie (<code>_gcl_au</code>) before you answer this banner; you can remove it at
+                any time in your browser settings.
+              </p>
               <p className="mb-6">Legal basis: Consent (Art. 6(1)(a) GDPR)</p>
 
               <h3 className="text-gray-900 font-medium mb-2">E. Third-Party Services</h3>

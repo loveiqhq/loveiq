@@ -70,6 +70,8 @@ vi.mock("@features/survey/server/server", () => ({
   ensureSubmissionScored: (...args: unknown[]) => mockEnsureSubmissionScored(...args),
   submitSurveyOnce: (...args: unknown[]) => mockSubmitSurveyOnce(...args),
   isSurveyClosed: () => Promise.resolve(false),
+  // No earlier submission under this session: the replay path stays out of the way.
+  fetchSubmissionBySessionId: () => Promise.resolve(null),
 }));
 
 vi.mock("@features/report/server/personalReport", () => ({
@@ -209,11 +211,24 @@ describe("POST /api/survey notifications", () => {
       ]),
     ].join("\n");
 
-    // masked, in a code span so the mask's asterisks are not read as bold markers
-    expect(flat).toContain("`a***@example.com`");
+    /**
+     * Two different guarantees, and only one of them moved.
+     *
+     * The RAW address must never appear in any form. That is the ROPA row for
+     * Slack ("masked email ... never a raw email address") written as a test, and
+     * it does not move for anyone.
+     *
+     * The MASKED address does appear now, on the title line, because Marcus asked
+     * for it back (#incoming-surveys, 15 Sep) — it tells the channel at a glance
+     * whether a submission is internal or a real visitor. Asserted as the rendered
+     * code span, so what actually reaches the channel is pinned rather than merely
+     * permitted.
+     */
     expect(flat).not.toContain("ada@example.com");
-    // the LIVE arm, in plain English — never the raw code
-    expect(flat).toContain("Landing Page V1 (First Design)");
+    expect(flat).toContain("Survey submission *#123* `a***@example.com`");
+    // the LIVE arm, in plain English — never the raw code. The arm NAME is bolded
+    // and its parenthetical is not, so this is asserted as the rendered string.
+    expect(flat).toContain("Landing page design: *Landing Page V1* (First Design)");
     // …and so is the price test, Pricing 3.0, once a quote has stamped its list.
     expect(flat).toContain("Report pricing");
     expect(flat).toContain("Pricing 3.0 A");

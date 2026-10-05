@@ -1,0 +1,65 @@
+{
+  "scanner_version": "v2",
+  "precision": 0.2,
+  "recall": 0.5,
+  "bars": {
+    "precision": 0.8,
+    "recall": 0.6
+  },
+  "passed": false,
+  "tp": 1,
+  "fp": 4,
+  "fn": 1,
+  "unresolved": 0,
+  "rows": [
+    {
+      "session_id": "01a04be1-da48-7cd6-abf5-6bfdecb52a9a",
+      "scanner": "LoveIQ survey UX",
+      "expect": "yes",
+      "got": "no",
+      "confidence": 1
+    },
+    {
+      "session_id": "01a04d64-fc8a-77c1-a6f7-a534858845f7",
+      "scanner": "LoveIQ report UX",
+      "expect": "yes",
+      "got": "yes",
+      "confidence": 0.9
+    },
+    {
+      "session_id": "01a08e2d-2fc6-7ed1-91a7-81626e8ffdb8",
+      "scanner": "LoveIQ report UX",
+      "expect": "no",
+      "got": "no",
+      "confidence": 0.9
+    },
+    {
+      "session_id": "01a09e04-dfaa-7a3e-9622-0d7ca5285017",
+      "scanner": "LoveIQ report UX",
+      "expect": "no",
+      "got": "yes",
+      "confidence": 0.9
+    },
+    {
+      "session_id": "01a09fe4-71ba-7ea5-afd7-c5da45a71af7",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "got": "yes",
+      "confidence": 0.9
+    },
+    {
+      "session_id": "01a09e25-3e09-78ed-b87e-21712439d172",
+      "scanner": "LoveIQ dead-click cause",
+      "expect": "no",
+      "got": "yes",
+      "confidence": 0.9
+    },
+    {
+      "session_id": "01a08680-882b-7465-b59e-014f7afbcc1f",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "got": "yes",
+      "confidence": 0.9
+    }
+  ]
+}

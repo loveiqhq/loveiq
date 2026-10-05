@@ -597,10 +597,19 @@ export function pageToRow(
  * reading information; a key pasted into every LLM prompt that retrieves it is a
  * different thing.
  */
-const ALWAYS_EXCLUDED = ["github token"];
+const ALWAYS_EXCLUDED = [
+  "github token",
+  // Job applicants (owner's decision, 2026-09-23): the Candidates database holds named
+  // people's applications, six of them marked "Rejected - decline pending" — rejections
+  // the candidates had not yet been told. The pipeline page names who is still waiting.
+  // Excluded by row, not by skipping the database, so the database stays a walked scope
+  // and the sweep removes what is already stored.
+  "candidates: ",
+  "notion: hiring pipeline",
+];
 
 /** Titles the team has chosen to keep out, lowercased, from NOTION_EXCLUDE_TITLES. */
-function excludedTitles(): string[] {
+export function excludedTitles(): string[] {
   return [
     ...ALWAYS_EXCLUDED,
     ...(process.env.NOTION_EXCLUDE_TITLES ?? "")
@@ -731,13 +740,19 @@ export async function ingestNotion(
     }
 
     let text = "";
+    fetched += 1;
     try {
       text = await pageText(token, item.raw.id as string, isOutOfTime);
     } catch (err) {
       logger.warn({ err, page: item.raw.id }, "brain-ingest notion: page content unreadable");
       complete = false;
+      // NOT written with an empty body. That row would carry the page's current edit
+      // time and builder version, so every later run would read it as unchanged and
+      // never fetch the text again: a transient Notion error erased the content until
+      // somebody edited the page. Unwritten, it is deferred below like any page the
+      // clock did not reach, keeps its stored copy, and is retried next run.
+      continue;
     }
-    fetched += 1;
 
     const row = item.dbTitle
       ? taskToRow(item.raw, stampedAt, item.dbTitle, text)
@@ -796,6 +811,19 @@ export async function ingestNotion(
   const swept = sweeping
     ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed]), {
         scopeKey: "database",
+        /**
+         * Only the databases this run actually crawled. Unshare a database from
+         * the integration and its pages stop being listed, which is lost access
+         * rather than deleted pages — without this they are swept whole, and 30
+         * of the 33 databases here sit under the vanishing-scope heuristic's 5%
+         * floor, so nothing else would catch it.
+         *
+         * `label` falls back to "Board" for a standalone page, and "Board" is a
+         * real database title, so those stay sweepable as long as it is crawled.
+         */
+        walkedScopes: new Set(
+          [...databases.values()].map((t) => t?.trim() || "Board").filter(Boolean)
+        ),
       })
     : 0;
 
@@ -871,14 +899,15 @@ function partIdsOf(known: Map<string, { edited: string; v: number }>, baseId: st
   return [...known.keys()].filter((id) => id.startsWith(prefix));
 }
 
-export function splitBody(text: string): string[] {
+/** `limit` below BODY_LIMIT leaves room for a header a caller adds to every part. */
+export function splitBody(text: string, limit = BODY_LIMIT): string[] {
   const out: string[] = [];
   let rest = text;
-  while (rest.length > BODY_LIMIT) {
-    const window = rest.slice(0, BODY_LIMIT);
+  while (rest.length > limit) {
+    const window = rest.slice(0, limit);
     let cut = window.lastIndexOf("\n\n");
     if (cut < MIN_SPLIT) cut = window.lastIndexOf("\n");
-    if (cut < MIN_SPLIT) cut = BODY_LIMIT;
+    if (cut < MIN_SPLIT) cut = limit;
     out.push(rest.slice(0, cut).trim());
     rest = rest.slice(cut).trim();
   }

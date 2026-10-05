@@ -71,6 +71,34 @@ describe("what it refuses before anything is composed", () => {
    * same tool addressing two hundred people is an unreviewed mailshot under our domain,
    * and it would be gone before anyone could read the log.
    */
+  /**
+   * PIN THE NUMBER, not only the behaviour.
+   *
+   * The two tests below build their recipient lists FROM `MAX_RECIPIENTS`, so they
+   * prove the ceiling is enforced wherever it happens to sit — and pass identically
+   * if someone moves it. Measured 2026-09-22: raising the constant from 5 to 500 left
+   * all 22 tests in this file green, and 500 recipients is precisely the mailshot the
+   * constant exists to prevent.
+   *
+   * The safety property written on that constant is about the NUMBER — "five covers
+   * 'email the three of us'; anything larger belongs in a campaign someone signed
+   * off" — so the number is what has to be asserted. A literal on both sides: the
+   * value itself, and a refusal count that never consults it.
+   */
+  it("keeps the ceiling at a handful, not a mailing list", () => {
+    expect(MAX_RECIPIENTS).toBe(5);
+  });
+
+  it("refuses a sixth recipient without asking the constant what the limit is", async () => {
+    const six = ["a", "b", "c", "d", "e", "f"].map((c) => `${c}@example.com`);
+    await expect(prepareEmail({ ...ok, to: six })).rejects.toThrow(EmailRefusal);
+  });
+
+  it("still accepts five, so the test above is a ceiling and not a ban", async () => {
+    const five = ["a", "b", "c", "d", "e"].map((c) => `${c}@example.com`);
+    expect((await prepareEmail({ ...ok, to: five })).to).toHaveLength(5);
+  });
+
   it("refuses more recipients than a message can reasonably have", async () => {
     const many = Array.from({ length: MAX_RECIPIENTS + 1 }, (_, i) => `p${i}@example.com`);
     await expect(prepareEmail({ ...ok, to: many })).rejects.toThrow(/campaign/);
@@ -174,11 +202,14 @@ describe("sending", () => {
   });
 
   /** Act-freely's compensating control is that a write cannot be quiet, and that matters
-   *  most for the write that leaves the company. */
-  it("mirrors every send to the ops channel", async () => {
+   *  most for the write that leaves the company. Since 2026-09-14 the mirror lands in the
+   *  brain's own channel rather than the shared ops one — a move toward the person who
+   *  actually watches the brain, not away from scrutiny. What must never change is that
+   *  it is mirrored SOMEWHERE, which is what the assertion on `kind` holds. */
+  it("mirrors every send to the brain channel", async () => {
     await sendEmail({ ...ok, send: true });
     expect(mockNotify).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: "ops", kind: "brain_email_sent" })
+      expect.objectContaining({ channel: "brain", kind: "brain_email_sent" })
     );
   });
 

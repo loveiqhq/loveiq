@@ -2,16 +2,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
-// --- Mocks (must be before imports) ---
-
-vi.mock("@/data/survey-data", () => ({
-  surveyQuestions: [
-    { qId: "q1", chapter: "Chapter A" },
-    { qId: "q2", chapter: "Chapter A" },
-    { qId: "q3", chapter: "Chapter B" },
-  ],
-}));
-
 import { useSurveyState } from "@features/survey/ui/hooks/useSurveyState";
 
 // --- localStorage helpers ---
@@ -56,12 +46,11 @@ describe("useSurveyState", () => {
     vi.restoreAllMocks();
   });
 
-  it("initial state has empty answers, currentIndex 0, progress 0", () => {
+  it("initial state has empty answers and currentIndex 0", () => {
     const { result } = renderHook(() => useSurveyState());
 
     expect(result.current.answers).toEqual({});
     expect(result.current.currentIndex).toBe(0);
-    expect(result.current.progress).toBe(0);
   });
 
   it("startedAt is a valid ISO string on init", () => {
@@ -94,31 +83,6 @@ describe("useSurveyState", () => {
   it("getAnswer returns null for non-existent key", () => {
     const { result } = renderHook(() => useSurveyState());
     expect(result.current.getAnswer("nonexistent")).toBeNull();
-  });
-
-  it("progress counts answered questions and excludes _other keys", () => {
-    const { result } = renderHook(() => useSurveyState());
-
-    act(() => {
-      result.current.setAnswer("q1", "yes");
-      result.current.setAnswer("q1_other", "some text"); // should not count
-      result.current.setAnswer("q2", "no");
-    });
-
-    // 2 answered out of 3 total questions = 67%
-    expect(result.current.progress).toBe(67);
-  });
-
-  it("progress is 100 when all questions answered", () => {
-    const { result } = renderHook(() => useSurveyState());
-
-    act(() => {
-      result.current.setAnswer("q1", "a");
-      result.current.setAnswer("q2", "b");
-      result.current.setAnswer("q3", "c");
-    });
-
-    expect(result.current.progress).toBe(100);
   });
 
   it("clearState resets to empty and removes localStorage entries", () => {
@@ -175,7 +139,6 @@ describe("useSurveyState", () => {
 
     expect(result.current.answers).toEqual({});
     expect(result.current.currentIndex).toBe(0);
-    expect(result.current.progress).toBe(0);
   });
 
   it("handles missing answers field in persisted data gracefully", () => {

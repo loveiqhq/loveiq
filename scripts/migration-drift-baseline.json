@@ -1,0 +1,34 @@
+{
+  "mismatched": [
+    "brain_search_anchor_recency_on_named_period: file 20260907110648 vs ledger 20260907105938"
+  ],
+  "missingRow": [],
+  "missingFile": [
+    "20260430234218_fix_add_unlocked_archetype_text_array",
+    "20260505132556_marketing_spend_lock_search_path",
+    "20260530204555_forced_paywall_ab_rpc_pin_search_path",
+    "20260530205823_forced_paywall_ab_rpc_refund_semantics",
+    "20260530212825_forced_paywall_ab_rpc_add_assigned",
+    "20260602144315_booking_event_call_funnel",
+    "20260602144330_nurture_perf_add_78h_stage",
+    "20260614135258_landing_variant_funnel_v2_drop_visitors",
+    "20260701171316_conversion_funnel_full_stages_revenue_fix",
+    "20260708211531_conversion_funnel_cohort",
+    "20260709071153_conversion_funnel_started_source_fix",
+    "20260907110404_brain_search_named_period_drops_recency_not_recenters",
+    "20260907110648_brain_search_restore_anchored_recency_after_bad_metric",
+    "20260908230535_brain_person_identity_registry",
+    "20260909070308_brain_count_aggregate_over_the_corpus_v2",
+    "20260909071604_brain_count_learned_since",
+    "20260911165734_brain_search_drop_bare_numbers_from_the_trigram_arm",
+    "20260911170047_brain_search_revert_bare_number_filter_it_did_not_help",
+    "20260911190105_brain_search_three_letter_acronyms_were_invisible",
+    "20260914200330_brain_search_demote_bulk_mail_that_is_not_about_us",
+    "20260914201107_tmp_revert_bulk_split_for_mutation_test",
+    "20260914201430_brain_search_demote_third_party_bulk_reapply",
+    "20260915123326_friction_exclude_staff_and_fix_price_signal",
+    "20260915124206_survey_friction_label_by_mode",
+    "20260917213200_question_effectiveness_aggregates",
+    "20260917213318_drop_question_dwell_context"
+  ]
+}

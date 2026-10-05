@@ -89,7 +89,10 @@ describe("orderedOptions", () => {
   it("keeps the flat shuffle exactly as it was before grouping existed", () => {
     // Characterisation, captured from the implementation before C9 was grouped. A
     // respondent mid-survey when this deploys must see the same order after a reload,
-    // and their recorded order must still be the one they saw.
+    // and their recorded order must still be the one they saw. 16014's is the order
+    // production shows since its "Nothing major" and "Something else" stay at the bottom
+    // (main, 2026-10-05): checked equal to main's implementation for every flat
+    // randomised question over 200 sessions when the two were merged.
     expect(orderedOptions(randomised(), SESSION)).toEqual([
       "f",
       "h",
@@ -108,17 +111,47 @@ describe("orderedOptions", () => {
         "session-fixed-1"
       )
     ).toEqual([
-      "Nothing major is in the way right now",
-      "Useful support feels too expensive or hard to access",
-      "The person I'm with isn't on the same page or willing to engage",
-      "Something else",
+      "Shame, self-judgment, or inner pressure",
       "I struggle to keep going with things over time",
+      "The person I'm with isn't on the same page or willing to engage",
       "I don't have enough time or energy",
       "Physical pain or body issues",
-      "Shame, self-judgment, or inner pressure",
+      "Useful support feels too expensive or hard to access",
       "It doesn't feel emotionally safe enough yet",
       "I'm not sure what would actually help",
+      "Nothing major is in the way right now",
+      "Something else",
     ]);
+  });
+
+  describe("answers that stay at the bottom", () => {
+    const SESSIONS = Array.from(
+      { length: 40 },
+      (_, n) => `3f2b1c7a-9d4e-4f10-8b52-${String(n).padStart(12, "0")}`
+    );
+
+    it("keeps None of these, Something else and Nothing major last, in authored order", () => {
+      // The flat lists. C9 (16016) is grouped into categories (orderedOptionGroups) and has
+      // no answer of this kind.
+      for (const qId of [...RANDOMISE_QIDS].filter((id) => id !== "16016")) {
+        const q = surveyQuestions.find((x) => x.qId === qId)!;
+        const anchored = q.options.filter((o) =>
+          /^(none of these|nothing major|something else|other)\b/i.test(o)
+        );
+        expect(anchored.length, `${qId} has an answer to anchor`).toBeGreaterThan(0);
+        for (const session of SESSIONS) {
+          const out = orderedOptions(q, session);
+          expect(out.slice(-anchored.length)).toEqual(anchored);
+          expect([...out].sort()).toEqual([...q.options].sort());
+        }
+      }
+    });
+
+    it("still shuffles everything above them", () => {
+      const q = surveyQuestions.find((x) => x.qId === "16011")!;
+      const firsts = new Set(SESSIONS.map((session) => orderedOptions(q, session)[0]));
+      expect(firsts.size).toBeGreaterThan(1);
+    });
   });
 });
 

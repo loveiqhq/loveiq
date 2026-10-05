@@ -15,14 +15,17 @@ See [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md) for env vars, troubleshooting
 
 ## Branch and Review Workflow
 
-1. Branch from `main`.
+1. Branch from `main`, in your own worktree. Several people and AI sessions work at once; follow the "Working alongside other sessions" section of `CLAUDE.md`.
 2. Make the smallest coherent change set you can.
 3. Run `npm run check`.
 4. Run `npm run docs:truth` when your change touches docs, API routes, env vars, scripts, or workflows.
 5. Open a PR against `main`.
 6. Complete the PR checklist truthfully. If high-risk code changed without markdown updates, check `No doc impact` explicitly.
+7. When the work is done, request a review from Eman (`@eman-cickusic`): `gh pr edit <number> --add-reviewer eman-cickusic`. Every PR into `main` needs it, whether a person or an AI agent wrote it, except one opened from Eman's own account, which cannot request its author.
 
 The CI docs-impact gate blocks PRs that change `app/api/admin`, `app/admin`, `features/admin`, public API routes, `proxy.ts`, `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, package/env files, or workflow/docs scripts without either markdown changes or a checked `No doc impact` box.
+
+It judges the PR's own changes (`git diff <base>...HEAD`) and is safe to run locally: `PR_BODY="$(cat body.md)" bash scripts/check-docs-impact.sh origin/main`. Until 2026-09-23 it fetched `main` with `--depth=1`, which made a local clone shallow (breaking `git rebase` in every worktree sharing it) and, whenever `main` had moved, compared whole trees so other people's merged changes counted as the PR's.
 
 ## Commit Conventions
 

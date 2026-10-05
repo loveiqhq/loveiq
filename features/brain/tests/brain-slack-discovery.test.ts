@@ -9,6 +9,8 @@ const slackCalls: string[] = [];
 /** Conversation types Slack will accept; anything else answers missing_scope. */
 let supportedTypes = new Set(["public_channel", "private_channel", "mpim"]);
 let listHttpFails = false;
+/** Opt-in: puts `page-two-only` behind a cursor so pagination can be asserted. */
+let withSecondPage = false;
 /** Opt-in, so every other test keeps the call sequence it asserts on. */
 let withThreadReply = false;
 
@@ -34,8 +36,19 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
         { id: "C1", name: "all-loveiq", is_member: true },
         { id: "C2", name: "founders-private", is_member: true, is_private: true },
         { id: "C3", name: "mpdm-eman--marcus--mark-1", is_member: true, is_mpim: true },
+        // The bot IS a member of this one. Membership is deliberately not enough.
+        { id: "C4", name: "email-inbox", is_member: true, is_private: true },
+        // The recruiting channel: names and assesses candidates (2026-09-23).
+        { id: "C5", name: "hr", is_member: true, is_private: true },
       ];
-      return ok({ ok: true, channels: all.filter((c) => asked.some((t) => typeOf(c) === t)) });
+      const visible = all.filter((c) => asked.some((t) => typeOf(c) === t));
+      if (withSecondPage) {
+        const cursor = u.searchParams.get("cursor") ?? "";
+        return cursor === ""
+          ? ok({ ok: true, channels: visible, response_metadata: { next_cursor: "pg2" } })
+          : ok({ ok: true, channels: [{ id: "C9", name: "page-two-only", is_member: true }] });
+      }
+      return ok({ ok: true, channels: visible });
     }
     if (u.pathname.endsWith("/users.list")) {
       return ok({
@@ -115,6 +128,7 @@ beforeEach(() => {
   slackCalls.length = 0;
   supportedTypes = new Set(["public_channel", "private_channel", "mpim"]);
   listHttpFails = false;
+  withSecondPage = false;
   process.env.SLACK_BRAIN_BOT_TOKEN = "xoxb-test";
 });
 
@@ -124,6 +138,34 @@ function listedTypes(): string[] {
     .filter((u) => u.includes("/conversations.list"))
     .map((u) => new URL(u).searchParams.get("types") ?? "");
 }
+
+describe("Slack discovery follows the conversations.list cursor", () => {
+  /**
+   * `conversations.list` was a single `limit: 200` call while `users.list` and
+   * `conversations.history` in the same file both looped. The workspace has 11
+   * conversations so it fitted — but `is_member` is applied to the RESULT, so
+   * past 200 the bot's own channels fall off the end and stop being ingested
+   * with no error anywhere.
+   */
+  it("ingests a channel that only appears on the second page", async () => {
+    withSecondPage = true;
+    await ingestSlack(STAMP);
+    const channels = new Set(upserted.map((r) => (r as Record<string, never>).meta?.channel));
+    expect(channels, "a second-page channel was never walked").toContain("page-two-only");
+  });
+
+  /**
+   * The distinction the sweep depends on. A REFUSED call must not look like an
+   * empty workspace: `sweepStale` deletes everything older than the run stamp,
+   * so "the bot is in no channels" would take the corpus with it.
+   */
+  it("a refused first page is a failure, not an empty workspace", async () => {
+    listHttpFails = true;
+    const res = await ingestSlack(STAMP);
+    expect(res.skipped).toBe("slack-list-failed");
+    expect(res.swept).toBe(0);
+  });
+});
 
 describe("Slack discovery reaches private channels and group DMs", () => {
   it("asks for private channels and group DMs, not just public ones", async () => {
@@ -215,5 +257,52 @@ describe("a walked day carries who spoke and where to read it", () => {
     expect((day as never as { url: string }).url).toBe(
       "https://loveiq.slack.com/archives/C1/p17566000000"
     );
+  });
+});
+
+/**
+ * MEMBERSHIP IS NOT ENOUGH FOR A CHANNEL THAT CARRIES CUSTOMER MAIL.
+ *
+ * `#email-inbox` forwards whatever arrives at the company address into Slack. The person
+ * who made it restricted it to three people because "some messages may be sensitive".
+ * The bot was later invited, and by 2026-09-14 two of its days were in the corpus — both
+ * benign setup chatter, so nothing had leaked. The ingest was live, so the next customer
+ * email would have been indexed into a corpus that one shared token reads.
+ *
+ * That is the line CLAUDE.md says does not move: `brain_chunk` never indexes user-level
+ * rows. Open access among the team is a choice the company made; publishing what a
+ * customer wrote to us privately is a different one.
+ */
+describe("a channel carrying customer mail is never indexed, however it was invited", () => {
+  beforeEach(() => {
+    slackCalls.length = 0;
+    supportedTypes = new Set(["public_channel", "private_channel", "mpim"]);
+    listHttpFails = false;
+    withThreadReply = false;
+    process.env.SLACK_BRAIN_BOT_TOKEN = "xoxb-test";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
+  });
+
+  it("never reads #email-inbox, even though the bot is a member", async () => {
+    await ingestSlack(STAMP);
+    const historyCalls = slackCalls.filter((u) => u.includes("conversations.history"));
+    expect(historyCalls.length).toBeGreaterThan(0); // it did walk SOMETHING
+    expect(historyCalls.some((u) => u.includes("C4"))).toBe(false);
+  });
+
+  it("never reads #hr, the recruiting channel", async () => {
+    await ingestSlack(STAMP);
+    const historyCalls = slackCalls.filter((u) => u.includes("conversations.history"));
+    expect(historyCalls.length).toBeGreaterThan(0);
+    expect(historyCalls.some((u) => u.includes("C5"))).toBe(false);
+  });
+
+  /** The denylist must be surgical: excluding one channel must not cost the others. */
+  it("still walks the channels that are allowed", async () => {
+    await ingestSlack(STAMP);
+    const historyCalls = slackCalls.filter((u) => u.includes("conversations.history"));
+    expect(historyCalls.some((u) => u.includes("C1"))).toBe(true);
+    expect(historyCalls.some((u) => u.includes("C2"))).toBe(true);
   });
 });

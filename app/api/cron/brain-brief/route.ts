@@ -13,6 +13,7 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import logger from "@shared/observability/logger";
+import { recordNotice } from "@features/brain/server/notice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,8 +26,9 @@ export const maxDuration = 120;
  *
  * The one job here that PUSHES instead of waiting to be asked.
  *
- * Runs at 06:10 UTC, after the nightly Search Console ingest at 04:47 and before
- * the funnel numbers at 09:00, so the morning reads: what happened, then how it did.
+ * Started in GitHub Actions at 06:41 UTC by Vercel's clock, with retries at 07:41 and 08:41
+ * (features/cron/server/github-jobs.ts), so it lands in the morning, before the funnel
+ * numbers at 09:00: what happened, then how it did.
  *
  * Deliberately not another numbers digest — `conversion-digest` already posts the
  * funnel and `anomaly-watcher` already watches for moves. This covers what is
@@ -133,13 +135,29 @@ export async function GET(request: Request) {
     const fitted = fitBlocks(blocks, body);
 
     await notifySlack({
-      channel: "ops",
+      channel: "brain",
       kind: "brain_brief",
       text: body,
       blocks: fitted.blocks,
       username: "ops_alerts",
     });
     await markSlackAlertDelivered("brain_brief", "day", day);
+
+    /**
+     * THE SAME BRIEF, WHERE THE TEAM READS: a notice Jarvis puts in front of whoever next
+     * asks it anything in Claude, and that whats_new lists. A second sink beside the post,
+     * never a second computation, and never allowed to cost the delivery: `recordNotice`
+     * swallows its own errors.
+     */
+    await recordNotice({
+      headline: `What the brain noticed on ${day}`,
+      detail: brief.text + (slipping ? `\n\n${slipping}` : ""),
+      kind: "brain-brief",
+      evidence: sources
+        .map((x) => `[${x.n}] ${x.title ?? x.source}`)
+        .join("; ")
+        .slice(0, 1500),
+    });
 
     logger.info({ day, sources: sources.length }, "brain-brief: posted");
     return NextResponse.json({ ok: true, day, sent: true, sources: sources.length });

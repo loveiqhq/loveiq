@@ -3,21 +3,23 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 
 /**
- * R-05: remove an email from the Resend Audience so they stop receiving
- * marketing campaigns shipped via the audience export. Best-effort: a
- * failure here doesn't break the suppression write; the daily tech-digest
- * surfaces sustained issues. Skipped silently when no Audience is configured.
+ * R-05: mark the address unsubscribed in Resend, so campaigns sent from Resend
+ * skip it whichever list they go to. Removing it from the one list, as this used
+ * to, left the contact subscribed, and the survey's opt-in push re-subscribes
+ * on create. Best-effort: a failure here doesn't break the suppression write.
+ * Tried whether or not a list is configured: a contact outlives a config change.
  */
-async function removeFromResendAudience(email: string): Promise<void> {
+async function unsubscribeInResend(email: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  const audienceId = process.env.RESEND_AUDIENCE_ID;
-  if (!apiKey || !audienceId) return;
+  if (!apiKey) return;
   try {
-    const resend = new Resend(apiKey);
-    // Resend supports removal by email (not just by contact id).
-    await resend.contacts.remove({ audienceId, email });
+    const { error } = await new Resend(apiKey).contacts.update({ email, unsubscribed: true });
+    // The SDK returns API errors instead of throwing. not_found = never a contact.
+    if (error && error.name !== "not_found") {
+      logger.warn({ error, email }, "Failed to unsubscribe email in Resend");
+    }
   } catch (err) {
-    logger.warn({ err, email }, "Failed to remove email from Resend Audience");
+    logger.warn({ err, email }, "Failed to unsubscribe email in Resend");
   }
 }
 
@@ -68,40 +70,53 @@ export async function addToSuppression(
   // insert upserts with `resolution=merge-duplicates` (ON CONFLICT DO UPDATE
   // over the columns sent), an omitted field never overwrites an existing one —
   // so a later bounce can't wipe the campaign recorded on an earlier unsubscribe.
-  opts?: { campaign?: string; channel?: "footer" | "one-click" }
-): Promise<void> {
+  // `ifAbsent` inserts only when the address has no row yet (ON CONFLICT DO
+  // NOTHING, in one statement), for a caller that must not relabel a reason.
+  opts?: { campaign?: string; channel?: "footer" | "one-click"; ifAbsent?: boolean }
+): Promise<boolean> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) return;
+  if (!supabaseUrl || !serviceKey) return false;
 
   const row: Record<string, string> = { email, reason };
   if (opts?.campaign) row.source_campaign = opts.campaign;
   if (opts?.channel) row.source_channel = opts.channel;
 
+  let written = false;
   try {
-    await fetchWithTimeout(`${supabaseUrl}/rest/v1/email_suppression`, {
+    const res = await fetchWithTimeout(`${supabaseUrl}/rest/v1/email_suppression`, {
       method: "POST",
       headers: {
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
         "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
+        Prefer: opts?.ifAbsent ? "resolution=ignore-duplicates" : "resolution=merge-duplicates",
       },
       body: JSON.stringify(row),
       timeoutMs: 5_000,
     });
+    // fetch rejects only on a network error: a refused insert arrives as a response. It
+    // used to pass silently, and the unsubscribe page said "you've been unsubscribed" to
+    // a person who stayed on the list. A 4xx refuses every write until someone fixes it,
+    // so it pages; a 5xx is a blip the caller retries, like the network error below.
+    written = res.ok;
+    if (res.status >= 500) {
+      logger.warn({ status: res.status, email, reason }, "Suppression insert refused");
+    } else if (!res.ok) {
+      logger.error({ status: res.status, email, reason }, "Suppression insert refused");
+    }
   } catch (err) {
-    // warn-not-error: the Resend webhook retries on non-2xx (Svix-signed), so
-    // a transient suppression insert failure is recoverable. Sustained outage
+    // warn-not-error: the caller sees `false` and retries (the Resend webhook
+    // answers 503, so Svix redelivers), so a transient failure is recoverable. Sustained outage
     // surfaces via the daily tech-digest service-health section. Avoids
     // amplifying every bounce-processing blip into an api_5xx Slack page.
     logger.warn({ err, email, reason }, "Failed to add email to suppression list");
   }
 
-  // R-05: ALSO remove from Resend Audience so the next marketing export
-  // doesn't ship them. The suppression_list gate alone doesn't protect
-  // recipients on bulk Audience sends because those are dispatched server-side
-  // by Resend, not through our `sendEmail` helper. Best-effort: failure here
-  // doesn't undo the suppression write above.
-  await removeFromResendAudience(email);
+  // R-05: ALSO unsubscribe them in Resend. The suppression_list gate alone
+  // doesn't protect recipients of campaigns sent from Resend, because those are
+  // dispatched server-side by Resend, not through our senders. Best-effort:
+  // failure here doesn't undo the suppression write above.
+  await unsubscribeInResend(email);
+  return written;
 }

@@ -1,4 +1,10 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 
 export interface ReportSharedEmailParams {
   ownerFirstName?: string | null;
@@ -102,6 +108,7 @@ export function reportSharedEmail({
     "",
     "With kindness,",
     `${owner.plain} sent via LoveIQ`,
+    ...renderBrandFooterText(unsubscribeUrl),
   ]
     .filter((line, idx, arr) => !(line === "" && arr[idx - 1] === ""))
     .join("\n");

@@ -10,9 +10,10 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyInvite: (...args: unknown[]) => trackSurveyInvite(...args),
   trackInviteLinkCopied: vi.fn(),
   trackInviteModalDismissed: vi.fn(),
-  // Tests assume analytics-consent is granted so the /api/invite-tracking
-  // fetch fires; in real prod the gate is honoured.
-  hasCookieYesConsent: () => true,
+  // DECLINED on purpose: `invite_event` is our own table and is written
+  // whatever the banner says, so the /api/invite-tracking assertions below are
+  // also the proof that a declining visitor still gets recorded.
+  hasCookieYesConsent: () => false,
 }));
 
 describe("InviteModal", () => {

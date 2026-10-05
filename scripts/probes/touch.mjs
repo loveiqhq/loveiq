@@ -21,6 +21,18 @@ export async function touchScroll(cdp, page, dy = 500, opts = {}) {
     x: Math.floor(window.innerWidth / 2),
     y: Math.floor(window.innerHeight * 0.6),
   }));
+  /**
+   * How far there was to go, so a caller can tell "could not move" from
+   * "nowhere to move". Without this every caller re-derives it or, more often,
+   * does not: a fixed push at the END of a page moves 0, and `moved <= 0` then
+   * reads as a dead scroll. replay-session.mjs shipped exactly that and the
+   * verifier turned it into "Reproduced in production" for a reader who had
+   * simply read to the bottom.
+   */
+  const room = await page.evaluate(() => ({
+    below: document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
+    above: window.scrollY,
+  }));
   const before = await page.evaluate(() => window.scrollY);
   if (cdp) {
     await cdp.send("Input.synthesizeScrollGesture", {
@@ -42,14 +54,34 @@ export async function touchScroll(cdp, page, dy = 500, opts = {}) {
   }
   await page.waitForTimeout(opts.settle ?? 450);
   const after = await page.evaluate(() => window.scrollY);
-  return { before, after, moved: after - before, real: !!cdp };
+  // `hadRoom` is about the direction actually requested: a page at its end has
+  // no room below, and asking it to go further down proves nothing.
+  const hadRoom = dy >= 0 ? room.below > 0 : room.above > 0;
+  return { before, after, moved: after - before, real: !!cdp, hadRoom, room };
 }
+
+/**
+ * Both helpers below resolve a selector to its first match that is NOT the
+ * consent banner's own markup. Selectors recorded from readers are often
+ * generic — "span", "p", "svg" — and the CookieYes banner is full of all three,
+ * so a plain querySelector could hand back the banner and the probe would then
+ * scroll to, or press, IT. The banner has its own daily guard
+ * (verify-consent-banner-clearance). Written out in each page.evaluate: sharing
+ * it as a string would need a Function constructor, which the site's CSP refuses.
+ *
+ * EXACT, not `[class*='cky']`: that substring also matches "sti-cky", so the
+ * report's own sticky unlock bar and its main wrapper counted as the banner and
+ * every element inside them was skipped — 1 of a reader's 41 taps resolved.
+ * CookieYes names every class `cky-…`.
+ */
 
 /** Scroll with real gestures until the selector is on screen (or we give up). */
 export async function touchScrollTo(cdp, page, selector, maxSwipes = 25) {
   for (let i = 0; i < maxSwipes; i += 1) {
     const pos = await page.evaluate((s) => {
-      const n = document.querySelector(s);
+      const n = [...document.querySelectorAll(s)].find(
+        (el) => !el.closest("[class^='cky-'], [class*=' cky-']")
+      );
       if (!n) return null;
       const r = n.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return null;
@@ -111,7 +143,9 @@ export async function hitAreaHeight(page, selector) {
 export async function realTap(page, selector, { cdp = null, scroll = true } = {}) {
   if (scroll) await touchScrollTo(cdp, page, selector);
   const probe = await page.evaluate((s) => {
-    const n = document.querySelector(s);
+    const n = [...document.querySelectorAll(s)].find(
+      (el) => !el.closest("[class^='cky-'], [class*=' cky-']")
+    );
     if (!n) return { exists: false };
     const r = n.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return { exists: true, visible: false };
@@ -127,12 +161,19 @@ export async function realTap(page, selector, { cdp = null, scroll = true } = {}
       cy,
       reaches: !!top && (top === n || n.contains(top) || top.contains(n)),
       topEl: top ? `${top.tagName}.${String(top.className || "").split(" ")[0]}` : null,
-      blockedByConsent: !!(top && top.closest && top.closest("[class*='cky']")),
+      blockedByConsent: !!(top && top.closest && top.closest("[class^='cky-'], [class*=' cky-']")),
       size: { w: Math.round(r.width), h: Math.round(r.height) },
     };
   }, selector);
 
   if (!probe.exists || !probe.visible || !probe.onScreen) return { tapped: false, ...probe };
+  /**
+   * Something else is on top, so a finger here would press THAT. This tapped
+   * anyway and reported tapped:false, which was true and too late: a replayed
+   * tap meant for a reader's paragraph pressed whatever covered it. Say it
+   * could not be reached; do not operate the thing in the way.
+   */
+  if (!probe.reaches) return { tapped: false, ...probe };
   await page.touchscreen.tap(probe.cx, probe.cy);
-  return { tapped: probe.reaches, ...probe };
+  return { tapped: true, ...probe };
 }

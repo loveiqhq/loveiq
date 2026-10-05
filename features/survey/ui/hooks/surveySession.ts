@@ -1,6 +1,22 @@
+import { SURVEY_STATE_KEY } from "./surveyStorage";
+
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
 export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
+/**
+ * The report a reader in THIS tab has already finished.
+ *
+ * Written when the submit response returns the token. `loadInitialStep()` reads
+ * only the step key and the answers, and submission deliberately clears both —
+ * so a reader who finished and then pressed Back landed on the intro screen
+ * with their progress apparently gone, as if they had never taken it. Four
+ * scanners reported that 24 times in 30 days, and `verify-survey-loop.mjs`
+ * reproduces it on every device.
+ *
+ * sessionStorage, not localStorage: the loop is a same-tab back-navigation, and
+ * a report token is an access credential that should not outlive the tab.
+ */
+export const COMPLETED_REPORT_KEY = "loveiq-completed-report";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
@@ -38,40 +54,64 @@ function newId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  // A version-4 UUID either way: the routes and the session_id column take only that,
+  // and the old "s-<time>-<random>" fallback was refused at the final submit.
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
- * The mirror is read and written through these two, each with its OWN try/catch, so a
- * browser that allows sessionStorage but throws on localStorage cannot take the primary
- * path down with it.
+ * The id a draft was saved under, kept in localStorage beside it.
  *
- * That is not hypothetical bookkeeping: `getSessionId` already had to catch, because
- * storage THROWS rather than going missing in Safari private mode and several in-app
- * WebViews. Putting the mirror inside that same try meant one localStorage failure fell
- * through to the in-memory fallback and discarded a perfectly good, reload-surviving
- * sessionStorage id — degrading precisely the visitors the catch was written for.
- *
- * The mirror is an enhancement. It must never cost more than it adds.
+ * The draft outlives the tab and this id lived only in sessionStorage, so a reader who
+ * closed the tab resumed their answers under a new id: their server draft was orphaned
+ * and the three shuffled questions recorded an order they never saw (6.3% of sessions
+ * start partway through). Mirrored once before (99f18e65) and lost in the revert of the
+ * demand block (07d7889e). Read only beside a draft: a finished run's id would answer a
+ * retake with the old submission (#375). Its own try/catch, so a localStorage that
+ * throws never costs the sessionStorage id (22f8e5c9).
  */
 function readSessionMirror(): string | null {
   try {
-    return localStorage.getItem(SURVEY_SESSION_KEY);
+    if (!localStorage.getItem(SURVEY_STATE_KEY)) return null;
+    const id = localStorage.getItem(SURVEY_SESSION_KEY);
+    return id && UUID_V4.test(id) ? id : null;
   } catch {
     return null;
   }
 }
 
-function writeSessionMirror(id: string): void {
+function writeSessionMirror(id: string | null): void {
   try {
-    // Written only when it differs, so reading an established id stays a pure read — and
-    // so a respondent already mid-survey when this deploys gets the mirror backfilled
-    // rather than being handed a new id.
-    if (localStorage.getItem(SURVEY_SESSION_KEY) !== id) {
-      localStorage.setItem(SURVEY_SESSION_KEY, id);
-    }
+    if (id) localStorage.setItem(SURVEY_SESSION_KEY, id);
+    else localStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
-    /* localStorage refused — the survey still works, it just will not survive the tab */
+    /* storage unavailable: the id lasts as long as the tab */
+  }
+}
+
+/**
+ * Drop the copy only if it is this run's. localStorage is shared by every tab, so the
+ * copy may belong to a draft open in another tab, which a report finishing here must not
+ * cost its id.
+ */
+function forgetSessionMirrorOf(id: string | null): void {
+  if (!id) return;
+  try {
+    if (localStorage.getItem(SURVEY_SESSION_KEY) === id)
+      localStorage.removeItem(SURVEY_SESSION_KEY);
+  } catch {
+    /* storage unavailable */
   }
 }
 
@@ -79,37 +119,15 @@ export function getSessionId(): string {
   if (!canUseStorage()) return "";
   try {
     let id = sessionStorage.getItem(SURVEY_SESSION_KEY);
-    /**
-     * THE MIRROR EXISTS BECAUSE THE DRAFT OUTLIVES THE TAB.
-     *
-     * The in-progress survey lives in localStorage (`SURVEY_STATE_KEY`) and survives the
-     * browser closing. This id lived only in sessionStorage, which does not. A respondent
-     * who closed the tab and came back therefore resumed their answers under a BRAND NEW
-     * id — measured: 191 of 3,014 sessions (6.3%) have their first behaviour event partway
-     * through the survey, which is exactly that population.
-     *
-     * Three things were wrong for them, all silent:
-     *
-     *  - C13's arm is a hash of this id, so half of them had the QUESTION ORDER change
-     *    under them mid-survey, and were recorded under the arm they finished in rather
-     *    than the one they mostly saw. That is unrecoverable after the fact and biases the
-     *    experiment toward "no difference".
-     *  - `optionOrder` is recomputed from this id at submit, so the recorded option order
-     *    was not the order they were shown — the recorded order becomes a fiction, which
-     *    is the one thing that feature exists to prevent.
-     *  - Their server-side partial save is keyed by the old id and is simply orphaned.
-     *
-     * Mirroring into localStorage ties the id's lifetime to the draft's, which is what it
-     * always should have been. `clearPersistedSurveyState` and `finalizeReportSession`
-     * clear the mirror wherever they clear the session, so a finished or reset survey
-     * still starts the next one fresh. Precedent is one function down: `getReportSessionId`
-     * already falls back to localStorage for exactly this reason.
-     */
     if (!id) {
       id = readSessionMirror() ?? newId();
       sessionStorage.setItem(SURVEY_SESSION_KEY, id);
+      // Only here, when this tab takes its id. The engine calls this on every render, and
+      // a tab that finished keeps its id while its wrap-up screens are up: writing on each
+      // call let it put its finished id beside a draft another tab had just started, and
+      // reopening that draft brought the finished run back (#375).
+      writeSessionMirror(id);
     }
-    writeSessionMirror(id);
     return id;
   } catch {
     /**
@@ -138,9 +156,18 @@ export function getSessionId(): string {
   }
 }
 
-/** Reset the in-memory fallback — for tests only. */
+/** The finished report, for a browser that refuses storage: remembered for this page load. */
+let inMemoryCompleted: string | null = null;
+
+/** Drop the draft's saved id (the run it belonged to is over). */
+export function forgetSessionMirror(): void {
+  writeSessionMirror(null);
+}
+
+/** Reset the in-memory fallbacks — for tests only. */
 export function __resetInMemorySessionIdForTests(): void {
   inMemorySessionId = null;
+  inMemoryCompleted = null;
 }
 
 export function setReportSessionId(sessionId: string): void {
@@ -173,11 +200,7 @@ export function finalizeReportSession(sessionId: string): void {
 
     if (sessionStorage.getItem(SURVEY_SESSION_KEY) === sessionId) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
-    }
-    // The localStorage mirror has to go with it, or the NEXT survey from this browser
-    // resumes a finished submission's id — see the note on `getSessionId`.
-    if (localStorage.getItem(SURVEY_SESSION_KEY) === sessionId) {
-      localStorage.removeItem(SURVEY_SESSION_KEY);
+      forgetSessionMirrorOf(sessionId);
     }
   } catch {
     /* storage unavailable */
@@ -306,5 +329,48 @@ export function getReportNurturePromo({
     return sessionStorage.getItem(storageKey);
   } catch {
     return null;
+  }
+}
+
+/** Remember that this tab finished the survey, and which report it produced. */
+export function rememberCompletedReport(token: string): void {
+  if (!canUseStorage() || !token) return;
+  try {
+    sessionStorage.setItem(COMPLETED_REPORT_KEY, token);
+  } catch {
+    // Storage THROWS in Safari private mode and several in-app WebViews. Kept for this
+    // page load, so starting again after finishing still gets a new session id there too.
+    inMemoryCompleted = token;
+  }
+}
+
+/** The report this tab already finished, or null. */
+export function completedReportToken(): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    return sessionStorage.getItem(COMPLETED_REPORT_KEY) ?? inMemoryCompleted;
+  } catch {
+    return inMemoryCompleted;
+  }
+}
+
+/**
+ * Forget it, so "start a new one" really does start a new one.
+ *
+ * The session id goes too. Submitting keeps it, and a report opened by token
+ * never finalizes it, so a retake submitted under the finished run's id, and
+ * `submitSurveyOnce()` answers a known id with the existing submission. One
+ * reader spent 23 minutes answering again and got submission 2263 back (#375).
+ */
+export function forgetCompletedReport(): void {
+  inMemoryCompleted = null;
+  inMemorySessionId = null;
+  if (!canUseStorage()) return;
+  try {
+    sessionStorage.removeItem(COMPLETED_REPORT_KEY);
+    forgetSessionMirrorOf(sessionStorage.getItem(SURVEY_SESSION_KEY));
+    sessionStorage.removeItem(SURVEY_SESSION_KEY);
+  } catch {
+    /* ignore */
   }
 }

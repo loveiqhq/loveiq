@@ -69,6 +69,7 @@ import {
   recordReportSessionView,
 } from "@features/report/server/personalReport";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
+import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 
 function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000", query = "") {
   return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}${query}`);
@@ -132,6 +133,21 @@ describe("GET /api/report", () => {
     const json = await res.json();
     expect(json.error).toBe("Please try again later.");
     expect(res.headers.get("Retry-After")).toBeDefined();
+  });
+
+  it("lets an all-reports buyer look through every archetype within a minute", async () => {
+    // Each archetype a reader switches to is one load, plus the first. At 10 a
+    // minute the 11th switch answered "Too many attempts".
+    allowCsrf();
+    allowRateLimit();
+    await GET(makeRequest());
+    const [, config] = mockCheckRateLimit.mock.calls[0] as [
+      string,
+      { bucket: string; limit: number; windowMs: number },
+    ];
+    expect(config.bucket).toBe("report-view");
+    expect(config.windowMs).toBe(60_000);
+    expect(config.limit).toBeGreaterThanOrEqual(KNOWN_ARCHETYPES.length + 1);
   });
 
   it("returns 400 when sessionId is not a valid UUID", async () => {

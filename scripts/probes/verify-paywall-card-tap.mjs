@@ -12,7 +12,11 @@ import { touchScroll } from "./touch.mjs";
 
 const ORIGIN = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org";
 const TOKEN = process.env.QA_TOKEN_LOCKED ?? "rpt_a9LY0Obbla1FVsclJ1nM";
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure. Conflating the
+// last two lets a probe that never reached its subject be reported as a
+// confirmed defect. See scripts/probes/README.md.
 let bad = 0;
+let unmeasured = 0;
 
 /**
  * The dialog node is ALWAYS mounted — one node, hidden with `visibility` and
@@ -45,7 +49,23 @@ const dismissPaywall = async (page) => {
   return !(await paywallOpen(page));
 };
 
-for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").split(",")) {
+/**
+ * Hoisted because the summary read the list for its NUMERATOR and used a
+ * hardcoded 3 for its denominator. One device passing printed "1/3 devices",
+ * which reads as two failures — the opposite of what happened.
+ */
+const DEVICE_LIST = (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE")
+  .split(",")
+  .map((n) => n.trim())
+  .filter(Boolean);
+for (const name of DEVICE_LIST) {
+  // An unknown name spreads as undefined into newContext: a desktop window,
+  // silently, and `page.touchscreen.tap` on a page with no touch support.
+  if (!devices[name]) {
+    console.log(`${name}: UNKNOWN DEVICE — INCONCLUSIVE`);
+    unmeasured += 1;
+    continue;
+  }
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...devices[name], locale: "en-US" });
@@ -126,7 +146,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
     const shut = !(await paywallOpen(page));
     if (!shut) {
       notes.push("INCONCLUSIVE: modal would not stay shut");
-      bad += 1;
+      unmeasured += 1;
     } else {
       /**
        * Bring the locked card back on screen. Safe to scroll here: the
@@ -152,7 +172,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
       }
       if (await paywallOpen(page)) {
         notes.push("INCONCLUSIVE: paywall would not stay shut near the card");
-        bad += 1;
+        unmeasured += 1;
       } else {
         /**
          * Retry the scroll. While the modal is open the body is scroll-locked
@@ -206,10 +226,10 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
         }
         if (!pt || !pt.onScreen) {
           notes.push("INCONCLUSIVE: card not on screen after the paywall closed");
-          bad += 1;
+          unmeasured += 1;
         } else if (pt.insideCta) {
           notes.push("INCONCLUSIVE: probe point landed on the CTA");
-          bad += 1;
+          unmeasured += 1;
         } else {
           notes.push(`cursor=${pt.cursor}`, `tapped card body, hit=${pt.hitClass}`);
           await page.touchscreen.tap(pt.cx, pt.cy);
@@ -225,7 +245,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
     }
   } catch (e) {
     notes.push(`exception: ${String(e.message).split("\n")[0].slice(0, 60)}`);
-    bad += 1;
+    unmeasured += 1;
   }
   console.log(
     `${notes.some((n) => n === "paywall OPENED") ? "PASS" : "FAIL"} ${name.padEnd(15)} ${notes.join(" | ")}`
@@ -234,6 +254,16 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
   await browser.close();
 }
 console.log(
-  `\n${(process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").split(",").length - bad}/3 devices: tapping the paywall CARD opens pricing`
+  `\n${DEVICE_LIST.length - bad}/${DEVICE_LIST.length} devices: ` +
+    `tapping the paywall CARD opens pricing`
 );
-process.exitCode = bad ? 1 : 0;
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

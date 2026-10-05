@@ -1,7 +1,7 @@
 "use client";
 
 import { GLOBAL_UTM_KEY } from "@shared/url/utm";
-import { SURVEY_SESSION_KEY } from "./surveySession";
+import { SURVEY_SESSION_KEY, forgetSessionMirror } from "./surveySession";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { UTM_STORAGE_KEY } from "./useUtmCapture";
 
@@ -9,6 +9,16 @@ export const SURVEY_STATE_KEY = "loveiq-survey-answers";
 export const SURVEY_INDEX_KEY = "loveiq-survey-index";
 export const SURVEY_STEP_KEY = "loveiq-survey-step";
 export const PENDING_COMPLETION_KEY = "loveiq-survey-pending-completion";
+/**
+ * When the reader agreed on the consent screen (18+, terms, sensitive data) for the run in
+ * progress. A draft is not proof of it: the homepage question card saves its answer before
+ * the reader ever sees that screen, and the server stamps consent on every submission.
+ */
+export const SURVEY_CONSENT_KEY = "loveiq-survey-consent";
+/** history.state key on an entry that is one of the questions. See SurveyEngine. */
+export const QUESTION_STATE_KEY = "surveyQuestion";
+/** history.state key: the question index of the base those question entries stack on. */
+export const BASE_STATE_KEY = "surveyQuestionBase";
 export const ANSWERS_STORAGE_KEY = SURVEY_STATE_KEY;
 
 export interface PendingSurveyCompletion {
@@ -27,7 +37,7 @@ export interface PendingSurveyCompletion {
  * The one question the landing page asks up front (the hero / closing-CTA card
  * in features/landing/ui/white/WQuestionCard.tsx). Answering it there stores a
  * real answer and marks the qId as "prefilled", so SurveyEngine drops it from
- * the flow — 59 questions total, 58 of them inside /survey.
+ * the flow; every other question is asked inside /survey.
  */
 export const LANDING_PREFILL_QID = "01002";
 
@@ -53,6 +63,13 @@ export function saveLandingPrefill(qId: string, value: number): void {
     const answers = (base.answers as Record<string, unknown> | undefined) ?? {};
     const prefilled = Array.isArray(base.prefilled) ? (base.prefilled as string[]) : [];
     const isFreshDraft = Object.keys(answers).length === 0 && !base.currentIndex;
+    // A fresh draft is a new run, and consent belongs to a run: one given and then left
+    // with no answers (or by someone else on a shared device) must not carry over to it.
+    if (isFreshDraft) {
+      forgetSurveyConsent();
+      // Same for a session id left by an earlier run: the new draft must not adopt it.
+      forgetSessionMirror();
+    }
 
     localStorage.setItem(
       SURVEY_STATE_KEY,
@@ -102,26 +119,65 @@ export function clearPendingCompletion(): void {
   }
 }
 
+/** Also held in memory, so a browser that refuses storage is not sent back to consent on every Back. */
+let consentGivenOnThisPage = false;
+
+export function recordSurveyConsent(): void {
+  consentGivenOnThisPage = true;
+  try {
+    localStorage.setItem(SURVEY_CONSENT_KEY, new Date().toISOString());
+  } catch {
+    /* storage unavailable: the consent screen is shown again after a reload */
+  }
+}
+
+export function hasSurveyConsent(): boolean {
+  if (consentGivenOnThisPage) return true;
+  try {
+    return Boolean(localStorage.getItem(SURVEY_CONSENT_KEY));
+  } catch {
+    return false;
+  }
+}
+
+export function forgetSurveyConsent(): void {
+  consentGivenOnThisPage = false;
+  try {
+    localStorage.removeItem(SURVEY_CONSENT_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Test-only: module state outlives a jsdom test. */
+export function __resetSurveyConsentForTests(): void {
+  consentGivenOnThisPage = false;
+}
+
 export function clearPersistedSurveyState(options?: {
   clearPendingCompletion?: boolean;
   clearSurveySession?: boolean;
 }): void {
+  consentGivenOnThisPage = false;
   if (!canUseStorage()) return;
 
   try {
     localStorage.removeItem(SURVEY_STATE_KEY);
     localStorage.removeItem(SURVEY_INDEX_KEY);
+    // Consent belongs to the run it was given for; the next run asks again.
+    localStorage.removeItem(SURVEY_CONSENT_KEY);
     localStorage.removeItem(UTM_STORAGE_KEY);
     localStorage.removeItem(GLOBAL_UTM_KEY);
     if (options?.clearPendingCompletion) {
       localStorage.removeItem(PENDING_COMPLETION_KEY);
     }
     sessionStorage.removeItem(SURVEY_STEP_KEY);
+    // The draft's id goes with the draft, whatever happens to the tab's: kept after a
+    // submit, it was adopted by the next run started from the homepage card in a new tab,
+    // and the server answered that run with the finished one's submission (#375).
+    forgetSessionMirror();
     if (options?.clearSurveySession !== false) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
-      // ...and its localStorage mirror, which exists so the id outlives a closed tab for
-      // as long as the draft does. Clearing the draft without it would resume a dead id.
-      localStorage.removeItem(SURVEY_SESSION_KEY);
     }
   } catch {
     /* storage unavailable */

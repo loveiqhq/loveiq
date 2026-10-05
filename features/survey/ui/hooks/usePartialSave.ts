@@ -9,7 +9,13 @@ export function usePartialSave(
   answers: Record<string, AnswerValue>,
   currentIndex: number,
   startedAt: string,
-  utmTracker: string | null
+  utmTracker: string | null,
+  /**
+   * The run went through. The abandon beacon used to fire on the way to the report (or on
+   * any app switch during the screens after it) and re-saved every answer of a finished
+   * run into survey_partial_save, the row the submit had just deleted.
+   */
+  submitted = false
 ) {
   const answersRef = useRef(answers);
   const currentIndexRef = useRef(currentIndex);
@@ -21,6 +27,10 @@ export function usePartialSave(
   // visitors.
   const sessionIdRef = useRef(getSessionId());
   const beaconSentRef = useRef(false);
+  const submittedRef = useRef(submitted);
+  useEffect(() => {
+    submittedRef.current = submitted;
+  }, [submitted]);
 
   // Keep refs in sync
   useEffect(() => {
@@ -43,6 +53,7 @@ export function usePartialSave(
 
   // Regular fetch — used on forward navigation (page stays open)
   const savePartial = useCallback(() => {
+    if (submittedRef.current) return;
     if (!sessionIdRef.current) return;
     // Skip if no answers yet
     if (Object.keys(answersRef.current).length === 0) return;
@@ -68,6 +79,7 @@ export function usePartialSave(
     const handleAbandon = () => {
       if (document.visibilityState !== "hidden") return;
       if (beaconSentRef.current) return; // prevent double-fire (visibilitychange + pagehide)
+      if (submittedRef.current) return;
       if (!sessionIdRef.current) return;
       if (Object.keys(answersRef.current).length === 0) return;
 

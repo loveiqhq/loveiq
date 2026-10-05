@@ -27,6 +27,7 @@ import {
 import { buildAnomalySnapshot } from "@features/admin/server/alerts";
 import { describeBrainHealth, readBrainHealth } from "@features/brain/server/health";
 import { recordNotice } from "@features/brain/server/notice";
+import { noticeJumps } from "@features/brain/server/jumps";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,6 +115,18 @@ export async function GET(request: Request) {
     }
 
     /**
+     * Yesterday's unusual numbers, explained, as a notice Jarvis serves in Claude. No Slack
+     * post: `noticeJumps` is the Claude-side half, and it only writes between 07:00 and 11:00
+     * UTC. Secondary to this cron's real job, like the watchdogs around it.
+     */
+    let jumps = 0;
+    try {
+      jumps = await noticeJumps(new Date(), recordNotice);
+    } catch (err) {
+      logger.error({ err }, "anomaly-watcher: the number-jump scan failed");
+    }
+
+    /**
      * And watch the brain from out here too, for the same reason.
      *
      * MCP on claude.ai and in the terminal is the surface people use, and every call
@@ -152,6 +165,7 @@ export async function GET(request: Request) {
       suppressed,
       deferred,
       stalled,
+      jumps,
       brain,
     });
   } catch (err) {

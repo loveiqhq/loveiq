@@ -48,15 +48,22 @@ export async function ingestPeople(stampedAt: string): Promise<IngestResult> {
    * only the expanded form ranked 1st for "who is the CEO" (carried by the semantic
    * arm alone) and MISSED "who is the CTO" entirely, because those three letters
    * appeared nowhere in it.
+   *
+   * ONLY THE LEADING TITLE, AND RIGHT AFTER IT. It used to take every capitalised word up
+   * to a comma and append the result, which was fine while a role was only a title. On
+   * 2026-09-24 the roles gained who owns design decisions: the names in that sentence
+   * became initials, "(CEOMBSK)", and an acronym at the end of it read as belonging to the
+   * last name mentioned.
    */
-  const acronym = (role: string): string => {
-    const initials = role
-      .replace(/,.*$/, "")
+  const withInitials = (role: string): string => {
+    const title = /^[A-Z][\w-]*(?:\s+[A-Z][\w-]*)+/.exec(role)?.[0] ?? "";
+    const initials = title
       .split(/\s+/)
-      .filter((w) => /^[A-Z]/.test(w))
       .map((w) => w[0])
       .join("");
-    return initials.length >= 2 && !role.includes(initials) ? ` (${initials})` : "";
+    return initials.length >= 2 && !role.includes(initials)
+      ? role.replace(title, `${title} (${initials})`)
+      : role;
   };
 
   const line = (p: PersonRow): string => {
@@ -66,11 +73,25 @@ export async function ingestPeople(stampedAt: string): Promise<IngestResult> {
       p.role_confidence === "unconfirmed"
         ? " (reported with a caveat — treat as unconfirmed and say so)"
         : "";
-    return `- ${p.canonical}: ${p.role}${acronym(p.role)}${caveat}${here}`;
+    return `- ${p.canonical}: ${withInitials(p.role)}${caveat}${here}`;
   };
 
-  const withRole = people.filter((p) => p.role);
-  const withoutRole = people.filter((p) => !p.role && p.active !== false);
+  const current = people.filter((p) => p.active !== false);
+  const withRole = current.filter((p) => p.role);
+  const withoutRole = current.filter((p) => !p.role);
+  /**
+   * PEOPLE WHO HAVE LEFT ARE STILL IN THE CORPUS, so the roster has to say who they
+   * were. Marking them inactive used to drop them from BOTH lists — `withoutRole`
+   * excluded them and `withRole` never held them, because a departed colleague rarely
+   * has a role recorded. They vanished, and `line()`'s "has left the company" suffix
+   * became unreachable for exactly the people it was written for.
+   *
+   * That is worse than listing them wrongly. Measured 2026-09-20: Adna Njuhovic is
+   * named in 315 chunks across six sources, so "who is Adna" is a question the corpus
+   * invites and could no longer answer. Naming them here, separately, answers it
+   * without implying they still work here.
+   */
+  const departed = people.filter((p) => p.active === false);
 
   const body = [
     "Who works at LoveIQ and what each person does — the team, the roles, who does what,",
@@ -87,6 +108,15 @@ export async function ingestPeople(stampedAt: string): Promise<IngestResult> {
           "",
           "Also on the team, with no role recorded — do not guess one:",
           ...withoutRole.map(line),
+        ]
+      : []),
+    ...(departed.length
+      ? [
+          "",
+          "No longer at LoveIQ. They appear throughout the corpus — emails, meetings,",
+          "documents they wrote — so their names are here to identify them, not to",
+          "suggest they are reachable. Do not assign them work or contact them:",
+          ...departed.map(line),
         ]
       : []),
     "",

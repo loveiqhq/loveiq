@@ -4,7 +4,22 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { credentialKind } from "@features/brain/server/ingest/upsert";
+const supabaseFetch = vi.fn(async () => ({
+  ok: true,
+  status: 201,
+  headers: new Headers(),
+  json: async () => [],
+  text: async () => "",
+}));
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: (...a: unknown[]) => supabaseFetch(...(a as [])),
+}));
+vi.mock("@features/brain/server/people", () => ({
+  loadPeople: vi.fn(async () => new Map()),
+  peopleIn: vi.fn(() => null),
+}));
+
+import { credentialKind, upsertChunks } from "@features/brain/server/ingest/upsert";
 
 /**
  * Indexing a credential is not the same act as letting someone read a document.
@@ -87,5 +102,129 @@ describe("credentialKind leaves real content alone", () => {
     ["an ordinary sentence", "We charge 39.99 for the full report and 19.99 for essentials."],
   ])("allows %s", (_label, text) => {
     expect(credentialKind(text)).toBeNull();
+  });
+});
+
+describe("a refused part leaves a marker, not a hole", () => {
+  /**
+   * MEASURED 2026-09-19. The guard `continue`d, dropping the row and saying so only
+   * to a log line that rolls off within hours. Its SIBLINGS still read "part 2 of 2",
+   * so the corpus held fragments of 26 gmail threads — 2FA mails, Jira invites,
+   * signup links — with nothing to say a piece was missing or why. A deliberate
+   * omission that looks identical to a bug is the thing this whole audit is about.
+   */
+  const row = (source_id: string, title: string, body: string) => ({
+    source: "gmail",
+    source_id,
+    title,
+    url: null,
+    body,
+    meta: {},
+    updated_at: "2026-09-19T15:11:00.000Z",
+    period_end: null,
+  });
+
+  const written = () =>
+    supabaseFetch.mock.calls.flatMap((c) =>
+      JSON.parse(String((c[1] as { body?: string } | undefined)?.body ?? "[]"))
+    ) as Array<{ source_id: string; title: string; body: string; meta?: Record<string, unknown> }>;
+
+  it("still writes a row for the refused part, and it carries no secret", async () => {
+    supabaseFetch.mockClear();
+    const secret = fake("sk-ant-", 40);
+    await upsertChunks([
+      row("thread:abc", "Email: Your new trial", `Here is your key ${secret}`),
+      row("thread:abc#2", "Email: Your new trial (part 2 of 2)", "Thanks for signing up."),
+    ]);
+    const rows = written();
+    const marker = rows.find((r) => r.source_id === "thread:abc");
+    expect(marker, "the refused part must still produce a row").toBeDefined();
+    expect(marker!.body).not.toContain(secret);
+    expect(marker!.body).toMatch(/deliberately not indexed/);
+    expect(marker!.meta?.withheld).toBeTruthy();
+  });
+
+  it("does not disturb the sibling that was clean", async () => {
+    supabaseFetch.mockClear();
+    await upsertChunks([
+      row("thread:abc", "Email: Your new trial", `key ${fake("sk-ant-", 40)}`),
+      row("thread:abc#2", "Email: Your new trial (part 2 of 2)", "Thanks for signing up."),
+    ]);
+    const sibling = written().find((r) => r.source_id === "thread:abc#2");
+    expect(sibling?.body).toBe("Thanks for signing up.");
+  });
+
+  it("drops a title that itself holds the credential", async () => {
+    supabaseFetch.mockClear();
+    const secret = fake("sk-ant-", 40);
+    await upsertChunks([row("thread:xyz", `Email: token ${secret}`, "body is clean")]);
+    const marker = written().find((r) => r.source_id === "thread:xyz");
+    expect(JSON.stringify(marker)).not.toContain(secret);
+  });
+
+  it("KEEPS a document whose only secret was removable from a url", async () => {
+    /**
+     * Measured 2026-09-19: 126 parts across 35 documents were refused, every one a
+     * JWT inside a Confluence or Jira action link. `redactUrlSecrets` already strips
+     * exactly that — but the refusal read the RAW text, so the surrounding email was
+     * thrown away for a single-use token that would have been masked a few lines
+     * later. The guard is unchanged; it now judges the text that would be stored.
+     */
+    supabaseFetch.mockClear();
+    const jwt = fake("eyJhbGciOi", 40) + "." + fake("eyJzdWIiOi", 30) + ".sig";
+    const n = await upsertChunks([
+      row("thread:inv", "Email: You were invited", `Accept: https://x.dev/a?token=${jwt}`),
+    ]);
+    const stored = written().find((r) => r.source_id === "thread:inv");
+    expect(n, "the row counts as indexed, not withheld").toBe(1);
+    expect(stored?.meta?.withheld, "must not be a marker").toBeUndefined();
+    expect(stored?.body).toContain("[redacted]");
+    expect(JSON.stringify(stored)).not.toContain(jwt);
+    // The point of keeping it: the text around the link survives.
+    expect(stored?.body).toContain("Accept:");
+  });
+
+  it("still refuses a secret that redaction cannot remove", async () => {
+    // The control. A bare key in prose has no url to strip it from, so the part must
+    // still be withheld — otherwise this change would be a hole, not an improvement.
+    supabaseFetch.mockClear();
+    const secret = fake("sk-ant-", 40);
+    const n = await upsertChunks([row("thread:bare", "Email: keys", `here it is ${secret}`)]);
+    const stored = written().find((r) => r.source_id === "thread:bare");
+    expect(n).toBe(0);
+    expect(stored?.meta?.withheld).toBeTruthy();
+    expect(JSON.stringify(stored)).not.toContain(secret);
+  });
+
+  it("does not count a marker as an indexed chunk", async () => {
+    /**
+     * `record_decision` reports success from this return value. When markers were
+     * first added it counted them, so a decision whose content was refused came back
+     * as "recorded" while the stored row said the opposite. A guard that reports
+     * success is worse than the hole it replaced.
+     */
+    supabaseFetch.mockClear();
+    const onlyWithheld = await upsertChunks([
+      row("decision:x", "Decision: rotate the key", `use ${fake("sk-ant-", 40)}`),
+    ]);
+    expect(onlyWithheld).toBe(0);
+  });
+
+  it("still counts the parts that were genuinely indexed", async () => {
+    // The control: subtracting markers must not subtract real rows too.
+    supabaseFetch.mockClear();
+    const mixed = await upsertChunks([
+      row("thread:m", "Email: trial", `key ${fake("sk-ant-", 40)}`),
+      row("thread:m#2", "Email: trial (part 2 of 2)", "Thanks for signing up."),
+    ]);
+    expect(mixed).toBe(1);
+  });
+
+  it("leaves an ordinary row completely alone", async () => {
+    supabaseFetch.mockClear();
+    await upsertChunks([row("thread:ok", "Email: lunch", "See you at one.")]);
+    const r = written().find((x) => x.source_id === "thread:ok");
+    expect(r?.body).toBe("See you at one.");
+    expect(r?.meta?.withheld).toBeUndefined();
   });
 });

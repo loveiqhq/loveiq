@@ -13,7 +13,6 @@ describe("SurveyNav", () => {
         canGoBack={false}
         canGoNext={false}
         hasAnswer={false}
-        statusText="Waiting"
         onPrevious={vi.fn()}
         onNext={vi.fn()}
       />
@@ -33,7 +32,6 @@ describe("SurveyNav", () => {
         canGoBack={true}
         canGoNext={true}
         hasAnswer={true}
-        statusText="Ready"
         onPrevious={onPrevious}
         onNext={onNext}
       />

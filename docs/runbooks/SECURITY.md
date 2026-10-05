@@ -26,6 +26,7 @@
 | `UNSUBSCRIBE_SECRET`             | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. Existing unsubscribe links in already-sent emails break — accept that or schedule rotation to coincide with low-email-volume window.                                                     |
 | `SHARE_VERIFY_SECRET`            | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. All existing share-recipient cookies invalidate immediately; users re-prompt at next access.                                                                                             |
 | `CRON_SECRET`                    | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. The vercel.json cron entries automatically pick up the new value on next fire.                                                                                                           |
+| `GITHUB_DISPATCH_TOKEN`          | Annually / on incident  | Regenerate at github.com → Developer settings → Fine-grained tokens (owner `loveiqhq`, only `loveiqhq/loveiq`, only "Actions: read and write") → Vercel env (Production) → redeploy. Expired: `start-github-jobs` errors hourly in #prod-alerts.           |
 | `STRATEGY_DIGEST_SIGNING_SECRET` | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. Slack-cached PNG images signed with the old secret keep working until Slack's image-proxy TTL expires (~24h, then broken-image icon until the next Monday's digest re-signs everything). |
 
 ## Webhook secret rotation (R-25)
@@ -227,6 +228,35 @@ would otherwise provide.
 - Export survey and waitlist_user data regularly from Supabase (CSV or snapshots) and store securely.
 - Test restores periodically to ensure data integrity.
 
+## Jarvis sign-in (company brain, `/api/mcp`)
+
+Since 2026-09-26 each person signs in to Jarvis as themselves. Supabase Auth's OAuth 2.1
+server issues the tokens, and `/jarvis/connect` is its authorization path. The operator
+detail is in `docs/runbooks/COMPANY_BRAIN.md` ("Connecting Claude to it").
+
+- **Membership is the people registry:** an `@loveiq.org` address on an active person in
+  `brain_person`. It is checked on every call, cached for at most a minute, so setting
+  `active = false` revokes every client that person connected.
+- **Tokens are verified by Supabase** (`/auth/v1/user`, which checks the signature and
+  that the session still exists). Only tokens carrying a `client_id` (OAuth-issued) are
+  accepted. An admin-panel session token is not a Jarvis sign-in.
+- **Open client registration is safe only with the callback allowlist.** Approvals go
+  back only to claude.ai, claude.com or localhost (Claude Code). Any other app is refused
+  on the consent page and in `/api/jarvis/decision`. That includes a request Supabase
+  approves on its own because the person allowed the app before: consent is kept per app,
+  not per return address, so the address is checked again there (fixed 2026-09-27; before
+  that, an app allowed once through Claude could collect codes at another address).
+- **The authorization id is checked before it reaches Supabase** (32 letters and digits).
+  The SDK puts it into the request path unencoded.
+- **Signing out on the page ends that browser's session only.** An unreadable registry is
+  a 503, never a sign-out.
+- **Staff accounts in Supabase Auth reach no data directly.** Every public table's RLS
+  policy is `service_role` only, and no function is executable by `authenticated` that
+  `anon` could not already run (checked 2026-09-26). Creating an auth user for a member
+  therefore grants nothing but the Jarvis sign-in.
+- **The shared `LOVEIQ_MCP_TOKEN`** remains for the unattended jobs. Rotate it after
+  everyone has connected as themselves. Its calls log as `actor = 'shared'`.
+
 ## Abuse protection
 
 - Rate limit and cooldown on `/api/survey` and `/api/contact` (in place).
@@ -272,6 +302,12 @@ The repository uses multiple layers of automated security scanning:
 
 - **npm audit** (`--audit-level=high`): **blocks the merge** in `ci.yml` (Dependabot PRs exempted) and runs again in `security.yml`.
 - **OSV-Scanner**: pinned binary (sha256-verified), config in `.osv-scanner.toml`.
+- **Accepted advisories**: `.osv-scanner.toml` is the one list of reviewed exceptions,
+  and both scanners in `security.yml` read it: OSV natively, npm audit through
+  `scripts/npm-audit-gate.mjs`. Every entry needs a `reason`. An entry for a bug that
+  upstream has not fixed yet also gets an `ignoreUntil` date; once it passes, both
+  scanners fail again, so someone looks again. The blocking audit in `ci.yml` covers
+  production dependencies only and accepts nothing.
 - **SBOM generation**: CycloneDX format, stored as a 90-day artifact (not signed/attested).
 - **Dependency Review**: currently **disabled** (commented out in `security.yml`; requires GHAS for private repos). npm audit + OSV cover the gap.
 
@@ -288,14 +324,148 @@ The repository uses multiple layers of automated security scanning:
 - `eslint-plugin-no-secrets` for secret detection
 - Custom rules in `eslint.config.mjs`
 
-## CI/CD enforcement (branch protection is unavailable on this plan)
+## CI/CD enforcement (branch protection: partly on)
 
-GitHub **branch protection rules and repository rulesets are a paid feature** for
-private repos (Team/Enterprise) — this repo is on the Free plan, so we **cannot**
-require status checks or reviews at the GitHub layer. A red commit can therefore
-reach `main` (a web merge, or `git push --no-verify`) and Vercel auto-deploys it.
+**Corrected 2026-09-19.** This section used to say branch protection was a paid
+feature we could not have. That was wrong on both counts, and it had been used
+as the reason not to pursue it: `loveiqhq/loveiq` is a **public** repository, so
+protected branches are free on every GitHub plan — and the organisation is on
+**Team** anyway, which includes them for private repos too. It costs nothing.
+`main` had simply never had a rule (`404 Branch not protected`).
 
-Because we can't hard-block merges, enforcement is layered (defence in depth):
+**What is enabled on `main` now:**
+
+|                        |                                                             |
+| ---------------------- | ----------------------------------------------------------- |
+| Force pushes           | **blocked**                                                 |
+| Branch deletion        | **blocked**                                                 |
+| Required pull request  | **required** (0 approvals) — enabled 2026-09-19, see below  |
+| Required status checks | **`Lint`, `Test`, `Build`** — enabled 2026-09-19            |
+| Admin bypass           | allowed (`enforce_admins: false`), deliberately — see below |
+
+Verified by attempting both against an identically-configured throwaway branch:
+`remote rejected … (protected branch hook declined)`.
+
+**Why the other two were off until 2026-09-19** (kept as history; both are on now —
+the table above is the current state). Requiring a pull request or a green
+status check also blocks direct pushes, and `main` takes around twenty a day from
+several people and agent sessions. Turning it on mid-stream would stop everyone
+working, so it is staged rather than skipped: it is the prerequisite for letting
+anything merge its own work, and it goes on at the same time as that, not before.
+
+To enable it when that day comes:
+
+```bash
+gh api -X PUT repos/loveiqhq/loveiq/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "contexts": ["build"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": { "required_approving_review_count": 1 },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
+
+**Enabled 2026-09-19, after the above.** `main` now also requires a pull request
+and three green checks (`Lint`, `Test`, `Build`) before merge:
+
+```bash
+gh api repos/loveiqhq/loveiq/branches/main/protection --jq \
+  '{checks:.required_status_checks.contexts, pr:(.required_pull_request_reviews!=null)}'
+```
+
+Three choices in that rule worth knowing, because each was deliberate:
+
+- **Zero required approvals.** The rule is "nothing reaches `main` without a PR
+  and green CI", not "someone must click approve". GitHub forbids approving your
+  own pull request, so requiring one approval would stop a two-person team from
+  merging anything at all.
+- **`strict: false`.** Requiring branches to be up to date would force a rebase
+  on every PR each time `main` moves, and `main` moves about twenty times a day.
+- **`enforce_admins: false`, and admins really do bypass it** — verified, a direct
+  admin push to `main` succeeds with a warning. That is the intended shape: the
+  rule exists to stop AUTOMATION merging its own work, and the automation runs on
+  `GITHUB_TOKEN`, which is not an admin. It pushes a feature branch and opens a
+  draft; it cannot reach `main`. Do not read the rule as protection against a
+  human with admin rights, because it is not one.
+
+### Letting the pipeline propose fixes (`generate-fix.yml`)
+
+It authenticates with the **team Claude subscription, not an API key**:
+
+```bash
+claude setup-token     # requires a Claude subscription; prints a long-lived token
+```
+
+Add the result as the repository secret `CLAUDE_CODE_OAUTH_TOKEN`. Without it the
+workflow skips with a warning rather than failing. Nothing it writes can merge
+itself: `scripts/prove-fix.mjs` refuses any diff outside presentation code, and
+the pull request it opens is reviewed and merged by a person.
+
+**It also needs one organisation setting, and nothing in this repository can see
+it.** At <https://github.com/organizations/loveiqhq/settings/actions>, under
+**Workflow permissions**, _"Allow GitHub Actions to create and approve pull
+requests"_ must be ticked. It was off until 2026-09-20, which is why no workflow
+in this repository had ever opened a pull request — every attempt died with
+`GitHub Actions is not permitted to create or approve pull requests`, including
+`scripts/lib/replay-pr.mjs`, which had therefore never once worked since it was
+written. The proof runs, the branch is pushed, and only the last step fails, so
+the run looks like a proof failure and is not one. Check it from here, which
+needs no `admin:org`:
+
+```bash
+gh api repos/loveiqhq/loveiq/actions/permissions/workflow \
+  --jq '.can_approve_pull_request_reviews'   # must be true
+```
+
+Leave the radio buttons on **read-only**; each workflow declares the write
+permissions it needs. The one thing to watch: that same checkbox also lets
+Actions _approve_ a pull request. Harmless today because `main` requires **zero**
+approvals, so an approval buys nothing — but if approvals ever become the human
+gate, this checkbox has to be reconsidered at the same time, or automation could
+satisfy its own gate.
+
+A red commit can still reach `main` when pushed by an admin, so the layered
+enforcement below is still what actually holds, and is not redundant:
+
+### A dependency check must not turn someone else's outage into ours
+
+`npm audit` calls a registry endpoint. On 2026-09-19 that endpoint answered
+`503 Service Unavailable — We are currently performing maintenance` for the
+better part of an hour, and because `Lint` and `Build` had just become required
+checks, **nothing in the repository could be merged by anyone** while it lasted.
+
+Both audit steps (`ci.yml` and `security.yml`) now tell the two cases apart:
+
+| what came back                                      | what it means               | what happens             |
+| --------------------------------------------------- | --------------------------- | ------------------------ |
+| a parseable report with high or critical advisories | a finding                   | **build fails**          |
+| a parseable report with none                        | we are clean                | passes                   |
+| nothing parseable                                   | the registry did not answer | **warns**, does not fail |
+
+The distinction is `metadata.vulnerabilities` in the `--json` output. An
+unreadable report is a gap in our visibility, not a verdict about our
+dependencies, and a check that is red for reasons nobody can act on is one
+people learn to scroll past. `security.yml` then subtracts the advisories
+accepted in `.osv-scanner.toml` (see Dependency Scanning above).
+`__tests__/scripts/npm-audit-gate.test.ts` pins the counting, including the
+three shapes an outage actually takes and an acceptance that has expired.
+
+### Every action is pinned to a commit, never a tag
+
+A tag is a movable pointer: whoever controls an action's repository can make
+`@v4` mean different code tomorrow, and that code runs with our secrets. A
+commit cannot move. `survey-db-sync.yml` was the last workflow still trusting a
+tag — found by hand on 2026-09-19, which is exactly the kind of check that
+should not depend on someone looking, so
+`__tests__/scripts/workflow-pinning.test.ts` now enforces it across every
+workflow. Commented-out `uses:` lines are ignored, since they execute nothing.
+The same goes for a container an action pulls: the TruffleHog action runs
+`ghcr.io/trufflesecurity/trufflehog:<version>` and defaults to `latest`, so
+`security.yml` pins `version` to a digest, which that test also checks.
+Dependabot does not update it; move it together with the action's `uses:` pin.
 
 ### Layer 1 — local pre-push gate (preventive)
 
@@ -351,10 +521,145 @@ the pipeline otherwise lacks (no SBOM signing / SLSA today).
   scheduled full-history (`fetch-depth: 0`) scan to catch older leaks.
 - **Dependency Review** is GHAS-gated and disabled; `npm audit --audit-level=high`
   (blocks merge) + OSV-Scanner cover dependency CVEs.
-- **E2E is intentionally not in CI** (deferred until the funnel stabilises) — do
-  not add it to the merge gate.
+- **E2E runs in CI but is not a required check**: `ci.yml` runs it on every push
+  to `main` and every pull request from a branch in this repository
+  (Dependabot's included; PRs from forks are skipped), and the merge gate stays
+  Lint, Test and Build.
 - **Prod deploy gating** (approvals / rollback) lives in Vercel project settings,
   not this repo — the revert runbook above is the rollback path.
+
+## Report tokens in analytics (database closed, analytics ACCEPTED 2026-09-20)
+
+`/report/<token>` is how a paid report is opened. **The token is the auth** — it
+does not expire, there is no second factor, and the page behind it is an
+intimate psychological profile. Anywhere that URL is stored is a credential
+store.
+
+**Closed:** `ux_finding.url_path` stored the live path verbatim — 14 rows
+holding 13 distinct working tokens three days after the table was created, one
+more with every report finding. The verifier now redacts to
+`/report/<redacted>` before writing (`scripts/lib/redact-report-token.mjs`) and
+the existing rows were scrubbed. The probe still gets the real path inside the
+run, so reproduction on the reader's own report is unaffected; only what
+PERSISTS is redacted.
+
+**Closed 2026-09-21, and the reason the first pass missed it:** that audit
+checked the table it had just built. `analytics_event.metadata` had been storing
+the same credential since **2026-05-22** — 2,424 rows across `scroll_depth_25`,
+`_50`, `_75`, `_100` and `rage_click`, still writing daily — because
+`trackScrollDepth`/`trackRageClick` call `persistAnalyticsEvent` with
+`pathname`, and `pathname` carries `location.search`. Nothing analytical was
+lost by redacting it: every row already carries `survey_submission_id`. (Since
+2026-09-23 campaign and ad-click parameters — `utm_*`, `gclid`, `gbraid` and
+the rest — are stripped by `withoutTrackingParams` in `shared/url/utm.ts`: in
+the browser before the tap tracker sends `pathname`, and again where the
+verifier reads a tap (`sessionClickTarget`), because PostHog keeps the older
+events for 30 days. They identify one person's ad click and their search
+words, and the dead-control probe was replaying them against production. The
+token is still redacted on the server, not there, for the reason above.) `ux_finding.probe_runs[].tail` held one too, one column
+over from the `url_path` that had just been fixed —
+`verify-dead-click-target.mjs` prints "what this reader tapped at /report/rpt_…"
+and that line is stored verbatim. `brain_query.args` held four.
+
+**Two shapes, not one.** 403 of the 2,424 carry the token as a QUERY PARAMETER
+(`/checkout?plan=…&token=rpt_…`), not in a `/report/` path. A guard keyed on
+`/report/` cleans 2,021 rows, leaves 403 and every future checkout event, and
+reports success. `shared/format/redact-report-token.ts` handles the path form
+first (keeping the `/report/<redacted>` shape the digest reads) and then matches
+the credential itself anywhere else. Every token in `report_access_token` is
+exactly `rpt_` plus 20 alphanumerics, 2,114 of 2,114.
+
+**Scrub after the guard is live, not before.** The 2026-09-21 scrub ran the day
+before its guard reached production (PR #240, merged 2026-09-22 09:42 UTC), so
+the ten rows written in between — 21 Sep 19:01 to 22 Sep 06:57 UTC, every one a
+live `/report/rpt_…` — kept their tokens until the sweep below found them on
+2026-09-23. They are scrubbed. A scrub proves the table was clean at that
+moment; only the sweep, re-run after the deploy, proves it stayed clean.
+
+**Enumerate, do not re-check.** The way to answer "where is this credential" is
+to sweep every `text`/`jsonb` column in the schema, not to revisit the table the
+last fix named. Doing that found eight places. Three were incidental and are now
+closed; the other five are FUNCTIONAL and must not be scrubbed:
+
+| where                                     | rows  | why it is there                             |
+| ----------------------------------------- | ----- | ------------------------------------------- |
+| `report_access_token.token`               | 2,114 | the token table itself                      |
+| `personal_report.url`                     | 2,099 | the report's own address                    |
+| `report_price_quote.metadata.reportToken` | 6,584 | pricing locks + nurture promos key off it   |
+| `payment.metadata.reportToken`            | 388   | how fulfilment knows which report to unlock |
+| `payment_webhook_event.event_data`        | 389   | Stripe's own payload, kept for replay/audit |
+
+Re-run the sweep any time:
+
+```sql
+do $$ declare r record; n bigint; begin
+  create temp table if not exists tok(t text, c text, hits bigint); delete from tok;
+  for r in select c.table_name t, c.column_name col from information_schema.columns c
+    join information_schema.tables tb on tb.table_name=c.table_name and tb.table_schema=c.table_schema
+    where c.table_schema='public' and tb.table_type='BASE TABLE'
+      and c.data_type in ('text','character varying','jsonb','json') loop
+    begin execute format('select count(*) from public.%I where %I::text ~ ''rpt_[A-Za-z0-9]{8,}''', r.t, r.col) into n;
+      if n > 0 then insert into tok values (r.t, r.col, n); end if;
+    exception when others then null; end;
+  end loop; end $$;
+select * from tok order by hits desc;
+```
+
+**NOT closed, and deliberately stated rather than quietly left:** PostHog holds
+the same URLs — 3,041 events in seven days with a live token in
+`$current_url`, plus the replay's own rrweb stream. A `sanitize_properties`
+hook would clean the event properties and **would not touch the replay**, which
+renders the URL from the recording itself, so it would look like a fix without
+being one. Anyone who can open a session replay can open that reader's report.
+
+**And it is TWO recorders, not one.** Microsoft Clarity also loads in
+production (`public/clarity-init.js`, gated on `productionAnalyticsEnabled`) and
+records the same URLs, in a separate vendor with a separate access list and its
+own masking configured in the Clarity dashboard rather than in this repo. Any
+decision below has to be applied there too, or it is half a decision — and
+Clarity is the easier one to forget, because nothing in the codebase configures
+what it captures.
+
+Access today is four PostHog members, all `@loveiq.org`, so this is internal
+exposure rather than public. That is a reason to decide calmly, not a reason it
+is fine: the data is special-category-adjacent under GDPR and the principle is
+data minimisation.
+
+The real options, none of them free:
+
+- Stop putting the token in the path (signed short-lived URL, or token in a
+  cookie set by a one-time link). Correct, and a product change.
+- Exclude `/report/*` from session recording (`session_recording_url_blocklist_config`,
+  currently `[]`). Cheap and immediate, and it removes exactly the recordings
+  the UX-review pipeline exists to watch.
+- Accept it, and write down that it was a decision.
+
+**DECIDED 2026-09-20 (Eman): accept it.** The report URLs stay in PostHog and
+in Clarity. This is a decision, not an oversight, and it is recorded here so
+the next person to find it does not spend an evening rediscovering it and does
+not "fix" it by blocklisting `/report/*` from session recording — which would
+delete exactly the recordings the UX-review pipeline exists to watch.
+
+What that acceptance is scoped to, so the scope is not quietly widened later:
+
+- **Four internal `@loveiq.org` accounts**, today. If PostHog or Clarity access
+  is granted to anyone outside the company — a contractor, an agency, a support
+  vendor — this decision has to be taken again, because it was made about that
+  access list and nothing else.
+- **The URL only.** Inputs stay masked (`maskAllInputs: true`). If masking is
+  ever relaxed, this is a different question.
+- **Not the database.** `ux_finding.url_path` is redacted and stays redacted;
+  that half was closed on the same day and is not part of what was accepted.
+
+Check the current state with:
+
+```bash
+curl -s "https://eu.posthog.com/api/projects/244778/" -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['session_recording_masking_config'], d['session_recording_url_blocklist_config'])"
+```
+
+Inputs are already masked project-wide (`maskAllInputs: true`); this is about
+the URL, which masking does not cover.
 
 ## Incident response
 

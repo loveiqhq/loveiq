@@ -466,10 +466,26 @@ export async function GET(request: Request) {
     const acquisitionStages: BandStage[] = [
       { id: "visitors", label: "Visitors", count: stageCount("unique_visitor") },
       {
+        /**
+         * NOT "Bounced on landing".
+         *
+         * That named the gap as a behaviour, and most of it is not one.
+         * `unique_visitor` is written server-side and is consent-independent;
+         * `survey_engine_mount` is posted by the browser using the `__liq_vid`
+         * cookie, which proxy.ts mints only AFTER someone clicks Accept. So the
+         * step below loses everyone who declined, and the drop between the two
+         * is mostly consent. Measured 2026-09-19 over 30 days: 637 visitors
+         * reached this step against 977 server-written survey drafts.
+         *
+         * The two also use unrelated identifiers — a per-day random UUID versus
+         * a persistent cookie — so only 20% of mount ids appear as a visitor id
+         * at all. Telling an admin these people "bounced" is a causal claim the
+         * data cannot support.
+         */
         id: "mount",
-        label: "Opened survey",
+        label: "Opened survey (reported by the browser)",
         count: stageCount("survey_engine_mount"),
-        dropLabel: "Bounced on landing",
+        dropLabel: "Declined cookies, or left",
       },
       {
         id: "intro1",

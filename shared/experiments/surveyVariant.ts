@@ -11,12 +11,12 @@
  * unconditionally — see the comment on it for why simply changing the coin flip
  * would NOT have been enough.
  *
- * The dark branches are still in the UI (33 theme ternaries across 10
- * components, not a separate tree) and `?survey=dark` still previews them on
- * dev/staging, so the old look can be inspected without a revert. What is gone is the assignment and the
- * reporting: the `survey` axis is dropped from every live-axis list, following
- * the same pattern as the concluded paywall experiment, and `/admin` lists it
- * under "Finished — not being tested any more" with no rates attached.
+ * The `?survey=dark` preview of the old look was retired with the 2026-10-04
+ * redesign of the question screen (Figma 11303:174), which has no dark version.
+ * What is gone is the assignment and the reporting: the `survey` axis is dropped
+ * from every live-axis list, following the same pattern as the concluded paywall
+ * experiment, and `/admin` lists it under "Finished — not being tested any more"
+ * with no rates attached.
  *
  * What survives is the RECORD, not a rendering of it.
  * `survey_submission.utm_tracker.survey_variant` still holds what each past
@@ -30,8 +30,6 @@
  * The 453/411 split is therefore final and permanently reproducible.
  */
 
-import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
-
 const isProduction = process.env.NODE_ENV === "production";
 
 export type SurveyVariant = "white" | "dark";
@@ -40,17 +38,6 @@ export const SURVEY_VARIANT_COOKIE = isProduction ? "__Host-liq_sv" : "__liq_sv"
 
 export function isSurveyVariant(value: string | null | undefined): value is SurveyVariant {
   return value === "white" || value === "dark";
-}
-
-/**
- * Preview override. Reads a `survey` query value (`white` | `dark`) so either arm
- * can be previewed deterministically — append `?survey=white` to `/survey`.
- * Active in dev and on staging/preview deploys; returns null on production so it
- * can never affect a real user's bucketing.
- */
-export function resolveSurveyDevOverride(param: string | null | undefined): SurveyVariant | null {
-  if (!isNonProdDeploy()) return null;
-  return isSurveyVariant(param) ? param : null;
 }
 
 function readSurveyCookie(): SurveyVariant | null {
@@ -66,8 +53,7 @@ function readSurveyCookie(): SurveyVariant | null {
 }
 
 /**
- * Everyone gets white. Only the `?survey=` preview override can say otherwise,
- * and only on dev/staging builds.
+ * Everyone gets white.
  *
  * WHY THIS IS NOT JUST A CHANGED COIN FLIP. Assignment used to be sticky in a
  * one-year cookie that was consulted BEFORE the randomiser. Deleting the flip
@@ -80,15 +66,9 @@ function readSurveyCookie(): SurveyVariant | null {
  * expiry runs when the survey engine mounts, so someone who never opens the
  * survey again keeps the stale value; nothing reads it.
  */
-export function assignSurveyVariant(devParam?: string | null): SurveyVariant {
-  // Expire FIRST, before the override can return. Nothing reads this cookie any
-  // more, so it should not survive a visit under any path — and on staging, which
-  // shares the production database, a previewer holding a pre-conclusion `dark`
-  // could otherwise keep it and have it stamped onto a real submission.
+export function assignSurveyVariant(): SurveyVariant {
+  // Nothing reads this cookie any more, so it should not survive a visit.
   if (typeof document !== "undefined") clearSurveyCookie();
-
-  const dev = resolveSurveyDevOverride(devParam);
-  if (dev) return dev;
   return "white";
 }
 

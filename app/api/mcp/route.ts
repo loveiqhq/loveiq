@@ -1,7 +1,9 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
+import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
+import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
+import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
 import { relatedContext, renderRelated } from "@features/brain/server/related";
@@ -22,17 +24,44 @@ import {
 } from "@features/brain/server/see/figma";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
+import { resolveCaller, signInChallenge, type Caller } from "@features/brain/server/sign-in";
+import {
+  DIMENSIONS as USER_DIMENSIONS,
+  MEASURES as USER_MEASURES,
+  findQuestion as findSurveyQuestion,
+  loadDeliveries,
+  loadPeople,
+  renderAnswers,
+  renderEmails,
+  renderTotals,
+  renderTraits,
+  type Dimension as UserDimension,
+  type Measure as UserMeasure,
+} from "@features/brain/server/user-totals";
+import {
+  adsForMonth,
+  lastBilledMonth,
+  filingSettled,
+  loadCostSheet,
+  parseCosts,
+  renderCostWatch,
+} from "@features/brain/server/cost-watch";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
-import { ARRAY_META_KEYS } from "@features/brain/server/retrieve";
+import { ARRAY_META_KEYS, UNFILTERABLE_META_KEYS } from "@features/brain/server/retrieve";
 import {
   CorpusUnavailableError,
   retrieve,
   type RetrieveShaping,
 } from "@features/brain/server/retrieve";
 import {
+  disputesOf,
+  looksLikeDecisionBrowse,
   priorDecisions,
+  recentDecisions,
   recordDecision,
   renderPriorDecisions,
+  replacementAsOf,
+  renderRecentDecisions,
 } from "@features/brain/server/decisions";
 import { postToSlack, SlackTargetError } from "@features/brain/server/act/slack";
 import { createNotionPage, NotionTargetError } from "@features/brain/server/act/notion";
@@ -43,6 +72,64 @@ import {
   DelegationNotGranted,
   GoogleDocRefusal,
 } from "@features/brain/server/act/gdoc";
+import {
+  allArchetypes,
+  checkCopy,
+  renderCopyReport,
+  shippedCopy,
+} from "@features/brain/server/copy-gate";
+import { allChapters } from "@features/brain/server/voice";
+import { buildContextPack } from "@features/brain/server/context-pack";
+import {
+  boardMatcher,
+  boardTasks,
+  meetingPromises,
+  renderPromises,
+} from "@features/brain/server/promises";
+import { promptDocs } from "@features/brain/server/ingest/skills";
+import { PER_NIGHT, queueResearch } from "@features/brain/server/night-shift";
+import {
+  commentAsks,
+  liveDeps as commentAskDeps,
+  renderAsks,
+} from "@features/brain/server/comment-asks";
+import { renderSelfReport, selfReport } from "@features/brain/server/self-report";
+import { fileCrmCalls, liveCrmDeps, renderCrmCalls } from "@features/brain/server/crm-calls";
+import { openConflicts, renderConflicts, settleConflict } from "@features/brain/server/radar";
+import { renderWhatsNew, whatsNew } from "@features/brain/server/whats-new";
+import {
+  isJump,
+  jumpsOn,
+  loadAround,
+  loadSeries,
+  METRICS,
+  NOT_PROOF,
+  readMetric,
+  renderDay,
+  renderMetric,
+  type Reading,
+} from "@features/brain/server/jumps";
+import {
+  CHART_METRICS,
+  DEFAULT_DAYS,
+  MAX_DAYS,
+  MIN_DAYS,
+  chartPng,
+  drawChart,
+} from "@features/brain/server/chart";
+import { checkAnswer, type SourceText } from "@features/brain/server/check-answer";
+import {
+  AXES as EXPERIMENT_AXES,
+  STATUSES as EXPERIMENT_STATUSES,
+  listExperiments,
+  recordExperiment,
+} from "@features/brain/server/experiments";
+import {
+  DEFAULT_DAYS as BREAK_EVEN_DEFAULT_DAYS,
+  MAX_DAYS as BREAK_EVEN_MAX_DAYS,
+  MIN_DAYS as BREAK_EVEN_MIN_DAYS,
+  breakEven,
+} from "@features/brain/server/break-even";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -72,8 +159,9 @@ export const maxDuration = 60;
  * cache problem.
  *
  * AUTH IS A BEARER TOKEN, NOT CSRF. There is no browser and no cookie here, so
- * the double-submit pattern the rest of the app uses cannot apply. Unset token ⇒
- * 503, so this is safe to deploy before the token exists.
+ * the double-submit pattern the rest of the app uses cannot apply. The token is
+ * either a person's own sign-in (Supabase OAuth, see features/brain/server/sign-in.ts)
+ * or LOVEIQ_MCP_TOKEN, which the unattended jobs use.
  *
  * The connector URL must be `https://www.loveiq.org/api/mcp` — the apex-to-www
  * redirect drops the Authorization header, which presents as a confusing 401.
@@ -304,8 +392,48 @@ export function capWithNotice(
   return text.slice(0, MAX_RESULT_CHARS - notice.length) + notice;
 }
 
+/**
+ * Below this, the best content match is weak enough to warn about.
+ *
+ * Module-level so the warning and anything reporting on it read the same number. Measured:
+ * across twelve questions with known-good answers and eight the corpus cannot answer, the
+ * good ones scored 2.37 and up and the unanswerable ones 1.71 and down. At 1.85 the warning
+ * fires on 2 of the good and catches 12 of 12 junk.
+ */
+export const RELEVANCE_FLOOR = 1.85;
+
 /** Exported only so the "no indexed source is invisible" test reads the SAME
  * array the route uses — a copy in the test would drift with the bug. */
+/**
+ * A date that EXISTS, not merely one shaped like a date.
+ *
+ * `/^\d{4}-\d{2}-\d{2}$/` accepts 2026-09-31 and 2026-02-30. Both then run as
+ * queries and come back empty, so an impossible input is indistinguishable from
+ * "nothing happened in that period" — found in the real call log on 2026-09-09,
+ * `get_business_numbers` with `since: "2026-09-31"`, which returned zero rows and
+ * no error. September has thirty days.
+ *
+ * Round-tripping is the check: JavaScript rolls 2026-09-31 forward to 2026-10-01,
+ * so a date that does not survive the trip was never real.
+ */
+export function isRealDate(value: string): boolean {
+  /**
+   * Redundant on purpose, and mutation testing says so: removing this line breaks no
+   * test, because the round-trip below already rejects everything it would — the only
+   * string that round-trips to itself IS `YYYY-MM-DD`. Verified against "2026-9-15",
+   * "26-09-15", "2026/09/15", "+2026-09-15" and a trailing-space variant.
+   *
+   * Kept anyway. The other two survivors found today were pointless duplication and
+   * were deleted; this one is belt-and-braces on INPUT VALIDATION, where the house
+   * rule is to refuse rather than guess, and dropping it would leave the contract
+   * resting entirely on `Date.parse` semantics for non-ISO input.
+   */
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  if (!Number.isFinite(ms)) return false;
+  return new Date(ms).toISOString().slice(0, 10) === value;
+}
+
 export const SOURCES_FOR_TEST = [
   // Written by `record_decision`, not ingested from anywhere. Listed here in the commit
   // that creates the first one, per the rule below about `jira`.
@@ -316,6 +444,19 @@ export const SOURCES_FOR_TEST = [
   // Written beside the Slack post by the jobs that watch for moves, so what the brain
   // noticed unprompted is searchable rather than only announced in a channel.
   "notice",
+  // The report copy that actually ships, built from `data/report-*.ts`. Listed here in the
+  // commit that creates it. Distinct from the Drive DRAFTS of the same chapters: this is
+  // what survived review, which is what "write it the way we write" means.
+  "report",
+  // How LoveIQ does its own work — the chapter method, the house voice counted off the
+  // shipped copy, and who accepts a change. Listed here in the commit that creates it.
+  // It lives in the corpus rather than `.agents/skills/` because the team works in
+  // claude.ai, where that directory does not exist.
+  "skill",
+  // What the words mean, what the survey asks, and how a score is built — the applied
+  // psychometrics vocabulary under the voice. `meta.kind` is glossary / survey / scoring.
+  // Listed here in the commit that creates it.
+  "domain",
   "doc",
   "analytics",
   "ga4",
@@ -329,6 +470,35 @@ export const SOURCES_FOR_TEST = [
   // Built from `brain_person` by the fast cron, not ingested from an outside system.
   // Listed here in the commit that creates the first chunk, per the `jira` rule below.
   "people",
+  // The published literature behind the constructs we sell: one citation card per glossary
+  // construct whose name appears in paper TITLES in our field, from Europe PMC. THIRD-PARTY
+  // work -- every card says so in its body -- and only about a quarter of our vocabulary has
+  // one, which is deliberate: the silence is how "we claim this and nobody has published on
+  // it" becomes findable. Listed here in the commit that creates the first chunk.
+  "evidence",
+  // Where the site frustrates people -- dead clicks, rage clicks, quick-backs, script
+  // errors -- summarised per page once a day from Microsoft Clarity. The only source that
+  // measures frustration rather than volume, which is why it answers "why did they leave"
+  // when ga4 and analytics can only answer "where". Listed here in the commit that creates
+  // the first chunk, per the `jira` rule below.
+  "clarity",
+  // Questions queued with `queue_research` and the Night Shift's cited answers to them,
+  // one record per question. Listed here in the commit that creates the first one.
+  "research",
+  // Eleven third-party books on love, desire and sex, whole, loaded by
+  // scripts/brain-books.ts. OPT-IN: brain_search returns them only when a caller names
+  // the source, so they cannot crowd company answers out. Listed in the commit that
+  // loads the first part.
+  "book",
+  // The full text of open-access research papers (CC BY and CC0 only) behind the constructs
+  // we measure, a few a day from Europe PMC (brain-papers). OPT-IN like the books, for the
+  // same reason: whole papers in our own vocabulary would crowd company answers out.
+  "paper",
+  // appliedpsychometrics.org, the website of Applied Psychometrics UG (the company that runs
+  // LoveIQ): its GA4 traffic and Google searches, nightly (brain-ingest). OPT-IN like the
+  // books and papers: its traffic rows read like LoveIQ's `ga4` rows, and would otherwise
+  // answer "how many visitors did we have" with the wrong site's numbers.
+  "corporate",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -405,7 +575,8 @@ const UNTRUSTED_SOURCES_PREAMBLE =
  *
  * The composed risk is what makes it worth saying: injected text, a client that
  * auto-approves the four write tools, and `record_decision` -- whose `actor` is
- * self-declared -- would forge a decision that then reappears under this server's most
+ * self-declared (a signed-in caller is named as the recorder, but the actor is still what
+ * the caller typed) -- would forge a decision that then reappears under this server's most
  * assertive header on every future search.
  */
 const UNTRUSTED_DATA_PREAMBLE =
@@ -479,7 +650,7 @@ const CLIENT_INJECTED_ARGS = new Set(["__unparsedToolInput", "truncated"]);
  * second when the first is true is the kind of confident wrong statement this file
  * exists to avoid.
  */
-const WRITTEN_SOURCES = new Set(["decision", "notice"]);
+const WRITTEN_SOURCES = new Set(["decision", "notice", "research"]);
 
 /** Tools whose results carry pixels, and so are rate-limited far more tightly. */
 const IMAGE_TOOLS = new Set(["show_design", "show_page"]);
@@ -584,7 +755,8 @@ export const TOOLS = [
           type: "array",
           items: { type: "string", enum: SOURCES_FOR_TEST },
           description:
-            "Restrict to these sources. Omit for all. Use it when you know where the " +
+            "Restrict to these sources. Omit for every source except `book`, `paper` and " +
+            "`corporate`, which are searched only when named here. Use it when you know where the " +
             "answer lives — a board task, a Slack day, a call note — rather than " +
             "hoping the wording matches.",
         },
@@ -592,7 +764,8 @@ export const TOOLS = [
           type: "array",
           items: { type: "string", enum: SOURCES_FOR_TEST },
           description:
-            "Everything EXCEPT these. Use it when one source keeps answering a question " +
+            "Everything EXCEPT these (books, papers and the corporate website stay out unless named in `sources`). Use it when " +
+            "one source keeps answering a question " +
             "it does not actually hold — the result says which source was held back and " +
             "by how much, so it tells you what to exclude.",
         },
@@ -605,7 +778,10 @@ export const TOOLS = [
         },
         until: {
           type: "string",
-          description: "Latest date the record describes, YYYY-MM-DD. Same caveat as `since`.",
+          description:
+            "Latest date the record describes, YYYY-MM-DD. Same caveat as `since`. Also the " +
+            "way to ask what stood on a past day: a decision replaced after it shows as " +
+            "standing then, with the day it was replaced.",
         },
         meta: {
           type: "object",
@@ -760,9 +936,9 @@ export const TOOLS = [
         actor: {
           type: "string",
           description:
-            "Who decided it, as their full name. There is one shared credential on this " +
-            "server, so this is taken on trust and never verified — record who actually " +
-            "decided, not who is typing.",
+            "Who decided it, as their full name — who actually decided, not who is typing. " +
+            "It is taken as given. When you are signed in to Jarvis as yourself, the record " +
+            "also names you as the one who recorded it, from the sign-in.",
         },
         why: { type: "string", description: "The reasoning, if there is any worth keeping." },
         rejected: {
@@ -991,6 +1167,168 @@ export const TOOLS = [
     },
   },
   {
+    name: "queue_research",
+    title: "Queue a question for the Night Shift",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      // Asking the same question again returns the one already queued or answered.
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    description:
+      "Hand a research question to the Night Shift, which answers it overnight and puts a cited " +
+      "answer in the brain by morning: our own records and live numbers first, then the web and " +
+      "published papers. For questions worth more than a quick answer: 'what does the research say " +
+      "about X', 'how do competitors price Y', 'what do we know about Z across everything we have'. " +
+      "The answer arrives as a research record and a notice, and whats_new lists it. Asking the same " +
+      "question again returns the one already queued or answered, and only a few can wait at once.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The question, as a full sentence." },
+        asked_by: {
+          type: "string",
+          description: "Who is asking, as their full name, so the answer says who it is for.",
+        },
+        why: {
+          type: "string",
+          description: "What the answer is for, when that helps the research.",
+        },
+      },
+      required: ["question"],
+    },
+  },
+  {
+    name: "file_call_notes",
+    title: "File recorded calls into the Notion CRM",
+    annotations: {
+      readOnlyHint: false,
+      // Additive and reversible: a row it writes can be archived in Notion.
+      destructiveHint: false,
+      // A call already filed (the same notes link) is left alone, so a second run adds nothing.
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+    description:
+      "Files each recorded call with someone on the Notion board 'Therapists & Coaches' as a row " +
+      "in 'Feedback Sessions', linked to them, with the date, the Gemini notes link, the next steps " +
+      "and the summary, and moves their 'Last touch' to the day of the call. Who was on the call is " +
+      "matched exactly: their email on the calendar invite, or their full name as a speaker in the " +
+      "transcript. A first name alone is listed as a possible match and never filed. A call already " +
+      "filed, or a person with a session row that day, is left alone. The same runs by itself every " +
+      "two hours. BY DEFAULT IT ONLY SHOWS what it would file; pass dry_run: false to write.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "string",
+          description: "First day, YYYY-MM-DD. Default: fourteen days ago.",
+        },
+        dry_run: {
+          type: "boolean",
+          description: "Default true: show what would be filed and write nothing. false files it.",
+        },
+      },
+    },
+  },
+  {
+    name: "settle_decision_conflict",
+    title: "Say which of two conflicting decisions stands",
+    annotations: {
+      readOnlyHint: false,
+      // History, not deletion: the decision that does not stand stays findable, marked superseded.
+      destructiveHint: false,
+      // A settled pair is refused the second time, with who settled it and when.
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    description:
+      "Settle a pair listed by decision_conflicts. keep: 'later' or 'earlier' marks the other decision superseded by " +
+      "the one that stands, exactly as record_decision's `supersedes` would, so search shows it as history. keep: " +
+      "'both' records that they do not conflict, and the radar will not raise the pair again. Ask the person who " +
+      "knows before calling this; the answer is theirs, not yours. Every call is logged with who settled it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        earlier: {
+          type: "string",
+          description: "One decision's id, as decision_conflicts lists it.",
+        },
+        later: { type: "string", description: "The other decision's id." },
+        keep: {
+          type: "string",
+          enum: ["earlier", "later", "both"],
+          description: "Which one stands: earlier, later, or both.",
+        },
+        settled_by: { type: "string", description: "Who decided, as their full name." },
+        note: { type: "string", description: "Optional: why, in a sentence." },
+      },
+      required: ["earlier", "later", "keep", "settled_by"],
+    },
+  },
+  {
+    name: "record_experiment",
+    title: "Register an A/B test, or record how it ended",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    description:
+      "Put an A/B test in the registry before it starts: its name, the hypothesis (what the " +
+      "change should do, and why), the one metric that decides it, the axis its arms are " +
+      "stamped on (landing, survey, pricing or paywall) and the day it starts. Refused without " +
+      "a hypothesis and a metric, because a test without them cannot be concluded from. Call " +
+      "it again with experiment_id to change it, and when the test ends set status " +
+      "'completed' with the outcome, then record the decision with record_decision. It is " +
+      "saved in the admin panel's own experiment table (admin_experiment).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        experiment_id: {
+          type: "number",
+          description: "To change a registered test: its number, as experiments lists it.",
+        },
+        name: {
+          type: "string",
+          description: "A short name, e.g. 'Paywall with a guarantee badge'.",
+        },
+        hypothesis: {
+          type: "string",
+          description: "What the change should do, and why, in a sentence or two.",
+        },
+        metric: {
+          type: "string",
+          description: "The one number that decides it, e.g. 'share of report openers who pay'.",
+        },
+        axis: {
+          type: "string",
+          enum: EXPERIMENT_AXES,
+          description: "Where its arms are stamped, so its numbers can be read live.",
+        },
+        status: { type: "string", enum: [...EXPERIMENT_STATUSES] },
+        start_date: {
+          type: "string",
+          description: "YYYY-MM-DD. Today or earlier makes it active.",
+        },
+        decision_date: {
+          type: "string",
+          description: "YYYY-MM-DD: when it will be, or was, called.",
+        },
+        expected_impact: {
+          type: "string",
+          description: "Optional: the change you expect, e.g. '+1 point'.",
+        },
+        outcome: { type: "string", description: "When it ends: what happened, in words." },
+        recorded_by: { type: "string", description: "Who is recording it, as their full name." },
+        owner: { type: "string", description: "Optional: whose test it is, as their full name." },
+      },
+      required: ["recorded_by"],
+    },
+  },
+  {
     name: "count_context",
     title: "Count what we hold, and break it down",
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -1126,7 +1464,12 @@ export const TOOLS = [
             "YYYY-MM-DD. Filters on the date a record DESCRIBES, not when it was indexed. " +
             "Any date range excludes repository documentation, which carries no date.",
         },
-        until: { type: "string", description: "YYYY-MM-DD, inclusive." },
+        until: {
+          type: "string",
+          description:
+            'YYYY-MM-DD, inclusive. With sources ["decision"], what had been decided by that ' +
+            "day: a decision replaced after it is marked as standing then.",
+        },
         meta: {
           type: "object",
           description:
@@ -1220,8 +1563,10 @@ export const TOOLS = [
     description:
       "Read any table, view or analysis function in LoveIQ's database, live and with full " +
       "history. This is how you answer questions the indexed corpus cannot: Resend " +
-      "deliverability (resend_webhook_event, email_suppression), Stripe payments and " +
-      "refunds (payment, payment_item, payment_webhook_event), Calendly bookings " +
+      "deliverability (email_suppression, and `resend_webhook_event` for per-message " +
+      "sent/delivered/bounced/complained events — live since 2026-09-14, so it holds NO " +
+      "history before that date), Stripe payments and " +
+      "refunds (payment, payment_item, payment_webhook_event), call invitations " +
       "(booking_event), survey submissions and answers, reports, shares, invites, the " +
       "waitlist, marketing spend, and the admin tables. WHAT WE CHARGE LIVES HERE TOO " +
       "(report_price_quote: plan, current_price, and the multipliers that produced it) " +
@@ -1412,15 +1757,439 @@ export const TOOLS = [
       "anything shipped since is not in the picture. A page that is not on the list has no " +
       "screenshot, which is a gap in what was captured and not a page that looks like " +
       "nothing. " +
-      "The landing page appears TWICE, as `landing-white` and `landing-white-prev`: those " +
-      "are the two arms of a live A/B and they are different pages, so name the arm in any " +
-      "critique of 'the landing page'.",
+      "The landing page appears TWICE: `landing-white` is the one every visitor gets, and " +
+      "`landing-white-prev` is the design retired on 2026-09-19 (the A/B ended; it opens " +
+      "only with ?variant=white_prev). Critique the live one unless asked to compare.",
     inputSchema: {
       type: "object",
       properties: {
         page: {
           type: "string",
           description: "A name from this tool's own listing, e.g. 'landing-white'. Omit to list.",
+        },
+      },
+    },
+  },
+  {
+    name: "what_shipped",
+    title: "What changed, in plain English",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      'What changed in the product and in this brain, as the plain-English "For Marcus:" ' +
+      "line every change to main carries, newest first, with its date and pull request. Read " +
+      "live from the repository, so today's merges are there. Use it for 'what changed this " +
+      "week', 'what shipped since Friday' or 'did X go live'. It is the non-technical summary; " +
+      "the pull request on GitHub has the detail.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string", description: "First day, YYYY-MM-DD. Default: seven days ago." },
+        until: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: today." },
+      },
+    },
+  },
+  {
+    name: "explain_change",
+    title: "Why a number jumped",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "Whether a day's numbers were outside their usual range, and where each move came from, " +
+      "from our own data: visitors (our count and GA4), surveys started and finished, reports " +
+      "opened and paid, and the rates between them, each against the 28 days before. A move is " +
+      "split by traffic source or GA4 channel, a rate into its two halves (a conversion that " +
+      "'doubled' because traffic halved says so), and the day is checked for engagement, GA4 " +
+      "against our own count, ad spend and campaigns, and what shipped or was decided. Use it " +
+      "before trusting or explaining any jump: 'why did visitors spike on the 17th', 'is this " +
+      "CVR real', 'what moved yesterday'. The likely causes are fixed rules over numbers, not " +
+      "a guess, and the answer says none of it is proof.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        day: { type: "string", description: "The day, YYYY-MM-DD. Default: yesterday." },
+        metric: {
+          type: "string",
+          enum: METRICS.map((m) => m.id),
+          description:
+            "One metric to explain whether or not it was unusual. Leave empty to list every metric " +
+            "that was outside its usual range that day.",
+        },
+      },
+    },
+  },
+  {
+    name: "show_chart",
+    title: "Chart a number over time",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Draw one or two of the site's daily numbers as a line chart, in the Slack digest's style, " +
+      "and return the picture, a link to it and the numbers behind it. Use it whenever a trend is " +
+      "easier to see than to read: 'show me visitors this month', 'chart the share of report " +
+      "openers who pay since August', 'revenue against Google Ads spend'. The link opens in any " +
+      "browser without a login and can be pasted into a doc or a deck. Two numbers share one " +
+      "axis, so they must be the same kind: two counts, two shares or two amounts in EUR. Days " +
+      "are UTC, and a share is left as a gap on a day with too few people to read it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        metrics: {
+          type: "array",
+          items: { type: "string", enum: CHART_METRICS.map((m) => m.id) },
+          minItems: 1,
+          maxItems: 2,
+          description:
+            "One or two of: " + CHART_METRICS.map((m) => `${m.id} (${m.label})`).join(", ") + ".",
+        },
+        days: {
+          type: "number",
+          description: `How many days, ${MIN_DAYS} to ${MAX_DAYS}, ending on \`until\`. Default ${DEFAULT_DAYS}.`,
+        },
+        until: {
+          type: "string",
+          description: "The last day, YYYY-MM-DD. Default: yesterday, the last whole day.",
+        },
+      },
+      required: ["metrics"],
+    },
+  },
+  {
+    name: "break_even",
+    title: "What it takes to break even on ads",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "What the Google Ads spend buys and what it would take to earn it back, from live numbers " +
+      "over a window: the cost per visitor, the share of visitors who finish the survey, the share " +
+      "of finishers who pay, the average order and the net after ad spend, then the level each of " +
+      "those four alone would have to reach to break even. Give any of the four to ask 'what if': " +
+      "'what if 5% of finishers paid', 'what if a visitor cost EUR 0.05'. Counted like the digest's " +
+      "cost per paying customer: every visitor and buyer on the days the ad data covers, not only " +
+      "those who came from an ad, and it says when the purchases are too few to trust.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "number",
+          description: `The window for today's numbers, ${BREAK_EVEN_MIN_DAYS} to ${BREAK_EVEN_MAX_DAYS} days ending yesterday. Default ${BREAK_EVEN_DEFAULT_DAYS}.`,
+        },
+        cost_per_visitor: { type: "number", description: "What if: ad cost per visitor, in EUR." },
+        visitor_to_finish: {
+          type: "number",
+          description: "What if: the percentage of visitors who finish the survey, like 5 for 5%.",
+        },
+        finish_to_paid: {
+          type: "number",
+          description: "What if: the percentage of finishers who pay, like 2 for 2%.",
+        },
+        average_order: {
+          type: "number",
+          description: "What if: the average a paying customer pays, in EUR.",
+        },
+      },
+    },
+  },
+  {
+    name: "user_totals",
+    title: "Anonymous totals about our users",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "What our users did, as totals by group, never a person. `measure` picks what is " +
+      "counted: people (default: how many finished the survey, paid, and what they paid), " +
+      "traits (the user graph: each group's average on the scoring engine's 21 traits, 0 to " +
+      "100), emails (the report reminders recorded for a group, and how many unsubscribed, " +
+      "from which of our emails, bounced, complained, invited or shared; Resend's own totals " +
+      "exist from 14 Sep 2026), or answers (how a group answered one survey question, by its " +
+      "id, e.g. 03011). 'which archetype pays most', 'how do Spark Seekers differ from " +
+      "everyone', 'who unsubscribes and from what', 'how did women aged 25 to 34 answer 16001'. " +
+      "Group by up to two of gender, age, orientation, relationship, country, archetype and " +
+      "month, and narrow with the same keys. Never a person: any group smaller than 5 is " +
+      "hidden, and every measure hides the same groups (decision of 26 Sep 2026). Inside a " +
+      "group, traits, emails and answers show a count or share only when both it and the rest " +
+      "of the group are 5 or more ('under 5' otherwise), and trait averages need 20 people; " +
+      "grouped, the All line gives only its size, and a share or an average is withheld when " +
+      "the rest would give back a hidden one. " +
+      "Staff submissions are left out, and paid means a real sale above EUR 0, not a test and " +
+      "not a free coupon unlock. Each person counts once, however many times they finished. " +
+      "Written-in answers are never read, and questions stored as text (the country question) " +
+      "are not summarised. Each answer is protected on its own: two answers can still be " +
+      "subtracted (a day apart, one filter narrower), so never use it to find out about one " +
+      "person. For one person's record, or for a table this does not cover, use " +
+      "query_product_data.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        group_by: {
+          type: "array",
+          items: { type: "string", enum: [...USER_DIMENSIONS] },
+          description: "Up to two of: " + USER_DIMENSIONS.join(", ") + ". Empty for one total.",
+        },
+        filter: {
+          type: "object",
+          description:
+            'Narrow to people with these values, e.g. {"gender": "Woman", "age": "25-34"}. ' +
+            "Keys are the group_by names. Ages are the survey's bands: 18-24, 25-34, 35-44, " +
+            "45-54, 55-64, 65+. Months look like 2026-09.",
+        },
+        since: { type: "string", description: "First day of survey submissions, YYYY-MM-DD." },
+        until: { type: "string", description: "Last day, YYYY-MM-DD." },
+        measure: {
+          type: "string",
+          enum: [...USER_MEASURES],
+          description:
+            "What to count: people (default), traits, emails, or answers (needs `question`).",
+        },
+        question: {
+          type: "string",
+          description:
+            "measure answers only: the survey question's id, e.g. 03011 or 16001. Free-text " +
+            "questions (name, email, written answers) are refused.",
+        },
+      },
+    },
+  },
+  {
+    name: "cost_watch",
+    title: "What we pay for tools and services, month by month",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "What LoveIQ pays each month for tools and services (Google Ads, Claude, Google " +
+      "Workspace, Figma, Slack and the rest), read live from the Business Case cost sheet that " +
+      "the monthly invoice filing keeps current: the latest closed month against the one " +
+      "before, the biggest lines, what moved, what started or stopped, the trend since the " +
+      "sheet begins, and the month still open. Lines typed in by hand are flagged when they " +
+      "have not moved, and Google Ads is set beside what GA4 recorded. People's pay is left out.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "ux_signals",
+    title: "Marcus's 22 behaviour signals, measured on real visits, shown once proven",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "The UX checker: Marcus's 22 behaviour signals (time to first action, backtracking, dead " +
+      "and rage clicks, scroll, paywall dwell and escape, trust seeking, conversion blockers and " +
+      "the rest), each measured on the last days of real production visits from PostHog. A " +
+      "signal's number is shown only once its measure has been right on at least 80% of the " +
+      "nightly persona walks, on the walks where the behaviour happened and on those where it " +
+      "did not, because a walk knows exactly what it did. Unproven signals say why and where the " +
+      "measure went wrong; those the site cannot yet measure say what is missing. Use it for " +
+      "'where do people struggle', 'do people see the unlock offer', 'how do they leave the " +
+      "paywall'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "number",
+          description: "How many days of real visits to measure, 1 to 28. Default 7.",
+        },
+      },
+    },
+  },
+  {
+    name: "check_answer",
+    title: "Check a draft answer's figures and quotes against its sources",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Before sending an answer drawn from the brain, pass the draft and the ids it drew on. " +
+      "Every number, date and quoted phrase in it is looked up in those documents, and anything " +
+      "not there is listed with the nearest figure the source does hold, so a rounding slip or " +
+      "a wrong number is caught before a person reads it. A sentence that names an id is " +
+      "checked against that record alone: the part cited, never the whole document it belongs " +
+      "to, since a long document holds nearly every number. It cannot judge " +
+      "wording, only whether each figure and quote is in the cited record, and it says which " +
+      "sentences it could not check. Use it on any answer with numbers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        answer: { type: "string", description: "The draft answer, in full." },
+        sources: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 12,
+          description:
+            "The ids the answer drew on, exactly as printed on search lines, e.g. " +
+            "decision/decision:2026-09-09-3d275f5327.",
+        },
+      },
+      required: ["answer", "sources"],
+    },
+  },
+  {
+    name: "experiments",
+    title: "Every A/B test: running, planned and finished",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "The experiment registry: every A/B test with its hypothesis, the metric that decides " +
+      "it, its dates and its outcome, plus the live readout of a running test whose arms are " +
+      "stamped, in the same words /admin's A/B overview uses (it never calls a winner the " +
+      "numbers cannot support). Also the tests that ended before the registry existed: the " +
+      "landing page, pricing, paywall and survey designs. Use it for 'what are we testing', " +
+      "'how is the paywall test doing', 'what did the pricing test conclude'.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "comment_asks",
+    title: "What people asked each other in comments",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "Every ask left in a Figma or Google Docs comment: who asked whom for what, a link to the " +
+      "comment, and whether it is still open, checked live against Figma and Google Drive. Use it " +
+      "for 'what is waiting on me in comments', 'what did Mark ask Sanjin in Figma', or 'which " +
+      "review requests are still open'. Figma is read from every file whose link the company has " +
+      "shared; a Google comment arrives through the notification email the person asked receives. " +
+      "'Answered' means they replied in the thread but nobody resolved it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        person: {
+          type: "string",
+          description: "Only asks to this person: a full name, or a first name such as 'Marcus'.",
+        },
+        since: { type: "string", description: "First day, YYYY-MM-DD. Default: thirty days ago." },
+        include_resolved: {
+          type: "boolean",
+          description: "Also list the resolved and deleted asks. Default false.",
+        },
+      },
+    },
+  },
+  {
+    name: "decision_conflicts",
+    title: "Recorded decisions that may not both stand",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Pairs of recorded decisions that may not both be in force: one may replace the other, or they give different " +
+      "answers to the same question (a different tool, owner, number or rule for the same job). Found every night by " +
+      "the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a " +
+      "person rather than a verdict. Use it for 'which of our decisions contradict each other', or before relying on " +
+      "a decision that search marks MAY CONFLICT. settle_decision_conflict records the answer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description:
+            "Only this topic, e.g. tooling, pricing, report, survey, growth. Default: all.",
+        },
+      },
+    },
+  },
+  {
+    name: "brain_health",
+    title: "How the brain itself is doing",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "The brain's own report on itself over a window of days, against the window before: how " +
+      "much people used it and which tools, how often a search came back weak or empty and which " +
+      "questions it could not answer well, calls that failed and guards that refused, speed, the " +
+      "weekly test batteries (fixed questions with known answers) with what fails, and every " +
+      "scheduled job that failed or stopped running. Use it for 'how is Jarvis doing', 'can we " +
+      "trust it', or 'what does it not know'. The same report is written as a notice every week.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "integer",
+          description: "How many days back, 1 to 30. Default 7, compared with the 7 before.",
+        },
+      },
+    },
+  },
+  {
+    name: "whats_new",
+    title: "What is new since you last looked",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "What the brain produced on its own since a time, newest first, one line each with its id: " +
+      "notices (unusual numbers, the daily brief, reconciliation gaps), the Night Shift's research " +
+      "answers, and decisions recorded, plus how many questions still wait for tonight. Use it when " +
+      "someone asks what is new or what they missed, or opens a conversation without a question.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "string",
+          description: "A day (YYYY-MM-DD) or an ISO time. Default: the last 24 hours.",
+        },
+      },
+    },
+  },
+  {
+    name: "check_copy",
+    title: "Check report copy against the house rules",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Checks report copy against the rules set for every chapter, in code, and prints the " +
+      "sentence behind each finding: no em dashes, no phrases that read as machine-written, no " +
+      "absolute claims, a plain reading level, length against the shipped chapter, no line that " +
+      "would fit every archetype, no line lifted from another chapter, and the chapter's own " +
+      "shipped voice (person, sentence length, headings). Pass `text` for a draft, with its " +
+      "`chapter` and `archetype` when known. Leave `text` out and pass both to audit the copy " +
+      "that already shipped. It checks wording, not meaning: whether a claim is backed by " +
+      "research still needs reading.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description:
+            "The draft, as plain text or HTML. For a Google Doc or corpus id, read it with " +
+            "fetch_document first and pass the text.",
+        },
+        chapter: {
+          type: "string",
+          enum: allChapters(),
+          description: "Which report chapter it is, e.g. 'motivation'.",
+        },
+        archetype: {
+          type: "string",
+          enum: allArchetypes(),
+          description: "Which archetype it is written for, e.g. 'Spark Seeker'.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_context_pack",
+    title: "Everything needed to write one chapter, and no more",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Exactly what writing one report chapter for one archetype needs, inside a fixed size, so a " +
+      "draft is not buried in loosely related material: the chapter's own rules (person, sentence " +
+      "length, headings, counted off what shipped, plus the house rules), the text as shipped, the " +
+      "same chapter for another archetype as a model, who the archetype is, research cards to draw " +
+      "on, and the team's prompt documents for the chapter. Use it before drafting or rewriting a " +
+      "chapter, then check_copy on the result.",
+    inputSchema: {
+      type: "object",
+      required: ["chapter", "archetype"],
+      properties: {
+        chapter: { type: "string", enum: allChapters(), description: "e.g. 'motivation'." },
+        archetype: { type: "string", enum: allArchetypes(), description: "e.g. 'Spark Seeker'." },
+      },
+    },
+  },
+  {
+    name: "meeting_promises",
+    title: "What people promised in meetings",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      'Every next step agreed in a recorded meeting, read by code off the "Next steps" list the ' +
+      "meeting notes end with, grouped by who owns it, with the meeting, its day and a link. Use " +
+      "it for 'what did I promise this week', 'what is Mark waiting on from meetings' or 'what did " +
+      "we agree on Tuesday'. Each item is looked up on the Notion board by owner and shared words, " +
+      "and shows the matching task with its status, due date and link, or that nothing on the board " +
+      "matches it: an untracked promise is the thing to act on.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "string",
+          description: "First day, YYYY-MM-DD. Default: fourteen days ago.",
+        },
+        until: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: today." },
+        person: {
+          type: "string",
+          description:
+            "Full name as on the roster, e.g. 'Mark Oldenburg'. Adds what was given to the whole group.",
         },
       },
     },
@@ -1522,7 +2291,14 @@ export const EXTERNAL_SERVICES: Record<
     base: "https://api.resend.com",
     envKeys: ["RESEND_API_KEY"],
     auth: { kind: "bearer" },
-    note: "Domains and their DNS/verification state, audiences and contacts, and a single email by id. Per-message delivery events are already in resend_webhook_event, so prefer query_product_data for bounce and open rates.",
+    note:
+      "Domains and their DNS/verification state, audiences and contacts, and a single " +
+      "email by id. Per-message delivery events land in `resend_webhook_event` via " +
+      "/api/resend/webhook, which started recording on 2026-09-14 — before that the " +
+      "endpoint was registered on the apex domain, which redirects to www, and Svix " +
+      "drops its signature headers across a redirect, so every event was rejected. The " +
+      "table therefore holds NOTHING before 2026-09-14: a zero bounce count for any " +
+      "earlier period is 'not recorded', never 'none happened'.",
   },
   slack: {
     base: "https://slack.com/api",
@@ -1554,7 +2330,7 @@ export const EXTERNAL_SERVICES: Record<
     envKeys: ["GITHUB_TOKEN"],
     auth: { kind: "token" },
     optional: true,
-    note: "Issues, pull requests, reviews, releases and workflow runs for loveiqhq/loveiq. The repository is public, so this works with no credential; a token only raises the rate limit.",
+    note: "Issues, pull requests, reviews, releases and workflow runs for loveiqhq/loveiq — and the CURRENT CONTENTS OF ANY FILE in the repository via /repos/loveiqhq/loveiq/contents/<path>, returned as text. The indexed corpus holds only the Markdown documentation, so this is how to read what the code and config actually say: vercel.json for which crons run and when, .github/workflows/ci.yml for what CI checks, proxy.ts for the security headers, any source file. Always the live main branch, never a stale copy. The repository is public, so this works with no credential; a token only raises the rate limit.",
   },
   vercel: {
     base: "https://api.vercel.com",
@@ -1623,7 +2399,13 @@ export const EXTERNAL_SERVICES: Record<
       "signal and an empty result for last month is the API's limit, not an absence of " +
       "sessions. Optional dimension1/dimension2/dimension3, each one of: Browser, Device, " +
       "Country, OS, Source, Medium, Campaign, URL. Example: " +
-      "{numOfDays: 3, dimension1: 'Device'}.",
+      "{numOfDays: 3, dimension1: 'Device'}. " +
+      "BUDGET: Microsoft allows TEN requests per project per day and it cannot be raised by " +
+      "paying, because Clarity has no paid tier. The daily brain-clarity cron spends one of " +
+      "them and writes a per-page frustration summary into the corpus, so SEARCH THE CORPUS " +
+      "FIRST (source 'clarity') and call this only for a breakdown the summary does not carry " +
+      "— by Device or Country, say. Several exploratory calls will exhaust the day for " +
+      "everyone, including tomorrow morning's ingest, and the API then returns 429.",
   },
   posthog: {
     base: "https://eu.posthog.com/api",
@@ -1744,6 +2526,26 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
 }
 
 /**
+ * THE FIX, NOT ONLY THE FAULT. Most real query_product_data failures in `brain_query`
+ * since 2026-09-09 were a guessed column (`payment.plan`, `personal_report.archetype`,
+ * `report_price_quote.created_at`) or a guessed function argument, and every one cost a
+ * second round trip to list_product_tables. The schema is already in hand here, so the
+ * error names what does exist. Only for those two codes: any other failure is not about
+ * the shape of the query, and a column list would send the reader the wrong way.
+ */
+function schemaHint(detail: string, table: string, spec: Map<string, string[]> | null): string {
+  const known = spec?.get(table);
+  if (!known?.length) return "";
+  if (/"code"\s*:\s*"42703"/.test(detail)) {
+    return `\n\n${table} has these columns: ${known.join(", ")}.`;
+  }
+  if (table.startsWith("rpc/") && /"code"\s*:\s*"PGRST202"/.test(detail)) {
+    return `\n\n${table} takes ${known.join(", ")} — pass them in \`params\` (a trailing ! is required).`;
+  }
+  return "";
+}
+
+/**
  * The stored-id prefix every part of one document shares, and how its parts are
  * suffixed. Three shapes, because three ingesters chose differently.
  */
@@ -1771,6 +2573,35 @@ function documentParts(source: string, rawId: string): { base: string; sep: "#" 
 }
 
 /** Part number from `meta.part`, defaulting to 1 for a document's first chunk. */
+
+/**
+ * A PART OLDER THAN ITS OWN FIRST PART IS LEFT OVER FROM A LONGER VERSION.
+ *
+ * A document that shrinks on rewrite (a builder bump, an edited thread) used to keep its
+ * old extra parts until the daily sweep, up to about twenty hours. Reassembled, they
+ * spliced stale text onto the current version: on 2026-09-23 a gmail thread whose current
+ * form is one part read back as "parts 1-1 of 32". Since 2026-09-24 `upsertChunks` deletes
+ * them in the same write (`leftoverParts`), so this is the second line: it still covers
+ * WhatsApp's own `-N` numbering, which the write path leaves to the sweep. Every part of
+ * one write lands with or after its first part, so a part written well before part 1 is
+ * not current. Only reading changes here: nothing is deleted.
+ */
+const LEFTOVER_SLACK_MS = 10 * 60_000;
+
+export function dropLeftoverParts(
+  parts: Array<Record<string, unknown>>,
+  base: string
+): Array<Record<string, unknown>> {
+  const first = parts.find((r) => String(r.source_id ?? "") === base);
+  const firstAt = Date.parse(String(first?.updated_at ?? ""));
+  if (!Number.isFinite(firstAt)) return parts;
+  return parts.filter((r) => {
+    if (r === first) return true;
+    const at = Date.parse(String(r.updated_at ?? ""));
+    return !Number.isFinite(at) || at >= firstAt - LEFTOVER_SLACK_MS;
+  });
+}
+
 function partNumber(row: Record<string, unknown>): number {
   const meta = (row.meta ?? {}) as Record<string, unknown>;
   const n = Number(meta.part);
@@ -1900,6 +2731,206 @@ const PRIVATE_COLUMN = new RegExp(
 );
 
 /**
+ * THE DENYLIST IS SNAKE_CASE AND JSONB IS NOT.
+ *
+ * `PRIVATE_COLUMN` is anchored as `^(?:.*_)?(?:ip|user_agent|…)$`, which needs an
+ * underscore before the suffix. Postgres columns have one; the camelCase keys inside a
+ * jsonb column do not. Measured 2026-09-23 on a single `payment` row: `ip_address` and
+ * `user_agent` were masked as the header promised, `reportToken` inside `metadata` was
+ * redacted by the value rule — and the SAME ROW printed `requestIp` as 109.175.96.167 and
+ * `requestUserAgent` as the full device string, in plaintext, because neither name has an
+ * underscore in front of the part that matters.
+ *
+ * That is worse than not masking at all: the result header tells the caller those two
+ * fields are private, so a reader has been told the opposite of what happened.
+ *
+ * Normalising the key covers every camelCase duplicate at once, including ones nobody has
+ * added yet, rather than naming `requestIp` and waiting for `clientIp` to appear.
+ */
+function snakeCase(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+/**
+ * HELD BACK, BUT BETTER THAN SOMETHING SHOWN.
+ *
+ * The per-source cap reserves a slot for every kind of evidence, so a strong second row
+ * from one source can be cut while a weak row from another is shown: measured
+ * 2026-09-23, the answer to "what is the record label strategy for therapists" scored
+ * 2.52 and was held back while rows at 1.73-1.98 kept their slots. Four ranking fixes
+ * were measured and each broke other questions — the reservation protects which rows
+ * are CHOSEN, and anything admitting a stronger row pushes the reserved ones down the
+ * score-sorted page. So the page stays as it is and the notice says what was left out.
+ *
+ * Ids and scores only, never titles: this text sits outside the per-source fences, and
+ * a title can be an email subject written by anyone. An id is enough to fetch it.
+ */
+/**
+ * A WEAK MATCH INSIDE A FILTER IS OFTEN A STRONG ONE OUTSIDE IT.
+ *
+ * Measured 2026-09-26 over the week's 42 weak searches: 25 were narrowed to a source, a
+ * date range or a person, and the same question with no filter found a match at or above
+ * the floor. "entity model ontology data model patient hub schema" in Slack alone scored
+ * 1.60; across everything, 3.65 (a Notion task). "fantasy vs reality report chapter" in
+ * Slack since the 10th scored 1.40; across everything, 3.30 (the chapter's own output by
+ * email). Agents narrow before they know where an answer lives, and a weak result read as
+ * "the record is thin" is the failure this server exists to prevent.
+ *
+ * Ids and dates only. No title, because a title can be written by anyone who emails the
+ * company and this line sits outside the fenced sources; and no score, because a weak
+ * result never hands the reader a decimal to re-threshold on (see the weak-match note).
+ */
+/**
+ * Every stored part of one document, and how many the table holds.
+ *
+ * PAGED, because the order that pages reliably is `source_id`, and that is TEXT order:
+ * "#100" sorts before "#2". Under the old single read of 400, a 540-part book lost parts
+ * 5-9, 46-99 and more from its MIDDLE, while the warning said only the tail was missing.
+ * Reading every page and sorting by part number afterwards fixes both. Stops at 4,000
+ * parts; `total` still says when a document is bigger than that.
+ */
+async function documentRows(
+  select: string,
+  src: string,
+  base: string
+): Promise<{ rows: Array<Record<string, unknown>>; total: number | null }> {
+  const PAGE = 1000; // PostgREST's own ceiling on one response
+  const rows: Array<Record<string, unknown>> = [];
+  let total: number | null = null;
+  for (let offset = 0; offset < 4 * PAGE; offset += PAGE) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=${select}&source=eq.${encodeURIComponent(src)}` +
+        `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc` +
+        `&limit=${PAGE}&offset=${offset}`,
+      { headers: { Prefer: "count=exact" } }
+    );
+    if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
+    const counted = Number(res.headers.get("content-range")?.split("/")[1]);
+    total = Number.isFinite(counted) ? counted : null;
+    const page = (await res.json().catch(() => null)) as Array<Record<string, unknown>> | null;
+    if (!Array.isArray(page)) throw new Error("brain_chunk: non-array body");
+    rows.push(...page);
+    if (page.length < PAGE || (total !== null && rows.length >= total)) break;
+  }
+  return { rows, total };
+}
+
+/** The line every book part opens with (partHead in scripts/brain-books.ts). */
+const BOOK_PART_HEAD =
+  /^[^\n]* A third-party book in our library, not LoveIQ's own claim\. Part \d+ of \d+\.\n/;
+/** The line every paper part opens with (partHead in features/brain/server/ingest/papers.ts). */
+const PAPER_PART_HEAD =
+  /^[^\n]* Open-access research under [^:\n]+: third-party work, not LoveIQ's own claim\. Part \d+ of \d+\.\n/;
+
+/**
+ * The text of exactly the record an id names, title first, or null when the id does not
+ * resolve. Throws on an outage, which is not a missing id.
+ *
+ * THE RECORD CITED, NEVER THE WHOLE DOCUMENT IT BELONGS TO. Joined, a long document holds
+ * nearly every number: measured 2026-09-28 against production, 3 of the 9 largest Drive
+ * documents "confirmed" all 90 made-up percentages from 10% to 99%, and a 300-part book
+ * confirmed any integer up to its part count ("Part 73 of 328"). Search prints each part's
+ * own id, so the part a figure came from is the one to cite. The "(part N of M)" on a
+ * part's title, and the head every book part opens with, are ours, not the source's.
+ */
+async function documentText(raw: string): Promise<string | null> {
+  const slash = raw.indexOf("/");
+  const src = slash > 0 ? raw.slice(0, slash) : "";
+  const rawId = slash > 0 ? raw.slice(slash + 1) : "";
+  if (!SOURCES_FOR_TEST.includes(src) || !rawId) return null;
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=title,body&source=eq.${encodeURIComponent(src)}` +
+      `&source_id=eq.${encodeURIComponent(rawId)}&limit=1`
+  );
+  if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
+  const rows = (await res.json().catch(() => null)) as Array<{
+    title?: unknown;
+    body?: unknown;
+  }> | null;
+  if (!Array.isArray(rows)) throw new Error("brain_chunk: non-array body");
+  if (!rows[0]) return null;
+  const title = String(rows[0].title ?? "").replace(/\s*\(part \d+ of \d+\)$/, "");
+  const body = String(rows[0].body ?? "");
+  const own =
+    src === "book"
+      ? body.replace(BOOK_PART_HEAD, "")
+      : src === "paper"
+        ? body.replace(PAPER_PART_HEAD, "")
+        : body;
+  return `${title}\n${own}`;
+}
+
+export function outsideTheFilter(
+  applied: string[],
+  wide: Array<{
+    source: string;
+    sourceId: string;
+    contentScore: number;
+    periodEnd?: string | null;
+  }>
+): string {
+  // Nothing on the page can reappear here: it fires only when every row shown scored
+  // under the floor, and it offers only rows at or above it.
+  const better = wide.filter((c) => c.contentScore >= RELEVANCE_FLOOR).slice(0, 3);
+  if (better.length === 0) return "";
+  return (
+    `\n\nOUTSIDE YOUR FILTER (${applied.join(", ")}): the same question with no filter ` +
+    `matches better. Fetch these, or search again without the filter, before calling the ` +
+    `record thin:\n` +
+    better
+      .map((c) => `  • ${c.source}/${c.sourceId}` + (c.periodEnd ? ` (${c.periodEnd})` : ""))
+      .join("\n")
+  );
+}
+
+export function outrankingHeldBack(
+  shaping: RetrieveShaping,
+  shown: Array<{ score: number }>
+): string {
+  if (!shaping.heldBackBest || shown.length === 0) return "";
+  const worth = [...shaping.heldBackBest.entries()]
+    .map(([source, r]) => ({ source, ...r, beats: shown.filter((c) => c.score < r.score).length }))
+    .filter((r) => r.beats > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  if (worth.length === 0) return "";
+  return (
+    `\nHeld back yet scoring above rows shown — fetch_document these if the question needs ` +
+    `more than the page gives:\n` +
+    worth
+      .map(
+        (r) =>
+          `  • ${r.source}/${r.sourceId} @${r.score.toFixed(2)} — outranks ${r.beats} of the ` +
+          `${shown.length} shown`
+      )
+      .join("\n")
+  );
+}
+
+/**
+ * A REPOSITORY FILE, AS TEXT.
+ *
+ * GitHub's contents endpoint returns a file base64-encoded, and a model cannot read four
+ * kilobytes of base64 reliably — so `vercel.json`, the CI workflows and every source file
+ * were technically reachable and practically invisible, while the corpus indexes only
+ * Markdown. The brain answered "which crons run" from documentation that had drifted (it
+ * named 13 jobs; 22 are scheduled). Decoding here makes the live file the answer.
+ *
+ * Only a single-file response is decoded; a directory listing is already readable JSON.
+ * URL secrets are masked like every other text this server returns.
+ */
+export function decodeGithubFile(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const f = parsed as Record<string, unknown>;
+  if (f.type !== "file" || f.encoding !== "base64" || typeof f.content !== "string") return null;
+  const text = Buffer.from(f.content.replace(/\s+/g, ""), "base64").toString("utf8");
+  const header =
+    `File: ${String(f.path ?? f.name ?? "")} on main — ${String(f.size ?? text.length)} bytes, ` +
+    `sha ${String(f.sha ?? "").slice(0, 12)}${f.html_url ? `\nurl: ${String(f.html_url)}` : ""}`;
+  return `${header}\n\n${redactUrlSecrets(text)}`;
+}
+
+/**
  * A STABLE TAG, not a blank.
  *
  * `[redacted]` would break the analysis this tool is for: "do these three payments
@@ -1940,7 +2971,7 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
     const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
     for (const key of Object.keys(copy)) {
       if (copy[key] === null || copy[key] === undefined) continue;
-      if (PRIVATE_COLUMN.test(key)) {
+      if (PRIVATE_COLUMN.test(key) || PRIVATE_COLUMN.test(snakeCase(key))) {
         hit.add(key);
         copy[key] = privateTag(copy[key]);
         continue;
@@ -1970,6 +3001,45 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
   };
   const out = rows.map((row) => walk(row, 0));
   return { rows: out, redacted: [...hit].sort() };
+}
+
+/**
+ * What an EMPTY result actually means, which is two different facts that render the same.
+ *
+ * "0 rows returned, 0 match." is what the caller saw whether their filter excluded
+ * everything or the table has never held a single row, and the second is the dangerous
+ * one: asked for the email bounce rate, a model reads zero rows and answers "no bounces",
+ * which is the opposite of "we have no record of any". The case that motivated this:
+ * on 2026-09-14 `resend_webhook_event` had never held a row — its webhook was registered
+ * on a redirecting host, so every event was rejected — while this tool's own description
+ * told the model to PREFER that table for bounce and open rates. (Fixed since; the table
+ * records normally now. The failure mode it demonstrates is not fixed and never will be.)
+ *
+ * One extra count, only ever on an empty result, and only for a table (an rpc has no
+ * table to count). Best-effort: if the count fails we say nothing rather than guess.
+ */
+async function describeEmptyResult(table: string, hadFilters: boolean): Promise<string> {
+  try {
+    const res = await supabaseFetch(`/rest/v1/${table}?select=*&limit=1`, {
+      headers: { Prefer: "count=exact", Range: "0-0" },
+    });
+    const total = Number(res.headers.get("content-range")?.split("/")[1] ?? NaN);
+    if (!Number.isFinite(total)) return "";
+    if (total === 0) {
+      return (
+        ` THE TABLE ITSELF IS EMPTY — \`${table}\` holds no rows at all, not merely none ` +
+        `matching this query. Report that we have NO DATA on this, which is a different ` +
+        `answer from a measured zero and usually means a feed was never connected. Do not ` +
+        `present it as "none happened".`
+      );
+    }
+    if (hadFilters) {
+      return ` The table itself holds ${total} rows, so it is the FILTERS that matched nothing.`;
+    }
+    return "";
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -2063,6 +3133,15 @@ function malformedFilterMessage(args: Record<string, unknown>): string | null {
       `ignored, which would have returned the unfiltered corpus with no notice.`
     );
   }
+  for (const key of Object.keys((args.meta as Record<string, unknown> | undefined) ?? {})) {
+    const instead = UNFILTERABLE_META_KEYS.get(key);
+    if (instead) {
+      return (
+        `\`meta.${key}\` cannot be filtered on: it holds records, not a value a filter can ` +
+        `match, so the search would return nothing and read as none. Instead, ${instead}.`
+      );
+    }
+  }
   return null;
 }
 
@@ -2112,7 +3191,9 @@ async function callTool(
    * return sites, three of them mid-branch, and a third top-level key on a tool
    * result is not something MCP defines.
    */
-  stats: { sourceCount?: number; topScore?: number } = {}
+  stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {},
+  /** Who is asking; the shared token when nobody signed in. Names the recorder of a decision. */
+  caller: Caller = { kind: "shared" }
 ) {
   /**
    * An argument a tool does not declare is REFUSED, never ignored.
@@ -2134,6 +3215,41 @@ async function callTool(
    * CLIENT_INJECTED_ARGS and fail the call it was trying to rescue. The server
    * is the only place that can tell the model's mistakes from the client's.
    */
+  /**
+   * ONE argument name that means exactly one declared argument, and nothing else.
+   *
+   * This is NOT a softening of the rule above — it is the other half of it. The rule
+   * says never to swallow a key whose meaning we are guessing at, because a dropped
+   * filter returns a wider answer that reads like a narrow one. `document_id` on
+   * `fetch_document` is not a guess: there is one id, the tool takes one id, and the
+   * caller has typed the longer name for it. Measured over the 14 days to 2026-09-18,
+   * on REAL calls only (`surface = 'mcp'`, which excludes the 7,628 battery probes
+   * that otherwise dominate this table): 27 of `fetch_document`'s 92 calls died on it.
+   *
+   * Every other refusal in that measurement stays a refusal, and should. `sql` and
+   * `question` on `query_product_data` are a caller asking for a tool this is not,
+   * `people` on `search_company_context` and `match` on `get_business_numbers` are
+   * filters nobody declared — accepting any of those would return the wider answer
+   * the comment above is about. An alias earns its place by being a second NAME for
+   * a declared argument, never a second MEANING.
+   */
+
+  const ARG_ALIASES: Record<string, Record<string, string>> = {
+    fetch_document: { document_id: "id" },
+    // Measured in `brain_query`: callers reach for `decided_by` when recording a
+    // decision. It can only mean `actor` — the tool has no other field for a person —
+    // so refusing it costs a round trip and teaches nothing.
+    record_decision: { decided_by: "actor" },
+  };
+  for (const [alias, real] of Object.entries(ARG_ALIASES[name] ?? {})) {
+    if (!(alias in args)) continue;
+    // Both present and disagreeing is ambiguous, so it stays a refusal: the unknown-key
+    // check below sees `document_id` still there and says so.
+    if (real in args && args[real] !== args[alias]) continue;
+    args[real] = args[alias];
+    delete args[alias];
+  }
+
   const declared = TOOLS.find((t) => t.name === name)?.inputSchema.properties as
     Record<string, unknown> | undefined;
   if (declared) {
@@ -2234,6 +3350,18 @@ async function callTool(
           `narrow the question, or use browse_context, which enumerates instead of ranking.`
       );
     }
+    const applied = [
+      opts.sources?.length ? `sources=${opts.sources.join(",")}` : null,
+      opts.excludeSources?.length ? `exclude_sources=${opts.excludeSources.join(",")}` : null,
+      opts.since ? `since=${opts.since}` : null,
+      opts.until ? `until=${opts.until}` : null,
+      opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
+    ].filter((x): x is string => x !== null);
+    /** The same question with no filter, for a narrowed search that came back weak or empty. */
+    const unfiltered = () =>
+      retrieve(query, 3, {}).catch(
+        () => [] as Array<{ source: string; sourceId: string; contentScore: number }>
+      );
     if (chunks.length === 0) {
       /**
        * A NARROW FILTER IS NOT AN EMPTY CORPUS, and the two must never read alike.
@@ -2245,13 +3373,6 @@ async function callTool(
        * otherwise. Same family as `CorpusUnavailableError`: never let the shape of
        * the request be reported as the state of the world.
        */
-      const applied = [
-        opts.sources?.length ? `sources=${opts.sources.join(",")}` : null,
-        opts.excludeSources?.length ? `exclude_sources=${opts.excludeSources.join(",")}` : null,
-        opts.since ? `since=${opts.since}` : null,
-        opts.until ? `until=${opts.until}` : null,
-        opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
-      ].filter((x): x is string => x !== null);
       if (applied.length > 0) {
         return textResult(
           `Nothing matched "${query}" WITH THE FILTERS YOU SET (${applied.join(", ")}). ` +
@@ -2259,7 +3380,8 @@ async function callTool(
             `search already found, they do not select on their own. Re-run without them, ` +
             `or widen them, before concluding the record does not exist. Note that any ` +
             `since/until range excludes repository documentation, which carries no date, ` +
-            `and that meta values match EXACTLY.`
+            `and that meta values match EXACTLY.` +
+            outsideTheFilter(applied, await unfiltered())
         );
       }
       return textResult(
@@ -2338,8 +3460,18 @@ async function callTool(
      * row and scores 1.80, because a title reading "all time, in total, to date,
      * lifetime since launch" shares few words with the question.
      */
-    const RELEVANCE_FLOOR = 1.85;
     const topScore = chunks.reduce((best, c) => Math.max(best, c.contentScore), 0);
+    /**
+     * RECORD THE SCORE THE WARNING IS JUDGED ON, not the one the ranking sorts by.
+     *
+     * `stats.topScore` above is `chunks[0].score` — content PLUS recency and every other
+     * bonus. The weak-match warning below is judged on `contentScore`, bonuses stripped,
+     * because that is the only part that says how well the corpus matched the question.
+     * Logging just the bonused figure meant the one signal this system trusts enough to
+     * warn a reader about was thrown away, and "which questions can the corpus not answer"
+     * could not be asked of 6,991 logged calls.
+     */
+    stats.contentScore = topScore;
     const rankedIn = chunks.filter(
       (c) =>
         c.source === "decision" &&
@@ -2395,6 +3527,8 @@ async function callTool(
           `written record is thin rather than assembling an answer from adjacent material; ` +
           `if one of them plainly does answer it, use it.\n`
         : "";
+    const outside =
+      weakMatch && applied.length > 0 ? outsideTheFilter(applied, await unfiltered()) : "";
     /**
      * WHAT THE BRAIN NOTICED WITHOUT BEING ASKED.
      *
@@ -2409,12 +3543,36 @@ async function callTool(
      */
     const notices = renderOpenNotices(await noticesPromise);
 
+    /**
+     * A QUESTION WITH NO TOPIC IS A BROWSE, and ranking cannot serve it.
+     *
+     * Sits beside the prior-decision block because it is the same shape -- prepended,
+     * dated, capped -- but fires on the opposite condition: that one interjects when a
+     * question PROPOSES something, this one when a question asks for a LIST. Only the
+     * untargeted form qualifies; "what did we decide about pricing" has a topic and goes
+     * down the ranked path untouched.
+     */
+    const browse = looksLikeDecisionBrowse(query)
+      ? renderRecentDecisions(await recentDecisions(8, opts.until), opts.until)
+      : "";
+
     const prior = renderPriorDecisions(
       rankedIn.length > 0
         ? rankedIn.map((c) => ({
             sourceId: c.sourceId,
             title: c.title,
             decidedOn: c.periodEnd,
+            // The same warnings the lookup path carries, so a decision reads the same
+            // whether it ranked into the results or had to be looked up.
+            supersededBy:
+              typeof (c.meta as { superseded_by?: unknown } | null)?.superseded_by === "string"
+                ? ((c.meta as { superseded_by: string }).superseded_by ?? null)
+                : null,
+            supersededOn:
+              typeof (c.meta as { superseded_on?: unknown } | null)?.superseded_on === "string"
+                ? (c.meta as { superseded_on: string }).superseded_on
+                : null,
+            disputedBy: disputesOf(c.meta as Record<string, unknown> | null),
           }))
         : /**
            * THE LOOKUP RUNS EVEN ON A WEAK MATCH, which is the opposite of what this did.
@@ -2430,7 +3588,9 @@ async function callTool(
            * The lookup has its own floor and its own decision-only search, so it is not
            * the ranked result's confidence being borrowed.
            */
-          await priorDecisions(query)
+          await priorDecisions(query, opts.until),
+      // `until` is the day the reader is asking about: a decision is shown as it stood then.
+      opts.until
     );
     // Was: raw `c.body`, joined by `---`. The Slack path removed that separator
     // BECAUSE a chunk could pose as the operator across it, then kept the fence,
@@ -2474,11 +3634,12 @@ async function callTool(
           .join(", ") +
         `. One source is not allowed to fill the whole result. If that is the source you ` +
         `want, ask again with sources:["${[...shaping.heldBack.keys()][0]}"] and you will ` +
-        `get them.`
+        `get them.` +
+        outrankingHeldBack(shaping, chunks)
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${prior}${RESULT_GUIDE}${weakMatch}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${weakMatch}${outside}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true, asOf: opts.until })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );
@@ -2544,21 +3705,14 @@ async function callTool(
      */
     let matchedTotal: number | null = null;
     try {
-      const res = await supabaseFetch(
-        `/rest/v1/brain_chunk?select=source,source_id,title,url,body,meta,period_end` +
-          `&source=eq.${encodeURIComponent(src)}` +
-          // ORDERED. PostgREST returns rows in whatever order the plan produced, and the
-          // sort below could not repair it while every part reported number 1.
-          `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc&limit=400`,
-        { headers: { Prefer: "count=exact" } }
+      // Every page, then sorted by part number below: see documentRows.
+      const read = await documentRows(
+        "source,source_id,title,url,body,meta,period_end,updated_at",
+        src,
+        base
       );
-      if (!res.ok) {
-        return textResult(`Could not read that document (status ${res.status}).`, true);
-      }
-      const total = Number(res.headers.get("content-range")?.split("/")[1]);
-      matchedTotal = Number.isFinite(total) ? total : null;
-      rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
-      if (!Array.isArray(rows)) throw new Error("non-array body");
+      rows = read.rows;
+      matchedTotal = read.total;
     } catch {
       // Same doctrine as search: an outage is not an absence.
       return textResult(
@@ -2570,12 +3724,15 @@ async function callTool(
 
     // `like` is a prefix match and `_` is a single-character wildcard in it, so the
     // real membership test happens here rather than in the query.
-    const parts = rows
-      .filter((r) => {
-        const sid = String(r.source_id ?? "");
-        return sid === base || (sep !== null && sid.startsWith(base + sep));
-      })
-      .sort((a, b) => partNumber(a) - partNumber(b));
+    const parts = dropLeftoverParts(
+      rows
+        .filter((r) => {
+          const sid = String(r.source_id ?? "");
+          return sid === base || (sep !== null && sid.startsWith(base + sep));
+        })
+        .sort((a, b) => partNumber(a) - partNumber(b)),
+      base
+    );
 
     if (parts.length === 0) {
       return textResult(
@@ -2637,20 +3794,21 @@ async function callTool(
     const nextPart = last + 1;
     const more = wanted.length > taken.length;
     /**
-     * THE 400-ROW CAP, SAID OUT LOUD WHEN IT FIRES.
+     * THE READ CAP, SAID OUT LOUD WHEN IT FIRES.
      *
      * `parts.length` counts what came back, not what exists, so a document over the cap
      * printed a denominator that was simply wrong and claimed "this is all of it".
      * `matchedTotal` is the real count from `content-range`; null means the header was
-     * unreadable, which is distinct from "not capped" and says so rather than guessing.
+     * unreadable, and then nothing is claimed about a cap: the read pages on until a short
+     * page, so only a document past the 4,000-row read limit could still be cut, silently.
      */
     const capped = matchedTotal !== null && matchedTotal > rows.length;
     const head =
       `parts ${first}-${last} of ${parts.length}` +
       (more ? ` — call again with from_part=${nextPart} for the rest.` : " — this is all of it.") +
       (capped
-        ? ` WARNING: this document has ${matchedTotal} parts and only the first ${rows.length} ` +
-          `were read, so the count above understates it and the tail is NOT included.`
+        ? ` WARNING: this document has ${matchedTotal} parts and only ${rows.length} ` +
+          `were read, so the count above understates it and some parts are NOT included.`
         : "") +
       (src === "doc"
         ? ` This is one heading of a repository file; open ${String((taken[0]!.meta as Record<string, unknown>)?.path ?? "the file")} for the whole document.`
@@ -2860,6 +4018,18 @@ async function callTool(
       until: typeof args.until === "string" ? args.until : undefined,
       meta: asMeta(args.meta),
     };
+    // A book filter without the book source matches nothing, because books are opt-in, and
+    // "widen it" was the wrong advice for that.
+    const bookHint =
+      (!opts.sources?.includes("book") && (opts.meta?.kind === "book" || opts.meta?.book)
+        ? ' Books are left out unless `sources` names "book".'
+        : "") +
+      (!opts.sources?.includes("paper") && (opts.meta?.kind === "paper" || opts.meta?.pmcid)
+        ? ' Papers are left out unless `sources` names "paper".'
+        : "") +
+      (!opts.sources?.includes("corporate") && opts.meta?.site
+        ? ' The corporate website is left out unless `sources` names "corporate".'
+        : "");
     const learnedSince =
       typeof args.learned_since === "string" && args.learned_since.trim()
         ? args.learned_since.trim()
@@ -2953,7 +4123,7 @@ async function callTool(
       if (rows.length === 0) {
         return textResult(
           `Nothing matches (${applied}). That is what this request selected, not what the ` +
-            `company has — widen it before concluding the record does not exist.`
+            `company has — widen it before concluding the record does not exist.${bookHint}`
         );
       }
       const total = rows[0]!.total;
@@ -3022,7 +4192,12 @@ async function callTool(
     // Only what is rendered. `url` and `meta` were selected and never printed, which is
     // a jsonb column pulled over the wire per row for nothing; `fetch_document` carries
     // both for the one record a reader actually opens.
-    qs.set("select", "source,source_id,title,period_end,first_seen_at");
+    // Two text fields, not `meta`: enough to say on the line that a decision was replaced.
+    qs.set(
+      "select",
+      "source,source_id,title,period_end,first_seen_at," +
+        "superseded_by:meta->>superseded_by,superseded_on:meta->>superseded_on"
+    );
     // NULLS LAST both ways: repository documentation carries no date, and letting it
     // head an "oldest first" listing buries everything the caller asked for.
     qs.set(
@@ -3038,6 +4213,10 @@ async function callTool(
     if (opts.sources?.length) qs.set("source", `in.(${opts.sources.join(",")})`);
     if (opts.excludeSources?.length)
       qs.append("source", `not.in.(${opts.excludeSources.join(",")})`);
+    // Books and papers are opt-in here too, as in search_company_context: listed only when named.
+    if (!opts.sources?.includes("book")) qs.append("source", "neq.book");
+    if (!opts.sources?.includes("paper")) qs.append("source", "neq.paper");
+    if (!opts.sources?.includes("corporate")) qs.append("source", "neq.corporate");
     if (opts.since) qs.append("period_end", `gte.${opts.since}`);
     if (opts.until) qs.append("period_end", `lte.${opts.until}`);
     if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
@@ -3119,7 +4298,7 @@ async function callTool(
     if (rows.length === 0) {
       return textResult(
         `Nothing matches (${applied}). That is what this request selected, not what the ` +
-          `company has — widen it before concluding the record does not exist.`
+          `company has — widen it before concluding the record does not exist.${bookHint}`
       );
     }
     stats.sourceCount = rows.length;
@@ -3134,7 +4313,15 @@ async function callTool(
         // `<source>/<source_id>`, the form `fetch_document` accepts and the form
         // `search_company_context` prints. Printing the bare source_id here — as this did
         // — hands the reader an id that the very next tool refuses.
-        return `${date}  [${String(r.source)}]  ${String(r.title ?? "(untitled)")}\n          id: ${String(r.source)}/${String(r.source_id)}`;
+        // A replaced decision said nothing on this line, so a browse of "what we decided"
+        // listed dead decisions as standing. With `until`, as it stood on that day.
+        const replaced = replacementAsOf(r.superseded_by, r.superseded_on, opts.until);
+        const mark = replaced?.later
+          ? `  (stood on ${opts.until!.slice(0, 10)}; replaced later, on ${replaced.on}, by decision/${replaced.by})`
+          : replaced
+            ? `  (SUPERSEDED by decision/${replaced.by})`
+            : "";
+        return `${date}  [${String(r.source)}]  ${String(r.title ?? "(untitled)")}${mark}\n          id: ${String(r.source)}/${String(r.source_id)}`;
       })
       .join("\n");
     const shownTo = offset + rows.length;
@@ -3175,7 +4362,7 @@ async function callTool(
     // A malformed date silently became today, which back-dates nothing and mis-dates the
     // record without telling anyone. `buildDecisionRow` also defaults, so this is the
     // difference between "not given" and "given wrong".
-    if (decidedOn !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(decidedOn)) {
+    if (decidedOn !== undefined && !isRealDate(decidedOn)) {
       return textResult("`decided_on` must look like 2026-09-09.", true);
     }
     const str = (v: unknown): string | undefined =>
@@ -3194,6 +4381,7 @@ async function callTool(
         // own output, and the record itself is keyed on the bare id. Accepting either
         // rather than refusing the one that was actually shown to them.
         supersedes: str(args.supersedes)?.replace(/^decision\//, ""),
+        recordedBy: caller.kind === "person" ? caller.name : undefined,
       });
     } catch (err) {
       logger.error({ err }, "brain: could not record a decision");
@@ -3206,6 +4394,9 @@ async function callTool(
         "Findable by its wording immediately, fully indexed within about fifteen " +
         "minutes, and `fetch_document` reads it back by that id at once. " +
         "Quote the id if a later decision replaces this one." +
+        (recorded.supersedeProblem
+          ? `\n\nNOT MARKED AS REPLACED: ${recorded.supersedeProblem}.`
+          : "") +
         (str(args.rejected)
           ? ""
           : "\n\nNothing was recorded about what was REJECTED. If alternatives were " +
@@ -3234,7 +4425,9 @@ async function callTool(
     const DAYISH = /^\d{4}-\d{2}-\d{2}$/;
     const since = typeof args.since === "string" ? args.since.trim() : "";
     const until = typeof args.until === "string" ? args.until.trim() : "";
-    if ((since || until) && args.days !== undefined) {
+    // `!= null`, not `!== undefined`: a client that sends every optional field fills the
+    // unset ones with null, and `{ days: null, since }` was refused as "not both".
+    if ((since || until) && args.days != null) {
       return textResult(
         "Give `days` OR a `since`/`until` range, not both — they answer the same " +
           "question two different ways and there is no sensible way to combine them.",
@@ -3247,6 +4440,15 @@ async function callTool(
     ] as const) {
       if (val && !DAYISH.test(val)) {
         return textResult(`\`${key}\` must be a date like 2026-08-01 — "${val}" is not one.`, true);
+      }
+      // Shape is not existence: 2026-09-31 passes the pattern and is not a day.
+      if (val && !isRealDate(val)) {
+        return textResult(
+          `\`${key}\` is "${val}", which is not a real date — that day does not exist. ` +
+            `Refused rather than queried, because an impossible date returns nothing and ` +
+            `reads exactly like "nothing happened".`,
+          true
+        );
       }
     }
     if (until && !since) {
@@ -3584,6 +4786,8 @@ async function callTool(
     // that grants a paid report for free. The method is not the guard; the
     // READ_ONLY_RPCS gate above is, and it runs before we get here.
     let path: string;
+    /** Whether the caller narrowed the query. Decides what an empty result MEANS. */
+    let hadFilters = false;
     let init: { method?: string; body?: string; headers?: Record<string, string> };
     if (isRpc) {
       // `select`, `filters`, `order`, `limit` and `offset` were computed here and
@@ -3646,6 +4850,7 @@ async function callTool(
         );
       }
       parts.push(...filterParts);
+      hadFilters = filterParts.length > 0;
       path = `/rest/v1/${table}?${parts.join("&")}`;
       init = { headers: { Prefer: "count=exact" } };
     }
@@ -3653,7 +4858,10 @@ async function callTool(
     const res = await supabaseFetch(path, init);
     if (!res.ok) {
       const detail = (await res.text().catch(() => "")).slice(0, 400);
-      return textResult(`Query failed (${res.status}): ${detail}`, true);
+      return textResult(
+        `Query failed (${res.status}): ${detail}${schemaHint(detail, table, spec)}`,
+        true
+      );
     }
     const rows = (await res.json().catch(() => null)) as unknown;
     if (!Array.isArray(rows)) {
@@ -3674,7 +4882,11 @@ async function callTool(
     // The total, so a truncated answer is never mistaken for the whole picture —
     // the same silent-cap bug that made list_sources report 307 commits instead
     // of 1,448.
-    const total = res.headers.get("content-range")?.split("/")[1] ?? null;
+    // NOT for an rpc. Its content-range counts the function's result ROWS, and a
+    // json-returning function is one row however long its array is: get_cohort_analysis
+    // answered `[]` as "0 rows returned, 1 match. Raise limit or page with offset", and
+    // this tool refuses limit and offset on an rpc. Only a table read has a real total.
+    const total = isRpc ? null : (res.headers.get("content-range")?.split("/")[1] ?? null);
     // BEFORE rendering, so no path can print a raw value: the rpc branch and the table
     // branch both land here, which is why the gate is at the render step rather than in
     // the two request builders.
@@ -3690,8 +4902,12 @@ async function callTool(
       `${shown} rows returned` +
       (total ? `, ${total} match` : "") +
       (dropped > 0
-        ? `. ${dropped} more were fetched but did not fit the character ceiling, so ` +
-          `page with offset=${offset + shown} — offset=${offset + rows.length} would SKIP them.`
+        ? isRpc
+          ? `. ${dropped} more were fetched but did not fit the character ceiling. An rpc takes ` +
+            `no offset, so narrow the function's own parameters (a shorter date range, say) ` +
+            `to see them.`
+          : `. ${dropped} more were fetched but did not fit the character ceiling, so ` +
+            `page with offset=${offset + shown} — offset=${offset + rows.length} would SKIP them.`
         : more
           ? `. ${
               limit >= MAX_PRODUCT_ROWS
@@ -3705,6 +4921,10 @@ async function callTool(
           `underlying value always shows the same #tag, so rows can still be matched to each ` +
           `other. Filtering and counting on these columns works normally; only reading the ` +
           `value does not.`
+        : "") +
+      // An empty result is two different facts; say which one this is.
+      (shown === 0 && (total === null || Number(total) === 0) && !isRpc
+        ? await describeEmptyResult(table, hadFilters)
         : "") +
       "\n\n";
     return textResult(`${UNTRUSTED_DATA_PREAMBLE}\n\n${head}${bodyText}`);
@@ -3732,6 +4952,37 @@ async function callTool(
 
     let path = typeof args.path === "string" ? args.path.trim() : "";
     if (!path.startsWith("/")) path = `/${path}`;
+
+    /**
+     * THE BASE ALREADY CARRIES THE VERSION, and everybody writes it again.
+     *
+     * The stripe entry's base URL ends `/v1`, so `path: "/v1/charges"` is sent to
+     * `/v1/v1/charges` and Stripe answers `Unrecognized request URL` — a 404 that reads
+     * like a missing resource rather than a malformed path, which is why it never
+     * self-corrects. Eight such calls in the last thirty days, the most recent today,
+     * across stripe and figma. Copying the path out of a vendor's own documentation is
+     * the natural way to get it wrong.
+     *
+     * Stripped rather than refused, because there is nothing to disambiguate: no API in
+     * the registry serves `/v1/v1/`. Only an exact leading segment that the base already
+     * ends with is removed, and only when it looks like a version — `/verify/...` keeps
+     * its first segment. The caller is TOLD, so the next call is right for the right
+     * reason instead of mysteriously working.
+     */
+    let pathNote = "";
+    const baseTail = svc.base.replace(/\/+$/, "").split("/").pop() ?? "";
+    // `api` joined the versions on evidence: 2026-09-23, PostHog asked for
+    // `/api/projects/244778/` against a base that already ends `/api`, and got a bare 404.
+    if (/^(v\d+|api)$/i.test(baseTail)) {
+      const duplicated = new RegExp(`^/${baseTail}(?=/|$)`, "i");
+      if (duplicated.test(path)) {
+        const was = path;
+        path = path.replace(duplicated, "") || "/";
+        pathNote =
+          `\n\nNote: ${key}'s base URL already ends with /${baseTail}, so "${was}" was ` +
+          `read as "${path}". Leave /${baseTail} off the path next time.`;
+      }
+    }
     // The host is fixed by the registry; these checks stop the PATH from
     // escaping it. `//` would be read as protocol-relative, `..` walks up out of
     // the API's namespace, and `@` can smuggle a different host into a URL.
@@ -3846,7 +5097,7 @@ async function callTool(
     // path decide — a second, quieter truncation is how the first one hid.
     const text = await res.text().catch(() => "");
     if (!res.ok) {
-      return textResult(`${key} returned ${res.status}:\n${text}`, true);
+      return textResult(`${key} returned ${res.status}:\n${text}${pathNote}`, true);
     }
     /**
      * THE SAME PRIVACY GATE AS THE DATABASE HALF, because it is the same data class.
@@ -3866,6 +5117,10 @@ async function callTool(
     let externalRedacted: string[] = [];
     try {
       const parsed: unknown = JSON.parse(text);
+      const file = key === "github" ? decodeGithubFile(parsed) : null;
+      if (file) {
+        return textResult(`${UNTRUSTED_DATA_PREAMBLE}${pathNote}\n\n${file}`);
+      }
       const { rows: safe, redacted } = redactPrivateColumns([parsed]);
       if (redacted.length > 0) {
         payload = JSON.stringify(safe[0]);
@@ -3882,7 +5137,7 @@ async function callTool(
         : "";
     // Fenced like the corpus tools are. A GitHub issue body on a PUBLIC repository is
     // writable by anyone, and this returned it as raw unframed JSON.
-    return textResult(`${UNTRUSTED_DATA_PREAMBLE}${externalNote}\n\n${payload}`);
+    return textResult(`${UNTRUSTED_DATA_PREAMBLE}${externalNote}${pathNote}\n\n${payload}`);
   }
 
   if (name === "related_context") {
@@ -3994,6 +5249,595 @@ async function callTool(
     return imageResult(outcome.text, [{ data: outcome.data, mimeType: outcome.mimeType }]);
   }
 
+  if (name === "check_copy") {
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const chapter = str(args.chapter);
+    const archetype = str(args.archetype);
+    if (chapter && !allChapters().includes(chapter)) {
+      return textResult(`No chapter "${chapter}". Chapters: ${allChapters().join(", ")}.`, true);
+    }
+    if (archetype && !allArchetypes().includes(archetype)) {
+      return textResult(
+        `No archetype "${archetype}". Archetypes: ${allArchetypes().join(", ")}.`,
+        true
+      );
+    }
+    let text = typeof args.text === "string" ? args.text : "";
+    let label = [chapter, archetype].filter(Boolean).join(" / ") || "draft";
+    if (!text.trim()) {
+      const shipped = chapter && archetype ? shippedCopy(chapter, archetype) : null;
+      if (!shipped) {
+        return textResult(
+          "Pass `text` to check a draft, or leave it out and pass both `chapter` and " +
+            "`archetype` to audit the copy that already shipped.",
+          true
+        );
+      }
+      text = shipped;
+      label = `the shipped ${chapter} for ${archetype}`;
+    }
+    stats.sourceCount = 1;
+    return textResult(
+      renderCopyReport(
+        checkCopy({ text, chapter: chapter || undefined, archetype: archetype || undefined }),
+        label
+      )
+    );
+  }
+
+  if (name === "get_context_pack") {
+    const chapter = typeof args.chapter === "string" ? args.chapter.trim() : "";
+    const archetype = typeof args.archetype === "string" ? args.archetype.trim() : "";
+    if (!allChapters().includes(chapter) || !allArchetypes().includes(archetype)) {
+      return textResult(
+        `Name a chapter and an archetype. Chapters: ${allChapters().join(", ")}. ` +
+          `Archetypes: ${allArchetypes().join(", ")}.`,
+        true
+      );
+    }
+    const pack = await buildContextPack(
+      { chapter, archetype },
+      {
+        promptDocs,
+        findEvidence: async (query) =>
+          (await retrieve(query, 3, { sources: ["evidence"] })).map((c) => ({
+            id: `${c.source}/${c.sourceId}`,
+            title: c.title ?? c.sourceId,
+            body: c.body,
+          })),
+      }
+    );
+    stats.sourceCount = 1;
+    return textResult(pack);
+  }
+
+  if (name === "meeting_promises") {
+    const day = (v: unknown) =>
+      typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null;
+    if ((args.since && !day(args.since)) || (args.until && !day(args.until))) {
+      return textResult("since and until must be days like 2026-09-01.", true);
+    }
+    const since =
+      day(args.since) ?? new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const person =
+      typeof args.person === "string" && args.person.trim() ? args.person.trim() : null;
+    const [r, board] = await Promise.all([
+      meetingPromises(since, day(args.until)),
+      boardTasks().catch(() => ({ ok: false as const, status: 0 })),
+    ]);
+    if (!r.ok) {
+      return textResult(
+        `The meeting notes could not be read (status ${r.status}). This is an outage, not an empty week.`,
+        true
+      );
+    }
+    // The board is an addition: unreadable, the promises still list, marked as unchecked.
+    let promises = r.promises;
+    if (board.ok) {
+      const match = boardMatcher(board.tasks);
+      promises = r.promises.map((p) => ({ ...p, task: match(p) }));
+    }
+    stats.sourceCount = new Set(r.promises.map((p) => p.id)).size;
+    return textResult(
+      `Next steps from meetings since ${since}${args.until ? ` until ${day(args.until)}` : ""}.\n\n` +
+        (board.ok
+          ? ""
+          : `The Notion board could not be read (status ${board.status}), so nothing below is checked against it.\n\n`) +
+        renderPromises(promises, person)
+    );
+  }
+
+  if (name === "comment_asks") {
+    const raw = typeof args.since === "string" ? args.since.trim() : "";
+    const since = raw || new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || !isRealDate(since)) {
+      return textResult(`\`since\` must be a real day like 2026-09-01, not "${raw}".`, true);
+    }
+    if (since > new Date().toISOString().slice(0, 10)) {
+      return textResult(`${since} has not happened yet.`, true);
+    }
+    const person =
+      typeof args.person === "string" && args.person.trim() ? args.person.trim() : null;
+    const result = await commentAsks(since, commentAskDeps(oidcForReport));
+    stats.sourceCount = result.asks.length;
+    return textResult(
+      `Asks left in comments since ${since}${person ? `, to ${person}` : ""}.\n\n` +
+        renderAsks(result, person, args.include_resolved === true),
+      false,
+      "name a `person`, or a later `since`"
+    );
+  }
+
+  if (name === "brain_health") {
+    const days = args.days === undefined ? 7 : args.days;
+    if (typeof days !== "number" || !Number.isInteger(days) || days < 1 || days > 30) {
+      return textResult("`days` must be a whole number from 1 to 30.", true);
+    }
+    const report = await selfReport(days, RELEVANCE_FLOOR);
+    stats.sourceCount = report.now?.calls ?? 0;
+    return textResult(renderSelfReport(report, RELEVANCE_FLOOR, { withQuestions: true }));
+  }
+
+  if (name === "file_call_notes") {
+    const raw = typeof args.since === "string" ? args.since.trim() : "";
+    const since = raw || new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || !isRealDate(since)) {
+      return textResult(`\`since\` must be a real day like 2026-09-01, not "${raw}".`, true);
+    }
+    const dryRun = args.dry_run !== false;
+    const result = await fileCrmCalls(since, dryRun, liveCrmDeps());
+    stats.sourceCount = result.calls;
+    const failed = result.gaps.length > 0 || result.filed.some((f) => f.error);
+    return textResult(renderCrmCalls(result, dryRun, since), failed);
+  }
+
+  if (name === "decision_conflicts") {
+    const topic = typeof args.topic === "string" && args.topic.trim() ? args.topic.trim() : null;
+    const list = await openConflicts(topic);
+    if (!list) return textResult("The decision radar's records could not be read just now.", true);
+    stats.sourceCount = list.length;
+    return textResult(renderConflicts(list, topic));
+  }
+
+  if (name === "settle_decision_conflict") {
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const earlier = str(args.earlier);
+    const later = str(args.later);
+    const keep = str(args.keep);
+    const actor = str(args.settled_by);
+    if (!earlier || !later)
+      return textResult("Give both decision ids, as decision_conflicts lists them.", true);
+    if (!["earlier", "later", "both"].includes(keep)) {
+      return textResult("`keep` must be earlier, later or both.", true);
+    }
+    if (!actor) return textResult("Say who decided, as `settled_by`.", true);
+    const res = await settleConflict({
+      a: earlier,
+      b: later,
+      keep: keep as "earlier" | "later" | "both",
+      actor,
+      note: str(args.note) || undefined,
+    });
+    return res.ok ? textResult(res.text) : textResult(res.error, true);
+  }
+
+  if (name === "queue_research") {
+    const question = typeof args.question === "string" ? args.question.trim() : "";
+    if (question.length < 15 || question.length > 1500) {
+      return textResult(
+        "Write the question as one full sentence, between 15 and 1,500 characters, so the Night " +
+          "Shift knows exactly what to find out.",
+        true
+      );
+    }
+    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 500) : null);
+    let outcome;
+    try {
+      outcome = await queueResearch({ question, askedBy: str(args.asked_by), why: str(args.why) });
+    } catch (err) {
+      logger.error({ err }, "brain: could not queue a research question");
+      return textResult("Could not queue that question. Nothing was written.", true);
+    }
+    stats.sourceCount = 1;
+    if (!outcome.ok) {
+      return textResult(
+        `The Night Shift queue is full: ${outcome.full.length} questions are waiting, and it answers ` +
+          `the oldest ${PER_NIGHT} each night.\n` +
+          outcome.full.map((q) => `- ${q.question} (research/${q.sourceId})`).join("\n") +
+          "\n\nAsk again tomorrow.",
+        true
+      );
+    }
+    if ("existing" in outcome) {
+      return textResult(
+        outcome.status === "done"
+          ? `Already answered: research/${outcome.id}. Read it with fetch_document.`
+          : `Already ${outcome.status === "running" ? "being researched" : "queued"}: research/${outcome.id}. ` +
+              "The answer will be in the brain by morning."
+      );
+    }
+    return textResult(
+      `Queued as research/${outcome.id}. The Night Shift starts at 02:30 Berlin time; by morning ` +
+        "the answer is in the brain with its sources, fetch_document reads it, and whats_new lists it."
+    );
+  }
+
+  if (name === "whats_new") {
+    const raw = typeof args.since === "string" ? args.since.trim() : "";
+    let since = new Date(Date.now() - 86_400_000);
+    if (raw) {
+      const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+        ? isRealDate(raw)
+          ? new Date(`${raw}T00:00:00Z`)
+          : null
+        : new Date(raw);
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        return textResult(
+          `\`since\` must be a day like 2026-09-24 or an ISO time, not "${raw}".`,
+          true
+        );
+      }
+      since = parsed;
+    }
+    const r = await whatsNew(since.toISOString());
+    if (!r.ok) {
+      return textResult(
+        `The brain could not be read (status ${r.status}). This is an outage, not a quiet day.`,
+        true
+      );
+    }
+    stats.sourceCount = r.items.length;
+    return textResult(
+      renderWhatsNew(
+        r.items,
+        r.waiting,
+        raw || `${since.toISOString().slice(0, 16).replace("T", " ")} UTC`
+      )
+    );
+  }
+
+  if (name === "show_chart") {
+    let outcome;
+    try {
+      outcome = await drawChart({ metrics: args.metrics, days: args.days, until: args.until });
+    } catch (err) {
+      logger.error({ err }, "brain: show_chart failed");
+      return textResult(
+        "The daily numbers could not be read right now. This is an outage, not a flat line.",
+        true
+      );
+    }
+    if (!outcome.ok) return textResult(outcome.message, true);
+    stats.sourceCount = 1;
+    const png = await chartPng(outcome.url);
+    if (!png) {
+      return textResult(
+        `${outcome.text}\n\nThe picture could not be attached just now; the link above draws it.`
+      );
+    }
+    return imageResult(outcome.text, [{ data: png, mimeType: "image/png" }]);
+  }
+
+  if (name === "check_answer") {
+    const answer = typeof args.answer === "string" ? args.answer.trim() : "";
+    const ids = asStrings(args.sources) ?? [];
+    if (answer.length < 2) return textResult("`answer` is the draft to check, in full.", true);
+    if (ids.length === 0 || ids.length > 12) {
+      return textResult(
+        "`sources` lists the ids the answer drew on, exactly as printed on search lines: 1 to 12 of them.",
+        true
+      );
+    }
+    let read: Array<{ id: string; text: string | null }>;
+    try {
+      read = await Promise.all(ids.map(async (id) => ({ id, text: await documentText(id) })));
+    } catch {
+      return textResult(
+        "The cited documents could not be read right now. This is an outage, not a failed check.",
+        true
+      );
+    }
+    const found = read.filter((r): r is SourceText => r.text !== null);
+    const unread = read.filter((r) => r.text === null).map((r) => r.id);
+    if (found.length === 0) {
+      return textResult(
+        `None of those ids is indexed (${unread.join(", ")}). Ids come from search lines and ` +
+          "are not guessable: copy the `id:` value of each source the answer used.",
+        true
+      );
+    }
+    stats.sourceCount = found.length;
+    return textResult(
+      (unread.length
+        ? `Not indexed, so left out: ${unread.join(", ")}. Figures were checked against the rest.\n\n`
+        : "") + checkAnswer(answer, found).text
+    );
+  }
+
+  if (name === "experiments") {
+    try {
+      stats.sourceCount = 1;
+      return textResult(await listExperiments());
+    } catch (err) {
+      logger.error({ err }, "brain: experiments failed");
+      return textResult(
+        "The experiment registry could not be read right now. This is an outage, not an empty registry.",
+        true
+      );
+    }
+  }
+
+  if (name === "record_experiment") {
+    let outcome;
+    try {
+      outcome = await recordExperiment(args);
+    } catch (err) {
+      logger.error({ err }, "brain: record_experiment failed");
+      return textResult(
+        "The experiment could not be saved just now; nothing was changed. Try again in a minute.",
+        true
+      );
+    }
+    if (!outcome.ok) return textResult(outcome.message, true);
+    return textResult(outcome.text);
+  }
+
+  if (name === "break_even") {
+    let outcome;
+    try {
+      outcome = await breakEven({
+        days: args.days,
+        cost_per_visitor: args.cost_per_visitor,
+        visitor_to_finish: args.visitor_to_finish,
+        finish_to_paid: args.finish_to_paid,
+        average_order: args.average_order,
+      });
+    } catch (err) {
+      logger.error({ err }, "brain: break_even failed");
+      return textResult(
+        "The live numbers could not be read right now. This is an outage, not a result.",
+        true
+      );
+    }
+    if (!outcome.ok) return textResult(outcome.message, true);
+    stats.sourceCount = 1;
+    return textResult(outcome.text);
+  }
+
+  if (name === "user_totals") {
+    const groupBy = Array.isArray(args.group_by)
+      ? args.group_by
+      : args.group_by === undefined
+        ? []
+        : [args.group_by];
+    const filter =
+      args.filter && typeof args.filter === "object" && !Array.isArray(args.filter)
+        ? (args.filter as Record<string, unknown>)
+        : args.filter === undefined
+          ? {}
+          : null;
+    const valid = USER_DIMENSIONS.join(", ");
+    const unknown = [...groupBy, ...Object.keys(filter ?? {})].filter(
+      (d) => !(USER_DIMENSIONS as readonly unknown[]).includes(d)
+    );
+    if (filter === null || unknown.length) {
+      return textResult(
+        `${filter === null ? "`filter` must be an object." : `Not something to group or filter by: ${unknown.join(", ")}.`} ` +
+          `Use ${valid}.`,
+        true
+      );
+    }
+    if (groupBy.length > 2) {
+      return textResult("Group by at most two things at once, or most groups fall under 5.", true);
+    }
+    for (const key of ["since", "until"] as const) {
+      if (args[key] !== undefined && (typeof args[key] !== "string" || !isRealDate(args[key]))) {
+        return textResult(`\`${key}\` must look like 2026-09-01.`, true);
+      }
+    }
+    const since = args.since as string | undefined;
+    const until = args.until as string | undefined;
+    const measure = (args.measure ?? "people") as UserMeasure;
+    if (!(USER_MEASURES as readonly unknown[]).includes(measure)) {
+      return textResult(`\`measure\` is one of ${USER_MEASURES.join(", ")}.`, true);
+    }
+    let question: Awaited<ReturnType<typeof findSurveyQuestion>> = null;
+    if (measure === "answers") {
+      if (typeof args.question !== "string" || !/^\d{5}$/.test(args.question.trim())) {
+        return textResult(
+          "measure answers needs `question`: a survey question id like 03011.",
+          true
+        );
+      }
+      try {
+        question = await findSurveyQuestion(args.question.trim());
+      } catch (err) {
+        logger.warn({ err }, "mcp: user_totals could not read the survey question");
+        return textResult(
+          "The survey questions could not be read right now. This is an outage, not a result.",
+          true
+        );
+      }
+      if (!question)
+        return textResult(`There is no survey question ${args.question.trim()}.`, true);
+      if (!["single", "multiple", "scale"].includes(question.type)) {
+        return textResult(
+          `${question.qid} is a ${question.type || "free-text"} question. Only questions with ` +
+            "options to pick are summarised; written answers are never read.",
+          true
+        );
+      }
+    }
+    const people = await loadPeople(since, until, { measure, questionId: question?.id });
+    if (!people) {
+      return textResult(
+        "The survey data could not be read right now. This is an outage, not a result.",
+        true
+      );
+    }
+    stats.sourceCount = 1;
+    const req = {
+      groupBy: groupBy as UserDimension[],
+      filter: Object.fromEntries(Object.entries(filter).map(([k, v]) => [k, String(v)])) as Partial<
+        Record<UserDimension, string>
+      >,
+      since,
+      until,
+    };
+    if (measure === "traits") return textResult(renderTraits(req, people));
+    if (measure === "emails") {
+      return textResult(renderEmails(req, people, await loadDeliveries(since, until)));
+    }
+    if (measure === "answers" && question) return textResult(renderAnswers(req, people, question));
+    return textResult(renderTotals(req, people));
+  }
+
+  if (name === "cost_watch") {
+    let rows: unknown[][];
+    try {
+      rows = await loadCostSheet(oidcForReport);
+    } catch (err) {
+      logger.warn({ err }, "mcp: could not read the cost sheet");
+      return textResult(
+        "The cost sheet could not be read right now. This is an outage, not a result.",
+        true
+      );
+    }
+    const parsed = parseCosts(rows);
+    if (!parsed.lines.length) {
+      return textResult(
+        "The cost sheet was read but has no cost lines under its Name header, so its layout " +
+          "has changed and this tool needs updating.",
+        true
+      );
+    }
+    const now = new Date();
+    // The GA4 check is a cross-check, not the answer: without it the sheet still speaks.
+    const [ads, settled] = await Promise.all([
+      adCostByDay()
+        .then((ad) => adsForMonth(ad, lastBilledMonth(now)))
+        .catch(() => undefined),
+      filingSettled(lastBilledMonth(now)),
+    ]);
+    stats.sourceCount = 1;
+    return textResult(renderCostWatch(parsed, now, ads, settled));
+  }
+
+  if (name === "ux_signals") {
+    const raw = args.days === undefined ? 7 : Number(args.days);
+    if (!Number.isInteger(raw) || raw < 1 || raw > 28) {
+      return textResult("`days` must be a whole number from 1 to 28.", true);
+    }
+    const report = await buildUxSignalsReport(raw);
+    stats.sourceCount = 2;
+    return textResult(renderUxSignals(report), report.visits === null && report.walks === null);
+  }
+
+  if (name === "explain_change") {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const day = typeof args.day === "string" && args.day.trim() ? args.day.trim() : yesterday;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !isRealDate(day)) {
+      return textResult(`\`day\` must be a real day like 2026-09-17, not "${day}".`, true);
+    }
+    if (day > today) return textResult(`${day} has not happened yet.`, true);
+    const metricId = typeof args.metric === "string" ? args.metric.trim() : "";
+    const metric = metricId ? METRICS.find((m) => m.id === metricId) : undefined;
+    if (metricId && !metric) {
+      return textResult(
+        `No metric called "${metricId}". It is one of: ${METRICS.map((m) => m.id).join(", ")}.`,
+        true
+      );
+    }
+    let series;
+    try {
+      series = await loadSeries(day);
+    } catch {
+      return textResult(
+        "The daily numbers could not be read right now. This is an outage, not a quiet day.",
+        true
+      );
+    }
+    const partial = day === today ? "Today is still going, so its numbers are partial.\n\n" : "";
+    if (metric) {
+      const reading = readMetric(metric, series, day);
+      if (!reading) {
+        return textResult(
+          `${metric.label} has no reading for ${day}: either nothing was counted that day or there ` +
+            `are fewer than two weeks of comparable days before it.`
+        );
+      }
+      stats.sourceCount = 1;
+      return textResult(
+        partial +
+          `${isJump(reading) ? "Outside its usual range" : "Within its usual range"} on ${day}.\n\n` +
+          renderDay(day, [reading], series, await loadAround(day)) +
+          `\n\n${NOT_PROOF}`
+      );
+    }
+    const jumps = jumpsOn(series, day);
+    stats.sourceCount = jumps.length;
+    if (jumps.length === 0) {
+      const lines = METRICS.map((m) => readMetric(m, series, day))
+        .filter((x): x is Reading => x !== null)
+        .map((x) => `- ${renderMetric(x, series).split("\n")[0]}`);
+      return textResult(
+        partial +
+          `Nothing on ${day} was outside its usual range (each metric against the 28 days before).` +
+          (lines.length ? `\n\n${lines.join("\n")}` : "")
+      );
+    }
+    return textResult(
+      partial +
+        `${jumps.length} unusual on ${day}.\n\n` +
+        renderDay(day, jumps, series, await loadAround(day)) +
+        `\n\n${NOT_PROOF}`
+    );
+  }
+
+  if (name === "what_shipped") {
+    const day = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    const since =
+      day(args.since) ?? new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const until = day(args.until);
+    for (const [key, val] of [
+      ["since", since],
+      ["until", until],
+    ] as const) {
+      // A day, not a timestamp: the value is spliced into GitHub's `since` as <day>T00:00:00Z.
+      if (val !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(val) || badDateMessage(key, val))) {
+        return textResult(`\`${key}\` must be a day like 2026-09-16 — "${val}" is not one.`, true);
+      }
+    }
+    const read = await fetchShipped(since, until);
+    if (!read.ok) {
+      return textResult(
+        `GitHub answered ${read.status}, so the list could not be read. That is not the same as ` +
+          `nothing having shipped. ${read.detail}`,
+        true
+      );
+    }
+    const entries = shippedEntries(read.commits);
+    const period = `between ${since} and ${until ?? "today"}`;
+    if (entries.length === 0) {
+      return textResult(
+        `${UNTRUSTED_DATA_PREAMBLE}\n\nNo change with a "For Marcus:" line reached main ${period} ` +
+          `(${read.commits.length} commits read).`
+      );
+    }
+    return textResult(
+      `${UNTRUSTED_DATA_PREAMBLE}\n\n${entries.length} changes reached main ${period}, newest first:\n\n` +
+        entries.map((e) => `${e.date} · ${e.pr ? `#${e.pr}` : e.sha} · ${e.text}`).join("\n") +
+        (read.truncated
+          ? "\n\nOnly the newest 300 commits were read; narrow since/until to see older changes."
+          : ""),
+      false,
+      // The generic advice says "page with offset", which this tool does not take. A month
+      // of changes runs past the ceiling (August 2026: cut at the 23rd), so say what works.
+      "ask again for a shorter period with since and until, a week at a time"
+    );
+  }
+
   if (name === "list_sources") {
     // A FIXED SOURCE LIST, AND EXACT COUNTS.
     //
@@ -4044,6 +5888,9 @@ async function callTool(
       calendar: "brain-calendar",
       gsc: "brain-ingest",
       people: "brain-fast",
+      // Pushed from a laptop, not a server cron: read here only so its last sync can be
+      // shown beside the laptop note below.
+      whatsapp: "brain-whatsapp",
     };
 
     /**
@@ -4087,7 +5934,19 @@ async function callTool(
        * `scripts/whatsapp-sync.ts`. Saying so beats an empty slot that reads like a
        * job nobody wired up.
        */
-      if (source === "whatsapp") return " · pushed from WhatsApp Desktop, not a scheduled job";
+      // It IS scheduled — every five minutes, by a launchd agent on a laptop, not by Vercel.
+      // The distinction that matters to a reader is that it stops when that machine is
+      // off, which "not a scheduled job" obscured.
+      if (source === "whatsapp") {
+        const note =
+          " · synced every five minutes from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off";
+        const run = lastRun.get("brain-whatsapp");
+        if (!run) return `${note}; no sync has recorded itself yet`;
+        const when = run.at.slice(0, 16).replace("T", " ");
+        return run.status === "success"
+          ? `${note}; last synced ${when}`
+          : `${note}; the last sync FAILED at ${when}${run.error ? ` (${run.error})` : ""}`;
+      }
       // Written by `record_decision`, so there is no job to be behind. Said explicitly:
       // an empty clause here reads as an ingester whose state could not be determined,
       // and the staleness guidance below would otherwise apply a rule that cannot hold —
@@ -4096,6 +5955,8 @@ async function callTool(
         return " · written directly by record_decision and by the decision miner, not ingested — a gap here means nothing was recorded, not that a job failed";
       if (source === "notice")
         return " · written by the jobs that watch for moves, not ingested — a gap here means nothing was worth noticing, not that a job failed";
+      if (source === "research")
+        return " · written by queue_research and answered by the nightly Night Shift, not ingested — a gap here means nobody queued a question";
       const cron = CRON_FOR_SOURCE[source];
       if (!cron) return "";
       const run = lastRun.get(cron);
@@ -4141,7 +6002,10 @@ async function callTool(
       const ingested = lastRows?.[0]?.updated_at?.slice(0, 10) ?? "?";
 
       return (
-        `${source}: ${total} chunks · newest period ${period ?? "n/a (docs carry no period)"}` +
+        `${source}: ${total} chunks · newest period ${period ?? "n/a (its records carry no date)"}` +
+        (source === "book" || source === "paper" || source === "corporate"
+          ? ` · searched only when named: sources ["${source}"]`
+          : "") +
         ` · last wrote ${ingested}${health(source)}`
       );
     };
@@ -4258,14 +6122,76 @@ export const MCP_INSTRUCTIONS =
   "Use " +
   "search_company_context, and list_sources when you need to know how fresh a source " +
   "is.\n\n" +
+  "BOOKS, searched only when you ask for them: eleven third-party books on love, desire " +
+  "and sex that we keep, whole (Fisher, Perel, Nagoski, Lehmiller, Kleinplatz and Ménard, " +
+  "Hite, Ryan and Jethá, Easton and Hardy, Winston, Roach, Bataille). Pass " +
+  '`sources: ["book"]`; an ordinary search never returns them. They are other people\'s ' +
+  "work, not LoveIQ's claims, so name the book and author when you use one. A search " +
+  "shows a book's single best part; fetch_document starts at part 1, so pass from_part " +
+  "to read from the part the search found.\n\n" +
+  "PAPERS, searched only when you ask for them: the full text of open-access research papers " +
+  "behind the constructs we measure, CC BY or CC0 only, a few added each day from Europe PMC. " +
+  'Pass `sources: ["paper"]`; an ordinary search never returns them. They are other ' +
+  "people's research, not LoveIQ's findings, so name the paper and its authors when you use " +
+  'one. To see what the literature on a construct looks like as a whole, read its evidence card (`sources: ["evidence"]`) first.\n\n' +
+  "THE CORPORATE WEBSITE, searched only when you ask for it: appliedpsychometrics.org, the " +
+  "website of Applied Psychometrics UG, the company that operates LoveIQ. Its daily, weekly and " +
+  "monthly visits, channels and most-read pages, its clicks out to other sites (loveiq.org above all), and the Google " +
+  'searches that find it, refreshed nightly. Pass `sources: ["corporate"]`; an ordinary search ' +
+  "never returns it, so a question about LoveIQ's traffic is answered with LoveIQ's. Its visits " +
+  "count only people who accepted the site's cookie banner.\n\n" +
   "LIVE STATE, queried straight from the production database with full history and no " +
-  "lag: payments and refunds, Resend email delivery and bounces, Calendly bookings, " +
+  "lag: payments and refunds, Resend email delivery and bounces, call invitations, " +
   "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
   "spend, the admin tables, and CURRENT PRICING (report_price_quote — prices are " +
   "computed per visitor, so 'what do we charge' is a live question, not a written " +
   "one). Use list_product_tables then query_product_data, and " +
   "prefer an rpc/get_* analysis function when one fits — those encode the business " +
   "logic already.\n\n" +
+  "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
+  "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
+  "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +
+  "comments, and whether each is still open, checked live against Figma and Google Drive.\n\n" +
+  "CALLS INTO THE CRM: file_call_notes files recorded calls with people on the 'Therapists & " +
+  "Coaches' board into 'Feedback Sessions'; it also runs by itself every two hours.\n\n" +
+  "DECISIONS THAT DISAGREE: decision_conflicts lists recorded decisions that may not both stand, found nightly " +
+  "and marked MAY CONFLICT on the records; settle_decision_conflict records which one stands, once a person says.\n\n" +
+  "HOW THE BRAIN IS DOING: brain_health is its own report card: use, weak and empty searches, " +
+  "failures, speed, the weekly test batteries and job health, against the window before.\n\n" +
+  "WHAT IS NEW: whats_new lists what the brain produced on its own since a time: notices, the " +
+  "Night Shift's research answers and decisions. Call it when someone asks what is new or what " +
+  "they missed.\n\n" +
+  "NIGHT SHIFT: queue_research hands a question worth real research to an overnight run that " +
+  "answers it with sources by morning, from our own records and the web.\n\n" +
+  "WHY A NUMBER MOVED: explain_change says whether a day's numbers were outside their usual " +
+  "range and splits each move by source, channel, engagement, ad spend and what shipped, before " +
+  "anyone explains a jump from memory.\n\n" +
+  "CHARTS: show_chart draws one or two daily numbers as a line in the digest's style and returns " +
+  "the picture, a link that opens in any browser and pastes into a doc or a deck, and the " +
+  "numbers behind it. Use it when someone wants to see a trend rather than read it.\n\n" +
+  "CHECK BEFORE SENDING: check_answer looks up every figure, date and quote in a draft answer " +
+  "in the documents it cites. Run it on any answer with numbers, and fix or explain what it lists.\n\n" +
+  "EXPERIMENTS: experiments is the A/B registry (running, planned, finished, with live readouts " +
+  "in /admin's words); record_experiment registers a test before it starts, with its hypothesis " +
+  "and deciding metric, and records how it ended.\n\n" +
+  "OUR USERS, as totals: user_totals counts who finished the survey, who paid and what they " +
+  "paid, by gender, age, orientation, relationship, country, archetype or month, never a " +
+  "person, with any group under 5 hidden. Its measure picks what is counted: people (who " +
+  "finished and paid), traits (the user graph: the 21 trait averages), emails (reminders sent, " +
+  "unsubscribes, bounces) or answers (how a group answered one survey question).\n\n" +
+  "UX SIGNALS: ux_signals measures Marcus's 22 behaviour signals on real visits, and shows a " +
+  "signal's number only once its measure has been proven right on the nightly persona walks.\n\n" +
+  "WHAT WE SPEND: cost_watch reads what we pay each month for tools and services from the " +
+  "cost sheet, what moved, and which hand-typed lines may be stale.\n\n" +
+  "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +
+  "finish, the share who pay, the average order, the net) and what each would have to reach " +
+  "alone to earn the spend back, with 'what if' values in place of any of them.\n\n" +
+  'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
+  "that reached main, newest first, read live from the repository.\n\n" +
+  "REPORT COPY: get_context_pack gives exactly what one chapter for one archetype needs before " +
+  "drafting, and check_copy runs the house rules on the draft (em dashes, machine-written " +
+  "phrases, absolute claims, reading level, lines that fit every archetype) before it goes to " +
+  "Mark, and audits the shipped copy the same way.\n\n" +
   "OUTSIDE SERVICES, read live: query_external_service reaches Stripe, Resend, " +
   "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
   "prints which are reachable on this deployment and exactly what each exposes, " +
@@ -4310,7 +6236,10 @@ export const MCP_INSTRUCTIONS =
   "of them have not moved since June. `overdue` there means open AND past its date: most " +
   "cards carrying a past date are simply finished.\n\n" +
   "THIS IS AN ANALYST'S DOOR, NOT ONLY A LIBRARIAN'S. Before writing your own query " +
-  "over raw rows, look at what is already computed: `list_product_tables` lists 44 " +
+  "over raw rows, look at what is already computed: `list_product_tables` lists dozens of " +
+  // A COUNT HERE WOULD ROT, and did: it said 46 the day a 47th function was added, which
+  // `brain:claims` caught. The scale is what the reader needs — "dozens, not three" — and
+  // the exact figure is one `list_product_tables` call away, always current.
   "read-only `get_*` functions that encode the business logic already — among them " +
   "`get_conversion_funnel` and `get_dropoff_everywhere` for where people leave, " +
   "`get_question_abandonment_top_n` and `get_question_discrimination` for which survey " +
@@ -4327,6 +6256,20 @@ export const MCP_INSTRUCTIONS =
   "a clean-looking answer rather than an error. So: use them to find WHERE to look, and " +
   "when a number is going to be repeated or acted on, confirm it against " +
   "`get_business_numbers`, whose definition is the one that reconciles to Stripe.\n\n" +
+  "YOU CAN HELP WITH THE WRITING, NOT ONLY THE NUMBERS. LoveIQ writes the report itself, " +
+  "and how it is written is in here. Two sources you will not guess the names of: " +
+  '`sources: ["skill"]` holds how the team does its own work — the chapter method, the ' +
+  "review protocol, and the house voice counted off what shipped rather than described; " +
+  '`sources: ["report"]` holds the COPY THAT SHIPPED, ~680 blocks titled "as shipped", ' +
+  "one per chapter per archetype. Read the shipped block for another archetype before " +
+  "drafting, because the chapter skeleton is identical across all fourteen and only the " +
+  "content changes. Drive holds DRAFTS of the same chapters, which are what someone is " +
+  "working on rather than the standard — the titles tell them apart. A draft you produce " +
+  "belongs in a Google Doc for a person to edit, never anywhere a reader sees. " +
+  'And `sources: ["domain"]` is the vocabulary underneath: every defined term with what ' +
+  "people commonly mistake it for and what is actually true, what the assessment asks " +
+  "chapter by chapter, and which question feeds which scoring dimension. Reach for a " +
+  "definition there before inferring one from how a word was used in a chapter.\n\n" +
   "YOU CAN SEE, NOT JUST READ. `show_design` returns a rendered " +
   "frame from LoveIQ's Figma file as an image — call it with no arguments for the pages, " +
   "a page id for its frames, a frame id to look at one. Critique a screen from the " +
@@ -4349,29 +6292,44 @@ export const MCP_INSTRUCTIONS =
   "corpus gets better at the thing it is for.";
 
 export async function POST(request: Request) {
-  const expected = process.env.LOVEIQ_MCP_TOKEN;
-  if (!expected) {
-    logger.warn("LOVEIQ_MCP_TOKEN not set — refusing MCP request");
-    return NextResponse.json({ error: "Not configured." }, { status: 503 });
+  /**
+   * WHO IS ASKING: a person signed in through Claude, or the shared token the unattended
+   * jobs use. See features/brain/server/sign-in.ts. A 401 names where to sign in
+   * (RFC 9728), which is how claude.ai and Claude Code find the sign-in page on their own.
+   */
+  const ip = getClientIp(request);
+  // A recently verified account re-checks in its own bucket; anyone else shares the address's.
+  const who = await resolveCaller(
+    request.headers.get("authorization"),
+    Date.now(),
+    async ({ knownSub }) =>
+      (
+        await checkRateLimit(knownSub ? `sub:${knownSub}` : ip, {
+          bucket: knownSub ? "mcp-sign-in-member" : "mcp-sign-in",
+          limit: 60,
+          windowMs: 60_000,
+        })
+      ).allowed
+  );
+  if (!who.ok) {
+    return NextResponse.json(
+      { error: who.message },
+      {
+        status: who.status,
+        headers:
+          who.status === 401
+            ? { "WWW-Authenticate": signInChallenge(new URL(request.url).origin) }
+            : undefined,
+      }
+    );
   }
+  const caller = who.caller;
 
-  const auth = request.headers.get("authorization") ?? "";
-  const presented = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  // The comment here used to claim timingSafeEqual while the code did a plain
-  // `!==`, which short-circuits on the first differing byte and so leaks the
-  // shared token's prefix to anyone who can time responses. Now it does what it
-  // says. The length check stays FIRST because timingSafeEqual throws outright on
-  // unequal buffer lengths — and length is not a secret worth protecting here.
-  const a = Buffer.from(presented);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  // The corpus is undifferentiated — revenue, ad spend, every internal doc — and
-  // one token is shared by the team, so a leaked token is the whole thing. A rate
-  // limit bounds how fast that could be drained.
-  const rate = await checkRateLimit(getClientIp(request), {
+  // The corpus is undifferentiated — revenue, ad spend, every internal doc — so a
+  // leaked token (the shared one, or a person's) is the whole thing. A rate limit
+  // bounds how fast that could be drained. Keyed by who is calling as well as from where,
+  // AFTER the sign-in check, so nobody who cannot sign in spends anyone's budget.
+  const rate = await checkRateLimit(`${caller.kind === "person" ? caller.email : "shared"}|${ip}`, {
     bucket: "mcp",
     limit: 120,
     windowMs: 60_000,
@@ -4414,7 +6372,7 @@ export async function POST(request: Request) {
   if (method === "initialize") {
     return result(id, {
       protocolVersion: PROTOCOL_VERSION,
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, prompts: {} },
       serverInfo: { name: "loveiq-brain", version: "1.0.0" },
       instructions: MCP_INSTRUCTIONS,
     });
@@ -4422,6 +6380,33 @@ export async function POST(request: Request) {
 
   if (method === "ping") return result(id, {});
   if (method === "tools/list") return result(id, { tools: TOOLS });
+
+  // Ready-made prompts claude.ai and Claude Code offer to pick. See features/brain/server/prompts.ts.
+  if (method === "prompts/list") {
+    return result(id, {
+      prompts: PROMPTS.map((p) => ({
+        name: p.name,
+        title: p.title,
+        description: p.description,
+        arguments: p.arguments.map((a) => ({
+          name: a.name,
+          description: a.description,
+          required: Boolean(a.required),
+        })),
+      })),
+    });
+  }
+  if (method === "prompts/get") {
+    const rendered = renderPrompt(
+      typeof params.name === "string" ? params.name : "",
+      (params.arguments ?? {}) as Record<string, unknown>
+    );
+    if ("error" in rendered) return rpcError(id, -32602, rendered.error);
+    return result(id, {
+      description: rendered.description,
+      messages: [{ role: "user", content: { type: "text", text: rendered.text } }],
+    });
+  }
 
   if (method === "tools/call") {
     const name = typeof params.name === "string" ? params.name : "";
@@ -4451,10 +6436,10 @@ export async function POST(request: Request) {
       }
     }
     const started = Date.now();
-    const stats: { sourceCount?: number; topScore?: number } = {};
+    const stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {};
     let out: { content: ContentBlock[]; isError: boolean };
     try {
-      out = await callTool(name, args, readVercelOidcToken(request), stats);
+      out = await callTool(name, args, readVercelOidcToken(request), stats, caller);
     } catch (err) {
       logger.error({ err, tool: name }, "MCP tool call failed");
       // Returned as a tool RESULT, not a protocol error: the model can then say
@@ -4494,11 +6479,14 @@ export async function POST(request: Request) {
         args,
         sourceCount: stats.sourceCount ?? null,
         topScore: stats.topScore ?? null,
+        contentScore: stats.contentScore ?? null,
         latencyMs: Date.now() - started,
         // Allow-listed, not free text: the header is caller-supplied and this column
         // is what the usage analysis groups by, so an arbitrary value would let a
         // caller fragment its own traffic into buckets nobody thinks to query.
         surface: request.headers.get("x-loveiq-mcp-client") === "battery" ? "mcp-battery" : "mcp",
+        // Who asked, from the sign-in itself; "shared" for the token the unattended jobs use.
+        actor: caller.kind === "person" ? caller.email : "shared",
         // The refusal text IS the diagnosis -- "rpc/x writes to the database",
         // "path must be a simple path". Storing it is what makes a bad call
         // reproducible without the caller filing a report.

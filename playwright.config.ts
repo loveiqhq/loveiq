@@ -82,7 +82,20 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : 3, // limit local parallelism so Firefox cold-start doesn't compete with 5 other simultaneous browser launches
+  /**
+   * FOUR IN CI, NOT ONE, and the difference is the whole feasibility of the gate.
+   *
+   * Measured 2026-09-21 on the full suite, five browser projects:
+   *   1 worker  — about 45 minutes, extrapolated from 8m54s for one project
+   *   4 workers — 5m53s, 315 passed, against a local build
+   *
+   * Nobody would accept the first on every push, and that is presumably why this
+   * never became a gate. A GitHub standard runner has 4 vCPU.
+   *
+   * Locally 3, so Firefox's cold start does not compete with five simultaneous
+   * browser launches on a machine that is also being used.
+   */
+  workers: process.env.CI ? 4 : 3,
   reporter: "html",
   expect: {
     toHaveScreenshot: {
@@ -91,7 +104,12 @@ export default defineConfig({
   },
   use: {
     baseURL,
-    trace: "on-first-retry",
+    // Every run is recorded; a failed attempt and every retry keep theirs. `on-first-retry`
+    // kept only the retry, so a first attempt that failed and a retry that passed left
+    // nothing to read: Desktop Safari lost the intro's first "Continue" that way on
+    // 2026-09-23. Measured 2026-09-29 on the 102 Mobile Safari tests: 311s of test time
+    // without recording, 317s with it (+2%), wall time unchanged.
+    trace: "retain-on-failure-and-retries",
     screenshot: "only-on-failure",
     video: "on-first-retry",
     // See `startingCookies` above: the landing-arm pin (local only) plus the

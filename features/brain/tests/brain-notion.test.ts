@@ -10,6 +10,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 
 import {
   blocksToText,
+  excludedTitles,
   isExcluded,
   notionHumans,
   pageToRow,
@@ -235,6 +236,26 @@ describe("isExcluded", () => {
 
   it("excludes nothing when the list is empty", () => {
     expect(isExcluded("anything at all", [])).toBe(false);
+  });
+
+  /**
+   * JOB APPLICANTS, ALWAYS (owner's decision, 2026-09-23). The Candidates database held
+   * twelve named applications, six marked "Rejected - decline pending" — rejections the
+   * candidates had not been told. Titles below are the real ones' shapes.
+   */
+  it("always excludes the candidates database and the hiring pipeline", () => {
+    const always = excludedTitles();
+    expect(isExcluded("Candidates: Jane Doe", always)).toBe(true);
+    expect(isExcluded("Notion: Hiring Pipeline", always)).toBe(true);
+  });
+
+  it("keeps what is about hiring rather than about a candidate", () => {
+    const always = excludedTitles();
+    expect(isExcluded("Notion: Hiring Guide", always)).toBe(false);
+    // "candidates" as a plain word, in a real product-research row.
+    expect(
+      isExcluded("Claude Artifacts: Assessment Portfolio — candidates for product 2", always)
+    ).toBe(false);
   });
 });
 

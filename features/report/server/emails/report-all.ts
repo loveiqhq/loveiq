@@ -1,4 +1,9 @@
-import { EMAIL_FONT, escapeHtml, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 import {
   KNOWN_ARCHETYPES,
   toArchetypeSlug,
@@ -150,6 +155,7 @@ export function reportAllEmail({
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

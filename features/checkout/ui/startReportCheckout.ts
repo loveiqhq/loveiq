@@ -6,6 +6,7 @@ import {
   getReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isOnOverlayEntry } from "@shared/ui/overlay-history";
 import { getGaMeasurementContext } from "@features/analytics/client";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import {
@@ -102,12 +103,26 @@ export async function startReportCheckout({
       StripeCheckoutSessionResponse | { error?: string } | null;
 
     if (!response.ok) {
+      /**
+       * Only 4xx bodies are written for a reader. The 5xx bodies are generic
+       * internal fallbacks — /api/stripe/checkout-session returns the literal
+       * "Unable to process request." on both of its catch-all paths — and this
+       * function used to pass whatever came back straight into the handoff card.
+       * Mark logged the result on 2026-08-30: "'Continue to secure checkout' on
+       * a EUR 39.99 purchase gave 'Unable to process request' three times."
+       * That string tells a reader nothing and reads as a broken product at the
+       * exact moment they were trying to pay.
+       *
+       * Covered by scripts/probes/verify-checkout-error-copy.mjs (criterion E1).
+       */
+      const serverMessage =
+        response.status < 500 && json && "error" in json && typeof json.error === "string"
+          ? json.error
+          : null;
       return {
         status: "error",
         message:
-          json && "error" in json && typeof json.error === "string"
-            ? json.error
-            : "We couldn't prepare secure checkout right now. Please try again.",
+          serverMessage ?? "We couldn't prepare secure checkout right now. Please try again.",
       };
     }
 
@@ -129,7 +144,20 @@ export async function startReportCheckout({
     }
 
     posthog.capture("checkout_started", { currency: quote.currency, plan });
-    window.location.assign(json.url);
+    /**
+     * Replace, not push, when the entry on top is the pricing modal's own.
+     *
+     * The open modal sits on a duplicate, same-URL entry so the back button can
+     * close it (useCloseOnBack), and the report is served no-store, so it never
+     * survives in the back-forward cache. Pushing Stripe on top left that
+     * duplicate behind: back from an abandoned checkout reloaded the report onto
+     * it, and the next back reloaded the report again instead of leaving —
+     * measured on WebKit. Replacing it leaves history as it was before the modal
+     * opened. With no such entry on top, this is the assign() it has always
+     * been.
+     */
+    if (isOnOverlayEntry()) window.location.replace(json.url);
+    else window.location.assign(json.url);
     return null;
   } catch {
     return { status: "error", message: "We couldn't reach Stripe right now. Please try again." };
