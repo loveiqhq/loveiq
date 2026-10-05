@@ -21,6 +21,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 import { chromium, devices, webkit, type Locator, type Page } from "playwright";
 
@@ -63,6 +64,12 @@ export const PLAN_TITLE: Record<Plan, RegExp> = {
  */
 export const WIZARD_FORWARD = /continue to next slide|view your report|continue to your report/i;
 export const WIZARD_LAST = /view your report|continue to your report/i;
+/**
+ * An archetype row's "Unlock report" ("Unlock Spark Seeker report" on a phone), and never the
+ * price picker's "Unlock my report", which buys the full report: on 2026-10-05 a core walk on
+ * a phone pressed that one and went to Stripe for the wrong plan.
+ */
+export const ARCHETYPE_ROW_UNLOCK = /^unlock (?!your |the |full |my )(?:[\w -]+ )?report$/i;
 /** Each plan's button on the paywall. */
 const PLAN_CTA: Record<Plan, RegExp> = {
   full_report: /^unlock my report$/i,
@@ -161,7 +168,7 @@ export function findQuestion(headings: string[]): SurveyQuestion | null {
  * hid for four nights which button was missing.
  */
 export function stoppedAtOf(err: unknown): string {
-  const message = String((err as Error)?.message ?? err);
+  const message = stripVTControlCharacters(String((err as Error)?.message ?? err));
   const waitingFor = /waiting for (.+)/.exec(message)?.[1]?.trim();
   const first = message.split("\n")[0]!;
   return redact(waitingFor ? `${first} (waiting for ${waitingFor})` : first).slice(0, 200);
@@ -1191,10 +1198,7 @@ async function main(argv: string[]): Promise<number> {
           ]
         : [
             // "Unlock report" on a desktop, "Unlock Spark Seeker report" on a phone.
-            [
-              () => button(/^unlock (?!your |the |full )(?:[\w -]+ )?report$/i),
-              "an archetype row's Unlock report",
-            ],
+            [() => button(ARCHETYPE_ROW_UNLOCK), "an archetype row's Unlock report"],
             [
               () => page.locator("button.rv4-lockbadge").filter({ visible: true }).first(),
               "a padlock on a locked chart",
@@ -1239,6 +1243,10 @@ async function main(argv: string[]): Promise<number> {
             .evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
             .catch(() => {});
           await page.waitForTimeout(400);
+          // Bringing the way up is a scroll, and the report can open the picker on a scroll.
+          // The page behind the picker is then hidden, so the way's pattern finds the picker's
+          // own buttons instead. The next round sees the picker, opened by the report.
+          if (await pricesOpen()) break;
           if (
             !(await way()
               .click({ timeout: 10_000 })

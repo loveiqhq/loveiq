@@ -34,6 +34,7 @@ import {
 } from "../../scripts/walkers/rotation";
 import {
   answerFor,
+  ARCHETYPE_ROW_UNLOCK,
   findQuestion,
   redact,
   MAIN_ON_STAGING,
@@ -202,6 +203,29 @@ describe("a walk", () => {
     expect(
       stoppedAtOf(new Error("timeout\n  - waiting for navigation to /report/rpt_ABC-123"))
     ).toBe("timeout (waiting for navigation to /report/<token>)");
+    // Playwright colours its messages; the log gets only the words.
+    expect(stoppedAtOf(new Error("\u001b[2mlocator.click: Timeout\u001b[22m"))).toBe(
+      "locator.click: Timeout"
+    );
+  });
+
+  it("opens the price picker from an archetype row, never with a button inside it", () => {
+    // The plans' buttons, read from where they are defined, so a renamed one is checked here.
+    const plans = readFileSync(
+      join(process.cwd(), "features/checkout/server/reportPurchase.ts"),
+      "utf8"
+    );
+    const labels = [...plans.matchAll(/ctaLabel: "([^"]+)"/g)].map((m) => m[1]!);
+    expect(labels).toContain("Unlock my report");
+    for (const label of labels) expect(ARCHETYPE_ROW_UNLOCK.test(label), label).toBe(false);
+    // A row reads "Unlock report", or names its archetype to a screen reader.
+    expect(ARCHETYPE_ROW_UNLOCK.test("Unlock report")).toBe(true);
+    for (const archetype of new Set(personasFile.personas.map((p) => p.archetype))) {
+      expect(ARCHETYPE_ROW_UNLOCK.test(`Unlock ${archetype} report`), archetype).toBe(true);
+    }
+    for (const other of ["Unlock your report", "Unlock the full report", "Unlock full report"]) {
+      expect(ARCHETYPE_ROW_UNLOCK.test(other), other).toBe(false);
+    }
   });
 
   it("recognises every question by the words of its heading", () => {
