@@ -8,7 +8,6 @@ import {
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { COST_SHEET_ID } from "@features/brain/server/cost-sheet";
 import { splitBody } from "./notion";
 import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
 import { domainMailboxes } from "./gmail";
@@ -652,14 +651,6 @@ const clean = (t: string): string =>
 
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 
-/**
- * Tabs left out of the index, by spreadsheet. The Business Case's `Core_KPI` tab holds
- * example figures, not measured ones ("false, not real numbers": Eman, 2026-09-28), and
- * because the example-figures mark is decided per FILE, it also labelled the real `Costs`
- * tab as examples. Left out here, where both the ingest and the nightly reconciler read
- * the tab list, so the reconciler does not report the tab as missing.
- */
-const SKIP_TABS: Record<string, string[]> = { [COST_SHEET_ID]: ["Core_KPI"] };
 /** Same ceiling as a pdf: a spreadsheet is the other easy way to blow up a chunk. */
 const SHEET_TEXT_LIMIT = 400_000;
 
@@ -686,8 +677,7 @@ export async function sheetTabTitles(token: string, fileId: string): Promise<str
   const meta = (await metaRes.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
   return (meta.sheets ?? [])
     .map((sh) => sh?.properties?.title)
-    .filter((t): t is string => typeof t === "string" && t.length > 0)
-    .filter((t) => !SKIP_TABS[fileId]?.includes(t));
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
 }
 
 /**
@@ -973,14 +963,53 @@ export function isAuthoredMarketingCopy(text: string): boolean {
  * Business Case and the KPI Framework. "Why it matters" alone was rejected as a signal — it
  * appears in 24 documents, most of them report copy.
  *
- * Marked, not excluded — with one exception since 2026-09-28: the Business Case's KPI tab
- * is left out entirely (SKIP_TABS), so the mark now reaches only the KPI Framework. A
- * definition document is real and the team should find it; it just must not be quotable as
- * what happened.
+ * Marked, not excluded. A definition document is real and the team should find it; it
+ * just must not be quotable as what happened.
+ *
+ * PER TAB when a spreadsheet mixes the two. The Business Case holds real monthly costs on
+ * `Costs` beside the example table on `Core_KPI`, and a mark decided per file labelled the
+ * costs as examples too. So from 2026-09-28 the tab was left out of the index altogether;
+ * on 2026-10-05 Eman asked for it back. `markedParts` now splits such a sheet at its tab
+ * headings first, so no part holds both kinds and only the example tab's parts are marked.
  */
 const KPI_DEFINITION_TABLE = /formula\s*\/\s*calculation/i;
 export function isIllustrativeFigures(text: string): boolean {
   return KPI_DEFINITION_TABLE.test(text);
+}
+
+/**
+ * The parts of a document, each with whether it carries the example-figures mark.
+ *
+ * A spreadsheet whose tabs differ (some example tables, some real figures) is split at
+ * the `## <tab>` headings `sheetText` writes before the usual length split, so a part
+ * never straddles a real tab and an example one. Everything else is marked as a whole,
+ * as before: the header is in part 1 and the figures in later parts, so the mark has to
+ * reach parts that do not contain it.
+ *
+ * ponytail: a cell whose own text holds a blank line followed by "## " would read as a
+ * tab heading here; no sheet in the Drive has one. Pass the tab blocks from `sheetText`
+ * if one ever does.
+ */
+export function markedParts(
+  name: string,
+  text: string,
+  isSheet: boolean
+): Array<{ body: string; illustrative: boolean }> {
+  const tabs = isSheet ? text.split(/\n\n(?=## )/) : [text];
+  const marks = tabs.map(isIllustrativeFigures);
+  if (marks.every((m) => m === marks[0])) {
+    const illustrative = marks[0] ?? false;
+    return splitBody([name, text].filter(Boolean).join("\n\n")).map((body) => ({
+      body,
+      illustrative,
+    }));
+  }
+  return tabs.flatMap((tab, i) =>
+    splitBody(i === 0 ? [name, tab].filter(Boolean).join("\n\n") : tab).map((body) => ({
+      body,
+      illustrative: marks[i]!,
+    }))
+  );
 }
 
 export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
@@ -1047,11 +1076,9 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
   // part of a split document carries. Putting it only in `meta` would leave the part that
   // actually holds the invented quotes looking exactly like customer words.
   const authored = isAuthoredMarketingCopy(text);
-  const illustrative = isIllustrativeFigures(text);
   const title =
     (isMeetingNote ? `Meeting notes: ${name}` : `Drive: ${name}`) +
-    (authored ? " [copy we wrote ourselves, not customer words]" : "") +
-    (illustrative ? " [example figures from a KPI definition table, not measured]" : "");
+    (authored ? " [copy we wrote ourselves, not customer words]" : "");
 
   const base: BrainRow = {
     source: SOURCE,
@@ -1062,7 +1089,6 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     meta: {
       kind: isMeetingNote ? "meeting-notes" : "drive-doc",
       ...(authored ? { authored: true } : {}),
-      ...(illustrative ? { illustrative: true } : {}),
       v: DRIVE_BUILDER_VERSION,
       owner,
       created: file.createdTime ?? null,
@@ -1076,7 +1102,8 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
 
   // Split rather than let the write path slice the tail off — a call note is
   // routinely longer than the 2,400-character ceiling.
-  const parts = splitBody(base.body);
+  const marked = markedParts(name, text, file.mimeType === SHEET_MIME);
+  const parts = marked.map((p) => p.body);
 
   /**
    * A GEMINI NOTE IS TWO DOCUMENTS IN ONE FILE: the structured decision record
@@ -1108,17 +1135,24 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
   const sectionOf = (i: number): DriveSection | undefined =>
     dividerAt < 0 ? undefined : i <= dividerAt ? "summary" : "transcript";
 
-  return parts.map((body, i) =>
-    i === 0
-      ? { ...base, body, meta: { ...base.meta, section: sectionOf(0) } }
+  return marked.map(({ body, illustrative }, i) => {
+    // On the TITLE for the same reason as `authored`: it is the field every result shows.
+    const own = illustrative
+      ? {
+          title: `${base.title} [example figures from a KPI definition table, not measured]`,
+          meta: { ...base.meta, illustrative: true },
+        }
+      : { title: base.title, meta: base.meta };
+    return i === 0
+      ? { ...base, title: own.title, body, meta: { ...own.meta, section: sectionOf(0) } }
       : {
           ...base,
           source_id: `${base.source_id}#${i + 1}`,
-          title: `${base.title} (part ${i + 1} of ${parts.length})`,
+          title: `${own.title} (part ${i + 1} of ${parts.length})`,
           body,
-          meta: { ...base.meta, part: i + 1, parts: parts.length, section: sectionOf(i) },
-        }
-  );
+          meta: { ...own.meta, part: i + 1, parts: parts.length, section: sectionOf(i) },
+        };
+  });
 }
 
 /** source_id → what is already indexed, for the incremental skip. */
