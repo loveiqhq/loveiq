@@ -57,17 +57,19 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
   // A tap outside closes the list. The typed text stays (it was wiped, so a reader who
   // tapped away mid-word lost it), and a whole name typed is chosen: here as well as on
   // blur, because WebKit keeps the box focused when the tap lands on something that
-  // cannot take focus, so on an iPhone the blur never came.
+  // cannot take focus, so on an iPhone the blur never came. pointerdown, not mousedown:
+  // WebKit sends no mouse events for a tap on something not clickable (a heading, the
+  // page), so on an iPhone a mousedown listener never heard those taps.
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: PointerEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         const exact = isEditing ? exactCountry(search) : null;
         if (exact) selectCountry(exact);
         else setIsOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
   }, [isEditing, search, selectCountry]);
 
   const clearSelection = useCallback(() => {

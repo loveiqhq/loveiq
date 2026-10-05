@@ -188,14 +188,15 @@ describe("CountryQuestion", () => {
     });
 
     // WebKit keeps the box focused when a tap lands on something that cannot take focus,
-    // so on an iPhone no blur came: the tap outside itself must choose the name.
-    it("chooses a whole name typed on a tap outside, with no blur", async () => {
+    // and sends it no mouse events, only pointer and touch ones: so on an iPhone neither a
+    // blur nor a mousedown came. The pointerdown alone must choose the name.
+    it("chooses a whole name typed on a tap outside, with no blur or mouse events", async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
       render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
       const input = screen.getByRole("combobox");
       await user.type(input, "germany");
-      fireEvent.mouseDown(document.body);
+      fireEvent.pointerDown(document.body);
       expect(onChange).toHaveBeenLastCalledWith("Germany");
     });
 
