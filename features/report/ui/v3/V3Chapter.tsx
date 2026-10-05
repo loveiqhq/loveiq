@@ -113,13 +113,16 @@ interface Props {
  */
 const BODY_SETTLE_MS = 400;
 
+/** The V4 chapters that open by default: Other Archetypes (Marcus 04.10, Sanjin 05.10). */
+const V4_OPEN_BY_DEFAULT: ReadonlySet<string> = new Set(["constellation"]);
+
 const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, archetype }) => {
   const isV4 = useIsV4();
   // The delivered V3 frame is "UNTOGGLED (all chapters open)", so open is its
   // resting state and the chevron points up until the reader collapses it. V4 closes
   // them (review 24.09): a chapter opens when the reader asks for it, and only then
-  // shows its "Does this resonate?".
-  const [isOpen, setIsOpen] = useState(!isV4);
+  // shows its "Does this resonate?". Other Archetypes is the exception.
+  const [isOpen, setIsOpen] = useState(!isV4 || V4_OPEN_BY_DEFAULT.has(sectionId));
   const bodyId = `rv3-chapter-body-${sectionId}`;
   // A chapter the reader has no access to is locked outright under V4 (review 26.09);
   // no provider exists outside V4. Called before the branch so hook order is stable.
