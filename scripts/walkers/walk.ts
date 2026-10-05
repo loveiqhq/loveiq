@@ -564,8 +564,11 @@ async function main(argv: string[]): Promise<number> {
     page
       .evaluate(() => {
         const text = document.body?.innerText ?? "";
+        // The default report's locks, then V4's (staging branch): its premium content card
+        // and the lock tile on a visual. Measured 2026-10-05: 4 cards and 17 tiles on an
+        // unpaid V4 report, none once paid; with only the first two, V4 counted 0 and 0.
         const badges = document.querySelectorAll(
-          '[aria-label="Unlock the full report"], .report-premium-overlay'
+          '[aria-label="Unlock the full report"], .report-premium-overlay, .rv4-premium, .rv4-lockbadge'
         ).length;
         return badges + (text.match(/Unlock it to keep reading/g) ?? []).length;
       })
