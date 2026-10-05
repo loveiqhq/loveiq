@@ -53,7 +53,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
 
       <div className="flex flex-col gap-[13.6px] pt-[4.8px]">
         {/* Rings, one per equal column, on a hairline running centre to centre */}
-        <div className="relative flex h-12 items-center">
+        {/* data-no-swipe: a drag across the rings is not a swipe to the next question. */}
+        <div className="relative flex h-12 items-center" data-no-swipe>
           <div
             aria-hidden
             className="pointer-events-none absolute left-[calc(100%/14)] right-[calc(100%/14)] top-1/2 h-px -translate-y-1/2 bg-[rgba(22,16,33,0.09)]"
