@@ -1724,9 +1724,14 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     // The relative branches feed the same anchor. "last month" was already right before
     // the change and must stay right after it. The months are counted from today, in UTC
     // as periods.ts counts them: written as "August 2026" and "September 2026", both went
-    // red the day October began, with nothing wrong in the search.
-    P("period-last-month", "how did last month go", namedMonthLeads(utcMonthName(-1))),
-    P("period-this-month", "how are we doing this month", namedMonthLeads(utcMonthName(0))),
+    // red the day October began, with nothing wrong in the search. Counted when the check
+    // runs, right after its query, so a run that crosses midnight UTC on the 1st races one
+    // query rather than the whole battery.
+    // ponytail: one clock for the probe and retrieve() would close that last second too.
+    P("period-last-month", "how did last month go", (h) => namedMonthLeads(utcMonthName(-1))(h)),
+    P("period-this-month", "how are we doing this month", (h) =>
+      namedMonthLeads(utcMonthName(0))(h)
+    ),
     /**
      * THE ANCHOR MUST NOT COST THE ANSWER. A question naming a month while wanting
      * something undated is the case a hard since/until filter would have destroyed, and
