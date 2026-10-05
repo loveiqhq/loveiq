@@ -82,6 +82,13 @@
 /* The brand gradient over a run. Upright by default (the section titles' "Report",
  * "people", "insights."); the hero and the benefit cards set it in Lora Italic. */
 .rpg-gradient {
+  /* An italic letter leans past its own box (the "f" of "Self"), and background-clip:
+   * text paints only inside the box, so the overhang came out invisible. The padding
+   * widens what is painted; the negative margin gives the room back, so nothing moves. */
+  padding: 0 0.14em;
+  margin: 0 -0.14em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   font-style: normal;
   background-image: var(--rpg-gradient);
   -webkit-background-clip: text;
@@ -117,6 +124,16 @@
 
 .rpg__title .rpg-gradient {
   font-style: italic;
+}
+
+/* "Discover Your Full" takes 324 of 842:597's 333px at 40px, so on a phone narrower than
+ * the frame's 390 it would wrap and leave "Full" on a line of its own. Below 390 the size
+ * follows the width (0.118 = 40/324, less a little for engines that set Lora wider). */
+@media (max-width: 389px) {
+  .rpg__title {
+    font-size: min(40px, calc((100vw - 40px) * 0.118));
+    line-height: 1.1;
+  }
 }
 
 .rpg__copy {
@@ -705,6 +722,10 @@
   .rpg__top {
     padding: 64px 40px 0;
     background: var(--rpg-wash);
+  }
+
+  .rpg__title-break {
+    display: none;
   }
 
   .rpg__title {

@@ -344,6 +344,10 @@ export async function POST(request: Request) {
           parsed.data.plan,
           parsed.data.archetype ?? "",
           nurturePromoMatch?.stripePromotionCodeId ?? "",
+          // The anchor rides in the success and cancel URLs, and Stripe refuses a reused
+          // key whose parameters differ: a reader who backs out and pays again from another
+          // spot within the minute would get an error instead of a session.
+          parsed.data.anchor ?? "",
           String(Math.floor(Date.now() / 60_000)),
         ].join("|")
       )

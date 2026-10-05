@@ -264,9 +264,11 @@ const CheckoutReturnPage: FC<Props> = ({
         </Link>
 
         <div className="checkout-return">
-          {/* What was bought. The journey's frames (1382:1210–1212) leave it out, but the
-              nightly persona walks read the plan off this page (scripts/walkers/walk.ts). */}
-          <p className="checkout-return__eyebrow">{planTitle}</p>
+          {/* What was bought, for screen readers only: the journey's frames (1382:1210–1212)
+              take it off the card (Marcus, Figma comment: "took out some text on the top").
+              It stays in the page, which is also where the nightly persona walks read the
+              plan they paid for (scripts/walkers/walk.ts). */}
+          <p className="sr-only">{planTitle}</p>
           <h1 className="checkout-return__title">Checkout status</h1>
 
           {state.status === "loading" ? (

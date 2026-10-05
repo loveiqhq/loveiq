@@ -492,7 +492,9 @@ const ReportPricingModal: FC<Props> = ({
                     </>
                   ) : (
                     <h2 id="report-pricing-modal-title" className="rpg__title">
-                      Discover Your Full <Gradient>Sexual Self</Gradient>
+                      {/* 842:597 sets "Sexual Self" on a line of its own; 963:15 runs it on. */}
+                      Discover Your Full <br className="rpg__title-break" />
+                      <Gradient>Sexual Self</Gradient>
                     </h2>
                   )}
                   {!quotes ? (

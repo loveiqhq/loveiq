@@ -51,6 +51,20 @@ describe("CheckoutReturnPage", () => {
     cleanup();
   });
 
+  it("names the plan for screen readers only, off the card as the journey frames draw it", () => {
+    // Stays on "Verifying…": the label is there from the first paint, whatever the state.
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as never;
+    render(
+      <CheckoutReturnPage
+        planId="all_reports"
+        sessionId="cs_test_label"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+    expect(screen.getByText("All 14 Archetype Reports")).toHaveClass("sr-only");
+    expect(screen.getByRole("heading", { name: "Checkout status" })).toBeInTheDocument();
+  });
+
   it("auto-redirects to the unlocked report after payment and backend access are confirmed", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
