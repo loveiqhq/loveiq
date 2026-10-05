@@ -3,7 +3,7 @@
  *
  * Every archetype on a phone and on a desktop is 28 walks. Four a night covers all of them
  * in a week, and the day number decides which four, so a rerun on the same day walks the
- * same four. The plan each walk buys rotates too, so all three plans get bought every week.
+ * same four. The plan each walk buys rotates too, so every plan on sale gets bought every week.
  *
  *   npx tsx scripts/walkers/rotation.ts            # tonight's walks, as JSON
  */
@@ -13,6 +13,12 @@ import personasFile from "./personas.json";
 export const DEVICES = ["iPhone 15 Pro", "Desktop Chrome"] as const;
 export const PLANS = ["full_report", "core", "all_reports"] as const;
 export type Plan = (typeof PLANS)[number];
+/**
+ * The plans the nightly walks buy: what staging sells. Pricing 3.0 (staging, 2026-10-05)
+ * sells "All 14 Archetype Reports" and "Only Your Highest Archetype" and no longer core,
+ * which a walk asked for by hand (`--plan core`) can still try where it is sold.
+ */
+export const ROTATION_PLANS: readonly Plan[] = ["full_report", "all_reports"];
 export const WALKS_PER_NIGHT = 4;
 
 export interface PlannedWalk {
@@ -25,11 +31,15 @@ export interface PlannedWalk {
 
 /**
  * Every persona on every device in `week`, each with the plan it buys. The plan moves on by
- * one every week, so each persona buys all three over three weeks.
+ * one every week, so each persona buys every plan on sale over as many weeks.
  */
 export function allWalks(personas: string[], week = 0): Array<Omit<PlannedWalk, "report">> {
   return personas.flatMap((persona, i) =>
-    DEVICES.map((device, j) => ({ persona, device, plan: PLANS[(i + j + week) % PLANS.length]! }))
+    DEVICES.map((device, j) => ({
+      persona,
+      device,
+      plan: ROTATION_PLANS[(i + j + week) % ROTATION_PLANS.length]!,
+    }))
   );
 }
 
