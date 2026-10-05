@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo, type FC } from "react";
+import { useState, useRef, useEffect, useCallback, useId, useMemo, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
-import { COUNTRIES, getCountryFlagUrl } from "@/data/countries";
+import { getCountryFlagUrl } from "@/data/countries";
+import { exactCountry, searchCountries } from "./countrySearch";
 import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
 
@@ -22,26 +23,21 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
 
   // Display: when editing show search text, otherwise show selected value
   const displayValue = isEditing ? search : (value ?? "");
 
   // Filter uses search text when editing, otherwise shows all
   const filterText = isEditing ? search : "";
-  const filtered = useMemo(
-    () =>
-      filterText
-        ? COUNTRIES.filter((c) => c.toLowerCase().includes(filterText.toLowerCase()))
-        : COUNTRIES,
-    [filterText]
-  );
+  const filtered = useMemo(() => searchCountries(filterText), [filterText]);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click. The typed text stays: it was wiped, so a reader who
+  // tapped away mid-word lost it and found nothing selected.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
-        setIsEditing(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -84,8 +80,18 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
     setSearch(text);
     setIsEditing(true);
     setIsOpen(true);
-    setHighlightIndex(-1);
+    // An exact name or alias is highlighted, so Enter picks what the list shows on top.
+    const exact = exactCountry(text);
+    setHighlightIndex(exact && searchCountries(text)[0] === exact ? 0 : -1);
     if (value) onChange("" as string);
+  };
+
+  // Leaving the box with a whole name typed ("germany", "UK") chooses it: Next stayed
+  // disabled until the reader also tapped the name in the list.
+  const handleBlur = () => {
+    if (!isEditing) return;
+    const exact = exactCountry(search);
+    if (exact) selectCountry(exact);
   };
 
   const handleFocus = () => {
@@ -176,9 +182,18 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
             value={displayValue}
             onChange={handleInputChange}
             onFocus={handleFocus}
+            onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             placeholder="Search for a country..."
             autoComplete="off"
+            role="combobox"
+            aria-label={question.question}
+            aria-autocomplete="list"
+            aria-expanded={isOpen && filtered.length > 0}
+            aria-controls={listId}
+            aria-activedescendant={
+              isOpen && highlightIndex >= 0 ? `${listId}-${highlightIndex}` : undefined
+            }
             className={`w-full rounded-xl border py-3 font-sans text-[16px] sm:text-[15px] focus:outline-none ${
               white
                 ? "border-black/[0.08] bg-[#f5f6f8] text-[#161021] placeholder:text-black/30 focus:border-[#8b6fbf]"
@@ -223,10 +238,12 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
                 : "border-white/10 bg-[#1a1225]"
             }`}
             role="listbox"
+            id={listId}
           >
             {filtered.map((country, i) => (
               <li
                 key={country}
+                id={`${listId}-${i}`}
                 role="option"
                 aria-selected={country === value}
                 className={`cursor-pointer px-4 py-2.5 font-sans text-[15px] transition-colors ${
