@@ -8558,6 +8558,60 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   }
 }
 
+/* ── Release asks — 05.10 ──────────────────────────────────────────────────────
+ * Marcus (04.10): Other Archetypes' "You're a Constellation, Not a Type" is an H2, so it
+ * sits under its H1 instead of over it. Report 2.0's heading kept its 28px / 40px; Mark:
+ * "we pulled in the V2 report element without changing it". V4's in-chapter H2, as
+ * .rv4-tb__h2. */
+.rv3.rv4 .report-constellation__heading {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 21.6px;
+}
+
+/* Mark (04.10): "keep the sticky footer underneath the navigation?" Yes. The drawer and the
+ * Refer a friend modal sit under it in the stack (z 60 and 50 to its 70), so the footer
+ * steps aside while either is open, and comes back once the drawer has gone. */
+body:has(.rv3.rv4 .report-chapter-drawer-root) .report-sticky-unlock,
+body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
+  visibility: hidden;
+}
+/* Mark (04.10): "move the navigation up a bit to avoid the black space on top". The panel
+ * opens 16px under the safe area, not under the floating pill (80px), and rises from the
+ * pill's place, so the two still meet. With the footer gone it may take the screen. */
+.rv3.rv4 .report-chapter-panel {
+  animation-name: rv4-panel-rise;
+  max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px);
+  max-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px
+  );
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+}
+.rv3.rv4 .report-chapter-panel--closing {
+  animation-name: rv4-panel-sink;
+}
+@keyframes rv4-panel-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, 64px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+}
+@keyframes rv4-panel-sink {
+  from {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-50%, 64px, 0) scale(0.99);
+  }
+}
+
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
  * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
  * properly to not have these huge gaps and spaces". Production's column (991cb18c) is
@@ -9402,59 +9456,5 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   }
   .rv3.rv4 .rv3-deck__slot.is-peeking:hover {
     translate: 0 -2px;
-  }
-}
-
-/* ── Release asks — 05.10 ──────────────────────────────────────────────────────
- * Marcus (04.10): Other Archetypes' "You're a Constellation, Not a Type" is an H2, so it
- * sits under its H1 instead of over it. Report 2.0's heading kept its 28px / 40px; Mark:
- * "we pulled in the V2 report element without changing it". V4's in-chapter H2, as
- * .rv4-tb__h2. */
-.rv3.rv4 .report-constellation__heading {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 21.6px;
-}
-
-/* Mark (04.10): "keep the sticky footer underneath the navigation?" Yes. The drawer and the
- * Refer a friend modal sit under it in the stack (z 60 and 50 to its 70), so the footer
- * steps aside while either is open, and comes back once the drawer has gone. */
-body:has(.rv3.rv4 .report-chapter-drawer-root) .report-sticky-unlock,
-body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
-  visibility: hidden;
-}
-/* Mark (04.10): "move the navigation up a bit to avoid the black space on top". The panel
- * opens 16px under the safe area, not under the floating pill (80px), and rises from the
- * pill's place, so the two still meet. With the footer gone it may take the screen. */
-.rv3.rv4 .report-chapter-panel {
-  animation-name: rv4-panel-rise;
-  max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px);
-  max-height: calc(
-    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px
-  );
-  top: calc(env(safe-area-inset-top, 0px) + 16px);
-}
-.rv3.rv4 .report-chapter-panel--closing {
-  animation-name: rv4-panel-sink;
-}
-@keyframes rv4-panel-rise {
-  from {
-    opacity: 0;
-    transform: translate3d(-50%, 64px, 0) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(-50%, 0, 0) scale(1);
-  }
-}
-@keyframes rv4-panel-sink {
-  from {
-    opacity: 1;
-    transform: translate3d(-50%, 0, 0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translate3d(-50%, 64px, 0) scale(0.99);
   }
 }
