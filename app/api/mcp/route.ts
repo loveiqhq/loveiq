@@ -2860,6 +2860,9 @@ async function documentText(raw: string): Promise<string | null> {
   return `${title}\n${own}`;
 }
 
+/** How long a narrowed search may wait for the look outside its filter. */
+export const UNFILTERED_BUDGET_MS = 2_000;
+
 export function outsideTheFilter(
   applied: string[],
   wide: Array<{
@@ -3357,11 +3360,24 @@ async function callTool(
       opts.until ? `until=${opts.until}` : null,
       opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
     ].filter((x): x is string => x !== null);
-    /** The same question with no filter, for a narrowed search that came back weak or empty. */
-    const unfiltered = () =>
-      retrieve(query, 3, {}).catch(
-        () => [] as Array<{ source: string; sourceId: string; contentScore: number }>
-      );
+    /**
+     * The same question with no filter, for a narrowed search that came back weak or empty.
+     *
+     * A HINT, SO IT NEVER COSTS THE ANSWER. It ran in sequence after the narrowed search,
+     * and measured 2026-10-05 that class of search went from 0.87 s to 6.37 s p50; some
+     * reached the 8 s timeouts and answered "unreachable" instead. Past its budget the
+     * answer goes out without the hint.
+     */
+    const unfiltered = () => {
+      const none: Array<{ source: string; sourceId: string; contentScore: number }> = [];
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return Promise.race([
+        retrieve(query, 3, {}).catch(() => none),
+        new Promise<typeof none>((resolve) => {
+          timer = setTimeout(() => resolve(none), UNFILTERED_BUDGET_MS);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    };
     if (chunks.length === 0) {
       /**
        * A NARROW FILTER IS NOT AN EMPTY CORPUS, and the two must never read alike.

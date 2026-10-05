@@ -129,6 +129,7 @@ import {
   RELEVANCE_FLOOR,
   SOURCES_FOR_TEST,
   TOOLS,
+  UNFILTERED_BUDGET_MS,
 } from "@/app/api/mcp/route";
 import { atomsIn } from "@features/brain/server/check-answer";
 import { citesSources } from "@features/brain/server/night-shift";
@@ -2538,6 +2539,25 @@ describe("/api/mcp", () => {
         expect(text).toContain("WITH THE FILTERS YOU SET (sources=slack, since=2026-09-10)");
         expect(text).toContain("OUTSIDE YOUR FILTER (sources=slack, since=2026-09-10)");
         expect(text).toContain("  • notion/task:better");
+      });
+
+      it("never waits past its budget for the look outside: the answer goes out without it", async () => {
+        // 2026-10-05: in sequence after the narrowed search, this class went 0.87 s -> 6.37 s p50.
+        expect(UNFILTERED_BUDGET_MS).toBe(2_000);
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          mockRetrieve.mockImplementation((_q: string, _l: number, opts: unknown) =>
+            narrowedCall(opts) ? Promise.resolve(weakInside) : new Promise(() => {})
+          );
+          const pending = textOf({ query: "entity model ontology", sources: ["slack"] });
+          await vi.advanceTimersByTimeAsync(UNFILTERED_BUDGET_MS);
+          const text = await pending;
+          expect(text).toMatch(/WEAK MATCH/);
+          expect(text).not.toContain("OUTSIDE YOUR FILTER");
+          expect(text).toContain("Board: something");
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it("costs nothing when the look outside fails", async () => {
