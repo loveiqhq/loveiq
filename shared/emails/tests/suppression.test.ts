@@ -148,15 +148,44 @@ describe("addToSuppression", () => {
     expect((init?.headers as Record<string, string>).Prefer).toBe("resolution=merge-duplicates");
   });
 
-  it("does nothing when env vars are missing", async () => {
+  it("does nothing, and says so, when env vars are missing", async () => {
     delete process.env.SUPABASE_URL;
-    await addToSuppression("x@example.com", "complaint");
+    expect(await addToSuppression("x@example.com", "complaint")).toBe(false);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("logs error but does not throw on fetch failure", async () => {
+  it("reports a written row", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 201 } as Response);
+    expect(await addToSuppression("x@example.com", "unsubscribed")).toBe(true);
+  });
+
+  it("warns, does not throw, and reports false on a network failure", async () => {
     mockFetch.mockRejectedValueOnce(new Error("db down"));
-    await expect(addToSuppression("x@example.com", "unsubscribed")).resolves.toBeUndefined();
+    await expect(addToSuppression("x@example.com", "unsubscribed")).resolves.toBe(false);
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  /**
+   * fetch resolves on a refusal, so a refused insert used to read as success: the
+   * unsubscribe page said "you've been unsubscribed" and the address stayed on the list.
+   */
+  it("reports false and pages on a refused insert (4xx: refuses every write until fixed)", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 400 } as Response);
+    expect(await addToSuppression("x@example.com", "unsubscribed")).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 400 }),
+      "Suppression insert refused"
+    );
+  });
+
+  it("reports false and only warns on a 5xx (a blip the caller retries)", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 503 } as Response);
+    expect(await addToSuppression("x@example.com", "hard_bounce")).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 503 }),
+      "Suppression insert refused"
+    );
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });
 

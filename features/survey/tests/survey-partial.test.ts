@@ -151,6 +151,23 @@ describe("POST /api/survey-partial", () => {
     expect(row.utm_tracker).toBe(utmJson);
   });
 
+  it("saves a draft with a long Other text, cut, instead of refusing it", async () => {
+    // Refusing it lost the reader's only server-side copy of their answers.
+    const res = await POST(
+      makeRequest({ ...validBody(), answers: { "15010_other": "x".repeat(5000) } })
+    );
+    expect(res.status).toBe(200);
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(row.answers["15010_other"]).toHaveLength(1000);
+  });
+
+  it("saves a draft without an over-long tracker instead of refusing it", async () => {
+    const res = await POST(makeRequest({ ...validBody(), utmTracker: "x".repeat(1500) }));
+    expect(res.status).toBe(200);
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(row.utm_tracker).toBeNull();
+  });
+
   it("sets utm_tracker to null when utmTracker is omitted", async () => {
     await POST(makeRequest(validBody()));
 

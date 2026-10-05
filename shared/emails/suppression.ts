@@ -73,17 +73,18 @@ export async function addToSuppression(
   // `ifAbsent` inserts only when the address has no row yet (ON CONFLICT DO
   // NOTHING, in one statement), for a caller that must not relabel a reason.
   opts?: { campaign?: string; channel?: "footer" | "one-click"; ifAbsent?: boolean }
-): Promise<void> {
+): Promise<boolean> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) return;
+  if (!supabaseUrl || !serviceKey) return false;
 
   const row: Record<string, string> = { email, reason };
   if (opts?.campaign) row.source_campaign = opts.campaign;
   if (opts?.channel) row.source_channel = opts.channel;
 
+  let written = false;
   try {
-    await fetchWithTimeout(`${supabaseUrl}/rest/v1/email_suppression`, {
+    const res = await fetchWithTimeout(`${supabaseUrl}/rest/v1/email_suppression`, {
       method: "POST",
       headers: {
         apikey: serviceKey,
@@ -94,9 +95,19 @@ export async function addToSuppression(
       body: JSON.stringify(row),
       timeoutMs: 5_000,
     });
+    // fetch rejects only on a network error: a refused insert arrives as a response. It
+    // used to pass silently, and the unsubscribe page said "you've been unsubscribed" to
+    // a person who stayed on the list. A 4xx refuses every write until someone fixes it,
+    // so it pages; a 5xx is a blip the caller retries, like the network error below.
+    written = res.ok;
+    if (res.status >= 500) {
+      logger.warn({ status: res.status, email, reason }, "Suppression insert refused");
+    } else if (!res.ok) {
+      logger.error({ status: res.status, email, reason }, "Suppression insert refused");
+    }
   } catch (err) {
-    // warn-not-error: the Resend webhook retries on non-2xx (Svix-signed), so
-    // a transient suppression insert failure is recoverable. Sustained outage
+    // warn-not-error: the caller sees `false` and retries (the Resend webhook
+    // answers 503, so Svix redelivers), so a transient failure is recoverable. Sustained outage
     // surfaces via the daily tech-digest service-health section. Avoids
     // amplifying every bounce-processing blip into an api_5xx Slack page.
     logger.warn({ err, email, reason }, "Failed to add email to suppression list");
@@ -107,4 +118,5 @@ export async function addToSuppression(
   // dispatched server-side by Resend, not through our senders. Best-effort:
   // failure here doesn't undo the suppression write above.
   await unsubscribeInResend(email);
+  return written;
 }

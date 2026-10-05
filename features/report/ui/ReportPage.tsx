@@ -304,6 +304,7 @@ function getErrorState(error: ReportRequestError | null): ReportStatusState {
         actionHref: "/report",
         actionLabel: "Reload report",
       };
+    case 400: // a malformed link (e.g. /report/[object Object]) is not an outage
     case 404:
       return {
         // Was "Complete the survey again to generate a fresh report", which asked
@@ -590,7 +591,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     });
   }, [hasLockedPremiumCards, fullReportQuote, submissionId]);
   // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
-  // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report?invite=1
+  // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report/<token>?invite=1
   // — they would silently fail without this auto-open.
   const reportSearchParams = useSearchParams();
   const shouldAutoOpenInvite = viewMode === "owner" && reportSearchParams.get("invite") === "1";
@@ -2567,7 +2568,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   }
 
   if (status === "error" || !data) {
-    const statusState = getErrorState(error);
+    const notFound = error?.statusCode === 404 || error?.statusCode === 400;
+    // A shared link (rpts_) that is gone was withdrawn by its owner. The usual copy
+    // ("We emailed your report link when you finished") is about someone else's survey.
+    const statusState =
+      notFound && token?.startsWith("rpts_")
+        ? {
+            ...getErrorState(error),
+            title: "This shared report isn't available",
+            copy: "The person who shared it may have withdrawn the link. Ask them to send it again.",
+          }
+        : getErrorState(error);
+    // "Reload report" must reload THIS report. Bare /report only works in the browser
+    // that took the survey, so from an emailed link it could only say "Can't find
+    // your report".
+    const actionHref =
+      token && statusState.actionHref === "/report" ? `/report/${token}` : statusState.actionHref;
 
     return (
       <main className="report-status-screen">
@@ -2575,7 +2591,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           <p className="report-overline">LoveIQ report</p>
           <h1 className="report-status-card__title">{statusState.title}</h1>
           <p className="report-status-card__copy">{statusState.copy}</p>
-          <a href={statusState.actionHref} className="report-button mt-3 inline-flex">
+          <a href={actionHref} className="report-button mt-3 inline-flex">
             {statusState.actionLabel}
           </a>
         </div>

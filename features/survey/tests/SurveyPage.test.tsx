@@ -6,8 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SurveyPage from "@features/survey/ui/SurveyPage";
 import {
   ANSWERS_STORAGE_KEY,
+  LANDING_PREFILL_QID,
   PENDING_COMPLETION_KEY,
+  SURVEY_CONSENT_KEY,
   SURVEY_STEP_KEY,
+  __resetSurveyConsentForTests,
+  saveLandingPrefill,
 } from "@features/survey/ui/hooks/surveyStorage";
 import { COMPLETED_REPORT_KEY } from "@features/survey/ui/hooks/surveySession";
 
@@ -33,10 +37,21 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@features/survey/ui/SurveyEngine", () => ({
-  default: ({ onExit, onComplete }: { onExit: () => void; onComplete: () => void }) => (
+  // Wired straight to onClick on purpose, as real buttons are: React then passes the
+  // click event as the first argument, which is exactly what broke Start Over.
+  default: ({
+    onExit,
+    onComplete,
+    onStartOver,
+  }: {
+    onExit: () => void;
+    onComplete: () => void;
+    onStartOver?: () => void;
+  }) => (
     <div data-testid="survey-engine">
       <button onClick={onExit}>Exit Survey</button>
       <button onClick={onComplete}>Complete Survey</button>
+      {onStartOver && <button onClick={onStartOver}>Start Over</button>}
     </div>
   ),
 }));
@@ -57,7 +72,11 @@ describe("SurveyPage", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    __resetSurveyConsentForTests();
     window.history.replaceState(null, "", "/survey");
+    // Most tests here model a reader who already agreed for this run. The ones about the
+    // consent gate itself remove this.
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-04T12:00:00.000Z");
   });
 
   afterEach(() => {
@@ -192,12 +211,15 @@ describe("SurveyPage", () => {
     });
 
     it("starts a new submission when a landing answer opens the survey after finishing", async () => {
-      // Round-11 audit: the landing page's question saves an answer, and /survey then opens
-      // straight into the survey, past "I agree".
+      // Round-11 audit: the landing page's question saves an answer before /survey opens.
+      // It now opens on consent (that run has not agreed yet), and agreeing starts it fresh.
+      localStorage.removeItem(SURVEY_CONSENT_KEY);
       sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
       sessionStorage.setItem("loveiq-survey-session", "finished-run");
       localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: 3 } }));
       render(<SurveyPage />);
+
+      await agree();
 
       expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
       expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
@@ -389,6 +411,91 @@ describe("SurveyPage", () => {
     }
   });
 
+  // Regression, 2026-10-04: a reload restores the step onto the entry it was saved from,
+  // and pushing a second copy buried the questions' own entry, so the first Back after a
+  // reload did nothing.
+  it("does not stack a second history entry for the step a reload restores", async () => {
+    window.history.replaceState({ surveyStep: 6, surveyQuestion: 3 }, "", "/survey");
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    const push = vi.spyOn(window.history, "pushState");
+    try {
+      render(<SurveyPage />);
+      await screen.findByTestId("survey-engine");
+      expect(push).not.toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+    }
+  });
+
+  it("still pushes the entry when it arrives at a step from elsewhere", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    const push = vi.spyOn(window.history, "pushState");
+    try {
+      render(<SurveyPage />);
+      await screen.findByTestId("survey-engine");
+      expect(push).toHaveBeenCalledWith(expect.objectContaining({ surveyStep: 6 }), "");
+    } finally {
+      push.mockRestore();
+    }
+  });
+
+  function captureNavigation() {
+    const original = Object.getOwnPropertyDescriptor(window, "location");
+    const navigated: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        get href() {
+          return "/survey";
+        },
+        set href(value: string) {
+          navigated.push(value);
+        },
+      },
+    });
+    return {
+      navigated,
+      restore: () => original && Object.defineProperty(window, "location", original),
+    };
+  }
+
+  // Regression, 2026-10-03: the failed-submission screen's Start Over took the success
+  // path with the click event as the report token, so it wiped the answers and opened
+  // /report/[object Object]. A reader whose submission kept failing had to redo all
+  // 57 questions after a "Can't find your report" detour.
+  it("Start Over discards the failed run and reopens the survey", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    localStorage.setItem(PENDING_COMPLETION_KEY, JSON.stringify(pendingCompletion));
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage />);
+      await userEvent.click(await screen.findByRole("button", { name: /start over/i }));
+
+      expect(nav.navigated).toEqual(["/survey"]);
+      expect(localStorage.getItem(ANSWERS_STORAGE_KEY)).toBeNull();
+      expect(localStorage.getItem(PENDING_COMPLETION_KEY)).toBeNull();
+    } finally {
+      nav.restore();
+    }
+  });
+
+  it("never uses a click event as the report token", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    const nav = captureNavigation();
+    try {
+      render(<SurveyPage />);
+      await userEvent.click(await screen.findByRole("button", { name: /complete survey/i }));
+
+      expect(nav.navigated).toEqual(["/report"]);
+    } finally {
+      nav.restore();
+    }
+  });
+
   it("restores the survey engine when answers exist in local storage", async () => {
     localStorage.setItem(
       ANSWERS_STORAGE_KEY,
@@ -410,5 +517,102 @@ describe("SurveyPage", () => {
     render(<SurveyPage />);
 
     expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+  });
+});
+
+async function agree() {
+  const user = userEvent.setup();
+  const agreeButton = await screen.findByRole("button", { name: /i agree/i });
+  for (const box of screen.getAllByRole("checkbox")) await user.click(box);
+  await user.click(agreeButton);
+}
+
+describe("SurveyPage — consent comes before any question", () => {
+  // Regression, 2026-10-04: the homepage question card saves its answer, and /survey opened
+  // straight onto question 1, past the 18+ / terms / sensitive-data screen, while the server
+  // stamps consent on every submission.
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    __resetSurveyConsentForTests();
+    window.history.replaceState(null, "", "/survey");
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("opens the consent screen, not the questions, after the homepage card", async () => {
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    expect(await screen.findByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("opens the questions once the reader agrees, keeping the card's answer", async () => {
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    await agree();
+
+    expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(ANSWERS_STORAGE_KEY) ?? "{}").answers).toEqual(
+      expect.objectContaining({ [LANDING_PREFILL_QID]: 4 })
+    );
+    expect(localStorage.getItem(SURVEY_CONSENT_KEY)).toBeTruthy();
+  });
+
+  it("asks again when the homepage card starts a new run after a consent with no answers", async () => {
+    // Agreed, then left before answering (or someone else on this device): the card's
+    // fresh draft is a new run, and that consent was not given for it.
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-01T09:00:00.000Z");
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    expect(await screen.findByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("keeps the consent of a run in progress when the card adds its answer to it", async () => {
+    localStorage.setItem(SURVEY_CONSENT_KEY, "2026-10-01T09:00:00.000Z");
+    localStorage.setItem(
+      ANSWERS_STORAGE_KEY,
+      JSON.stringify({ answers: { "00001": "Sam" }, currentIndex: 1 })
+    );
+    saveLandingPrefill(LANDING_PREFILL_QID, 4);
+    render(<SurveyPage />);
+
+    expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+  });
+
+  it("shows consent on a refresh of the questions when this run never agreed", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "6");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+    render(<SurveyPage />);
+
+    expect(await screen.findByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
+  });
+
+  it("asks for consent before the retry screen of a run that never agreed", async () => {
+    localStorage.setItem(PENDING_COMPLETION_KEY, JSON.stringify(pendingCompletion));
+    render(<SurveyPage />);
+
+    await agree();
+
+    expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+  });
+
+  it("does not let Forward onto the questions skip consent", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    render(<SurveyPage />);
+    await screen.findByRole("button", { name: /i agree/i });
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: { surveyStep: 6 } }));
+    });
+
+    expect(screen.getByRole("button", { name: /i agree/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
   });
 });

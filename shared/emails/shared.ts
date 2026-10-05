@@ -71,6 +71,18 @@ export function renderBrandFooter(unsubscribeUrl?: string): string {
   </tr>`;
 }
 
+/**
+ * The plain-text twin of renderBrandFooter. A text-only mail app shows only the text
+ * part, which carried neither the sender's name nor the unsubscribe link.
+ */
+export function renderBrandFooterText(unsubscribeUrl?: string): string[] {
+  return [
+    "",
+    "Copyright © 2026 Applied Psychometrics UG",
+    ...(unsubscribeUrl ? [`Unsubscribe from these emails: ${unsubscribeUrl}`] : []),
+  ];
+}
+
 export interface CtaButton {
   href: string;
   label: string;

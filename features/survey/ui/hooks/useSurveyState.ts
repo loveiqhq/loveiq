@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { surveyQuestions } from "@/data/survey-data";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { SurveyAnswerValue } from "@features/survey/server/types";
 import {
   SURVEY_STATE_KEY,
@@ -137,19 +136,11 @@ export function useSurveyState() {
     clearPersistedSurveyState({ clearPendingCompletion: true });
   }, []);
 
-  const progress = useMemo(() => {
-    const total = surveyQuestions.length;
-    if (total === 0) return 0;
-    const answered = Object.keys(state.answers).filter((key) => !key.endsWith("_other")).length;
-    return Math.min(100, Math.round((answered / total) * 100));
-  }, [state.answers]);
-
   return {
     answers: state.answers,
     currentIndex: state.currentIndex,
     startedAt: state.startedAt,
     prefilled: state.prefilled,
-    progress,
     setAnswer,
     getAnswer,
     getLatestAnswers,

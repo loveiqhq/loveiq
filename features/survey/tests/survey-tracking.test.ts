@@ -68,6 +68,31 @@ describe("POST /api/survey-tracking", () => {
     mockFetchWithTimeout.mockResolvedValue({ ok: true });
   });
 
+  it("keeps a slow question's event instead of failing the whole batch", async () => {
+    // A question left open past ten minutes used to 400 the batch, losing the events
+    // sent with it (often the quit or finish event).
+    const slow = { ...validEvent(), timeSpentMs: 15 * 60_000 };
+    const res = await POST(makeRequest({ events: [validEvent(), slow] }));
+    expect(res.status).toBe(200);
+    const rows = JSON.parse(mockFetchWithTimeout.mock.calls[0]![1].body);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].time_spent_ms).toBe(15 * 60_000);
+  });
+
+  it("clamps an impossible time spent instead of refusing it", async () => {
+    const res = await POST(
+      makeRequest({
+        events: [
+          { ...validEvent(), timeSpentMs: -5 },
+          { ...validEvent(), timeSpentMs: 3 * 86_400_000 },
+        ],
+      })
+    );
+    expect(res.status).toBe(200);
+    const rows = JSON.parse(mockFetchWithTimeout.mock.calls[0]![1].body);
+    expect(rows.map((r: { time_spent_ms: number }) => r.time_spent_ms)).toEqual([0, 86_400_000]);
+  });
+
   it("returns 200 with valid batch of events", async () => {
     const res = await POST(makeRequest({ events: [validEvent()] }));
     expect(res.status).toBe(200);

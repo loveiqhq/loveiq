@@ -22,7 +22,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { chromium, devices, webkit, type Page } from "playwright";
+import { chromium, devices, webkit, type Locator, type Page } from "playwright";
 
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 
@@ -312,7 +312,6 @@ async function readScreen(page: Page): Promise<Screen> {
         .filter((e) => (e as HTMLElement).offsetParent !== null || e.getClientRects().length > 0)
         .map((e) => (e.textContent ?? "").replace(/\s+/g, " ").trim())
         .filter(Boolean);
-      const body = document.body?.innerText ?? "";
       // What is on screen right now, not the page's first lines: a report is one long page.
       // Every visible text node, so a number in a bare <span> ("0% complete") is not missed.
       const inView: string[] = [];
@@ -336,11 +335,22 @@ async function readScreen(page: Page): Promise<Screen> {
           continue;
         if (inView.at(-1) !== t) inView.push(t);
       }
-      // The survey header's "PROGRESS 12%": present on every question screen, and only there.
-      const m = /progress\s+(\d+)%/i.exec(body);
+      // The bar under every question screen, and only there: "Question n of N". Kept as
+      // the share already answered, the number the survey_progress event carries, not
+      // the bar's 15% head start.
+      const bar = document.querySelector('[role="progressbar"][aria-label="Survey progress"]');
+      const at = /Question (\d+) of (\d+)/.exec(bar?.getAttribute("aria-valuetext") ?? "");
+      // The header's "PROGRESS 12%" from before the 2026-10-04 redesign. This walk runs
+      // from main against staging.loveiq.org, which serves the staging branch; drop this
+      // once staging carries the redesign.
+      const old = at ? null : /progress\s+(\d+)%/i.exec(document.body?.innerText ?? "");
       return {
         headings,
-        progress: m ? `${m[1]}%` : null,
+        progress: at
+          ? `${Math.round(((Number(at[1]) - 1) / Number(at[2])) * 100)}%`
+          : old
+            ? `${old[1]}%`
+            : null,
         text: inView.join("\n").slice(0, 1500),
       };
     })
@@ -622,7 +632,7 @@ async function main(argv: string[]): Promise<number> {
     await page.getByRole("checkbox").nth(1).locator("div").first().click();
     await button(/i agree/i).click();
 
-    // The questions, one screen at a time. The header's progress says this is a question
+    // The questions, one screen at a time. The progress bar says this is a question
     // screen; the heading says which question, matched against this checkout's survey-data.
     const seenTypes = new Set<string>();
     /** The question id at each position, counted from 1, for what a backtrack leaves. */
@@ -1401,9 +1411,9 @@ async function answerQuestion(
       for (const label of wanted) {
         const i = labels.indexOf(label.replace(/\s+/g, " ").trim());
         if (i === -1) missing.push(label);
-        else await cards.nth(i).click();
+        else await pressChoice(page, cards.nth(i));
       }
-      if (missing.length === wanted.length) await cards.first().click();
+      if (missing.length === wanted.length) await pressChoice(page, cards.first());
       return missing.length ? `option not on screen: ${missing.join(" | ")}` : undefined;
     }
     case "country":
@@ -1424,8 +1434,22 @@ async function answerQuestion(
   }
 }
 
+/**
+ * Presses a choice, first opening the collapsed category it sits in.
+ *
+ * C9 on staging (#411) groups its topics into categories, and a closed category's panel
+ * is `inert`. Its checkboxes still have a box, so `isVisible()` says yes, but a click
+ * waits out its 30s timeout and the walk stops on C9. The panel's id is what its header
+ * button's `aria-controls` names.
+ */
+async function pressChoice(page: Page, card: Locator): Promise<void> {
+  const closed = await card.evaluate((el) => el.closest("[inert]")?.id ?? null);
+  if (closed) await page.locator(`button[aria-controls="${closed}"]`).click();
+  await card.click();
+}
+
 /** A question this checkout does not know (staging can be ahead of main): the first option. */
-async function answerGenerically(page: Page): Promise<string> {
+export async function answerGenerically(page: Page): Promise<string> {
   const radio = page.locator('[role="radio"]').first();
   if (await radio.isVisible().catch(() => false)) {
     await radio.click();
@@ -1433,7 +1457,7 @@ async function answerGenerically(page: Page): Promise<string> {
   }
   const box = page.locator('[role="checkbox"]').first();
   if (await box.isVisible().catch(() => false)) {
-    await box.click();
+    await pressChoice(page, box);
     return "first option";
   }
   const scale = page.getByRole("button", { name: "4 of 7", exact: true });

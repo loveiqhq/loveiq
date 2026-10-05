@@ -8,7 +8,9 @@ import {
   ANSWERS_STORAGE_KEY,
   SURVEY_STEP_KEY,
   clearPersistedSurveyState,
+  hasSurveyConsent,
   loadPendingCompletion,
+  recordSurveyConsent,
 } from "./hooks/surveyStorage";
 import {
   completedReportToken,
@@ -1205,7 +1207,19 @@ const ConsentScreen: FC<{
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+/**
+ * Where a visit opens. Whatever would open the questions (a draft, a pending completion, a
+ * refresh on them) opens the consent screen instead until the reader has agreed for this
+ * run. The homepage question card saves a draft before anyone has seen that screen, and
+ * those readers went straight to question 1, while the server stamps consent on every
+ * submission.
+ */
 function loadInitialStep(): number {
+  const step = loadSavedStep();
+  return step === TOTAL_STEPS + 2 && !hasSurveyConsent() ? TOTAL_STEPS + 1 : step;
+}
+
+function loadSavedStep(): number {
   if (typeof window === "undefined") return 0;
 
   try {
@@ -1304,6 +1318,10 @@ const SurveyPage: FC = () => {
       return;
     }
     if (step > 0) {
+      // A reload restores the step onto the entry it was saved from. Pushing another
+      // copy buried the questions' own entry (SurveyEngine), so the first Back after a
+      // reload landed on the same question and did nothing.
+      if (window.history.state?.surveyStep === step) return;
       window.history.pushState({ surveyStep: step }, "");
     }
   }, [step]);
@@ -1313,7 +1331,9 @@ const SurveyPage: FC = () => {
     const handlePopState = (e: PopStateEvent) => {
       isPopStateNav.current = true;
       const prevStep = e.state?.surveyStep;
-      const next = prevStep !== undefined ? prevStep : 0;
+      const saved = prevStep !== undefined ? prevStep : 0;
+      // Never onto the questions without consent for this run (see loadInitialStep).
+      const next = saved === TOTAL_STEPS + 2 && !hasSurveyConsent() ? TOTAL_STEPS + 1 : saved;
       // Only a real entry: a second history entry for the survey, which a reload on it
       // pushes, lands on step 6 FROM step 6, and must not retire the run just finished.
       if (next === TOTAL_STEPS + 2 && stepRef.current !== TOTAL_STEPS + 2) {
@@ -1348,11 +1368,13 @@ const SurveyPage: FC = () => {
     setStep(TOTAL_STEPS + 1); // jump to consent
   }, []);
 
-  const handleReturn = useCallback((clearAnswersArg?: boolean, reportToken?: string | null) => {
+  const handleReturn = useCallback((clearAnswersArg?: boolean, reportTokenArg?: string | null) => {
     // Guard against a caller wired straight to onClick: React would pass the
     // MouseEvent here, which is truthy, wiping answers and sending the user to
-    // the token-less /report ("Can't find your report") screen.
+    // the token-less /report ("Can't find your report") screen. The same event
+    // arriving as the token sent a reader to /report/[object Object] (2026-10-03).
     const clearAnswers = clearAnswersArg === true;
+    const reportToken = typeof reportTokenArg === "string" ? reportTokenArg : null;
     try {
       if (clearAnswers) {
         copySurveySessionToReportSession();
@@ -1372,7 +1394,19 @@ const SurveyPage: FC = () => {
     }
   }, []);
 
+  /**
+   * "Start Over" on the failed-submission screen: drop this run (its answers, the
+   * pending completion Retry keeps resending, and its session id, so the next run is
+   * a new submission) and begin again at the intro. It used to be wired to the
+   * success path, which wiped the answers and opened a report that did not exist.
+   */
+  const handleStartOver = useCallback(() => {
+    clearPersistedSurveyState({ clearPendingCompletion: true });
+    window.location.href = "/survey";
+  }, []);
+
   const handleAgree = useCallback(() => {
+    recordSurveyConsent();
     retireFinishedRun();
     setFinishedToken(null);
     setStep(TOTAL_STEPS + 2);
@@ -1421,6 +1455,7 @@ const SurveyPage: FC = () => {
       <SurveyEngine
         onExit={() => handleReturn()}
         onComplete={(token) => handleReturn(true, token)}
+        onStartOver={handleStartOver}
       />
     );
   }

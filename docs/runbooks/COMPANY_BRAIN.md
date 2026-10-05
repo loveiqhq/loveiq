@@ -58,8 +58,9 @@ Skills teach Claude how LoveIQ does a job, step by step, with Jarvis's tools.
 
 - **In claude.ai** (for everyone): `loveiq-copy-gate`, `loveiq-chapter-writer`,
   `loveiq-numbers` and `loveiq-research`, in `docs/claude-ai-skills/`. Build the zips with
-  `npm run skills:pack`, then upload each in claude.ai under Settings, Capabilities, Skills.
-  `PROJECT_INSTRUCTIONS.md` beside them is the text for a claude.ai Project called LoveIQ.
+  `npm run skills:pack`, then upload each in claude.ai under Organization settings, Plugins &
+  skills, Add, Upload a skill, which installs it for every member. `PROJECT_INSTRUCTIONS.md`
+  beside them is the text of the claude.ai Project LoveIQ, shared with the organization.
 - **In Claude Code** (for engineers, in this repo): `/copy-gate`, `/report-chapter`,
   `/assessment-factory` and `/jarvis-brief`, in `.claude/skills/`, with the five review
   agents in `.claude/agents/`.

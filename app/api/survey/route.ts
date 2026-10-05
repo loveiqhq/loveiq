@@ -2,7 +2,12 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
+import {
+  checkRateLimit,
+  checkCooldown,
+  getClientIp,
+  releaseCooldown,
+} from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
@@ -25,9 +30,12 @@ import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
+  fetchSubmissionBySessionId,
   isSurveyClosed,
+  SUBMIT_OUTCOME_UNKNOWN,
   submitSurveyOnce,
 } from "@features/survey/server/server";
+import { SURVEY_EMAIL_RE, tidySurveyEmail } from "@features/survey/email";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 let _resend: Resend | null = null;
@@ -50,19 +58,128 @@ function generateReportToken(): string {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * A new report link for a submission, or null. Tried twice: the link is created only
+ * here, and without one the reader's report works in this browser only (bare /report)
+ * and the report-ready email links there too.
+ */
+async function createReportToken(submissionId: number): Promise<string | null> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const token = generateReportToken();
+    try {
+      const res = await fetchWithTimeout(`${supabaseUrl}/rest/v1/report_access_token`, {
+        method: "POST",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ token, survey_submission_id: submissionId }),
+        timeoutMs: 5000,
+      });
+      if (res.ok) return token;
+      // warn-not-error: the reader still gets their submission saved.
+      logger.warn({ status: res.status, attempt }, "Failed to create report access token");
+    } catch (err) {
+      logger.warn({ err, attempt }, "Error creating report access token");
+    }
+  }
+  return null;
+}
+
+/** The submission's existing report link, or a new one if it never got one. */
+async function reportTokenFor(submissionId: number): Promise<string | null> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) return null;
+  try {
+    const res = await fetchWithTimeout(
+      `${supabaseUrl}/rest/v1/report_access_token?survey_submission_id=eq.${submissionId}&select=token&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }, timeoutMs: 5000 }
+    );
+    if (res.ok) {
+      const rows = (await res.json()) as Array<{ token?: string }>;
+      if (rows[0]?.token) return rows[0].token;
+    }
+  } catch (err) {
+    logger.warn({ err, submissionId }, "Report token lookup failed on a replayed submit");
+  }
+  return createReportToken(submissionId);
+}
+
+/**
+ * The reply for a submit whose session already has a submission (see POST). Sends
+ * nothing: the email and the Slack post went out with the first one.
+ */
+async function replyWithExistingSubmission(body: unknown): Promise<NextResponse | null> {
+  const sessionId = (body as { sessionId?: unknown } | null)?.sessionId;
+  if (typeof sessionId !== "string" || !UUID_RE.test(sessionId)) return null;
+  const existing = await fetchSubmissionBySessionId(sessionId).catch(() => null);
+  if (!existing) return null;
+  // Its first request may have died after the insert, before scoring (an admin recovery
+  // scores, a submit that landed after we stopped waiting does not), and a report without
+  // scoring is "Can't find your report". A no-op when it is scored.
+  const answers = surveyAnswersSchema.safeParse((body as { answers?: unknown }).answers);
+  if (answers.success) await ensureSubmissionScored(existing.id, answers.data as SurveyAnswers);
+  const reportToken = await reportTokenFor(existing.id);
+  if (reportToken) {
+    scheduleAfterResponse("personal-report-bootstrap", async () => {
+      await ensurePersonalReportForSubmission({ reportToken, submissionId: existing.id });
+    });
+  }
+  return NextResponse.json(
+    { success: true, submissionId: existing.id, ...(reportToken ? { reportToken } : {}) },
+    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+  );
+}
+
 const surveySchema = z.object({
-  email: z.string().email().max(320),
-  firstName: z.string().max(80),
+  // The same rule the email question applies (features/survey/email.ts), after the same
+  // tidying of pasted extras, so nothing the question let through is refused here.
+  email: z
+    .string()
+    .max(400)
+    .transform(tidySurveyEmail)
+    .pipe(z.string().max(320).regex(SURVEY_EMAIL_RE)),
+  // Below, every field a real browser can have stored gets a fallback instead of a
+  // refusal (`.catch`). At this point a 400 is a dead end: Retry resends the same stored
+  // payload, and only Start Over, which discards every answer, gets the reader out.
+  // The name box had no limit: a long name is cut rather than refused.
+  firstName: z
+    .string()
+    .max(2_000)
+    .transform((s) => s.trim().slice(0, 80))
+    .catch(""),
   // Key/value bounds and the per-question selection cap live in the schema module so
   // they can be tested directly — Next.js rejects arbitrary exports from a route file.
   answers: surveyAnswersSchema,
-  startedAt: z.string().datetime(),
-  durationMs: z.number().int().min(0).max(86_400_000),
+  startedAt: z
+    .string()
+    .datetime()
+    .catch(() => new Date().toISOString()),
+  // Clamped to between zero and a day, never rejected. Answers persist on the device, so
+  // a reader can start one day and finish the next: the old .max() returned 400 to every
+  // such reader, and three who answered every question never got a report
+  // (2026-09-21/22/28). A device clock set back makes it negative, which the .min(0)
+  // that stayed refused the same way. The clamp only keeps the averages honest.
+  durationMs: z
+    .number()
+    .int()
+    .transform((ms) => Math.min(Math.max(ms, 0), 86_400_000))
+    .catch(0),
   // 1000 (not 500) so a Google Ads click id (gclid, ~100 chars) captured
   // alongside utm params + the A/B stamps below fits without rejecting the
   // submission. Column is `text`, so the cap is only an anti-abuse bound.
-  utmTracker: z.string().max(1000).optional().nullable(),
-  sessionId: z.string().regex(UUID_RE).optional().nullable(),
+  // Over the bound, the tracker is dropped (one reader's attribution) rather than the
+  // submission refused.
+  utmTracker: z.string().max(1000).optional().nullable().catch(null),
+  // Not a UUID (the client's fallback id, from a browser without crypto.randomUUID):
+  // submitted without the session, rather than refused. The column is uuid.
+  sessionId: z.string().regex(UUID_RE).optional().nullable().catch(null),
   /**
    * PostHog `$session_id` for the browsing session that finished the survey, used
    * to deep-link the Slack notification to the session replay.
@@ -78,7 +195,8 @@ const surveySchema = z.object({
     .max(100)
     .regex(/^[A-Za-z0-9_-]+$/)
     .optional()
-    .nullable(),
+    .nullable()
+    .catch(null),
   /**
    * The order answer options were SHOWN in, per question — `{ "<qId>": ["<label>", …] }`.
    *
@@ -94,7 +212,8 @@ const surveySchema = z.object({
     .record(z.string().min(1).max(16), z.array(z.string().max(500)).max(60))
     .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many option orders" })
     .optional()
-    .nullable(),
+    .nullable()
+    .catch(null),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -222,9 +341,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
-  const parsed = surveySchema.safeParse(await request.json().catch(() => ({})));
+  const body: unknown = await request.json().catch(() => ({}));
+
+  // A replay of a submission that already landed gets that submission back instead of a
+  // refusal: a reply lost to the network, a reload mid-submit, or a draft an admin
+  // recovered. Re-checking its payload or its email cooldown could only strand the
+  // reader (a Retry inside the cooldown was refused for five minutes, shown as "we lost
+  // connection").
+  const replay = await replyWithExistingSubmission(body);
+  if (replay) return replay;
+
+  const parsed = surveySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+    // The email is the one field a reader can still get wrong. Saying so lets the screen
+    // send them back to fix it, instead of offering only Start Over.
+    const emailOnly = parsed.error.issues.every((issue) => issue.path[0] === "email");
+    return NextResponse.json(
+      { error: "Invalid input", ...(emailOnly ? { field: "email" } : {}) },
+      { status: 400 }
+    );
   }
 
   const {
@@ -389,41 +524,10 @@ export async function POST(request: Request) {
     // preserved per branch via try/catch or `.catch()`:
     //   - scoring: returns the summary or null on internal error (existing)
     //   - report-token POST: failure clears reportToken so the response omits it
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    let reportToken: string | undefined =
-      supabaseUrl && serviceKey ? generateReportToken() : undefined;
-
-    const reportTokenPromise: Promise<void> =
-      reportToken && supabaseUrl && serviceKey
-        ? fetchWithTimeout(`${supabaseUrl}/rest/v1/report_access_token`, {
-            method: "POST",
-            headers: {
-              apikey: serviceKey,
-              Authorization: `Bearer ${serviceKey}`,
-              "Content-Type": "application/json",
-              Prefer: "return=minimal",
-            },
-            body: JSON.stringify({
-              token: reportToken,
-              survey_submission_id: submissionId,
-            }),
-            timeoutMs: 5000,
-          })
-            .then((res) => {
-              if (!res.ok) {
-                // warn-not-error: best-effort token creation, route degrades
-                // gracefully by setting reportToken = undefined. The user
-                // still gets their submission saved; share URL just unset.
-                logger.warn({ status: res.status }, "Failed to create report access token");
-                reportToken = undefined;
-              }
-            })
-            .catch((err) => {
-              logger.warn({ err }, "Error creating report access token");
-              reportToken = undefined;
-            })
-        : Promise.resolve();
+    let reportToken: string | undefined;
+    const reportTokenPromise: Promise<void> = createReportToken(submissionId).then((token) => {
+      reportToken = token ?? undefined;
+    });
 
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
@@ -619,6 +723,12 @@ export async function POST(request: Request) {
       }
     );
   } catch (err) {
+    // An attempt that failed gives the cooldown back, so Retry works at once. One whose
+    // outcome is unknown keeps it: the insert may still land, and an immediate Retry
+    // would find no submission and make a second. Retry then reads "Almost There" (429)
+    // until the window passes, and the replay above returns the submission once it exists.
+    const outcomeUnknown = (err as Error).message === SUBMIT_OUTCOME_UNKNOWN;
+    if (!outcomeUnknown) await releaseCooldown(normalizedEmail, "survey-email");
     if ((err as Error).message === "supabase_not_configured") {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
     }

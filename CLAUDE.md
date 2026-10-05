@@ -286,7 +286,7 @@ Copy `.env.example` to `.env.local` and fill values:
 | `STRIPE_COUPON_50`                        | For nurture  | Stripe Coupon ID for 50%-off (e.g. `nurture_50`). Used by `/api/cron/nurture-sequence` to mint per-user 24h promotion codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `STRIPE_COUPON_100`                       | For calls    | Stripe Coupon ID for 100%-off (e.g. `nurture_100`). Used by the admin "grant post-call 100% coupon" action to mint a one-time code that unlocks the full report free after a 20-minute call. Redeemed via normal `?promo=` checkout → $0 session → existing fulfillment. Grant action returns 503 when unset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `STRIPE_CHECKOUT_ENABLED`                 | For checkout | `true` to create real Stripe sessions; default `false`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `KV_REST_API_URL`                         | For prod     | Upstash Redis REST URL — backs the rate limiter; falls back to in-memory if unset (logged as an error on production, a warning on preview deployments such as staging, which has no store of its own)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `KV_REST_API_URL`                         | For prod     | Upstash Redis REST URL — backs the rate limiter; falls back to in-memory if unset (logged as an error only on the real production site, `www.loveiq.org` or `loveiq.org`; a warning on the staging project, which has no store of its own, on both its preview and its production build of main)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `KV_REST_API_TOKEN`                       | For prod     | Upstash Redis REST token — paired with `KV_REST_API_URL`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `CRON_SECRET`                             | For crons    | Bearer token for `/api/cron/*` endpoints; required when those crons are deployed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `GITHUB_DISPATCH_TOKEN`                   | For crons    | Fine-grained GitHub token for `loveiqhq/loveiq` with only "Actions: read and write" (it can start and stop workflows, not change code or read secrets). `/api/cron/start-github-jobs` uses it every hour to start the UX verifier, probe guard, survey DB sync, health monitor, digest audit and the brain's daily jobs through `workflow_dispatch`, because GitHub's own schedule starts this repo's jobs hours late and drops some (`features/cron/server/github-jobs.ts`). Missing or expired: those jobs stop, the cron records `error`, and #prod-alerts says so. Expires yearly; see `docs/runbooks/SECURITY.md`.                                                                                                                                                                                                                                                                                                                                                               |
@@ -329,7 +329,7 @@ Copy `.env.example` to `.env.local` and fill values:
 | `GOOGLE_OAUTH_CLIENT_SECRET`              | For brain    | Paired with `GOOGLE_OAUTH_CLIENT_ID`, from the same `application_default_credentials.json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `GOOGLE_OAUTH_REFRESH_TOKEN`              | For brain    | Long-lived refresh token, exchanged for an access token per run. Scopes are fixed at login — a missing one surfaces as a 403 "insufficient authentication scopes" error, which the ingester rewrites into the command that fixes it. **Must come from a custom OAuth client in `loveiq-brain` with an Internal consent screen**; gcloud's shared client is refused the sensitive `analytics.readonly` scope ("This app is blocked"). Any plain `gcloud auth application-default login` on the machine overwrites the credential file and silently drops the extra scopes, so copy the values into `.env.local` rather than reading them from that file.                                                                                                                                                                                                                                                                                                                               |
 | `GOOGLE_OAUTH_ACCESS_TOKEN`               | No           | **Local runs only.** A ready-made Google access token, which overrides the three `GOOGLE_OAUTH_*` values above. Obtained by impersonating the `ga4-reader@loveiq-brain` service account (`gcloud auth print-access-token --impersonate-service-account=… --scopes=…analytics.readonly`) — the one route that needs no browser consent, because gcloud's shared client is **blocked** from requesting `analytics.readonly`. GA4 only: the service account is a Viewer on the GA4 property but not a user on Search Console. Lasts an hour and needs the gcloud CLI, so it can never be a deployment credential.                                                                                                                                                                                                                                                                                                                                                                        |
-| `GA4_PROPERTY_ID`                         | For brain    | GA4 **numeric** property id (GA4 Admin → Property Settings), not the `G-` measurement id. When Google Ads is linked to the property, ad cost/clicks/impressions arrive through the same report — so no Google Ads API and no developer-token approval is needed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `GA4_PROPERTY_ID`                         | For brain    | GA4 **numeric** property id (GA4 Admin → Property Settings), not the `G-` measurement id. When Google Ads is linked to the property, ad cost/clicks/impressions arrive through the same report — so the digests need no Google Ads API (only the invoice filing calls it, for the month's spend).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `SEARCH_CONSOLE_SITE`                     | For brain    | Search Console property exactly as listed there — `sc-domain:loveiq.org` for a domain property, `https://www.loveiq.org/` for a URL-prefix one. The only source of the search queries people used to find us.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.
@@ -407,9 +407,9 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 
 ### Pre-push hook standard
 
-- Pre-push runs: `npm test` (unit tests only, ~10–30s) ✅
+- Pre-push runs `npm run lint`, `npm run typecheck`, `npm test` and `npm run docs:check` (`.husky/pre-push`) ✅
 - E2E belongs in CI, NOT pre-push — too slow, blocks developer flow ❌
-- E2E now RUNS in CI (`ci.yml`, job `End-to-end (Playwright)`), on every push and PR.
+- E2E now RUNS in CI (`ci.yml`, jobs `E2E <project>`, one per browser), on pushes to `main`/`staging` and on PRs from branches in this repo, Dependabot's included (PRs from forks are skipped).
   ~6 min at 4 workers against a locally built server with NO database credentials,
   so it cannot write to production the way a local run does.
 
@@ -658,6 +658,96 @@ When working in this codebase:
 9. **Use existing utilities** - `shared/http/ratelimit.ts`, `shared/http/csrf.ts`, `features/analytics/client.ts`, `shared/observability/logger.ts`, `shared/http/circuit-breaker.ts`, `shared/http/fetch-with-timeout.ts`
 10. **Document unknowns** - If uncertain, note assumptions and which files to check
 11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `docs/plans/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `docs/runbooks/SECURITY.md`, `docs/runbooks/DEVELOPMENT.md`, `docs/architecture/*`) should remain in the repo.
+12. **Request Eman's review on every PR into `main`** - `main` deploys to production. When the work on a PR into `main` is done, request a review from Eman: `gh pr edit <number> --add-reviewer eman-cickusic`. This holds for every PR, whoever or whatever wrote it. `.github/CODEOWNERS` usually requests him when the PR opens; add him anyway, which does nothing if he is already requested. A PR opened from Eman's own account cannot request its author.
+
+### Working alongside other sessions
+
+Several people and AI sessions work on this repository at the same time, often on one
+machine: Claude Code terminals, cloud sessions, scheduled jobs and the team's own editors.
+Each rule below exists because one session once lost, reverted or shipped another's work.
+They hold for every person and every agent.
+
+**Where to work**
+
+- **Your own worktree, on your own branch.** Start from the latest `main`:
+  `git fetch origin && git worktree add -b <type>/<topic> <path> origin/main`. Never switch
+  branches, reset, stash or rebase in a checkout you did not create. Another session may be
+  working in it, and its local `main` may hold commits that are not pushed yet. On Eman's Mac
+  the main checkout `/Users/eman/loveiq` is shared like that.
+- **Leave other worktrees alone.** `git worktree list` shows them all. Never edit, reset,
+  prune or remove one you did not create. `~/.loveiq-brain` is the brain's scheduled jobs,
+  pinned to `origin/main`.
+- **A branch name nobody uses.** Check `git branch -a --list '*<topic>*'` and
+  `gh pr list --search <topic>` first. Never reuse, push to or delete a branch you did not
+  create.
+- **`node_modules`.** Tests and lint work with a symlink to the main checkout's
+  (`ln -s /Users/eman/loveiq/node_modules node_modules`). `next dev` and `next build` reject
+  that symlink: copy it with `cp -cR` instead (copy-on-write, seconds). Never run
+  `npm install` or `npm ci` in a checkout you did not create: it changes the packages under
+  other sessions' servers and tests. Never leave a second `node_modules` inside a checkout:
+  vitest collects the test files inside it.
+- **Ports and processes.** The dev server and Playwright default to port 3000. Run your own
+  server on a free port (`npx next start -p 3100` with
+  `PLAYWRIGHT_BASE_URL=http://localhost:3100`). Never build in a checkout another session's
+  server runs from (it serves from `.next`), and never stop a server or process you did not
+  start.
+
+**Git operations that destroy someone else's work**
+
+- **Never rewrite shared history.** No force-push (`--force` or `--force-with-lease`) to
+  `main`, `staging` or any branch someone else pushes to. No rebase or reset of a branch
+  another session uses. Do not count on GitHub to stop you: `main`'s protection does not bind
+  admin accounts, which is what our AI sessions push as, and `staging` has no protection at all.
+- **Re-read before any history operation.** Run `git log -1` and `git status` right before a
+  reset, amend, rebase or squash. Never trust a SHA you remember: another session may have
+  committed into the same checkout in between.
+- **Squash only on the current base.** Before `git reset --soft origin/main` and a new
+  commit, check that `git merge-base HEAD origin/main` equals `git rev-parse origin/main`.
+  If `main` moved, that squash deletes everything `main` gained since. Afterwards
+  `git diff --stat origin/main HEAD` must list only your own files.
+- **Discarding is for your own changes.** `git checkout -- <file>`, `git restore`,
+  `git stash` and `git clean` destroy uncommitted work. Use them only on files you changed,
+  in your own worktree. Commit a fix before mutation-testing it, so reverting a mutation
+  returns to your commit.
+- **Stay current by merging.** Once a branch is pushed, bring in `main` with
+  `git fetch origin && git merge origin/main`, not a rebase.
+- **Look before you push or merge.** `git fetch origin`, then
+  `git log --oneline HEAD..origin/main` shows what landed meanwhile. Two PRs that change the
+  same thing can each pass CI alone, so the second is brought up to date and checked again
+  before it merges.
+- **Delete only what you made.** After your PR merges, remove your own worktree
+  (`git worktree remove <path>`) and branch (`git branch -d <branch>`; lowercase `-d` refuses
+  an unmerged branch). GitHub keeps merged branches, so delete your remote one with
+  `gh api -X DELETE repos/loveiqhq/loveiq/git/refs/heads/<branch>`. `git push origin --delete`
+  runs the whole pre-push hook (lint, typecheck, tests, docs) in whichever checkout you run it
+  from, and in a stale checkout that fails and blocks the delete. Never `git worktree prune`,
+  `git branch -D` or delete anything you did not create.
+- **Push early.** Unpushed commits exist on one disk only, and scratch directories under
+  `/tmp` are swept by age, overnight. Push your branch whenever you stop.
+- **Tests that run `git`** must clear the `GIT_*` variables a hook exports, or they act on
+  the real repository (see `__tests__/scripts/replay-pr.test.ts`).
+
+**Shared state outside git (one copy for everyone)**
+
+- **The production database.** A migration ships in a PR. Whoever applies it to production
+  also records its ledger row, and checks first that nobody applied it already;
+  `npm run check:migration-drift` shows both directions. Bring staging forward afterwards
+  (see "Staging has its OWN database" above).
+- **Settings in Vercel, Supabase, Stripe, Resend, PostHog, CookieYes and Google.** Read the
+  current value first, change only what the task needs, never restore "what I remember",
+  and list every outside change in the PR description.
+- **Scripts that write to a live service** (any script run with `--apply`) run from a clean
+  worktree of `origin/main`, never from a feature branch: they publish whatever the working
+  tree holds. That decides only the code. The target is whatever `.env.local` points at, which
+  is production unless you changed it, and a new worktree has none until you copy one. Check
+  the target before every `--apply`, and run the script without `--apply` first if it has a
+  dry run.
+- **Scheduled jobs** (Vercel crons, GitHub Actions, the brain's launchd jobs) run what is on
+  `main`, so a merge is live at their next run.
+
+**Before you stop:** nothing you meant to keep is uncommitted, your branch is pushed, a
+finished PR has Eman requested as reviewer (rule 12), and after the merge your worktree and
+branch are removed, and nothing else.
 
 ### Verify, then audit, then audit again
 

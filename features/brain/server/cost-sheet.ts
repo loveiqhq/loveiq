@@ -24,7 +24,10 @@ export const TOOL_CATEGORIES = ["Software", "Marketing", "Books", "Other"];
 /** Vendors that bill us but never attach a PDF, so their lines are kept by hand. */
 export const NEVER_ATTACHES = [
   { sheetName: "Figma", why: "emails a receipt link, not a PDF" },
-  { sheetName: "Adwords", why: "billing doc lives in the Ads console; spend is read from GA4" },
+  {
+    sheetName: "Adwords",
+    why: "paid by card, so no invoice by email: the month's spend stands in until the invoice is entered",
+  },
   { sheetName: "Upwork - Arsalan Majid", why: "HTML summary, hourly not fixed" },
   { sheetName: "Domain - united-domains", why: "registrar mails the portfolio owner only" },
 ];

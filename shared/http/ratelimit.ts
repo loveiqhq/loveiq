@@ -9,6 +9,7 @@
  */
 
 import { Redis } from "@upstash/redis";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
 
 // Initialize Redis client from Vercel KV env vars
@@ -33,11 +34,22 @@ function getRedis(): Redis | null {
 function logMissingKvOnce(): void {
   if (missingKvLogged) return;
   missingKvLogged = true;
-  // A preview deployment (staging.loveiq.org is one) has no store of its own on purpose:
-  // the staging project's only Redis is production's, and sharing it would mix staging's
-  // counters and keys into production's. In-memory is the expected state there, not an
-  // incident; real production without a store still is one.
-  if (process.env.NODE_ENV === "production" && process.env.VERCEL_ENV !== "preview") {
+  // Only the real production project (www.loveiq.org) has a store. The staging project has
+  // none on purpose: its only Redis would be production's, and sharing it would mix staging's
+  // counters and keys into production's. In-memory is the expected state on both of that
+  // project's deployments: staging.loveiq.org, a preview, and its build of main, which is a
+  // PRODUCTION deployment because main is that project's production branch (the proof walks
+  // run there). Telling them apart by VERCEL_ENV missed the second, and its cold starts posted
+  // this as an incident eight times on 2026-10-04. The site address tells the real one apart,
+  // as it does for every cron. GitHub Actions is the other look-alike: the brain jobs run
+  // the routes there with production's address (so isProdCronHost lets them run) and no
+  // Redis, which they never needed, and this reached #brain as an incident whenever one
+  // of them used the limiter (about hourly on 2026-10-04 and 05).
+  if (
+    process.env.NODE_ENV === "production" &&
+    isProdCronHost() &&
+    process.env.GITHUB_ACTIONS !== "true"
+  ) {
     logger.error(
       "[ratelimit] KV_REST_API_URL / KV_REST_API_TOKEN missing in production — using in-memory fallback. Per-instance state will not coordinate across regions or warm containers, so rate limits may be under-enforced."
     );
@@ -185,6 +197,21 @@ export async function checkRateLimit(
  * Uses Redis SET with NX + EX for atomic check-and-set in a single command.
  * If the key exists (SET NX returns null), the cooldown hasn't elapsed.
  */
+/**
+ * Give a cooldown back. For an attempt that failed after claiming it: a reader whose
+ * submit hit a database error was otherwise refused on every Retry for the whole window,
+ * told only that the connection was lost.
+ */
+export async function releaseCooldown(key: string, bucket: string): Promise<void> {
+  const kv = getRedis();
+  if (!kv) return;
+  try {
+    await kv.del(`cd:${bucket}:${key}`);
+  } catch (err) {
+    logger.warn({ err }, "[ratelimit] Redis cooldown release failed");
+  }
+}
+
 export async function checkCooldown(
   key: string,
   bucket: string,

@@ -1,5 +1,8 @@
 # Dependabot configuration for automated dependency updates
-# This helps keep dependencies secure and up-to-date
+# This helps keep dependencies secure and up-to-date.
+#
+# Reviewers come from .github/CODEOWNERS: GitHub removed dependabot.yml's own
+# `reviewers` option in 2025. Security updates are not affected by `ignore` below.
 
 version: 2
 updates:
@@ -11,12 +14,14 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    reviewers: # Valid field - IDE may show false warning
-      - "eman-cickusic"
     labels:
       - "dependencies"
-      - "security"
-    # Group minor and patch updates together
+    # Minor and patch updates arrive as two grouped PRs. Production minors used to
+    # sit outside the patch-only group. The docs say such updates get PRs of their
+    # own; in practice they did not. With a group PR open, the scheduled run logs
+    # "Adding dependencies as handled" for every dependency of that type, then
+    # "Found no dependencies to update" (job log 2026-09-28). React 19.3, zod 4.6
+    # and other production minors never got a PR.
     groups:
       development-dependencies:
         dependency-type: "development"
@@ -26,8 +31,42 @@ updates:
       production-dependencies:
         dependency-type: "production"
         update-types:
+          - "minor"
           - "patch"
-    # Security updates always separate
+    ignore:
+      # Tailwind 4 rewrites the styling setup (the PostCSS plugin moved to
+      # @tailwindcss/postcss and utilities were renamed). That is a migration with a
+      # visual check of every page, not a version bump.
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      # ESLint 10 crashes with the plugins eslint-config-next brings (import,
+      # jsx-a11y, react and react-hooks all accept eslint 9 at most).
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # Every Stripe minor pins a newer API version, and checkout pins
+      # STRIPE_API_VERSION (features/checkout/server/stripeCheckout.ts) on purpose,
+      # so a minor alone fails the typecheck and would hold the whole production
+      # group red. Bump deliberately: SDK and constant together, then a sandbox
+      # checkout. Patches keep the API version and still arrive.
+      - dependency-name: "stripe"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # TypeScript 7 (the native compiler) cannot be loaded by typescript-eslint:
+      # `npm run lint` dies in the module loader (PR #482, 2026-10-04). Revisit
+      # once typescript-eslint and Next.js support it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # svix 2's Webhook.verify() returns nothing instead of the payload, so
+      # app/api/resend/webhook/route.ts would need to parse the body itself. That
+      # is the signature check on our email webhook; change it on purpose, with
+      # tests, not as a bot bump (PR #483, 2026-10-04).
+      - dependency-name: "svix"
+        update-types: ["version-update:semver-major"]
+      # vitest 5's @vitest/mocker declares an optional peer of msw ^2. With msw 3,
+      # CI's npm 10 refuses the lockfile ("Missing: msw@2.15.0"), so `npm ci`
+      # fails before any test runs (PR #485, 2026-10-04). Revisit when that peer
+      # range includes msw 3.
+      - dependency-name: "msw"
+        update-types: ["version-update:semver-major"]
     versioning-strategy: increase
     commit-message:
       prefix: "chore"
@@ -39,10 +78,17 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
-    reviewers: # Valid field - IDE may show false warning
-      - "eman-cickusic"
     labels:
       - "dependencies"
       - "github-actions"
+    # One PR for every action. codeql-action's init, analyze and autobuild must
+    # share a version (a split bump fails "Loaded a configuration file for version
+    # X, but running version Y"), and one PR per action filled Dependabot's default
+    # cap of five open PRs, after which it stopped proposing Actions updates
+    # (nothing from 2026-08-28 to 2026-10-04).
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     commit-message:
       prefix: "ci"

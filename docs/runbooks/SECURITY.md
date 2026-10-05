@@ -302,6 +302,12 @@ The repository uses multiple layers of automated security scanning:
 
 - **npm audit** (`--audit-level=high`): **blocks the merge** in `ci.yml` (Dependabot PRs exempted) and runs again in `security.yml`.
 - **OSV-Scanner**: pinned binary (sha256-verified), config in `.osv-scanner.toml`.
+- **Accepted advisories**: `.osv-scanner.toml` is the one list of reviewed exceptions,
+  and both scanners in `security.yml` read it: OSV natively, npm audit through
+  `scripts/npm-audit-gate.mjs`. Every entry needs a `reason`. An entry for a bug that
+  upstream has not fixed yet also gets an `ignoreUntil` date; once it passes, both
+  scanners fail again, so someone looks again. The blocking audit in `ci.yml` covers
+  production dependencies only and accepts nothing.
 - **SBOM generation**: CycloneDX format, stored as a 90-day artifact (not signed/attested).
 - **Dependency Review**: currently **disabled** (commented out in `security.yml`; requires GHAS for private repos). npm audit + OSV cover the gap.
 
@@ -442,8 +448,10 @@ Both audit steps (`ci.yml` and `security.yml`) now tell the two cases apart:
 The distinction is `metadata.vulnerabilities` in the `--json` output. An
 unreadable report is a gap in our visibility, not a verdict about our
 dependencies, and a check that is red for reasons nobody can act on is one
-people learn to scroll past. `__tests__/scripts/npm-audit-gate.test.ts` pins the
-counting against six inputs, including the three shapes an outage actually takes.
+people learn to scroll past. `security.yml` then subtracts the advisories
+accepted in `.osv-scanner.toml` (see Dependency Scanning above).
+`__tests__/scripts/npm-audit-gate.test.ts` pins the counting, including the
+three shapes an outage actually takes and an acceptance that has expired.
 
 ### Every action is pinned to a commit, never a tag
 
@@ -454,6 +462,10 @@ tag — found by hand on 2026-09-19, which is exactly the kind of check that
 should not depend on someone looking, so
 `__tests__/scripts/workflow-pinning.test.ts` now enforces it across every
 workflow. Commented-out `uses:` lines are ignored, since they execute nothing.
+The same goes for a container an action pulls: the TruffleHog action runs
+`ghcr.io/trufflesecurity/trufflehog:<version>` and defaults to `latest`, so
+`security.yml` pins `version` to a digest, which that test also checks.
+Dependabot does not update it; move it together with the action's `uses:` pin.
 
 ### Layer 1 — local pre-push gate (preventive)
 
@@ -509,8 +521,10 @@ the pipeline otherwise lacks (no SBOM signing / SLSA today).
   scheduled full-history (`fetch-depth: 0`) scan to catch older leaks.
 - **Dependency Review** is GHAS-gated and disabled; `npm audit --audit-level=high`
   (blocks merge) + OSV-Scanner cover dependency CVEs.
-- **E2E is intentionally not in CI** (deferred until the funnel stabilises) — do
-  not add it to the merge gate.
+- **E2E runs in CI but is not a required check**: `ci.yml` runs it on every push
+  to `main` and every pull request from a branch in this repository
+  (Dependabot's included; PRs from forks are skipped), and the merge gate stays
+  Lint, Test and Build.
 - **Prod deploy gating** (approvals / rollback) lives in Vercel project settings,
   not this repo — the revert runbook above is the rollback path.
 

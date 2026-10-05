@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Fast last-10-commits scan on push/PR; the weekly schedule does a
           # FULL-history scan (depth 0) to catch older leaks. Truthy value sits
@@ -35,9 +35,15 @@ jobs:
           fetch-depth: ${{ github.event_name != 'schedule' && 10 || 0 }}
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@f446421baf832d6356c42c1743d99abff52ff334 # v3.95.7
+        uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
         with:
           extra_args: --only-verified
+          # The action runs `docker run <image>:<version>`, and `version`
+          # defaults to `latest`: a movable tag, so the commit pin above would
+          # not pin the scanner that actually runs. Digest-pinned like every
+          # action. Dependabot does not update this line, so move it together
+          # with the `uses:` pin above.
+          version: 3.97.9@sha256:52e67fef4d054ecff5c2ce4b4ae376626d1ef54aa0898b53cac19c25e92e14db
 
   # SAST using Semgrep for security patterns
   sast-semgrep:
@@ -50,7 +56,7 @@ jobs:
       image: semgrep/semgrep:1.116.0@sha256:70dbbcab41ba5899d21c081c90f7a08c624dd68ff551c7f76ca9e6d74ec30a22
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Semgrep (rule packs + gate on error-severity)
         # `--config auto` previously OVERRODE the SEMGREP_RULES env (semgrep gives
@@ -90,20 +96,20 @@ jobs:
         language: ["javascript-typescript"]
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
           # Use security-extended query suite for more thorough analysis
           queries: security-extended
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: "/language:${{matrix.language}}"
           upload: false # Don't upload SARIF (requires Advanced Security)
@@ -114,12 +120,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -136,13 +142,14 @@ jobs:
           set +e
           report=$(npm audit --audit-level=high --json 2>/dev/null)
           set -e
-          high=$(printf '%s' "$report" \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=JSON.parse(s).metadata.vulnerabilities;console.log((v.high||0)+(v.critical||0))}catch{console.log("unknown")}})')
+          # Counts advisories, minus the reviewed exceptions in .osv-scanner.toml
+          # (the same list the OSV step below reads), or prints "unknown".
+          high=$(printf '%s' "$report" | node scripts/npm-audit-gate.mjs)
           if [ "$high" = "unknown" ]; then
             echo "::warning::npm audit could not be read — the registry endpoint did not answer. NOT treating this as a vulnerability."
             exit 0
           fi
-          echo "high+critical advisories: $high"
+          echo "high+critical advisories not accepted in .osv-scanner.toml: $high"
           if [ "$high" -gt 0 ]; then
             npm audit --audit-level=high || true
             echo "::error::$high high or critical advisory(ies)"
@@ -189,12 +196,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -221,12 +228,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -330,8 +337,8 @@ jobs:
 
           echo "✅ No secrets found in build output"
 
-  # NOTE: Playwright E2E tests (e2e/) are kept intact for local use and will be
-  # re-added to CI when the survey feature launches with proper test coverage.
+  # Playwright E2E runs in ci.yml (job `e2e`), on every push to main and every
+  # pull request from this repository, Dependabot's included.
 
   # Custom security rules check
   custom-security-rules:
@@ -339,7 +346,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check API route security patterns
         run: |
