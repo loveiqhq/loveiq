@@ -1861,7 +1861,8 @@ the same as "as fast as possible".
   set. The walk budget is 65s (40s until 2026-10-05, when the crawl alone had grown
   to fill it), so a request that starts just inside it, with its one capped retry
   (up to 35s) and the tail (up to ~18s), still ends under the 120s ceiling. A crawl the clock cuts short is not an error while the deletion sweep
-  has run in the last 26 hours; past that it fails and alerts #brain.
+  has run in the last 26 hours; past that, or when the sweep's state cannot be read,
+  it fails and alerts #brain.
 - **Search Console stays nightly because it genuinely lags.** Probed on 2026-08-29,
   its newest available day was 2026-08-26 — three days back. Asking every 15 minutes
   would refetch identical numbers 96 times a day. For GSC alone, nightly IS live.
