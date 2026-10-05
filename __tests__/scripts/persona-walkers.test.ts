@@ -2,7 +2,7 @@
  * The persona walkers (scripts/walkers/): the answers each persona gives, which walks run
  * tonight, what a walk proves on its own, and what the judge may do and post.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,7 +38,10 @@ import {
   redact,
   MAIN_ON_STAGING,
   PROOF_PAGE_SCRIPT,
+  stoppedAtOf,
   walkableOrigin,
+  WIZARD_FORWARD,
+  WIZARD_LAST,
   type Walk,
 } from "../../scripts/walkers/walk";
 
@@ -165,6 +168,40 @@ describe("a walk", () => {
     // The PRODUCTION project's build of main has production's settings: never.
     expect(walkableOrigin("https://loveiq-web-git-main-loveiq.vercel.app", false)).toBe(false);
     expect(walkableOrigin("http://loveiq-staging-git-main-loveiq.vercel.app", false)).toBe(false);
+  });
+
+  it("gets through the pre-report slides by every name their button has", () => {
+    // Main's own names, read from the wizard, so renaming them there fails here first.
+    const wizard = readFileSync(
+      join(process.cwd(), "features/survey/ui/PreReportWizard.tsx"),
+      "utf8"
+    );
+    const label = /slideIndex >= slides\.length - 1 \? "([^"]+)" : "([^"]+)"/.exec(wizard);
+    expect(label, "the wizard's forward button names its last slide").not.toBeNull();
+    const [, last, next] = label!;
+    expect(WIZARD_FORWARD.test(next!)).toBe(true);
+    expect(WIZARD_FORWARD.test(last!)).toBe(true);
+    expect(WIZARD_LAST.test(last!)).toBe(true);
+    expect(WIZARD_LAST.test(next!)).toBe(false);
+    // The staging branch's last slide since 2026-10-01, which stopped every walk there.
+    expect(WIZARD_FORWARD.test("Continue to your report")).toBe(true);
+    expect(WIZARD_LAST.test("Continue to your report")).toBe(true);
+  });
+
+  it("says what it was waiting for when it stops", () => {
+    const err = new Error(
+      "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /view your report/i }).first()\n"
+    );
+    expect(stoppedAtOf(err)).toBe(
+      "locator.click: Timeout 30000ms exceeded. (waiting for getByRole('button', { name: /view your report/i }).first())"
+    );
+    expect(stoppedAtOf(new Error('stuck on "What is your name?"'))).toBe(
+      'stuck on "What is your name?"'
+    );
+    // What reaches the public log is redacted, waiting-for part included.
+    expect(
+      stoppedAtOf(new Error("timeout\n  - waiting for navigation to /report/rpt_ABC-123"))
+    ).toBe("timeout (waiting for navigation to /report/<token>)");
   });
 
   it("recognises every question by the words of its heading", () => {

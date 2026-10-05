@@ -56,6 +56,13 @@ export const PLAN_TITLE: Record<Plan, RegExp> = {
   core: /all your core archetypes/i,
   all_reports: /for you (?:&|and) your partner/i,
 };
+/**
+ * The pre-report wizard's forward button, and its last slide's. That last button is "View
+ * your report" on main and "Continue to your report" on the staging branch (since 1 October
+ * 2026); knowing only main's name, every walk on staging stopped there from 2 to 5 October.
+ */
+export const WIZARD_FORWARD = /continue to next slide|view your report|continue to your report/i;
+export const WIZARD_LAST = /view your report|continue to your report/i;
 /** Each plan's button on the paywall. */
 const PLAN_CTA: Record<Plan, RegExp> = {
   full_report: /^unlock my report$/i,
@@ -148,6 +155,18 @@ export function findQuestion(headings: string[]): SurveyQuestion | null {
  * post, with the tokens taken out: report tokens, Stripe sessions, and every query string.
  * A navigation error's first line can carry the whole URL of the return page.
  */
+/**
+ * Why a walk stopped, for the log and the night's message: Playwright's first line, plus
+ * what it was waiting for. The first line alone ("locator.click: Timeout 30000ms exceeded.")
+ * hid for four nights which button was missing.
+ */
+export function stoppedAtOf(err: unknown): string {
+  const message = String((err as Error)?.message ?? err);
+  const waitingFor = /waiting for (.+)/.exec(message)?.[1]?.trim();
+  const first = message.split("\n")[0]!;
+  return redact(waitingFor ? `${first} (waiting for ${waitingFor})` : first).slice(0, 200);
+}
+
 export function redact(text: string): string {
   return text
     .replace(/(https?:\/\/[^\s?"')]+|\/[\w./-]*)\?[^\s"')]*/g, "$1")
@@ -777,13 +796,11 @@ async function main(argv: string[]): Promise<number> {
 
     // Processing, then the pre-report slides, then the report.
     await record("processing");
-    const wizard = page
-      .getByRole("button", { name: /continue to next slide|view your report/i })
-      .first();
+    const wizard = page.getByRole("button", { name: WIZARD_FORWARD }).first();
     await wizard.waitFor({ state: "visible", timeout: 90_000 });
     for (let i = 1; i <= 8 && !page.url().includes("/report/"); i++) {
       await record(`pre-report-${i}`);
-      const finalSlide = await visible(/view your report/i);
+      const finalSlide = await visible(WIZARD_LAST);
       await wizard.click();
       if (finalSlide) break;
       await page.waitForTimeout(900);
@@ -1352,7 +1369,7 @@ async function main(argv: string[]): Promise<number> {
     walk.finished = true;
     return 0;
   } catch (err) {
-    walk.stoppedAt = redact(String((err as Error).message).split("\n")[0]!).slice(0, 200);
+    walk.stoppedAt = stoppedAtOf(err);
     await record("failed").catch(() => {});
     // What a screen reader would have been given at the point the walk gave up.
     await page
