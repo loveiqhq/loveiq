@@ -16,16 +16,17 @@
  * with no code change and nobody having to remember.
  *
  * `paywall` is absent by construction: not in CHART_AXES, and the RPC does not
- * emit it either. `survey` and `pricing` are absent differently and the
- * distinction is worth keeping — both ARE still emitted by the RPC, and are
- * dropped purely because CHART_AXES does not list them. Extra rows for an
- * unlisted axis are filtered by `rowsForAxis`, so they cost nothing; do not take
- * the paywall sentence to mean an unlisted axis cannot arrive in the data. All
- * three experiments concluded, so a chart would be inventing a test that is not
- * running.
+ * emit it either. `survey` is absent differently and the distinction is worth
+ * keeping — it IS still emitted by the RPC, and is dropped purely because
+ * CHART_AXES does not list it. Extra rows for an unlisted axis are filtered by
+ * `rowsForAxis`, so they cost nothing; do not take the paywall sentence to mean an
+ * unlisted axis cannot arrive in the data. Both of those experiments concluded, so
+ * a chart would be inventing a test that is not running. `pricing` is back since
+ * Pricing 3.0 (A3 vs B3), on its own window.
  */
 
 import { computeRate } from "@features/admin/server/digest-metrics";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 import { armLabel, AXIS_TITLES, isKnownArm } from "@features/attribution/server/labels";
 import {
   formatSignalSummary,
@@ -37,7 +38,7 @@ import {
 /** The axes that are actively randomised. Deliberately NOT derived from
  *  AXIS_TITLES, which also contains the CONCLUDED paywall and survey-theme axes —
  *  a keys() loop over that is exactly how a dead experiment gets charted. */
-export const CHART_AXES = ["landing"] as const;
+export const CHART_AXES = ["landing", "pricing"] as const;
 export type ChartAxis = (typeof CHART_AXES)[number];
 
 export interface AxisFunnelRow {
@@ -62,6 +63,12 @@ export const AXIS_VALID_FROM: Record<ChartAxis, { day: string; why: string } | n
   landing: {
     day: "2026-08-21",
     why: "the current two versions only started running against each other on 21 Aug",
+  },
+  // Pricing 3.0. A3/B3 are new arm names, but the launch re-priced every reader who
+  // had not bought yet, so readers who finished before it carry a 3.0 arm too.
+  pricing: {
+    day: PRICING_3_LAUNCH_DAY,
+    why: "Pricing 3.0's two price lists only started on its launch day",
   },
 };
 

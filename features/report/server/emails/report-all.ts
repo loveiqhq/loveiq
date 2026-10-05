@@ -72,7 +72,7 @@ export function reportAllEmail({
   <tr>
     <td style="padding:24px 32px 8px;">
       <h1 style="margin:0; font-family:${EMAIL_FONT}; font-size:26px; font-weight:600; line-height:1.35; color:#000000; letter-spacing:-0.3px;">
-        You went deeper. Here&rsquo;s what you unlocked.
+        You&rsquo;ve unlocked all 14 reports.
       </h1>
     </td>
   </tr>

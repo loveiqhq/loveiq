@@ -1,11 +1,9 @@
 import {
   getPricingBucketsForPlan,
+  type ReportPriceQuotes,
   type ReportPriceQuoteSnapshot,
 } from "@features/pricing/logic/reportPricing";
-import {
-  REPORT_PURCHASE_PLAN_IDS,
-  type ReportPurchasePlanId,
-} from "@features/checkout/server/reportPurchase";
+import { OFFERED_REPORT_PURCHASE_PLAN_IDS } from "@features/checkout/server/reportPurchase";
 
 /**
  * Undiscounted price quotes for the staging preview, and ONLY for it.
@@ -25,13 +23,14 @@ import {
  * preview shows is therefore a true LIST price — the most a reader would ever be
  * asked — not an invented one. Every remaining field is a neutral placeholder, and
  * `id: 0` is inert because the preview's checkout callback does not call Stripe.
+ *
+ * Pricing 3.0 has two lists, so the preview shows arm A3's: the prices the paygate
+ * frames are drawn with (Figma 842:584 / 963:6).
  */
-export function buildPreviewQuotes(
-  now = new Date()
-): Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> {
+export function buildPreviewQuotes(now = new Date()): ReportPriceQuotes {
   const stamp = now.toISOString();
-  const entries = REPORT_PURCHASE_PLAN_IDS.map((plan) => {
-    const bucket = getPricingBucketsForPlan(plan)[0]!;
+  const entries = OFFERED_REPORT_PURCHASE_PLAN_IDS.map((plan) => {
+    const bucket = getPricingBucketsForPlan(plan).find((entry) => entry.code === "A3")!;
     const price = bucket.startingCents;
     return [
       plan,
@@ -39,7 +38,7 @@ export function buildPreviewQuotes(
         id: 0,
         plan,
         currency: "EUR",
-        experimentGroup: "B",
+        experimentGroup: "A3",
         basePriceBucket: bucket.code,
         basePriceCents: price,
         msrpCents: bucket.msrpCents,
@@ -71,5 +70,5 @@ export function buildPreviewQuotes(
     ] as const;
   });
 
-  return Object.fromEntries(entries) as Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>;
+  return Object.fromEntries(entries) as ReportPriceQuotes;
 }

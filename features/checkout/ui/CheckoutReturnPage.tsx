@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FC } from "react";
 import { useRouter } from "next/navigation";
 import {
-  getReportPurchasePlan,
+  getReportPurchasePlanTitle,
   getReportReturnHref,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
@@ -42,6 +42,8 @@ type ReturnState =
     };
 
 interface Props {
+  /** Where on the report the checkout started; handed back so it opens there. */
+  anchor?: string | null;
   archetype?: string | null;
   planId: ReportPurchasePlanId;
   sessionId?: string | null;
@@ -53,13 +55,14 @@ function isSuccessfulPaymentStatus(value: string | null) {
 }
 
 const CheckoutReturnPage: FC<Props> = ({
+  anchor = null,
   archetype = null,
   planId,
   sessionId = null,
   token = null,
 }) => {
   const router = useRouter();
-  const plan = getReportPurchasePlan(planId);
+  const planTitle = getReportPurchasePlanTitle(planId);
   const trackedTransactionIdRef = useRef<string | null>(null);
   const [state, setState] = useState<ReturnState>(
     sessionId
@@ -74,8 +77,15 @@ const CheckoutReturnPage: FC<Props> = ({
   );
   const archetypeSlug = archetype ? toArchetypeSlug(archetype) : null;
   const baseReportHref = getReportReturnHref(token);
-  const reportHrefWithArchetype = archetypeSlug
-    ? `${baseReportHref}?archetype=${encodeURIComponent(archetypeSlug)}`
+  const reportQuery = new URLSearchParams();
+  if (archetypeSlug) reportQuery.set("archetype", archetypeSlug);
+  // The report reads `anchor` once, scrolls the reader back to it and drops it.
+  if (anchor) reportQuery.set("anchor", anchor);
+  // `.toString()`, not `.size`: Safari before 17 has no `size`, and an undefined
+  // there would drop the archetype from every return.
+  const reportQueryString = reportQuery.toString();
+  const reportHrefWithArchetype = reportQueryString
+    ? `${baseReportHref}?${reportQueryString}`
     : baseReportHref;
   const backHref = reportHrefWithArchetype;
 
@@ -211,7 +221,7 @@ const CheckoutReturnPage: FC<Props> = ({
     }
 
     trackedTransactionIdRef.current = state.purchaseAnalytics.transaction_id;
-    trackReportPurchase({ ...state.purchaseAnalytics, item_name: plan.title });
+    trackReportPurchase({ ...state.purchaseAnalytics, item_name: planTitle });
 
     // Persist a durable "paywall_unlocked" event to analytics_event so the
     // admin submission funnel can show the conversion as a timestamp +
@@ -227,7 +237,7 @@ const CheckoutReturnPage: FC<Props> = ({
         state.purchaseAnalytics.transaction_id
       );
     }
-  }, [isPaidAndComplete, state, plan.title, planId, token]);
+  }, [isPaidAndComplete, state, planTitle, planId, token]);
 
   useEffect(() => {
     if (!canReturnToUnlockedReport) {
@@ -254,14 +264,17 @@ const CheckoutReturnPage: FC<Props> = ({
         </Link>
 
         <div className="checkout-return">
-          <p className="checkout-return__eyebrow">{plan.title}</p>
+          {/* What was bought. The journey's frames (1382:1210–1212) leave it out, but the
+              nightly persona walks read the plan off this page (scripts/walkers/walk.ts). */}
+          <p className="checkout-return__eyebrow">{planTitle}</p>
           <h1 className="checkout-return__title">Checkout status</h1>
 
           {state.status === "loading" ? (
             <p className="checkout-return__copy">{state.message}</p>
           ) : isRedirecting ? (
             <p className="checkout-return__copy">
-              Payment complete. Your report is unlocked. Redirecting you now…
+              <strong className="checkout-return__done">Payment complete.</strong> Your report is
+              unlocked. Redirecting you now…
             </p>
           ) : state.status === "ready" && isPaidAndComplete ? (
             <>

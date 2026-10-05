@@ -21,7 +21,8 @@ deliberately left behind (the forced paywall and the urgency countdown).
 - `ui/report.css` — the whole report stylesheet, split out of `app/globals.css` by
   `5faa2a2c`. Carries BOTH versions' rules; also imported by `app/practice-preview`.
 - `ui/reportPlaceholders.ts` — `{{USER_NAME}}`-style substitution, shared by both.
-- `ui/ReportPricingModal.tsx` — paywall modal.
+- `ui/ReportPricingModal.tsx` + `ui/paygate.css` — the Pricing 3.0 paygate (Figma 842:584 phone, 963:6 desktop).
+- `ui/unlockAnchor.ts` — returns a buyer to the spot they paid from, through Stripe's success and cancel URLs.
 - `ui/ShareReportModal.tsx`, `ui/SharedViewerBanner.tsx`, `ui/ShareVerifyGate.tsx` — share flow.
 - `ui/hooks/` — `useReportData`, `useSectionFeedback` (a thumb saves the rating at once; the
   message is optional), `useReportShares`, `useReportEngagementTimers`, `useRevealOnView` (2.0's

@@ -6,8 +6,7 @@ import {
   finalizeReportSession,
   getReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
-import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 
 export interface ReportPracticeTendencyRowData {
   practice: string;
@@ -52,7 +51,7 @@ export interface ReportData {
     currentSexualSatisfaction: number | null;
     importanceOfSex: number | null;
   } | null;
-  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  pricingQuotes: ReportPriceQuotes | null;
   unlockedArchetypes: string[];
   /**
    * Per-archetype tier the user holds: `{ "Sage": "essentials", "Lover":

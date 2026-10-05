@@ -7,6 +7,7 @@ import {
   REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
+import { activeArms } from "@features/attribution/server/labels";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -17,7 +18,7 @@ const querySchema = z.object({
 
 interface PricingMetricsRpcRow {
   plan: ReportPurchasePlanId;
-  experiment_group: "A" | "B";
+  experiment_group: string;
   pricing_cluster_id: string;
   base_price_bucket: string;
   country_tier: string;
@@ -143,7 +144,12 @@ export async function GET(request: Request) {
       }
     );
 
-    const experimentGroups = ["A", "B"].map((experimentGroup) => {
+    // The live arms always (Pricing 3.0's A3/B3), then any other group the window
+    // holds: the 2.x A and B are on the rows of everyone who bought before it.
+    const experimentGroupIds = [
+      ...new Set([...activeArms("pricing"), ...clusters.map((c) => c.experimentGroup)]),
+    ];
+    const experimentGroups = experimentGroupIds.map((experimentGroup) => {
       const groupClusters = clusters.filter(
         (cluster) => cluster.experimentGroup === experimentGroup
       );

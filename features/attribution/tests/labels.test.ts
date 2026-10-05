@@ -31,7 +31,9 @@ describe("arm labels", () => {
     // pricing 2.1 inverted on 2026-08-24 without anything failing.
     expect(armLabel("pricing", "A").long).toBe("Pricing: group A");
     expect(armLabel("pricing", "B").long).toBe("Pricing: group B");
-    for (const arm of ["A", "B"] as const) {
+    expect(armLabel("pricing", "A3").long).toBe("Pricing 3.0: list A");
+    expect(armLabel("pricing", "B3").long).toBe("Pricing 3.0: list B");
+    for (const arm of ["A", "B", "A3", "B3"] as const) {
       for (const field of ["short", "long"] as const) {
         expect(armLabel("pricing", arm)[field]).not.toMatch(/lower|higher/i);
       }
@@ -43,7 +45,17 @@ describe("arm labels", () => {
   it("never uses the raw arm code in a label", () => {
     // The whole point: a non-technical reader must not meet "white_prev".
     for (const axis of ["landing", "survey", "pricing", "paywall"] as ExperimentAxis[]) {
-      for (const arm of ["white", "white_prev", "control", "dark", "A", "B", "treatment"]) {
+      for (const arm of [
+        "white",
+        "white_prev",
+        "control",
+        "dark",
+        "A",
+        "B",
+        "A3",
+        "B3",
+        "treatment",
+      ]) {
         const label = armLabel(axis, arm);
         if (label.short === "Unknown") continue;
         expect(label.long).not.toContain("white_prev");
@@ -74,11 +86,13 @@ describe("arm labels", () => {
 
   it("excludes retired arms from the active set used for charts", () => {
     expect(activeArms("landing")).toEqual(["white", "white_prev"]);
-    // Arm A retired 2026-08-31 when the higher-priced arm was dropped, so B is
-    // the only group still stamped on a new quote.
-    expect(activeArms("pricing")).toEqual(["B"]);
-    expect(armLabel("pricing", "A").retired).toBe(true);
-    expect(isKnownArm("pricing", "A")).toBe(true);
+    // Pricing 3.0 stamps every new quote A3 or B3. A (dropped 2026-08-31) and B (the
+    // 2.x list 3.0 replaced) are retired but still KNOWN, for the rows bought under them.
+    expect(activeArms("pricing")).toEqual(["A3", "B3"]);
+    for (const arm of ["A", "B"]) {
+      expect(armLabel("pricing", arm).retired).toBe(true);
+      expect(isKnownArm("pricing", arm)).toBe(true);
+    }
     // Dark is retired (the theme test concluded 2026-08-25 in favour of white), so
     // it must not read as an arm we still assign.
     expect(activeArms("survey")).toEqual(["white"]);
