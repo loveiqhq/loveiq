@@ -84,6 +84,26 @@ describe("usePartialSave", () => {
     expect(mockSendBeacon).toHaveBeenCalledWith("/api/survey-partial", expect.any(Blob));
   });
 
+  it("saves nothing more once the run is submitted, by fetch or by beacon", () => {
+    // The beacon fired on the way to the report and re-saved every answer of a finished
+    // run into the row the submit had just deleted (and counted it as abandoned).
+    const { result } = renderHook(() =>
+      usePartialSave({ "00000": "alice@test.com" }, 3, "2026-01-01T00:00:00.000Z", null, true)
+    );
+    act(() => {
+      result.current.savePartial();
+    });
+    Object.defineProperty(document, "visibilityState", {
+      value: "hidden",
+      writable: true,
+      configurable: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockSendBeacon).not.toHaveBeenCalled();
+  });
+
   it("includes utmTracker when provided", () => {
     const utm = JSON.stringify({ utm_source: "google" });
     const { result } = renderHook(() =>

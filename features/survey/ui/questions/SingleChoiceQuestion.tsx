@@ -54,6 +54,8 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
           value={otherText ?? ""}
           onChange={(e) => onOtherTextChange?.(e.target.value)}
           placeholder="Please specify…"
+          // The server keeps 1000 characters; more was refused at the final submit.
+          maxLength={500}
           className={`w-full border-b-2 border-[rgba(254,104,57,0.2)] bg-transparent pb-3 pt-2 font-sans text-[18px] focus:border-[rgba(254,104,57,0.4)] focus:outline-none ${
             white
               ? "text-[#161021] placeholder:text-black/30"

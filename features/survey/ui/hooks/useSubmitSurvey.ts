@@ -12,12 +12,37 @@ import { orderedOptions } from "../questionOrder";
 import { getSessionId, rememberCompletedReport, setReportSessionId } from "./surveySession";
 import {
   clearPendingCompletion,
+  clearPersistedSurveyState,
   loadPendingCompletion,
   savePendingCompletion,
   type PendingSurveyCompletion,
 } from "./surveyStorage";
+import { copySurveySessionToReportSession } from "./surveySession";
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
+
+/**
+ * Why the last submit failed, so the screen says what is true instead of "we lost
+ * connection" for every refusal, and offers what can actually help.
+ */
+export type SubmitErrorKind = "connection" | "email" | "answers" | "busy" | "paused";
+
+/**
+ * A stalled request (a phone moving from Wi-Fi to mobile data) used to leave the
+ * processing screen at 95% with no way on. Past this it is an error with Retry, and a
+ * submit that did land meanwhile comes back on Retry as that same submission.
+ */
+export const SUBMIT_TIMEOUT_MS = 30_000;
+
+async function errorKindOf(res: Response): Promise<SubmitErrorKind> {
+  if (res.status === 429) return "busy";
+  if (res.status === 409) return "paused";
+  if (res.status === 400) {
+    const body = (await res.json().catch(() => null)) as { field?: string } | null;
+    return body?.field === "email" ? "email" : "answers";
+  }
+  return "connection";
+}
 
 /**
  * The order this respondent was shown the options in, for every randomised question
@@ -70,6 +95,7 @@ function posthogSessionId(): string | null {
 
 export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
+  const [errorKind, setErrorKind] = useState<SubmitErrorKind | null>(null);
   const [reportToken, setReportTokenState] = useState<string | null>(null);
   // Captured from the /api/survey response so SurveyEngine can pre-set the
   // analytics submission context (window.__loveiqReportSubmissionId) BEFORE
@@ -114,6 +140,9 @@ export function useSubmitSurvey() {
       if (status === "submitting") return;
 
       setStatus("submitting");
+      setErrorKind(null);
+      const controller = typeof AbortController === "function" ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), SUBMIT_TIMEOUT_MS) : null;
 
       // Read once: two calls could straddle a PostHog session rollover.
       const replaySessionId = posthogSessionId();
@@ -137,6 +166,7 @@ export function useSubmitSurvey() {
             ...(replaySessionId ? { posthogSessionId: replaySessionId } : {}),
             ...(Object.keys(optionOrder).length > 0 ? { optionOrder } : {}),
           }),
+          ...(controller ? { signal: controller.signal } : {}),
         });
 
         if (res.ok) {
@@ -164,6 +194,11 @@ export function useSubmitSurvey() {
             /* token extraction is best-effort */
           }
           syncPendingCompletion(null);
+          // Here rather than in the engine: a reader who pressed Back while this was in
+          // flight has no engine left to run its cleanup, and the finished draft it left
+          // behind put the next visit onto a processing screen that never finished.
+          copySurveySessionToReportSession();
+          clearPersistedSurveyState({ clearPendingCompletion: true, clearSurveySession: false });
           /**
            * Identify on submit. distinct_id is the lower-cased email, which is
            * exactly what the server-side purchase uses
@@ -196,9 +231,13 @@ export function useSubmitSurvey() {
           return;
         }
 
+        setErrorKind(await errorKindOf(res));
         setStatus("error");
       } catch {
+        setErrorKind("connection");
         setStatus("error");
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     },
     [status, syncPendingCompletion]
@@ -256,5 +295,6 @@ export function useSubmitSurvey() {
     reportToken,
     submissionId,
     status,
+    errorKind,
   };
 }

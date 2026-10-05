@@ -24,6 +24,26 @@ describe("OpenResponseQuestion", () => {
     expect(screen.getByPlaceholderText("Type your answer…")).toBeInTheDocument();
   });
 
+  it("stops the name at the 80 characters the server keeps", () => {
+    // Over 80 used to be refused at the final submit, 56 questions later, on every Retry.
+    const name = makeOpenQuestion({ qId: "00001", question: "What is your name?" });
+    render(<OpenResponseQuestion question={name} value={null} onChange={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveAttribute("maxLength", "80");
+  });
+
+  it("flags an email the server would refuse, at the question", () => {
+    const email = makeOpenQuestion({ qId: "00000", question: "Email?", inputType: "email" });
+    render(
+      <OpenResponseQuestion
+        question={email}
+        value="na..me@gmail.com"
+        onChange={vi.fn()}
+        forceValidation
+      />
+    );
+    expect(screen.getByText(/doesn.t look like a valid email/i)).toBeInTheDocument();
+  });
+
   it("uses custom placeholder when provided", () => {
     const q = { ...baseQuestion, placeholder: "Enter your email" };
     render(<OpenResponseQuestion question={q} value={null} onChange={vi.fn()} />);

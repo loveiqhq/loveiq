@@ -190,6 +190,21 @@ export async function checkRateLimit(
  * Uses Redis SET with NX + EX for atomic check-and-set in a single command.
  * If the key exists (SET NX returns null), the cooldown hasn't elapsed.
  */
+/**
+ * Give a cooldown back. For an attempt that failed after claiming it: a reader whose
+ * submit hit a database error was otherwise refused on every Retry for the whole window,
+ * told only that the connection was lost.
+ */
+export async function releaseCooldown(key: string, bucket: string): Promise<void> {
+  const kv = getRedis();
+  if (!kv) return;
+  try {
+    await kv.del(`cd:${bucket}:${key}`);
+  } catch (err) {
+    logger.warn({ err }, "[ratelimit] Redis cooldown release failed");
+  }
+}
+
 export async function checkCooldown(
   key: string,
   bucket: string,
