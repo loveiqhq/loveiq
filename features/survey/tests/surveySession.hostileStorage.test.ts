@@ -109,4 +109,25 @@ describe("getSessionId under hostile storage", () => {
       restore();
     }
   });
+
+  // The draft's id is also kept in localStorage. A browser that allows sessionStorage but
+  // throws on localStorage must keep its perfectly good sessionStorage id (22f8e5c9).
+  it("keeps the sessionStorage id when localStorage throws", () => {
+    const real = window.localStorage;
+    const boom = () => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => ({ getItem: boom, setItem: boom, removeItem: boom, clear: boom, key: boom }),
+    });
+    try {
+      const a = getSessionId();
+      expect(a).toMatch(UUID_ISH);
+      expect(window.sessionStorage.getItem("loveiq-survey-session")).toBe(a);
+      expect(getSessionId()).toBe(a);
+    } finally {
+      Object.defineProperty(window, "localStorage", { configurable: true, value: real });
+    }
+  });
 });

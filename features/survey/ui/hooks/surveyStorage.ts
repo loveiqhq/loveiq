@@ -1,7 +1,7 @@
 "use client";
 
 import { GLOBAL_UTM_KEY } from "@shared/url/utm";
-import { SURVEY_SESSION_KEY } from "./surveySession";
+import { SURVEY_SESSION_KEY, forgetSessionMirror } from "./surveySession";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { UTM_STORAGE_KEY } from "./useUtmCapture";
 
@@ -65,7 +65,11 @@ export function saveLandingPrefill(qId: string, value: number): void {
     const isFreshDraft = Object.keys(answers).length === 0 && !base.currentIndex;
     // A fresh draft is a new run, and consent belongs to a run: one given and then left
     // with no answers (or by someone else on a shared device) must not carry over to it.
-    if (isFreshDraft) forgetSurveyConsent();
+    if (isFreshDraft) {
+      forgetSurveyConsent();
+      // Same for a session id left by an earlier run: the new draft must not adopt it.
+      forgetSessionMirror();
+    }
 
     localStorage.setItem(
       SURVEY_STATE_KEY,
@@ -168,6 +172,10 @@ export function clearPersistedSurveyState(options?: {
       localStorage.removeItem(PENDING_COMPLETION_KEY);
     }
     sessionStorage.removeItem(SURVEY_STEP_KEY);
+    // The draft's id goes with the draft, whatever happens to the tab's: kept after a
+    // submit, it was adopted by the next run started from the homepage card in a new tab,
+    // and the server answered that run with the finished one's submission (#375).
+    forgetSessionMirror();
     if (options?.clearSurveySession !== false) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
     }

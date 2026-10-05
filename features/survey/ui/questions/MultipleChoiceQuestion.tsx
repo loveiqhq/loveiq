@@ -8,6 +8,9 @@ import { getOptionExplanation } from "./getOptionExplanation";
 import { useOrderedOptions } from "./useOrderedOptions";
 import { useSurveyTheme } from "../SurveyThemeContext";
 
+/** An answer that means "none of the above". */
+export const isExclusive = (option: string) => /^none of these\b/i.test(option);
+
 interface MultipleChoiceQuestionProps {
   question: SurveyQuestion;
   value: string[] | null;
@@ -42,13 +45,22 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
       return;
     }
 
-    if (typeof maxSelections === "number" && selected.length >= maxSelections) {
+    // "None of these" and any other pick exclude each other: both together was a
+    // contradiction the survey stored.
+    if (isExclusive(option)) {
+      setAttemptedOverLimit(false);
+      onChange([option]);
+      return;
+    }
+    const others = selected.filter((v) => !isExclusive(v));
+
+    if (typeof maxSelections === "number" && others.length >= maxSelections) {
       setAttemptedOverLimit(true);
       return;
     }
 
     setAttemptedOverLimit(false);
-    onChange([...selected, option]);
+    onChange([...others, option]);
   };
 
   const white = useSurveyTheme() === "white";
@@ -64,7 +76,8 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
           aria-live="polite"
           className="font-sans text-[13px] font-medium text-[#ef4444]"
         >
-          You can select up to {maxSelections} options. Deselect one to choose another.
+          You can select up to {maxSelections} {maxSelections === 1 ? "option" : "options"}.
+          Deselect one to choose another.
         </p>
       )}
 

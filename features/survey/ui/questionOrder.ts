@@ -80,6 +80,13 @@ function mulberry32(seed: number): () => number {
  * Pure and total: returns a permutation of the input — same length, same members, no
  * duplicates — so callers can treat it as a reordering and nothing else.
  */
+/**
+ * Answers that stay at the bottom of a shuffled list: "None of these", "Something else",
+ * "Other", "Nothing major…". Shuffled in among the rest they read as one more option, and
+ * a reader scanning for "none" has to read every line to find it.
+ */
+const ANCHORED = /^(none of these|nothing major|something else|other)\b/i;
+
 export function orderedOptions(question: SurveyQuestion, sessionId: string): string[] {
   // No session id means storage is blocked (see `getSessionId`), and the submit path
   // records no order for that respondent. Shuffling anyway would show an order nothing
@@ -89,11 +96,11 @@ export function orderedOptions(question: SurveyQuestion, sessionId: string): str
   if (!isRandomised(question.qId) || question.options.length < 2) return question.options;
 
   const rand = mulberry32(hashSeed(`${sessionId}:${question.qId}`));
-  const out = [...question.options];
+  const out = question.options.filter((o) => !ANCHORED.test(o));
   // Fisher-Yates, descending — each index lands on a uniformly chosen remaining element.
   for (let i = out.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rand() * (i + 1));
     [out[i], out[j]] = [out[j]!, out[i]!];
   }
-  return out;
+  return [...out, ...question.options.filter((o) => ANCHORED.test(o))];
 }
