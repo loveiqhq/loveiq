@@ -120,7 +120,8 @@ async function liveReportToken(filter: string): Promise<string | null> {
   const res = await supabaseGet(
     `/rest/v1/report_access_token?${filter}${live}&select=token&order=created_at.desc&limit=1`
   );
-  if (!res.ok) return null;
+  // A refused lookup is a failure, not "no link": see the loop.
+  if (!res.ok) throw new Error(`report_token_lookup_failed:${res.status}`);
   const token = ((await res.json()) as Array<{ token?: string }>)[0]?.token;
   return typeof token === "string" && REPORT_TOKEN_RE.test(token) ? token : null;
 }
@@ -140,7 +141,7 @@ async function reportTokenForPayment(row: PaidUserRow): Promise<string | null> {
   const report = await supabaseGet(
     `/rest/v1/personal_report?id=eq.${row.personal_report_id}&select=survey_submission_id&limit=1`
   );
-  if (!report.ok) return null;
+  if (!report.ok) throw new Error(`personal_report_lookup_failed:${report.status}`);
   const submissionId = ((await report.json()) as Array<{ survey_submission_id?: number }>)[0]
     ?.survey_submission_id;
   if (!submissionId) return null;
@@ -249,7 +250,16 @@ export async function GET(request: Request) {
       // it showed "Can't find your report", and on a shared device another person's
       // report. `from=email` softens the forced-paywall arm (see
       // resolveReportPaywallCohort) so the invite modal can open. No link, no email.
-      const reportToken = await reportTokenForPayment(row);
+      let reportToken: string | null;
+      try {
+        reportToken = await reportTokenForPayment(row);
+      } catch (err) {
+        // A failed lookup is an error, not "no link", and costs only this buyer: the run
+        // carries on, and with the cooldown taken after it, tomorrow's run tries again.
+        summary.errors++;
+        logger.error({ err, paymentId: row.id }, "invite-reminders: report link lookup failed");
+        continue;
+      }
       if (!reportToken) {
         summary.skippedNoToken++;
         logger.warn({ paymentId: row.id }, "invite-reminders: no report link for a buyer");

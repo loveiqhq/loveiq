@@ -118,6 +118,8 @@ describe("GET /api/cron/invite-reminders", () => {
       submissionToken?: string | null;
       /** The token recorded on the payment has been revoked since. */
       recordedRevoked?: boolean;
+      /** How the submission's token lookup answers: a status, or "throw". */
+      submissionLookup?: number | "throw";
     } = {}
   ) {
     const candidates = opts.candidates ?? [paidRow()];
@@ -139,6 +141,10 @@ describe("GET /api/cron/invite-reminders", () => {
             json: async () =>
               opts.recordedRevoked ? [] : [{ token: decodeURIComponent(recorded) }],
           };
+        }
+        if (opts.submissionLookup === "throw") throw new Error("Request timeout after 8000ms");
+        if (typeof opts.submissionLookup === "number") {
+          return { ok: false, status: opts.submissionLookup, json: async () => ({}) };
         }
         return {
           ok: true,
@@ -230,6 +236,38 @@ describe("GET /api/cron/invite-reminders", () => {
       expect(u).toContain("revoked_at=is.null");
       expect(u).toContain("or=(expires_at.is.null,expires_at.gt.");
     }
+  });
+
+  it("counts a refused link lookup as an error, not as a buyer with no link", async () => {
+    mockSupabaseSequence({
+      candidates: [paidRow({ personal_report_id: 42 })],
+      submissionLookup: 503,
+    });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.errors).toBe(1);
+    expect(body.skippedNoToken).toBe(0);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("carries on with the other buyers when one lookup throws", async () => {
+    mockResendSend.mockResolvedValue({ data: { id: "e1" } });
+    mockSupabaseSequence({
+      candidates: [
+        paidRow({ id: 1, personal_report_id: 42 }),
+        paidRow({
+          id: 2,
+          app_user: { email: "second@example.com", first_name: "Second" },
+          metadata: { plan: "full_report", reportToken: "rpt_AbCdEfGhIjKlMnOpQrSt" },
+        }),
+      ],
+      submissionLookup: "throw",
+    });
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.errors).toBe(1);
+    expect(body.reminder1Sent + body.reminder2Sent).toBe(1);
+    expect(mockResendSend.mock.calls[0]![0].to).toBe("second@example.com");
   });
 
   it("sends nothing to a buyer whose link cannot be found, rather than a dead link", async () => {
