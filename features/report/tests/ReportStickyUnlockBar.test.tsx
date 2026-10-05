@@ -240,7 +240,7 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     });
   });
 
-  it("styles it through the page, in Plus Jakarta, the box at the card's own scale", () => {
+  it("styles it through the page, in Plus Jakarta, the guarantee without its box", () => {
     const css = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
     const rule = (selector: string) => {
       const at = css.indexOf(`${selector} {`);
@@ -252,13 +252,14 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     const row = rule(`${D} .report-sticky-unlock__desktop-inner`);
     expect(row).toContain("flex-direction: row;");
     expect(row).toContain("justify-content: center;");
-    // 1015:1218 — the footer drew this box at 0.68 until 01.10; the card's is 265.6 x 45.25.
+    // Mark, 05.10: the desktop card matches the phone footer, "without the bigger
+    // rectangle around the Money back guarantee" (1015:1218 still draws the 265.6 x 45.25
+    // box). No fill, no stroke, no padding of its own.
     const badge = rule(`${D} .report-sticky-unlock__badge`);
-    expect(badge).toContain("flex: 0 1 265.6px;");
-    expect(badge).toContain("height: 45.25px;");
-    // The desktop card keeps its box: Mark's 01.10 change is the phone footer's.
-    expect(badge).toContain("background: rgba(0, 0, 0, 0.01);");
-    expect(badge).toContain("border: 0.719px solid rgba(0, 0, 0, 0.08);");
+    expect(badge).not.toMatch(/background|border/);
+    expect(badge).toContain("padding: 0;");
+    expect(badge).toContain("height: auto;");
+    expect(badge).not.toContain("265.6px");
     expect(rule(`${D} .report-sticky-unlock__badge-head`)).toContain("font-size: 14px;");
     expect(rule(`${D} .report-sticky-unlock__badge-sub`)).toContain("font-size: 10px;");
   });

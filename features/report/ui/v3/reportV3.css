@@ -8187,15 +8187,14 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__d
   justify-content: center;
   padding: 14px 20px;
 }
-/* The card keeps the box the phone footer dropped on 01.10. */
+/* Mark (05.10): the card matches the phone footer, "without the bigger rectangle around
+ * the Money back guarantee". 1015:1218 still draws the 265.6 x 45.25 box; the phone's went
+ * on 01.10. The shield and copy keep the card's larger scale. */
 body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__badge {
-  background: rgba(0, 0, 0, 0.01);
-  border: 0.719px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14.39px;
-  flex: 0 1 265.6px;
+  flex: none;
   gap: 11.512px;
-  height: 45.25px;
-  padding: 0 20.146px;
+  height: auto;
+  padding: 0;
 }
 body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__shield {
   height: 28.779px;
