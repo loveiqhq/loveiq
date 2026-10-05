@@ -1753,7 +1753,7 @@ const FUNNEL_ROW_H = 40;
 const FUNNEL_ROW_GAP = 6;
 const FUNNEL_LABEL_W = 230;
 const FUNNEL_COUNT_W = 86;
-const FUNNEL_PCT_W = 70;
+const FUNNEL_PCT_W = 100;
 const FUNNEL_VISITS_W = 84;
 const FUNNEL_BAR_H = 18;
 const FUNNEL_GAP = 14;
@@ -1828,6 +1828,7 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
         justifyContent: "flex-end",
         fontSize: 13,
         color: COLORS.textMuted,
+        whiteSpace: "nowrap",
       }}
     >
       {text}
