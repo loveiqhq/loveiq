@@ -1,7 +1,7 @@
 "use client";
 
 import { GLOBAL_UTM_KEY } from "@shared/url/utm";
-import { SURVEY_SESSION_KEY } from "./surveySession";
+import { SURVEY_SESSION_KEY, forgetSessionMirror } from "./surveySession";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { UTM_STORAGE_KEY } from "./useUtmCapture";
 
@@ -170,6 +170,7 @@ export function clearPersistedSurveyState(options?: {
     sessionStorage.removeItem(SURVEY_STEP_KEY);
     if (options?.clearSurveySession !== false) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
+      forgetSessionMirror();
     }
   } catch {
     /* storage unavailable */

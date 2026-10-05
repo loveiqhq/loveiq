@@ -30,6 +30,48 @@ describe("surveySession", () => {
     vi.restoreAllMocks();
   });
 
+  describe("the id a draft was saved under", () => {
+    // The draft outlives the tab; the id lived only in sessionStorage, so a reader who
+    // closed the tab resumed their answers under a new one (orphaned server draft, a
+    // shuffle order recorded that they never saw). 6.3% of sessions start partway.
+    const ID = "3f2b1c7a-9d4e-4f10-8b52-1a2c3d4e5f60";
+    const closeTheTab = () => sessionStorage.clear();
+
+    it("survives the tab while a draft does", () => {
+      localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      getSessionId();
+      closeTheTab();
+      expect(getSessionId()).toBe(ID);
+    });
+
+    // A finished run's id would answer a retake with the old submission (#375).
+    it("is not reused without a draft", () => {
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      getSessionId();
+      closeTheTab();
+      expect(getSessionId()).not.toBe(ID);
+    });
+
+    it("goes with the run", () => {
+      localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      getSessionId();
+      forgetCompletedReport();
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      getSessionId();
+      finalizeReportSession(ID);
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+    });
+
+    it("ignores a saved value that is not a session id", () => {
+      localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
+      localStorage.setItem(SURVEY_SESSION_KEY, "s-123-old");
+      expect(getSessionId()).not.toBe("s-123-old");
+    });
+  });
+
   it("creates and stores a session id when one does not exist", () => {
     const randomUuid = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("session-123");
 

@@ -1,3 +1,5 @@
+import { SURVEY_STATE_KEY } from "./surveyStorage";
+
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
 export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
@@ -66,14 +68,47 @@ function newId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * The id a draft was saved under, kept in localStorage beside it.
+ *
+ * The draft outlives the tab and this id lived only in sessionStorage, so a reader who
+ * closed the tab resumed their answers under a new id: their server draft was orphaned
+ * and the three shuffled questions recorded an order they never saw (6.3% of sessions
+ * start partway through). Mirrored once before (99f18e65) and lost in the revert of the
+ * demand block (07d7889e). Read only beside a draft: a finished run's id would answer a
+ * retake with the old submission (#375). Its own try/catch, so a localStorage that
+ * throws never costs the sessionStorage id (22f8e5c9).
+ */
+function readSessionMirror(): string | null {
+  try {
+    if (!localStorage.getItem(SURVEY_STATE_KEY)) return null;
+    const id = localStorage.getItem(SURVEY_SESSION_KEY);
+    return id && UUID_V4.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionMirror(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(SURVEY_SESSION_KEY, id);
+    else localStorage.removeItem(SURVEY_SESSION_KEY);
+  } catch {
+    /* storage unavailable: the id lasts as long as the tab */
+  }
+}
+
 export function getSessionId(): string {
   if (!canUseStorage()) return "";
   try {
     let id = sessionStorage.getItem(SURVEY_SESSION_KEY);
     if (!id) {
-      id = newId();
+      id = readSessionMirror() ?? newId();
       sessionStorage.setItem(SURVEY_SESSION_KEY, id);
     }
+    writeSessionMirror(id);
     return id;
   } catch {
     /**
@@ -104,6 +139,11 @@ export function getSessionId(): string {
 
 /** The finished report, for a browser that refuses storage: remembered for this page load. */
 let inMemoryCompleted: string | null = null;
+
+/** Drop the draft's saved id (the run it belonged to is over). */
+export function forgetSessionMirror(): void {
+  writeSessionMirror(null);
+}
 
 /** Reset the in-memory fallbacks — for tests only. */
 export function __resetInMemorySessionIdForTests(): void {
@@ -141,6 +181,7 @@ export function finalizeReportSession(sessionId: string): void {
 
     if (sessionStorage.getItem(SURVEY_SESSION_KEY) === sessionId) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
+      writeSessionMirror(null);
     }
   } catch {
     /* storage unavailable */
@@ -309,6 +350,7 @@ export function forgetCompletedReport(): void {
   try {
     sessionStorage.removeItem(COMPLETED_REPORT_KEY);
     sessionStorage.removeItem(SURVEY_SESSION_KEY);
+    writeSessionMirror(null);
   } catch {
     /* ignore */
   }
