@@ -32,7 +32,7 @@ export type SubmitErrorKind = "connection" | "email" | "answers" | "busy" | "pau
  * processing screen at 95% with no way on. Past this it is an error with Retry, and a
  * submit that did land meanwhile comes back on Retry as that same submission.
  */
-const SUBMIT_TIMEOUT_MS = 30_000;
+export const SUBMIT_TIMEOUT_MS = 30_000;
 
 async function errorKindOf(res: Response): Promise<SubmitErrorKind> {
   if (res.status === 429) return "busy";

@@ -10,6 +10,27 @@ import {
 import type { SurveyAnswers } from "./types";
 
 const SUPABASE_TIMEOUT_MS = 8000;
+/** The submit writes every answer, so it gets longer than a lookup; the browser waits 30 s. */
+const SUBMIT_RPC_TIMEOUT_MS = 15_000;
+/** How long, after a submit we stopped waiting for, to look for it landing anyway. */
+const SUBMIT_LAND_CHECKS = 3;
+const SUBMIT_LAND_POLL_MS = 2_000;
+let submitLandPollMs = SUBMIT_LAND_POLL_MS;
+/** The longest the submit itself can hold the request. The browser must outwait it. */
+export const SUBMIT_WORST_CASE_MS =
+  SUBMIT_RPC_TIMEOUT_MS + SUBMIT_LAND_CHECKS * SUBMIT_LAND_POLL_MS;
+
+/** Test hook: the landing checks run without real waits. */
+export function __setSubmitLandPollMsForTests(ms: number) {
+  submitLandPollMs = ms;
+}
+
+/**
+ * The submit timed out or its connection dropped, so whether the insert committed is
+ * unknown: the database carries on after we stop waiting. The route keeps the email
+ * cooldown for it (see app/api/survey/route.ts).
+ */
+export const SUBMIT_OUTCOME_UNKNOWN = "submit_survey_outcome_unknown";
 
 /**
  * T-11: GDPR Art. 7(1) consent versioning. Bumped whenever the Q16015
@@ -145,19 +166,30 @@ export async function fetchSubmissionBySessionId(sessionId: string | null | unde
 }
 
 async function runSubmitSurveyRpc(payload: SurveySubmissionPayload) {
-  const response = await supabaseServiceFetch("/rest/v1/rpc/submit_survey", {
-    method: "POST",
-    body: JSON.stringify({
-      p_email: payload.email,
-      p_first_name: payload.firstName,
-      p_answers: payload.answers,
-      p_started_at: payload.startedAt,
-      p_duration_ms: payload.durationMs,
-      p_utm_tracker: payload.utmTracker || null,
-      p_session_id: payload.sessionId || null,
-      p_marketing_opt_in: payload.marketingOptIn ?? null,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await supabaseServiceFetch("/rest/v1/rpc/submit_survey", {
+      method: "POST",
+      timeoutMs: SUBMIT_RPC_TIMEOUT_MS,
+      body: JSON.stringify({
+        p_email: payload.email,
+        p_first_name: payload.firstName,
+        p_answers: payload.answers,
+        p_started_at: payload.startedAt,
+        p_duration_ms: payload.durationMs,
+        p_utm_tracker: payload.utmTracker || null,
+        p_session_id: payload.sessionId || null,
+        p_marketing_opt_in: payload.marketingOptIn ?? null,
+      }),
+    });
+  } catch (err) {
+    // A timeout, or a connection that failed with the request out, says nothing about
+    // the insert. Anything else (not configured, the circuit open) never sent it.
+    const maybeSent =
+      err instanceof TypeError ||
+      (err instanceof Error && err.message.startsWith("Request timeout after"));
+    throw maybeSent ? new Error(SUBMIT_OUTCOME_UNKNOWN, { cause: err }) : err;
+  }
 
   if (!response.ok) {
     logger.error({ status: response.status }, "Supabase survey RPC failed");
@@ -176,6 +208,16 @@ async function runSubmitSurveyRpc(payload: SurveySubmissionPayload) {
   throw new Error("submit_survey_rpc_missing_submission_id");
 }
 
+async function waitForSubmission(sessionId: string | null | undefined) {
+  if (!sessionId) return null;
+  for (let check = 0; check < SUBMIT_LAND_CHECKS; check++) {
+    await new Promise((resolve) => setTimeout(resolve, submitLandPollMs));
+    const landed = await fetchSubmissionBySessionId(sessionId).catch(() => null);
+    if (landed) return landed;
+  }
+  return null;
+}
+
 export async function submitSurveyOnce(
   payload: SurveySubmissionPayload
 ): Promise<SubmitSurveyOnceResult> {
@@ -184,7 +226,18 @@ export async function submitSurveyOnce(
     return { submissionId: existing.id, isExisting: true };
   }
 
-  const submissionId = await runSubmitSurveyRpc(payload);
+  let submissionId: number;
+  try {
+    submissionId = await runSubmitSurveyRpc(payload);
+  } catch (err) {
+    if ((err as Error).message !== SUBMIT_OUTCOME_UNKNOWN) throw err;
+    // Answering "failed" for an insert about to land sends the reader to Retry, which
+    // finds no submission yet and makes a second one. Wait a little for it instead; if
+    // it lands, this request finishes it (scoring, link, email) as if it had answered.
+    const landed = await waitForSubmission(payload.sessionId);
+    if (!landed) throw err;
+    submissionId = landed.id;
+  }
 
   // Audit M2 + T-11: stamp consent-accountability fields as a follow-up PATCH
   // (keeps the submit_survey RPC body — with answer_options / answer_history

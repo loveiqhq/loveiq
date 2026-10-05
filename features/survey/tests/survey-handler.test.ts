@@ -69,7 +69,12 @@ process.env.RESEND_AUDIENCE_ID = "aud_test_id";
 
 import { POST } from "@/app/api/survey/route";
 import logger from "@shared/observability/logger";
-import { __resetSurveyStatusCacheForTests } from "@features/survey/server/server";
+import {
+  __resetSurveyStatusCacheForTests,
+  __setSubmitLandPollMsForTests,
+  SUBMIT_WORST_CASE_MS,
+} from "@features/survey/server/server";
+import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
 
 // --- Helpers ---
 
@@ -814,6 +819,96 @@ describe("POST /api/survey — a finished survey is never stranded", () => {
     expect(res.status).toBe(200);
     expect(rpcBody().p_answers["16001"]).toEqual(["a", "b"]);
     expect(rpcBody().p_answers).not.toHaveProperty("15011");
+  });
+
+  describe("a submit we stopped waiting for", () => {
+    /**
+     * The database carries on after the request times out, so the insert may still
+     * commit. Releasing the cooldown let an immediate Retry find no submission yet and
+     * create a second one (two reports, two emails).
+     */
+    const timeout = () => {
+      throw new Error(
+        "Request timeout after 15000ms: https://test.supabase.co/rest/v1/rpc/submit_survey"
+      );
+    };
+
+    beforeEach(() => {
+      __setSubmitLandPollMsForTests(0);
+    });
+
+    it("gives the submit more time than a lookup, and answers before the browser gives up", async () => {
+      routeFetch({ "/rpc/submit_survey": rpcOk });
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+      const rpc = mockFetchWithTimeout.mock.calls.find((c) =>
+        (c[0] as string).includes("/rpc/submit_survey")
+      );
+      expect((rpc![1] as { timeoutMs: number }).timeoutMs).toBeGreaterThan(8_000);
+      // The browser abandons the request at SUBMIT_TIMEOUT_MS; leave 5 s for the rest of it.
+      expect(SUBMIT_WORST_CASE_MS + 5_000).toBeLessThan(SUBMIT_TIMEOUT_MS);
+    });
+
+    it("keeps the cooldown and answers 503 when it never lands", async () => {
+      routeFetch({ "/rpc/submit_survey": timeout });
+      const res = await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+      expect(res.status).toBe(503);
+      expect(mockReleaseCooldown).not.toHaveBeenCalled();
+      // the initial check, then three landing checks
+      const lookups = mockFetchWithTimeout.mock.calls.filter((c) =>
+        (c[0] as string).includes("/survey_submission?session_id=")
+      );
+      expect(lookups.length).toBe(1 + 1 + 3);
+    });
+
+    it("finishes it when it lands: the submission, a report link and the email", async () => {
+      let lookups = 0;
+      routeFetch({
+        "/rpc/submit_survey": timeout,
+        "/survey_submission?session_id=": () => ({
+          ok: true,
+          // the replay check and the submit's own check see nothing; the first landing check sees it
+          json: async () => (++lookups >= 3 ? [{ id: 777, status: "completed" }] : []),
+        }),
+      });
+      const res = await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.submissionId).toBe(777);
+      expect(json.reportToken).toMatch(/^rpt_/);
+      expect(mockReleaseCooldown).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(mockResendEmailsSend).toHaveBeenCalledTimes(1));
+    });
+
+    it("still gives the cooldown back when the submit was refused (nothing was written)", async () => {
+      routeFetch({
+        "/rpc/submit_survey": () => ({ ok: false, status: 400, json: async () => ({}) }),
+      });
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+      expect(mockReleaseCooldown).toHaveBeenCalledWith("alice@example.com", "survey-email");
+    });
+  });
+
+  it("scores a replayed submission that never was (its first request died after the insert)", async () => {
+    routeFetch({
+      "/survey_submission?session_id=": () => ({
+        ok: true,
+        json: async () => [{ id: 77, status: "completed" }],
+      }),
+      "/scoring_result?survey_submission_id=eq.77": () => ({ ok: true, json: async () => [] }),
+      "/report_access_token?survey_submission_id=eq.77": () => ({
+        ok: true,
+        json: async () => [{ token: "rpt_existing" }],
+      }),
+    });
+    const res = await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+    expect(res.status).toBe(200);
+    const stored = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/scoring_result?on_conflict=survey_submission_id")
+    );
+    expect(stored, "the replay must store the missing scoring").toBeDefined();
+    expect(JSON.parse((stored![1] as { body: string }).body)).toMatchObject({
+      survey_submission_id: 77,
+    });
   });
 
   it("gives the email cooldown back when the submit fails", async () => {

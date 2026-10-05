@@ -32,6 +32,7 @@ import {
   ensureSubmissionScored,
   fetchSubmissionBySessionId,
   isSurveyClosed,
+  SUBMIT_OUTCOME_UNKNOWN,
   submitSurveyOnce,
 } from "@features/survey/server/server";
 import { SURVEY_EMAIL_RE, tidySurveyEmail } from "@features/survey/email";
@@ -119,6 +120,11 @@ async function replyWithExistingSubmission(body: unknown): Promise<NextResponse 
   if (typeof sessionId !== "string" || !UUID_RE.test(sessionId)) return null;
   const existing = await fetchSubmissionBySessionId(sessionId).catch(() => null);
   if (!existing) return null;
+  // Its first request may have died after the insert, before scoring (an admin recovery
+  // scores, a submit that landed after we stopped waiting does not), and a report without
+  // scoring is "Can't find your report". A no-op when it is scored.
+  const answers = surveyAnswersSchema.safeParse((body as { answers?: unknown }).answers);
+  if (answers.success) await ensureSubmissionScored(existing.id, answers.data as SurveyAnswers);
   const reportToken = await reportTokenFor(existing.id);
   if (reportToken) {
     scheduleAfterResponse("personal-report-bootstrap", async () => {
@@ -717,9 +723,12 @@ export async function POST(request: Request) {
       }
     );
   } catch (err) {
-    // The cooldown was claimed for an attempt that did not land; keeping it would refuse
-    // the reader's Retry for the rest of the window.
-    await releaseCooldown(normalizedEmail, "survey-email");
+    // An attempt that failed gives the cooldown back, so Retry works at once. One whose
+    // outcome is unknown keeps it: the insert may still land, and an immediate Retry
+    // would find no submission and make a second. Retry then reads "Almost There" (429)
+    // until the window passes, and the replay above returns the submission once it exists.
+    const outcomeUnknown = (err as Error).message === SUBMIT_OUTCOME_UNKNOWN;
+    if (!outcomeUnknown) await releaseCooldown(normalizedEmail, "survey-email");
     if ((err as Error).message === "supabase_not_configured") {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
     }
