@@ -9,6 +9,7 @@
  */
 
 import { Redis } from "@upstash/redis";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
 
 // Initialize Redis client from Vercel KV env vars
@@ -33,7 +34,13 @@ function getRedis(): Redis | null {
 function logMissingKvOnce(): void {
   if (missingKvLogged) return;
   missingKvLogged = true;
-  if (process.env.NODE_ENV === "production") {
+  // Only the real production project (www.loveiq.org) has a store. The staging project has
+  // none on purpose: its only Redis would be production's, and sharing it would mix staging's
+  // counters and keys into production's. So in-memory is expected on staging.loveiq.org,
+  // and NODE_ENV=production alone posted this to #brain as an incident on every cold start
+  // there (02:43 nightly with the persona walk, 2026-10-05). The site address tells the real
+  // production apart, as it does for every cron. Ported from main (#466).
+  if (process.env.NODE_ENV === "production" && isProdCronHost()) {
     logger.error(
       "[ratelimit] KV_REST_API_URL / KV_REST_API_TOKEN missing in production — using in-memory fallback. Per-instance state will not coordinate across regions or warm containers, so rate limits may be under-enforced."
     );
