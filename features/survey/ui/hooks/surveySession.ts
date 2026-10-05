@@ -122,8 +122,12 @@ export function getSessionId(): string {
     if (!id) {
       id = readSessionMirror() ?? newId();
       sessionStorage.setItem(SURVEY_SESSION_KEY, id);
+      // Only here, when this tab takes its id. The engine calls this on every render, and
+      // a tab that finished keeps its id while its wrap-up screens are up: writing on each
+      // call let it put its finished id beside a draft another tab had just started, and
+      // reopening that draft brought the finished run back (#375).
+      writeSessionMirror(id);
     }
-    writeSessionMirror(id);
     return id;
   } catch {
     /**

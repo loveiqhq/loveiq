@@ -41,30 +41,32 @@ describe("surveySession", () => {
     const ID = "3f2b1c7a-9d4e-4f10-8b52-1a2c3d4e5f60";
     const closeTheTab = () => sessionStorage.clear();
 
+    /** A tab with no id of its own takes one: here, a new one equal to ID. */
+    const takeId = () => {
+      vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValueOnce(ID);
+      return getSessionId();
+    };
+
     it("survives the tab while a draft does", () => {
       localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
-      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
-      getSessionId();
+      expect(takeId()).toBe(ID);
       closeTheTab();
       expect(getSessionId()).toBe(ID);
     });
 
     // A finished run's id would answer a retake with the old submission (#375).
     it("is not reused without a draft", () => {
-      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
-      getSessionId();
+      takeId();
       closeTheTab();
       expect(getSessionId()).not.toBe(ID);
     });
 
     it("goes with the run", () => {
       localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
-      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
-      getSessionId();
+      takeId();
       forgetCompletedReport();
       expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
-      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
-      getSessionId();
+      takeId();
       finalizeReportSession(ID);
       expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
     });
@@ -74,8 +76,7 @@ describe("surveySession", () => {
     // with the finished one's submission (#375).
     it("goes with the draft at submit, so the next run from the card is a new session", () => {
       localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
-      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
-      getSessionId();
+      takeId();
       clearPersistedSurveyState({ clearPendingCompletion: true, clearSurveySession: false });
       expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
       closeTheTab();
@@ -87,6 +88,30 @@ describe("surveySession", () => {
       // A leftover from a run whose clean-up never ran (closed mid-wizard).
       localStorage.setItem(SURVEY_SESSION_KEY, ID);
       saveLandingPrefill("01001", 4);
+      expect(getSessionId()).not.toBe(ID);
+    });
+
+    // The engine calls getSessionId on every render; a finished tab keeps its id while its
+    // wrap-up screens are up, so it must never write its id over or beside another draft.
+    it("is never written by a tab that already has its id", () => {
+      const OTHER = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+      localStorage.setItem("loveiq-survey-answers", JSON.stringify({ q1: "a" }));
+      localStorage.setItem(SURVEY_SESSION_KEY, OTHER);
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      expect(getSessionId()).toBe(ID);
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBe(OTHER);
+    });
+
+    it("never pairs a finished tab's id with a draft another tab started", () => {
+      // This tab finished: it keeps its id, its draft and copy went at submit.
+      sessionStorage.setItem(SURVEY_SESSION_KEY, ID);
+      // Another tab starts a new run from the homepage card.
+      saveLandingPrefill("01001", 4);
+      // This tab's wrap-up screens render again.
+      getSessionId();
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+      // The new run, reopened in a new tab, is a new session.
+      closeTheTab();
       expect(getSessionId()).not.toBe(ID);
     });
 
