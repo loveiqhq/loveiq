@@ -32,6 +32,13 @@ const postSchema = z.object({
 });
 
 const POST_RATE_LIMIT = { bucket: "report-share-post", limit: 5, windowMs: 60_000 };
+/**
+ * Per report, whatever the IP. Free sharing made every finished survey a sender, and a
+ * share/revoke loop would otherwise mail anyone from our domain, with a 2,000-character
+ * note, as often as the per-IP limit allows. Six a day covers two seats and a few
+ * corrections.
+ */
+const REPORT_RATE_LIMIT = { bucket: "report-share-report", limit: 6, windowMs: 86_400_000 };
 const GET_RATE_LIMIT = { bucket: "report-share-get", limit: 30, windowMs: 60_000 };
 
 let _resend: Resend | null = null;
@@ -86,6 +93,14 @@ export async function POST(request: Request) {
 
   if (owner.ownerEmail && owner.ownerEmail === recipientEmail) {
     return NextResponse.json({ error: "You already own this report." }, { status: 400 });
+  }
+
+  const reportRate = await checkRateLimit(String(owner.personalReportId), REPORT_RATE_LIMIT);
+  if (!reportRate.allowed) {
+    return NextResponse.json(
+      { error: "Please try again later." },
+      { status: 429, headers: retryAfterHeaders(reportRate.resetAt) }
+    );
   }
 
   let plan;

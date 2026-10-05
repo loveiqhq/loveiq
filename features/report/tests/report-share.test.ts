@@ -252,6 +252,27 @@ describe("POST /api/report/share", () => {
     );
   });
 
+  it("limits each report to six shares a day, whatever the IP", async () => {
+    allowCsrf();
+    mockCheckRateLimit.mockImplementation(async (_key: string, config: { bucket: string }) => ({
+      allowed: config.bucket !== "report-share-report",
+      remaining: 0,
+      resetAt: new Date(Date.now() + 60_000),
+    }));
+    defaultOwner();
+    mockGetPlan.mockResolvedValue(null);
+    const res = await POST(
+      postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "r@x.io" })
+    );
+    expect(res.status).toBe(429);
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      "99",
+      expect.objectContaining({ bucket: "report-share-report", limit: 6, windowMs: 86_400_000 })
+    );
+    expect(mockCreateShare).not.toHaveBeenCalled();
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
   it("returns 409 on seat_limit_reached", async () => {
     allowCsrf();
     allowRateLimit();
