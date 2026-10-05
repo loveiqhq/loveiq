@@ -484,6 +484,72 @@ describe("SurveyEngine completion phases", () => {
         back.mockRestore();
       }
     });
+
+    // Pinch-zoom is on, and the finger a horizontal pinch lifts first was measured from
+    // the other finger's start, so spreading two fingers went back a question.
+    const a = { clientX: 40, clientY: 300 };
+    const b = { clientX: 60, clientY: 300 };
+    it.each([
+      [
+        "a pinch, one finger lifting first",
+        () => {
+          fireEvent.touchStart(document.body, { touches: [a] });
+          fireEvent.touchStart(document.body, { touches: [a, b] });
+          fireEvent.touchEnd(window, {
+            touches: [a],
+            changedTouches: [{ clientX: 240, clientY: 305 }],
+          });
+          fireEvent.touchEnd(window, { touches: [], changedTouches: [a] });
+        },
+      ],
+      [
+        "a pinch, both fingers lifting together",
+        () => {
+          fireEvent.touchStart(document.body, { touches: [a] });
+          fireEvent.touchStart(document.body, { touches: [a, b] });
+          fireEvent.touchEnd(window, {
+            touches: [],
+            changedTouches: [{ clientX: 240, clientY: 305 }, b],
+          });
+        },
+      ],
+      [
+        "a finger lifting while another is down, its touch start unheard",
+        () => {
+          fireEvent.touchStart(document.body, { touches: [a] });
+          fireEvent.touchEnd(window, {
+            touches: [a],
+            changedTouches: [{ clientX: 240, clientY: 305 }],
+          });
+        },
+      ],
+      [
+        "a drag across a zoomed-in page",
+        () => {
+          Object.defineProperty(window, "visualViewport", {
+            configurable: true,
+            value: { scale: 2 },
+          });
+          try {
+            swipeRight(document.body);
+          } finally {
+            delete (window as { visualViewport?: unknown }).visualViewport;
+          }
+        },
+      ],
+    ])("%s does not change the question", (_label, gesture) => {
+      mockCurrentIndex = 1;
+      const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      mockSetCurrentIndex.mockClear();
+      try {
+        gesture();
+        expect(back).not.toHaveBeenCalled();
+        expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+      } finally {
+        back.mockRestore();
+      }
+    });
   });
 
   // Focus stays on Next, so a screen reader said nothing when the question changed.

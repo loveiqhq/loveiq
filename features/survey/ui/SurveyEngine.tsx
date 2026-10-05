@@ -542,25 +542,37 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
+    const clearSwipe = () => {
+      touchStartX.current = null;
+      touchStartY.current = null;
+    };
     const handleTouchStart = (e: TouchEvent) => {
       // A drag that starts on the scale (it looks like a slider) or in a text box (moving
       // the caret, selecting text) is not a swipe between questions; it changed the
-      // question under the reader.
-      if ((e.target as Element | null)?.closest?.(NO_SWIPE)) {
-        touchStartX.current = null;
-        touchStartY.current = null;
+      // question under the reader. Nor is a pinch (the finger it lifts first was measured
+      // from the other finger's start), or a drag across a zoomed-in page, which is a
+      // reader moving around the question to read it.
+      if (
+        e.touches.length !== 1 ||
+        (window.visualViewport?.scale ?? 1) > 1.01 ||
+        (e.target as Element | null)?.closest?.(NO_SWIPE)
+      ) {
+        clearSwipe();
         return;
       }
-      // TouchEvent always fires with at least one touch point.
       touchStartX.current = e.touches[0]!.clientX;
       touchStartY.current = e.touches[0]!.clientY;
     };
     const handleTouchEnd = (e: TouchEvent) => {
+      // A finger still down: the end of one finger of a pinch.
+      if (e.touches.length > 0) {
+        clearSwipe();
+        return;
+      }
       if (touchStartX.current === null || touchStartY.current === null) return;
       const diffX = e.changedTouches[0]!.clientX - touchStartX.current;
       const diffY = e.changedTouches[0]!.clientY - touchStartY.current;
-      touchStartX.current = null;
-      touchStartY.current = null;
+      clearSwipe();
       if (Math.abs(diffX) < 50) return;
       // Ignore if gesture is more vertical than horizontal (prevents false triggers on scroll)
       if (Math.abs(diffY) >= Math.abs(diffX)) return;
