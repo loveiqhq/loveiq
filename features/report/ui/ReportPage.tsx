@@ -22,7 +22,6 @@ import {
 import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
-import { canSharePlan } from "@features/report/server/planAccess";
 import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
@@ -425,7 +424,7 @@ interface ReportExperienceProps {
   ownerToken: string | null;
   percentages: Record<string, number>;
   pricingTargetArchetype: string | null;
-  pricingVariant: "default" | "offer" | "share";
+  pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -722,17 +721,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     activeSection.set(sectionId);
   };
 
-  const unlockSection = (section: DisplayReportSection) => {
-    // Lock-icon click intent — fired BEFORE the modal opens so funnel can
-    // measure pre-paywall intent vs modal-view conversion. `plan_needed`
-    // mirrors the locked section's accessTier (free tier is always unlocked
-    // so it shouldn't reach this handler).
-    const planNeeded: "essentials" | "full_report" | "all_reports" =
-      section.accessTier === "essentials" || section.accessTier === "full_report"
-        ? section.accessTier
-        : "full_report";
+  // Lock-icon click intent — fired BEFORE the modal opens so funnel can
+  // measure pre-paywall intent vs modal-view conversion. A recipient's click is
+  // not counted: only the owner can pay, so it is nobody's intent to.
+  const trackLockClick = (
+    sectionId: string,
+    planNeeded: "essentials" | "full_report" | "all_reports"
+  ) => {
+    if (viewMode === "shared") return;
     trackLockIconClicked({
-      section_id: section.id,
+      section_id: sectionId,
       archetype: viewArchetype || null,
       plan_needed: planNeeded,
     });
@@ -740,10 +738,21 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // counts this (not auto-mount paywall_view) as "user-initiated paywall".
     trackPaywallInitiated({
       source: "lock_click",
-      section_id: section.id,
+      section_id: sectionId,
       archetype: viewArchetype || null,
       plan_needed: planNeeded,
     });
+  };
+
+  const unlockSection = (section: DisplayReportSection) => {
+    // `plan_needed` mirrors the locked section's accessTier (free tier is always
+    // unlocked so it shouldn't reach this handler).
+    trackLockClick(
+      section.id,
+      section.accessTier === "essentials" || section.accessTier === "full_report"
+        ? section.accessTier
+        : "full_report"
+    );
     // Scope the upgrade modal to the archetype the user is currently viewing,
     // not the primary. Otherwise a buyer who already owns essentials/full on
     // primary X would see the modal flag both cards as "Your current plan"
@@ -756,17 +765,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // archetype — no bespoke checkout. full_report is the plan that unlocks the
   // gated findings.
   const unlockFindings = () => {
-    trackLockIconClicked({
-      section_id: "findings",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
-    trackPaywallInitiated({
-      source: "lock_click",
-      section_id: "findings",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
+    trackLockClick("findings", "full_report");
     onOpenPricingModal(viewArchetype || null);
   };
 
@@ -774,17 +773,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // Findings unlock path: they open the shared pricing modal scoped to the
   // viewed archetype. full_report unlocks the pattern sections these tease.
   const unlockMap = () => {
-    trackLockIconClicked({
-      section_id: "map",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
-    trackPaywallInitiated({
-      source: "lock_click",
-      section_id: "map",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
+    trackLockClick("map", "full_report");
     onOpenPricingModal(viewArchetype || null);
   };
 
@@ -2492,8 +2481,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           open={isShareModalOpen}
           onClose={onCloseShareModal}
           ownerToken={ownerToken}
-          initialPlan={accessPlan}
-          onUpgrade={onOpenPricingModal}
           returnFocusRef={mainContentRef}
         />
       ) : null}
@@ -2668,7 +2655,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     message: string | null;
   } | null>(null);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
-  const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "share">("default");
+  const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "recipient">(
+    "default"
+  );
   const autoOpenedPricingRef = useRef(false);
   const autoOpenedOfferRef = useRef(false);
   const scrollTeaserFiredRef = useRef(false);
@@ -3086,6 +3075,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         return;
       }
 
+      // Someone else's report: nothing here is theirs to buy (see the recipient variant).
+      if (viewMode === "shared") {
+        setPricingTargetArchetype(null);
+        setPricingVariant("recipient");
+        setIsPricingModalOpen(true);
+        return;
+      }
       // Intent signal — user clicked "Unlock" on an archetype probability tile.
       trackPaywallInitiated({ source: "archetype_unlock", archetype: name });
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
@@ -3102,6 +3098,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       shouldShowOfferVariant,
       showReportV2,
       unlockedArchetypes,
+      viewMode,
     ]
   );
 
@@ -3120,6 +3117,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
    * absence costs the value, not the event.
    */
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
+    // A recipient cannot buy the report they were sent: every way to Stripe ends here, so
+    // this is the one place that is sure to catch them.
+    if (viewMode === "shared") {
+      setPricingTargetArchetype(null);
+      setPricingVariant("recipient");
+      setIsPricingModalOpen(true);
+      return;
+    }
     const quote = pricingQuotes?.[plan];
     trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     // Essentials + Full Report are per-archetype; All Reports is a global
@@ -3156,6 +3161,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
    * full_report. all_reports is a global unlock, so it carries no archetype.
    */
   const handlePurchaseFullReport = () => {
+    if (viewMode === "shared") {
+      beginCheckout("full_report", null);
+      return;
+    }
     const plan: ReportPurchasePlanId = accessPlan === "full_report" ? "all_reports" : "full_report";
     const archetype = plan === "all_reports" ? null : primaryArchetype;
     trackPaywallInitiated({
@@ -3172,17 +3181,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingVariant("default");
   }, []);
 
-  const openShareModal = useCallback(() => {
-    // Free-plan users see the pricing modal in "share" variant instead of the
-    // share form — they have nothing to share until they purchase a plan.
-    if (!canSharePlan(accessPlan)) {
-      setPricingTargetArchetype(null);
-      setPricingVariant("share");
-      setIsPricingModalOpen(true);
-      return;
-    }
-    setIsShareModalOpen(true);
-  }, [accessPlan]);
+  // Paid or not, every reader shares with up to two people (planAccess.ts).
+  const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
@@ -3192,10 +3192,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // not primary). null = primary archetype.
       const scope = archetype ?? null;
       setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
-      setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
+      setPricingVariant(
+        viewMode === "shared" ? "recipient" : shouldShowOfferVariant ? "offer" : "default"
+      );
       setIsPricingModalOpen(true);
     },
-    [primaryArchetypeFromData, shouldShowOfferVariant]
+    [primaryArchetypeFromData, shouldShowOfferVariant, viewMode]
   );
 
   if (status === "loading") {
@@ -3516,7 +3518,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           `core` buys the top-3 archetypes AT full_report tier, so listing plans
           by hand showed a paying core buyer a permanent "Unlock full report" bar
           whose CTA sent them to Stripe for something they already owned. */}
-      {!doesAccessPlanCover(data.accessPlan, "full_report") && (
+      {viewMode === "owner" && !doesAccessPlanCover(data.accessPlan, "full_report") && (
         <ReportStickyUnlockBar
           quote={pricingQuotes?.full_report ?? null}
           onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}

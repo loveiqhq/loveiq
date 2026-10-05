@@ -191,7 +191,7 @@ describe("POST /api/report/share", () => {
     expect(res.status).toBe(400);
   });
 
-  it("allows essentials plan to share (1 seat)", async () => {
+  it("gives an essentials buyer two seats, like every reader", async () => {
     allowCsrf();
     allowRateLimit();
     defaultOwner();
@@ -216,21 +216,61 @@ describe("POST /api/report/share", () => {
     );
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.seatLimit).toBe(1);
+    expect(json.seatLimit).toBe(2);
     expect(mockCreateShare).toHaveBeenCalledWith(
-      expect.objectContaining({ plan: "essentials", seatLimit: 1 })
+      expect.objectContaining({ plan: "essentials", seatLimit: 2 })
     );
   });
 
-  it("returns 403 when plan is null (unpaid)", async () => {
+  it("lets an unpaid owner share, recorded as 'free' (Marcus, 2026-10-05)", async () => {
     allowCsrf();
     allowRateLimit();
+    defaultOwner();
+    mockGetPlan.mockResolvedValue(null);
+    mockCreateShare.mockResolvedValue({
+      ok: true,
+      row: {
+        id: 322,
+        personal_report_id: 99,
+        recipient_email: "r@x.io",
+        share_token: VALID_SHARE_TOKEN,
+        shared_by_user_id: 7,
+        plan_at_share: "free",
+        last_viewed_at: null,
+        view_count: 0,
+        revoked_at: null,
+        created_at: "2026-10-05T00:00:00Z",
+      },
+    });
+    const res = await POST(
+      postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "r@x.io" })
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).seatLimit).toBe(2);
+    expect(mockCreateShare).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: "free", seatLimit: 2 })
+    );
+  });
+
+  it("limits each report to six shares a day, whatever the IP", async () => {
+    allowCsrf();
+    mockCheckRateLimit.mockImplementation(async (_key: string, config: { bucket: string }) => ({
+      allowed: config.bucket !== "report-share-report",
+      remaining: 0,
+      resetAt: new Date(Date.now() + 60_000),
+    }));
     defaultOwner();
     mockGetPlan.mockResolvedValue(null);
     const res = await POST(
       postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "r@x.io" })
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(429);
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      "99",
+      expect.objectContaining({ bucket: "report-share-report", limit: 6, windowMs: 86_400_000 })
+    );
+    expect(mockCreateShare).not.toHaveBeenCalled();
+    expect(mockResendSend).not.toHaveBeenCalled();
   });
 
   it("returns 409 on seat_limit_reached", async () => {
@@ -491,17 +531,20 @@ describe("GET /api/report/share", () => {
     });
   });
 
-  it("returns seatLimit 1 for essentials plan", async () => {
-    allowRateLimit();
-    defaultOwner();
-    mockGetPlan.mockResolvedValue("essentials");
-    mockListActive.mockResolvedValue([]);
-    const res = await GET(getRequest(VALID_OWNER_TOKEN));
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.seatLimit).toBe(1);
-    expect(json.plan).toBe("essentials");
-  });
+  it.each([["essentials"], [null]] as const)(
+    "returns two seats whatever the plan (%s)",
+    async (plan) => {
+      allowRateLimit();
+      defaultOwner();
+      mockGetPlan.mockResolvedValue(plan);
+      mockListActive.mockResolvedValue([]);
+      const res = await GET(getRequest(VALID_OWNER_TOKEN));
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.seatLimit).toBe(2);
+      expect(json.plan).toBe(plan);
+    }
+  );
 });
 
 describe("DELETE /api/report/share/[id]", () => {

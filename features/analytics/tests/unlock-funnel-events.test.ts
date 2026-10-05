@@ -116,7 +116,19 @@ describe("begin_checkout carries a monetary value", () => {
       if (src[i] === "{") depth++;
       else if (src[i] === "}" && --depth === 0) break;
     }
-    const body = src.slice(bodyStart, i);
+    let body = src.slice(bodyStart, i);
+
+    // The one branch allowed before the count: a shared viewer is sent to the recipient
+    // screen and NEVER reaches Stripe (free sharing, Marcus 2026-10-05). It may come first
+    // only because it returns without checking out; the rest is held to the rule below.
+    const recipientGuard = body.match(
+      /^\{\s*(?:\/\/[^\n]*\n\s*)*if \(viewMode === "shared"\) \{([^}]*)\}/
+    );
+    if (recipientGuard) {
+      expect(recipientGuard[1]).toContain("return;");
+      expect(recipientGuard[1]).not.toMatch(/startReportCheckout|router\.push|location/);
+      body = body.slice(recipientGuard[0].length);
+    }
 
     const callAt = body.indexOf("trackBeginCheckout(");
     expect(callAt, "beginCheckout must count the event").toBeGreaterThan(-1);

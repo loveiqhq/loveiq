@@ -13,9 +13,9 @@ import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsub
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
-  canSharePlan,
   getReportPlanByPersonalReportId,
-  getShareSeatLimit,
+  SHARE_SEAT_LIMIT,
+  sharePlanLabel,
 } from "@features/report/server/planAccess";
 import {
   REPORT_ACCESS_TOKEN_REGEX,
@@ -32,6 +32,13 @@ const postSchema = z.object({
 });
 
 const POST_RATE_LIMIT = { bucket: "report-share-post", limit: 5, windowMs: 60_000 };
+/**
+ * Per report, whatever the IP. Free sharing made every finished survey a sender, and a
+ * share/revoke loop would otherwise mail anyone from our domain, with a 2,000-character
+ * note, as often as the per-IP limit allows. Six a day covers two seats and a few
+ * corrections.
+ */
+const REPORT_RATE_LIMIT = { bucket: "report-share-report", limit: 6, windowMs: 86_400_000 };
 const GET_RATE_LIMIT = { bucket: "report-share-get", limit: 30, windowMs: 60_000 };
 
 let _resend: Resend | null = null;
@@ -88,6 +95,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You already own this report." }, { status: 400 });
   }
 
+  const reportRate = await checkRateLimit(String(owner.personalReportId), REPORT_RATE_LIMIT);
+  if (!reportRate.allowed) {
+    return NextResponse.json(
+      { error: "Please try again later." },
+      { status: 429, headers: retryAfterHeaders(reportRate.resetAt) }
+    );
+  }
+
   let plan;
   try {
     plan = await getReportPlanByPersonalReportId(owner.personalReportId);
@@ -96,14 +111,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
-  if (!canSharePlan(plan)) {
-    return NextResponse.json(
-      { error: "Sharing is available after purchasing a report." },
-      { status: 403 }
-    );
-  }
-
-  const seatLimit = getShareSeatLimit(plan);
+  // Paid or not: the recipient sees the report as the owner does (planAccess.ts).
+  const seatLimit = SHARE_SEAT_LIMIT;
   const shareToken = generateShareToken();
 
   let result;
@@ -112,7 +121,7 @@ export async function POST(request: Request) {
       personalReportId: owner.personalReportId,
       recipientEmail,
       sharedByUserId: owner.ownerUserId,
-      plan: plan as "essentials" | "full_report" | "core" | "all_reports",
+      plan: sharePlanLabel(plan),
       seatLimit,
       shareToken,
       personalMessage,
@@ -275,7 +284,7 @@ export async function GET(request: Request) {
     logger.error({ err }, "report-share GET: plan lookup failed");
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
-  const seatLimit = getShareSeatLimit(plan);
+  const seatLimit = SHARE_SEAT_LIMIT;
 
   let shares;
   try {
