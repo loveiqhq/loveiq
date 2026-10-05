@@ -626,6 +626,28 @@ describe("Pricing 3.0 — what Stripe is asked to sell", () => {
     expect(await buy("Spark Seeker")).toBe("Unlock the Spark Seeker report");
   });
 
+  it("gives a checkout from another spot its own idempotency key, and a double-click the same one", async () => {
+    const createSession = enableStripe();
+    const post = async (anchor: string) => {
+      const res = await POST(
+        makeRequest({
+          anchor,
+          archetype: "Spark Seeker",
+          plan: "full_report",
+          reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        })
+      );
+      expect(res.status).toBe(200);
+    };
+    await post("typical_beliefs~~1201~329");
+    await post("typical_beliefs~~1201~329");
+    await post("typical_beliefs~~1240~300");
+    const keys = createSession.mock.calls.map((call) => call[1].idempotencyKey);
+    expect(keys).toHaveLength(3);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
   it("carries the unlock position through both return URLs", async () => {
     const createSession = enableStripe();
     const anchor = "desire_drivers~2~-120~340";
