@@ -94,6 +94,14 @@ describe("surveyAnswersSchema — server-side cap enforcement", () => {
 });
 
 describe("surveyAnswersSchema — tidies what a real browser can have stored", () => {
+  // A pending submit from before the Other box's 500-character limit can hold any length.
+  // Refused at 20,000, Retry resent it and only Start Over (losing every answer) got out.
+  it("cuts any length of text, never refusing it", () => {
+    const parsed = surveyAnswersSchema.safeParse({ "15010_other": "x".repeat(25_000) });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.["15010_other"]).toHaveLength(1000);
+  });
+
   it("cuts text to 1000 characters (the Other box had no limit)", () => {
     const parsed = surveyAnswersSchema.safeParse({ "15010_other": "x".repeat(5000) });
     expect(parsed.success).toBe(true);
