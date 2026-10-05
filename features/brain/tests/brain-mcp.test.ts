@@ -134,6 +134,7 @@ import {
 import { atomsIn } from "@features/brain/server/check-answer";
 import { citesSources } from "@features/brain/server/night-shift";
 import { BOOKS, partHead } from "@/scripts/brain-books";
+import { FIGMA_RETRY_MAX_S } from "@features/brain/server/see/figma";
 import { partHead as paperPartHead } from "@features/brain/server/ingest/papers";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -6011,6 +6012,69 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toContain("not a design that does not exist");
     });
 
+    /**
+     * FIGMA'S ALLOWANCE IS THE WHOLE TEAM'S (2026-09-29: seven 429s in 40 seconds, all at
+     * once). A short Retry-After is waited out ONCE; a long one is reported with its wait.
+     */
+    const limited = (retryAfter: string, extra: Record<string, string> = {}) => ({
+      ok: false,
+      status: 429,
+      headers: new Headers({ "retry-after": retryAfter, ...extra }),
+    });
+
+    it("waits out a short Retry-After once, then shows the design", async () => {
+      expect(FIGMA_RETRY_MAX_S).toBe(10);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        mockFetch
+          .mockResolvedValueOnce(limited("2"))
+          .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(800, 600) })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
+          })
+          .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(PNG) });
+        const pending = call({ node_id: "1:2" });
+        await vi.advanceTimersByTimeAsync(1_999);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        const r = await pending;
+        expect(r.content.map((c) => c.type)).toEqual(["text", "image"]);
+        expect(mockFetch).toHaveBeenCalledTimes(4);
+        expect(mockFetch.mock.calls[1]![0]).toBe(mockFetch.mock.calls[0]![0]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("does not wait out a long Retry-After, and says how long and how to ask for less", async () => {
+      mockFetch.mockResolvedValueOnce(
+        limited("120", { "x-figma-plan-tier": "org", "x-figma-rate-limit-type": "high" })
+      );
+      const r = await call({ node_id: "1:2" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("it asks us to wait 120 s");
+      expect(r.content[0].text).toContain("plan tier: org, rate-limit type: high");
+      expect(r.content[0].text).toContain("nodes?ids=a,b,c");
+    });
+
+    it("retries once, never twice", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        mockFetch.mockResolvedValueOnce(limited("1")).mockResolvedValueOnce(limited("1"));
+        const pending = call({ node_id: "1:2" });
+        await vi.advanceTimersByTimeAsync(5_000);
+        const r = await pending;
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toContain("it asks us to wait 1 s");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("reuses the missing-credential wording, so the two doors cannot disagree", async () => {
       delete process.env.FIGMA_TOKEN;
       delete process.env.FIGMA_ACCESS_TOKEN;
@@ -6068,6 +6132,54 @@ describe("/api/mcp", () => {
     it("says it did so, rather than silently working for a reason nobody can see", async () => {
       const r = await call({ service: "stripe", path: "/v1/charges" });
       expect(r.content[0]!.text).toMatch(/already ends with \/v1/);
+    });
+
+    it("waits out a short Figma 429 once, and reports a long one with its wait", async () => {
+      process.env.FIGMA_TOKEN = "figd_test";
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        mockFetch
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 429,
+            headers: new Headers({ "retry-after": "2" }),
+            text: async () => '{"status":429}',
+          })
+          .mockResolvedValueOnce({ ok: true, status: 200, text: async () => '{"nodes":{}}' });
+        const pending = call({ service: "figma", path: "/files/abc/nodes?ids=1:2" });
+        await vi.advanceTimersByTimeAsync(2_000);
+        const ok = await pending;
+        expect(ok.isError).toBeFalsy();
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: new Headers({ "retry-after": "120", "x-figma-plan-tier": "pro" }),
+        text: async () => '{"status":429}',
+      });
+      const r = await call({ service: "figma", path: "/files/abc/nodes?ids=1:2" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain("figma returned 429");
+      expect(r.content[0]!.text).toContain("it asks us to wait 120 s (plan tier: pro)");
+      expect(r.content[0]!.text).toContain("ONE request");
+    });
+
+    it("does not retry a 429 from any other service", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: new Headers({ "retry-after": "1" }),
+        text: async () => "slow down",
+      });
+      const r = await call({ service: "stripe", path: "/charges" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(r.content[0]!.text).toContain("stripe returned 429");
     });
 
     it("leaves an ordinary path completely alone", async () => {

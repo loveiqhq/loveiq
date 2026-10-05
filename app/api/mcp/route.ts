@@ -18,6 +18,8 @@ import { listPageShots, renderPageShot } from "@features/brain/server/see/pages"
 import {
   DEFAULT_EDGE_PX,
   MAX_EDGE_PX,
+  figmaFetch,
+  figmaLimitText,
   listDesign,
   renderDesign,
   type ShowDesignOutcome,
@@ -2374,7 +2376,11 @@ export const EXTERNAL_SERVICES: Record<
       "Start with `/files/<key>?depth=1` (about 9 KB, the page list); a whole page at " +
       "`depth=2` exceeds the 40,000-character result cap and comes back truncated. " +
       "`/images/<key>?ids=<node>` returns a URL to a render, which is a LINK and not a " +
-      "picture — use `show_design` when you want to SEE a frame.",
+      "picture — use `show_design` when you want to SEE a frame. " +
+      "RATE LIMIT: file, node and image reads share one small per-minute allowance across the " +
+      "whole team, so batch: `/files/<key>/nodes?ids=a,b,c` reads many nodes in ONE request, and " +
+      "`/images` takes several ids too. Never loop one id per call; render fewer ids, or at a " +
+      "lower `scale`, when a render times out.",
   },
   trustpilot: {
     base: "https://api.trustpilot.com/v1",
@@ -5093,7 +5099,8 @@ async function callTool(
 
     let res: Response;
     try {
-      res = await fetchWithTimeout(url.toString(), {
+      // Figma's allowance is shared by the whole team, so its reads wait out a short 429.
+      res = await (key === "figma" ? figmaFetch : fetchWithTimeout)(url.toString(), {
         method: "GET",
         headers,
         timeoutMs: 20_000,
@@ -5112,6 +5119,12 @@ async function callTool(
     // isError=false. Hand the full body to textResult and let the one capping
     // path decide — a second, quieter truncation is how the first one hid.
     const text = await res.text().catch(() => "");
+    if (key === "figma" && res.status === 429) {
+      return textResult(
+        `figma returned 429. ${figmaLimitText(res.headers, "that request")}\n${text}${pathNote}`,
+        true
+      );
+    }
     if (!res.ok) {
       return textResult(`${key} returned ${res.status}:\n${text}${pathNote}`, true);
     }

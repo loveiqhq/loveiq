@@ -589,6 +589,16 @@ later `date:` is the current decision.
 | `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                 |
 | `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
 
+**Figma's rate limit is one allowance for the whole team.** Figma counts per user and
+plan, so every tool on the token shares it (file, node and image reads: 15 a minute on
+Professional, 20 on Organization). `show_design` and the gateway's Figma reads both go
+through `figmaFetch` in `features/brain/server/see/figma.ts`: a 429 whose `Retry-After`
+is 10 seconds or less is waited out once, and a longer one is answered with the wait,
+the plan tier Figma reports, and how to ask for less (several node ids in one
+`nodes?ids=a,b,c` request). On 2026-09-29 an agent sent 31 single-node reads in one
+minute and got seven 429s in 40 seconds. `comment_asks` reads comments with its own
+fetch, and a 429 there is reported as a Figma file that could not be read.
+
 **Read-only by allowlist — the HTTP method was never the guard.** This section
 used to claim construction was enough: a table read is a GET, a function call is a
 POST to `/rpc`, and PostgREST needs PATCH/PUT/DELETE to write. The second half of
