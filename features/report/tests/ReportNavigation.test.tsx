@@ -406,14 +406,19 @@ describe("V4 — the finalised nav (961:333)", () => {
     const pill = rule(".rv3.rv4 .report-chapter-pill__chapter");
     expect(pill).toContain("font-weight: 700;");
     expect(pill).toContain("margin-left: 0;");
-    // Free and open rows SemiBold, locked rows Light (Marcus's heavier weights for "the
-    // ones that are free or partially unlocked"; Mark: "Amazing, i love it").
+    // Featured rows SemiBold; free and locked rows Light. Mark, 04.10: "only have the
+    // featured chapters bold to drive users deeper into the report" (Fatih, 05.10: yes).
     expect(
       rule(".rv3.rv4 .report-mobile-nav__label,\n.rv3.rv4 .report-sidebar__item-label")
     ).toContain("font-weight: 600;");
     expect(
       rule(
-        '.rv3.rv4 .report-mobile-nav__link[data-access="locked"] .report-mobile-nav__label,\n.rv3.rv4 .report-sidebar__item[data-access="locked"] .report-sidebar__item-label'
+        [
+          '.rv3.rv4 .report-mobile-nav__link[data-access="locked"] .report-mobile-nav__label',
+          '.rv3.rv4 .report-mobile-nav__link[data-access="free"] .report-mobile-nav__label',
+          '.rv3.rv4 .report-sidebar__item[data-access="locked"] .report-sidebar__item-label',
+          '.rv3.rv4 .report-sidebar__item[data-access="free"] .report-sidebar__item-label',
+        ].join(",\n")
       )
     ).toContain("font-weight: 300;");
     // The drawer's rows hold one line, ending in an ellipsis; the sidebar keeps its wrap.
