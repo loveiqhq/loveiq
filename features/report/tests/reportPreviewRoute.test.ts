@@ -41,6 +41,16 @@ afterAll(() => {
   expect("NEXT_PUBLIC_SITE_URL" in process.env).toBe(SITE_URL !== undefined);
 });
 
+describe("GET /api/report/preview — no reader behind it", () => {
+  // Marcus (04.10): Refer a friend opened with "Preview" as the sender's name. A preview
+  // has no reader, so it sends no name and the form starts empty for the person to fill.
+  it("sends no reader's name", async () => {
+    const { status, json } = await get("archetype=Spark%20Seeker&plan=&v4=1");
+    expect(status).toBe(200);
+    expect(json.userName).toBeNull();
+  });
+});
+
 describe("GET /api/report/preview — Accelerator & Brakes", () => {
   // Review 26.09 (lockedBlurCopy.ts): a locked reader's page carries the copy it
   // draws blurred — "the unlocked content but blurred" — still marked locked.

@@ -17,8 +17,9 @@ export function inviteEmail({
   personalMessage,
   unsubscribeUrl,
 }: InviteEmailParams) {
-  const firstName = referrerName?.trim() ? referrerName.trim().split(/\s+/)[0] : null;
-  const safeFirstName = firstName ? escapeHtml(firstName) : "A friend";
+  // The whole name the form asks for (Marcus, 04.10: "Your Full Name"), spaces collapsed.
+  const senderName = referrerName?.trim().replace(/\s+/g, " ") || null;
+  const safeSenderName = senderName ? escapeHtml(senderName) : "A friend";
 
   const userMessage = personalMessage?.trim() || "";
   const isCustom = userMessage.length > 0;
@@ -60,7 +61,7 @@ export function inviteEmail({
         With kindness,
       </p>
       <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; text-align:center;">
-        ${safeFirstName} sent via LoveIQ
+        ${safeSenderName} sent via LoveIQ
       </p>
     </td>
   </tr>`;
@@ -75,7 +76,7 @@ export function inviteEmail({
     ctaUrl,
     "",
     "With kindness,",
-    `${firstName || "A friend"} sent via LoveIQ`,
+    `${senderName || "A friend"} sent via LoveIQ`,
   ].join("\n");
 
   return { subject, html, text };
