@@ -70,6 +70,9 @@ function entriesAboveBase(currentIndex: number): number {
   return Math.max(0, q - base);
 }
 
+/** Where a touch never starts a swipe between questions. */
+const NO_SWIPE = "input, textarea, select, [contenteditable], [data-no-swipe]";
+
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }) => {
   const {
     answers,
@@ -540,6 +543,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
+      // A drag that starts on the scale (it looks like a slider) or in a text box (moving
+      // the caret, selecting text) is not a swipe between questions; it changed the
+      // question under the reader.
+      if ((e.target as Element | null)?.closest?.(NO_SWIPE)) {
+        touchStartX.current = null;
+        touchStartY.current = null;
+        return;
+      }
       // TouchEvent always fires with at least one touch point.
       touchStartX.current = e.touches[0]!.clientX;
       touchStartY.current = e.touches[0]!.clientY;
@@ -704,7 +715,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       <main
         id="main-content"
         className="relative flex min-h-dvh flex-col bg-white"
-        style={{ touchAction: "pan-y" }}
+        // pinch-zoom too: pan-y alone turned off zooming on the whole survey.
+        style={{ touchAction: "pan-y pinch-zoom" }}
         data-survey-theme={surveyVariant}
       >
         {/* Background gradient blurs */}
@@ -725,6 +737,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
             aria-label={`Question ${currentIndex + 1} of ${totalQuestions}`}
             className="relative flex flex-1 flex-col bg-white sm:rounded-[22px] sm:border sm:border-[rgba(22,16,33,0.09)]"
           >
+            {/* Read out each new question: focus stays on Next, so a screen reader said
+                nothing when the question changed. */}
+            <p className="sr-only" aria-live="polite">
+              {`Question ${currentIndex + 1} of ${totalQuestions}: ${question.question}`}
+            </p>
             {/* Fill `backwards`, not `both`: a transform left in place after the
                 entrance would trap the country dropdown under the sticky footer. */}
             <div

@@ -8,6 +8,9 @@ import { getOptionExplanation } from "./getOptionExplanation";
 import { useOrderedOptions } from "./useOrderedOptions";
 import { useSurveyTheme } from "../SurveyThemeContext";
 
+/** An answer that means "none of the above". */
+export const isExclusive = (option: string) => /^none of these\b/i.test(option);
+
 interface MultipleChoiceQuestionProps {
   question: SurveyQuestion;
   value: string[] | null;
@@ -30,7 +33,9 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
   const [attemptedOverLimit, setAttemptedOverLimit] = useState(false);
   const maxSelections = question.maxSelections;
   const isOverLimit = typeof maxSelections === "number" && selected.length > maxSelections;
-  const atLimit = typeof maxSelections === "number" && selected.length >= maxSelections;
+  // A list of one swaps on a new tap, so nothing is greyed out as unavailable.
+  const atLimit =
+    typeof maxSelections === "number" && maxSelections > 1 && selected.length >= maxSelections;
   const showLimitMessage =
     typeof maxSelections === "number" &&
     (attemptedOverLimit || isOverLimit || (forceValidation && isOverLimit));
@@ -42,13 +47,23 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
       return;
     }
 
-    if (typeof maxSelections === "number" && selected.length >= maxSelections) {
+    // "None of these" and any other pick exclude each other: both together was a
+    // contradiction the survey stored. A list of one swaps rather than asking the reader
+    // to deselect first.
+    if (isExclusive(option) || maxSelections === 1) {
+      setAttemptedOverLimit(false);
+      onChange([option]);
+      return;
+    }
+    const others = selected.filter((v) => !isExclusive(v));
+
+    if (typeof maxSelections === "number" && others.length >= maxSelections) {
       setAttemptedOverLimit(true);
       return;
     }
 
     setAttemptedOverLimit(false);
-    onChange([...selected, option]);
+    onChange([...others, option]);
   };
 
   const white = useSurveyTheme() === "white";

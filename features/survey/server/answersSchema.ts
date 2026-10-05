@@ -27,7 +27,9 @@ const SCALE_QIDS = new Set(
  *   cap went live, or a page left open across that deploy);
  * - answers to questions hidden since are dropped (an old draft still carries them);
  * - a scale answer that is not a number is dropped (two questions were text once, and
- *   submit_survey casts scale answers to numeric, which failed every retry).
+ *   submit_survey casts scale answers to numeric, which failed every retry);
+ * - the "Other" box's text is dropped once "Other" is no longer the answer (switching
+ *   away kept it, so a reader who typed something and changed their mind had it stored).
  */
 export const surveyAnswersSchema = z
   .record(
@@ -51,15 +53,22 @@ export const surveyAnswersSchema = z
   .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" })
   .transform((obj) => {
     // Rebuilt from entries, so a key like "__proto__" stays a plain own property.
+    const given = new Map(Object.entries(obj));
+    const capped = (key: string, value: string | string[] | number | undefined) =>
+      Array.isArray(value) ? value.slice(0, SURVEY_SELECTION_CAPS.get(key) ?? 20) : value;
     const tidied = new Map<string, string | string[] | number>();
-    for (const [key, value] of Object.entries(obj)) {
+    for (const [key, value] of given) {
       const qId = key.endsWith("_other") ? key.slice(0, -"_other".length) : key;
       if (isHidden(qId)) continue;
       if (SCALE_QIDS.has(key) && typeof value !== "number") continue;
-      tidied.set(
-        key,
-        Array.isArray(value) ? value.slice(0, SURVEY_SELECTION_CAPS.get(key) ?? 20) : value
-      );
+      if (key !== qId && !picksOther(capped(qId, given.get(qId)))) continue;
+      tidied.set(key, capped(key, value)!);
     }
     return Object.fromEntries(tidied);
   });
+
+/** Whether an answer is (or includes) an "Other" option, the one with a text box. */
+function picksOther(answer: string | string[] | number | undefined): boolean {
+  const picks = Array.isArray(answer) ? answer : [answer];
+  return picks.some((pick) => typeof pick === "string" && /^other\b/i.test(pick));
+}

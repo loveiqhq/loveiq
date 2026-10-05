@@ -435,6 +435,87 @@ describe("SurveyEngine completion phases", () => {
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
   });
 
+  describe("swipes", () => {
+    const swipeRight = (start: EventTarget) => {
+      fireEvent.touchStart(start, { touches: [{ clientX: 40, clientY: 300 }] });
+      fireEvent.touchEnd(window, { changedTouches: [{ clientX: 240, clientY: 305 }] });
+    };
+
+    // A drag across the 1-7 scale (it looks like a slider), or along a text box to move
+    // the caret, went to the previous or next question.
+    it.each([
+      [
+        "the scale",
+        () => {
+          const scale = document.createElement("div");
+          scale.setAttribute("data-no-swipe", "");
+          return scale;
+        },
+      ],
+      ["a text box", () => document.createElement("input")],
+      ["a text area", () => document.createElement("textarea")],
+    ])("a drag that starts on %s does not change the question", (_label, make) => {
+      mockCurrentIndex = 1;
+      const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      mockSetCurrentIndex.mockClear();
+      const el = make();
+      document.body.appendChild(el);
+      try {
+        swipeRight(el);
+        expect(back).not.toHaveBeenCalled();
+        expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+      } finally {
+        el.remove();
+        back.mockRestore();
+      }
+    });
+
+    it("a swipe anywhere else still goes back a question", () => {
+      mockCurrentIndex = 1;
+      const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      mockSetCurrentIndex.mockClear();
+      try {
+        swipeRight(document.body);
+        // Back pops an entry, or with none above the base, moves on its own.
+        expect(back.mock.calls.length + mockSetCurrentIndex.mock.calls.length).toBe(1);
+      } finally {
+        back.mockRestore();
+      }
+    });
+  });
+
+  // Focus stays on Next, so a screen reader said nothing when the question changed.
+  it("announces each new question to screen readers", () => {
+    mockQuestions = [
+      makeSurveyQuestion({ qId: "q1", question: "First question?" }),
+      makeSurveyQuestion({ qId: "q2", question: "Second question?" }),
+    ];
+    try {
+      mockCurrentIndex = 0;
+      const { rerender, container } = render(
+        <SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />
+      );
+      const live = () => container.querySelector('[aria-live="polite"]')?.textContent;
+      expect(live()).toBe("Question 1 of 2: First question?");
+      mockCurrentIndex = 1;
+      rerender(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      expect(live()).toBe("Question 2 of 2: Second question?");
+    } finally {
+      mockQuestions = null;
+    }
+  });
+
+  // pan-y alone turned pinch-zoom off for the whole survey.
+  it("lets the reader pinch to zoom", () => {
+    mockCurrentIndex = 0;
+    const { container } = render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect((container.querySelector("main") as HTMLElement).style.touchAction).toContain(
+      "pinch-zoom"
+    );
+  });
+
   it("never re-runs a finished run from the keyboard or a swipe", () => {
     // A remount onto the retry screen resets hasCompleted; ArrowRight, Enter or a left
     // swipe there re-ran the whole completion (a second survey_completed and payload).

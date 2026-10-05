@@ -235,4 +235,52 @@ describe("MultipleChoiceQuestion", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent(/up to 3 options/i);
   });
+
+  describe("None of these", () => {
+    const withNone = makeSurveyQuestion({
+      qId: "q2",
+      answerType: "multiple",
+      options: ["Therapy", "Books", "An app", "None of these"],
+      required: true,
+    });
+    const checked = (label: string) =>
+      screen.getByTestId(`choice-${label}`).getAttribute("aria-checked") === "true";
+
+    // Picking it beside a real answer stored a contradiction.
+    it("clears the other picks", async () => {
+      const user = userEvent.setup();
+      render(<ControlledQuestion question={withNone} initialValue={["Therapy", "Books"]} />);
+      await user.click(screen.getByTestId("choice-None of these"));
+      expect(checked("None of these")).toBe(true);
+      expect(checked("Therapy")).toBe(false);
+      expect(checked("Books")).toBe(false);
+    });
+
+    it("is cleared by a real pick", async () => {
+      const user = userEvent.setup();
+      render(<ControlledQuestion question={withNone} initialValue={["None of these"]} />);
+      await user.click(screen.getByTestId("choice-Books"));
+      expect(checked("Books")).toBe(true);
+      expect(checked("None of these")).toBe(false);
+    });
+  });
+
+  describe("a list of one", () => {
+    const one = makeSurveyQuestion({
+      qId: "q3",
+      answerType: "multiple",
+      options: ["Time", "Money", "Nothing major is in the way right now"],
+      maxSelections: 1,
+    });
+
+    // It answered a second tap with "You can select up to 1 options. Deselect one".
+    it("swaps to the new pick instead of refusing it", async () => {
+      const user = userEvent.setup();
+      render(<ControlledQuestion question={one} initialValue={["Time"]} />);
+      await user.click(screen.getByTestId("choice-Money"));
+      expect(screen.getByTestId("choice-Money").getAttribute("aria-checked")).toBe("true");
+      expect(screen.getByTestId("choice-Time").getAttribute("aria-checked")).toBe("false");
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
 });

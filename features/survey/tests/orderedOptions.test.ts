@@ -84,6 +84,34 @@ describe("orderedOptions", () => {
     orderedOptions(q, SESSION);
     expect(q.options).toEqual(before);
   });
+
+  describe("answers that stay at the bottom", () => {
+    const SESSIONS = Array.from(
+      { length: 40 },
+      (_, n) => `3f2b1c7a-9d4e-4f10-8b52-${String(n).padStart(12, "0")}`
+    );
+
+    it("keeps None of these, Something else and Nothing major last, in authored order", () => {
+      for (const qId of RANDOMISE_QIDS) {
+        const q = surveyQuestions.find((x) => x.qId === qId)!;
+        const anchored = q.options.filter((o) =>
+          /^(none of these|nothing major|something else|other)\b/i.test(o)
+        );
+        expect(anchored.length, `${qId} has an answer to anchor`).toBeGreaterThan(0);
+        for (const session of SESSIONS) {
+          const out = orderedOptions(q, session);
+          expect(out.slice(-anchored.length)).toEqual(anchored);
+          expect([...out].sort()).toEqual([...q.options].sort());
+        }
+      }
+    });
+
+    it("still shuffles everything above them", () => {
+      const q = surveyQuestions.find((x) => x.qId === "16011")!;
+      const firsts = new Set(SESSIONS.map((session) => orderedOptions(q, session)[0]));
+      expect(firsts.size).toBeGreaterThan(1);
+    });
+  });
 });
 
 function arraysEqual(a: string[], b: string[]): boolean {
