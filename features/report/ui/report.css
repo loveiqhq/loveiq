@@ -3510,11 +3510,14 @@
   line-height: 20px;
 }
 
+/* Whole words: `hyphens: auto` let Safari break short labels mid-word at 1280 ("What Shaped
+ * This Re-port", "3 Highest Scoring Ar-chetypes") where Chrome and Firefox wrapped the word
+ * (review 06.10). The longest label word fits the column; break-word stays the last resort. */
 .report-sidebar__item-label > span {
   min-width: 0;
   overflow-wrap: break-word;
   word-break: normal;
-  hyphens: auto;
+  hyphens: manual;
 }
 
 /* Active item keeps the light label (Figma 8719:9352) — the purple pill +

@@ -33,6 +33,15 @@ describe("ReportDesktopSidebar", () => {
     }
   });
 
+  // Review 06.10: Safari hyphenated short labels mid-word at 1280 ("Re-port").
+  it("wraps chapter labels at whole words", () => {
+    const css = readFileSync(join(process.cwd(), "features/report/ui/report.css"), "utf8");
+    const start = css.indexOf("\n.report-sidebar__item-label > span {");
+    const rule = css.slice(start, css.indexOf("}", start));
+    expect(rule).toContain("hyphens: manual");
+    expect(rule).not.toContain("hyphens: auto");
+  });
+
   it("fades an edge of the chapter list only while there is more list beyond it", () => {
     const { container, unmount } = render(
       <ReportDesktopSidebar activeSectionId="core_archetype" />
