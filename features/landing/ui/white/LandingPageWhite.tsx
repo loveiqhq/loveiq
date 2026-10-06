@@ -1,5 +1,6 @@
 import type { FC } from "react";
 import dynamic from "next/dynamic";
+import type { LandingVariant } from "@shared/experiments/landingVariant";
 import ScrollAnimator from "../ScrollAnimator";
 import LandingPageTracker from "../LandingPageTracker";
 import WNavSection from "./WNavSection";
@@ -23,13 +24,17 @@ const WStickyBar = dynamic(() => import("./WStickyBar"));
 
 /**
  * The live landing page (Figma node 8947-7360, "Landing E — workshop build").
- * Served at `/` to 100% of visitors — the dark A/B arm was retired 2026-06-19.
+ *
+ * Both arms of the round-3 landing test render this page; only the hero's
+ * right-hand slot differs. `white_video` puts the presenter video there (Figma
+ * Report-3.0 `1503:12473`); every other value — `white_card`, and `white` for
+ * crawlers and visitors without a cookie — keeps question 1.
  *
  * Section order mirrors the Figma frame top to bottom. Sections the mock marks
  * "(live)" — nav, archetypes, field reports, FAQ, footer — are the existing
  * components, reused unchanged.
  */
-const LandingPageWhite: FC = () => {
+const LandingPageWhite: FC<{ variant: LandingVariant }> = ({ variant }) => {
   return (
     <main id="main-content" className="relative bg-white text-gray-900">
       {/* The global body background is dark (var(--color-bg)). That shows
@@ -37,9 +42,9 @@ const LandingPageWhite: FC = () => {
           Server-rendered → no flash. */}
       <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <ScrollAnimator />
-      <LandingPageTracker variant="white" />
+      <LandingPageTracker variant={variant} />
       <WNavSection />
-      <WHero />
+      <WHero media={variant === "white_video" ? "video" : "card"} />
       <WTrustStrip />
       <WDiscover />
       <WVocab />

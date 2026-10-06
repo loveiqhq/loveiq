@@ -35,7 +35,8 @@ describe("landing A/B — the arm reaches the analytics", () => {
     const { default: LandingPageTracker } = await import("@features/landing/ui/LandingPageTracker");
     const { LANDING_VARIANT_EXPERIMENT } = await import("@shared/experiments/landingVariant");
 
-    for (const arm of ["white", "white_prev"] as const) {
+    // Round 3's two arms, plus the two values a landing still renders outside the test.
+    for (const arm of ["white_card", "white_video", "white", "white_prev"] as const) {
       setVariant.mockClear();
       exposure.mockClear();
       render(<LandingPageTracker variant={arm} />);
@@ -48,8 +49,8 @@ describe("landing A/B — the arm reaches the analytics", () => {
     }
   });
 
-  it("stamps the arm from the cookie onto a durable event, previous arm included", async () => {
-    for (const arm of ["white", "white_prev"] as const) {
+  it("stamps the arm from the cookie onto a durable event, earlier rounds' arms included", async () => {
+    for (const arm of ["white_card", "white_video", "white", "white_prev"] as const) {
       vi.resetModules();
       setConsent();
       // persistAnalyticsEvent needs a submission context and a CSRF token, or it
