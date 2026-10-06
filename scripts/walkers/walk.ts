@@ -608,11 +608,12 @@ async function main(argv: string[]): Promise<number> {
     page
       .evaluate(() => {
         const text = document.body?.innerText ?? "";
-        // The default report's locks, then V4's (staging branch): its premium content card
-        // and the lock tile on a visual. Measured 2026-10-05: 4 cards and 17 tiles on an
-        // unpaid V4 report, none once paid; with only the first two, V4 counted 0 and 0.
+        // The default report's locks, then V4's (staging branch): its premium content card,
+        // the lock tile on a visual and a locked chapter's disc. Measured 2026-10-05: 4 cards
+        // and 17 tiles on an unpaid V4 report, none once paid; with only the first two, V4
+        // counted 0 and 0.
         const badges = document.querySelectorAll(
-          '[aria-label="Unlock the full report"], .report-premium-overlay, .rv4-premium, .rv4-lockbadge'
+          '[aria-label="Unlock the full report"], .report-premium-overlay, .rv4-premium, .rv4-lockbadge, .rv4-chapter__lock'
         ).length;
         return badges + (text.match(/Unlock it to keep reading/g) ?? []).length;
       })
@@ -1176,12 +1177,6 @@ async function main(argv: string[]): Promise<number> {
       walk.sequence!.checks.push({ what, ok, observed: seen });
       if (!ok) throw new Error(`purchase sequence: expected ${what}; saw ${seen}`);
     };
-    /** Locks on a V4 report: lock badges, locked chapters' discs, premium cards. */
-    const lockCount = () =>
-      page
-        .locator(".rv4-lockbadge, .rv4-chapter__lock, .rv4-premium")
-        .count()
-        .catch(() => -1);
     /** "Other Archetypes": each row's archetype, its pill's words, and the one on screen. */
     const constellationRows = () =>
       page
@@ -1342,7 +1337,7 @@ async function main(argv: string[]): Promise<number> {
       await page.goto(mine.toString(), { waitUntil: "domcontentloaded" });
       await settle();
       await record("sequence-own-report");
-      const locks = await lockCount();
+      const locks = await countLocks();
       const bar =
         (await page.locator(".report-sticky-unlock").filter({ visible: true }).count()) > 0;
       seqCheck(
@@ -1355,7 +1350,7 @@ async function main(argv: string[]): Promise<number> {
     const checkBothOpen = async () => {
       const other = walk.sequence!.other!;
       const own = walk.serverArchetype ?? persona.archetype;
-      const ownLocks = await lockCount();
+      const ownLocks = await countLocks();
       const ownOnScreen = (await constellationRows()).find((r) => r.onScreen)?.name ?? "none";
       seqCheck(
         `no locks left on the reader's own report (${own}) once bought`,
@@ -1369,7 +1364,7 @@ async function main(argv: string[]): Promise<number> {
       await page.goto(theirs.toString(), { waitUntil: "domcontentloaded" });
       await settle();
       await record("sequence-other-report-again");
-      const locks = await lockCount();
+      const locks = await countLocks();
       const onScreen = (await constellationRows()).find((r) => r.onScreen)?.name ?? "none";
       seqCheck(
         `no locks on ${other}'s report after both purchases`,
