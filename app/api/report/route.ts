@@ -390,7 +390,14 @@ export async function GET(request: Request) {
         submissionId: submission.id,
       });
 
-      const access = await getReportAccessPlanForSubmission(submission.id, ensuredReport);
+      // Scoped to the reader's own archetype: every gate below that falls back to
+      // `accessPlan` is gating THAT report, so a single report bought for another
+      // archetype must not open it (it opens its own archetype via the tiers).
+      const access = await getReportAccessPlanForSubmission(
+        submission.id,
+        ensuredReport,
+        scoring.v5_primary_archetype || scoring.primary_archetype
+      );
       accessPlan = access.accessPlan;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};

@@ -31,7 +31,9 @@ const paidLine = () =>
   screen.getByText(
     (_, el) =>
       el?.tagName === "P" &&
-      /payment complete\. your report is unlocked\. redirecting you now/i.test(el.textContent ?? "")
+      /payment complete\. (your report is|your [a-z ]+ report is|all 14 archetype reports are) unlocked\. redirecting you now/i.test(
+        el.textContent ?? ""
+      )
   );
 
 describe("CheckoutReturnPage", () => {
@@ -187,6 +189,31 @@ describe("CheckoutReturnPage", () => {
         discount_amount: 24.49,
       })
     );
+  });
+
+  it("names the archetype a single report was bought for", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        accessPlan: "full_report",
+        enabled: true,
+        paymentStatus: "paid",
+        purchaseAnalytics: { value: 14.99, currency: "EUR", transaction_id: "cs_test_other" },
+        sessionStatus: "complete",
+      }),
+    } as Response);
+
+    render(
+      <CheckoutReturnPage
+        archetype="Minimalist Companion"
+        planId="full_report"
+        sessionId="cs_test_other"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+
+    await waitFor(() => expect(paidLine()).toBeInTheDocument());
+    expect(paidLine().textContent).toMatch(/your minimalist companion report is unlocked/i);
   });
 
   it("keeps polling while payment is complete but backend access is still syncing", async () => {

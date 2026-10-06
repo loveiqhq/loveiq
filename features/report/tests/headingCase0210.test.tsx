@@ -241,6 +241,7 @@ describe("Report 2.0's headings that V4 shows follow the 02.10 heading rule", ()
         mottos={{ "Spark Seeker": null }}
         viewArchetype="Spark Seeker"
         onViewArchetype={() => {}}
+        unlockedArchetypes={new Set(["Spark Seeker"])}
       />
     );
     const heading = container.querySelector(".report-constellation__heading")!;

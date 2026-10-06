@@ -343,7 +343,18 @@ export async function getReportAccessPlanForSubmission(
    * report view, one wasted Supabase round trip on the hottest route. Passing it
    * through removes the second read. Omitted, the behaviour is unchanged.
    */
-  prefetchedReport?: PersonalReportRow | null
+  prefetchedReport?: PersonalReportRow | null,
+  /**
+   * The reader's own archetype. Given, `accessPlan` answers "which plan covers
+   * THIS reader's own report", and a single report bought for a different
+   * archetype no longer counts towards it: that purchase opens its own archetype
+   * through `archetype_tiers`, and nothing else. Without it, buying "Only the
+   * Minimalist Companion Report" also opened the buyer's own report for free
+   * (reproduced on staging 2026-10-06). A payment with no archetype predates
+   * per-archetype pricing and was always for the reader's own report, so it still
+   * counts. Omitted, `accessPlan` is the strongest plan across every payment.
+   */
+  primaryArchetype?: string | null
 ): Promise<{
   accessPlan: ReportAccessPlan;
   archetypeTiers: ArchetypeTierMap;
@@ -381,7 +392,15 @@ export async function getReportAccessPlanForSubmission(
   const strongestPlan = getStrongestReportAccessPlan(
     payments.map((payment) => {
       const candidate = payment.metadata?.plan;
-      return isReportPurchasePlan(candidate) ? candidate : null;
+      if (!isReportPurchasePlan(candidate)) return null;
+      const archetype = payment.metadata?.archetype;
+      const boughtForAnotherArchetype =
+        Boolean(primaryArchetype) &&
+        (candidate === "full_report" || candidate === "essentials") &&
+        typeof archetype === "string" &&
+        archetype !== "" &&
+        archetype !== primaryArchetype;
+      return boughtForAnotherArchetype ? null : candidate;
     })
   );
 
