@@ -305,15 +305,37 @@ test.describe("Survey — a browser that refuses storage", () => {
     expect(threw, "the storage refusal did not take effect in this engine").toBe(true);
 
     await enterEngine(page);
+    // With storage refused the engine mints its session id in memory, so the test cannot
+    // pin the C13 arm: either opening order may come. Answer whichever question is on
+    // screen, by its heading, and require the next one to arrive.
+    const known = new Map(surveyQuestions.map((q) => [q.question, q]));
+    const onScreen = async () => {
+      const heading = page
+        .getByRole("heading", { level: 1 })
+        .or(page.getByRole("heading", { level: 2 }));
+      await expect
+        .poll(
+          async () => {
+            for (const text of await heading.allTextContents())
+              if (known.has(text.trim())) return text.trim();
+            return null;
+          },
+          { timeout: 10_000 }
+        )
+        .not.toBeNull();
+      for (const text of await heading.allTextContents())
+        if (known.has(text.trim())) return known.get(text.trim())!;
+      throw new Error("no known question on screen");
+    };
     for (let i = 0; i < 2; i += 1) {
-      await expect(
-        page.getByRole("heading", { name: ASKED[i]!.question, exact: true })
-      ).toBeVisible({ timeout: 10_000 });
-      await answerAndAdvance(page, ASKED[i]!, ASKED[i + 1]!.question);
+      const q = await onScreen();
+      await answerAndAdvance(page, q, null);
+      await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
+      await expect(page.getByRole("heading", { name: q.question, exact: true })).toBeHidden({
+        timeout: 12_000,
+      });
     }
-    await expect(
-      page.getByRole("heading", { name: ASKED[2]!.question, exact: true })
-    ).toBeVisible();
+    await onScreen();
     expect(ours, "our own code threw with storage refused").toEqual([]);
   });
 });
