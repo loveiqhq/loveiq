@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
 vi.mock("@features/survey/ui/questions/ChoiceCard", () => ({
   default: (props: {
@@ -408,6 +408,67 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
     } finally {
       window.removeEventListener("keydown", onWindowKey);
     }
+  });
+
+  // Mark, 2026-10-06: on a phone the list seemed to end where the footer began.
+  describe("categories under the sticky footer", () => {
+    const scrollY = { value: 0 };
+    let footer: HTMLDivElement;
+    let rect: ReturnType<typeof vi.spyOn>;
+    let scrolled: ReturnType<typeof vi.fn>;
+    // Headings 52px tall every 60px from 100px: with the footer at 500px, the seventh
+    // (index 6, 460-512) is the first not fully above it, so seven are under it.
+    const headingIndex = (el: Element) =>
+      Number(/-group-(\d+)$/.exec(el.getAttribute("aria-controls") ?? "")?.[1] ?? NaN);
+
+    beforeEach(() => {
+      footer = document.createElement("div");
+      footer.setAttribute("data-survey-footer", "");
+      document.body.appendChild(footer);
+      rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: Element
+      ) {
+        const top = this.hasAttribute("data-survey-footer")
+          ? 500
+          : 100 + 60 * headingIndex(this) - scrollY.value;
+        return Number.isNaN(top)
+          ? new DOMRect(0, 0, 0, 0)
+          : new DOMRect(0, top, 300, this === footer ? 160 : 52);
+      });
+      scrolled = vi.fn();
+      Element.prototype.scrollIntoView = scrolled;
+    });
+
+    afterEach(() => {
+      rect.mockRestore();
+      footer.remove();
+      scrollY.value = 0;
+    });
+
+    it("says how many categories are under it, and a tap brings the next one up", async () => {
+      const user = userEvent.setup();
+      render(<ControlledC9 />);
+
+      const pill = screen.getByText("7 more categories");
+      await user.click(pill);
+
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(headingIndex(scrolled.mock.contexts[0] as Element)).toBe(6);
+    });
+
+    it("counts down as the reader scrolls, and goes away at the last category", () => {
+      render(<ControlledC9 />);
+      expect(screen.getByText("7 more categories")).toBeInTheDocument();
+
+      scrollY.value = 300;
+      fireEvent.scroll(window);
+      expect(screen.getByText("2 more categories")).toBeInTheDocument();
+
+      scrollY.value = 400;
+      fireEvent.scroll(window);
+
+      expect(screen.queryByText(/more categor/)).toBeNull();
+    });
   });
 
   it("labels each open panel as a group named after its category", async () => {

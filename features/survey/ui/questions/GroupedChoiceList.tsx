@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FC, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FC, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import type { SurveyQuestion } from "@/data/survey-data";
 import type { OptionGroup } from "@features/survey/optionGroups";
 import ChoiceCard from "./ChoiceCard";
@@ -39,14 +40,32 @@ function containActivationKeys(e: KeyboardEvent<HTMLButtonElement>) {
   if (e.key === "Enter" || e.key === " ") e.stopPropagation();
 }
 
+/** Where the sticky footer starts. Unpinned on a short window it can sit below the fold. */
+function footerEdge(): number {
+  const footer = document.querySelector("[data-survey-footer]");
+  return Math.min(footer ? footer.getBoundingClientRect().top : Infinity, window.innerHeight);
+}
+
+/** The category headings not fully above the footer. */
+function hiddenHeadings(list: HTMLElement | null): Element[] {
+  const edge = footerEdge();
+  return [...(list?.querySelectorAll("button[aria-controls]") ?? [])].filter(
+    (heading) => heading.getBoundingClientRect().bottom > edge + 1
+  );
+}
+
 /**
  * A multi-select's options under collapsible category headings: C9's thirteen categories
  * (see `features/survey/optionGroups.ts`).
  *
- * One category is open at a time and all start closed, so the whole set of headings fits
- * on a phone before the respondent commits to one. A heading that holds picks says how
- * many, so a choice made inside a closed category is never out of sight. Closed panels are
- * `inert` as well as `aria-hidden`: their topics can be neither tabbed to nor clicked.
+ * One category is open at a time and all start closed, so the respondent sees the headings
+ * before committing to one. Thirteen never fit on a phone, though, and a heading ending
+ * right at the sticky footer made the list look finished (Mark, 2026-10-06: "not entirely
+ * clear that you can scroll down for more options"). So the headings are compact, and
+ * while some sit under the footer a pill above it says how many; a tap brings the next one
+ * up. A heading that holds picks says how many, so a choice made inside a closed category
+ * is never out of sight. Closed panels are `inert` as well as `aria-hidden`: their topics
+ * can be neither tabbed to nor clicked.
  *
  * Selection, the cap and click order stay with MultipleChoiceQuestion, which passes
  * `onToggle` down unchanged, so a grouped question is capped and recorded exactly like a
@@ -61,9 +80,43 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
 }) => {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const white = useSurveyTheme() === "white";
+  const listRef = useRef<HTMLDivElement | null>(null);
+  // Headings not fully above the footer, and how far the footer's top is from the bottom.
+  const [below, setBelow] = useState({ count: 0, bottom: 0 });
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      const count = hiddenHeadings(list).length;
+      const bottom = Math.round(window.innerHeight - footerEdge());
+      setBelow((prev) =>
+        prev.count === count && prev.bottom === bottom ? prev : { count, bottom }
+      );
+    };
+    measure();
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    // Opening or closing a category changes the list's height without a scroll.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(list);
+    return () => {
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, []);
+
+  const showNext = () => {
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    hiddenHeadings(listRef.current)[0]?.scrollIntoView({
+      block: "center",
+      behavior: smooth ? "smooth" : "auto",
+    });
+  };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={listRef} className="flex flex-col gap-2">
       {groups.map((group, index) => {
         const isOpen = openLabel === group.label;
         const picked = group.options.filter((option) => selected.includes(option)).length;
@@ -89,7 +142,7 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
               aria-controls={panelId}
               onClick={() => setOpenLabel(isOpen ? null : group.label)}
               onKeyDown={containActivationKeys}
-              className={`flex min-h-[64px] w-full items-center gap-3 rounded-[16px] px-[21px] text-left font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 ${
+              className={`flex min-h-[52px] w-full items-center gap-3 rounded-[16px] px-[21px] text-left font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 ${
                 white ? "focus-visible:ring-offset-white" : "focus-visible:ring-offset-[#0a0510]"
               }`}
             >
@@ -150,6 +203,27 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
           </div>
         );
       })}
+      {/* A visual cue only: the headings it points at are next in the reading order. */}
+      {below.count > 0
+        ? createPortal(
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              onClick={showNext}
+              style={{ bottom: below.bottom + 12 }}
+              className={`fixed left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3.5 py-1.5 font-sans text-[13px] font-semibold leading-[18px] shadow-[0_6px_18px_rgba(22,16,33,0.14)] ${
+                white
+                  ? "border-black/[0.08] bg-white text-[#6b5b95]"
+                  : "border-white/15 bg-[#1a1324] text-white/80"
+              }`}
+            >
+              <ChevronIcon open={false} />
+              {below.count} more {below.count === 1 ? "category" : "categories"}
+            </button>,
+            document.body
+          )
+        : null}
     </div>
   );
 };
