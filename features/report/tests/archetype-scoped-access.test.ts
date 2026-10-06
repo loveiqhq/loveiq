@@ -44,6 +44,8 @@ describe("a single report bought for another archetype", () => {
     mockFetchWithTimeout.mockResolvedValueOnce(payments({ plan: "full_report", archetype: OTHER }));
     const res = await getReportAccessPlanForSubmission(42, row({ [OTHER]: "full_report" }), OWN);
     expect(res.accessPlan).toBeNull();
+    // Still "bought something": the reader's own findings open on any purchase.
+    expect(res.anyPlan).toBe("full_report");
   });
 
   it("leaves the own report locked and opens only the archetype it was bought for", async () => {

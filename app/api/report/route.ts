@@ -368,6 +368,8 @@ export async function GET(request: Request) {
     }
 
     let accessPlan: "essentials" | "full_report" | "core" | "all_reports" | null = null;
+    // Has the reader bought ANYTHING, whichever archetype it was for (the Findings gate).
+    let boughtAnything = false;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -399,6 +401,7 @@ export async function GET(request: Request) {
         scoring.v5_primary_archetype || scoring.primary_archetype
       );
       accessPlan = access.accessPlan;
+      boughtAnything = access.anyPlan !== null;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
 
@@ -642,7 +645,9 @@ export async function GET(request: Request) {
     // kill-switch's all_reports) unlocks the real findings. Shared viewers
     // inherit the owner's plan here, matching the report's gift-view gating.
     const findingsSection = getReport2Section(primaryArchetype, "findings");
-    const findingsUnlocked = accessPlan !== null;
+    // Any purchase, not only the reader's own report: a single report bought for another
+    // archetype still opens the reader's own findings, as it always did.
+    const findingsUnlocked = accessPlan !== null || boughtAnything;
     const findingsCopy = {
       "f1.head": findingsSection["f1.head"] ?? null,
       "f1.body": findingsSection["f1.body"] ?? null,

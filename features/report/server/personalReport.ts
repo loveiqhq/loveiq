@@ -357,6 +357,8 @@ export async function getReportAccessPlanForSubmission(
   primaryArchetype?: string | null
 ): Promise<{
   accessPlan: ReportAccessPlan;
+  /** The strongest plan across EVERY payment, archetype ignored: "has bought anything". */
+  anyPlan: ReportAccessPlan;
   archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
@@ -369,6 +371,7 @@ export async function getReportAccessPlanForSubmission(
   if (!personalReport) {
     return {
       accessPlan: null,
+      anyPlan: null,
       archetypeTiers: {},
       personalReportId: null,
       unlockedArchetypeColumn: [],
@@ -410,6 +413,11 @@ export async function getReportAccessPlanForSubmission(
 
   return {
     accessPlan: strongestPlan,
+    anyPlan: getStrongestReportAccessPlan(
+      payments.map((payment) =>
+        isReportPurchasePlan(payment.metadata?.plan) ? payment.metadata.plan : null
+      )
+    ),
     archetypeTiers: sanitizeArchetypeTierMap(personalReport.archetype_tiers ?? {}),
     personalReportId: personalReport.id,
     unlockedArchetypeColumn: columnValues,
