@@ -801,7 +801,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
             <div
               key={animKey}
               ref={bodyRef}
-              className="flex flex-1 flex-col gap-5 px-[18.4px] pt-[22.4px] motion-safe:animate-[survey-fade-up_0.4s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:px-[35px] sm:pb-3 sm:pt-[33px]"
+              className="flex flex-1 flex-col gap-5 px-[18.4px] pb-3 pt-[22.4px] motion-safe:animate-[survey-fade-up_0.4s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:px-[35px] sm:pt-[33px]"
             >
               {question.answerType === "open" && (
                 <OpenResponseQuestion
