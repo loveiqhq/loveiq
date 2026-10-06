@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { pickEmailVariant, pickFromVariants, emailExperimentTags } from "@shared/emails/ab-variant";
 
@@ -167,14 +166,20 @@ describe("every email A/B send is tagged", () => {
   it("covers every site in the codebase that picks a variant", () => {
     // Guards the list above: a NEW send site that picks an arm and is not listed
     // here would otherwise never be checked.
-    const found = execSync(
-      "grep -rl 'pickEmailVariant(\\|pickFromVariants(' app features shared --include='*.ts' " +
-        "| grep -v '/tests/' | grep -v 'ab-variant.ts' | sort",
-      { encoding: "utf8", cwd: process.cwd() }
-    )
-      .trim()
-      .split("\n")
-      .filter(Boolean);
+    //
+    // The same search the shell pipeline `grep -rl … --include='*.ts' | grep -v
+    // /tests/ | grep -v ab-variant.ts` made, in Node: on Windows that pipeline ran
+    // through cmd.exe, which split it at the `\|` and failed before searching.
+    const filesUnder = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const full = join(dir, name);
+        return statSync(full).isDirectory() ? filesUnder(full) : [full];
+      });
+    const found = ["app", "features", "shared"]
+      .flatMap((root) => filesUnder(join(process.cwd(), root)))
+      .map((full) => relative(process.cwd(), full).split(sep).join("/"))
+      .filter((f) => f.endsWith(".ts") && !f.includes("/tests/") && !f.includes("ab-variant.ts"))
+      .filter((f) => /pickEmailVariant\(|pickFromVariants\(/.test(readFileSync(f, "utf8")));
     expect(found.sort()).toEqual([...SEND_SITES].sort());
   });
 });
