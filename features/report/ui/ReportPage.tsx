@@ -9,14 +9,19 @@ import {
   useState,
   useSyncExternalStore,
   type FC,
+  type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
+import {
+  assignPopupArm,
+  POPUP_EXPERIMENT,
+  resolvePopupArmOverride,
+} from "@shared/experiments/popupArm";
 import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
-import { canSharePlan } from "@features/report/server/planAccess";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
@@ -30,7 +35,46 @@ import {
   REPORT_SECTION_ORDER,
   RETIRED_REPORT_SECTION_IDS,
 } from "./reportNav";
+import {
+  createActiveSectionStore,
+  useActiveSectionId,
+  type ActiveSectionStore,
+} from "./activeSectionStore";
 import ReportMobileNav from "./ReportMobileNav";
+import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
+import { V4ChapterCardsProvider } from "./v3/V4ChapterCards";
+import { V4ChapterLockProvider } from "./v3/V4ChapterLock";
+import { v4CardsFromV2 } from "./v3/v4CardsFromV2";
+import V3Intro from "./v3/V3Intro";
+import V4Part1 from "./v3/V4Part1";
+import V3ArchetypeCard from "./v3/V3ArchetypeCard";
+import V4CoreArchetypeHeading from "./v3/V4CoreArchetypeHeading";
+import V4PartHeading from "./v3/V4PartHeading";
+import V4SummaryChapter from "./v3/V4SummaryChapter";
+import V4TopThreeSection from "./v3/V4TopThreeSection";
+import { report3ArchetypeCard } from "@/data/report3-archetype-card";
+import type { ArchetypeName } from "@features/report/server/archetypeSlug";
+import {
+  REPORT_V4_DESIGNED_CHAPTER_IDS,
+  REPORT_V4_PART_DIVIDER_BY_SECTION,
+  REPORT_V4_PART_FRAME_BY_SECTION,
+  REPORT_V4_REWARD_INTRO,
+  REPORT_V4_SUMMARY,
+  REPORT_V4_TOP_THREE_HEADING,
+} from "@/data/report3-archetype-page";
+import V3EndSummary from "./v3/V3EndSummary";
+import V3Methodology from "./v3/V3Methodology";
+import V3PartDivider from "./v3/V3PartDivider";
+import V3SnapshotIgnite from "./v3/V3SnapshotIgnite";
+import V3TopThree from "./v3/V3TopThree";
+import {
+  REPORT_V3_NAV_PARTS,
+  REPORT_V3_PART_DIVIDER_BY_SECTION,
+  REPORT_V3_SECTION_ORDER,
+  REPORT_V4_NAV_IDS,
+  REPORT_V4_NAV_PARTS,
+  REPORT_V4_SECTION_ORDER,
+} from "./v3/reportV3Nav";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportStickyUnlockBar from "./ReportStickyUnlockBar";
 import ReportSection from "./ReportSection";
@@ -50,12 +94,25 @@ import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeed
 import { useCloseOnBack } from "./hooks/useCloseOnBack";
 import { resolveReportSections, type DisplayReportSection } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
+import { v4InkStyle } from "./v3/v4ArchetypeColors";
 import AttachmentPatternsSection, {
   type AttachmentCopy,
   type AttachmentPlane,
 } from "./sections/AttachmentPatternsSection";
 import AcceleratorsSection, { type AccelCopy } from "./sections/AcceleratorsSection";
 import BeliefsSection, { type BeliefsCopy } from "./sections/BeliefsSection";
+import V4Chapter from "./v3/V4Chapter";
+import V4TypicalBeliefs from "./v3/V4TypicalBeliefs";
+import V4TryThis from "./v3/V4TryThis";
+import V4Accelerators from "./v3/V4Accelerators";
+import V4Partnership from "./v3/V4Partnership";
+import V4Fantasy from "./v3/V4Fantasy";
+import V4LearnMore from "./v3/V4LearnMore";
+import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
+import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
+import type { Report3PartnershipView } from "@/data/report3-partnership";
+import type { V4LearnMoreState } from "@/data/report3-learn-more";
+import type { Report3FantasyView } from "@/data/report3-fantasy";
 import ConfidenceSection, {
   type ConfidenceCopy,
   type ConfidenceStrip,
@@ -111,6 +168,7 @@ import {
   setReportSubmissionContext,
   trackLockedCardPriceShown,
   trackBeginCheckout,
+  trackExperimentExposure,
   trackLockIconClicked,
   trackPaywallInitiated,
   trackReferFriendOpened,
@@ -120,7 +178,15 @@ import {
 } from "@features/analytics/client";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
+import {
+  captureUnlockAnchor,
+  parseUnlockAnchor,
+  restoreUnlockAnchor,
+  serializeUnlockAnchor,
+  type UnlockAnchor,
+} from "./unlockAnchor";
 import "./report.css";
+import "./v3/reportV3.css";
 
 interface SnapshotAnswers {
   currentSexualSatisfaction: number | null;
@@ -146,6 +212,11 @@ const REPORT_PART_DIVIDER_BY_SECTION: Record<string, ReportPartDividerProps> = {
   [REPORT_PART_FIRST_SECTION.partIII]: { part: "Part III", lead: "Your erotic ", accent: "engine" },
   [REPORT_PART_FIRST_SECTION.partIV]: { part: "Part IV", lead: "Your growth edges" },
 };
+
+/** The element just tapped, if the tap was recent enough to be what opened the paywall. */
+function recentTapTarget(tap: { at: number; el: Element | null }): Element | null {
+  return Date.now() - tap.at < 1_500 ? tap.el : null;
+}
 
 function getScalarOverlay(diagnostics: Record<string, unknown> | null, key: string) {
   const overlays = diagnostics?.overlaysScalar;
@@ -338,6 +409,10 @@ interface ReportPageProps {
 }
 
 interface ReportExperienceProps {
+  /** `?v3=1` — render the mobile-first V3 chrome instead of V1. */
+  isV3: boolean;
+  /** `?v4=1` — V2's report with the Report 3.0 components swapped in. */
+  isV4: boolean;
   accessPlan: ReportAccessPlan;
   archetypeTiers: Record<string, "essentials" | "full_report">;
   devParam: string | null;
@@ -355,7 +430,7 @@ interface ReportExperienceProps {
   ownerToken: string | null;
   percentages: Record<string, number>;
   pricingTargetArchetype: string | null;
-  pricingVariant: "default" | "offer" | "share";
+  pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -377,7 +452,7 @@ interface ReportExperienceProps {
    * another's name.
    */
   contentArchetype: string;
-  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  pricingQuotes: ReportPriceQuotes | null;
   archetypeContent: Record<string, Record<string, string>>;
   practiceTendencies: Record<
     string,
@@ -390,10 +465,18 @@ interface ReportExperienceProps {
   snapshotCopy: SnapshotCopy | null;
   findingsCopy: FindingsCopy | null;
   beliefsCopy: BeliefsCopy | null;
+  /** Report 3.0's Typical Beliefs chapter; null until the archetype is scaled. */
+  typicalBeliefs: Report3TypicalBeliefsView | null;
+  /** The "Go deeper & learn more" article that closes that chapter. */
+  typicalBeliefsArticle: V4LearnMoreState | null;
   attachmentCopy: AttachmentCopy | null;
   attachmentFamily: string | null;
   attachmentPlane: AttachmentPlane | null;
   accelCopy: AccelCopy | null;
+  /** Report 3.0's Accelerators & Brakes chapter; null until the archetype is scaled. */
+  accelerators: Report3AcceleratorsView | null;
+  /** The "Go deeper & learn more" article that closes that chapter. */
+  acceleratorsArticle: V4LearnMoreState | null;
   insecuritiesCopy: InsecuritiesCopy | null;
   insecurityCueFamily: string | null;
   insecurityGraph: InsecurityGraph | null;
@@ -409,6 +492,8 @@ interface ReportExperienceProps {
   libidoConfig: LibidoConfig | null;
   partnershipCopy: PartnershipCopy | null;
   partnershipLoop: PartnershipLoop | null;
+  /** Report 3.0's Challenges in Partnerships chapter; null keeps V2's section. */
+  partnership: Report3PartnershipView | null;
   enjoyCopy: EnjoyCopy | null;
   growthCopy: GrowthCopy | null;
   growthRungs: number | null;
@@ -416,6 +501,10 @@ interface ReportExperienceProps {
   powerCopy: PowerCopy | null;
   fantasyCopy: FantasyCopy | null;
   fantasyDots: FantasyMapDot[] | null;
+  /** Report 3.0's Fantasy vs. Reality chapter; null keeps V2's section. */
+  fantasy: Report3FantasyView | null;
+  /** The "Go deeper & learn more" article that closes that chapter. */
+  fantasyArticle: V4LearnMoreState | null;
   curiosityCopy: CuriosityCopy | null;
   relationshipFit: Record<string, number> | null;
   lovelangCopy: LoveLanguageCopy | null;
@@ -425,7 +514,10 @@ interface ReportExperienceProps {
   mapCopy: MapCopy | null;
   stageCopy: StageCopy | null;
   constellationMottos: Record<string, string | null>;
-  submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
+  /** The thumb: stores the rating alone (review 01.10). Resolves to whether it was stored. */
+  rateSection: (sectionId: string, feedback: "up" | "down") => Promise<boolean>;
+  /** Send: the rating with its optional message. Resolves to whether it was stored. */
+  submitFeedback: (sectionId: string, payload: FeedbackPayload) => Promise<boolean>;
   submitted: Record<string, boolean>;
   theme: ReturnType<typeof getReportTheme>;
   userEmail: string | null;
@@ -446,7 +538,18 @@ interface ReportExperienceProps {
  */
 const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
 
+/** A nav that follows the current chapter; it alone renders again when that moves. */
+const WithActiveSection: FC<{
+  store: ActiveSectionStore;
+  children: (activeSectionId: string) => ReactNode;
+}> = ({ store, children }) => {
+  const activeSectionId = useActiveSectionId(store);
+  return <>{children(activeSectionId)}</>;
+};
+
 const ReportExperience: FC<ReportExperienceProps> = ({
+  isV3,
+  isV4,
   accessPlan,
   archetypeTiers,
   devParam,
@@ -477,11 +580,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   snapshot,
   snapshotCopy,
   findingsCopy,
+  typicalBeliefs,
+  typicalBeliefsArticle,
   beliefsCopy,
   attachmentCopy,
   attachmentFamily,
   attachmentPlane,
   accelCopy,
+  accelerators,
+  acceleratorsArticle,
   insecuritiesCopy,
   insecurityCueFamily,
   insecurityGraph,
@@ -497,6 +604,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   libidoConfig,
   partnershipCopy,
   partnershipLoop,
+  partnership,
   enjoyCopy,
   growthCopy,
   growthRungs,
@@ -504,6 +612,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   powerCopy,
   fantasyCopy,
   fantasyDots,
+  fantasy,
+  fantasyArticle,
   curiosityCopy,
   relationshipFit,
   lovelangCopy,
@@ -513,6 +623,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   mapCopy,
   stageCopy,
   constellationMottos,
+  rateSection,
   submitFeedback,
   submitted,
   theme,
@@ -537,10 +648,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       sectionTitle={sectionTitle}
       value={feedbacks[sectionId] ?? null}
       isSent={submitted[sectionId] ?? false}
+      onRate={(feedback) => rateSection(sectionId, feedback)}
       onFeedback={(payload) => submitFeedback(sectionId, payload)}
     />
   );
-  const [activeSectionId, setActiveSectionId] = useState(REPORT_NAV_IDS[0] ?? "core_archetype");
+  // The anchors the navs list, in nav order. V4's open on Part 1's Welcome (961:333).
+  const navIds = isV4 ? REPORT_V4_NAV_IDS : REPORT_NAV_IDS;
+  // The chapter the navs mark as current. A store, not state: only the navs read it,
+  // and as state every change down the page rendered the whole report again.
+  const [activeSection] = useState(() => createActiveSectionStore(navIds[0] ?? "core_archetype"));
   // Live full-report quote used by the locked premium cards' price/strike/save.
   // Same source the pricing modal and sticky bar read, so all three agree.
   const fullReportQuote = pricingQuotes?.full_report ?? null;
@@ -608,20 +724,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
   const handleSectionClick = (sectionId: string) => {
     clickLockUntilRef.current = Date.now() + 800;
-    setActiveSectionId(sectionId);
+    activeSection.set(sectionId);
   };
 
-  const unlockSection = (section: DisplayReportSection) => {
-    // Lock-icon click intent — fired BEFORE the modal opens so funnel can
-    // measure pre-paywall intent vs modal-view conversion. `plan_needed`
-    // mirrors the locked section's accessTier (free tier is always unlocked
-    // so it shouldn't reach this handler).
-    const planNeeded: "essentials" | "full_report" | "all_reports" =
-      section.accessTier === "essentials" || section.accessTier === "full_report"
-        ? section.accessTier
-        : "full_report";
+  // Lock-icon click intent — fired BEFORE the modal opens so funnel can
+  // measure pre-paywall intent vs modal-view conversion. A recipient's click is
+  // not counted: only the owner can pay, so it is nobody's intent to.
+  const trackLockClick = (
+    sectionId: string,
+    planNeeded: "essentials" | "full_report" | "all_reports"
+  ) => {
+    if (viewMode === "shared") return;
     trackLockIconClicked({
-      section_id: section.id,
+      section_id: sectionId,
       archetype: viewArchetype || null,
       plan_needed: planNeeded,
     });
@@ -629,10 +744,21 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // counts this (not auto-mount paywall_view) as "user-initiated paywall".
     trackPaywallInitiated({
       source: "lock_click",
-      section_id: section.id,
+      section_id: sectionId,
       archetype: viewArchetype || null,
       plan_needed: planNeeded,
     });
+  };
+
+  const unlockSection = (section: DisplayReportSection) => {
+    // `plan_needed` mirrors the locked section's accessTier (free tier is always
+    // unlocked so it shouldn't reach this handler).
+    trackLockClick(
+      section.id,
+      section.accessTier === "essentials" || section.accessTier === "full_report"
+        ? section.accessTier
+        : "full_report"
+    );
     // Scope the upgrade modal to the archetype the user is currently viewing,
     // not the primary. Otherwise a buyer who already owns essentials/full on
     // primary X would see the modal flag both cards as "Your current plan"
@@ -645,17 +771,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // archetype — no bespoke checkout. full_report is the plan that unlocks the
   // gated findings.
   const unlockFindings = () => {
-    trackLockIconClicked({
-      section_id: "findings",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
-    trackPaywallInitiated({
-      source: "lock_click",
-      section_id: "findings",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
+    trackLockClick("findings", "full_report");
     onOpenPricingModal(viewArchetype || null);
   };
 
@@ -663,17 +779,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // Findings unlock path: they open the shared pricing modal scoped to the
   // viewed archetype. full_report unlocks the pattern sections these tease.
   const unlockMap = () => {
-    trackLockIconClicked({
-      section_id: "map",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
-    trackPaywallInitiated({
-      source: "lock_click",
-      section_id: "map",
-      archetype: viewArchetype || null,
-      plan_needed: "full_report",
-    });
+    trackLockClick("map", "full_report");
     onOpenPricingModal(viewArchetype || null);
   };
 
@@ -706,7 +812,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   };
 
   useEffect(() => {
-    const ACTIVATION_LINE = 90;
+    /**
+     * Where a chapter becomes the current one, from the top of the window. Report 3.0
+     * lands a chapter 144px down, under its floating chrome (scroll-margin-top), so at
+     * 90 the first scroll after a nav jump lit the chapter before it again, and on a
+     * desktop a heading sitting 150-200px down still showed the previous chapter, by
+     * then off screen. A quarter of the window, never above 200px, keeps it the chapter
+     * being read. V1 and 2.0 keep their 90.
+     */
+    const activationLine = () => (isV4 ? Math.max(200, window.innerHeight * 0.25) : 90);
 
     // Spy on the NAV's ids, not the section list from `data/report-general.ts`.
     // That list has no row for the Report 2.0 anchors the nav lists (`snapshot`,
@@ -714,14 +828,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // `findings`), so scrolling Part I left the highlight a chapter behind:
     // "Core Archetype" stayed lit from 225px all the way to the Insight Map at
     // 3787px, and "Importance of Sexuality" stayed lit through Other Archetypes.
-    // See REPORT_NAV_IDS.
+    // See REPORT_NAV_IDS, and REPORT_V4_NAV_IDS for V4's.
     function buildSectionTops() {
       return (
-        REPORT_NAV_IDS.map((id) => {
-          const el = document.getElementById(id);
-          if (!el) return null;
-          return { id, top: el.getBoundingClientRect().top + window.scrollY };
-        })
+        navIds
+          .map((id) => {
+            const el = document.getElementById(id);
+            if (!el) return null;
+            return { id, top: el.getBoundingClientRect().top + window.scrollY };
+          })
           .filter((section): section is { id: string; top: number } => section !== null)
           // Sorted so the early `break` below is correct by construction: nav order
           // matches DOM order today, and a future reorder of either can't silently
@@ -730,13 +845,17 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       );
     }
 
-    let sectionTops = buildSectionTops();
     let rafId: number | null = null;
 
     function updateActive() {
       if (Date.now() < clickLockUntilRef.current) return;
-      const threshold = window.scrollY + ACTIVATION_LINE;
-      let activeId = sectionTops[0]?.id ?? REPORT_NAV_IDS[0] ?? "core_archetype";
+      // Measured on every update, not once at mount: the page keeps changing height
+      // after it — Typical Beliefs' rows grow ~759px as they turn, chapters open and
+      // close, the fonts land — and tops measured at mount ran the highlight ahead of
+      // the reader (27.09: at Attachment it lit Love Language). Once a frame at most.
+      const sectionTops = buildSectionTops();
+      const threshold = window.scrollY + activationLine();
+      let activeId = sectionTops[0]?.id ?? navIds[0] ?? "core_archetype";
       for (const section of sectionTops) {
         if (section.top <= threshold) {
           activeId = section.id;
@@ -744,7 +863,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           break;
         }
       }
-      setActiveSectionId(activeId);
+      activeSection.set(activeId);
     }
 
     function onScroll() {
@@ -755,23 +874,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       });
     }
 
-    function onResize() {
-      sectionTops = buildSectionTops();
-      updateActive();
-    }
-
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onResize, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
     updateActive();
 
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", onScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-    // `REPORT_NAV_IDS` is a module constant; `resolvedSections` only matters
-    // because the sections have to be in the DOM before the tops are measured.
-  }, [resolvedSections]);
+    // `navIds` is one of two module constants; `resolvedSections` only matters
+    // because the sections have to be in the DOM before the first update measures them.
+    // `activeSection` never changes: it is created once.
+  }, [resolvedSections, activeSection, navIds, isV4]);
 
   const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
 
@@ -783,26 +898,34 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // open padlock) rather than dropping out of the map. Nav ids with no matching
   // section (`snapshot`, `map`, `constellation` — the redesign-added anchors)
   // are free by construction.
+  //
+  // Under V4 these are the three tiers the team agreed on 28.09 and Mark drew in
+  // 961:333: free, open to this reader, locked. The four designed chapters open, in
+  // part, to every reader (they never lock outright, V4ChapterLock), so they read open
+  // whatever the plan.
   const navAccessById = useMemo(() => {
     const access = new Map<string, ReportNavAccess>();
-    for (const part of REPORT_NAV_PARTS) {
+    const parts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
+    for (const part of parts) {
       for (const item of part.items) {
         const section = resolvedSections.find((s) => s.id === (item.gateId ?? item.id));
         if (!section?.isPremium) {
           access.set(item.id, "free");
           continue;
         }
-        const unlocked = isSectionUnlockedForPlan({
-          accessPlan,
-          archetypeTier: viewArchetypeTier,
-          isPremium: section.isPremium,
-          sectionId: section.id,
-        });
+        const unlocked =
+          (isV4 && REPORT_V4_DESIGNED_CHAPTER_IDS.has(item.id)) ||
+          isSectionUnlockedForPlan({
+            accessPlan,
+            archetypeTier: viewArchetypeTier,
+            isPremium: section.isPremium,
+            sectionId: section.id,
+          });
         access.set(item.id, unlocked ? "unlocked" : "locked");
       }
     }
     return access;
-  }, [resolvedSections, accessPlan, viewArchetypeTier]);
+  }, [resolvedSections, accessPlan, viewArchetypeTier, isV3, isV4]);
 
   /**
    * Build-time, deliberately not a runtime flag or a query parameter. A reader on
@@ -811,13 +934,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
    */
   const copyable = isNonProdDeploy();
 
-  return (
+  const experience = (
     <main
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
-      style={getReportThemeStyle(theme)}
+      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}${isV3 ? " rv3" : ""}${isV4 ? " rv4" : ""}`}
+      // V4 sets the archetype's name and accent inks too (Fatih, 03.10: its own colours).
+      style={{ ...getReportThemeStyle(theme), ...(isV4 ? v4InkStyle(theme.archetype) : {}) }}
       /**
        * Copy, right-click and drag are blocked on the LIVE site only. The report
        * is the paid product, so lifting its text is the thing this prevents.
@@ -899,29 +1023,33 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         aria-hidden={isPricingModalOpen || isShareModalOpen}
         inert={isPricingModalOpen || isShareModalOpen}
       >
-        <ReportMobileNav
-          activeSectionId={activeSectionId}
-          accessById={navAccessById}
-          onDrawerOpened={() => {
-            trackReportChapterMenuOpened({
-              archetype: viewArchetype || null,
-              active_section_id: activeSectionId,
-            });
-          }}
-          onReferFriend={() => {
-            trackReferFriendOpened({ source: "drawer" });
-            setShowInvite(true);
-          }}
-          onSectionClick={handleSectionClick}
-          onShareClick={
-            viewMode === "owner" && ownerToken
-              ? () => {
-                  trackReportShareOpened({ source: "drawer" });
-                  onOpenShareModal();
-                }
-              : undefined
-          }
-        />
+        <WithActiveSection store={activeSection}>
+          {(activeSectionId) => (
+            <ReportMobileNav
+              activeSectionId={activeSectionId}
+              accessById={navAccessById}
+              onDrawerOpened={() => {
+                trackReportChapterMenuOpened({
+                  archetype: viewArchetype || null,
+                  active_section_id: activeSectionId,
+                });
+              }}
+              onReferFriend={() => {
+                trackReferFriendOpened({ source: "drawer" });
+                setShowInvite(true);
+              }}
+              onSectionClick={handleSectionClick}
+              onShareClick={
+                viewMode === "owner"
+                  ? () => {
+                      trackReportShareOpened({ source: "drawer" });
+                      onOpenShareModal();
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </WithActiveSection>
         <div
           className={[
             "report-page__shell-wrap",
@@ -931,27 +1059,46 @@ const ReportExperience: FC<ReportExperienceProps> = ({
             .join(" ")}
         >
           <div className="report-shell">
-            <ReportDesktopSidebar
-              activeSectionId={activeSectionId}
-              accessById={navAccessById}
-              onReferFriend={() => {
-                trackReferFriendOpened({ source: "sidebar" });
-                setShowInvite(true);
-              }}
-              onSectionClick={handleSectionClick}
-              onShareClick={
-                viewMode === "owner" && ownerToken
-                  ? () => {
-                      trackReportShareOpened({ source: "sidebar" });
-                      onOpenShareModal();
-                    }
-                  : undefined
-              }
-            />
+            <WithActiveSection store={activeSection}>
+              {(activeSectionId) => (
+                <ReportDesktopSidebar
+                  activeSectionId={activeSectionId}
+                  accessById={navAccessById}
+                  onReferFriend={() => {
+                    trackReferFriendOpened({ source: "sidebar" });
+                    setShowInvite(true);
+                  }}
+                  onSectionClick={handleSectionClick}
+                  onShareClick={
+                    viewMode === "owner"
+                      ? () => {
+                          trackReportShareOpened({ source: "sidebar" });
+                          onOpenShareModal();
+                        }
+                      : undefined
+                  }
+                />
+              )}
+            </WithActiveSection>
 
             <div className="report-content">
+              {/* Part I — Welcome. V4 draws 1:168: a part heading, the
+               * Introduction and "What shaped this report" as two open chapters,
+               * then the science deck. V3 opens straight into the intro and the
+               * methodology block instead. Everything below this line is V2's,
+               * under either flag. */}
+              {isV4 ? (
+                <V4Part1 />
+              ) : isV3 ? (
+                <>
+                  <V3Intro />
+                  <V3Methodology />
+                </>
+              ) : null}
               {resolvedSections.map((section) => {
-                const partDivider = REPORT_PART_DIVIDER_BY_SECTION[section.id];
+                const partDivider = isV3
+                  ? REPORT_V3_PART_DIVIDER_BY_SECTION[section.id]
+                  : REPORT_PART_DIVIDER_BY_SECTION[section.id];
                 const sectionNode = (() => {
                   const title = section.displayTitle;
                   const generalHtml = replacePlaceholders(
@@ -1019,77 +1166,161 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           sectionId={section.id}
                           title={title}
                         >
-                          <CoreArchetypeSection matchScore={matchScore} theme={theme} />
-                        </ReportSection>
-                        {/* "What this means for you" (Figma 8719:8865). Part I's
-                          child order is HERO → SUMMARY → SNAPSHOT, so this sits
-                          between the card and Your Snapshot. Free + universal;
-                          renders nothing for archetypes with no verified copy. */}
-                        <ReportSection
-                          primaryArchetype={viewArchetype}
-                          sectionId="means_for_you"
-                          title=""
-                          feedbackWidget={renderFeedback(
-                            "means_for_you",
-                            "What this means for you"
+                          {/* 15:815. V2's hero is a different card entirely — it
+                           * has no dimension deck, which is the whole middle of
+                           * the frame. Falls back to V2's whenever the archetype
+                           * has no Report 3.0 card copy. */}
+                          {isV4 && report3ArchetypeCard[viewArchetype] ? (
+                            <>
+                              {/* 1:576 — "Core Archetype" + its lede, which the
+                               * frame draws immediately above the card. It was
+                               * built for the V4 shell (V4Part2) and never
+                               * swapped into the live report, so this ran from
+                               * the top-three list straight into the card. */}
+                              <V4CoreArchetypeHeading />
+                              <V3ArchetypeCard
+                                archetype={viewArchetype as ArchetypeName}
+                                matchStrength={matchScore}
+                                copy={report3ArchetypeCard[viewArchetype]!}
+                              />
+                            </>
+                          ) : (
+                            <CoreArchetypeSection matchScore={matchScore} theme={theme} />
                           )}
-                        >
-                          <MeansForYouSection archetype={viewArchetype} />
                         </ReportSection>
-                        {/* Empty title suppresses ReportSection's own large
+                        {isV4 && REPORT_V4_SUMMARY[viewArchetype] ? (
+                          /* 1:736 — V4's Summary Chapter IN PLACE OF V2's "What
+                           * this means for you", never beside it: both are titled
+                           * "Summary of the <archetype>", so rendering the two
+                           * stacked the summary twice. The frame's text box
+                           * (1:742) is 356x1280, which is this six-paragraph
+                           * copy at 16/25.6; V2's is roughly a third of that. Its
+                           * rating posts under `summary`, a real section id —
+                           * `means_for_you` is not, so the API rejects it. */
+                          <ReportSection
+                            primaryArchetype={viewArchetype}
+                            sectionId="summary"
+                            title=""
+                          >
+                            <V4SummaryChapter
+                              archetype={viewArchetype}
+                              summary={REPORT_V4_SUMMARY[viewArchetype]!}
+                              feedback={renderFeedback(
+                                "summary",
+                                `Summary of the ${viewArchetype}`
+                              )}
+                            />
+                          </ReportSection>
+                        ) : (
+                          /* "What this means for you" (Figma 8719:8865). Part I's
+                            child order is HERO → SUMMARY → SNAPSHOT, so this sits
+                            between the card and Your Snapshot. Free + universal;
+                            renders nothing for archetypes with no verified copy.
+                            Under V4 every archetype has its own summary since
+                            Sanjin's docs (03.10), so this is V2's and V3's. */
+                          <ReportSection
+                            primaryArchetype={viewArchetype}
+                            sectionId="means_for_you"
+                            title=""
+                            feedbackWidget={renderFeedback(
+                              "means_for_you",
+                              "What this means for you"
+                            )}
+                          >
+                            <MeansForYouSection archetype={viewArchetype} />
+                          </ReportSection>
+                        )}
+                        {/* V3's Part I runs HERO -> "Summary of the <archetype>"
+                          -> Snapshot, where Snapshot is the Ignite accordion
+                          (which IS the five findings) plus "How you compare".
+                          V1's Snapshot / Findings / Insight Map blocks below are
+                          therefore suppressed: keeping Findings would render the
+                          same five findings twice, and V3 has no Insight Map at
+                          all (Figma 10392:19223 is the whole Part I tail). */}
+                        {/* The wrapper carries V1's `report-section is-visible`
+                          classes so the shared chart-reveal CSS that
+                          SnapshotCompare depends on still resolves outside a
+                          ReportSection. V4 has no Snapshot: since 30.09 its four
+                          chapter nudges are the pre-report wizard's map (Figma
+                          1071:2092), and Part 2 runs the Archetype card into the
+                          Summary (1:483). */}
+                        {isV3 && !isV4 ? (
+                          <section
+                            id="snapshot"
+                            data-report-section="true"
+                            className="report-section is-visible rv3-snap"
+                          >
+                            <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
+                              Snapshot &mdash; of the {viewArchetype}
+                            </h2>
+                            <V3SnapshotIgnite copy={findingsCopy} />
+                            <SnapshotCompare copy={snapshotCopy} thirdRowViz="dots" />
+                            <div className="rv3-chapter__feedback">
+                              {renderFeedback("findings", "Five things this report found")}
+                            </div>
+                          </section>
+                        ) : null}
+                        {isV3 ? null : (
+                          <>
+                            {/* Empty title suppresses ReportSection's own large
                           header (hidden via CSS on #snapshot) — SnapshotSection
                           renders its own 29px "Your snapshot" heading per the
                           Figma. The wrapper is only here for scroll-reveal +
                           the #snapshot anchor + the section divider. */}
-                        <ReportSection
-                          primaryArchetype={viewArchetype}
-                          sectionId="snapshot"
-                          title=""
-                        >
-                          <SnapshotSection
-                            archetype={viewArchetype}
-                            copy={snapshotCopy}
-                            stageResult={stageCopy?.result ?? null}
-                          />
-                        </ReportSection>
-                        {/* Findings renders directly after Snapshot with the same
+                            <ReportSection
+                              primaryArchetype={viewArchetype}
+                              sectionId="snapshot"
+                              title=""
+                            >
+                              <SnapshotSection
+                                archetype={viewArchetype}
+                                copy={snapshotCopy}
+                                stageResult={stageCopy?.result ?? null}
+                              />
+                            </ReportSection>
+                            {/* Findings renders directly after Snapshot with the same
                           reveal treatment (Figma 8501:683). Locked findings
                           (f3-5, unpaid) arrive server-stripped to teaser text;
                           the unlock CTA reuses the shared pricing-modal path. */}
-                        <ReportSection
-                          primaryArchetype={viewArchetype}
-                          sectionId="findings"
-                          title=""
-                          feedbackWidget={renderFeedback(
-                            "findings",
-                            "Five things this report found"
-                          )}
-                        >
-                          <FindingsSection copy={findingsCopy} onUnlock={() => unlockFindings()} />
-                          {/* "How you compare" belongs to the snapshot copy but
+                            <ReportSection
+                              primaryArchetype={viewArchetype}
+                              sectionId="findings"
+                              title=""
+                              feedbackWidget={renderFeedback(
+                                "findings",
+                                "Five things this report found"
+                              )}
+                            >
+                              <FindingsSection
+                                copy={findingsCopy}
+                                onUnlock={() => unlockFindings()}
+                              />
+                              {/* "How you compare" belongs to the snapshot copy but
                               reads AFTER the five findings (Eman, 2026-08-19),
                               so it renders here rather than in SnapshotSection.
                               Same section wrapper, so it keeps the shared
                               `.report-section.is-visible` reveal. */}
-                          <SnapshotCompare copy={snapshotCopy} />
-                        </ReportSection>
-                        {/* Insight Map renders directly after Findings with the
+                              <SnapshotCompare copy={snapshotCopy} />
+                            </ReportSection>
+                            {/* Insight Map renders directly after Findings with the
                           same reveal treatment (Figma 8762:15822). Fully visible
                           (featured tile is "always unlocked"); pill CTAs reuse
                           the shared pricing-modal path. */}
-                        <ReportSection
-                          primaryArchetype={viewArchetype}
-                          sectionId="map"
-                          title=""
-                          feedbackWidget={renderFeedback("map", "Your insight map")}
-                        >
-                          <InsightMapSection
-                            archetype={viewArchetype}
-                            copy={mapCopy}
-                            onOpen={openMapTarget}
-                            isSectionOpen={isMapTargetOpen}
-                          />
-                        </ReportSection>
+                            <ReportSection
+                              primaryArchetype={viewArchetype}
+                              sectionId="map"
+                              title=""
+                              feedbackWidget={renderFeedback("map", "Your insight map")}
+                            >
+                              <InsightMapSection
+                                archetype={viewArchetype}
+                                copy={mapCopy}
+                                onOpen={openMapTarget}
+                                isSectionOpen={isMapTargetOpen}
+                              />
+                            </ReportSection>
+                          </>
+                        )}
                       </Fragment>
                     );
                   }
@@ -1132,21 +1363,25 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           8427:1070. The wrapper only provides scroll-reveal + the
                           #constellation anchor + the section divider. Free — no
                           gating; every archetype's row shows its own motto and
-                          links to that archetype's report (unlock-gated on click).*/}
-                        <ReportSection
-                          primaryArchetype={viewArchetype}
-                          sectionId="constellation"
-                          title=""
-                          feedbackWidget={renderFeedback("constellation", "Other archetypes")}
-                        >
-                          <ConstellationSection
-                            ranking={ranking}
-                            percentages={percentages}
-                            mottos={constellationMottos}
-                            viewArchetype={viewArchetype}
-                            onViewArchetype={onUnlockArchetype}
-                          />
-                        </ReportSection>
+                          links to that archetype's report (unlock-gated on click).
+                          V3 numbers it chapter 5.4, BEFORE Importance (5.5), so
+                          there it is rendered standalone instead of inline. */}
+                        {isV3 ? null : (
+                          <ReportSection
+                            primaryArchetype={viewArchetype}
+                            sectionId="constellation"
+                            title=""
+                            feedbackWidget={renderFeedback("constellation", "Other archetypes")}
+                          >
+                            <ConstellationSection
+                              ranking={ranking}
+                              percentages={percentages}
+                              mottos={constellationMottos}
+                              viewArchetype={viewArchetype}
+                              onViewArchetype={onUnlockArchetype}
+                            />
+                          </ReportSection>
+                        )}
                       </Fragment>
                     );
                   }
@@ -1251,6 +1486,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={hasArchetypeCopy ? rewardCopy : null}
                           config={hasArchetypeCopy ? rewardConfig : null}
+                          intro={isV4 ? REPORT_V4_REWARD_INTRO : undefined}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1536,31 +1772,35 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             tier={partnershipTier}
                           />
                         </ReportSection>
-                        {/* "Challenges in Partnership" (Report 2.0, Figma 8427:2619)
+                        {isV3 ? null : (
+                          /* "Challenges in Partnership" (Report 2.0, Figma 8427:2619)
                           — no own row in report-general.ts; renders inline right
                           after Libido and shares its full_report gate. Gating is
                           resolved SERVER-SIDE (partnershipCopy.locked); a locked
                           client gets only universal framing. No feedbackWidget:
-                          it rides Libido's section shell above. */}
-                        <ReportSection
-                          primaryArchetype={viewArchetype}
-                          sectionId="challenges_in_partnership"
-                          title=""
-                          feedbackWidget={renderFeedback(
-                            "challenges_in_partnership",
-                            "Challenges in Partnership"
-                          )}
-                        >
-                          <PartnershipSection
-                            archetype={viewArchetype}
-                            copy={hasArchetypeCopy ? partnershipCopy : null}
-                            loop={hasArchetypeCopy ? partnershipLoop : null}
-                            onUnlock={() => unlockSection(section)}
-                            quote={fullReportQuote}
-                            sectionTitle={title}
-                            tier={partnershipTier}
-                          />
-                        </ReportSection>
+                          it rides Libido's section shell above. In V3 this is
+                          promoted to its own chapter 4.4 after Curiosity, so this
+                          inline copy is suppressed there. */
+                          <ReportSection
+                            primaryArchetype={viewArchetype}
+                            sectionId="challenges_in_partnership"
+                            title=""
+                            feedbackWidget={renderFeedback(
+                              "challenges_in_partnership",
+                              "Challenges in Partnership"
+                            )}
+                          >
+                            <PartnershipSection
+                              archetype={viewArchetype}
+                              copy={hasArchetypeCopy ? partnershipCopy : null}
+                              loop={hasArchetypeCopy ? partnershipLoop : null}
+                              onUnlock={() => unlockSection(section)}
+                              quote={fullReportQuote}
+                              sectionTitle={title}
+                              tier={partnershipTier}
+                            />
+                          </ReportSection>
+                        )}
                       </Fragment>
                     );
                   }
@@ -1710,6 +1950,48 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       isPremium: section.isPremium,
                       sectionId: section.id,
                     });
+                    // Report 3.0 swaps this chapter for Figma 304:256 (348:213 when
+                    // locked): the V4 chapter row, then the chapter body, the
+                    // practice (374:238) and "Go deeper & learn more" (153:2260).
+                    // It sits in V4Chapter rather than ReportSection's V3 chrome —
+                    // the frame draws no "Chapter 2.2" eyebrow, and this chapter opens
+                    // bare and open. (The V3 chapter's suffix restyles and overflow
+                    // clip that once broke these cards no longer reach V4: its roots
+                    // dropped `.rv3-chapter` and clip only vertically, review 27.09.)
+                    // All three blocks open the same pricing modal every other
+                    // locked section does. It falls back to V2's section whenever
+                    // the archetype has no Report 3.0 copy (since 02.10, only a name
+                    // none is written for), so no reader meets an empty chapter.
+                    if (isV4 && typicalBeliefs && hasArchetypeCopy) {
+                      const unlockBeliefs = () => unlockSection(section);
+                      return (
+                        <Fragment key={section.id}>
+                          {/* 1:858 — the 44px under the part heading is the part
+                           * opener's (dividerNode below), for every archetype. */}
+                          <V4Chapter
+                            sectionId={section.id}
+                            title="Typical Beliefs"
+                            archetype={viewArchetype}
+                            defaultOpen
+                            bare
+                            feedback={feedbackWidget}
+                          >
+                            <V4TypicalBeliefs view={typicalBeliefs} onUnlock={unlockBeliefs} />
+                            <V4TryThis
+                              practice={typicalBeliefs.practice}
+                              onUnlock={unlockBeliefs}
+                            />
+                            {typicalBeliefsArticle ? (
+                              <V4LearnMore
+                                article={typicalBeliefsArticle.article}
+                                locked={typicalBeliefsArticle.locked}
+                                onUnlock={unlockBeliefs}
+                              />
+                            ) : null}
+                          </V4Chapter>
+                        </Fragment>
+                      );
+                    }
                     return (
                       <ReportSection
                         key={section.id}
@@ -1734,6 +2016,41 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   }
 
                   if (section.sectionNumber === 23) {
+                    // Report 3.0 swaps this chapter for Figma 310:221 (314:211 when
+                    // locked), the chapter that opens Part IV "Your erotic engine":
+                    // the V4 chapter row, the body with its two trigger cards and
+                    // the practice (377:221), then "Go deeper & learn more"
+                    // (235:234). Like Typical Beliefs it sits in V4Chapter, not
+                    // ReportSection's V3 chrome, and only where the chapter is
+                    // written for the archetype on screen — every other reader keeps
+                    // V2's section below. Every locked surface opens the same
+                    // pricing modal.
+                    const hasAccelCopy = viewArchetype === contentArchetype;
+                    if (isV4 && accelerators && hasAccelCopy) {
+                      const unlockAccel = () => unlockSection(section);
+                      return (
+                        <Fragment key={section.id}>
+                          <V4Chapter
+                            sectionId={section.id}
+                            title="Accelerators & Brakes"
+                            archetype={viewArchetype}
+                            defaultOpen
+                            bare
+                            feedback={feedbackWidget}
+                          >
+                            <V4Accelerators view={accelerators} onUnlock={unlockAccel} />
+                            {acceleratorsArticle ? (
+                              <V4LearnMore
+                                article={acceleratorsArticle.article}
+                                locked={acceleratorsArticle.locked}
+                                onUnlock={unlockAccel}
+                              />
+                            ) : null}
+                          </V4Chapter>
+                        </Fragment>
+                      );
+                    }
+
                     // Report 2.0 "Accelerators & Brakes" — a Part II, essentials-
                     // tier PREMIUM section. Gating is resolved SERVER-SIDE: a
                     // locked client's accelCopy carries only the universal
@@ -1794,6 +2111,45 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // isn't duplicated. Only the primary archetype gets a fantasy
                     // copy block; browsing another archetype renders the tables only.
                     const hasArchetypeCopy = viewArchetype === contentArchetype;
+                    // V4 names the chapter "Fantasy vs. Reality", as its head does,
+                    // on V2's section too; ?v3=1 keeps the section's own title.
+                    const fantasyFeedback =
+                      isV4 && feedbackWidget
+                        ? renderFeedback(section.id, "Fantasy vs. Reality")
+                        : feedbackWidget;
+
+                    // Report 3.0 swaps this chapter for Figma 304:281 (305:217 when
+                    // locked), the chapter that opens Part VI "Your edges": the V4
+                    // chapter row, the body with the fantasy table, the practice
+                    // (441:6422) and "Go deeper & learn more" (368:5450). Only where
+                    // the chapter is written for the archetype on screen; every other
+                    // reader keeps V2's section below. Every locked surface opens the
+                    // same pricing modal, through this section's full-report gate.
+                    if (isV4 && fantasy && hasArchetypeCopy) {
+                      const unlockFantasy = () => unlockSection(section);
+                      return (
+                        <Fragment key={section.id}>
+                          <V4Chapter
+                            sectionId={section.id}
+                            title="Fantasy vs. Reality"
+                            archetype={viewArchetype}
+                            defaultOpen
+                            bare
+                            feedback={fantasyFeedback}
+                          >
+                            <V4Fantasy view={fantasy} onUnlock={unlockFantasy} />
+                            {fantasyArticle ? (
+                              <V4LearnMore
+                                article={fantasyArticle.article}
+                                locked={fantasyArticle.locked}
+                                onUnlock={unlockFantasy}
+                              />
+                            ) : null}
+                          </V4Chapter>
+                        </Fragment>
+                      );
+                    }
+
                     const isBackendUnlocked = isSectionUnlockedForPlan({
                       accessPlan,
                       archetypeTier: viewArchetypeTier,
@@ -1805,7 +2161,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     return (
                       <ReportSection
                         key={section.id}
-                        feedbackWidget={feedbackWidget}
+                        feedbackWidget={fantasyFeedback}
                         primaryArchetype={viewArchetype}
                         sectionId={section.id}
                         title=""
@@ -1918,20 +2274,201 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   );
                 })();
 
-                return partDivider ? (
-                  <Fragment key={section.id}>
+                // V4 renumbers every part: "Welcome" is Part I, so what V3 calls
+                // Part I is Part II here. Falling through to the V3 map below is
+                // what gave the report two Part I's — and since V4 also opens two
+                // parts with different chapters (Typical Beliefs, Accelerators &
+                // Brakes), V3 keys fall where V4 has none. So under V4 it is the
+                // V4 heading or nothing.
+                const v4PartHeading = isV4
+                  ? REPORT_V4_PART_DIVIDER_BY_SECTION[section.id]
+                  : undefined;
+                const v4PartFrame = v4PartHeading
+                  ? REPORT_V4_PART_FRAME_BY_SECTION[section.id]
+                  : undefined;
+                const dividerNode = v4PartHeading ? (
+                  <>
+                    {/* Every part opens as its frame draws it (review 26.09): the
+                     * fading hairline (1:484, 1:850, 1:983, 38:1508, 1:1138), the
+                     * heading, and 44px (1:491, 1:858, 1:991, 38:1516, 1:1146) before
+                     * its first block — the designed chapters and V2's alike. */}
+                    <div className="rv4-rule" aria-hidden="true" data-node-id={v4PartFrame?.rule} />
+                    <V4PartHeading heading={v4PartHeading} />
+                    <div className="rv4-sep" aria-hidden="true" data-node-id={v4PartFrame?.sep} />
+                  </>
+                ) : partDivider && !isV4 ? (
+                  isV3 ? (
+                    <V3PartDivider
+                      eyebrow={partDivider.part}
+                      lead={partDivider.lead}
+                      accent={partDivider.accent ?? ""}
+                      tail={"tail" in partDivider ? partDivider.tail : undefined}
+                    />
+                  ) : (
                     <ReportPartDivider {...partDivider} />
+                  )
+                ) : null;
+
+                // Part I in V3 carries the top-3 card and the Snapshot accordion
+                // between the divider and the Core Archetype chapter.
+                // V4 (1:493) wraps the same list in its heading, a two-paragraph
+                // lede and a rating. Its rating posts under `core_archetype`, whose
+                // own widget is suppressed, so it is the only one on the page.
+                const v3PartOneExtras =
+                  isV4 && section.id === "core_archetype" ? (
+                    <V4TopThreeSection
+                      percentages={percentages}
+                      feedback={renderFeedback("core_archetype", REPORT_V4_TOP_THREE_HEADING)}
+                    />
+                  ) : isV3 && section.id === "core_archetype" ? (
+                    <V3TopThree percentages={percentages} />
+                  ) : null;
+
+                // V3 numbers "Other Archetypes" chapter 5.4, one ahead of
+                // Importance of Sexuality (5.5). V1 renders it inline AFTER
+                // Importance, which would invert the two.
+                // V4 no longer carries Importance (review 24.09), so there the
+                // chapter closes the report, right after Reading Recommendations.
+                const constellationHost = isV4 ? "recommendations" : "the_importance_of_sexuality";
+                const v3Constellation =
+                  isV3 && section.id === constellationHost ? (
+                    <ReportSection
+                      primaryArchetype={viewArchetype}
+                      sectionId="constellation"
+                      title=""
+                      feedbackWidget={renderFeedback("constellation", "Other archetypes")}
+                    >
+                      <ConstellationSection
+                        ranking={ranking}
+                        percentages={percentages}
+                        mottos={constellationMottos}
+                        viewArchetype={viewArchetype}
+                        onViewArchetype={onUnlockArchetype}
+                      />
+                    </ReportSection>
+                  ) : null;
+
+                // V3 promotes "Challenges in Partnership" to its own chapter 4.4,
+                // after Curiosity. V1 renders it inline under Libido (3.1 in V3),
+                // which would put chapter 4.4 two parts early.
+                // V4 opens Part V with it instead (review 24.09), in Attachment
+                // Style's slot: under the part heading, above Attachment. It keeps
+                // the gate it has everywhere: the server unlocks its copy with
+                // Libido's full-report tier, and V3 reads the tier and the unlock off
+                // Curiosity, also full report. Attachment is an essentials chapter,
+                // so V4 still reads them off Curiosity, never off the slot.
+                const partnershipGate = isV4
+                  ? resolvedSections.find((s) => s.id === "curiosity_level")
+                  : section;
+                // Report 3.0 draws the chapter as Figma 38:1672 (305:350 locked) wherever
+                // the archetype on screen has it written — today Spark Seeker; everyone
+                // else keeps V2's section below. Open in V4Chapter, as Typical Beliefs
+                // and Accelerators & Brakes are, under the part heading and its 44px
+                // (38:1516, the part opener's), behind the same gate: the server's
+                // Libido, the unlock Curiosity's.
+                const v4Partnership =
+                  isV4 &&
+                  partnership &&
+                  partnershipGate &&
+                  section.id === "attachment_style" &&
+                  viewArchetype === contentArchetype ? (
+                    <Fragment>
+                      <V4Chapter
+                        sectionId="challenges_in_partnership"
+                        title="Challenges in Partnerships"
+                        archetype={viewArchetype}
+                        defaultOpen
+                        bare
+                        feedback={renderFeedback(
+                          "challenges_in_partnership",
+                          "Challenges in Partnerships"
+                        )}
+                      >
+                        <V4Partnership
+                          view={partnership}
+                          onUnlock={() => unlockSection(partnershipGate)}
+                        />
+                      </V4Chapter>
+                    </Fragment>
+                  ) : null;
+                const v3Partnership =
+                  isV3 &&
+                  !v4Partnership &&
+                  partnershipGate &&
+                  section.id === (isV4 ? "attachment_style" : "curiosity_level") ? (
+                    <ReportSection
+                      primaryArchetype={viewArchetype}
+                      sectionId="challenges_in_partnership"
+                      title=""
+                      feedbackWidget={renderFeedback(
+                        "challenges_in_partnership",
+                        // V4 names the chapter in the plural, as its head does.
+                        isV4 ? "Challenges in Partnerships" : "Challenges in Partnership"
+                      )}
+                    >
+                      <PartnershipSection
+                        archetype={viewArchetype}
+                        // The server keys this copy to contentArchetype; V4 matches it,
+                        // so an all-reports reader browsing another archetype gets the
+                        // chapter. ?v3=1 keeps its primary-archetype check.
+                        copy={
+                          viewArchetype === (isV4 ? contentArchetype : primaryArchetype)
+                            ? partnershipCopy
+                            : null
+                        }
+                        loop={
+                          viewArchetype === (isV4 ? contentArchetype : primaryArchetype)
+                            ? partnershipLoop
+                            : null
+                        }
+                        onUnlock={() => unlockSection(partnershipGate)}
+                        quote={fullReportQuote}
+                        sectionTitle={
+                          isV4 ? "Challenges in Partnerships" : "Challenges in Partnership"
+                        }
+                        tier={
+                          isSectionIncludedInEssentials(partnershipGate.id)
+                            ? "essentials"
+                            : "full_report"
+                        }
+                      />
+                    </ReportSection>
+                  ) : null;
+
+                if (
+                  !dividerNode &&
+                  !v3PartOneExtras &&
+                  !v4Partnership &&
+                  !v3Partnership &&
+                  !v3Constellation
+                )
+                  return sectionNode;
+                return (
+                  <Fragment key={section.id}>
+                    {dividerNode}
+                    {isV4 ? (v4Partnership ?? v3Partnership) : null}
+                    {v3PartOneExtras}
+                    {isV4 ? null : v3Constellation}
                     {sectionNode}
+                    {isV4 ? null : v3Partnership}
+                    {isV4 ? v3Constellation : null}
                   </Fragment>
-                ) : (
-                  sectionNode
                 );
               })}
 
+              {/* V3 closes with the "Summary" block (Figma 10392:25297), which
+                  V1 retired. It sits after the last chapter, before the closing
+                  note. V4 drops it: "Take out the Summary, Sexual Stage, Importance
+                  of Sexuality chapters please" (review 24.09). V4's own summary is
+                  Part II's. */}
+              {isV3 && !isV4 ? <V3EndSummary archetype={viewArchetype} /> : null}
+
               {/* Report 2.0 closing note (Figma 8427:2837) — universal + free,
                   no gating, no CTA. Mounts LAST in the report content, right
-                  before the footer. Same for every archetype and every plan. */}
-              <ClosingSection />
+                  before the footer. Same for every archetype and every plan. V4
+                  drops it (sync 28.09): hardly anyone scrolls that far, and its
+                  points belong in the chapters. */}
+              {isV4 ? null : <ClosingSection />}
 
               <FooterSection />
             </div>
@@ -1951,13 +2488,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         primaryArchetype={primaryArchetype}
         variant={pricingVariant}
       />
-      {viewMode === "owner" && ownerToken ? (
+      {/* The owner's even with no token, which a ?preview=1 page never has: sharing then
+       * says on Send that nothing went, where the sidebar used to show a dead button. */}
+      {viewMode === "owner" ? (
         <ShareReportModal
           open={isShareModalOpen}
           onClose={onCloseShareModal}
           ownerToken={ownerToken}
-          initialPlan={accessPlan}
-          onUpgrade={onOpenPricingModal}
           returnFocusRef={mainContentRef}
         />
       ) : null}
@@ -1968,6 +2505,36 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         referrerName={userName ?? ""}
       />
     </main>
+  );
+
+  // V3 mode is announced via context so `ReportSection` — the one wrapper all 28
+  // render branches share — can swap its chrome for the numbered-chapter
+  // accordion without the variant being threaded through every call site.
+  // V4 rides on V3 mode and announces itself on top of it, for the chapter nav
+  // and the eyebrow numbers, whose order differs (REPORT_V4_CHAPTERS).
+  if (!isV3) return experience;
+  // Under V4 a chapter the reader has no access to is locked outright (review 26.09):
+  // the nav badges' answer, from the same gate the sections use, and its paywall is
+  // that gate's. The designed chapters keep their own gates.
+  const v4ChapterLock = {
+    isLocked: (id: string) =>
+      !REPORT_V4_DESIGNED_CHAPTER_IDS.has(id) && navAccessById.get(id) === "locked",
+    unlock: (id: string) => {
+      const item = REPORT_V3_NAV_PARTS.flatMap((part) => part.items).find((i) => i.id === id);
+      const section = resolvedSections.find((s) => s.id === (item?.gateId ?? id));
+      if (section) unlockSection(section);
+    },
+  };
+  return (
+    <V3ModeProvider>
+      {isV4 ? (
+        <V4ModeProvider>
+          <V4ChapterLockProvider value={v4ChapterLock}>{experience}</V4ChapterLockProvider>
+        </V4ModeProvider>
+      ) : (
+        experience
+      )}
+    </V3ModeProvider>
   );
 };
 
@@ -1983,16 +2550,63 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   /* eslint-enable no-restricted-syntax */
   const sessionId = devParam ?? storedSessionId;
 
+  // `?v3=1` renders the mobile-first V3 chrome. Opt-in while it is being built,
+  // so the same token can be compared against the live report side by side.
+  const v3Param = searchParams.get("v3");
+
   /**
-   * Which report the reader gets. V1 — the pre-2.0 report — is the DEFAULT for
-   * everyone (WhatsApp 2026-09-12, Mark: "Revert back fully please"), and stays
-   * so until Report 3.0 ships. `?v2=1` still reaches Report 2.0, which is kept
-   * in the tree because the in-progress V3 work builds on its sections.
+   * Report 3.0 (V4), the report every reader gets since it launched (LoveIQ sync,
+   * 2026-10-05: "push the new report live to production"). Asking for an older one by
+   * name still opens it: `?v2=1` Report 2.0, `?v3=1` its V3 chrome, and `?v4=0` the
+   * pre-2.0 report (V1) that was the default until then.
+   *
+   * It is a COPY OF V2, not a new report. Aligned at the sync of 2026-09-23:
+   * "the new report staging version will be built by duplicating the V2 report
+   * and substituting redesigned components rather than editing the base V2
+   * directly." An earlier attempt built the frame from scratch against Figma
+   * 1:165, and Mark's verdict on staging was that it "feels empty rather than
+   * serving as an upgrade to the V2 base" — it drew placeholders where V2
+   * already had a working report.
+   *
+   * So the flag changes nothing on its own. Every section still renders exactly
+   * as V2 draws it, and a redesigned component replaces one only where it is
+   * swapped in explicitly — the same thing `isV3` already does for
+   * core_archetype, the_importance_of_sexuality and curiosity_level.
+   */
+  const v4Param = searchParams.get("v4");
+  const asksForOlderReport =
+    v4Param === "0" ||
+    v4Param === "false" ||
+    searchParams.get("v2") === "1" ||
+    v3Param === "1" ||
+    v3Param === "true";
+  const isV4 = v4Param === "1" || v4Param === "true" || !asksForOlderReport;
+
+  // Review 24.09: the status bar was dark on an iPhone. Safari 15-18 tints it from
+  // `theme-color`, and with none it keeps the site's dark shell (#0b0613), which is
+  // what paints while the report loads. V4 is white edge to edge, so it says so, on
+  // every screen below, from the loading one on. React hoists the tag into <head>,
+  // and Safari follows theme-color as it changes. A route-level `viewport` would
+  // need `searchParams` and turn /report dynamic for every version, so it lives here.
+  const v4ThemeColor = isV4 ? <meta name="theme-color" content="#ffffff" /> : null;
+
+  // V4 takes the V3 chrome underneath it for the same reason V3 takes V2: the
+  // mobile-first shell is what the redesigned components are drawn against.
+  const isV3 = isV4 || v3Param === "1" || v3Param === "true";
+
+  /**
+   * Which report the reader gets. V4 above is the default; V1, the pre-2.0 report, was
+   * the default from WhatsApp 2026-09-12 (Mark: "Revert back fully please") until
+   * Report 3.0 shipped, and `?v4=0` still opens it. `?v2=1` reaches Report 2.0.
+   *
+   * `?v3=1` implies it too: V3 is not a separate experience, it is the 2.0
+   * `ReportExperience` rendering V3 chrome, so selecting V1 underneath it would
+   * leave the V3 flag with nothing to act on.
    *
    * This is NOT an A/B split: nothing buckets traffic, the arm is only ever
    * chosen by typing the parameter.
    */
-  const showReportV2 = searchParams.get("v2") === "1";
+  const showReportV2 = searchParams.get("v2") === "1" || isV3;
 
   // Honour the discount-email CTA deep-link: /report/[token]?offer=1&pricingSessionId=<uuid>
   const isOfferLink = searchParams.get("offer") === "1";
@@ -2035,11 +2649,25 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Raw slug on purpose — the server validates it against the archetypes this
     // reader has actually paid for and resolves the report copy for that one.
     archetypeSlug: searchParams.get("archetype"),
+    // `?preview=1` renders the report from the repository's own copy, with no
+    // database behind it — see app/api/report/preview/route.ts. It 404s on
+    // production, and /api/report is untouched either way.
+    preview: searchParams.get("preview") === "1",
+    previewPlan: searchParams.get("plan"),
+    // Only the V4 page asks for V4's chapters: no other version draws them, and a
+    // locked reader's copy of them is the real one under the blur (final review 26.09).
+    v4: isV4,
   });
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works
   // cross-device); sessionId is the legacy in-storage one.
-  const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId, token);
+  // A recipient's rating is not the owner's, and a share token identifies no reader of
+  // ours, so it is kept on screen and stored nowhere.
+  const isSharedView = data?.viewMode === "shared";
+  const { feedbacks, submitted, rateSection, submitFeedback } = useSectionFeedback(
+    isSharedView ? null : sessionId,
+    isSharedView ? null : token
+  );
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   /**
@@ -2053,7 +2681,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     message: string | null;
   } | null>(null);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
-  const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "share">("default");
+  const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "recipient">(
+    "default"
+  );
   const autoOpenedPricingRef = useRef(false);
   const autoOpenedOfferRef = useRef(false);
   const scrollTeaserFiredRef = useRef(false);
@@ -2089,6 +2719,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // dev_session) viewers still resolve to their own report.
   const resolvedReportToken = token ?? data?.ownerToken ?? null;
 
+  // The pay pop-up test, V4 only (see shared/experiments/popupArm.ts). Null means
+  // this reader is not in it and gets the pop-up as built.
+  const popupArm = isV4
+    ? (resolvePopupArmOverride(searchParams.get("popup")) ?? assignPopupArm(data?.submissionId))
+    : null;
+
   /**
    * The prices the page loaded with. Nothing moves them mid-session any more: the
    * +2 EUR urgency surcharge — the only thing that ever re-priced a live report —
@@ -2109,6 +2745,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const paywallReachedRef = useRef(false);
   const notifyPaywallReached = useCallback(() => {
     if (paywallReachedRef.current) return;
+    // A recipient reaching a lock is not the owner reaching the paywall (and the route
+    // takes only the owner's token).
+    if (isSharedView) return;
     if (!resolvedReportToken && !sessionId) return;
     paywallReachedRef.current = true;
     void fetch("/api/price", {
@@ -2120,14 +2759,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     }).catch(() => {
       // Best-effort: a missed ping costs one funnel step, never the reader's session.
     });
-  }, [resolvedReportToken, sessionId]);
+  }, [isSharedView, resolvedReportToken, sessionId]);
 
   const reportViewedFiredRef = useRef(false);
   useEffect(() => {
     if (reportViewedFiredRef.current) return;
     if (!data) return;
     reportViewedFiredRef.current = true;
-    setReportSubmissionContext(data.submissionId ?? null);
+    // Persisted events need a submission to count against. A recipient's visit is not the
+    // owner's, so it publishes none and theirs stay out of the owner's numbers.
+    setReportSubmissionContext(data.viewMode === "shared" ? null : (data.submissionId ?? null));
     trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
   }, [data, accessPlan]);
 
@@ -2182,6 +2823,47 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     isPricingModalOpenRef.current = isPricingModalOpen;
   }, [isPricingModalOpen]);
 
+  /**
+   * Where the reader was when they started a checkout, so Stripe's return puts them
+   * back there (unlockAnchor.ts, Figma 1382:2010). The last tap is remembered for a
+   * moment because the paywall is opened by callbacks that never see the event; a
+   * pop-up that opened on its own finds no recent tap and records the reading line.
+   */
+  const lastTapRef = useRef<{ at: number; el: Element | null }>({ at: 0, el: null });
+  useEffect(() => {
+    const onTap = (event: Event) => {
+      lastTapRef.current = {
+        at: Date.now(),
+        el: event.target instanceof Element ? event.target : null,
+      };
+    };
+    document.addEventListener("click", onTap, true);
+    return () => document.removeEventListener("click", onTap, true);
+  }, []);
+  const unlockAnchorRef = useRef<UnlockAnchor | null>(null);
+  useEffect(() => {
+    if (!isPricingModalOpen) return;
+    unlockAnchorRef.current = captureUnlockAnchor(recentTapTarget(lastTapRef.current));
+  }, [isPricingModalOpen]);
+
+  // Back from Stripe with `?anchor=`: once the report has rendered, return the reader
+  // to that spot and drop the parameter, so a reload or a copied link does not jump.
+  const anchorFromUrl = searchParams.get("anchor");
+  const anchorRestoredRef = useRef(false);
+  useEffect(() => {
+    if (anchorRestoredRef.current || !anchorFromUrl || status !== "success") return;
+    anchorRestoredRef.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("anchor");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
+    const anchor = parseUnlockAnchor(anchorFromUrl);
+    if (anchor) restoreUnlockAnchor(anchor);
+  }, [anchorFromUrl, status]);
+
   useEffect(() => {
     if (!data) return;
     if (accessPlan !== null) return;
@@ -2205,6 +2887,26 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // Report the paywall on ARRIVAL, not after the 1.6s settle beat — the reader
       // has reached it whether or not they wait for the pop-up to fade in.
       notifyPaywallReached();
+      // No pop-up on a V4 desktop (Mark, desktop review 01.10: "Take out the Paywall Pop
+      // up that currently triggers at Challenges in Partnerships"; Fatih: desktop only,
+      // from 700px). Nothing opens, so nothing is exposed: the 50/50 runs on phones.
+      if (
+        isV4 &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(min-width: 700px)").matches
+      ) {
+        return;
+      }
+      // Both arms of the pop-up test mark this moment, so readers who got this far
+      // are compared like for like; `no_popup` then stops before the pop-up.
+      if (popupArm) {
+        trackExperimentExposure({
+          experiment: POPUP_EXPERIMENT,
+          variant: popupArm,
+          surface: trigger?.id ?? "first_scroll",
+        });
+      }
+      if (popupArm === "no_popup") return;
       scrollTeaserTimerRef.current = setTimeout(() => {
         if (!isPricingModalOpenRef.current) {
           // Pricing 2.0: the scroll pop-up shows the NEW 3-tier plans modal
@@ -2221,11 +2923,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Primary target is Attachment Style — the chapter after the two teased ones.
     // Beliefs is the first backstop (the chapter this trigger used to sit on) and the
     // snapshot the second, so a layout change that drops a chapter moves the pop-up
-    // earlier rather than losing it.
+    // earlier rather than losing it. V4 opens that part with Challenges in Partnership,
+    // one chapter above Attachment (review 24.09), so there it waits for that.
     const trigger =
+      (isV4 ? document.getElementById("challenges_in_partnership") : null) ??
       document.getElementById("attachment_style") ??
       document.getElementById("typical_beliefs") ??
-      document.getElementById("snapshot");
+      document.getElementById("snapshot") ??
+      // V4 has no Snapshot (30.09): the Summary it followed holds its place.
+      document.getElementById("summary") ??
+      document.getElementById("means_for_you");
 
     // COUNT THE PAYWALL FROM THE FIRST OFFER THE READER ACTUALLY SEES.
     //
@@ -2233,7 +2940,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // before it, so a reader meets the paywall earlier than the pop-up fires. Whichever
     // arrives first reports it; `notifyPaywallReached` is idempotent, so the pop-up
     // reporting it again later is a no-op.
-    const firstOfferCard = document.querySelector(".report-premium-overlay");
+    // V4's in-flow paywall card (.rv4-premium) counts too — whichever offer comes
+    // first in the page.
+    const firstOfferCard = document.querySelector(".report-premium-overlay, .rv4-premium");
     let cardObserver: IntersectionObserver | null = null;
     if (firstOfferCard) {
       cardObserver = new IntersectionObserver(
@@ -2334,7 +3043,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant]);
+  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant, isV4, popupArm]);
 
   // Every other route to the paywall reports it too: an ?offer=1 email deep-link,
   // the 24h ladder auto-open, and every manual "Unlock" CTA. Whichever comes first
@@ -2368,9 +3077,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // `?v2=1` has to survive archetype navigation, or anyone comparing the two
     // reports silently falls back to V1 on the first tile they click.
     if (showReportV2) params.set("v2", "1");
+    if (isV4) params.set("v4", "1");
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [devParam, pathname, showReportV2]);
+  }, [devParam, isV4, pathname, showReportV2]);
 
   const handleUnlockArchetype = useCallback(
     (name: string) => {
@@ -2387,6 +3097,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         params.set("archetype", slug);
         if (devParam) params.set("dev_session", devParam);
         if (showReportV2) params.set("v2", "1");
+        if (isV4) params.set("v4", "1");
         router.push(`${pathname}?${params.toString()}`);
       };
 
@@ -2395,6 +3106,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         return;
       }
 
+      // Someone else's report: nothing here is theirs to buy (see the recipient variant).
+      if (viewMode === "shared") {
+        setPricingTargetArchetype(null);
+        setPricingVariant("recipient");
+        setIsPricingModalOpen(true);
+        return;
+      }
       // Intent signal — user clicked "Unlock" on an archetype probability tile.
       trackPaywallInitiated({ source: "archetype_unlock", archetype: name });
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
@@ -2403,6 +3121,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     },
     [
       devParam,
+      isV4,
       pathname,
       primaryArchetypeFromData,
       returnToPrimaryHref,
@@ -2410,6 +3129,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       shouldShowOfferVariant,
       showReportV2,
       unlockedArchetypes,
+      viewMode,
     ]
   );
 
@@ -2428,6 +3148,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
    * absence costs the value, not the event.
    */
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
+    // A recipient cannot buy the report they were sent: every way to Stripe ends here, so
+    // this is the one place that is sure to catch them.
+    if (viewMode === "shared") {
+      setPricingTargetArchetype(null);
+      setPricingVariant("recipient");
+      setIsPricingModalOpen(true);
+      return;
+    }
     const quote = pricingQuotes?.[plan];
     trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     // Essentials + Full Report are per-archetype; All Reports is a global
@@ -2437,7 +3165,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // repeated this price and then auto-forwarded anyway; it is gone, so the
     // pending state it used to show has to live here instead.
     setCheckoutHandoff({ status: "redirecting", message: null });
+    // From the pay screen, the spot it was opened from; from the sticky footer, here.
+    const anchor = serializeUnlockAnchor(
+      isPricingModalOpenRef.current
+        ? unlockAnchorRef.current
+        : captureUnlockAnchor(recentTapTarget(lastTapRef.current))
+    );
     void startReportCheckout({
+      anchor,
       archetype: archetypeForCheckout,
       plan,
       quote: quote ?? null,
@@ -2457,6 +3192,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
    * full_report. all_reports is a global unlock, so it carries no archetype.
    */
   const handlePurchaseFullReport = () => {
+    if (viewMode === "shared") {
+      beginCheckout("full_report", null);
+      return;
+    }
     const plan: ReportPurchasePlanId = accessPlan === "full_report" ? "all_reports" : "full_report";
     const archetype = plan === "all_reports" ? null : primaryArchetype;
     trackPaywallInitiated({
@@ -2493,17 +3232,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingVariant("default");
   }, []);
 
-  const openShareModal = useCallback(() => {
-    // Free-plan users see the pricing modal in "share" variant instead of the
-    // share form — they have nothing to share until they purchase a plan.
-    if (!canSharePlan(accessPlan)) {
-      setPricingTargetArchetype(null);
-      setPricingVariant("share");
-      setIsPricingModalOpen(true);
-      return;
-    }
-    setIsShareModalOpen(true);
-  }, [accessPlan]);
+  // Paid or not, every reader shares with up to two people (planAccess.ts).
+  const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
   // Back closes whichever of these is open instead of leaving the report — see
   // useCloseOnBack for the readers it was losing.
@@ -2517,15 +3247,18 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // not primary). null = primary archetype.
       const scope = archetype ?? null;
       setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
-      setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
+      setPricingVariant(
+        viewMode === "shared" ? "recipient" : shouldShowOfferVariant ? "offer" : "default"
+      );
       setIsPricingModalOpen(true);
     },
-    [primaryArchetypeFromData, shouldShowOfferVariant]
+    [primaryArchetypeFromData, shouldShowOfferVariant, viewMode]
   );
 
   if (status === "loading") {
     return (
       <main className="report-status-screen">
+        {v4ThemeColor}
         <div className="report-status-card report-card">
           <div className="report-status-card__spinner" />
           <p className="report-status-card__label">Loading your report...</p>
@@ -2536,18 +3269,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   if (status === "needs_verification" && token) {
     return (
-      <ShareVerifyGate
-        shareToken={token}
-        ownerFirstName={challenge?.ownerFirstName ?? null}
-        recipientEmailHint={challenge?.recipientEmailHint ?? null}
-        onVerified={() => retry()}
-      />
+      <>
+        {v4ThemeColor}
+        <ShareVerifyGate
+          shareToken={token}
+          ownerFirstName={challenge?.ownerFirstName ?? null}
+          recipientEmailHint={challenge?.recipientEmailHint ?? null}
+          onVerified={() => retry()}
+        />
+      </>
     );
   }
 
   if (status === "missing") {
     return (
       <main className="report-status-screen">
+        {v4ThemeColor}
         <div className="report-status-card report-card">
           <p className="report-overline">LoveIQ report</p>
           {/* Was "Complete the survey again to generate a fresh report". Opening
@@ -2587,6 +3324,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
     return (
       <main className="report-status-screen">
+        {v4ThemeColor}
         <div className="report-status-card report-card">
           <p className="report-overline">LoveIQ report</p>
           <h1 className="report-status-card__title">{statusState.title}</h1>
@@ -2629,101 +3367,158 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // order — no retirement filter and no Figma re-ordering, both of which are
   // Report 2.0 concepts.
   const resolvedSectionsV1 = allSections;
+  // V3 un-retires "Arousal, Desire & Pleasure" (chapter 3.3), which the 2.0
+  // redesign folded away — so the retired set is narrowed to whatever V3 does
+  // not explicitly ask for.
+  // V4 runs V3's order with Typical Beliefs moved to the front of its part.
+  const sectionOrder = isV4
+    ? REPORT_V4_SECTION_ORDER
+    : isV3
+      ? REPORT_V3_SECTION_ORDER
+      : REPORT_SECTION_ORDER;
   const resolvedSections = allSections
-    .filter((section) => !RETIRED_REPORT_SECTION_IDS.has(section.id))
+    .filter(
+      (section) =>
+        !RETIRED_REPORT_SECTION_IDS.has(section.id) || (isV3 && sectionOrder.includes(section.id))
+    )
+    .filter((section) => !isV3 || sectionOrder.includes(section.id))
     // Order by the Figma part containers, NOT by `sectionNumber` — the two
     // disagree (Beliefs is numbered after Attachment but comes FIRST in Part II,
     // and Accelerators & Brakes is numbered into Part III but belongs in II).
     // Anything unlisted keeps its numeric order and sorts last.
     .sort((a, b) => {
-      const ia = REPORT_SECTION_ORDER.indexOf(a.id);
-      const ib = REPORT_SECTION_ORDER.indexOf(b.id);
+      const ia = sectionOrder.indexOf(a.id);
+      const ib = sectionOrder.indexOf(b.id);
       if (ia === -1 && ib === -1) return a.sectionNumber - b.sectionNumber;
       if (ia === -1) return 1;
       if (ib === -1) return -1;
       return ia - ib;
     });
 
+  // Review 27.09: V4 opens its Report 2.0 chapters on V4's own "Try this & see what
+  // shifts" and "Go deeper & learn more" cards in place of 2.0's practical and "Learn:"
+  // panels (v4CardsFromV2, which clears each panel's copy where its card took it). Only
+  // while the payload describes the archetype on screen — the test ReportExperience
+  // makes as `hasArchetypeCopy` — so a chapter shows its panel or its card, never both.
+  const reportV2Copies = {
+    insecuritiesCopy: data.insecuritiesCopy ?? null,
+    libidoCopy: data.libidoCopy ?? null,
+    initiationCopy: data.initiationCopy ?? null,
+    confidenceCopy: data.confidenceCopy ?? null,
+    powerCopy: data.powerCopy ?? null,
+    rewardCopy: data.rewardCopy ?? null,
+    arousalCopy: data.arousalCopy ?? null,
+    energyCopy: data.energyCopy ?? null,
+    attachmentCopy: data.attachmentCopy ?? null,
+    lovelangCopy: data.lovelangCopy ?? null,
+    curiosityCopy: data.curiosityCopy ?? null,
+    beliefsCopy: data.beliefsCopy ?? null,
+    accelCopy: data.accelCopy ?? null,
+    fantasyCopy: data.fantasyCopy ?? null,
+    partnershipCopy: data.partnershipCopy ?? null,
+    // No card, but V4 takes their "What you will learn" out too (review 28.09).
+    growthCopy: data.growthCopy ?? null,
+    readingCopy: data.readingCopy ?? null,
+  };
+  const v4Chapters =
+    isV4 && effectiveViewArchetype === (data.contentArchetype ?? primaryArchetype)
+      ? v4CardsFromV2(reportV2Copies)
+      : null;
+  const v2Copies = v4Chapters?.copies ?? reportV2Copies;
+
   return (
     <>
+      {v4ThemeColor}
       {showReportV2 ? (
-        <ReportExperience
-          key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
-          submissionId={data.submissionId ?? null}
-          devParam={devParam}
-          accessPlan={data.accessPlan}
-          archetypeTiers={data.archetypeTiers ?? {}}
-          feedbacks={feedbacks}
-          isPricingModalOpen={isPricingModalOpen}
-          isShareModalOpen={isShareModalOpen}
-          matchScore={matchScore}
-          onBeginCheckout={beginCheckout}
-          onClosePricingModal={closePricingModal}
-          onCloseShareModal={closeShareModal}
-          onOpenShareModal={openShareModal}
-          onOpenPricingModal={openPricingModal}
-          onUnlockArchetype={handleUnlockArchetype}
-          ownerFirstName={ownerFirstName}
-          ownerToken={ownerToken}
-          percentages={percentages}
-          placeholderValues={placeholderValues}
-          primaryArchetype={primaryArchetype}
-          pricingQuotes={pricingQuotes}
-          archetypeContent={data.archetypeContent ?? {}}
-          practiceTendencies={data.practiceTendencies ?? {}}
-          pricingTargetArchetype={pricingTargetArchetype}
-          pricingVariant={pricingVariant}
-          ranking={ranking}
-          reportDate={reportDate}
-          resolvedSections={resolvedSections}
-          snapshot={snapshot}
-          snapshotCopy={data.snapshotCopy ?? null}
-          findingsCopy={data.findingsCopy ?? null}
-          beliefsCopy={data.beliefsCopy ?? null}
-          attachmentCopy={data.attachmentCopy ?? null}
-          attachmentFamily={data.attachmentFamily ?? null}
-          attachmentPlane={data.attachmentPlane ?? null}
-          accelCopy={data.accelCopy ?? null}
-          insecuritiesCopy={data.insecuritiesCopy ?? null}
-          insecurityCueFamily={data.insecurityCueFamily ?? null}
-          insecurityGraph={data.insecurityGraph ?? null}
-          rewardCopy={data.rewardCopy ?? null}
-          rewardConfig={data.rewardConfig ?? null}
-          energyCopy={data.energyCopy ?? null}
-          energyConfig={data.energyConfig ?? null}
-          arousalCopy={data.arousalCopy ?? null}
-          arousalConfig={data.arousalConfig ?? null}
-          initiationCopy={data.initiationCopy ?? null}
-          initiationConfig={data.initiationConfig ?? null}
-          libidoCopy={data.libidoCopy ?? null}
-          libidoConfig={data.libidoConfig ?? null}
-          growthCopy={data.growthCopy ?? null}
-          growthRungs={data.growthRungs ?? null}
-          readingCopy={data.readingCopy ?? null}
-          partnershipCopy={data.partnershipCopy ?? null}
-          partnershipLoop={data.partnershipLoop ?? null}
-          enjoyCopy={data.enjoyCopy ?? null}
-          powerCopy={data.powerCopy ?? null}
-          fantasyCopy={data.fantasyCopy ?? null}
-          fantasyDots={data.fantasyDots ?? null}
-          curiosityCopy={data.curiosityCopy ?? null}
-          relationshipFit={data.relationshipFit ?? null}
-          lovelangCopy={data.lovelangCopy ?? null}
-          loveLanguageOrder={data.loveLanguageOrder ?? null}
-          confidenceCopy={data.confidenceCopy ?? null}
-          confidenceStrip={data.confidenceStrip ?? null}
-          mapCopy={data.mapCopy ?? null}
-          stageCopy={data.stageCopy ?? null}
-          constellationMottos={data.constellationMottos ?? {}}
-          submitFeedback={submitFeedback}
-          submitted={submitted}
-          theme={theme}
-          userEmail={data.userEmail}
-          userName={data.userName}
-          contentArchetype={data.contentArchetype ?? primaryArchetype}
-          viewArchetype={effectiveViewArchetype}
-          viewMode={viewMode}
-        />
+        <V4ChapterCardsProvider value={v4Chapters?.cards ?? null}>
+          <ReportExperience
+            key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+            isV3={isV3}
+            isV4={isV4}
+            submissionId={data.submissionId ?? null}
+            devParam={devParam}
+            accessPlan={data.accessPlan}
+            archetypeTiers={data.archetypeTiers ?? {}}
+            feedbacks={feedbacks}
+            isPricingModalOpen={isPricingModalOpen}
+            isShareModalOpen={isShareModalOpen}
+            matchScore={matchScore}
+            onBeginCheckout={beginCheckout}
+            onClosePricingModal={closePricingModal}
+            onCloseShareModal={closeShareModal}
+            onOpenShareModal={openShareModal}
+            onOpenPricingModal={openPricingModal}
+            onUnlockArchetype={handleUnlockArchetype}
+            ownerFirstName={ownerFirstName}
+            ownerToken={ownerToken}
+            percentages={percentages}
+            placeholderValues={placeholderValues}
+            primaryArchetype={primaryArchetype}
+            pricingQuotes={pricingQuotes}
+            archetypeContent={data.archetypeContent ?? {}}
+            practiceTendencies={data.practiceTendencies ?? {}}
+            pricingTargetArchetype={pricingTargetArchetype}
+            pricingVariant={pricingVariant}
+            ranking={ranking}
+            reportDate={reportDate}
+            resolvedSections={resolvedSections}
+            snapshot={snapshot}
+            snapshotCopy={data.snapshotCopy ?? null}
+            findingsCopy={data.findingsCopy ?? null}
+            beliefsCopy={v2Copies.beliefsCopy}
+            typicalBeliefs={data.typicalBeliefs ?? null}
+            typicalBeliefsArticle={data.typicalBeliefsArticle ?? null}
+            attachmentCopy={v2Copies.attachmentCopy}
+            attachmentFamily={data.attachmentFamily ?? null}
+            attachmentPlane={data.attachmentPlane ?? null}
+            accelCopy={v2Copies.accelCopy}
+            accelerators={data.accelerators ?? null}
+            acceleratorsArticle={data.acceleratorsArticle ?? null}
+            insecuritiesCopy={v2Copies.insecuritiesCopy}
+            insecurityCueFamily={data.insecurityCueFamily ?? null}
+            insecurityGraph={data.insecurityGraph ?? null}
+            rewardCopy={v2Copies.rewardCopy}
+            rewardConfig={data.rewardConfig ?? null}
+            energyCopy={v2Copies.energyCopy}
+            energyConfig={data.energyConfig ?? null}
+            arousalCopy={v2Copies.arousalCopy}
+            arousalConfig={data.arousalConfig ?? null}
+            initiationCopy={v2Copies.initiationCopy}
+            initiationConfig={data.initiationConfig ?? null}
+            libidoCopy={v2Copies.libidoCopy}
+            libidoConfig={data.libidoConfig ?? null}
+            growthCopy={v2Copies.growthCopy}
+            growthRungs={data.growthRungs ?? null}
+            readingCopy={v2Copies.readingCopy}
+            partnershipCopy={v2Copies.partnershipCopy}
+            partnershipLoop={data.partnershipLoop ?? null}
+            partnership={data.partnership ?? null}
+            enjoyCopy={data.enjoyCopy ?? null}
+            powerCopy={v2Copies.powerCopy}
+            fantasyCopy={v2Copies.fantasyCopy}
+            fantasyDots={data.fantasyDots ?? null}
+            fantasy={data.fantasy ?? null}
+            fantasyArticle={data.fantasyArticle ?? null}
+            curiosityCopy={v2Copies.curiosityCopy}
+            relationshipFit={data.relationshipFit ?? null}
+            lovelangCopy={v2Copies.lovelangCopy}
+            loveLanguageOrder={data.loveLanguageOrder ?? null}
+            confidenceCopy={v2Copies.confidenceCopy}
+            confidenceStrip={data.confidenceStrip ?? null}
+            mapCopy={data.mapCopy ?? null}
+            stageCopy={data.stageCopy ?? null}
+            constellationMottos={data.constellationMottos ?? {}}
+            rateSection={rateSection}
+            submitFeedback={submitFeedback}
+            submitted={submitted}
+            theme={theme}
+            userEmail={data.userEmail}
+            userName={data.userName}
+            contentArchetype={data.contentArchetype ?? primaryArchetype}
+            viewArchetype={effectiveViewArchetype}
+            viewMode={viewMode}
+          />
+        </V4ChapterCardsProvider>
       ) : (
         <ReportExperienceV1
           key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
@@ -2757,6 +3552,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           reportDate={reportDate}
           resolvedSections={resolvedSectionsV1}
           snapshot={snapshot}
+          rateSection={rateSection}
           submitFeedback={submitFeedback}
           submitted={submitted}
           theme={theme}
@@ -2795,12 +3591,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           `core` buys the top-3 archetypes AT full_report tier, so listing plans
           by hand showed a paying core buyer a permanent "Unlock full report" bar
           whose CTA sent them to Stripe for something they already owned. */}
-      {!doesAccessPlanCover(data.accessPlan, "full_report") && (
+      {viewMode === "owner" && !doesAccessPlanCover(data.accessPlan, "full_report") && (
         <ReportStickyUnlockBar
           quote={pricingQuotes?.full_report ?? null}
           onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
           hidden={isPricingModalOpen || isShareModalOpen}
           archetype={effectiveViewArchetype}
+          v4={isV4}
         />
       )}
     </>

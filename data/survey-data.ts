@@ -1340,7 +1340,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16011",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "Which of these have you actually paid for in the last 12 months?",
+    question:
+      "For your Personal Development, which of these have you paid for in the last 12 months?",
     answerType: "multiple",
     options: [
       "Therapy, coaching, or counseling",
@@ -1451,5 +1452,160 @@ export const surveyQuestions: SurveyQuestion[] = [
     supportAndGuidance:
       "This includes insights on sexuality, intimacy, research papers, news and future advanced tests.",
     formatGuidance: "Select one option.",
+  },
+  {
+    qId: "16016",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question: "Beyond sex, which of these would you most want to understand about yourself?",
+    answerType: "multiple",
+    options: [
+      "Low mood & loss of interest",
+      "Low energy & motivation",
+      "Low self-worth & confidence",
+      "Feeling numb or disconnected",
+      "Anxiety, tension & worry",
+      "Fear of judgement in social situations",
+      "Perfectionism & fear of failure",
+      "Anger & irritability",
+      "Emotions that overwhelm",
+      "Rapid mood swings",
+      "Feeling empty inside",
+      "Past stress echoing now",
+      "Burnout & chronic stress",
+      "Grief & loss",
+      "Shame carried from the past",
+      "Poor or broken sleep",
+      "Constant fatigue & exhaustion",
+      "Stress showing up in the body",
+      "Changes in appetite & eating",
+      "Trouble focusing & follow-through",
+      "Procrastination & avoidance",
+      "Overwhelmed by everyday tasks",
+      "Distance in my relationship",
+      "Conflict & arguments that escalate",
+      "Loneliness & isolation",
+      "Pulling close, then away",
+      "Trouble saying no & setting boundaries",
+      "Trouble trusting others",
+      "Mismatched desire with a partner",
+      "Body image & feeling comfortable",
+      "Shame about sex",
+      "Dating feels exhausting",
+      "Fear of rejection when making a move",
+      "Repeating the same relationship pattern",
+      "Being single when you don't want to be",
+      "Doubts about committing",
+      "Tension with parents or family",
+      "Parenting stress & feeling stretched",
+      "Co-parenting after separation",
+      "Caring for someone who depends on you",
+      "Fertility, pregnancy & becoming a parent",
+      "A difficult workplace",
+      "Money worries",
+      "Feeling stuck in your career",
+      "Money conflict with a partner",
+      "Feeling like a fraud at work",
+      "Drinking more than you want to",
+      "Scrolling, gaming & screens",
+      "Adjusting to a big life change",
+      "Not knowing who you are",
+      "Life feels without meaning",
+      "Feeling wired differently from others",
+      "Not feeling like you belong",
+    ],
+    required: true,
+    guide:
+      "Pick the ones that matter most to you right now — up to three. This helps us decide what to build next, so there are no wrong answers.",
+    supportAndGuidance:
+      "Pick the ones that matter most to you right now — up to three. This helps us decide what to build next, so there are no wrong answers.",
+    comment:
+      "Tells us which areas beyond sex people most want help with, so we build what people actually want instead of guessing.",
+    howAnswerIsUsed:
+      "Tells us which areas beyond sex people most want help with, so we build what people actually want instead of guessing.",
+    formatGuidance: "Select up to three options.",
+    maxSelections: 3,
+  },
+  {
+    qId: "16017",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question: "Thinking about what you just picked — have you tried to work on it before?",
+    answerType: "single",
+    options: [
+      "Yes, and I got somewhere",
+      "Yes, and I got stuck",
+      "I've thought about it, but never really tried",
+      "No, this is new for me",
+    ],
+    required: true,
+    guide:
+      "Every answer here is useful. Having tried and got stuck tells us as much as never having started.",
+    supportAndGuidance:
+      "Every answer here is useful. Having tried and got stuck tells us as much as never having started.",
+    comment:
+      "Separates people who are stuck from people who have not started — the two need very different kinds of help.",
+    howAnswerIsUsed:
+      "Separates people who are stuck from people who have not started — the two need very different kinds of help.",
+    formatGuidance: "Select one option.",
+  },
+  {
+    qId: "16018",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question:
+      "We're building more assessments, including one on the area you picked. Would you like first access when we launch?",
+    answerType: "single",
+    options: ["Yes, tell me when it's ready", "No thanks"],
+    required: true,
+    guide:
+      "Saying yes only means we let you know when it exists. Nothing is for sale here and no payment is taken.",
+    supportAndGuidance:
+      "Saying yes only means we let you know when it exists. Nothing is for sale here and no payment is taken.",
+    comment:
+      "The only behavioural signal in this block. What people say they want and what they sign up for usually differ, and the sign-up is the one to trust.",
+    howAnswerIsUsed:
+      "The only behavioural signal in this block. What people say they want and what they sign up for usually differ, and the sign-up is the one to trust.",
+    formatGuidance: "Select one option.",
+  },
+  {
+    qId: "16019",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question: "Was there a learning or insight that profoundly changed or improved your sexuality?",
+    answerType: "open",
+    options: ["Free text"],
+    required: false,
+    guide:
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
+    supportAndGuidance:
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
+    inputType: "text",
+    placeholder:
+      "Think of something you wish you had understood about your sexuality earlier that others could genuinely benefit from knowing today?",
+    comment:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    howAnswerIsUsed:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    formatGuidance: "Optional. Share as much or as little as you like.",
+  },
+  {
+    qId: "16020",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question:
+      "What are books, articles, blogs or YouTube channels around sexuality that helped you?",
+    answerType: "open",
+    options: ["Free text"],
+    required: false,
+    guide: "Post any links or names that reference to the helpful content",
+    supportAndGuidance: "Post any links or names that reference to the helpful content",
+    inputType: "text",
+    placeholder: "Post any links or names that reference to the helpful content",
+    comment:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    howAnswerIsUsed:
+      "Helps us choose the insights and sources we feature in the Learn and Practice sections of the report.",
+    formatGuidance: "Optional. Share as much or as little as you like.",
   },
 ];

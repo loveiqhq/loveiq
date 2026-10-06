@@ -54,6 +54,7 @@ vi.mock("@features/brain/server/people", () => {
 
 import { listExperiments, recordExperiment } from "@features/brain/server/experiments";
 import type { ArmOutcomes } from "@features/admin/server/experiment-readouts";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 
 const NOW = Date.parse("2026-09-26T09:00:00Z");
 const row = (over: Record<string, unknown> = {}) => ({
@@ -99,6 +100,8 @@ function outcomes(arms: Array<[string, boolean]>): ArmOutcomes {
   return { submissions, bySubmission, truncated: false };
 }
 const body = (c: Call) => JSON.parse(c.init?.body ?? "{}") as Record<string, unknown>;
+/** No completed submissions in the window. */
+const nobody = (): ArmOutcomes => ({ submissions: [], bySubmission: new Map(), truncated: false });
 
 beforeEach(() => {
   calls.length = 0;
@@ -108,10 +111,14 @@ beforeEach(() => {
 afterEach(() => mockSupabaseFetch.mockClear());
 
 describe("experiments: the registry, read", () => {
-  it("says nothing is running, lists the tests that ended before the registry, and how to start one", async () => {
-    const load = vi.fn();
+  it("names Pricing 3.0 as running unregistered, lists the tests that ended before the registry, and how to start one", async () => {
+    const load = vi.fn(async () => nobody());
     const text = await listExperiments(NOW, load);
-    expect(text).toContain("RUNNING NOW\n- None. No test is being randomised right now.");
+    // Pricing 3.0 is randomised with nothing registered against it, so it is named.
+    expect(text).toContain(
+      "RUNNING NOW\n- Report pricing: being randomised with no hypothesis on record; register it with record_experiment."
+    );
+    expect(text).not.toContain("No test is being randomised");
     expect(text).toContain(
       "- Landing page design (V1 vs V2) (before the registry): Finished on 19 September 2026"
     );
@@ -119,9 +126,9 @@ describe("experiments: the registry, read", () => {
     expect(text).toContain("- Paywall style (before the registry):");
     expect(text).toContain("- Survey design (white vs dark) (before the registry):");
     expect(text).toContain("Before the next test starts, record it with record_experiment");
-    // Archived tests are left out by the query itself; nothing live was loaded.
+    // Archived tests are left out by the query itself; the live split's last 30 days were read.
     expect(calls[0]!.path).toContain("status=neq.archived");
-    expect(load).not.toHaveBeenCalled();
+    expect(load).toHaveBeenCalledWith("2026-08-27T00:00:00Z");
   });
 
   it("reads a running test live from its own start, in /admin's words", async () => {
@@ -143,16 +150,17 @@ describe("experiments: the registry, read", () => {
 
   it("counts a paused test as running, and reads a pricing test from the arm on its quote", async () => {
     rows = [row({ id: 6, status: "paused", axis: "pricing", start_date: "2026-09-22" })];
+    // Pricing 3.0's arm, on readers who finished from its launch day.
     const priced: ArmOutcomes = {
       submissions: [1, 2, 3].map((id) => ({
         id,
-        created_date_time: "2026-09-23T10:00:00Z",
+        created_date_time: `${PRICING_3_LAUNCH_DAY}T10:00:00Z`,
         utm_tracker: null,
       })),
       bySubmission: new Map([
-        [1, { pricing: "B", purchased: true, startedCheckout: true, revenue: 19 }],
-        [2, { pricing: "B", purchased: false, startedCheckout: false, revenue: 0 }],
-        [3, { pricing: "B", purchased: false, startedCheckout: false, revenue: 0 }],
+        [1, { pricing: "B3", purchased: true, startedCheckout: true, revenue: 19.99 }],
+        [2, { pricing: "B3", purchased: false, startedCheckout: false, revenue: 0 }],
+        [3, { pricing: "B3", purchased: false, startedCheckout: false, revenue: 0 }],
       ]),
       truncated: false,
     };
@@ -161,7 +169,7 @@ describe("experiments: the registry, read", () => {
       vi.fn(async () => priced)
     );
     expect(text).toMatch(/RUNNING NOW\n- #6 .*\(paused, Report pricing, 2026-09-22 onwards\)/);
-    expect(text).toMatch(/ {2}So far: .*1 of 3 bought \(33\.3%\)/);
+    expect(text).toMatch(/ {2}So far: .*Pricing 3\.0 B 1 of 3 bought \(33\.3%\)/);
   });
 
   it("says why a running test has no live numbers when it has no axis, or one nothing stamps", async () => {
@@ -185,7 +193,10 @@ describe("experiments: the registry, read", () => {
       }),
       row({ id: 10, status: "completed", outcome: null, result_summary: null }),
     ];
-    const text = await listExperiments(NOW, vi.fn());
+    const text = await listExperiments(
+      NOW,
+      vi.fn(async () => nobody())
+    );
     expect(text).toMatch(/PLANNED\n- #8 .*\(draft, Landing page design, 2026-10-05 onwards\)/);
     expect(text).toMatch(
       /- #9 .*2026-09-20 to 2026-09-25\)[^\n]*\n {2}Outcome: Badge won by 2 points\./

@@ -19,18 +19,30 @@ import type { ReactNode } from "react";
  * Paragraphs that don't match render unchanged.
  */
 export function renderEduPara(text: string): ReactNode {
-  const i = text.indexOf(":");
-  if (i <= 0 || i > 34) return text;
-
-  const label = text.slice(0, i);
-  const rest = text.slice(i);
-  if (/[.!?]/.test(label)) return text;
-  if (!rest.slice(1).trim()) return text;
+  const split = splitEduLabel(text);
+  if (!split) return text;
 
   return (
     <>
-      <span className="report-learn-para-label">{label}</span>
-      {rest}
+      <span className="report-learn-para-label">{split.label}</span>
+      {split.rest}
     </>
   );
+}
+
+/**
+ * The rule above, as data: the label and the rest (the colon included), or null for a
+ * paragraph that has no label. Shared with V4's "Go deeper & learn more" cards, which
+ * these paragraphs fill since review 27.09, so the two can never bold different words.
+ */
+export function splitEduLabel(text: string): { label: string; rest: string } | null {
+  const i = text.indexOf(":");
+  if (i <= 0 || i > 34) return null;
+
+  const label = text.slice(0, i);
+  const rest = text.slice(i);
+  if (/[.!?]/.test(label)) return null;
+  if (!rest.slice(1).trim()) return null;
+
+  return { label, rest };
 }

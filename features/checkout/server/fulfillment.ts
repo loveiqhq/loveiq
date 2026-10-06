@@ -17,8 +17,9 @@ import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
-  getReportPurchasePlan,
+  getReportPurchasePlanTitle,
   isReportPurchasePlanId,
+  PRICING_CATALOG,
   type ReportPurchasePlanId,
 } from "./reportPurchase";
 import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
@@ -124,7 +125,7 @@ async function notifySlackPurchase({
   submissionId: number;
   utmTracker: string | null;
 }) {
-  const planLabel = getReportPurchasePlan(plan).title;
+  const planLabel = getReportPurchasePlanTitle(plan);
   const formattedAmount =
     typeof amount === "number" && Number.isFinite(amount)
       ? `${(currency ?? "EUR").toUpperCase()} ${amount.toFixed(2)}`
@@ -275,6 +276,17 @@ async function sendPurchaseEmail({
   const purchaseExperiment = plan === "essentials" || plan === "core" ? null : `purchase-${plan}`;
   const variant = purchaseExperiment ? pickEmailVariant(recipient.email, purchaseExperiment) : "a";
 
+  // The A copy (Figma 1382:2556) names no archetype, because on the main path the
+  // reader buys their own ("Only Your Highest Archetype"); one bought from another
+  // archetype's tile still names it.
+  const fullReportArchetypeA =
+    plan === "full_report" &&
+    variant === "a" &&
+    unlockedArchetype &&
+    unlockedArchetype === (await lookupPrimaryArchetypeForSubmission(submissionId))
+      ? null
+      : (unlockedArchetype ?? null);
+
   const tpl =
     plan === "all_reports"
       ? variant === "b"
@@ -308,7 +320,7 @@ async function sendPurchaseEmail({
                 firstName: recipient.firstName,
                 reportUrl,
                 siteUrl,
-                unlockedArchetype: unlockedArchetype ?? null,
+                unlockedArchetype: fullReportArchetypeA,
                 unsubscribeUrl,
               });
 
@@ -554,7 +566,9 @@ function normalizePlan(value: unknown): ReportPurchasePlanId | null {
  * write still lands. Returns null if scoring isn't available; the caller
  * logs and skips the tier write in that case.
  */
-async function lookupPrimaryArchetypeForSubmission(submissionId: number): Promise<string | null> {
+export async function lookupPrimaryArchetypeForSubmission(
+  submissionId: number
+): Promise<string | null> {
   try {
     const response = await supabaseServiceFetch(
       `/rest/v1/scoring_result?survey_submission_id=eq.${submissionId}&select=primary_archetype,v5_primary_archetype&limit=1`
@@ -963,11 +977,9 @@ async function ensurePaymentItem({
     return existingRows[0].id;
   }
 
-  const planDefinition = getReportPurchasePlan(plan);
-
   const createResponse = await supabaseServiceFetch("/rest/v1/payment_item", {
     body: JSON.stringify({
-      item_name: planDefinition.title,
+      item_name: getReportPurchasePlanTitle(plan),
       item_type: "report_plan",
       payment_id: paymentId,
       quantity: 1,
@@ -1233,6 +1245,8 @@ async function syncCheckoutSessionPayment({
     // utm_tracker (source of truth), this is the convenience copy.
     landingVariant: settledSession.metadata?.landingVariant ?? null,
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
+    // Which paygate sold this ("3.0" since Pricing 3.0; absent before it).
+    pricingCatalog: settledSession.metadata?.pricingCatalog ?? null,
     discountStep: settledSession.metadata?.discountStep ?? null,
     currentPrice: settledSession.metadata?.currentPrice ?? null,
     initialPrice: settledSession.metadata?.initialPrice ?? null,
@@ -1286,7 +1300,7 @@ async function syncCheckoutSessionPayment({
     cardExpYear: chargeDetails.cardExpYear,
     cardLast4: chargeDetails.cardLast4,
     currency: settledSession.currency ?? null,
-    description: `LoveIQ ${getReportPurchasePlan(plan).title}`,
+    description: `LoveIQ ${getReportPurchasePlanTitle(plan)}`,
     failureCode: chargeDetails.failureCode,
     failureMessage: chargeDetails.failureMessage,
     ipAddress: requestIp,
@@ -1425,10 +1439,15 @@ async function syncCheckoutSessionPayment({
         utmTracker: recipient.utmTracker,
       });
 
-      // Tier-3 ("For you & your partner") only: hand the buyer a one-time
+      // The old tier 3 ("For you & your partner") only: hand the buyer a one-time
       // 100%-off code to share with a partner. Inside isFirstFulfillment so it
       // mints exactly once per purchase (Stripe re-deliveries are skipped).
-      if (plan === "all_reports") {
+      //
+      // Pricing 3.0 sells all_reports as "All 14 Archetype Reports", whose card
+      // promises no partner report, so a session opened on the 3.0 paygate (stamped
+      // `pricingCatalog`) gets none. A session opened on the old paygate before the
+      // switch and paid after it still gets the code it was sold with.
+      if (plan === "all_reports" && metadata.pricingCatalog !== PRICING_CATALOG) {
         await mintAndEmailPartnerCode({
           submissionId: context.submissionId,
           email: recipient.email,
@@ -1449,7 +1468,7 @@ async function syncCheckoutSessionPayment({
         value: amount ?? 0,
         isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
-        itemName: getReportPurchasePlan(plan).title,
+        itemName: getReportPurchasePlanTitle(plan),
         params: {
           plan,
           archetype: unlockedArchetype ?? undefined,
@@ -1476,7 +1495,7 @@ async function syncCheckoutSessionPayment({
         isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         plan,
-        itemName: getReportPurchasePlan(plan).title,
+        itemName: getReportPurchasePlanTitle(plan),
         params: {
           archetype: unlockedArchetype ?? undefined,
           pricing_cluster_id: metadata.pricingClusterId ?? undefined,

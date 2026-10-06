@@ -233,10 +233,12 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * axis rather than the arm.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  // EMPTY as of 2026-09-19: `landing` concluded in favour of V2, so nothing is
-  // randomised any more. An arm nothing assigns is a permanent constant on every
-  // message — the class of blank row this list exists to keep out.
-  const axes: ExperimentAxis[] = [];
+  // `landing` concluded on 2026-09-19 in favour of V2, so it is not shown: an arm
+  // nothing assigns is a permanent constant on every message. Pricing 3.0 is live, but
+  // its arm is assigned when the report first quotes a price, after the survey, so a
+  // survey-completed message has none yet. That is not a missing record, and a
+  // permanent "Not recorded" row on every one would be noise, so it shows when set.
+  const axes: ExperimentAxis[] = journey.arms.pricing ? ["pricing"] : [];
   return fields(
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
@@ -387,6 +389,15 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
   lines.push(
     `Landing page design: ${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`
   );
+
+  // Pricing 3.0 is live; its arm is stamped when the report first quotes a price, so a
+  // survey-completed message usually has none yet and shows the line only when set.
+  if (journey.arms.pricing) {
+    const pricing = armLabel("pricing", journey.arms.pricing);
+    lines.push(
+      `${AXIS_TITLES.pricing}: ${boldArmName(pricing.short)}${pricing.retired ? " _(retired arm)_" : ""}`
+    );
+  }
 
   // Omitted when unknown rather than falling back to the pricing band — a band
   // is not an answer to "where are they from".

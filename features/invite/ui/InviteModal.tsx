@@ -781,8 +781,10 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop. `data-invite-modal` lets the report hide its sticky footer, which would
+          otherwise draw over the modal (Mark, 04.10). */}
       <div
+        data-invite-modal=""
         className="fixed inset-0 z-50 bg-[rgba(217,217,217,0.1)] backdrop-blur-[3.75px]"
         style={{
           opacity: isVisible ? 1 : 0,
@@ -959,18 +961,18 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                       noValidate
                       className="flex flex-col gap-6 border-t border-white/5 pt-8"
                     >
-                      {/* Name used in mail */}
+                      {/* The sender's full name, so the friend knows who sent it (Marcus, 04.10). */}
                       <div className="flex flex-col gap-2">
                         <label
                           htmlFor="invite-sender-name"
                           className="px-2 font-sans text-[16px] text-white"
                         >
-                          Name used in mail
+                          Your Full Name
                         </label>
                         <input
                           id="invite-sender-name"
                           type="text"
-                          placeholder="Your name"
+                          placeholder="Your full name"
                           value={senderName}
                           onChange={(e) => setSenderName(e.target.value)}
                           disabled={state === "sending"}
@@ -1054,7 +1056,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                           onChange={(e) => setPersonalMessage(e.target.value.slice(0, 1500))}
                           disabled={state === "sending"}
                           maxLength={1500}
-                          className="w-full resize-y max-h-[40dvh] sm:max-h-none rounded-2xl border border-white/10 bg-[#130b1c] py-[15px] px-[25px] font-sans text-[15px] sm:text-[16px] leading-[22px] sm:leading-[24px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#a855f7]/60 disabled:opacity-50"
+                          className="w-full resize-y max-h-[40dvh] sm:max-h-none rounded-2xl border border-white/10 bg-[#130b1c] py-[15px] px-[25px] font-sans text-[16px] leading-[22px] sm:leading-[24px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#a855f7]/60 disabled:opacity-50"
                         />
                       </div>
 

@@ -8,7 +8,7 @@
  */
 
 /** Questions every respondent is asked (survey-data minus the hidden ones). */
-export const QUESTIONS_ASKED = 57;
+export const QUESTIONS_ASKED = 62;
 
 /** Archetypes every answer sheet is scored against. */
 export const ARCHETYPES_COMPARED = 14;

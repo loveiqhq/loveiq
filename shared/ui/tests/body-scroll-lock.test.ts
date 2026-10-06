@@ -7,6 +7,7 @@ import {
   scrollState,
   unlockBodyScroll,
 } from "@shared/ui/body-scroll-lock";
+import { setSmoothScroll } from "@shared/ui/smooth-scroll-registry";
 
 /**
  * On 2026-09-05 a reader on Android opened the report's chapter drawer, tapped
@@ -116,6 +117,68 @@ describe("body scroll lock", () => {
     expect(bodyStyle()).toBe("");
     lockBodyScroll();
     expect(document.body.style.position).toBe("fixed");
+  });
+
+  /**
+   * Mark, desktop review 30.09: "When the paywall pop up comes and you exit it, it
+   * scrolls up weirdly." The page's smooth scroll (Lenis, desktop) was never told about
+   * the lock. While the body is fixed the page has no height, and Lenis re-measures it
+   * only 250ms after a resize, so for that long after the release its limit was ~0: a
+   * wheel tick then glided the reader to the top (measured at 1440: 14741 → 0 for a tick
+   * 0-120ms after closing). A glide still running when the pop-up opened on its own kept
+   * moving the window under the lock, too.
+   */
+  describe("with the page's smooth scroll running", () => {
+    const calls: string[] = [];
+    const smooth = {
+      stop: vi.fn(() => {
+        calls.push("stop");
+        // The glide halts where it is: that is where the reader is.
+        Object.defineProperty(window, "scrollY", { value: 1234, configurable: true });
+      }),
+      start: vi.fn(() => calls.push("start")),
+      resize: vi.fn(() => calls.push("resize")),
+    };
+
+    beforeEach(() => {
+      calls.length = 0;
+      smooth.stop.mockClear();
+      smooth.start.mockClear();
+      smooth.resize.mockClear();
+      Object.defineProperty(window, "scrollY", { value: 1200, configurable: true });
+      vi.stubGlobal(
+        "scrollTo",
+        vi.fn(() => calls.push("scrollTo"))
+      );
+      setSmoothScroll(smooth);
+    });
+
+    afterEach(() => {
+      setSmoothScroll(null);
+    });
+
+    it("stops it before the reader's place is taken, so a running glide ends there", () => {
+      lockBodyScroll();
+      expect(smooth.stop).toHaveBeenCalledTimes(1);
+      expect(document.body.style.top).toBe("-1234px");
+    });
+
+    it("lets it go again, re-measured, only once the reader is back in place", () => {
+      lockBodyScroll();
+      unlockBodyScroll();
+      expect(calls).toEqual(["stop", "scrollTo", "start", "resize"]);
+    });
+
+    it("holds it stopped while an outer overlay still holds the page", () => {
+      lockBodyScroll();
+      lockBodyScroll();
+      unlockBodyScroll();
+      expect(smooth.stop).toHaveBeenCalledTimes(1);
+      expect(smooth.start).not.toHaveBeenCalled();
+      unlockBodyScroll();
+      expect(smooth.start).toHaveBeenCalledTimes(1);
+      expect(smooth.resize).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

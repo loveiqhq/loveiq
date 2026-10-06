@@ -2,7 +2,7 @@ import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
-  REPORT_PURCHASE_PLAN_IDS,
+  OFFERED_REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
 import {
@@ -67,36 +67,42 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * The price list. One bucket per plan since the A/B price test was CONCLUDED on
- * 2026-08-31 in favour of B; `startingCents` is what the reader is charged and
- * `msrpCents` is the struck-out anchor shown in the modal and the emails.
+ * The price list: Pricing 3.0, the `Pricing_3.0` tab of the "Tracking & Pricing" sheet
+ * in Drive, agreed at the 1 Oct sync and launched with the new paygate (Figma
+ * 1382:2557). Two products, two price lists, 50/50:
  *
- * Why B, and what the data actually said. Group A was the dearer arm from the
- * 2.1 flip on 2026-08-24 (39.99/49.99/59 against B's 29/39/49); before that, in
- * 2.0, A was the cheaper one. Measured over the whole life of the test:
+ *   all_reports  "All 14 Archetype Reports"     A3 €39.99 (strike €49.99)   B3 €19.99 (strike €29.99)
+ *   full_report  "Only Your Highest Archetype"  A3 €29.99 (no strike)       B3 €14.99 (no strike)
  *
- *   before the flip   A 2,525 quotes / 21 paid / EUR 482.29
- *                     B 2,376 quotes / 23 paid / EUR 684.81
- *   since the flip    A   195 quotes /  1 paid / EUR  39.99
- *                     B   191 quotes /  2 paid / EUR  68.00
+ * A3 is the price the Figma frames show; B3 is the "one lower price tier" Marcus asked
+ * for beside it. `startingCents` is what the reader is charged and `msrpCents` the
+ * struck-out anchor; a bucket priced at its own anchor draws no strike.
  *
- * B earned more in both eras, but the flip means the two eras are not one test,
- * and 1-vs-2 purchases since the flip settles nothing on its own. This was called
- * on the stakeholder's instruction to drop the higher-priced arm, which the
- * numbers do not contradict — not on a result the sample could support.
+ * WHY "A3"/"B3" AND NOT "A"/"B". `experiment_group` already holds A and B from the
+ * 2.x test concluded on 2026-08-31 (A 822 / B 829 finished surveys, recorded in the
+ * Notion Test Repository), and every reader of the column — get_arm_cohorts, the axis
+ * trends, the Slack journey, /admin — treats a value as one arm for all time. Reusing
+ * the letters would have pooled the old test into the new one.
+ *
+ * The arm is a pure function of the report id (`pricingArmForReport`), so all of a
+ * reader's quotes agree and the re-sync migration can assign the same arm in SQL.
  *
  * Existing quotes are frozen on create, so a change here reprices ONLY new
  * quotes: the stored msrp/starting_price, initial_price and current_price each
  * independently pin an existing row to its old price. Every change here
  * therefore needs a matching re-sync of unpurchased rows, or it silently does
  * nothing for everyone who already has a quote (see
- * supabase/migrations/*_resync_quotes.sql).
+ * supabase/migrations/*_pricing_3_*.sql).
+ *
+ * `essentials` and `core` are no longer offered (REPORT_PURCHASE_PLANS); their one
+ * bucket stays so a historical row still rehydrates, and a fresh quote for either
+ * throws in `mustGetBucket` because no 3.0 arm exists for it.
  */
-// "C" retired 2026-06 (3-bucket → 2-bucket); "A" retired 2026-08-31. Both stay in
-// the union so legacy quotes stamped with them still rehydrate — they read
+// "C" retired 2026-06, "A"/"B" with the 2.x test on 2026-08-31 and 2026-10-05. All
+// stay in the union so legacy quotes stamped with them still rehydrate — they read
 // msrp/starting off the stored row, and bucketFromCode → null is handled
 // gracefully downstream.
-export type PricingBucketCode = "A" | "B" | "C";
+export type PricingBucketCode = "A" | "B" | "C" | "A3" | "B3";
 interface PricingBucket {
   code: PricingBucketCode;
   weight: number; // out of 100
@@ -104,14 +110,18 @@ interface PricingBucket {
   startingCents: number;
 }
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
-  // Retired/grandfathered tier, untouched by the 2.1 flip and by this cut.
+  // Retired (2026-07); kept for historical rows only.
   essentials: [{ code: "B", weight: 100, msrpCents: 2999, startingCents: 999 }],
-  // Tier 1 "Just a snapshot": €29 (priced at its own anchor, so no strike)
-  full_report: [{ code: "B", weight: 100, msrpCents: 2900, startingCents: 2900 }],
-  // Tier 2 "All your core archetypes": €39 (strike €87)
+  full_report: [
+    { code: "A3", weight: 50, msrpCents: 2999, startingCents: 2999 },
+    { code: "B3", weight: 50, msrpCents: 1499, startingCents: 1499 },
+  ],
+  // Retired with Pricing 3.0; kept for historical rows only.
   core: [{ code: "B", weight: 100, msrpCents: 8700, startingCents: 3900 }],
-  // Tier 3 "For you & your partner": €49 (strike €58)
-  all_reports: [{ code: "B", weight: 100, msrpCents: 5800, startingCents: 4900 }],
+  all_reports: [
+    { code: "A3", weight: 50, msrpCents: 4999, startingCents: 3999 },
+    { code: "B3", weight: 50, msrpCents: 2999, startingCents: 1999 },
+  ],
 };
 
 const COUNTRY_CODE_TO_TIER: Record<
@@ -186,7 +196,8 @@ const COUNTRY_NAME_TO_CODE: Record<string, string> = {
 const PRICING_SESSION_ID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type PricingExperimentGroup = "A" | "B";
+/** "A"/"B" are the concluded 2.x test, read back only; new quotes carry "A3"/"B3". */
+export type PricingExperimentGroup = "A" | "B" | "A3" | "B3";
 export type PricingDeviceType = "iOS" | "Android" | "Desktop";
 export type PricingTrafficSource =
   "direct" | "newsletter" | "google" | "instagram" | "tiktok" | "other";
@@ -244,6 +255,13 @@ export interface ReportPriceQuoteSnapshot {
   purchasedAt: string | null;
   viewCount: number;
 }
+
+/**
+ * A reader's live quotes, one per OFFERED plan (`OFFERED_REPORT_PURCHASE_PLAN_IDS`).
+ * Partial because the retired plans are never quoted: reading `.core` gives
+ * undefined, which every price surface already treats as "no price".
+ */
+export type ReportPriceQuotes = Partial<Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>>;
 
 interface ServiceFetchOptions {
   body?: string;
@@ -604,11 +622,20 @@ export function normalizePriceEnding(rawCents: number) {
 }
 
 /**
- * The surviving pricing group. Nothing is randomised any more — the A/B price test
- * concluded on 2026-08-31 — but `report_price_quote.experiment_group` is NOT NULL,
- * so new rows carry the group that won rather than an arm nobody was assigned to.
+ * The Pricing 3.0 arm of a report: 50/50 on the report id, by the high bit of a
+ * Knuth multiplicative hash rather than plain parity, so a change in how ids are
+ * handed out (a sequence that steps by 2) could not put everyone in one arm.
+ *
+ * A pure function of the id on purpose: every quote of a reader lands in the same
+ * arm whenever and in whatever order it is created, and the re-sync migration
+ * computes the same expression in SQL —
+ *   (personal_report_id::bigint * 2654435761) % 4294967296 < 2147483648  →  'A3'
+ * — so the two can never disagree. `Math.imul` is that product mod 2^32 exactly
+ * (a plain `*` loses the low bits once it passes 2^53), and `>>> 0` reads it unsigned.
  */
-const SURVIVING_PRICING_GROUP: PricingExperimentGroup = "B";
+export function pricingArmForReport(personalReportId: number): "A3" | "B3" {
+  return Math.imul(personalReportId, 2654435761) >>> 0 < 2147483648 ? "A3" : "B3";
+}
 
 function bucketFromCode(
   plan: ReportPurchasePlanId,
@@ -1066,7 +1093,8 @@ function buildQuotePayload({
   // base prices still differ (bucket.startingCents), but no dynamic uplift.
   upliftEnabled: boolean;
 }): BuiltQuotePayload {
-  const experimentGroup = existingQuote?.experiment_group ?? SURVIVING_PRICING_GROUP;
+  const experimentGroup =
+    existingQuote?.experiment_group ?? pricingArmForReport(context.personalReportId);
 
   // Resolve the bucket — either read the stored code (with MSRP/starting
   // sourced from the row when present) or pick fresh for a brand-new quote.
@@ -1090,9 +1118,9 @@ function buildQuotePayload({
             ? fromEuroAmount(existingQuote.starting_price)
             : (existingBucketFromCode?.startingCents ?? fromEuroAmount(existingQuote.base_price)),
       }
-    : // One price list, so a fresh quote takes the only bucket there is. The
-      // lookup is by code rather than `[0]` so a stray group value can never
-      // silently price someone off the wrong row — it throws instead.
+    : // A fresh quote takes its arm's bucket. The lookup is by code rather than
+      // `[0]` so a stray group value can never silently price someone off the
+      // wrong row — it throws instead, as it does for a retired plan.
       mustGetBucket(plan, experimentGroup);
 
   const countryPricing = getCountryPricing(context.countryCode);
@@ -1498,8 +1526,11 @@ export async function getReportPriceQuotesForContext({
     return null;
   }
 
+  // Only the plans the paygate sells. Quoting the retired ones as well would write
+  // a row per reader that nothing can show or buy — and throw, since no 3.0 arm
+  // prices them (`mustGetBucket`).
   const results = await Promise.all(
-    REPORT_PURCHASE_PLAN_IDS.map(async (plan) => {
+    OFFERED_REPORT_PURCHASE_PLAN_IDS.map(async (plan) => {
       const quote = await resolveQuote({
         context,
         now,
@@ -1510,7 +1541,7 @@ export async function getReportPriceQuotesForContext({
     })
   );
 
-  return Object.fromEntries(results) as Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>;
+  return Object.fromEntries(results) as ReportPriceQuotes;
 }
 
 /**

@@ -17,11 +17,14 @@ vi.mock("@features/report/server/personalReport", () => ({
   lookupReportTokenBySubmissionId: vi.fn().mockResolvedValue(null),
 }));
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   getDiscountAdjustment,
   getPricingBucketsForPlan,
   getReportPriceQuoteForContext,
   normalizePriceEnding,
+  pricingArmForReport,
 } from "@features/pricing/logic/reportPricing";
 import {
   ensurePersonalReportForSubmission,
@@ -77,46 +80,71 @@ describe("reportPricing", () => {
     });
   });
 
-  describe("price list (arm A retired 2026-08-31)", () => {
-    // One bucket per plan: the A/B price test was concluded by dropping the
-    // higher-priced arm, so the surviving B list IS the price list. These assert
-    // the exact numbers because they are what the reader is charged; the
-    // companion resync migration (20260831120000) carries the same four rows and
-    // the two must not drift.
-    it("essentials is flat €9.99 (retired/grandfathered)", () => {
+  describe("price list (Pricing 3.0)", () => {
+    // Two products on two price lists, 50/50 (the Pricing_3.0 tab of "Tracking &
+    // Pricing"). These assert the exact numbers because they are what the reader is
+    // charged; the re-sync migration carries the same four rows, and the test below
+    // reads them out of it so the two cannot drift.
+    it("full_report is €29.99 or €14.99, each at its own anchor so neither strikes", () => {
+      expect(getPricingBucketsForPlan("full_report")).toEqual([
+        { code: "A3", weight: 50, msrpCents: 2999, startingCents: 2999 },
+        { code: "B3", weight: 50, msrpCents: 1499, startingCents: 1499 },
+      ]);
+    });
+
+    it("all_reports is €39.99 (strike €49.99) or €19.99 (strike €29.99)", () => {
+      expect(getPricingBucketsForPlan("all_reports")).toEqual([
+        { code: "A3", weight: 50, msrpCents: 4999, startingCents: 3999 },
+        { code: "B3", weight: 50, msrpCents: 2999, startingCents: 1999 },
+      ]);
+    });
+
+    it("keeps one bucket for each retired plan, so their old rows still rehydrate", () => {
       expect(getPricingBucketsForPlan("essentials")).toEqual([
         { code: "B", weight: 100, msrpCents: 2999, startingCents: 999 },
       ]);
-    });
-
-    it("full_report is €29, priced at its own anchor so no strike", () => {
-      expect(getPricingBucketsForPlan("full_report")).toEqual([
-        { code: "B", weight: 100, msrpCents: 2900, startingCents: 2900 },
-      ]);
-    });
-
-    it("core is €39 (strike €87)", () => {
       expect(getPricingBucketsForPlan("core")).toEqual([
         { code: "B", weight: 100, msrpCents: 8700, startingCents: 3900 },
       ]);
     });
 
-    it("all_reports is €49 (strike €58)", () => {
-      expect(getPricingBucketsForPlan("all_reports")).toEqual([
-        { code: "B", weight: 100, msrpCents: 5800, startingCents: 4900 },
-      ]);
+    it("re-syncs existing quotes to exactly these prices", () => {
+      const sql = readFileSync(
+        join(process.cwd(), "supabase/migrations/20261005120100_pricing_3_resync_quotes.sql"),
+        "utf8"
+      );
+      const rows = [
+        ...sql.matchAll(
+          /\('(full_report|all_reports)'(?:::text)?,\s*'(A3|B3)'(?:::text)?,\s*([\d.]+)(?:::numeric)?,\s*([\d.]+)/g
+        ),
+      ].map(([, plan, code, msrp, starting]) => ({
+        plan,
+        code,
+        msrpCents: Math.round(Number(msrp) * 100),
+        startingCents: Math.round(Number(starting) * 100),
+      }));
+      expect(rows).toHaveLength(4);
+      for (const row of rows) {
+        const bucket = getPricingBucketsForPlan(row.plan as "full_report" | "all_reports").find(
+          (b) => b.code === row.code
+        );
+        expect(bucket, `${row.plan} ${row.code}`).toMatchObject({
+          msrpCents: row.msrpCents,
+          startingCents: row.startingCents,
+        });
+      }
     });
 
-    it("no plan offers a second bucket to be assigned to", () => {
-      // The guard against half-retiring the arm: a stray A row in the catalogue
-      // would silently start pricing people again, because the fresh-quote path
-      // looks a bucket up by code.
-      for (const plan of ["essentials", "full_report", "core", "all_reports"] as const) {
-        const buckets = getPricingBucketsForPlan(plan);
-        expect(buckets, plan).toHaveLength(1);
-        expect(buckets[0]!.code, plan).toBe("B");
-        expect(buckets[0]!.weight, plan).toBe(100);
+    it("assigns the arm from the report id exactly as the re-sync's SQL does, 50/50", () => {
+      // SQL: (personal_report_id * 2654435761) % 4294967296 < 2147483648 → A3. Exact in
+      // a double while the product stays under 2^53, which holds far past any real id.
+      let a3 = 0;
+      for (let id = 1; id <= 5000; id += 1) {
+        const sql = (id * 2654435761) % 4294967296 < 2147483648 ? "A3" : "B3";
+        expect(pricingArmForReport(id), `report ${id}`).toBe(sql);
+        if (sql === "A3") a3 += 1;
       }
+      expect(a3).toBe(2500);
     });
 
     // Kept from the arm-A era because the rule it guards is not about arm A.
@@ -457,8 +485,9 @@ describe("reportPricing", () => {
       reportSessionId: "550e8400-e29b-41d4-a716-446655440222",
     });
 
-    expect(quote.experimentGroup).toMatch(/^[AB]$/);
-    expect(quote.basePriceBucket).toMatch(/^[ABC]$/);
+    // Report 9 falls in arm B3, and a fresh quote's bucket is its arm's.
+    expect(quote.experimentGroup).toBe("B3");
+    expect(quote.basePriceBucket).toBe("B3");
     expect(quote.msrpCents).toBeGreaterThan(0);
     expect(quote.startingPriceCents).toBeGreaterThan(0);
     // MSRP is always ≥ starting. Pricing 2.0 flat Group-B buckets can have
@@ -543,82 +572,85 @@ describe("reportPricing", () => {
     expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
   });
 
-  it("an all_reports fresh quote is the €49 base starting verbatim (step 0)", async () => {
-    // The reader is charged the flat base `starting` verbatim: no per-user uplift,
-    // no decay, no charm-snap. A fresh quote at step 0 → initial == current ==
-    // the catalogue starting. End-to-end, so it also proves the retired arm A
-    // cannot be reached: any id would previously have had a 50% chance of being
-    // priced at €59.
-    const reportId = 4242;
-    vi.mocked(ensurePersonalReportForSubmission).mockResolvedValue({ id: reportId });
+  it.each([
+    { reportId: 4243, arm: "A3", starting: 3999, msrp: 4999 },
+    { reportId: 4242, arm: "B3", starting: 1999, msrp: 2999 },
+  ])(
+    "an all_reports fresh quote in $arm is its list's base verbatim (step 0)",
+    async ({ reportId, arm, starting, msrp }) => {
+      // The reader is charged the flat base `starting` verbatim: no per-user uplift,
+      // no decay, no charm-snap. A fresh quote at step 0 → initial == current ==
+      // the catalogue starting, on the list the report id's arm picks.
+      vi.mocked(ensurePersonalReportForSubmission).mockResolvedValue({ id: reportId });
 
-    mockFetchWithTimeout.mockImplementation(
-      async (url: string, options?: { body?: string; method?: string }) => {
-        // Report-wide urgency-window read (no window armed in these fixtures).
-        if (url.includes("select=metadata")) {
-          return createJsonResponse([]);
-        }
-        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
-          return createJsonResponse([
-            {
-              id: 42,
-              user_id: 7,
-              utm_tracker: null,
-              duration_ms: 0,
-              app_user: {
-                id: 7,
-                email: "user@example.com",
+      mockFetchWithTimeout.mockImplementation(
+        async (url: string, options?: { body?: string; method?: string }) => {
+          // Report-wide urgency-window read (no window armed in these fixtures).
+          if (url.includes("select=metadata")) {
+            return createJsonResponse([]);
+          }
+          if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+            return createJsonResponse([
+              {
+                id: 42,
+                user_id: 7,
                 utm_tracker: null,
-                user_profile: { location_primary: "Germany" },
+                duration_ms: 0,
+                app_user: {
+                  id: 7,
+                  email: "user@example.com",
+                  utm_tracker: null,
+                  user_profile: { location_primary: "Germany" },
+                },
               },
-            },
-          ]);
+            ]);
+          }
+          if (url.includes("/rest/v1/survey_submission_answer")) return createJsonResponse([]);
+          if (url.includes("/rest/v1/report_session")) return createJsonResponse([]);
+          if (
+            url.includes("/rest/v1/report_price_quote?personal_report_id=") &&
+            url.includes("plan=eq.all_reports") &&
+            options?.method !== "POST"
+          ) {
+            return createJsonResponse([]);
+          }
+          if (options?.method === "POST" && url.includes("/rest/v1/report_price_quote")) {
+            const createdPayload = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
+            return createJsonResponse([
+              {
+                id: 92,
+                personal_report_id: reportId,
+                survey_submission_id: 42,
+                user_id: 7,
+                ...createdPayload,
+              },
+            ]);
+          }
+          throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
         }
-        if (url.includes("/rest/v1/survey_submission_answer")) return createJsonResponse([]);
-        if (url.includes("/rest/v1/report_session")) return createJsonResponse([]);
-        if (
-          url.includes("/rest/v1/report_price_quote?personal_report_id=") &&
-          url.includes("plan=eq.all_reports") &&
-          options?.method !== "POST"
-        ) {
-          return createJsonResponse([]);
-        }
-        if (options?.method === "POST" && url.includes("/rest/v1/report_price_quote")) {
-          const createdPayload = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
-          return createJsonResponse([
-            {
-              id: 92,
-              personal_report_id: reportId,
-              survey_submission_id: 42,
-              user_id: 7,
-              ...createdPayload,
-            },
-          ]);
-        }
-        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
-      }
-    );
+      );
 
-    const quote = await getReportPriceQuoteForContext({
-      now: new Date("2026-06-02T10:00:00.000Z"),
-      plan: "all_reports",
-      pricingSessionId: "550e8400-e29b-41d4-a716-446655440222",
-      reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
-    });
+      const quote = await getReportPriceQuoteForContext({
+        now: new Date("2026-06-02T10:00:00.000Z"),
+        plan: "all_reports",
+        pricingSessionId: "550e8400-e29b-41d4-a716-446655440222",
+        reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+      });
 
-    // This fixture does NOT stub the system_flags fetch, so `pricing_uplift_enabled`
-    // resolves to its default — which is the point. That default is `false`, so a
-    // Supabase outage leaves the flat base price rather than switching per-visitor
-    // boosts on and charging more than the page showed. Flip the default in
-    // reportPricing.ts and this assertion fails with an uplifted amount.
-    //
-    // all_reports: starting €49.00, strike (msrp) €58.00 — the surviving list.
-    expect(quote.initialPriceCents).toBe(4900);
-    expect(quote.currentPriceCents).toBe(4900);
-    expect(quote.msrpCents).toBe(5800);
-    expect(quote.chargedPriceCents).toBe(4900);
-    expect(quote.basePriceBucket).toBe("B");
-  });
+      // This fixture does NOT stub the system_flags fetch, so `pricing_uplift_enabled`
+      // resolves to its default — which is the point. That default is `false`, so a
+      // Supabase outage leaves the flat base price rather than switching per-visitor
+      // boosts on and charging more than the page showed. Flip the default in
+      // reportPricing.ts and this assertion fails with an uplifted amount.
+      //
+      expect(quote.initialPriceCents).toBe(starting);
+      expect(quote.currentPriceCents).toBe(starting);
+      expect(quote.msrpCents).toBe(msrp);
+      expect(quote.chargedPriceCents).toBe(starting);
+      expect(quote.basePriceBucket).toBe(arm);
+      expect(quote.experimentGroup).toBe(arm);
+    }
+  );
 
   // Pricing 2.1 RAISED arm A, and a raise is the one direction the engine
   // resists: current_price is Math.min(previous, discounted, initial), so an

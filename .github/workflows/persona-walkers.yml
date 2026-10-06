@@ -249,3 +249,37 @@ jobs:
           # The stall watcher (features/cron/server/cron-stall.ts) alerts #ops when this goes quiet.
           npx tsx scripts/record-cron-run.mjs ux-proof-walks "$outcome"
           [ "$outcome" = success ]
+
+  # Two layout probes written with Report 3.0 (scripts/probes/README.md), against staging's
+  # own report every night, on their own runner: nothing on a phone pans sideways or zooms
+  # in on a tapped box, and closing the paywall on a desktop leaves the reader where they
+  # were. Each exits 1 on a defect AND on a page it could not measure.
+  layout:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium webkit
+
+      - name: Nothing pans sideways or zooms in on a phone
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          ORIGIN: https://staging.loveiq.org
+        run: node scripts/probes/verify-no-sideways.mjs
+
+      - name: Closing the paywall leaves a desktop reader where they were
+        if: ${{ !cancelled() }}
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          ORIGIN: https://staging.loveiq.org
+        run: node scripts/probes/verify-paywall-close-holds.mjs

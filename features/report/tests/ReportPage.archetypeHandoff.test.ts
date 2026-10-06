@@ -28,7 +28,15 @@ import { describe, expect, it } from "vitest";
  * when the server quietly goes back to primary-keying the chapters.
  */
 const SOURCE = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
-const ROUTE = readFileSync(join(process.cwd(), "app/api/report/route.ts"), "utf8");
+/**
+ * The route, and the builder it hands Report 2.0's chapter bodies to since 27.09
+ * (report2ChapterCopies.ts, shared with the preview route): one source for these
+ * invariants, since the builder resolves those chapters for whichever archetype the
+ * route passes it.
+ */
+const ROUTE =
+  readFileSync(join(process.cwd(), "app/api/report/route.ts"), "utf8") +
+  readFileSync(join(process.cwd(), "features/report/server/report2ChapterCopies.ts"), "utf8");
 const HOOK = readFileSync(join(process.cwd(), "features/report/ui/hooks/useReportData.ts"), "utf8");
 
 /**

@@ -59,6 +59,32 @@ describe("InviteModal", () => {
     cleanup();
   });
 
+  // Marcus (04.10): the field asks for "Your Full Name", so the friend knows who sent
+  // it. The owner's first name is only where it starts.
+  it("asks for the sender's full name, starting from the owner's name", () => {
+    render(
+      <InviteModal open onClose={vi.fn()} referrerEmail="alice@example.com" referrerName="Alice" />
+    );
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    const field = screen.getByLabelText("Your Full Name") as HTMLInputElement;
+    expect(field.placeholder).toBe("Your full name");
+    expect(field.value).toBe("Alice");
+    expect(screen.queryByText("Name used in mail")).toBeNull();
+  });
+
+  // The report hides its sticky footer while this is open (Mark, 04.10: the footer drew
+  // over it), so the open modal marks itself.
+  it("marks itself while open, for the page around it", () => {
+    const { rerender } = render(
+      <InviteModal open onClose={vi.fn()} referrerEmail="" referrerName="" />
+    );
+    expect(document.querySelector("[data-invite-modal]")).not.toBeNull();
+    rerender(<InviteModal open={false} onClose={vi.fn()} referrerEmail="" referrerName="" />);
+    expect(document.querySelector("[data-invite-modal]")).toBeNull();
+  });
+
   it("hides the email form by default and reveals it when the Email tile is clicked", () => {
     render(
       <InviteModal open onClose={vi.fn()} referrerEmail="alice@example.com" referrerName="Alice" />

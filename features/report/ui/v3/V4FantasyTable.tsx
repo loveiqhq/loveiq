@@ -1,0 +1,372 @@
+"use client";
+
+import { useEffect, useId, useRef, useState, type FC } from "react";
+import type {
+  Report3FantasyCategory,
+  Report3FantasyRow,
+  Report3FantasyTable,
+} from "@/data/report3-fantasy";
+import V4LockBadge from "./V4LockBadge";
+import useV4Reveal from "./useV4Reveal";
+import { guardedUnlock } from "./v4Unlock";
+
+/**
+ * The fantasy table — Figma 639:308 (open: "collapsible, 3 rows + fade") and
+ * 639:1905 (paywalled: "3 + 2 blurred"), in Fantasy vs. Reality's body.
+ *
+ * Eleven categories, each a heading whose whole row toggles it. An open category
+ * sets three column heads and its rows: the fantasy with an info mark, then its
+ * Fantasy Pull and Actual Pleasure scores, each over its likelihood.
+ *
+ * OPEN. Three rows sharp; the fourth and fifth peek, inert, under a 96px fade with
+ * "Show all" on it (its accessible name carries the count). The peek stands exactly 96px under the third row,
+ * so the fade always starts where the fourth row does, whatever the first three
+ * wrap to — 639:308's fixed 328px frame is that for its two open categories.
+ * "Show all" drops the fade and lists every row; Figma draws no way back, so the
+ * category toggle is it.
+ *
+ * PAYWALLED. The server sends three sharp rows of the first three categories, the
+ * blurred rows after them and three blurred rows for every other category: since
+ * review 26.09 with their real names and scores and no note (lockedBlurCopy.ts); in
+ * decoy mode with a scrambled name and no scores, and the scores under the blur are
+ * drawn here. One group owns the click over the blurred rows, the lock and the
+ * "Unlock all N fantasies" pill, so any of them opens the paywall once (the badge
+ * and the pill only bubble).
+ *
+ * ITS ENTRANCE (review 28.09, mobile: "Can we have animations in the Fantasy table.
+ * V2 had them i think."). V2's, as it was: every score fades in and rises 8px, all at
+ * once, the first time the table comes into view. The rows are drawn from the start;
+ * only the CSS holds them back (`is-pending`), and the blurred rows never move.
+ *
+ * No copy is quoted in these comments on purpose: production serves browser source
+ * maps, so a client component's comments are public.
+ */
+
+interface Props {
+  table: Report3FantasyTable;
+  /** Opens the paywall. Omitted where it would be inert. */
+  onUnlock?: () => void;
+}
+
+/**
+ * Maps a 1-10 score to its likelihood, as V2's section does (Figma 8146:76002). The middle
+ * band reads "Neutral": the frame's "Neutral likely" (and "Neutral likey" beside it) was a
+ * template slip, read as broken in the review of 06.10.
+ */
+const likelihood = (score: number): string =>
+  score >= 7 ? "More likely" : score >= 4 ? "Neutral" : "Less likely";
+
+/**
+ * Drawn under the blur for a decoy row, cycling — never a real score. Since review
+ * 26.09 a blurred row carries its real scores (lockedBlurCopy.ts), which Row prefers;
+ * these only fill a row the server sent without them.
+ */
+const STAND_IN_SCORES: readonly (readonly [number, number])[] = [
+  [5, 7],
+  [7, 6],
+  [4, 5],
+];
+
+/** The frame's 15px chevron, pointing down; CSS turns it up on an open category. */
+const Chevron: FC = () => (
+  <svg viewBox="0 0 15 15" fill="none">
+    <path
+      d="M3.28125 5.625L7.5 9.84375L11.7188 5.625"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * The info mark — 639:338 in a row (10.875px, a 0.906 stroke at 92%). The column heads
+ * drew a smaller one (639:322) until 28.09.
+ */
+const Mark: FC = () => (
+  <svg viewBox="0 0 10.875 10.875" fill="none" aria-hidden="true">
+    <circle cx="5.4375" cy="5.4375" r="4.531" stroke="currentColor" strokeWidth="0.906" />
+    <path
+      d="M5.4375 4.53V6.524M5.4375 3.216H5.4465"
+      stroke="currentColor"
+      strokeWidth="0.906"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const Score: FC<{ tone: "pull" | "pleasure"; value: number }> = ({ tone, value }) => (
+  <div className={`rv4-fvt__score rv4-fvt__score--${tone}`} role="cell">
+    <span className="rv4-fvt__num">{value}</span>
+    <span className="rv4-fvt__qual">{likelihood(value)}</span>
+  </div>
+);
+
+interface RowProps {
+  row: Report3FantasyRow;
+  /** Scores for a blurred row the server sent without its own (decoy mode). */
+  standIn?: readonly [number, number];
+  noteId?: string;
+  noteOpen?: boolean;
+  onToggleNote?: () => void;
+}
+
+/**
+ * A name's leading words and its last one. Mark, 28.09 (1944174274): "the information
+ * icons ('i') were set in weird positions. Now updated." 639:315 sets the mark right
+ * after the last word, so the last word carries it and the two never part at a wrap.
+ */
+const splitLast = (name: string): [string, string] => {
+  const at = name.trimEnd().lastIndexOf(" ");
+  return at < 0 ? ["", name] : [name.slice(0, at + 1), name.slice(at + 1)];
+};
+
+const Row: FC<RowProps> = ({ row, standIn, noteId, noteOpen = false, onToggleNote }) => {
+  const pull = row.pull ?? standIn?.[0] ?? 0;
+  const pleasure = row.pleasure ?? standIn?.[1] ?? 0;
+  const hasNote = Boolean(row.description && noteId && onToggleNote);
+  const [lead, last] = splitLast(row.practice);
+  const mark = hasNote ? (
+    <button
+      type="button"
+      className="rv4-fvt__info"
+      aria-label={`What ${row.practice} tends to organize`}
+      aria-expanded={noteOpen}
+      aria-controls={noteId}
+      data-fvt-note
+      onClick={onToggleNote}
+    >
+      <span className="rv4-fvt__mark">
+        <Mark />
+      </span>
+    </button>
+  ) : (
+    <span className="rv4-fvt__info" aria-hidden="true">
+      <span className="rv4-fvt__mark">
+        <Mark />
+      </span>
+    </span>
+  );
+  return (
+    <>
+      <div className="rv4-fvt__row" role="row">
+        <div className="rv4-fvt__label" role="cell">
+          <span className="rv4-fvt__name">
+            {lead}
+            <span className="rv4-fvt__tail">
+              {last}
+              {/* Zero-width, so the mark overhangs the line rather than moving its wrap. */}
+              <span className="rv4-fvt__anchor">{mark}</span>
+            </span>
+          </span>
+        </div>
+        <Score tone="pull" value={pull} />
+        <Score tone="pleasure" value={pleasure} />
+      </div>
+      {hasNote && noteOpen ? (
+        <div className="rv4-fvt__note-row" role="row">
+          <div className="rv4-fvt__note" id={noteId} role="cell" aria-colspan={3} data-fvt-note>
+            <span className="rv4-fvt__note-name">{row.practice}</span>
+            <span className="rv4-fvt__note-text">{row.description}</span>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+};
+
+interface CategoryProps {
+  category: Report3FantasyCategory;
+  locked: boolean;
+  onUnlock?: () => void;
+  openNote: string | null;
+  setOpenNote: (key: string | null) => void;
+  index: number;
+}
+
+/** Rows drawn sharp above the fade (639:308) or the blur (639:1905). */
+const CLEAR_ROWS = 3;
+/** The peek under the fade: rows 4 and 5 of 639:308. */
+const PEEK_ROWS = 2;
+
+const Category: FC<CategoryProps> = ({
+  category,
+  locked,
+  onUnlock,
+  openNote,
+  setOpenNote,
+  index,
+}) => {
+  const [isOpen, setIsOpen] = useState(category.defaultOpen);
+  const [showAll, setShowAll] = useState(false);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  /** Set by the pill: once the rows are in, focus goes to the first one it revealed. */
+  const revealed = useRef(false);
+  const baseId = useId();
+  const panelId = `${baseId}-panel`;
+  const clear = category.rows.slice(0, category.blurredFrom);
+  const hidden = category.rows.slice(category.blurredFrom);
+  const collapsed = !locked && !showAll && clear.length > CLEAR_ROWS;
+  const sharp = collapsed ? clear.slice(0, CLEAR_ROWS) : clear;
+  const peek = collapsed ? clear.slice(CLEAR_ROWS, CLEAR_ROWS + PEEK_ROWS) : [];
+  const noteKey = (row: number) => `${index}:${row}`;
+
+  // The pill unmounts under the keyboard's focus, which would drop it on <body>;
+  // it goes to the first row the pill revealed instead (final review, 25.09).
+  useEffect(() => {
+    if (!showAll || !revealed.current) return;
+    revealed.current = false;
+    const row = rowsRef.current?.querySelectorAll<HTMLElement>(".rv4-fvt__row")[CLEAR_ROWS];
+    (row?.querySelector<HTMLElement>("button") ?? rowsRef.current)?.focus();
+  }, [showAll]);
+
+  return (
+    <section className={`rv4-fvt__cat${isOpen ? " is-open" : ""}`}>
+      <h4 className="rv4-fvt__head">
+        <button
+          type="button"
+          className="rv4-fvt__toggle"
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          onClick={() => setIsOpen((v) => !v)}
+        >
+          <span className="rv4-fvt__title">{category.title}</span>
+          <span className="rv4-fvt__disc" aria-hidden="true">
+            <Chevron />
+          </span>
+        </button>
+      </h4>
+
+      <div className="rv4-fvt__panel" id={panelId} hidden={!isOpen}>
+        <div className="rv4-fvt__grid" role="table" aria-label={category.title}>
+          <div className="rv4-fvt__cols" role="row">
+            <span className="rv4-fvt__col rv4-fvt__col--practice" role="columnheader">
+              Fantasy &amp; Practice
+            </span>
+            {/* 639:319 — the frame breaks both heads after their first word, so the
+             * lines are set apart here, each centred on the whole cell. Since 28.09
+             * (1944174274) the heads carry no info mark. */}
+            <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
+              <span className="rv4-fvt__col-line">Fantasy</span>{" "}
+              <span className="rv4-fvt__col-line">Pull</span>
+            </span>
+            <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
+              <span className="rv4-fvt__col-line">Actual</span>{" "}
+              <span className="rv4-fvt__col-line">Pleasure</span>
+            </span>
+          </div>
+
+          <div className="rv4-fvt__rows" role="rowgroup" ref={rowsRef} tabIndex={-1}>
+            {sharp.map((row, i) => (
+              <Row
+                key={row.practice}
+                row={row}
+                noteId={`${baseId}-note-${i}`}
+                noteOpen={openNote === noteKey(i)}
+                onToggleNote={() => setOpenNote(openNote === noteKey(i) ? null : noteKey(i))}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Beside the table, not in it: a table holds rows and cells only. */}
+        {collapsed ? (
+          <div className="rv4-fvt__peek">
+            <div className="rv4-fvt__peek-rows" aria-hidden="true" inert>
+              {peek.map((row) => (
+                <Row key={row.practice} row={row} />
+              ))}
+            </div>
+            <span className="rv4-fvt__fade" aria-hidden="true" />
+            {/* 639:499 — "Show all" since Mark's 28.09 update (1944175761); the count
+             * stays in the accessible name, so each category's pill says what it opens. */}
+            <button
+              type="button"
+              className="rv4-fvt__pill"
+              aria-label={`Show all ${category.total} fantasies`}
+              onClick={() => {
+                revealed.current = true;
+                setShowAll(true);
+              }}
+            >
+              <span className="rv4-fvt__pill-label">Show all</span>
+            </button>
+          </div>
+        ) : null}
+
+        {hidden.length ? (
+          <div className="rv4-fvt__lock" onClick={guardedUnlock(onUnlock)}>
+            {/* 979:588 / 979:600 / 979:612 — the compact tile on the middle of the
+             * blurred rows (Mark's 29.09 lock, 1945259495). */}
+            <div className="rv4-fvt__lockrows">
+              <div className="rv4-fvt__blurred" aria-hidden="true" inert>
+                {hidden.map((row, i) => (
+                  <Row
+                    key={`${row.practice}-${i}`}
+                    row={row}
+                    standIn={STAND_IN_SCORES[i % STAND_IN_SCORES.length]}
+                  />
+                ))}
+              </div>
+              <V4LockBadge size="compact" />
+            </div>
+            {/* 639:2098 */}
+            <div className="rv4-fvt__cta">
+              <button type="button" className="rv4-fvt__pill">
+                <span className="rv4-fvt__pill-label">Unlock all {category.total} fantasies</span>
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+};
+
+const V4FantasyTable: FC<Props> = ({ table, onUnlock }) => {
+  // One note open at a time across the table, as V2's section keeps it.
+  const [openNote, setOpenNote] = useState<string | null>(null);
+  const [ref, inView] = useV4Reveal<HTMLDivElement>();
+
+  useEffect(() => {
+    if (openNote === null) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-fvt-note]")) return;
+      setOpenNote(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenNote(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openNote]);
+
+  return (
+    <div
+      ref={ref}
+      className={`rv4-fvt${inView ? "" : " is-pending"}`}
+      data-node-id={table.locked ? "639:1905" : "639:308"}
+    >
+      {table.categories.map((category, index) => (
+        <Category
+          key={category.title}
+          category={category}
+          locked={table.locked}
+          onUnlock={onUnlock}
+          openNote={openNote}
+          setOpenNote={setOpenNote}
+          index={index}
+        />
+      ))}
+    </div>
+  );
+};
+
+export default V4FantasyTable;

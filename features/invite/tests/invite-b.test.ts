@@ -14,7 +14,9 @@ describe("inviteBEmail", () => {
     expect(result.subject).toContain("I found out something about myself");
     expect(result.html).toContain("This opened my eyes");
     expect(result.html).toContain("real clarity on my intimate patterns");
-    expect(result.html).toContain("Alice sent via LoveIQ");
+    // The form asks for "Your Full Name" (Marcus, 04.10), so the email signs with all of it.
+    expect(result.html).toContain("Alice Doe sent via LoveIQ");
+    expect(result.text).toContain("Alice Doe sent via LoveIQ");
     expect(result.html).toContain("Take the test");
   });
 

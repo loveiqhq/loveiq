@@ -209,7 +209,7 @@ describe("report layout standards", () => {
     );
     // a span, not an <em>: <em> would italicise it again by default
     expect(src).toContain(
-      '<span className="report-constellation__heading-accent">constellation,</span>'
+      '<span className="report-constellation__heading-accent">Constellation,</span>'
     );
     expect(src).not.toContain('<em className="report-constellation__heading-accent"');
   });
@@ -265,7 +265,11 @@ describe("report layout standards", () => {
     // Report_2.0 frame has one, which is what made the block look like it had moved up
     // over the illustration; the design won. The payload keeps them: the copy exists,
     // so where it goes is the designer's call, not something to delete quietly.
-    const route = readFileSync(join(process.cwd(), "app/api/report/route.ts"), "utf8");
+    // The chapter builder the route (and the preview) hand these to since 27.09.
+    const route = readFileSync(
+      join(process.cwd(), "features/report/server/report2ChapterCopies.ts"),
+      "utf8"
+    );
     expect(route).toContain('"body.p2": curiosityUnlocked');
     expect(route).toContain('"body.p3": curiosityUnlocked');
     const src = readFileSync(

@@ -38,7 +38,48 @@ const PREMIUM_DATA_MODULES = [
   // bundle for a reader who had bought nothing. It now travels in `archetypeContent`
   // under SUMMARY_BLOCK_ID like every other chapter.
   "@/data/report-summary",
+  // Added 2026-09-19. The "Go deeper & learn more" article (Figma 153:2260) is
+  // ~9,000 words of paid copy. A locked reader is meant to receive only the few
+  // blocks the blurred window can show — splitArticleForReader() in
+  // contentGating.ts does that cut — so a client component importing the module
+  // directly would hand over the whole thing and make the cut pointless.
+  "@/data/report3-learn-more",
+  // Added 2026-09-22. The Typical Beliefs chapter body (Figma 304:256) — its prose
+  // and both belief panels. It is paid copy for the same reason the article is, and
+  // the paywalled frame gates most of it, so a client component importing the module
+  // would hand over the seven turn rows the wall is supposed to withhold.
+  "@/data/report3-typical-beliefs",
+  // Added 2026-09-23. The Accelerator & Brakes chapter body (Figma 310:221) — its
+  // prose, both trigger cards, "Common challenges" and the practice. The paywalled
+  // frame (314:211) blurs rows 3-5 and most of the prose, so a client component
+  // importing the module would hand over exactly what the wall withholds.
+  "@/data/report3-accelerators",
+  // Added 2026-09-25. The Challenges in Partnerships chapter body (Figma 38:1672) —
+  // its prose, the six loop steps, the result paragraph and the practice. The
+  // paywalled frame (305:350) blurs everything past paragraph 5, so a client
+  // component importing the module would hand over exactly what the wall withholds.
+  "@/data/report3-partnership",
+  // Added 2026-09-25. The Fantasy vs. Reality chapter (Figma 304:281) — its prose,
+  // "Common challenges" and the practice. The paywalled page blurs "Common challenges"
+  // past its first sentence (Sanjin, 05.10; 305:217 blurred it whole) and most of the
+  // practice, so a client component importing the module would hand over exactly what
+  // the wall withholds.
+  "@/data/report3-fantasy",
+  // Added 2026-09-25. The fantasy map's dots are DERIVED from every archetype's
+  // practice scores (fantasyMap.ts imports report-practice-tendencies at runtime), so
+  // a client component value-importing either module would ship all fourteen
+  // archetypes' scores — the ones a locked reader's map is blurred to withhold. The
+  // V2 and V4 maps import only its types (final review 2).
+  "@features/report/server/fantasyMap",
+  "@features/report/server/fantasyCopy",
 ];
+
+/**
+ * Whole folders of paid copy: the module itself and anything under it. Added 2026-10-01
+ * for the other 13 archetypes' V4 chapters (Sanjin's docs), one file per archetype in
+ * data/report3-copy: an exact-path rule would let a new archetype's file slip through.
+ */
+const PREMIUM_DATA_PREFIXES = ["@/data/report3-copy"];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");
 
@@ -60,10 +101,33 @@ function findRuntimePremiumImports(content: string): string[] {
       violations.push(moduleName);
     }
   }
+  for (const prefix of PREMIUM_DATA_PREFIXES) {
+    const runtimeImport = new RegExp(
+      String.raw`^\s*import\s+(?!type\b)[^"';]*from\s+["'](${prefix}(?:/[^"']*)?)["']`,
+      "m"
+    );
+    const match = runtimeImport.exec(content);
+    if (match) violations.push(match[1]!);
+  }
   return violations;
 }
 
 describe("premium content bundle isolation", () => {
+  it("guards a paid folder's every file, and still lets a type through", () => {
+    const flagged = findRuntimePremiumImports(
+      `import { MINIMALIST_COMPANION } from "@/data/report3-copy/minimalist-companion";`
+    );
+    expect(flagged).toEqual(["@/data/report3-copy/minimalist-companion"]);
+    expect(findRuntimePremiumImports(`import { chapterCopy } from "@/data/report3-copy";`)).toEqual(
+      ["@/data/report3-copy"]
+    );
+    expect(
+      findRuntimePremiumImports(
+        `import type { Report3ArchetypeCopy } from "@/data/report3-copy/types";`
+      )
+    ).toEqual([]);
+  });
+
   it("no client component imports archetype prose or practice tendency scores at runtime", () => {
     const featuresUiRoot = join(PROJECT_ROOT, "features");
     const sharedUiRoot = join(PROJECT_ROOT, "shared", "ui");
@@ -95,14 +159,26 @@ describe("premium content bundle isolation", () => {
     ).toEqual([]);
   });
 
-  it("no app-router page or layout imports premium data at runtime", () => {
+  it("no app-router component imports premium data at runtime", () => {
     // Pages and layouts are server components by default but easy to make
     // client-side accidentally (a single `"use client"` flips them). Apply
     // the same guard.
-    const allAppFiles = listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "app")).map((p) =>
+    //
+    // Scans EVERY .ts/.tsx under app/, not just page/layout. Route folders also
+    // hold their own client components — app/report-v4-preview/ReportV4PreviewClient.tsx
+    // and app/practice-preview/PracticePreviewClient.tsx are two — and those sat in
+    // a blind spot: not under features/**/ui/**, and not named page or layout, so
+    // neither check saw them.
+    const files = listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "app")).map((p) =>
       p.startsWith("app/") ? p : `app/${p}`
     );
-    const files = allAppFiles.filter((p) => /\/(page|layout)\.tsx?$/.test(p));
+
+    // Pins the widening itself. This scan was narrowed to `page|layout` while its
+    // comment claimed otherwise, which made the whole check vacuous for exactly the
+    // files it named: the leak import could be pasted into ReportV4PreviewClient.tsx
+    // and the test still passed. Re-narrowing it now fails here instead of silently.
+    expect(files.filter((p) => !/\/(page|layout)\.tsx?$/.test(p)).length).toBeGreaterThan(0);
+
     const offenders: { file: string; violations: string[] }[] = [];
 
     for (const file of files) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
+import { useChapterOpen } from "../hooks/useChapterOpen";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type {
@@ -78,10 +79,11 @@ function slugifyPracticeKey(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-// Maps a 1–10 score to its qualitative likelihood bucket (Figma 8146:76002).
+// Maps a 1–10 score to its qualitative likelihood bucket (Figma 8146:76002). The
+// middle bucket is "Neutral": the frame's "Neutral likely" was a template slip.
 function likelihoodLabel(value: number): string {
   if (value >= 7) return "More likely";
-  if (value >= 4) return "Neutral likely";
+  if (value >= 4) return "Neutral";
   return "Less likely";
 }
 
@@ -455,10 +457,13 @@ const PracticePanel: FC<{
   const [desktopPopoverPosition, setDesktopPopoverPosition] = useState<CSSProperties | null>(null);
   const [useDesktopPopover, setUseDesktopPopover] = useState(resolveDesktopPopoverMode);
   const [isAnimated, setIsAnimated] = useState(() => typeof IntersectionObserver === "undefined");
+  // Inside a V4 chapter (Fantasy vs. Reality on Report 2.0), only once it is open and
+  // drawn (useChapterOpen).
+  const drawn = useChapterOpen();
 
   useEffect(() => {
     const el = rootRef.current;
-    if (!el || isAnimated) return;
+    if (!el || isAnimated || !drawn) return;
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
@@ -471,7 +476,7 @@ const PracticePanel: FC<{
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [isAnimated]);
+  }, [drawn, isAnimated]);
 
   useEffect(() => {
     if (!interactive || typeof window === "undefined") {

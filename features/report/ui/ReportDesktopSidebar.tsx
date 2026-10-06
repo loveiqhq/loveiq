@@ -6,6 +6,8 @@ import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
+import { useIsV3, useIsV4 } from "./v3/V3Chapter";
+import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS } from "./v3/reportV3Nav";
 
 interface Props {
   activeSectionId: string;
@@ -26,6 +28,9 @@ const ReportDesktopSidebar: FC<Props> = ({
   onSectionClick,
   onShareClick,
 }) => {
+  const isV3 = useIsV3();
+  const isV4 = useIsV4();
+  const navParts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
   const navRef = useRef<HTMLElement>(null);
 
   // Capture wheel events on the desktop nav so the page doesn't scroll instead
@@ -48,6 +53,29 @@ const ReportDesktopSidebar: FC<Props> = ({
     return () => nav.removeEventListener("wheel", onWheel);
   }, []);
 
+  // Fade an edge only while there is more list beyond it, so a label the edge cuts dissolves
+  // instead of being sliced in half (review 06.10: "Part 1 · Welcome" halved by the top edge
+  // at load, a "FREE" badge and "Part 2" halved while scrolling). At rest at the top nothing
+  // fades there, so the first label stays crisp. The fade itself is CSS (report.css).
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const update = () => {
+      const { scrollTop, scrollHeight, clientHeight } = nav;
+      nav.toggleAttribute("data-fade-top", scrollTop > 1);
+      nav.toggleAttribute("data-fade-bottom", scrollTop + clientHeight < scrollHeight - 1);
+    };
+    update();
+    nav.addEventListener("scroll", update, { passive: true });
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(update) : null;
+    observer?.observe(nav);
+    if (nav.firstElementChild) observer?.observe(nav.firstElementChild);
+    return () => {
+      nav.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, []);
+
   // Keep the active chapter link in view inside the sidebar as the page
   // scrolls. We adjust only nav.scrollTop — never the window — so the main
   // page scroll position is untouched.
@@ -59,7 +87,8 @@ const ReportDesktopSidebar: FC<Props> = ({
 
     const navRect = nav.getBoundingClientRect();
     const linkRect = activeLink.getBoundingClientRect();
-    const margin = 24;
+    // Clear of the 24px edge fade, so the active link is never the thing fading out.
+    const margin = 36;
     let delta = 0;
     if (linkRect.top < navRect.top + margin) {
       delta = linkRect.top - navRect.top - margin;
@@ -87,7 +116,7 @@ const ReportDesktopSidebar: FC<Props> = ({
             src="/images/loveiq-mark.svg"
             width={45}
           />
-          <span className="report-sidebar__brand-text" aria-label="LoveIQ Report">
+          <span className="report-sidebar__brand-text" role="img" aria-label="LoveIQ Report">
             <span aria-hidden="true" className="report-sidebar__love">
               Love
             </span>
@@ -114,7 +143,7 @@ const ReportDesktopSidebar: FC<Props> = ({
         </div>
 
         <nav ref={navRef} aria-label="Report sections" className="report-sidebar__nav">
-          {REPORT_NAV_PARTS.map((part) => (
+          {navParts.map((part) => (
             <div key={part.part} className="report-sidebar__part-group">
               <p className="report-sidebar__part">
                 {part.part} · {part.label}
@@ -122,12 +151,15 @@ const ReportDesktopSidebar: FC<Props> = ({
               <div className="report-sidebar__nav-list">
                 {part.items.map((item) => {
                   const isActive = activeSectionId === item.id;
+                  const access = accessById?.get(item.id) ?? "free";
 
                   return (
                     <a
                       key={item.id}
                       href={`#${item.id}`}
                       aria-current={isActive ? "location" : undefined}
+                      // V4 sets the row's weight by its tier (961:333).
+                      data-access={isV4 ? access : undefined}
                       title={item.label}
                       onClick={() => {
                         trackSectionNavigated({
@@ -143,7 +175,7 @@ const ReportDesktopSidebar: FC<Props> = ({
                       <span className="report-sidebar__item-label">
                         <span>{item.label}</span>
                       </span>
-                      <ReportNavBadge access={accessById?.get(item.id) ?? "free"} />
+                      <ReportNavBadge access={access} />
                     </a>
                   );
                 })}

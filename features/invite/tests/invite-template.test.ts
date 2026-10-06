@@ -52,3 +52,23 @@ describe("invite email — multi-line personal message", () => {
     expect(out.html.includes("&lt;br")).toBe(false);
   });
 });
+
+describe("invite email, the sender's full name (Marcus, 04.10)", () => {
+  it("signs with the whole name the form asks for, trimmed and escaped", () => {
+    const out = inviteEmail({ ctaUrl: CTA, referrerName: "  Alice   Doe ", siteUrl: SITE });
+    expect(out.html).toContain("Alice Doe sent via LoveIQ");
+    expect(out.text).toContain("Alice Doe sent via LoveIQ");
+    const marked = inviteEmail({ ctaUrl: CTA, referrerName: "Ann <b>Lee</b>", siteUrl: SITE });
+    expect(marked.html).not.toContain("<b>Lee</b>");
+    expect(marked.html).toContain("Ann &lt;b&gt;Lee&lt;/b&gt; sent via LoveIQ");
+  });
+
+  it("still signs as a friend when no name is given", () => {
+    expect(inviteEmail({ ctaUrl: CTA, referrerName: " ", siteUrl: SITE }).html).toContain(
+      "A friend sent via LoveIQ"
+    );
+    expect(inviteBEmail({ ctaUrl: CTA, referrerName: null, siteUrl: SITE }).text).toContain(
+      "A friend sent via LoveIQ"
+    );
+  });
+});

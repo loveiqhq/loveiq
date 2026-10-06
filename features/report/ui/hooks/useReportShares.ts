@@ -36,13 +36,6 @@ const INITIAL: ReportSharesState = {
   shares: [],
 };
 
-const SEAT_LIMIT_BY_PLAN: Record<NonNullable<ReportSharesState["plan"]>, number> = {
-  essentials: 1,
-  full_report: 2,
-  core: 2,
-  all_reports: 2,
-};
-
 async function parseErrorMessage(res: Response, fallback: string) {
   try {
     const json = (await res.json()) as { error?: unknown };
@@ -53,19 +46,9 @@ async function parseErrorMessage(res: Response, fallback: string) {
   return fallback;
 }
 
-export function useReportShares(
-  ownerToken: string | null | undefined,
-  initialPlan?: ReportSharesState["plan"]
-): UseReportSharesResult {
-  const [state, setState] = useState<ReportSharesState>(() => {
-    if (!initialPlan) return INITIAL;
-    return {
-      plan: initialPlan,
-      seatLimit: SEAT_LIMIT_BY_PLAN[initialPlan] ?? 0,
-      seatsUsed: 0,
-      shares: [],
-    };
-  });
+export function useReportShares(ownerToken: string | null | undefined): UseReportSharesResult {
+  // seatLimit stays 0 until the server answers; the modal reads that as loading.
+  const [state, setState] = useState<ReportSharesState>(INITIAL);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +96,12 @@ export function useReportShares(
 
   const add = useCallback<UseReportSharesResult["add"]>(
     async (recipientEmail, personalMessage) => {
-      if (!ownerToken) return { ok: false, error: "Missing report context." };
+      if (!ownerToken) {
+        return {
+          ok: false,
+          error: "Nothing was sent — open your report from its email link to share it.",
+        };
+      }
       setSubmitting(true);
       setError(null);
       try {

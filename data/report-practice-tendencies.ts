@@ -8040,7 +8040,7 @@ export const reportPracticeTendencies: Record<string, ReportPracticeTendencyCont
             practice: "Master–slave (consensual)",
             fantasyPull: 10,
             actualPleasure: 5,
-            description: "Formalized hierarchy. Organizes identity and structure structure.",
+            description: "Formalized hierarchy. Organizes identity and structure.",
           },
           {
             practice: "Power exchange (24/7 or partial)",

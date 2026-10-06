@@ -76,6 +76,22 @@ future export could drop it silently — randomisation would switch off with no 
 failing test, and no signal until someone noticed months of rankings were unusable again.
 Randomisation is also display behaviour rather than survey content.
 
+### 5. A grouped question records its categories' flattened order (2026-09-29)
+
+`16016` (C9) shows its 53 topics under thirteen collapsible category headings
+(`features/survey/optionGroups.ts`). Both levels are shuffled from their own seeds: the
+category order from `(session id, qId)`, and each category's topics from
+`(session id, qId, category)`. Folding a list into headings does not remove position bias;
+it moves it to the first heading, which is the one opened most.
+
+The recorded order stays one flat array of labels. It is the categories in their shown
+order, each followed by its topics in their shown order, because `orderedOptions` returns
+exactly that flattening of `orderedOptionGroups`, and the page renders from the same groups.
+The storage shape, the API bounds and `buildOptionOrder` are unchanged.
+
+A reader of `option_order` for `16016` can rebuild each topic's category position from the
+labels and `optionGroups.ts`, which lists the categories and their exact labels.
+
 ## Consequences
 
 - Rankings from rows where `option_order` is null are **not** comparable to rows where it

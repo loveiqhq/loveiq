@@ -179,7 +179,7 @@ loveiq-web/
 1. **Page Load:** SSR → Client hydration → Smooth scroll init → Analytics pageview
 2. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
 3. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → consent PATCH (also stores `posthog_session_id`, the PostHog `$session_id` captured at submit) → Slack notification with a "▶ Watch session recording" button beside the admin link
-4. **Pre-Report Wizard:** Survey submit → ProcessingSequence (white; 5 animated steps around a progress ring, ~11s, waits for the POST) → fade to PreReportWizard (5 slides, dark) → `/report/<token>`. SurveyConfirmation is the error path only.
+4. **Pre-Report Wizard:** Survey submit → ProcessingSequence (white; 5 animated steps around a progress ring, ~11s, waits for the POST) → fade to PreReportWizard (6 slides, Figma 1071:2092; slide 2 is the report map with the four deep dives; from 1024px a desktop layout in `wizard/wizard-desktop.css`, on Mark's desktop wizard frames 1:4454; off production `/wizard-preview` shows it alone) → `/report/<token>`, which is Report 3.0 (V4) by default; `?v4=0` opens the pre-2.0 report and `?v2=1` Report 2.0 (`ReportPage`). SurveyConfirmation is the error path only.
 5. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
 6. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
 7. **Invite Send:** Form → CSRF check → Rate limit → Zod validation → Resend email (after response) → Supabase invite_event insert (after response)
@@ -895,10 +895,11 @@ Two consequences worth keeping in view rather than rediscovering:
   "Field reports" section (`white/WTestimonials.tsx`, the former on-site
   testimonials, pixel-matched to Figma 7828:9430) instead of Trustpilot, and
   stays that way even after the flag flips — it's the A/B counterpart to the dark
-  arm. (3) the report **pricing modal** (`ReportPricingModal`) renders no
-  Trustpilot block when off — it shows the curated `PaywallTestimonials` carousel
-  instead. (The second paywall modal this note used to name, `ScrollPricingModal`,
-  was the forced wall and was deleted on 2026-08-31.) (4) the nurture **emails**
+  arm. (3) the report **pricing modal** (`ReportPricingModal`, the Pricing 3.0
+  paygate) always shows its four curated reviews (Figma 842:682) and adds the
+  Trustpilot carousel under them only when the flag is on. (The second paywall
+  modal this note used to name, `ScrollPricingModal`, was the forced wall and was
+  deleted on 2026-08-31.) (4) the nurture **emails**
   still reference Trustpilot copy; the flag does not touch emails (they're not
   "the website" and staging crons are short-circuited) — revisit separately.
 
