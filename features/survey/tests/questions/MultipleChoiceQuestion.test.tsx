@@ -413,6 +413,7 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
   // Mark, 2026-10-06: on a phone the list seemed to end where the footer began.
   describe("categories under the sticky footer", () => {
     const scrollY = { value: 0 };
+    const footerTop = { value: 500 };
     let footer: HTMLDivElement;
     let rect: ReturnType<typeof vi.spyOn>;
     let scrolled: ReturnType<typeof vi.fn>;
@@ -429,7 +430,7 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
         this: Element
       ) {
         const top = this.hasAttribute("data-survey-footer")
-          ? 500
+          ? footerTop.value
           : 100 + 60 * headingIndex(this) - scrollY.value;
         return Number.isNaN(top)
           ? new DOMRect(0, 0, 0, 0)
@@ -443,6 +444,7 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
       rect.mockRestore();
       footer.remove();
       scrollY.value = 0;
+      footerTop.value = 500;
     });
 
     it("says how many categories are under it, and a tap brings the next one up", async () => {
@@ -468,6 +470,31 @@ describe("MultipleChoiceQuestion — grouped into categories (C9)", () => {
       fireEvent.scroll(window);
 
       expect(screen.queryByText(/more categor/)).toBeNull();
+    });
+
+    // The question slides in: a count read mid-animation was off by a heading on an iPhone 13.
+    it("counts again when the question has finished sliding in", () => {
+      scrollY.value = -60; // still sliding: everything a heading lower
+      render(<ControlledC9 />);
+      expect(screen.getByText("8 more categories")).toBeInTheDocument();
+
+      scrollY.value = 0;
+      fireEvent.animationEnd(window);
+
+      expect(screen.getByText("7 more categories")).toBeInTheDocument();
+    });
+
+    it("sits on the footer's top edge, or clear of the screen's bottom when the footer is not pinned", () => {
+      render(<ControlledC9 />);
+      const pill = screen.getByText("7 more categories");
+      expect(pill.style.bottom).toBe(`${window.innerHeight - 500}px`);
+      expect(pill).toHaveClass("translate-y-1/2");
+
+      footerTop.value = window.innerHeight + 200; // a short window: the footer follows the list
+      fireEvent.scroll(window);
+
+      expect(pill.style.bottom).toBe("12px");
+      expect(pill).not.toHaveClass("translate-y-1/2");
     });
   });
 

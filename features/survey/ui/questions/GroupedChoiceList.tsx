@@ -81,7 +81,8 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const white = useSurveyTheme() === "white";
   const listRef = useRef<HTMLDivElement | null>(null);
-  // Headings not fully above the footer, and how far the footer's top is from the bottom.
+  // Headings not fully above the footer, and how far the footer's top is from the bottom
+  // of the screen (0 when the footer is not pinned there).
   const [below, setBelow] = useState({ count: 0, bottom: 0 });
 
   useEffect(() => {
@@ -97,12 +98,18 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
     measure();
     window.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", measure);
+    // The question slides in, and a category eases open or shut: neither scrolls or
+    // resizes the list, and the count read during either was off by a heading.
+    window.addEventListener("animationend", measure);
+    window.addEventListener("transitionend", measure);
     // Opening or closing a category changes the list's height without a scroll.
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(list);
     return () => {
       window.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
+      window.removeEventListener("animationend", measure);
+      window.removeEventListener("transitionend", measure);
       observer?.disconnect();
     };
   }, []);
@@ -211,8 +218,12 @@ const GroupedChoiceList: FC<GroupedChoiceListProps> = ({
               tabIndex={-1}
               aria-hidden
               onClick={showNext}
-              style={{ bottom: below.bottom + 12 }}
-              className={`fixed left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3.5 py-1.5 font-sans text-[13px] font-semibold leading-[18px] shadow-[0_6px_18px_rgba(22,16,33,0.14)] ${
+              // Centred on the footer's top edge, so it covers as little of the list as it
+              // can; with no footer pinned there, clear of the screen's bottom edge.
+              style={{ bottom: below.bottom > 0 ? below.bottom : 12 }}
+              className={`fixed left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 font-sans ${
+                below.bottom > 0 ? "translate-y-1/2" : ""
+              } text-[13px] font-semibold leading-[18px] shadow-[0_6px_18px_rgba(22,16,33,0.14)] ${
                 white
                   ? "border-black/[0.08] bg-white text-[#6b5b95]"
                   : "border-white/15 bg-[#1a1324] text-white/80"
