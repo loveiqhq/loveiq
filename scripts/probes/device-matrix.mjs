@@ -192,8 +192,8 @@ const CONSENT_OVERLAP = () => {
   if (b.width === 0 || b.height === 0) return { present: false };
   const covered = [];
   for (const sel of [
-    ".report-sticky-unlock__cta",
-    ".report-premium-overlay__cta",
+    ".report-sticky-unlock__cta, .report-sticky-unlock__cta--v4",
+    ".report-premium-overlay__cta, .rv4-premium__cta",
     ".report-pricing-modal__dialog",
   ]) {
     for (const n of document.querySelectorAll(sel)) {
@@ -361,9 +361,13 @@ async function runDevice(browser, deviceName, engine) {
     }
 
     result.notes.consent = await page.evaluate(CONSENT_OVERLAP);
-    if (await page.locator(".report-sticky-unlock__cta").count()) {
+    if (await page.locator(".report-sticky-unlock__cta, .report-sticky-unlock__cta--v4").count()) {
       const t = await page.evaluate(() => {
-        const all = [...document.querySelectorAll(".report-sticky-unlock__cta")];
+        const all = [
+          ...document.querySelectorAll(
+            ".report-sticky-unlock__cta, .report-sticky-unlock__cta--v4"
+          ),
+        ];
         const n = all.find((el) => {
           const b = el.getBoundingClientRect();
           return b.width > 0 && b.height > 0;
@@ -392,7 +396,10 @@ async function runDevice(browser, deviceName, engine) {
       }
       // Measure what a finger can hit, not the painted box — a hit-area
       // expansion enlarges the former without changing the latter.
-      const hit = await hitAreaHeight(page, ".report-sticky-unlock__cta");
+      const hit = await hitAreaHeight(
+        page,
+        ".report-sticky-unlock__cta, .report-sticky-unlock__cta--v4"
+      );
       result.notes.ctaHitArea = hit;
       if (hit && hit.hit > 0 && hit.hit < 44) {
         fail(
@@ -449,7 +456,8 @@ async function runDevice(browser, deviceName, engine) {
     }
 
     // ---------- 3. the unlock CTA ----------
-    const ctaSel = ".report-premium-overlay__cta, .report-sticky-unlock__cta";
+    const ctaSel =
+      ".report-premium-overlay__cta, .report-sticky-unlock__cta, .rv4-premium__cta, .report-sticky-unlock__cta--v4";
     const ctaCount = await page.locator(ctaSel).count();
     result.notes.ctaCount = ctaCount;
     if (ctaCount === 0)
@@ -494,14 +502,10 @@ async function runDevice(browser, deviceName, engine) {
         const modal = await page.evaluate(() => {
           const d = document.querySelector(".report-pricing-modal__dialog");
           const region = document.querySelector(".report-pricing-modal__scroll-region");
-          const cards = [
-            ...document.querySelectorAll(
-              ".report-pricing-card, [class*='report-pricing-card__title']"
-            ),
-          ];
-          const prices = [...document.querySelectorAll(".report-pricing-card__amount")].map((n) =>
-            n.textContent.trim()
-          );
+          const cards = [...document.querySelectorAll(".report-pricing-card, .rpg-card")];
+          const prices = [
+            ...document.querySelectorAll(".report-pricing-card__amount, .rpg-card__amount"),
+          ].map((n) => n.textContent.trim());
           const ctas = [
             ...document.querySelectorAll(
               ".report-pricing-modal__dialog button, .report-pricing-modal__dialog a"

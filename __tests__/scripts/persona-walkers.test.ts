@@ -186,7 +186,8 @@ describe("a walk", () => {
       join(process.cwd(), "features/survey/ui/PreReportWizard.tsx"),
       "utf8"
     );
-    const label = /slideIndex >= slides\.length - 1 \? "([^"]+)" : "([^"]+)"/.exec(wizard);
+    // The wizard names its forward button for a screen reader: the last slide's, then the rest.
+    const label = /aria-label=\{isLast \? "([^"]+)" : "([^"]+)"\}/.exec(wizard);
     expect(label, "the wizard's forward button names its last slide").not.toBeNull();
     const [, last, next] = label!;
     expect(WIZARD_FORWARD.test(next!)).toBe(true);
@@ -225,7 +226,8 @@ describe("a walk", () => {
       "utf8"
     );
     const labels = [...plans.matchAll(/ctaLabel: "([^"]+)"/g)].map((m) => m[1]!);
-    expect(labels).toContain("Unlock my report");
+    // Pricing 3.0's two plans (features/checkout/server/reportPurchase.ts).
+    expect(labels).toEqual(["Continue", "Only Unlock My Highest Scoring Report"]);
     for (const label of labels) expect(ARCHETYPE_ROW_UNLOCK.test(label), label).toBe(false);
     // A row reads "Unlock report", or names its archetype to a screen reader.
     expect(ARCHETYPE_ROW_UNLOCK.test("Unlock report")).toBe(true);

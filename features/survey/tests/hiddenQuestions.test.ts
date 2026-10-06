@@ -32,10 +32,14 @@ describe("hidden questions", () => {
     expect(isCompletionReady(SURVEY_TOTAL_QUESTIONS, answers)).toBe(true);
   });
 
-  it("is not satisfied one answer short", () => {
+  it("is not satisfied one required answer short", () => {
+    // One REQUIRED answer: the content asks (16019, 16020) are optional and completion
+    // does not wait on them (see contentAsks.test.ts), so leaving one of those out would
+    // prove nothing.
     const asked = surveyQuestions.filter((q) => !isHidden(q.qId));
+    const lastRequired = asked.filter((q) => q.required && q.qId !== "00000").at(-1)!;
     const answers: Record<string, string> = { "00000": "person@example.com" };
-    for (const q of asked.slice(0, asked.length - 1)) answers[q.qId] = "answer";
+    for (const q of asked) if (q.qId !== lastRequired.qId) answers[q.qId] = "answer";
     expect(isCompletionReady(0, answers)).toBe(false);
   });
 });

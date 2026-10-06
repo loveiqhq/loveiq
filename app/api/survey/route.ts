@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
+import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 import {
   checkRateLimit,
   checkCooldown,
@@ -35,6 +36,7 @@ import {
   SUBMIT_OUTCOME_UNKNOWN,
   submitSurveyOnce,
 } from "@features/survey/server/server";
+import { dropBlankOptionalAnswers } from "@features/survey/server/utils";
 import { SURVEY_EMAIL_RE, tidySurveyEmail } from "@features/survey/email";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 
@@ -365,7 +367,7 @@ export async function POST(request: Request) {
   const {
     email,
     firstName,
-    answers,
+    answers: submittedAnswers,
     startedAt,
     durationMs,
     utmTracker,
@@ -374,6 +376,9 @@ export async function POST(request: Request) {
     optionOrder,
     website,
   } = parsed.data;
+  // A blank optional answer (16019, 16020 typed into and cleared) is no answer. Dropped
+  // before anything counts, scores or stores it, so submit_survey never writes an empty row.
+  const answers = dropBlankOptionalAnswers(submittedAnswers);
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
@@ -392,7 +397,68 @@ export async function POST(request: Request) {
    * writer. Past submissions keep theirs; new ones legitimately have no survey
    * arm, which also makes the final 453/411 split permanently reproducible.
    */
-  const mergedUtmTracker = await stampLandingArm(utmTracker);
+  /**
+   * The C13 opening-order arm is DERIVED here rather than sent by the client.
+   * `assignQuestionOrderArm` is pure and deterministic over the session id, and
+   * the session id is already in this payload — so recomputing it server-side
+   * agrees with what the respondent actually saw, and a client cannot misreport
+   * its arm.
+   *
+   * ONE EXCEPTION, and it is not production. `?order=control|variant` previews
+   * either arm on dev and staging; a previewer whose session hashes the other way
+   * sees one arm and is stamped with the other. `resolveQuestionOrderOverride`
+   * returns null on production, so no real respondent can land in that state — but
+   * staging shares this database, so such a row does exist in the same table. It is
+   * internal traffic and `is_likely_test` already marks the @loveiq.org ones; noted
+   * here rather than fixed, because the alternative is letting the client tell the
+   * server its arm, which is the property this derivation exists to remove.
+   *
+   * AND ONE ON PRODUCTION, outside every readout. A draft begun before C13 launched
+   * keeps the control order when it is resumed (`resolveDraftQuestionOrderArm`), so
+   * its stamp can say "variant" for a control run. Such a run started before the
+   * launch, and every C13 readout must filter on sessions started after it (see
+   * questionOrderArm.ts), so these rows never reach one.
+   *
+   * Only stamped when a session id is present, which preserves the
+   * "no session, no stamp" rule the landing arm follows: a crawler or a direct
+   * hit still produces no utm_tracker at all rather than a bare {} .
+   */
+  const questionOrderArm = sessionId ? assignQuestionOrderArm(sessionId) : null;
+
+  let mergedUtmTracker = await stampLandingArm(utmTracker);
+  /**
+   * NEVER CREATE A TRACKER JUST FOR THE ARM.
+   *
+   * `utm_tracker IS NOT NULL` is used as "this respondent has attribution data"
+   * by get_dropout_funnel and three other analytics queries, which then classify
+   * the source and fall back to 'direct'. 36.3% of submissions (748 of 2,058)
+   * have no tracker and all of them have a session id — so stamping the arm
+   * unconditionally would pull every one of them into those charts as 'direct',
+   * inflating that bucket by more than half. So the C13 arm only joins a tracker
+   * that exists already: the client's, or the one the landing stamp made.
+   *
+   * The arm is a pure function of the session id, which is stored on the
+   * submission, so nothing is lost: an unstamped respondent's arm is recomputed
+   * rather than read. The stamp is a convenience for grouping, never the record.
+   *
+   * It commits only if it still fits the 1000-char budget, AFTER the landing arm,
+   * so a tracker near the limit loses this stamp and keeps the older one. A client's
+   * own `question_order_arm` is dropped either way, as the landing stamp drops its
+   * `landing_variant`: the arm is derived, never claimed.
+   */
+  if (questionOrderArm && mergedUtmTracker) {
+    try {
+      const base: unknown = JSON.parse(mergedUtmTracker);
+      if (base && typeof base === "object" && !Array.isArray(base)) {
+        const { question_order_arm: claimed, ...rest } = base as Record<string, unknown>;
+        const candidate = JSON.stringify({ ...rest, question_order_arm: questionOrderArm });
+        if (candidate.length <= 1000) mergedUtmTracker = candidate;
+        else if (claimed !== undefined) mergedUtmTracker = JSON.stringify(rest);
+      }
+    } catch {
+      /* utmTracker wasn't JSON — leave it untouched */
+    }
+  }
 
   if (website) {
     // Honeypot field was filled — almost certainly a bot. Fire-and-forget

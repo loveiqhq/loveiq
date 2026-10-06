@@ -15,8 +15,8 @@ vi.mock("next/link", () => ({
 }));
 
 import WQuestionCard from "@features/landing/ui/white/WQuestionCard";
+import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 import { SURVEY_STATE_KEY, LANDING_PREFILL_QID } from "@features/survey/ui/hooks/surveyStorage";
-import { QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 
 function answer(value: number) {
   const dot = screen
@@ -38,7 +38,9 @@ describe("WQuestionCard — landing question hand-off", () => {
 
   it("asks exactly one question", () => {
     render(<WQuestionCard location="hero" />);
-    expect(screen.getByText(`QUESTION 1 OF ${QUESTIONS_ASKED}`)).toBeInTheDocument();
+    // The card's count is QUESTIONS_ASKED (reportFacts.ts); this holds it to the count
+    // DERIVED from the survey data, so a question added or hidden fails here too.
+    expect(screen.getByText(`QUESTION 1 OF ${SURVEY_TOTAL_QUESTIONS}`)).toBeInTheDocument();
     expect(screen.getByText("Right now, I feel satisfied with my sex life.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /of 7/ })).toHaveLength(7);
   });

@@ -17,6 +17,7 @@ import {
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
 import { readStampedArms } from "@features/attribution/server/traffic";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 import logger from "@shared/observability/logger";
 
 /** Hard ceiling per collection, paged 1000 at a time. */
@@ -341,6 +342,10 @@ export function tallyAxis(
  * Which arm a submission was in, for the axes whose arms are recorded: landing and survey
  * are stamped on the submission, pricing on its quote. Nothing stamps a paywall arm since
  * the forced paywall was removed on 2026-08-31, so that axis reads nothing.
+ *
+ * Pricing counts only readers who finished from Pricing 3.0's launch day: the launch
+ * re-priced everyone who had not bought yet, after they had seen the 2.x prices, so their
+ * A3/B3 stamp is not the test's. They read as unattributed rather than in either list.
  */
 export function armReader(
   axis: ExperimentAxis,
@@ -349,26 +354,28 @@ export function armReader(
   if (axis === "landing" || axis === "survey")
     // eslint-disable-next-line security/detect-object-injection -- axis is "landing" or "survey" here.
     return (_id, tracker) => readStampedArms(tracker)[axis];
-  if (axis === "pricing") return (id) => outcomes.bySubmission.get(id)?.pricing ?? null;
+  if (axis === "pricing") {
+    const finishedOn = new Map(outcomes.submissions.map((s) => [s.id, s.created_date_time]));
+    return (id) =>
+      (finishedOn.get(id) ?? "") >= PRICING_3_LAUNCH_DAY
+        ? (outcomes.bySubmission.get(id)?.pricing ?? null)
+        : null;
+  }
   return null;
 }
 
 /*
  * Only genuinely randomised, currently-running splits belong here.
  *
- * EMPTY as of 2026-09-19. The landing test was the last one and it moved to
- * `concluded` below: V2 now serves 100% of traffic, so there is one design
- * and nothing to compare. Every other axis left on 2026-08-31. The forced
- * paywall was REMOVED from the product, so nothing stamps an arm at all. The
- * price test was settled by dropping the higher-priced arm, so every new quote
- * is stamped with the surviving group — which is not the same thing as a
- * randomised arm, and comparing it against the retired one would be comparing
- * two time periods.
- *
- * `tally` is kept and still exported-by-use through the concluded readouts;
- * add an axis back here the day it starts being randomised.
+ * Pricing 3.0 (A3 vs B3, 50/50 by report id) is the one running now, read from its
+ * launch day by `armReader`. The landing test moved to `concluded` below on
+ * 2026-09-19: V2 serves 100% of traffic, so there is one design and nothing to
+ * compare. Every other axis left on 2026-08-31. The forced paywall was REMOVED from
+ * the product, so nothing stamps an arm at all. The 2.x price test was settled by
+ * dropping the higher-priced arm; its A/B rows are retired arms, never pooled into
+ * 3.0's, which is why 3.0 took new letters.
  */
-export const LIVE_AXES: ExperimentAxis[] = [];
+export const LIVE_AXES: ExperimentAxis[] = ["pricing"];
 
 export function liveReadouts(outcomes: ArmOutcomes): ExperimentReadout[] {
   return LIVE_AXES.map((axis) =>

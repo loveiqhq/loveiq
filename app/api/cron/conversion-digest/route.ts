@@ -91,6 +91,7 @@ import {
 } from "@features/admin/server/conversion-digest";
 import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
 import { adCostByDay, adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,29 +131,41 @@ const LANDING_CONCLUDED_ON = "2026-09-19";
 export const MIDWAY_QUESTION_INDEX = 30;
 
 /**
- * The axes worth a verdict. `paywall`, `survey` and `pricing` are deliberately
- * absent — all three experiments are concluded (the paywall in favour of the
- * forced wall and then removed entirely, the survey theme in favour of white on
- * 2026-08-25, the price test in favour of the lower arm on 2026-08-31) and
- * nothing randomises any of them any more, so presenting one as a live test is
- * exactly the mistake the /admin dashboard made before it was corrected.
+ * The axes worth a verdict. `paywall`, `survey` and `landing` are deliberately
+ * absent — all three experiments are concluded (the paywall in favour of the forced
+ * wall and then removed entirely, the survey theme in favour of white on 2026-08-25,
+ * the landing page in favour of V2 on 2026-09-19) and nothing randomises any of them
+ * any more, so presenting one as a live test is exactly the mistake the /admin
+ * dashboard made before it was corrected. A verdict on a test nobody is running is
+ * not a verdict. `pricing` is the Pricing 3.0 test (A3 vs B3), but only once the
+ * whole window lies after its launch (`verdictAxesFor`).
  */
+const VERDICT_AXES: ExperimentAxis[] = ["pricing"];
+
 /**
- * EMPTY as of 2026-09-19 — `landing` was the last live axis and it concluded in
- * favour of V2. A verdict on a test nobody is running is not a verdict.
- * Re-add an axis here the same day it starts being randomised.
+ * The cohorts behind a verdict span the whole window. Before the window lies wholly
+ * inside Pricing 3.0 they include readers who finished under the 2.x prices and were
+ * re-priced at launch, and a verdict pooled over them would call that a result. The
+ * price test is still in *The tests* meanwhile, cut to its launch day.
  */
-const VERDICT_AXES: ExperimentAxis[] = [];
+function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[] {
+  const windowStartDay = new Date(
+    Date.parse(`${dayKey}T00:00:00Z`) - (WINDOW_DAYS - 1) * 86_400_000
+  )
+    .toISOString()
+    .slice(0, 10);
+  return axes.filter((axis) => axis !== "pricing" || windowStartDay >= PRICING_3_LAUNCH_DAY);
+}
 
 /**
  * When report prices last changed. `buildAlerts` uses it to suppress the
  * "conversion dropped" alert around a repricing, where a rate change is expected
  * rather than a regression. Update this on the next price change.
  *
- * 2026-08-31: the higher-priced arm was retired, so every reader moved to the
- * lower price list. That is a repricing for most visitors, hence the new date.
+ * Pricing 3.0: two new products on two new price lists, for every reader who had not
+ * bought yet.
  */
-const PRICING_CUTOVER_ISO = "2026-08-31T00:00:00Z";
+const PRICING_CUTOVER_ISO = `${PRICING_3_LAUNCH_DAY}T00:00:00Z`;
 
 /**
  * Makes each preview's Slack `kind` distinct so notifySlack's 60-second dedup
@@ -409,8 +422,8 @@ interface DigestInput {
   /**
    * Treat these axes as live, retired arms included.
    *
-   * Production omits it and gets VERDICT_AXES, which is EMPTY — `landing`
-   * concluded 2026-09-19 and it was the last one running.
+   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing` alone, since
+   * `landing` concluded on 2026-09-19.
    *
    * ONE field, not an axis list plus a retired-arms flag, because those two can
    * disagree and a message has to have a single answer to "what is running". An
@@ -506,7 +519,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
-    for (const axis of verdictAxes) {
+    for (const axis of verdictAxesFor(dayKey, verdictAxes)) {
       const rows = cohorts
         .filter((c) => c.axis === axis && c.arm !== "unknown")
         .map((c) => ({ arm: c.arm, n: c.n, conversions: c.conversions }));

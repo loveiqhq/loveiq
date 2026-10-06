@@ -1,4 +1,5 @@
 import { restoreScroll } from "./restore-scroll";
+import { getSmoothScroll } from "./smooth-scroll-registry";
 
 /**
  * One reference-counted body-scroll lock, shared by every overlay.
@@ -26,6 +27,14 @@ import { restoreScroll } from "./restore-scroll";
  * `position: fixed` + negative `top` (rather than plain `overflow: hidden`) is
  * kept from the pricing modal — it is the variant that also holds iOS Safari
  * still, and it is now applied uniformly.
+ *
+ * The page's smooth scroll (Lenis, on desktop) is stopped for the lock and let go
+ * again, re-measured, after it (Mark, desktop review 30.09: closing the paywall "scrolls
+ * up weirdly"). Nothing told it about the lock before. While the body is fixed the page
+ * has no height, and Lenis re-measures only 250ms after a resize, so for that long
+ * after the release its limit was ~0 and a wheel tick glided the reader to the top
+ * (14741 → 0 at 1440). And a glide still running when the paywall opened on its own
+ * kept moving the window under the lock.
  */
 
 let depth = 0;
@@ -46,6 +55,8 @@ export function lockBodyScroll(): void {
   depth += 1;
   if (depth > 1) return; // already locked by an outer overlay
 
+  // First, so a glide still running ends here and the reader is kept where it ends.
+  getSmoothScroll()?.stop();
   const scrollY = window.scrollY;
   snapshot = {
     htmlOverflow: document.documentElement.style.overflow,
@@ -86,6 +97,11 @@ export function unlockBodyScroll(): void {
   document.body.style.top = restore.bodyTop;
   document.body.style.width = restore.bodyWidth;
   restoreScroll(restore.scrollY);
+  // Then, with the page back at its height and the reader in place: start reads the
+  // window's scroll, and resize measures the page now rather than 250ms from now.
+  const smooth = getSmoothScroll();
+  smooth?.start();
+  smooth?.resize();
 }
 
 /**

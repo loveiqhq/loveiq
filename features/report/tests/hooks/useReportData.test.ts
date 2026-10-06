@@ -17,6 +17,107 @@ describe("useReportData", () => {
     vi.restoreAllMocks();
   });
 
+  describe("preview mode", () => {
+    /**
+     * `?preview=1` is what makes the report openable on a machine with no
+     * Supabase credentials — staging got its own database on 2026-09-21, so a
+     * developer laptop has none. Checking a layout at 360px needs the page, not
+     * anyone's real answers.
+     */
+    it("asks the preview endpoint, and needs no session or token to do it", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Spark Seeker", percentages: {} }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() =>
+        useReportData({
+          sessionId: null,
+          token: null,
+          preview: true,
+          previewPlan: "full_report",
+          archetypeSlug: "spark-seeker",
+        })
+      );
+
+      await waitFor(() => expect(result.current.status).toBe("success"));
+
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report/preview");
+      expect(url).toContain("archetype=spark-seeker");
+      expect(url).toContain("plan=full_report");
+      // The real endpoint must not be touched: it would 404 without an identifier
+      // anyway, and the point is that nothing about the live path changes.
+      expect(url).not.toContain("/api/report?");
+    });
+
+    it("leaves the real endpoint alone when preview is off", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Emotional Voyeur", percentages: {} }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() => useReportData({ token: "rpt_abcdefghij0123456789" }));
+
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report?");
+      expect(url).not.toContain("/preview");
+    });
+  });
+
+  /**
+   * Final review 26.09: the API built Report V4's four chapters for every request,
+   * so a locked reader of the default report received their copy — the real copy
+   * under the blur since review 26.09 — without ever being shown it. The V4 page now
+   * says it is one, and only then does the API build them.
+   */
+  describe("the V4 page's request", () => {
+    const fetchOk = () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Spark Seeker", percentages: {} }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+      return mockFetch;
+    };
+
+    it("asks for the V4 chapters when the page is V4", async () => {
+      const mockFetch = fetchOk();
+      const { result } = renderHook(() =>
+        useReportData({ token: "rpt_abcdefghij0123456789", v4: true })
+      );
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report?");
+      expect(new URL(url, "http://localhost").searchParams.get("v4")).toBe("1");
+    });
+
+    it("does not ask for them from any other version", async () => {
+      const mockFetch = fetchOk();
+      const { result } = renderHook(() => useReportData({ token: "rpt_abcdefghij0123456789" }));
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(new URL(url, "http://localhost").searchParams.has("v4")).toBe(false);
+    });
+
+    it("says so to the preview endpoint too", async () => {
+      const mockFetch = fetchOk();
+      const { result } = renderHook(() =>
+        useReportData({ sessionId: null, token: null, preview: true, v4: true })
+      );
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report/preview");
+      expect(new URL(url, "http://localhost").searchParams.get("v4")).toBe("1");
+    });
+  });
+
   it("returns a missing status when no report session id exists", () => {
     const { result } = renderHook(() => useReportData({ sessionId: null }));
 

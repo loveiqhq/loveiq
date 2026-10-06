@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup } from "@testing-library/react";
+import { useState } from "react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import OpenResponseQuestion from "@features/survey/ui/questions/OpenResponseQuestion";
 import { makeOpenQuestion } from "@/__tests__/__fixtures__/survey";
+import type { SurveyQuestion } from "@/data/survey-data";
 
 afterEach(cleanup);
 
@@ -92,6 +94,75 @@ describe("OpenResponseQuestion", () => {
       <OpenResponseQuestion question={baseQuestion} value="Current answer" onChange={vi.fn()} />
     );
     expect(screen.getByDisplayValue("Current answer")).toBeInTheDocument();
+  });
+});
+
+describe("OpenResponseQuestion — multi-line content asks (16019, 16020)", () => {
+  const insights = makeOpenQuestion({
+    qId: "16019",
+    question: "Was there a learning or insight that profoundly changed or improved your sexuality?",
+    required: false,
+    placeholder: "Think of something you wish you had understood about your sexuality earlier",
+  });
+
+  function ControlledInsights() {
+    const [value, setValue] = useState("");
+    return <OpenResponseQuestion question={insights} value={value} onChange={setValue} />;
+  }
+
+  it("answers in a multi-line box rather than a single line", () => {
+    render(<OpenResponseQuestion question={insights} value={null} onChange={vi.fn()} />);
+    expect(screen.getByRole("textbox").tagName).toBe("TEXTAREA");
+  });
+
+  it("shows the question's own hint as the grey placeholder in the box", () => {
+    render(<OpenResponseQuestion question={insights} value={null} onChange={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveAttribute(
+      "placeholder",
+      "Think of something you wish you had understood about your sexuality earlier"
+    );
+  });
+
+  it("allows 1,000 characters, the server's cap, and counts them", () => {
+    render(<OpenResponseQuestion question={insights} value="hello" onChange={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveAttribute("maxLength", "1000");
+    expect(screen.getByText("5 / 1000")).toBeInTheDocument();
+  });
+
+  it("keeps what people type out of session replay", () => {
+    // The survey root is deliberately unmasked (owner decision, 10.08), so without this
+    // Clarity would record the free text itself. Fatih, 29.09: mask these two boxes only.
+    render(<OpenResponseQuestion question={insights} value={null} onChange={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveAttribute("data-clarity-mask", "true");
+  });
+
+  it("lets Enter start a new line", async () => {
+    const user = userEvent.setup();
+    render(<ControlledInsights />);
+    await user.type(screen.getByRole("textbox"), "one{Enter}two");
+    expect(screen.getByRole("textbox")).toHaveValue("one\ntwo");
+  });
+
+  it("keeps Enter and the arrow keys away from the survey's Next and Back shortcuts", () => {
+    // SurveyEngine listens on window: Enter or → moves on, ← goes back. Inside a box
+    // those are editing keys.
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    try {
+      render(<OpenResponseQuestion question={insights} value="text" onChange={vi.fn()} />);
+      const box = screen.getByRole("textbox");
+      for (const key of ["Enter", "ArrowLeft", "ArrowRight"]) fireEvent.keyDown(box, { key });
+      expect(onWindowKey).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", onWindowKey);
+    }
+  });
+
+  it("leaves single-line questions exactly as they were", () => {
+    render(<OpenResponseQuestion question={baseQuestion} value="hello" onChange={vi.fn()} />);
+    expect(screen.getByRole("textbox").tagName).toBe("INPUT");
+    expect(screen.getByText("5 / 500")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).not.toHaveAttribute("data-clarity-mask");
   });
 });
 

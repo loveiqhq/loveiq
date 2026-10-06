@@ -1,0 +1,316 @@
+/**
+ * Report V3 chapter structure — Figma 10392:18451.
+ *
+ * V3 is NOT just a restyle of V1: it regroups the report into FIVE parts and
+ * moves chapters between them. Differences from `reportNav.ts`:
+ *   - Attachment Style      Part II  -> Part IV (4.1)
+ *   - Power Orientation     Part III -> Part II (2.5)
+ *   - Libido Challenges     Part IV  -> Part III (3.1)
+ *   - Constellation / Importance / Sexual Stage
+ *                           Part I   -> Part V (5.4 / 5.5 / 5.6)
+ *   - Challenges in Partnership is its own chapter (4.4) instead of rendering
+ *     inline underneath Libido
+ *   - "Arousal, Desire & Pleasure" (3.3) is UN-RETIRED — V1 has it in
+ *     `RETIRED_REPORT_SECTION_IDS`, V3 gives it a numbered chapter
+ *   - Insight Map and "What this means for you" do NOT appear in V3
+ *
+ * Chapter numbers are the designer's own ("Chapter 2.1" … "Chapter 5.6") and
+ * render in the eyebrow above each chapter title.
+ */
+
+export interface ReportV3Chapter {
+  /** Section id in `data/report-general.ts` (the DOM anchor). */
+  id: string;
+  /** "2.1" … "5.6" — rendered as "Chapter 2.1". */
+  number: string;
+  /** Chapter title exactly as Figma types it. */
+  title: string;
+}
+
+export const REPORT_V3_CHAPTERS: readonly ReportV3Chapter[] = [
+  // Part II — How the {archetype} works
+  {
+    id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    number: "2.1",
+    title: "Accelerators & Brakes",
+  },
+  { id: "typical_beliefs", number: "2.2", title: "Typical Beliefs" },
+  { id: "core_insecurities", number: "2.3", title: "Core Insecurities" },
+  { id: "confidence_level", number: "2.4", title: "Confidence Level" },
+  { id: "power_orientation", number: "2.5", title: "Power Orientation" },
+
+  // Part III — The {archetype}'s erotic engine
+  { id: "libido_challenges_in_relationships", number: "3.1", title: "Libido Challenges" },
+  { id: "biochemical_reward_system_dynamics", number: "3.2", title: "Reward System" },
+  {
+    id: "background_know_how_arousal_desire_and_pleasure",
+    number: "3.3",
+    title: "Arousal, Desire & Pleasure",
+  },
+  { id: "arousal_style", number: "3.4", title: "Arousal Style" },
+  { id: "initiation_style", number: "3.5", title: "Initiation Style" },
+  { id: "energy_level", number: "3.6", title: "Energy & Risk" },
+
+  // Part IV — How the {archetype} connects
+  { id: "attachment_style", number: "4.1", title: "Attachment Style" },
+  { id: "love_language", number: "4.2", title: "Love Language" },
+  { id: "curiosity_level", number: "4.3", title: "Curiosity & Relationship Form" },
+  { id: "challenges_in_partnership", number: "4.4", title: "Challenges in Partnership" },
+
+  // Part V — The {archetype}'s edges
+  {
+    id: "typical_sexual_fantasy_amp_practice_tendencies",
+    number: "5.1",
+    title: "Fantasy vs. Reality",
+  },
+  {
+    id: "typical_growth_potentials_for_the_core_archetype",
+    number: "5.2",
+    title: "Growth Potentials",
+  },
+  { id: "recommendations", number: "5.3", title: "Reading Recommendations" },
+  { id: "constellation", number: "5.4", title: "Other Archetypes" },
+  { id: "the_importance_of_sexuality", number: "5.5", title: "Importance of Sexuality" },
+  { id: "sexual_stage", number: "5.6", title: "Your Sexual Stage" },
+];
+
+/** Body order for V3 — Part I's `core_archetype` first, then the 21 chapters. */
+export const REPORT_V3_SECTION_ORDER: readonly string[] = [
+  "core_archetype",
+  ...REPORT_V3_CHAPTERS.map((c) => c.id),
+];
+
+export const REPORT_V3_CHAPTER_BY_ID: ReadonlyMap<string, ReportV3Chapter> = new Map(
+  REPORT_V3_CHAPTERS.map((c) => [c.id, c])
+);
+
+const v3Chapter = (id: string): ReportV3Chapter => {
+  const chapter = REPORT_V3_CHAPTER_BY_ID.get(id);
+  if (!chapter) throw new Error(`reportV3Nav: no V3 chapter "${id}"`);
+  return chapter;
+};
+
+/**
+ * Chapters V4 does not carry. The 24.09 review: "Please take out the Arousal, Desire &
+ * Sexual Stage Chapter" and "Take out the Summary, Sexual Stage, Importance of Sexuality
+ * chapters please". (The Summary it means is V3's closing one; see ReportPage.)
+ */
+const V4_REMOVED_CHAPTERS: ReadonlySet<string> = new Set([
+  "background_know_how_arousal_desire_and_pleasure",
+  "sexual_stage",
+  "the_importance_of_sexuality",
+]);
+
+/**
+ * Report V4 (`?v4=1`) moves THREE chapters to the front of a part:
+ * - Typical Beliefs opens "How your archetype works" — the team's chapter sequence
+ *   (2026-09-14) and Figma 1:849 both put it first.
+ * - Accelerators & Brakes opens "Your erotic engine" — Figma 334:521 (1:982) and the
+ *   Notion content roadmap ("Part IV - Your Erotic Engine", order 1). The frame
+ *   titled it in the singular, and the 24.09 review asked for the "s" everywhere,
+ *   so V4 now carries V3's own plural title.
+ * - Challenges in Partnership opens "How you connect" — the 24.09 review: "Challenges
+ *   in Partnership is the first chapter in Part V". It has no row of its own in
+ *   report-general.ts, so ReportPage renders it in Attachment Style's slot. V4 titles
+ *   it in the plural, as its head 38:1675 does (Fatih's call, 2026-09-24); V3 keeps
+ *   the singular.
+ * (The first two are Fatih's calls of 2026-09-23, as Figma draws them.)
+ *
+ * V3's ids less V4_REMOVED_CHAPTERS, so every filter keyed on the order drops those
+ * three from the page, the nav and the drawer together, and each
+ * part is renumbered in its new order so the V3 eyebrows the other chapters still
+ * carry keep counting up (Libido Challenges reads 3.2). The nav groups chapters by
+ * that number, so the renumbering is also what moves A&B into the erotic-engine
+ * part of the drawer. `?v3=1` keeps REPORT_V3_CHAPTERS exactly as it was. The rest
+ * of Figma's Part III-VI regrouping is not done.
+ */
+const V4_PART_OPENERS: readonly { id: string; part: string; title?: string }[] = [
+  { id: "typical_beliefs", part: "2" },
+  { id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype", part: "3" },
+  { id: "challenges_in_partnership", part: "4", title: "Challenges in Partnerships" },
+];
+
+const partOf = (chapter: ReportV3Chapter): string => chapter.number.split(".")[0]!;
+
+export const REPORT_V4_CHAPTERS: readonly ReportV3Chapter[] = [
+  ...new Set(REPORT_V3_CHAPTERS.map(partOf)),
+].flatMap((part) => {
+  const openers = V4_PART_OPENERS.filter((o) => o.part === part).map((o) => ({
+    ...v3Chapter(o.id),
+    ...(o.title ? { title: o.title } : {}),
+  }));
+  const rest = REPORT_V3_CHAPTERS.filter(
+    (c) =>
+      partOf(c) === part &&
+      !V4_PART_OPENERS.some((o) => o.id === c.id) &&
+      !V4_REMOVED_CHAPTERS.has(c.id)
+  );
+  return [...openers, ...rest].map((c, i) => ({ ...c, number: `${part}.${i + 1}` }));
+});
+
+/** Body order for V4 — V3's, with Typical Beliefs and Accelerators & Brakes each first in its part. */
+export const REPORT_V4_SECTION_ORDER: readonly string[] = [
+  "core_archetype",
+  ...REPORT_V4_CHAPTERS.map((c) => c.id),
+];
+
+export const REPORT_V4_CHAPTER_BY_ID: ReadonlyMap<string, ReportV3Chapter> = new Map(
+  REPORT_V4_CHAPTERS.map((c) => [c.id, c])
+);
+
+export interface ReportV3PartDivider {
+  /** "Part I" … "Part V". */
+  part: string;
+  lead: string;
+  /** Violet italic segment. */
+  accent: string;
+  tail?: string;
+}
+
+/**
+ * Part dividers keyed by the FIRST chapter of each part.
+ *
+ * These titles do NOT interpolate the archetype. They did until 2026-09-05,
+ * when the designer replaced "How the Spark Seeker works" / "The Spark Seeker's
+ * erotic engine" / "…connects" / "…edges" with archetype-neutral wording.
+ * Re-read live from the frames (10392:19333 / 20417 / 21106 / 21684), not from
+ * a cached dump.
+ *
+ * `lead` renders upright, `accent` italic violet — the split is the designer's
+ * and is NOT simply the last word ("Your " + "erotic engine").
+ */
+export const REPORT_V3_PART_DIVIDER_BY_SECTION: Readonly<Record<string, ReportV3PartDivider>> = {
+  core_archetype: { part: "Part I", lead: "Your ", accent: "Constellation" },
+  typical_arousal_accelerators_turn_ons_of_the_core_archetype: {
+    part: "Part II",
+    lead: "How your archetype ",
+    accent: "works",
+  },
+  libido_challenges_in_relationships: {
+    part: "Part III",
+    lead: "Your ",
+    accent: "erotic engine",
+  },
+  attachment_style: { part: "Part IV", lead: "How you ", accent: "connect" },
+  typical_sexual_fantasy_amp_practice_tendencies: {
+    part: "Part V",
+    lead: "Your ",
+    accent: "edges",
+  },
+};
+/**
+ * Sidebar / chapter-drawer navigation for V3, derived from the chapter list so
+ * the nav can never drift from the body order the way V1's did.
+ *
+ * The part LABELS here are generic ("How you work") rather than the frame's
+ * archetype-interpolated headings ("How the Spark Seeker works"): the nav is
+ * rendered by components that have no archetype in scope, and the designer's
+ * links do not include the V3 chapter drawer, so its wording is unspecified.
+ */
+export interface ReportV3NavPart {
+  part: string;
+  label: string;
+  items: { label: string; id: string; gateId?: string }[];
+}
+
+// In the 02.10 sync's heading case (logic/titleCase.ts). Both navs set them in capitals.
+const V3_PART_LABELS: Record<string, string> = {
+  "2": "How Your Archetype Works",
+  "3": "Your Erotic Engine",
+  "4": "How You Connect",
+  "5": "Your Edges",
+};
+
+const V3_PART_NUMERALS: Record<string, string> = {
+  "1": "I",
+  "2": "II",
+  "3": "III",
+  "4": "IV",
+  "5": "V",
+};
+
+const navPartsFrom = (
+  chapters: readonly ReportV3Chapter[],
+  {
+    numerals = V3_PART_NUMERALS,
+    snapshotLabel = "Your Snapshot",
+    welcome,
+    constellationLead,
+  }: {
+    numerals?: Record<string, string>;
+    /** The Snapshot row's label, or null for a report without a Snapshot (V4). */
+    snapshotLabel?: string | null;
+    /** A part listed ahead of the constellation's (V4's Part 1). */
+    welcome?: ReportV3NavPart;
+    /** A row listed above Core Archetype (V4's top three). */
+    constellationLead?: ReportV3NavPart["items"][number];
+  } = {}
+): readonly ReportV3NavPart[] => [
+  ...(welcome ? [welcome] : []),
+  {
+    part: `Part ${numerals["1"]}`,
+    label: "Your Constellation",
+    items: [
+      ...(constellationLead ? [constellationLead] : []),
+      { label: "Core Archetype", id: "core_archetype" },
+      ...(snapshotLabel === null
+        ? []
+        : [{ label: snapshotLabel, id: "snapshot", gateId: "core_archetype" }]),
+    ],
+  },
+  ...["2", "3", "4", "5"].map((p) => ({
+    part: `Part ${numerals[p]}`,
+    label: V3_PART_LABELS[p] as string,
+    items: chapters
+      .filter((c) => c.number.startsWith(`${p}.`))
+      .map((c) => ({
+        label: c.title,
+        id: c.id,
+        // Partnership has no row of its own in report-general.ts; it shares
+        // Libido's gate, exactly as it does in V1.
+        ...(c.id === "challenges_in_partnership"
+          ? { gateId: "libido_challenges_in_relationships" }
+          : {}),
+      })),
+  })),
+];
+
+export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V3_CHAPTERS);
+
+/**
+ * The same nav in V4's body order, so the drawer lists the moved chapters first too.
+ *
+ * Mark's finalised nav, 961:333 (29.09, 1945094456, "Please also use these changes for
+ * Desktop"): it opens on Part 1 · Welcome, with the Introduction and "What shaped this
+ * report" (V4Part1, Figma 1:175 / 1:185), and numbers the parts 1 to 6 as the part
+ * headings do ("Parts now dont have a roman number"). It lists no Snapshot: since 30.09
+ * its four chapters are the pre-report wizard's map (Figma 1071:2092), and Part 2 runs
+ * the Archetype card into the Summary (1:483).
+ */
+/**
+ * Where Part 2's first row lands: the top three (V4TopThreeSection, 1:493). Marcus,
+ * 01.10: "any reason this part only has one chapter? And it's a bit that it doesn't link
+ * to the top of the part right?" Mark's 961:333 (01.10) adds the row above Core
+ * Archetype. After the 02.10 sync he named it as the section is titled (1:493), "3
+ * Highest Scoring Archetypes".
+ */
+export const REPORT_V4_TOP_THREE_ANCHOR = "top_archetypes";
+
+export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
+  numerals: { "1": "2", "2": "3", "3": "4", "4": "5", "5": "6" },
+  snapshotLabel: null,
+  constellationLead: { label: "3 Highest Scoring Archetypes", id: REPORT_V4_TOP_THREE_ANCHOR },
+  welcome: {
+    part: "Part 1",
+    label: "Welcome",
+    items: [
+      { label: "Introduction", id: "introduction" },
+      { label: "What Shaped This Report", id: "what_shaped_this_report" },
+    ],
+  },
+});
+
+/** V4's nav anchors in nav order: what the scroll-spy walks under `?v4=1`. */
+export const REPORT_V4_NAV_IDS: readonly string[] = REPORT_V4_NAV_PARTS.flatMap((part) =>
+  part.items.map((item) => item.id)
+);

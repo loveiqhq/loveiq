@@ -37,7 +37,7 @@ import {
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import { SUMMARY_BLOCK_ID } from "@features/report/server/contentGating";
 import {
   doesAccessPlanCover,
@@ -90,7 +90,7 @@ export interface ReportExperienceV1Props {
   ownerToken: string | null;
   percentages: Record<string, number>;
   pricingTargetArchetype: string | null;
-  pricingVariant: "default" | "offer" | "share";
+  pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -100,14 +100,17 @@ export interface ReportExperienceV1Props {
     userName: string;
   };
   primaryArchetype: string;
-  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  pricingQuotes: ReportPriceQuotes | null;
   archetypeContent: Record<string, Record<string, string>>;
   practiceTendencies: Record<string, ReportPracticeTendencyContentForUser>;
   ranking: string[];
   reportDate: string;
   resolvedSections: ReturnType<typeof resolveReportSections>;
   snapshot: SnapshotContent;
-  submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
+  /** The thumb: stores the rating alone (review 01.10). Resolves to whether it was stored. */
+  rateSection: (sectionId: string, feedback: "up" | "down") => Promise<boolean>;
+  /** Send: the rating with its optional message. Resolves to whether it was stored. */
+  submitFeedback: (sectionId: string, payload: FeedbackPayload) => Promise<boolean>;
   submitted: Record<string, boolean>;
   theme: ReportTheme;
   unlockedArchetypes: Set<string>;
@@ -147,6 +150,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   ranking,
   resolvedSections,
   snapshot,
+  rateSection,
   submitFeedback,
   submitted,
   theme,
@@ -234,6 +238,11 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
       section.accessTier === "essentials" || section.accessTier === "full_report"
         ? section.accessTier
         : "full_report";
+    // A recipient's click is nobody's intent to pay: only the owner can.
+    if (viewMode === "shared") {
+      onOpenPricingModal(null);
+      return;
+    }
     trackLockIconClicked({
       section_id: section.id,
       archetype: viewArchetype || null,
@@ -379,7 +388,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
           }}
           onSectionClick={handleSectionClick}
           onShareClick={
-            viewMode === "owner" && ownerToken
+            viewMode === "owner"
               ? () => {
                   trackReportShareOpened({ source: "drawer" });
                   onOpenShareModal();
@@ -405,7 +414,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
               }}
               onSectionClick={handleSectionClick}
               onShareClick={
-                viewMode === "owner" && ownerToken
+                viewMode === "owner"
                   ? () => {
                       trackReportShareOpened({ source: "sidebar" });
                       onOpenShareModal();
@@ -430,6 +439,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
                     sectionTitle={title}
                     value={feedbacks[section.id] ?? null}
                     isSent={submitted[section.id] ?? false}
+                    onRate={(feedback) => rateSection(section.id, feedback)}
                     onFeedback={(payload) => submitFeedback(section.id, payload)}
                   />
                 ) : null;
@@ -681,13 +691,13 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
         primaryArchetype={primaryArchetype}
         variant={pricingVariant}
       />
-      {viewMode === "owner" && ownerToken ? (
+      {/* The owner's even with no token, which a ?preview=1 page never has: sharing then
+       * says on Send that nothing went, where the sidebar used to show a dead button. */}
+      {viewMode === "owner" ? (
         <ShareReportModal
           open={isShareModalOpen}
           onClose={onCloseShareModal}
           ownerToken={ownerToken}
-          initialPlan={accessPlan}
-          onUpgrade={onOpenPricingModal}
           returnFocusRef={mainContentRef}
         />
       ) : null}

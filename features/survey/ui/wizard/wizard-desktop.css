@@ -1,0 +1,255 @@
+/*
+ * The pre-report wizard on a desktop, from 1024px (Fatih, 01.10: "we do need to scale
+ * the Wizard properly for the desktop version").
+ *
+ * No desktop frame exists for the 30.09 wizard. This takes the system of Mark's own
+ * desktop wizard frames (Figma 1:4454 / 1:4407, 1440x1024):
+ *   - a 1120 content column, 160 in at 1440;
+ *   - Lora Medium 64/76.8 headings;
+ *   - Plus Jakarta 24/38.4 copy in a 672 measure;
+ *   - the 448 step bar;
+ *   - Back at the far left, CONTINUE at the far right;
+ *   - SKIP INTRO on one line, top right.
+ * A slide with a visual (the research tiles, the guarantee) sets it beside its text:
+ * stacked under it, slide 1 ran to ~1080px, past a 900px-tall screen. Sizes ease down
+ * with the window's height so a laptop does not scroll.
+ *
+ * The phone's own classes are untouched: every rule here is inside this one query, on
+ * the hooks PreReportWizard names (wz-*), and outweighs the utility it overrides.
+ */
+@media (min-width: 1024px) {
+  /* The frame and its chrome (1:4461: 1440 wide, 160 padding). */
+  .wz-root .wz-frame {
+    max-width: none;
+    width: min(1120px, 100% - 128px);
+  }
+  /* The column clips sideways. 64 out on each side (the frame leaves 128), it clears
+   * the icons' glow and the drawer's shadow, which a clip flush with the text cut. A phone's
+   * holds still (its slides are scaled to fit); this one scrolls on a window too short. */
+  .wz-root .wz-scroll {
+    margin: 0 -64px;
+    overflow-y: auto;
+    padding: clamp(24px, 5vh, 53px) 64px;
+  }
+  /* 1:4468 — one line at the content's right edge. */
+  .wz-root .wz-skip {
+    right: 64px;
+    top: clamp(24px, 5vh, 53px);
+    white-space: nowrap;
+    width: auto;
+  }
+  /* The slide fills what the chrome leaves and sits in its middle (1:4471, centred). The
+   * phone's scaled 345 x 640 box steps out of the layout: a desktop sets its own sizes. */
+  .wz-root .wz-slot {
+    flex: 1 0 auto;
+    height: auto;
+    justify-content: center;
+    width: 100%;
+  }
+  .wz-root .wz-fit-box,
+  .wz-root .wz-fit {
+    display: contents;
+  }
+
+  /* A text slide (1:4476): the icon (the phone's 64 since Mark's 01.10), 40 to the
+   * heading, 32 to the copy. */
+  .wz-root .wz-text {
+    padding-top: 0;
+  }
+  .wz-root .wz-heading {
+    font-size: clamp(40px, min(4.45vw, 7vh), 64px);
+    line-height: 1.2;
+    margin-bottom: 0;
+    max-width: 848px;
+    padding-top: clamp(24px, 4.4vh, 40px);
+  }
+  .wz-root .wz-body {
+    padding-top: clamp(20px, 3.5vh, 32px);
+  }
+  .wz-root .wz-copy {
+    font-size: clamp(18px, min(1.67vw, 2.7vh), 24px);
+    line-height: 1.6;
+    max-width: 672px;
+  }
+  /* The phone's breaks are for its 294 column; the measure sets the lines here. */
+  .wz-root .wz-copy br {
+    display: none;
+  }
+  .wz-root .wz-copy p + p {
+    margin-top: 1.6em;
+  }
+
+  /* A slide with a visual: the text in the first column, the visual beside it, never
+   * under 320 (at 1024 it would be 235, the research cards four lines deep). The visual
+   * spans every row, and a taller one is taken up by the 1fr above and below the text's
+   * three, so the text sits centred against it rather than pulled apart. */
+  .wz-root .wz-text.has-extra {
+    align-items: center;
+    column-gap: clamp(48px, 6vw, 96px);
+    display: grid;
+    grid-template-columns: minmax(0, 600px) minmax(320px, 1fr);
+    grid-template-rows: 1fr auto auto auto 1fr;
+  }
+  .wz-root .wz-text.has-extra > * {
+    grid-column: 1;
+  }
+  .wz-root .wz-text.has-extra > .wz-icon {
+    grid-row: 2;
+  }
+  .wz-root .wz-text.has-extra > .wz-heading {
+    grid-row: 3;
+  }
+  .wz-root .wz-text.has-extra > .wz-body {
+    grid-row: 4;
+  }
+  .wz-root .wz-text.has-extra > .wz-extra {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    padding-top: 0;
+  }
+
+  /* Slide 1's research tiles, stacked as wide cards: the icon, then the title over its
+   * line, at a desktop size. */
+  .wz-root .wz-proof {
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wz-root .wz-proof-card {
+    align-items: center;
+    border-radius: 18px;
+    flex-direction: row;
+    gap: 20px;
+    padding: 20px 24px;
+    text-align: left;
+  }
+  .wz-root .wz-proof-icon {
+    border-radius: 12px;
+    flex-shrink: 0;
+    height: 48px;
+    width: 48px;
+  }
+  .wz-root .wz-proof-icon img {
+    height: 26px;
+    width: 26px;
+  }
+  .wz-root .wz-proof-text {
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .wz-root .wz-proof-title {
+    font-size: 18px;
+    line-height: 24px;
+  }
+  .wz-root .wz-proof-body {
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  /* Slide 3's guarantee, at the same scale. */
+  .wz-root .wz-guarantee {
+    border-radius: 18px;
+    gap: 20px;
+    padding: 24px 28px;
+  }
+  .wz-root .wz-guarantee-icon {
+    height: 48px;
+    width: 48px;
+  }
+  .wz-root .wz-guarantee-icon img {
+    height: 37px;
+    width: 32px;
+  }
+  .wz-root .wz-guarantee-title {
+    font-size: 20px;
+    line-height: 28px;
+  }
+  .wz-root .wz-guarantee-body {
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  /* Slide 2's map. The phone draws one 345 x 640 illustration; scaled whole it could
+   * not grow here, the drawer's height being most of a window's. So its parts take a
+   * grid: the drawer at the left, as the report's own sidebar sits, and beside it the
+   * pitch or the tiles, both in one cell so a step never changes the slide's height.
+   * The drawer and the tiles zoom to the height the chrome leaves (mapZoom), the pitch
+   * takes the text slides' type. */
+  .wz-root .wz-canvas {
+    align-items: center;
+    column-gap: clamp(40px, 5vw, 80px);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    height: auto;
+    position: relative;
+    width: 100%;
+  }
+  .wz-root .wz-drawer {
+    grid-column: 1;
+    grid-row: 1;
+    position: relative;
+    zoom: var(--wz-drawer-zoom, 1);
+  }
+  .wz-root .wz-pitch,
+  .wz-root .wz-tiles {
+    grid-column: 2;
+    grid-row: 1;
+    left: auto;
+    position: relative;
+    top: auto;
+  }
+  .wz-root .wz-tiles {
+    justify-self: start;
+    zoom: var(--wz-tiles-zoom, 1);
+  }
+  .wz-root .wz-pitch {
+    gap: clamp(28px, 4.5vh, 48px);
+    height: auto;
+    max-width: 672px;
+    width: auto;
+  }
+  .wz-root .wz-pitch-title {
+    line-height: 1.2;
+  }
+  .wz-root .wz-pitch-big {
+    font-size: clamp(40px, min(4.45vw, 7vh), 64px);
+  }
+  .wz-root .wz-pitch-small {
+    font-size: clamp(28px, min(3vw, 4.8vh), 44px);
+  }
+  .wz-root .wz-pitch-item {
+    gap: 6px;
+    padding-top: clamp(20px, 3vh, 32px);
+  }
+  .wz-root .wz-pitch-badge {
+    border-radius: 6px;
+    font-size: 12px;
+    letter-spacing: 0.75px;
+    line-height: 16px;
+    padding: 3px 8px;
+  }
+  .wz-root .wz-pitch-icon {
+    height: 26px;
+    width: 26px;
+  }
+  .wz-root .wz-pitch-copy {
+    font-size: clamp(18px, min(1.67vw, 2.7vh), 24px);
+    line-height: 1.6;
+  }
+  /* The pitch's arrows at the tiles' size, so they do not change between steps. */
+  .wz-root .wz-pitch .wz-controls {
+    zoom: var(--wz-tiles-zoom, 1);
+  }
+
+  /* The buttons and the step bar (1:4481 drew the bar above them, 48 between; since
+   * Mark's 01.10 phone round the bar sits 24 under CONTINUE, so here too): 48 under the
+   * slide; Back at the left, CONTINUE at the right, alone or not (1:4407 draws no Back). */
+  .wz-root .wz-footer {
+    padding-top: clamp(24px, 4.5vh, 48px);
+  }
+  .wz-root .wz-nav {
+    justify-content: space-between;
+  }
+  .wz-root .wz-nav > .wz-continue:only-child {
+    margin-left: auto;
+  }
+}

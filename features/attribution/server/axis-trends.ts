@@ -16,16 +16,17 @@
  * with no code change and nobody having to remember.
  *
  * `paywall` is absent by construction: not in CHART_AXES, and the RPC does not
- * emit it either. `survey` and `pricing` are absent differently and the
- * distinction is worth keeping — both ARE still emitted by the RPC, and are
- * dropped purely because CHART_AXES does not list them. Extra rows for an
- * unlisted axis are filtered by `rowsForAxis`, so they cost nothing; do not take
- * the paywall sentence to mean an unlisted axis cannot arrive in the data. All
- * three experiments concluded, so a chart would be inventing a test that is not
- * running.
+ * emit it either. `survey` is absent differently and the distinction is worth
+ * keeping — it IS still emitted by the RPC, and is dropped purely because
+ * CHART_AXES does not list it. Extra rows for an unlisted axis are filtered by
+ * `rowsForAxis`, so they cost nothing; do not take the paywall sentence to mean an
+ * unlisted axis cannot arrive in the data. Both of those experiments concluded, as
+ * `landing` did on 2026-09-19, so a chart would be inventing a test that is not
+ * running. `pricing` is back since Pricing 3.0 (A3 vs B3), on its own window.
  */
 
 import { computeRate } from "@features/admin/server/digest-metrics";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 import {
   armLabel,
   AXIS_TITLES,
@@ -45,11 +46,11 @@ import {
  * landing axes — a keys() loop over that is exactly how a dead experiment gets
  * charted.
  *
- * EMPTY as of 2026-09-19: `landing` was the last live axis and it concluded in
- * favour of V2. This is the axis-level retirement idiom, not the arm-level one,
- * and the difference matters — retiring only `white_prev` would leave a
- * one-armed "test" still being charted and still being given a verdict, which
- * is a dead experiment reported as a live one.
+ * `landing` concluded on 2026-09-19 in favour of V2 and left this list (the
+ * axis-level retirement idiom, not the arm-level one: retiring only `white_prev`
+ * would leave a one-armed "test" still being charted and given a verdict).
+ * `pricing` is back since Pricing 3.0 (A3 vs B3), cut at its launch day by
+ * AXIS_VALID_FROM below.
  *
  * Nothing else needs changing to bring an axis back: add it here, give its arms
  * labels + colours in labels.ts, and set its AXIS_VALID_FROM below.
@@ -58,7 +59,7 @@ import {
  * empty list is expressible — `[] as const` would make ChartAxis `never` and
  * every signature below unusable.
  */
-export const CHART_AXES: readonly ExperimentAxis[] = [];
+export const CHART_AXES: readonly ExperimentAxis[] = ["pricing"];
 export type ChartAxis = ExperimentAxis;
 
 export interface AxisFunnelRow {
@@ -86,6 +87,12 @@ export const AXIS_VALID_FROM: Partial<Record<ChartAxis, { day: string; why: stri
   landing: {
     day: "2026-08-21",
     why: "the current two versions only started running against each other on 21 Aug",
+  },
+  // Pricing 3.0. A3/B3 are new arm names, but the launch re-priced every reader who
+  // had not bought yet, so readers who finished before it carry a 3.0 arm too.
+  pricing: {
+    day: PRICING_3_LAUNCH_DAY,
+    why: "Pricing 3.0's two price lists only started on its launch day",
   },
 };
 
@@ -317,10 +324,10 @@ export function buildAxisTrends(
    * wants and what the "never charts a concluded experiment" guard checks.
    *
    * Overridable because the charting logic and the live list are two different
-   * things to test. CHART_AXES is empty today, and without this every test of
-   * the gates below — history length, arm thinness, one-armed axes, the
-   * significance wording — would have had nothing to iterate and would have
-   * passed by iterating nothing. Ten tests going green by measuring nothing is
+   * things to test. CHART_AXES was empty from 2026-09-19 until Pricing 3.0, and
+   * without this every test of the gates below — history length, arm thinness,
+   * one-armed axes, the significance wording — would have had nothing to iterate
+   * and would have passed by iterating nothing. Ten tests going green by measuring nothing is
    * worse than ten failing ones.
    */
   axes: readonly ExperimentAxis[] = CHART_AXES,

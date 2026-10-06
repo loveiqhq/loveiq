@@ -1,9 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
+import { optionGroupsFor } from "../features/survey/optionGroups";
 import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
-import { orderEmailLast, orderedOptions } from "../features/survey/ui/questionOrder";
+import { orderAskedQuestions, orderedOptions } from "../features/survey/ui/questionOrder";
 import { instantScroll } from "./fixtures/instant-scroll";
+import { pinSurveySession } from "./surveyArm";
+import { openFirstCategory, renderedGroupedOptions } from "./surveyGroups";
 
 /**
  * Walks the whole survey in a real browser and checks the three behaviours the survey
@@ -22,7 +25,18 @@ import { instantScroll } from "./fixtures/instant-scroll";
  * endpoint is intercepted below and answered locally; the run never reaches a submission.
  */
 
-const ASKED: SurveyQuestion[] = orderEmailLast(surveyQuestions).filter((q) => !isHidden(q.qId));
+/**
+ * The arm this walk runs in. C13 picks the question order from the session id, so without
+ * pinning it this spec would get the variant opening in about half its runs and fail at
+ * question three with a failure that does not reproduce. Control is the right arm here:
+ * what this spec covers (option randomisation, selection caps, the priced question) is
+ * identical in both, and `survey-c13-opening.spec.ts` walks the variant opening.
+ */
+const ARM = "control" as const;
+
+const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM).filter(
+  (q) => !isHidden(q.qId)
+);
 
 /**
  * The caps the work order specifies, written out rather than read from `maxSelections`.
@@ -103,6 +117,7 @@ async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: stri
       await page.getByRole("radio").first().click();
       break;
     case "multiple":
+      await openFirstCategory(page, q); // C9's topics sit under closed categories
       await page.getByRole("checkbox").first().click();
       break;
     case "country":
@@ -129,6 +144,7 @@ test.describe("Survey — the questions the work order changed", () => {
   }) => {
     test.setTimeout(180_000);
     await blockWrites(page);
+    const pinnedSessionId = await pinSurveySession(page, ARM);
     await enterEngine(page);
 
     // Read after the engine has mounted: the id is created lazily on first use.
@@ -139,6 +155,10 @@ test.describe("Survey — the questions the work order changed", () => {
       window.sessionStorage.getItem("loveiq-survey-session")
     );
     expect(sessionId, "survey session id must exist — the shuffle is seeded from it").toBeTruthy();
+    // The pin is what makes both the arm and the option shuffle deterministic. If it
+    // silently did not take, the engine minted its own id and this walk is back to a coin
+    // flip — assert it rather than discover it as an intermittent failure later.
+    expect(sessionId, "pinSurveySession must be the id the engine used").toBe(pinnedSessionId);
 
     const shuffledSomewhere: string[] = [];
     let checkedCaps = 0;
@@ -158,8 +178,11 @@ test.describe("Survey — the questions the work order changed", () => {
       if (RANDOMISE_QIDS.has(q.qId)) {
         // C0. The order on screen must equal the order `useSubmitSurvey` recomputes for
         // this session — that equality IS the feature. If they can differ, the recorded
-        // order is a fiction and the rankings built on it are worse than no data.
-        const shown = await renderedOptions(page, "checkbox");
+        // order is a fiction and the rankings built on it are worse than no data. C9 shows
+        // its topics category by category, so it is read by opening each one in turn.
+        const shown = optionGroupsFor(q)
+          ? await renderedGroupedOptions(page, q)
+          : await renderedOptions(page, "checkbox");
         const expected = orderedOptions(q, sessionId!);
         expect(shown.length, `${q.qId} option count`).toBe(expected.length);
         shown.forEach((label, idx) => {
@@ -282,15 +305,37 @@ test.describe("Survey — a browser that refuses storage", () => {
     expect(threw, "the storage refusal did not take effect in this engine").toBe(true);
 
     await enterEngine(page);
+    // With storage refused the engine mints its session id in memory, so the test cannot
+    // pin the C13 arm: either opening order may come. Answer whichever question is on
+    // screen, by its heading, and require the next one to arrive.
+    const known = new Map(surveyQuestions.map((q) => [q.question, q]));
+    const onScreen = async () => {
+      const heading = page
+        .getByRole("heading", { level: 1 })
+        .or(page.getByRole("heading", { level: 2 }));
+      await expect
+        .poll(
+          async () => {
+            for (const text of await heading.allTextContents())
+              if (known.has(text.trim())) return text.trim();
+            return null;
+          },
+          { timeout: 10_000 }
+        )
+        .not.toBeNull();
+      for (const text of await heading.allTextContents())
+        if (known.has(text.trim())) return known.get(text.trim())!;
+      throw new Error("no known question on screen");
+    };
     for (let i = 0; i < 2; i += 1) {
-      await expect(
-        page.getByRole("heading", { name: ASKED[i]!.question, exact: true })
-      ).toBeVisible({ timeout: 10_000 });
-      await answerAndAdvance(page, ASKED[i]!, ASKED[i + 1]!.question);
+      const q = await onScreen();
+      await answerAndAdvance(page, q, null);
+      await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
+      await expect(page.getByRole("heading", { name: q.question, exact: true })).toBeHidden({
+        timeout: 12_000,
+      });
     }
-    await expect(
-      page.getByRole("heading", { name: ASKED[2]!.question, exact: true })
-    ).toBeVisible();
+    await onScreen();
     expect(ours, "our own code threw with storage refused").toEqual([]);
   });
 });

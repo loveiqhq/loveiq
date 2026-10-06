@@ -18,18 +18,24 @@
  * Questions whose answer options are shown in a randomised order, with that order
  * recorded against the submission (`survey_submission.option_order`).
  *
- * Why these three: each is a multi-select whose ANSWER IS A RANKING — which changes
- * matter most, what is already part of your life, what is getting in the way. A fixed
- * render order makes the share an option receives inseparable from its position, so the
- * ranking cannot be published. Scale and open questions are excluded because they have
- * no option order to bias, and single-choice questions whose options are an ordered
- * scale must keep their sequence.
+ * Why these four: each is a multi-select whose ANSWER IS A RANKING — which changes
+ * matter most, what is already part of your life, what is getting in the way, and which
+ * topics beyond sex people want to understand. A fixed render order makes the share an
+ * option receives inseparable from its position, so the ranking cannot be published.
+ *
+ * `16016` needs this more than the other three, not less: it offers 53 options against
+ * their handful, and position bias grows with list length. It is shown under the thirteen
+ * collapsible category headings the teardown specified (`optionGroups.ts`), and both levels
+ * are randomised: the category order and the topics inside each category. Folding a list
+ * into headings does not remove position bias, it moves it to the first heading. Scale and
+ * open questions are excluded because they have no option order to bias, and single-choice
+ * questions whose options are an ordered scale must keep their sequence.
  *
  * Deliberately NOT randomised: any question whose options carry a fixed reading order —
  * price ladders, for instance, where a "none of these" opt-out has to stay last for the
  * answer to mean anything.
  */
-export const RANDOMISE_QIDS: ReadonlySet<string> = new Set(["16001", "16011", "16014"]);
+export const RANDOMISE_QIDS: ReadonlySet<string> = new Set(["16001", "16011", "16014", "16016"]);
 
 /** Whether this question's options should be shown in a randomised order. */
 export function isRandomised(qId: string): boolean {
@@ -61,4 +67,21 @@ export const HIDDEN_QIDS: ReadonlySet<string> = new Set(["15011"]);
 /** Whether this question is still defined but no longer asked. */
 export function isHidden(qId: string): boolean {
   return HIDDEN_QIDS.has(qId);
+}
+
+/**
+ * Open questions answered in a multi-line box instead of a single-line input.
+ *
+ * `16019` and `16020` are Mark's content asks (29.09, worded by Marcus 30.09): a learning or
+ * insight that changed or improved someone's sexuality, and the books, articles, blogs or
+ * YouTube channels that helped them. Both invite a list or a few sentences, which a single line would clip.
+ *
+ * A presentation flag, so it lives here with the others rather than in a CSV column the
+ * next upstream export could drop.
+ */
+export const MULTILINE_QIDS: ReadonlySet<string> = new Set(["16019", "16020"]);
+
+/** Whether this open question is answered in a multi-line box. */
+export function isMultiline(qId: string): boolean {
+  return MULTILINE_QIDS.has(qId);
 }

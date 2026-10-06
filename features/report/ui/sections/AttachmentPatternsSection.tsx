@@ -90,14 +90,19 @@ const ATTACHMENT_ROW_LABELS_BY_FAMILY: Record<string, { row2: string; row3: stri
   avoidant: { row2: "When closeness stays constant", row3: "After space is restored" },
 };
 
-/** The five universal attachment patterns (Figma 8439:653–739). Not per-archetype. */
-const ATTACHMENT_FAMILY_CARDS: {
+/**
+ * The five universal attachment patterns (Figma 8439:653–739). Not per-archetype.
+ * Exported, with their title, for V4's "Go deeper & learn more" card, which carries
+ * this panel's copy since review 27.09 (v4CardsFromV2).
+ */
+export const ATTACHMENT_PATTERNS_TITLE = "Common Attachment Style Patterns Across Archetypes";
+export const ATTACHMENT_FAMILY_CARDS: {
   title: string;
   body: string;
   chips: { label: string; color: string }[];
 }[] = [
   {
-    title: "Secure attachment",
+    title: "Secure Attachment",
     body: "These archetypes generally feel safe with intimacy and autonomy. They can enjoy closeness without losing themselves and tolerate distance without panic. Desire is relatively stable and flexible across relationship phases.",
     chips: [
       { label: "Sensual Connector", color: "#e57373" },
@@ -108,12 +113,12 @@ const ATTACHMENT_FAMILY_CARDS: {
     ],
   },
   {
-    title: "Anxious attachment",
+    title: "Anxious Attachment",
     body: "These archetypes are highly attuned to signs of closeness or rejection. Desire is often intertwined with reassurance, validation, and fear of loss. Sexuality can become a way to secure connection or soothe anxiety.",
     chips: [{ label: "Tender Devotee", color: "#e7b3c2" }],
   },
   {
-    title: "Avoidant attachment",
+    title: "Avoidant Attachment",
     body: "These archetypes value autonomy and emotional self-containment. They may experience closeness as threatening or overwhelming. Desire often activates through distance, novelty, or control rather than sustained emotional intimacy.",
     chips: [
       { label: "Spark Seeker", color: "#ff6a3d" },
@@ -124,7 +129,7 @@ const ATTACHMENT_FAMILY_CARDS: {
     ],
   },
   {
-    title: "Disorganized or mixed",
+    title: "Disorganized or Mixed",
     body: "These archetypes experience closeness as both desired and threatening. Desire may surge and collapse unpredictably. Sexuality can oscillate between craving connection and needing escape, intensity, or control.",
     chips: [
       { label: "Explorer of Edges", color: "#ff2e63" },
@@ -132,7 +137,7 @@ const ATTACHMENT_FAMILY_CARDS: {
     ],
   },
   {
-    title: "Contextual / adaptive",
+    title: "Contextual / Adaptive",
     body: "Some archetypes shift attachment expression depending on partner, power dynamics, or relational safety. Their attachment is less fixed and more situationally activated.",
     chips: [
       { label: "Spark Seeker", color: "#ff6a3d" },
@@ -375,9 +380,7 @@ const AttachmentPatternsSection: FC<Props> = ({
      exactly what the locked-state test guards against.  */
   const patternsBlock = (
     <div className="report-attachment__patterns">
-      <h3 className="report-attachment__patterns-title">
-        Common Attachment Style Patterns Across Archetypes
-      </h3>
+      <h3 className="report-attachment__patterns-title">{ATTACHMENT_PATTERNS_TITLE}</h3>
       <div className="report-attachment__patterns-grid">
         {ATTACHMENT_FAMILY_CARDS.map((card) => (
           <div key={card.title} className="report-attachment-family">

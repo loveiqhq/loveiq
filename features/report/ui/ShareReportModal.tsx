@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type FC, type FormEvent, type MutableRefObject } from "react";
 import posthog from "posthog-js";
-import { canSharePlan } from "@features/report/server/planAccess";
 import { useReportShares } from "./hooks/useReportShares";
 import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 
@@ -10,13 +9,6 @@ interface Props {
   open: boolean;
   onClose: () => void;
   ownerToken: string | null;
-  /**
-   * Optional plan hint from the parent (e.g. /api/report response). Lets the
-   * modal skip the "Loading…" flash while the share-specific GET resolves —
-   * locked-vs-active state is determined synchronously on first render.
-   */
-  initialPlan?: "essentials" | "full_report" | "core" | "all_reports" | null;
-  onUpgrade?: () => void;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
 }
 
@@ -30,20 +22,15 @@ I thought you might find it interesting, maybe even helpful in understanding me 
 
 P.S. I think you should also try the test on loveiq.org`;
 
-const ShareReportModal: FC<Props> = ({
-  open,
-  onClose,
-  ownerToken,
-  initialPlan,
-  onUpgrade,
-  returnFocusRef,
-}) => {
+/** SHARE_SEAT_LIMIT in planAccess.ts: every reader's, paid or not (Marcus, 2026-10-05). */
+const FREE_SHARE_SEATS = 2;
+
+const ShareReportModal: FC<Props> = ({ open, onClose, ownerToken, returnFocusRef }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const didOpenRef = useRef(false);
-  const { plan, seatLimit, seatsUsed, loading, submitting, error, add, refresh } = useReportShares(
-    open ? ownerToken : null,
-    initialPlan ?? undefined
+  const { seatLimit, seatsUsed, submitting, error, add, refresh } = useReportShares(
+    open ? ownerToken : null
   );
 
   const [phase, setPhase] = useState<"form" | "sent">("form");
@@ -52,10 +39,11 @@ const ShareReportModal: FC<Props> = ({
   const [lastSentEmail, setLastSentEmail] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
-  const isLocked = !canSharePlan(plan);
-  const seatsRemaining = Math.max(0, seatLimit - seatsUsed);
-  const sendDisabled =
-    isLocked || seatsRemaining <= 0 || submitting || !emailInput.trim().includes("@");
+  // The server's answer brings the seats (0 until then). Without a token (?preview=1) none
+  // comes, so the form shows the two every reader has and Send says that nothing went.
+  const shownSeatLimit = ownerToken ? seatLimit : FREE_SHARE_SEATS;
+  const seatsRemaining = Math.max(0, shownSeatLimit - seatsUsed);
+  const sendDisabled = seatsRemaining <= 0 || submitting || !emailInput.trim().includes("@");
 
   useEffect(() => {
     if (open) {
@@ -189,7 +177,7 @@ const ShareReportModal: FC<Props> = ({
             <path d="M11.4534 18.0133L20.56 23.32" />
             <path d="M20.5467 8.68005L11.4534 13.9867" />
           </svg>
-          <span>They&apos;ll see your complete unlocked report</span>
+          <span>They&apos;ll see your report as you see it</span>
         </li>
       </ul>
     </div>
@@ -236,7 +224,7 @@ const ShareReportModal: FC<Props> = ({
           Share Your Report
         </h1>
         <p className="report-share-modal__subtitle">
-          Grant someone you trust access to your complete personalized report
+          Grant someone you trust access to your personalized report
         </p>
       </div>
 
@@ -287,7 +275,8 @@ const ShareReportModal: FC<Props> = ({
             </li>
           </ul>
           <p className="report-share-modal__privacy-warn">
-            The person you share with will see everything you&rsquo;ve unlocked in your report.
+            The person you share with sees your report as you do, including anything you unlock
+            later.
           </p>
         </div>
       </div>
@@ -301,11 +290,11 @@ const ShareReportModal: FC<Props> = ({
         </div>
         <div className="report-share-modal__seat-copy">
           <p className="report-share-modal__seat-title">Count of your report sharing</p>
-          <p className="report-share-modal__seat-sub">This is limited by your plan</p>
+          <p className="report-share-modal__seat-sub">Free for up to {FREE_SHARE_SEATS} people</p>
         </div>
         <div className="report-share-modal__seat-count">
           <span className="report-share-modal__seat-count-num">
-            {seatsUsed}/{seatLimit}
+            {seatsUsed}/{shownSeatLimit}
           </span>
           <span className="report-share-modal__seat-count-label">Used</span>
         </div>
@@ -326,7 +315,7 @@ const ShareReportModal: FC<Props> = ({
             placeholder="friend@example.com"
             value={emailInput}
             onChange={(event) => setEmailInput(event.target.value)}
-            disabled={submitting || isLocked}
+            disabled={submitting}
             required
             autoComplete="email"
           />
@@ -342,7 +331,7 @@ const ShareReportModal: FC<Props> = ({
             className="report-share-modal__textarea"
             value={messageInput}
             onChange={(event) => setMessageInput(event.target.value)}
-            disabled={submitting || isLocked}
+            disabled={submitting}
             maxLength={2000}
             rows={7}
           />
@@ -410,7 +399,7 @@ const ShareReportModal: FC<Props> = ({
         <h1 className="report-share-modal__title">Report Sent!</h1>
         <p className="report-share-modal__subtitle">
           The recipient of your choosing will receive an email invitation with a unique link to view
-          your personalized report on this email address :{" "}
+          your personalized report on this email address:{" "}
           <strong className="report-share-modal__sent-email">{lastSentEmail}</strong>.
         </p>
       </div>
@@ -447,100 +436,6 @@ const ShareReportModal: FC<Props> = ({
     </>
   );
 
-  const renderLocked = () => (
-    <div className="report-share-modal__locked">
-      <button
-        type="button"
-        className="report-share-modal__close"
-        aria-label="Close share dialog"
-        onClick={onClose}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          aria-hidden="true"
-        >
-          <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
-        </svg>
-      </button>
-
-      <div className="report-share-modal__hero">
-        <div className="report-share-modal__locked-icon" aria-hidden="true">
-          <svg viewBox="0 0 32 32" fill="none" stroke="#ffffff" strokeWidth="2">
-            <rect x="8" y="14" width="16" height="12" rx="2" />
-            <path d="M12 14v-3a4 4 0 0 1 8 0v3" strokeLinecap="round" />
-          </svg>
-        </div>
-        <h2 id="report-share-modal-title" className="report-share-modal__title">
-          Sharing is a Full Report benefit
-        </h2>
-        <p className="report-share-modal__subtitle">
-          Unlock the Full Report to share your results with up to 2 people you trust. Revoke a seat
-          anytime — you stay in control.
-        </p>
-      </div>
-
-      <ul className="report-share-modal__locked-perks" aria-label="What you get with Full Report">
-        <li>
-          <span className="report-share-modal__locked-check" aria-hidden="true">
-            <svg viewBox="0 0 14 14" fill="none" stroke="#a78bfa" strokeWidth="2">
-              <path d="m3 7 3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span>Every analysed dimension — your complete psychometric profile</span>
-        </li>
-        <li>
-          <span className="report-share-modal__locked-check" aria-hidden="true">
-            <svg viewBox="0 0 14 14" fill="none" stroke="#a78bfa" strokeWidth="2">
-              <path d="m3 7 3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span>Share securely with up to 2 people — email-verified access</span>
-        </li>
-        <li>
-          <span className="report-share-modal__locked-check" aria-hidden="true">
-            <svg viewBox="0 0 14 14" fill="none" stroke="#a78bfa" strokeWidth="2">
-              <path d="m3 7 3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span>14-day money-back guarantee — no questions asked</span>
-        </li>
-      </ul>
-
-      <div className="report-share-modal__locked-actions">
-        <button
-          type="button"
-          className="report-share-modal__primary"
-          onClick={() => {
-            onClose();
-            onUpgrade?.();
-          }}
-        >
-          <svg
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="#ffffff"
-            strokeWidth="1.8"
-            aria-hidden="true"
-          >
-            <path d="M6 9V6a4 4 0 0 1 8 0" strokeLinecap="round" />
-            <rect x="4.5" y="9" width="11" height="8" rx="1.5" />
-          </svg>
-          <span>Unlock Full Report</span>
-        </button>
-        <button
-          type="button"
-          className="report-share-modal__secondary report-share-modal__secondary--tall"
-          onClick={onClose}
-        >
-          Not now
-        </button>
-      </div>
-    </div>
-  );
-
   const renderLoading = () => (
     <div className="report-share-modal__locked" aria-busy="true">
       <h2 id="report-share-modal-title" className="report-share-modal__title">
@@ -550,7 +445,9 @@ const ShareReportModal: FC<Props> = ({
     </div>
   );
 
-  const showLoading = loading && plan === null && seatLimit === 0;
+  // Also before the fetch starts: its effect runs after the first paint, which would
+  // otherwise flash the form at 0/0.
+  const showLoading = Boolean(ownerToken) && seatLimit === 0 && !error;
 
   return (
     <div
@@ -569,13 +466,7 @@ const ShareReportModal: FC<Props> = ({
           tabIndex={-1}
         >
           <div className="report-share-modal__inner">
-            {showLoading
-              ? renderLoading()
-              : isLocked
-                ? renderLocked()
-                : phase === "sent"
-                  ? renderSent()
-                  : renderForm()}
+            {showLoading ? renderLoading() : phase === "sent" ? renderSent() : renderForm()}
           </div>
         </div>
       </div>

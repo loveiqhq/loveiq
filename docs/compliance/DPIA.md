@@ -114,7 +114,9 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
   Clarity was subsequently un-gated — it carries neither `type="text/plain"` nor
   `data-cookieyes`, so it now records every visitor regardless of consent, and
   the `data-clarity-mask` on the survey root was removed, so Art. 9 answers are
-  captured. See ROPA §"Consent — Clarity is NOT consent-gated". **Also open:**
+  captured. One exception since 2026-09-29: the two free-text boxes for `16019` and
+  `16020` carry `data-clarity-mask="true"`, so typed text about the respondent's own
+  sexuality is not recorded. See ROPA §"Consent — Clarity is NOT consent-gated". **Also open:**
   GA4 and Google Ads load via
   `next/script` carrying only a `data-cookieyes` attribute, which does NOT
   withhold them. Measured on production 2026-08-10 with the banner untouched,

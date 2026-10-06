@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import ReportPage from "@features/report/ui/ReportPage";
+import { preloadReportFont } from "@/app/report/preloadReportFont";
 
 export const metadata: Metadata = {
   title: "Your Report | LoveIQ",
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
+  preloadReportFont();
   return (
     <Suspense fallback={null}>
       <ReportPage />

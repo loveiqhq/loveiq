@@ -23,6 +23,7 @@ vi.mock("@features/admin/server/digest-metrics", async () => {
 });
 
 import { __resetAbOverviewCacheForTests, GET } from "@/app/api/admin/ab-overview/route";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 
 function req(days = 90) {
   return new Request(`https://x.test/api/admin/ab-overview?days=${days}`);
@@ -74,13 +75,18 @@ const STAGES = {
   purchased: 10,
 };
 
-function submission(id: number, landing: string | null, survey: string | null) {
+function submission(
+  id: number,
+  landing: string | null,
+  survey: string | null,
+  createdAt = "2026-08-20T00:00:00.000Z"
+) {
   const tracker: Record<string, string> = {};
   if (landing) tracker.landing_variant = landing;
   if (survey) tracker.survey_variant = survey;
   return {
     id,
-    created_date_time: "2026-08-20T00:00:00.000Z",
+    created_date_time: createdAt,
     utm_tracker: Object.keys(tracker).length ? JSON.stringify(tracker) : null,
   };
 }
@@ -167,10 +173,15 @@ describe("GET /api/admin/ab-overview", () => {
     routeData(subs, quotes);
 
     const body = await (await GET(req())).json();
-    // The pricing axis was CONCLUDED on 2026-08-31 by retiring the higher-priced
-    // arm, so it must not appear as a live experiment however many quotes carry
-    // an arm — the stored arms are historical, and comparing them now compares
-    // two time periods rather than two randomly-assigned groups.
+    // The 2.x price test was CONCLUDED on 2026-08-31, so its arms must never read as
+    // the live price test however many quotes carry them — comparing them now
+    // compares two time periods rather than two randomly-assigned groups. The live
+    // one is Pricing 3.0's, and these readers all finished before it began.
+    const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
+    expect(pricing.arms.map((x: { arm: string }) => x.arm)).toEqual(["A3", "B3"]);
+    expect(pricing.arms.every((x: { n: number }) => x.n === 0)).toBe(true);
+    expect(pricing.unattributed).toBe(200);
+    // Nor as a final readout: the 2.x test is concluded prose only.
     expect(body.concludedReadouts.map((e: { axis: string }) => e.axis)).not.toContain("pricing");
     expect(
       body.concluded.map((c: { title: string }) => c.title),
@@ -320,6 +331,41 @@ describe("GET /api/admin/ab-overview", () => {
     expect(body.funnelCaveats.join(" ")).toContain("our own servers");
   });
 
+  it("reads the Pricing 3.0 test from readers who finished on or after its launch", async () => {
+    const launch = `${PRICING_3_LAUNCH_DAY}T00:00:00.000Z`;
+    const after = new Date(Date.parse(launch) + 86_400_000).toISOString();
+    const before = new Date(Date.parse(launch) - 86_400_000).toISOString();
+    const subs = [
+      ...Array.from({ length: 40 }, (_, i) => submission(i + 1, "white", null, after)),
+      ...Array.from({ length: 60 }, (_, i) => submission(i + 41, "white", null, after)),
+      // Finished before the launch and re-priced by it: a 3.0 stamp, but not the test's.
+      ...Array.from({ length: 25 }, (_, i) => submission(i + 101, "white", null, before)),
+    ];
+    const quotes = [
+      ...Array.from({ length: 40 }, (_, i) => quote(i + 1, "A3", i < 4, 39.99)),
+      ...Array.from({ length: 60 }, (_, i) => quote(i + 41, "B3", i < 3, 19.99)),
+      ...Array.from({ length: 25 }, (_, i) => quote(i + 101, "A3", i < 5, 39.99)),
+    ];
+    routeData(subs, quotes);
+
+    const body = await (await GET(req())).json();
+    const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
+    expect(pricing.title).toBe("Report pricing");
+    expect(pricing.arms.find((x: { arm: string }) => x.arm === "A3")).toMatchObject({
+      label: "Pricing 3.0 A",
+      n: 40,
+      purchases: 4,
+      revenue: 159.96,
+    });
+    expect(pricing.arms.find((x: { arm: string }) => x.arm === "B3")).toMatchObject({
+      label: "Pricing 3.0 B",
+      n: 60,
+      purchases: 3,
+      revenue: 59.97,
+    });
+    expect(pricing.unattributed).toBe(25);
+  });
+
   it("does not claim consent-gated steps are counted server-side", async () => {
     /**
      * The caveat used to read "Every step is counted on our own servers, so
@@ -358,6 +404,11 @@ describe("GET /api/admin/ab-overview", () => {
     // this asserts the axis list is what removes them, not absent values.
     routeData([submission(1, "white", "dark")], [quote(1, "A", false)]);
     const body = await (await GET(req(36))).json();
+    // Pricing is listed, but as Pricing 3.0's test: the arm-A quote is not an arm of it.
+    // Landing concluded on 2026-09-19, so it is a final readout, not a live one.
+    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual(["pricing"]);
+    const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
+    expect(pricing.arms.map((x: { arm: string }) => x.arm)).toEqual(["A3", "B3"]);
     expect(body.concludedReadouts.map((e: { axis: string }) => e.axis)).toEqual(["landing"]);
     const titles = body.concluded.map((c: { title: string }) => c.title);
     expect(titles).toContain("Paywall style");

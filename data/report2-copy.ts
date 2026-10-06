@@ -195,7 +195,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -722,7 +722,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -1253,7 +1253,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -1543,7 +1543,7 @@ export const report2Copy = {
     reading: {
       "gate.hook": "Four hand-picked reads matched to your archetype",
       "book1.tag": "Core pick",
-      "book1.title": "Come As You Are",
+      "book1.title": "Come as You Are",
       "book1.author": "Emily Nagoski · 2015",
       "book1.blurb":
         "The science of why context switches desire on and off. Reads like it was written about your nervous system.",
@@ -1788,7 +1788,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -2325,7 +2325,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -2861,7 +2861,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -3396,7 +3396,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -3935,7 +3935,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -4475,7 +4475,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -4780,7 +4780,7 @@ export const report2Copy = {
       "book3.blurb":
         "Gottman on repair and turning toward, the small reliable moments that build trust. Aimed straight at softening without losing an inch of authority.",
       "book4.tag": "The stretch",
-      "book4.title": "Being Responsive and Self-Determined When it Comes to Sex",
+      "book4.title": "Being Responsive and Self-Determined When It Comes to Sex",
       "book4.author": "Shoikhedbrod & Rosen · 2022",
       "book4.blurb":
         "Research on how autonomy and responsiveness raise desire. Evidence that shared power, not looser structure, is what deepens wanting.",
@@ -5017,7 +5017,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -5560,7 +5560,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -6100,7 +6100,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -6638,7 +6638,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",
@@ -7179,7 +7179,7 @@ export const report2Copy = {
       "edu.body.p2":
         "Across our user base, roughly 48% run on a slow-building wave, 35% on fast-igniting spikes, and the rest open steadily or past a safety threshold. Wave-spike couples are everywhere, and neither pattern is wrong.",
       chartnote1:
-        "Every line is one of the 14 archetypes. Only yours is named; the rest stay anonymous until you open the full report.",
+        "Every line is one of the 14 archetypes. Only yours is named; the others stay anonymous.",
       "edu.body.p3":
         "The compatibility move is translation in both directions: a slow start isn't reluctance (the wave is still forming), and a fast fade isn't loss of interest (it's how spikes breathe). Timing beats technique: meet in the middle of the encounter, not at its start.",
       "learn.eyebrow": "What you will learn",

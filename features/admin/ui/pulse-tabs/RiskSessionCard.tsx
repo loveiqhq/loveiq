@@ -1,6 +1,6 @@
 "use client";
 
-const TOTAL_QUESTIONS = 62;
+import { SURVEY_TOTAL_QUESTIONS as TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
 interface AtRiskSession {
   session_id: string;

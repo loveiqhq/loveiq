@@ -80,7 +80,7 @@ const WCapBand: FC = () => {
                 placeholder="you@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="focus-visible-ring w-full rounded-xl border-[1.5px] border-[#e9e6ee] bg-white px-[15px] py-[13px] text-[15px] text-[#161021] outline-none transition placeholder:text-[#6f6a7a] focus:border-[#bf66d9] sm:w-[220px]"
+                className="focus-visible-ring w-full rounded-xl border-[1.5px] border-[#e9e6ee] bg-white px-[15px] py-[13px] text-[16px] text-[#161021] outline-none transition placeholder:text-[#6f6a7a] focus:border-[#bf66d9] sm:w-[220px]"
               />
               <button
                 type="submit"

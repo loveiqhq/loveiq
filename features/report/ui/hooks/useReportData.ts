@@ -6,8 +6,7 @@ import {
   finalizeReportSession,
   getReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
-import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 
 export interface ReportPracticeTendencyRowData {
   practice: string;
@@ -52,7 +51,7 @@ export interface ReportData {
     currentSexualSatisfaction: number | null;
     importanceOfSex: number | null;
   } | null;
-  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  pricingQuotes: ReportPriceQuotes | null;
   unlockedArchetypes: string[];
   /**
    * Per-archetype tier the user holds: `{ "Sage": "essentials", "Lover":
@@ -93,6 +92,20 @@ export interface ReportData {
    * essentials tier (`locked: false`). Threaded to `BeliefsSection`.
    */
   beliefsCopy: import("../sections/BeliefsSection").BeliefsCopy | null;
+  /**
+   * Report 3.0's Typical Beliefs chapter, for `?v4=1`. NULL for any archetype the
+   * content has not been scaled to yet, which is what ReportPage falls back on.
+   */
+  typicalBeliefs: import("@/data/report3-typical-beliefs").Report3TypicalBeliefsView | null;
+  /** The "Go deeper & learn more" article closing that chapter, already gated. */
+  typicalBeliefsArticle: import("@/data/report3-learn-more").V4LearnMoreState | null;
+  /**
+   * Report 3.0's Accelerator & Brakes chapter, for `?v4=1`. NULL for any archetype
+   * the content has not been scaled to yet, which is what ReportPage falls back on.
+   */
+  accelerators: import("@/data/report3-accelerators").Report3AcceleratorsView | null;
+  /** The "Go deeper & learn more" article closing that chapter, already gated. */
+  acceleratorsArticle: import("@/data/report3-learn-more").V4LearnMoreState | null;
   /**
    * Report 2.0 Attachment Style copy for the primary archetype, resolved
    * server-side and locked-aware. Universal slots (gate.hook, eyebrow, edu.*,
@@ -181,6 +194,12 @@ export interface ReportData {
   partnershipCopy: import("../sections/PartnershipSection").PartnershipCopy | null;
   partnershipLoop: import("@/data/report2-partnership-loops").PartnershipLoop | null;
   /**
+   * Report 3.0's Challenges in Partnerships chapter, for `?v4=1`. NULL for any
+   * archetype the content has not been scaled to yet, which is what ReportPage
+   * falls back on (V2's section, fed by partnershipCopy above).
+   */
+  partnership: import("@/data/report3-partnership").Report3PartnershipView | null;
+  /**
    * Report 2.0 "Challenges to Enjoy Sex" (Enjoyment) copy for the primary
    * archetype, resolved server-side. Universal framing (`eyebrow`,
    * `row1..3.label`, `insight.label`, `edu.*`, `learn.*`) always present;
@@ -220,6 +239,14 @@ export interface ReportData {
    */
   fantasyCopy: import("../sections/FantasySection").FantasyCopy | null;
   fantasyDots: import("@features/report/server/fantasyMap").FantasyMapDot[] | null;
+  /**
+   * Report 3.0's Fantasy vs. Reality chapter, for `?v4=1`. NULL for any archetype
+   * the content has not been scaled to yet, which is what ReportPage falls back on
+   * (V2's section, fed by fantasyCopy above).
+   */
+  fantasy: import("@/data/report3-fantasy").Report3FantasyView | null;
+  /** The "Go deeper & learn more" article closing that chapter, already gated. */
+  fantasyArticle: import("@/data/report3-learn-more").V4LearnMoreState | null;
   /**
    * Report 2.0 Curiosity & Relationship Form copy for the primary archetype,
    * resolved server-side. Universal slots (`gate.hook`, `edu.*` incl. the
@@ -280,6 +307,14 @@ interface ReportIdentifier {
   sessionId?: string | null;
   token?: string | null;
   /**
+   * `?preview=1` — answer from the repository's own copy instead of the database,
+   * so the report opens on a machine that has no Supabase credentials. Design and
+   * responsiveness work needs the page, not anyone's real answers.
+   */
+  preview?: boolean;
+  /** `?plan=` in preview mode: which purchase to pretend the reader made. */
+  previewPlan?: string | null;
+  /**
    * Optional override for the pricing session id — threaded from the offer
    * email CTA (?pricingSessionId=...). When provided it takes precedence over
    * the per-report session id read from local storage so the recipient lands
@@ -293,6 +328,12 @@ interface ReportIdentifier {
    * Part of the effect's dependencies, so switching archetype refetches.
    */
   archetypeSlug?: string | null;
+  /**
+   * The page is Report V4 (`?v4=1`). Only then does the API build V4's chapters: no
+   * other version draws them, and a locked reader's copy of them is the real one
+   * under the blur since review 26.09. Part of the effect's dependencies.
+   */
+  v4?: boolean;
 }
 
 async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
@@ -311,8 +352,12 @@ async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
 }
 
 export function useReportData(identifier: ReportIdentifier) {
-  const { sessionId, token, pricingSessionIdOverride, archetypeSlug } = identifier;
-  const hasIdentifier = !!(sessionId || token);
+  const { sessionId, token, pricingSessionIdOverride, archetypeSlug, preview, previewPlan, v4 } =
+    identifier;
+  // A preview needs no identifier: there is no reader to identify. Without this
+  // the effect never runs on a machine with no session and no token, which is
+  // every machine the preview exists for.
+  const hasIdentifier = preview || !!(sessionId || token);
 
   const [state, setState] = useState<{
     data: ReportData | null;
@@ -353,8 +398,22 @@ export function useReportData(identifier: ReportIdentifier) {
         if (archetypeSlug) {
           params.set("archetype", archetypeSlug);
         }
+        if (v4) {
+          params.set("v4", "1");
+        }
 
-        const res = await fetch(`/api/report?${params.toString()}`, {
+        // `?preview=1` answers from static copy instead of the database — see
+        // app/api/report/preview/route.ts. Nothing else in this hook changes, so
+        // the page downstream cannot tell the difference, which is the point.
+        const endpoint = preview
+          ? `/api/report/preview?${new URLSearchParams({
+              archetype: archetypeSlug ?? "",
+              plan: previewPlan ?? "",
+              ...(v4 ? { v4: "1" } : {}),
+            }).toString()}`
+          : `/api/report?${params.toString()}`;
+
+        const res = await fetch(endpoint, {
           headers: { "x-csrf-token": csrfToken },
           cache: "no-store",
         });
@@ -425,7 +484,17 @@ export function useReportData(identifier: ReportIdentifier) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, token, hasIdentifier, pricingSessionIdOverride, archetypeSlug, state.refreshKey]);
+  }, [
+    sessionId,
+    token,
+    hasIdentifier,
+    pricingSessionIdOverride,
+    archetypeSlug,
+    state.refreshKey,
+    preview,
+    previewPlan,
+    v4,
+  ]);
 
   const retry = () => setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));
 

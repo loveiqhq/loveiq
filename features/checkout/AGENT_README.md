@@ -1,6 +1,6 @@
 # features/checkout
 
-**Purpose:** Stripe-backed report-purchase checkout. Three plans: `essentials`, `full_report`, `all_reports`. Sandbox + live modes both fulfill via webhook.
+**Purpose:** Stripe-backed report-purchase checkout. Two plans on sale since Pricing 3.0: `all_reports` ("All 14 Archetype Reports") and `full_report` ("Only Your Highest Archetype"); `essentials` and `core` are retired, refused at checkout, and still honoured on past payments. Sandbox + live modes both fulfill via webhook.
 
 **Entry:**
 

@@ -75,6 +75,7 @@ import {
   SUBMIT_WORST_CASE_MS,
 } from "@features/survey/server/server";
 import { SUBMIT_TIMEOUT_MS } from "@features/survey/ui/hooks/useSubmitSurvey";
+import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
 // --- Helpers ---
 
@@ -543,6 +544,35 @@ describe("POST /api/survey", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────────
+  // Optional content asks (16019, 16020)
+  // ────────────────────────────────────────────────────────────────────────
+
+  it("drops a blank optional answer before submit_survey, and keeps one that says something", async () => {
+    // A box typed into and cleared leaves "" behind. submit_survey would store it as an
+    // empty answer_text row that reads as answered, so the route drops it first.
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    await POST(
+      makeRequest({
+        ...validBody(),
+        answers: { ...validBody().answers, "16019": "   ", "16020": "Come as you are" },
+      })
+    );
+
+    const rpcCall = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/rpc/submit_survey")
+    );
+    expect(rpcCall, "expected RPC call to submit_survey").toBeDefined();
+    const rpcBody = JSON.parse((rpcCall![1] as { body: string }).body);
+    expect(rpcBody.p_answers).not.toHaveProperty("16019");
+    expect(rpcBody.p_answers["16020"]).toBe("Come as you are");
+    expect(rpcBody.p_answers.q1).toBe("yes");
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
   // Q16015 marketing opt-in
   // ────────────────────────────────────────────────────────────────────────
 
@@ -626,6 +656,163 @@ describe("POST /api/survey", () => {
 
     await new Promise((r) => setTimeout(r, 10));
     expect(mockResendContactsCreate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The client clamps `durationMs` to 86_400_000, and since main's "a finished survey is
+   * never stranded" fix the server clamps to the same bound instead of refusing past it
+   * (a resumed draft, whose `startedAt` comes from localStorage, routinely exceeds it).
+   * These pin the BOUND ITSELF from the server side, so the clamp in `useSubmitSurvey`
+   * and the schema here cannot quietly drift apart.
+   */
+  describe("the durationMs ceiling the client clamps to", () => {
+    const storedDuration = () => {
+      const call = mockFetchWithTimeout.mock.calls.find((c) =>
+        String(c[0]).includes("/rpc/submit_survey")
+      );
+      return JSON.parse(call![1].body).p_duration_ms;
+    };
+
+    beforeEach(() => {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+    });
+
+    it("accepts exactly 86_400_000", async () => {
+      const res = await POST(makeRequest({ ...validBody(), durationMs: 86_400_000 }));
+      expect(res.status).toBe(200);
+      expect(storedDuration()).toBe(86_400_000);
+    });
+
+    it("stores one millisecond more as the ceiling, never refusing the reader", async () => {
+      const res = await POST(makeRequest({ ...validBody(), durationMs: 86_400_001 }));
+      expect(res.status).toBe(200);
+      expect(storedDuration()).toBe(86_400_000);
+    });
+  });
+
+  describe("C13 arm stamping on utm_tracker", () => {
+    const SESSION = "6f1c2a44-8e21-4d0b-9a77-2b3c4d5e6f70";
+
+    /**
+     * Two sessions whose arms are WRITTEN OUT, one per arm.
+     *
+     * `expect(["control", "variant"]).toContain(arm)` is true of any string the route
+     * could possibly emit. Verified: replacing the derivation with a hardcoded
+     * `"control"` left the whole suite green — the experiment would have reported 100%
+     * control, which reads as "no difference" rather than as a bug.
+     *
+     * The expected values are literals rather than a second call to
+     * `assignQuestionOrderArm`, so this also fails if the hash or the salt ever changes.
+     * That is the intent: an arm assignment that shifts mid-experiment resplits everyone
+     * and invalidates the comparison, so it must not pass quietly.
+     */
+    const ARM_FIXTURES = [
+      { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
+      { sessionId: "00000000-0000-4000-8000-000000000001", arm: "variant" },
+    ] as const;
+
+    // Located by URL, not by index. An earlier draft of this block sat outside the
+    // parent describe, so it missed that describe's `vi.resetAllMocks()` and read
+    // call 0 of a much earlier test: three false failures and one false pass.
+    const rpcTracker = () => {
+      const call = mockFetchWithTimeout.mock.calls.find((c) =>
+        String(c[0]).includes("/rpc/submit_survey")
+      );
+      if (!call) throw new Error("submit_survey RPC was never called");
+      return JSON.parse(call[1].body).p_utm_tracker;
+    };
+
+    beforeEach(() => {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+    });
+
+    it.each(ARM_FIXTURES)(
+      "stamps the arm the respondent actually saw ($arm)",
+      async ({ sessionId, arm }) => {
+        // The premise of deriving server-side is that the stamp cannot disagree with what
+        // was rendered. That only holds if the derivation is real — assert the VALUE.
+        await POST(
+          makeRequest({
+            ...validBody(),
+            sessionId,
+            utmTracker: JSON.stringify({ utm_source: "google" }),
+          })
+        );
+        expect(JSON.parse(rpcTracker()).question_order_arm).toBe(arm);
+      }
+    );
+
+    it("agrees with the pure function the client bucketed with", async () => {
+      // Same check from the other side: whatever the route stamps must equal what
+      // SurveyEngine computed from the same session id. A change to either that does not
+      // move the other is a silent desync between what was shown and what was recorded.
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: SESSION,
+          utmTracker: JSON.stringify({ utm_source: "google" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker()).question_order_arm).toBe(assignQuestionOrderArm(SESSION));
+    });
+
+    it("adds the arm to a tracker that already exists", async () => {
+      const utmJson = JSON.stringify({ utm_source: "google" });
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION, utmTracker: utmJson }));
+
+      const stamped = JSON.parse(rpcTracker());
+      expect(stamped.utm_source).toBe("google");
+      expect(["control", "variant"]).toContain(stamped.question_order_arm);
+    });
+
+    it("NEVER creates a tracker just to hold the arm", async () => {
+      // get_dropout_funnel and three other queries treat `utm_tracker IS NOT NULL`
+      // as "has attribution data". 36.3% of submissions have no tracker and every
+      // one has a session id, so stamping unconditionally would pull all of them
+      // into those charts as 'direct'. The arm is recomputable from session_id, so
+      // leaving it unstamped costs nothing.
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+      expect(rpcTracker()).toBeNull();
+    });
+
+    it("leaves a tracker untouched when there is no session to derive an arm from", async () => {
+      const utmJson = JSON.stringify({ utm_source: "google" });
+      await POST(makeRequest({ ...validBody(), utmTracker: utmJson }));
+      expect(rpcTracker()).toBe(utmJson);
+    });
+
+    it("drops the arm rather than the tracker when the 1000-char budget is tight", async () => {
+      // Each stamp commits only if it still fits. Adding both and testing the total
+      // would lose whatever else was being stamped alongside it.
+      //
+      // The arm always adds exactly 31 chars (`,"question_order_arm":"control"` —
+      // both arm values serialise to 9, so this holds whichever way the session
+      // hashes). 951 x's makes the tracker 970, and 970 + 31 = 1001: one past.
+      const fat = JSON.stringify({ utm_campaign: "x".repeat(951) });
+      expect(fat.length).toBe(970);
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION, utmTracker: fat }));
+
+      const out = rpcTracker();
+      expect(out).toBe(fat); // unchanged — the arm did not fit and nothing was lost
+      expect(JSON.parse(out).utm_campaign).toHaveLength(951);
+    });
+
+    it("still stamps at exactly the 1000-char limit", async () => {
+      // Pins `> 1000` rather than `>= 1000`. 950 x's -> 969 + 31 = 1000 exactly.
+      const snug = JSON.stringify({ utm_campaign: "x".repeat(950) });
+      expect(snug.length).toBe(969);
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION, utmTracker: snug }));
+
+      const out = rpcTracker();
+      expect(out).toHaveLength(1000);
+      expect(["control", "variant"]).toContain(JSON.parse(out).question_order_arm);
+    });
   });
 
   const optInYes = () =>

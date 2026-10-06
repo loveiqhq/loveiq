@@ -2138,6 +2138,12 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 600;
 }
 
+/* 1382:1212 — the paid state's first words in the guarantee’s green (4.55:1 on the white card). */
+.checkout-return__copy .checkout-return__done {
+  color: #00892f;
+  font-weight: 700;
+}
+
 .checkout-return__actions {
   display: grid;
   gap: 12px;

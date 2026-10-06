@@ -66,7 +66,7 @@ describe("PracticeTendenciesSection", () => {
     ).not.toBeInTheDocument();
     expect(container.querySelector(".report-practice-table")).toBeInTheDocument();
     expect(container.querySelector(".report-practice-panel__glow")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/More likely|Neutral likely|Less likely/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/More likely|Neutral|Less likely/).length).toBeGreaterThan(0);
   });
 
   it("collapses to the first category behind a 'Show all N' pill, then expands", async () => {
@@ -269,8 +269,7 @@ describe("PracticeTendenciesSection", () => {
 
     // Invariant: EVERY rendered cell's label matches its number's bucket
     // (7-10 More, 4-6 Neutral, 0-3 Less) — also proves the middle bucket is hit.
-    const bucket = (n: number) =>
-      n >= 7 ? "More likely" : n >= 4 ? "Neutral likely" : "Less likely";
+    const bucket = (n: number) => (n >= 7 ? "More likely" : n >= 4 ? "Neutral" : "Less likely");
     let checked = 0;
     let neutralSeen = 0;
     for (const cell of container.querySelectorAll(".report-practice-table__metric")) {

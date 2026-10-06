@@ -46,7 +46,8 @@ Mark asked for this on 2026-09-05: "a systematic way to thoroughly test" the pro
   (Chrome) make 28 walks. Four a night covers them all in a week.
   - **Which report.** A night reads one report: the default one loveiq.org shows, and
     Fatih's V4 (`?v4=1`) on the next night. The rotation repeats every seven days, so each
-    persona on each device reads both, a week apart.
+    persona on each device reads both, a week apart. Since Report 3.0 launched
+    (2026-10-06) the default IS V4, so both nights read it; the `v4` night only names it.
   - **Which plan.** Each walk buys one of the two plans staging sells since Pricing 3.0
     (2026-10-05), and the plan moves on by one each week, so every persona buys both over two
     weeks. `core` is no longer sold there, so the rotation leaves it out (`ROTATION_PLANS`); a
