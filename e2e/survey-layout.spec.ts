@@ -15,14 +15,17 @@ import { pinSurveySession } from "./surveyArm";
  *   - picking an answer moves nothing (the placement is held, the card grows down)
  *   - from 640px wide, the buttons follow the last guidance row, no dead gap
  *
- * And since the 2026-10-06 update, where the footer row draws its own hairline: on a
- * phone, a question longer than the screen ends clear of that line.
+ * And since the 2026-10-06 update (one footer row with its own hairline): on a phone, a
+ * question longer than the screen ends clear of that line, and from 640px the bar
+ * starts where the frame puts it, whatever the count beside it says.
  *
  * Nothing is written: every survey write is answered locally.
  */
 
 const ASKED = orderEmailLast(surveyQuestions).filter((q) => !isHidden(q.qId));
 const SCALE_INDEX = ASKED.findIndex((q) => q.answerType === "scale");
+// The order a session pinned to control sees (see e2e/surveyArm.ts).
+const CONTROL = orderAskedQuestions(surveyQuestions, "control").filter((q) => !isHidden(q.qId));
 
 test.describe("Survey — question layout", () => {
   test("picking an answer moves nothing, and no dead gap above the buttons", async ({ page }) => {
@@ -78,8 +81,7 @@ test.describe("Survey — question layout", () => {
     }
     // The first multiple-choice question: on an iPhone SE its options run past the
     // screen, so at the scroll end the question meets the sticky footer row.
-    const asked = orderAskedQuestions(surveyQuestions, "control").filter((q) => !isHidden(q.qId));
-    const index = asked.findIndex((q) => q.answerType === "multiple");
+    const index = CONTROL.findIndex((q) => q.answerType === "multiple");
     await pinSurveySession(page, "control");
     await page.setViewportSize({ width: 375, height: 667 });
     await page.addInitScript((i) => {
@@ -95,7 +97,7 @@ test.describe("Survey — question layout", () => {
     }, index);
     await page.goto("/survey");
     await expect(
-      page.getByRole("heading", { name: asked[index]!.question, exact: true })
+      page.getByRole("heading", { name: CONTROL[index]!.question, exact: true })
     ).toBeVisible({ timeout: 15_000 });
     await page.waitForFunction(() =>
       document
@@ -128,5 +130,57 @@ test.describe("Survey — question layout", () => {
       line.y - (why.y + why.height),
       "the footer's line runs under the last line of the question"
     ).toBeGreaterThanOrEqual(8);
+  });
+
+  test("from 640px, the bar starts in the same place whatever the count says", async ({
+    context,
+  }) => {
+    // Figma draws the count in a fixed 104px box (node 11303:267), so the bar never
+    // moves. The narrowest count (1/62 · ~15 MIN) against the widest (22/62 · ~10 MIN).
+    const measure = async (index: number) => {
+      const page = await context.newPage();
+      for (const p of ["**/api/survey", "**/api/survey-partial", "**/api/survey-tracking"]) {
+        await page.route(p, (r) =>
+          r.fulfill({ status: 200, contentType: "application/json", body: "{}" })
+        );
+      }
+      await pinSurveySession(page, "control");
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.addInitScript((i) => {
+        const state = {
+          answers: {},
+          currentIndex: i,
+          startedAt: new Date().toISOString(),
+          prefilled: [],
+        };
+        window.localStorage.setItem("loveiq-survey-answers", JSON.stringify(state));
+        window.localStorage.setItem("loveiq-survey-consent", new Date().toISOString());
+        window.sessionStorage.setItem("loveiq-survey-step", "6");
+      }, index);
+      await page.goto("/survey");
+      const bar = page.getByRole("progressbar", { name: "Survey progress" });
+      await expect(bar).toHaveAttribute(
+        "aria-valuetext",
+        `Question ${index + 1} of ${CONTROL.length}`,
+        { timeout: 15_000 }
+      );
+      const nav = (await page.locator("main nav").boundingBox())!;
+      const box = (await bar.boundingBox())!;
+      // The label is the count, the divider between it and the time left, then the time.
+      const label = await bar.evaluate((el) => {
+        const [, divider, time] = el.parentElement!.firstElementChild!.children;
+        return {
+          textEnd: time!.getBoundingClientRect().right,
+          divider: divider!.getBoundingClientRect().width,
+        };
+      });
+      await page.close();
+      return { start: box.x - nav.x, clear: box.x - label.textEnd, divider: label.divider };
+    };
+    const narrow = await measure(0);
+    const wide = await measure(21);
+    expect(Math.abs(wide.start - narrow.start), "the bar moved with the count").toBeLessThan(0.5);
+    expect(wide.clear, "the widest count runs into the bar").toBeGreaterThanOrEqual(4);
+    expect(wide.divider, "the widest count squeezed its divider away").toBeGreaterThanOrEqual(0.9);
   });
 });
