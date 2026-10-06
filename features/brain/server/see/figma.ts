@@ -62,26 +62,72 @@ function api(fileKey: string, path: string): string {
   return `https://api.figma.com/v1${path.replace("<key>", encodeURIComponent(fileKey))}`;
 }
 
+/**
+ * FIGMA'S LIMIT IS ONE ALLOWANCE, AND THE WHOLE TEAM SHARES IT.
+ *
+ * Figma counts per user and plan, not per token or tool: file, node and image reads allow
+ * 15 a minute on Professional and 20 on Organization for a full or dev seat. On 2026-09-29
+ * at 14:21 UTC an agent sent 31 node reads through query_external_service in one minute,
+ * one id each, and seven came back 429 within 40 seconds, while every other tool on the
+ * token was locked out with it. Each 429 carries `Retry-After` in seconds. A short one is
+ * waited out once, because a failed call costs more than a pause; a long one is the
+ * caller's to decide, so `figmaLimitText` says how long and how to ask for less.
+ */
+export const FIGMA_RETRY_MAX_S = 10;
+
+/** `Retry-After` in seconds, as Figma sends it; null when absent or not a number. */
+export function retryAfterSeconds(headers: Headers | undefined): number | null {
+  const raw = headers?.get("retry-after")?.trim() ?? "";
+  return /^\d+$/.test(raw) ? Number(raw) : null;
+}
+
+/** Every Figma API read goes through here: one retry on a short 429, never more. */
+export async function figmaFetch(
+  url: string,
+  init: Parameters<typeof fetchWithTimeout>[1]
+): Promise<Response> {
+  const res = await fetchWithTimeout(url, init);
+  const wait = res.status === 429 ? retryAfterSeconds(res.headers) : null;
+  if (wait === null || wait > FIGMA_RETRY_MAX_S) return res;
+  await res.body?.cancel().catch(() => undefined);
+  await new Promise((r) => setTimeout(r, wait * 1000));
+  return fetchWithTimeout(url, init);
+}
+
+/** What a 429 tells the caller: Figma's wait, its plan tier, and how to ask for less. */
+export function figmaLimitText(headers: Headers | undefined, what: string): string {
+  const wait = retryAfterSeconds(headers);
+  const tier = headers?.get("x-figma-plan-tier");
+  const seat = headers?.get("x-figma-rate-limit-type");
+  return (
+    `Figma is rate-limiting us, so ${what} could not be read just now` +
+    (wait === null ? "; it did not say for how long" : `; it asks us to wait ${wait} s`) +
+    (tier ? ` (plan tier: ${tier}${seat ? `, rate-limit type: ${seat}` : ""})` : "") +
+    `. This is a limit on Figma's side, not a design that does not exist. The allowance is ` +
+    `shared by everyone on the token, so ask for less at once: put several node ids in ONE ` +
+    `request (\`/files/<key>/nodes?ids=a,b,c\`), render fewer ids per images call or at a lower ` +
+    `scale, and never send the same request twice in parallel.`
+  );
+}
+
 async function figmaGet(
   url: string,
   token: string
-): Promise<{ ok: true; body: unknown } | { ok: false; status: number }> {
-  const res = await fetchWithTimeout(url, {
+): Promise<{ ok: true; body: unknown } | { ok: false; status: number; headers?: Headers }> {
+  const res = await figmaFetch(url, {
     headers: { "X-Figma-Token": token },
     timeoutMs: 20_000,
   });
-  if (!res.ok) return { ok: false, status: res.status };
+  if (!res.ok) return { ok: false, status: res.status, headers: res.headers };
   return { ok: true, body: await res.json() };
 }
 
 /** Figma's error shape differs per endpoint; these are the two that change what we say. */
-function outageText(status: number, what: string): string {
-  if (status === 429) {
-    return (
-      `Figma is rate-limiting us, so ${what} could not be read just now. This is an outage ` +
-      `on Figma's side, not a design that does not exist — try again shortly.`
-    );
-  }
+function outageText(
+  { status, headers }: { status: number; headers?: Headers },
+  what: string
+): string {
+  if (status === 429) return figmaLimitText(headers, what);
   if (status === 403 || status === 401) {
     return (
       `Figma refused the credential (${status}) when reading ${what}. The token is set but ` +
@@ -110,8 +156,7 @@ export async function listDesign(
     ? api(fileKey, `/files/<key>/nodes?ids=${encodeURIComponent(pageId)}&depth=1`)
     : api(fileKey, "/files/<key>?depth=1");
   const res = await figmaGet(url, token);
-  if (!res.ok)
-    return { kind: "text", text: outageText(res.status, "the file listing"), isError: true };
+  if (!res.ok) return { kind: "text", text: outageText(res, "the file listing"), isError: true };
 
   if (!pageId) {
     const body = res.body as {
@@ -200,8 +245,7 @@ export async function renderDesign(
     api(fileKey, `/files/<key>/nodes?ids=${encodeURIComponent(nodeId)}&depth=1`),
     token
   );
-  if (!meta.ok)
-    return { kind: "text", text: outageText(meta.status, `node ${nodeId}`), isError: true };
+  if (!meta.ok) return { kind: "text", text: outageText(meta, `node ${nodeId}`), isError: true };
 
   const node = Object.values(
     (meta.body as { nodes?: Record<string, { document?: Record<string, unknown> }> }).nodes ?? {}
@@ -262,7 +306,7 @@ export async function renderDesign(
     token
   );
   if (!imgRes.ok)
-    return { kind: "text", text: outageText(imgRes.status, `a render of ${name}`), isError: true };
+    return { kind: "text", text: outageText(imgRes, `a render of ${name}`), isError: true };
 
   const imgBody = imgRes.body as { err?: unknown; images?: Record<string, string | null> };
   if (imgBody.err) {

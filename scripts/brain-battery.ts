@@ -850,6 +850,12 @@ const monthTotalLeads = (h: BrainChunk[]): string[] => {
       ];
 };
 
+/** "October 2026" for the month `offset` months from now, counted in UTC. */
+function utcMonthName(offset: number, now = new Date()): string {
+  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+  return first.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
 const namedMonthLeads =
   (month: string) =>
   (h: BrainChunk[]): string[] => {
@@ -1716,9 +1722,16 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       namedMonthLeads("December 2025")
     ),
     // The relative branches feed the same anchor. "last month" was already right before
-    // the change and must stay right after it.
-    P("period-last-month", "how did last month go", namedMonthLeads("August 2026")),
-    P("period-this-month", "how are we doing this month", namedMonthLeads("September 2026")),
+    // the change and must stay right after it. The months are counted from today, in UTC
+    // as periods.ts counts them: written as "August 2026" and "September 2026", both went
+    // red the day October began, with nothing wrong in the search. Counted when the check
+    // runs, right after its query, so a run that crosses midnight UTC on the 1st races one
+    // query rather than the whole battery.
+    // ponytail: one clock for the probe and retrieve() would close that last second too.
+    P("period-last-month", "how did last month go", (h) => namedMonthLeads(utcMonthName(-1))(h)),
+    P("period-this-month", "how are we doing this month", (h) =>
+      namedMonthLeads(utcMonthName(0))(h)
+    ),
     /**
      * THE ANCHOR MUST NOT COST THE ANSWER. A question naming a month while wanting
      * something undated is the case a hard since/until filter would have destroyed, and

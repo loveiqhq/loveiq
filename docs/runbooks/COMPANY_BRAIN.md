@@ -589,6 +589,17 @@ later `date:` is the current decision.
 | `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                 |
 | `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
 
+**Figma's rate limit is one allowance for the whole team.** Figma counts per user and
+plan, so every tool on the token shares it (file, node and image reads: 15 a minute on
+Professional and 20 on Organization for a full or dev seat; a seat that can only view or
+comment on design files gets 20 a month). `show_design` and the gateway's Figma reads both go
+through `figmaFetch` in `features/brain/server/see/figma.ts`: a 429 whose `Retry-After`
+is 10 seconds or less is waited out once, and a longer one is answered with the wait,
+the plan tier Figma reports, and how to ask for less (several node ids in one
+`nodes?ids=a,b,c` request). On 2026-09-29 an agent sent 31 single-node reads in one
+minute and got seven 429s in 40 seconds. `comment_asks` reads comments with its own
+fetch, and a 429 there is reported as a Figma file that could not be read.
+
 **Read-only by allowlist — the HTTP method was never the guard.** This section
 used to claim construction was enough: a table read is a GET, a function call is a
 POST to `/rpc`, and PostgREST needs PATCH/PUT/DELETE to write. The second half of
@@ -1828,7 +1839,7 @@ the same as "as fast as possible".
 | Job            | Every   | Sources                                      | Measured                           |
 | -------------- | ------- | -------------------------------------------- | ---------------------------------- |
 | `brain-fast`   | 15 min  | ga4, drive, analytics, slack, **embeddings** | ~12s in production                 |
-| `brain-notion` | hourly  | notion                                       | ~29s in production                 |
+| `brain-notion` | hourly  | notion                                       | up to ~65s (its walk budget)       |
 | `brain-gmail`  | hourly  | gmail                                        | 621s first walk, incremental after |
 | `brain-ingest` | nightly | gsc                                          | seconds                            |
 
@@ -1841,12 +1852,17 @@ the same as "as fast as possible".
   visitors today" unanswerable until the next night. Its window now ends at `today`
   rather than `yesterday`. Today's row is partial by nature and is labelled
   `TODAY SO FAR, still accruing`, so a running total is never read as a closed day.
-- **Notion is hourly, not 15-minute, because it costs ~29s a run whether or not
-  anything changed** — it enumerates all 35 databases to find what moved. Every 15
-  minutes that is ~50 minutes of compute a day re-reading unchanged pages, against
-  Notion's rate limit, for nothing. Hourly is still 24x fresher than nightly. The
-  cheap alternative, a `/search`-by-last-edited crawl, can never notice a DELETED
-  page, and the sweep depends on knowing the full set.
+- **Notion is hourly, not 15-minute, because its crawl costs ~35-40s a run whether
+  or not anything changed** — it enumerates every database (39 on 2026-10-05) and
+  every page to find what moved. Every 15 minutes that is ~50 minutes of compute a
+  day re-reading unchanged pages, against Notion's rate limit, for nothing. Hourly is
+  still 24x fresher than nightly. The cheap alternative, a `/search`-by-last-edited
+  crawl, can never notice a DELETED page, and the sweep depends on knowing the full
+  set. The walk budget is 65s (40s until 2026-10-05, when the crawl alone had grown
+  to fill it), so a request that starts just inside it, with its one capped retry
+  (up to 35s) and the tail (up to ~18s), still ends under the 120s ceiling. A crawl the clock cuts short is not an error while the deletion sweep
+  has run in the last 26 hours; past that, or when the sweep's state cannot be read,
+  it fails and alerts #brain.
 - **Search Console stays nightly because it genuinely lags.** Probed on 2026-08-29,
   its newest available day was 2026-08-26 — three days back. Asking every 15 minutes
   would refetch identical numbers 96 times a day. For GSC alone, nightly IS live.

@@ -844,6 +844,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 question and the page scrolls to them. */}
             <div
               ref={footerRef}
+              data-survey-footer
               className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
                 footerFloating
                   ? "shadow-[0_-1px_0_rgba(22,16,33,0.09),0_-12px_24px_-16px_rgba(22,16,33,0.2)]"
