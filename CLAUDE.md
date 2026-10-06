@@ -215,10 +215,10 @@ Consequences to expect:
 - **PostHog and CookieYes still run everywhere.** PostHog is the only replay and
   error trail staging and local dev have, so it is labelled rather than excluded: it
   registers `deploy_env` (`production` | `staging` | `development`) as a super
-  property, so filtering is one click. CookieYes must stay because its consent cookie
-  is what gates the first-party durable writes in `persistAnalyticsEvent` — dropping
-  it would silently stop the funnel tables staging QA reads, not just quieten a third
-  party.
+  property, so filtering is one click. CookieYes stays because its consent cookie
+  gates the GA4 and Ads events our code sends (`hasCookieYesConsent`). It does **not**
+  gate our own rows: `persistAnalyticsEvent` writes `analytics_event` whatever the
+  visitor chose (seen on production 2026-10-06 after "Reject All").
 - `sendGa4PurchaseEvent` refuses to send off production too. It runs in the Stripe
   webhook rather than a browser, and staging shares the production database, so a
   sandbox test purchase would otherwise arrive in real GA4 as revenue.
@@ -659,6 +659,74 @@ When working in this codebase:
 10. **Document unknowns** - If uncertain, note assumptions and which files to check
 11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `docs/plans/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `docs/runbooks/SECURITY.md`, `docs/runbooks/DEVELOPMENT.md`, `docs/architecture/*`) should remain in the repo.
 12. **Request Eman's review on every PR into `main`** - `main` deploys to production. When the work on a PR into `main` is done, request a review from Eman: `gh pr edit <number> --add-reviewer eman-cickusic`. This holds for every PR, whoever or whatever wrote it. `.github/CODEOWNERS` usually requests him when the PR opens; add him anyway, which does nothing if he is already requested. A PR opened from Eman's own account cannot request its author.
+
+### Testing without touching real data (production and staging)
+
+A test on production lands where customers' visits land: the same GA4 property, Google
+Ads account, PostHog project, Clarity project and database tables. The digest, the
+experiment readouts and Google Ads bidding all read them. Staging has its own database and
+loads no Google or Clarity tags, but it shares production's **Slack and Resend**, and
+PostHog (labelled `deploy_env=staging`). These rules hold for every person and agent
+testing on either.
+
+**Before the first click**
+
+1. **Team submissions only**: the owner's email ends in `@loveiq.org`. Never a customer's
+   report. Prefer one finished **before** the running experiments began. The A/B readouts
+   (`features/admin/server/experiment-readouts.ts`, also the brain's `experiments` tool)
+   count a quote's `purchased_at` as a sale with no test filter, and each experiment's
+   cohort starts at its launch, so an older submission stays out of it. Do not take the
+   survey on production just to get a report. Finishing it fires the Google Ads "Survey
+   completed" conversion (a GTM tag on `survey_completed`).
+2. **Write down the start time (UTC).** The cleanup below is "these submissions since then".
+3. **Fresh browser profile, never an ad click.** Type or paste the URL. A URL carrying
+   `gclid`, `gbraid`, `wbraid` or `utm_source=google` lets Google Ads credit the visit to
+   a campaign. Without one, in a profile not signed in to Google, it cannot.
+4. **Set the probe cookie** `loveiq_probe=1` on `www.loveiq.org`
+   (`shared/http/probe-cookie.ts`). It turns PostHog off for the visit and skips the
+   `report_session` row. It does nothing else.
+5. **Desktop, in a browser Playwright launches:** abort Google, Clarity and PostHog
+   requests with `context.route` (let `gtag/js` and `gtm.js` themselves load), and check
+   tracking by reading the aborted requests. On 2026-10-06 nothing got through to GA4.
+6. **Phones, emulators and simulators:** request blocking does not hold there. Chrome
+   attached over CDP let some GA4 requests through, and the iOS Simulator cannot be
+   intercepted at all. Tap **Reject All** on the cookie banner before anything else and
+   never Accept: our code then sends no GA4 or Ads events of its own. PostHog ignores
+   the cookie choice, so set the probe cookie on Android over CDP. On the iOS Simulator one
+   anonymous PostHog visit cannot be avoided.
+
+**Purchases**
+
+- €0 only, with the team's 100%-off promotion code applied before checkout opens. Ask
+  Eman for the code. Never write it in this repository, which is public. Typed codes are
+  often refused in our Stripe sessions, so stage an alias on one of that submission's quotes:
+  `report_price_quote.metadata.nurturePromoCodes.team_test` =
+  `{code: "LIQ-100-TESTONLY", stripePromotionCodeId: <the code's promo_ id>, percentOff: 100, expiresAt: <tomorrow>}`.
+  Then open `/report/<token>?promo=LIQ-100-TESTONLY`.
+- On Stripe, press the button only when it says **Complete order**. "Pay" means real money.
+- Why this is safe for ads and revenue: at €0 the browser sends no GA4 purchase and no
+  Google Ads conversion (`trackReportPurchase`). The server-side GA4 send skips staff and
+  €0 (`sendGa4PurchaseEvent`). A staff payer email sets `payment.is_test`, and the revenue,
+  sales, digest and pricing readouts exclude those. The A/B readouts do not (rule 1).
+
+**What still lands, and the cleanup**
+
+- Expected, labelled, leave them: the `payment` row (`is_test`), the Stripe session, the
+  confirmation email to the team inbox, the #payments post, the survey-journey message
+  turning to Paid, and PostHog's server-side `purchase` event (`is_test: true`).
+- **Not filtered anywhere, so remove it.** Only payments carry a test flag. Our own funnel
+  rows are written whatever the cookie choice: `analytics_event` (views, paywall,
+  checkout, experiment exposures) and `report_session`. The quote's `checkout_started_at`
+  also moves to now. The digest's funnel and checkout rates count them, and so do the
+  experiment readouts (checkout starts, pay pop-up exposures). After verifying, export and
+  then delete those rows for the test submissions since the start time. Put
+  `checkout_started_at` back to its old value. Keep `purchased_at`: pricing freezes a bought
+  quote on it (`features/pricing/logic/reportPricing.ts`).
+- Remove only your key from `nurturePromoCodes`. Real `72h_no_unlock` codes can sit
+  beside it.
+- If something reached GA4 anyway: GA4 → Explore → User explorer → the client id (the last
+  two parts of the `_ga` cookie) → Delete user. Deleting a PostHog person needs an API key
+  with `person:write`.
 
 ### Working alongside other sessions
 
