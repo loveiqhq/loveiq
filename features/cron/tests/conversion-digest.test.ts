@@ -1854,6 +1854,103 @@ describe("conversion-digest handler", () => {
     expect(json).not.toContain("Landing page test concluded");
   });
 
+  /**
+   * The line the landing test is decided on. Built for round 3 with the shared
+   * fixtures' round-2 rows still in every source, so a regression that read the
+   * wrong arms, or dropped a half of the count, shows up as a wrong number.
+   */
+  describe("survey starts per visit, round 3's deciding number", () => {
+    const days = Array.from({ length: 14 }, (_, i) =>
+      new Date(Date.UTC(2026, 9, 6) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    const startFunnel = (videoVisitsPerDay = 22) => ({
+      daily: days.flatMap((day) => [
+        { day, arm: "white_card", visits: 20, starts: 2 },
+        ...(videoVisitsPerDay
+          ? [{ day, arm: "white_video", visits: videoVisitsPerDay, starts: 2 }]
+          : []),
+        { day, arm: "white", visits: 99, starts: 9 },
+      ]),
+      totals: [
+        { arm: "white_card", visits: 280, starts: 28 },
+        ...(videoVisitsPerDay
+          ? [{ arm: "white_video", visits: videoVisitsPerDay * 14, starts: 28 }]
+          : []),
+        { arm: "white", visits: 1386, starts: 126 },
+      ],
+    });
+    const startsPastFirst = {
+      overall: { sessions: 300, reached: 120 },
+      daily: [],
+      totals: [
+        { arm: "white_card", sessions: 60, reached: 20 },
+        { arm: "white_video", sessions: 70, reached: 25 },
+        { arm: "white", sessions: 170, reached: 75 },
+      ],
+      midwayIndex: 1,
+      firstArmDay: "2026-10-06",
+    };
+    const cohorts = [
+      { axis: "landing" as const, arm: "white_card", n: 4, conversions: 0 },
+      { axis: "landing" as const, arm: "white_video", n: 6, conversions: 1 },
+      { axis: "landing" as const, arm: "white", n: 50, conversions: 3 },
+    ];
+    const build = async (over: Record<string, unknown> = {}) => {
+      vi.setSystemTime(new Date("2026-10-20T09:05:00.000Z"));
+      const now = new Date();
+      const dayKey = reportingDay(new Date(reportingDayStart(reportingDay(now)).getTime() - 1));
+      return blockText(
+        (
+          await buildConversionDigest({
+            dayKey,
+            liveAxesOverride: ["landing"],
+            funnel: null,
+            cohorts,
+            startFunnel: startFunnel(),
+            startsPastFirst,
+            axisRows: [],
+            cvrDays: null,
+            midway: null,
+            paywall: null,
+            emailExperiments: null,
+            unitEconomics: null,
+            adSpend: null,
+            friction: null,
+            now,
+            ...over,
+          } as Parameters<typeof buildConversionDigest>[0])
+        ).blocks
+      );
+    };
+    const card = armLabel("landing", "white_card").short;
+    const video = armLabel("landing", "white_video").short;
+
+    it("counts drafts past question one plus finished surveys over visits, per live arm", async () => {
+      const text = await build();
+      expect(text).toContain("*Survey starts per visit* — what this test is decided on");
+      // V2: 20 drafts + 4 finished of 280 visits; V3: 25 + 6 of 308.
+      expect(text).toContain(`${card} 24 of 280 visits (8.6%: 20 past question one, 4 finished)`);
+      expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
+      // Round 2's arm is in every source and in none of the counts.
+      expect(text).not.toContain(armLabel("landing", "white").short);
+    });
+
+    it("says the number is unavailable when a read fails, instead of leaving it out", async () => {
+      const failedDrafts = await build({ startsPastFirst: null });
+      expect(failedDrafts).toContain("Survey starts per visit is not available today");
+      expect(failedDrafts).not.toContain("what this test is decided on");
+      const failedCohorts = await build({ cohorts: null });
+      expect(failedCohorts).toContain("Survey starts per visit is not available today");
+    });
+
+    it("says an arm has no visits rather than printing 0% beside it", async () => {
+      const text = await build({ startFunnel: startFunnel(0) });
+      expect(text).toContain(`${video} — no visits recorded yet`);
+      expect(text).toContain(`${card} 24 of 280 visits`);
+      expect(text).not.toMatch(/\(0%/);
+    });
+  });
+
   it("says round 2 concluded while its days are in the window, and stops once they are not", async () => {
     /**
      * The notice belongs to a landing axis that is NOT live, which round 3 is not.

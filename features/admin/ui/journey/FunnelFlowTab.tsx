@@ -4,6 +4,7 @@ import { useMemo, useState, type FC, type ReactNode } from "react";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import StatCard from "@features/admin/ui/StatCard";
 import { armLabel } from "@features/attribution/server/labels";
+import { LANDING_VARIANT_ARMS } from "@shared/experiments/landingVariant";
 import JourneyFlowSankey, {
   type FlowNode,
   type FlowLink,
@@ -144,13 +145,19 @@ const SegmentFilters: FC<{ value: Segment; onChange: (s: Segment) => void }> = (
 
         `white_prev` was missing entirely, so the arm CURRENTLY under test could not
         be selected — the only choices were the live V2 arm and a dark arm that has
-        not been assigned since 21 Aug. */}
+        not been assigned since 21 Aug. Round 3's arms went missing the same way, so the
+        live ones now come from the experiment's own list; the earlier rounds' values
+        stay for reading their history. */}
     <Select
       label="Landing page"
       value={value.landingVariant}
       onChange={(v) => onChange({ ...value, landingVariant: v })}
       options={[
         { value: "all", label: "All" },
+        ...LANDING_VARIANT_ARMS.map((arm) => ({
+          value: arm,
+          label: armLabel("landing", arm).short,
+        })),
         { value: "white", label: armLabel("landing", "white").short },
         { value: "white_prev", label: armLabel("landing", "white_prev").short },
         { value: "control", label: armLabel("landing", "control").short },

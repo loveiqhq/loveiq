@@ -135,6 +135,14 @@ const LANDING_CONCLUDED_ON = "2026-09-19";
 export const MIDWAY_QUESTION_INDEX = 30;
 
 /**
+ * The landing test's deciding number counts a survey as started once it has a draft
+ * at this question index or later (or has finished). One, not zero: V2's hero card
+ * saves a draft at question one before its answerer reaches the survey, which V3's
+ * visitors cannot do. Exported so the local preview reads the same threshold.
+ */
+export const STARTED_QUESTION_INDEX = 1;
+
+/**
  * The axes worth a verdict. `paywall` and `survey` are deliberately absent — both
  * experiments are concluded (the paywall in favour of the forced wall and then
  * removed entirely, the survey theme in favour of white on 2026-08-25) and nothing
@@ -249,6 +257,31 @@ function shortDay(day: string): string {
 
 function money(amount: number): string {
   return `EUR ${amount.toFixed(2)}`;
+}
+
+/**
+ * The share of `of`, as the funnel and the landing test's deciding line print it.
+ * NOT `computeRate`.
+ *
+ * `computeRate` is right for a trend chart and wrong here, in two ways that
+ * both produce a confident wrong number:
+ *
+ *   * it CLAMPS to 100. buildFunnel deliberately leaves the last steps
+ *     unclamped, because a promo one-tap or an admin-granted unlock sets
+ *     purchased_at without a checkout, so unlocks CAN exceed checkouts
+ *     truthfully. 6 from 5 printed "100%" and hid a real 120%.
+ *   * it returns 0 for a zero denominator, which printed "<0.1%": a vanishing
+ *     ratio, for a ratio that does not exist.
+ *
+ * A non-zero count whose share rounds to nothing prints "<0.1%", never "0".
+ * With 5 payments against 12,308 visits the share is 0.04%, and a bare "0"
+ * beside a count of five says that nobody paid.
+ */
+function shareText(count: number, of: number): string {
+  if (of <= 0) return "—";
+  const raw = (count / of) * 100;
+  if (raw > 0 && raw < 0.05) return "<0.1%";
+  return `${Math.round(raw * 10) / 10}%`;
 }
 
 /**
@@ -705,29 +738,6 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const worstIndex = leak ? leak.index + 1 : -1;
     blocks.push(divider());
     /**
-     * The share of `of`, as the funnel prints it. NOT `computeRate`.
-     *
-     * `computeRate` is right for a trend chart and wrong here, in two ways that
-     * both produce a confident wrong number:
-     *
-     *   * it CLAMPS to 100. buildFunnel deliberately leaves the last steps
-     *     unclamped, because a promo one-tap or an admin-granted unlock sets
-     *     purchased_at without a checkout, so unlocks CAN exceed checkouts
-     *     truthfully. 6 from 5 printed "100%" and hid a real 120%.
-     *   * it returns 0 for a zero denominator, which printed "<0.1%": a vanishing
-     *     ratio, for a ratio that does not exist.
-     *
-     * A non-zero count whose share rounds to nothing prints "<0.1%", never "0".
-     * With 5 payments against 12,308 visits the share is 0.04%, and a bare "0"
-     * beside a count of five says that nobody paid.
-     */
-    const share = (count: number, of: number): string => {
-      if (of <= 0) return "—";
-      const raw = (count / of) * 100;
-      if (raw > 0 && raw < 0.05) return "<0.1%";
-      return `${Math.round(raw * 10) / 10}%`;
-    };
-    /**
      * Says so when the paywall step covers less of the window than the steps
      * above it. Only when it actually does: once the instrument is older than the
      * window this line disappears on its own rather than becoming furniture.
@@ -757,7 +767,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
       const to = steps[worstIndex]!;
       const from = steps[worstIndex - 1]!;
-      return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${share(to.count, from.count)}).`;
+      return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${shareText(to.count, from.count)}).`;
     })();
 
     /**
@@ -806,7 +816,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         alt_text: `${funnelTitle}: ${steps
           .map(
             (s, i) =>
-              `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${share(s.count, steps[i - 1]!.count)} of the step above)`}`
+              `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${shareText(s.count, steps[i - 1]!.count)} of the step above)`}`
           )
           .join("; ")}.`,
       });
@@ -816,7 +826,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        * funnel as a monospace table, so the message never loses its numbers.
        */
       const rows = steps.map((s, i) => {
-        const stepShare = i === 0 ? "—" : share(s.count, steps[i - 1]!.count);
+        const stepShare = i === 0 ? "—" : shareText(s.count, steps[i - 1]!.count);
         return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
       });
       blocks.push(
@@ -1246,19 +1256,32 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * Counts and rates only. The verdict is taken once, at the decision date in the
      * experiment registry, not re-taken every morning.
      */
-    if (landingIsLive && input.startsPastFirst && cohorts) {
+    if (landingIsLive && (input.startsPastFirst === null || cohorts === null)) {
+      // A failed read says so. Without this line the deciding number simply vanished
+      // for the day, which reads as "nothing to decide on yet", not "we could not read it".
+      landingStartBlocks.push(
+        context(
+          "_Survey starts per visit is not available today — one of its data sources did not answer._"
+        )
+      );
+    } else if (landingIsLive && input.startsPastFirst && cohorts) {
       const pastFirst = input.startsPastFirst;
-      const perArm = liveArms.map((arm) => {
-        const visits = totalFor(arm)?.visits ?? 0;
-        const drafts = pastFirst.totals.find((t) => t.arm === arm)?.reached ?? 0;
-        const finished = cohorts.find((c) => c.axis === "landing" && c.arm === arm)?.n ?? 0;
-        return { arm, visits, starts: drafts + finished };
-      });
+      const perArm = liveArms.map((arm) => ({
+        arm,
+        visits: totalFor(arm)?.visits ?? 0,
+        // An arm with no draft past question one has no row, so zero is the true count.
+        drafts: pastFirst.totals.find((t) => t.arm === arm)?.reached ?? 0,
+        finished: cohorts.find((c) => c.axis === "landing" && c.arm === arm)?.n ?? 0,
+      }));
       if (perArm.some((a) => a.visits > 0)) {
-        const parts = perArm.map(
-          (a) =>
-            `${armLabel("landing", a.arm).short} ${a.starts} of ${a.visits} visits (${computeRate(a.starts, a.visits)}%)`
-        );
+        // Both halves of each count are printed, so a half that went missing shows as a
+        // zero beside the other instead of quietly lowering the total.
+        const parts = perArm.map((a) => {
+          const label = armLabel("landing", a.arm).short;
+          if (a.visits === 0) return `${label} — no visits recorded yet`;
+          const starts = a.drafts + a.finished;
+          return `${label} ${starts} of ${a.visits} visits (${shareText(starts, a.visits)}: ${a.drafts} past question one, ${a.finished} finished)`;
+        });
         landingStartBlocks.push(
           section(
             `*Survey starts per visit* — what this test is decided on: ${parts.join("  ·  ")}. A start is a survey answered past question one or finished, counted for every visitor. Counts and rates, not a verdict.`
@@ -1559,7 +1582,7 @@ export async function GET(request: Request) {
       fetchEmailExperimentResults(windowStart, windowEnd),
       fetchUnitEconomics(ad, windowStart, windowEnd, WINDOW_DAYS),
       // Drafts past question one: half of the landing test's deciding number.
-      fetchMidwayProgress(windowStart, windowEnd, 1),
+      fetchMidwayProgress(windowStart, windowEnd, STARTED_QUESTION_INDEX),
     ]);
 
     /**
