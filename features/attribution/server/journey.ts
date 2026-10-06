@@ -20,6 +20,7 @@
  */
 
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 import { classifyTraffic, readStampedArms, type TrafficInfo } from "./traffic";
 
@@ -36,6 +37,11 @@ export interface SubmissionJourney {
   firstName: string | null;
   /** Already masked (a***@example.com). The raw address never leaves this module. */
   emailMasked: string | null;
+  /**
+   * One of ours — `isStaffEmail`, the rule that sets `payment.is_test` — so the
+   * message says "[internal]" rather than leaving the team to guess from a mask.
+   */
+  internal: boolean;
   arms: JourneyArms;
   traffic: TrafficInfo;
   /** Frozen on the quote at pricing time — "Desktop" | "iOS" | "Android". */
@@ -90,6 +96,13 @@ export interface SubmissionJourney {
     amount: number | null;
     currency: string;
   } | null;
+  /**
+   * The purchase took no money: every succeeded payment was €0 (a 100% coupon) or
+   * `is_test`. `purchased_at` is stamped for both, and 9 of the 12 messages that
+   * had ever reached "Paid" by 2026-10-06 were exactly this. False unless a
+   * payment row says so — a failed or empty lookup must never relabel a real sale.
+   */
+  noMoneyTaken: boolean;
   /** How many plan quotes exist — a rough proxy for paywall exposure. */
   quoteCount: number;
   /**
@@ -128,6 +141,13 @@ interface QuoteRow {
   currency: string | null;
   purchased_at: string | null;
   checkout_started_at: string | null;
+  paywall_reached_at: string | null;
+}
+
+/** A succeeded payment, reduced to whether money changed hands. */
+interface PaymentRow {
+  amount: number | string | null;
+  is_test: boolean | null;
 }
 
 interface AnalyticsRow {
@@ -355,7 +375,7 @@ export async function buildSubmissionJourney(
 ): Promise<SubmissionJourney | null> {
   // Wave 1: everything keyed directly off the submission id, concurrently. The
   // existing admin timeline route does 13 of these sequentially; don't copy that.
-  const [subs, quotes, eventsDesc, reportSessions] = await Promise.all([
+  const [subs, quotes, eventsDesc, reportSessions, payments] = await Promise.all([
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
@@ -366,7 +386,8 @@ export async function buildSubmissionJourney(
     fetchJson<QuoteRow>(
       `/rest/v1/report_price_quote?survey_submission_id=eq.${submissionId}` +
         `&select=plan,experiment_group,base_price_bucket,forced_paywall_arm,device_type,country_tier,` +
-        `current_price,currency,purchased_at,checkout_started_at&order=created_date_time.asc`,
+        `current_price,currency,purchased_at,checkout_started_at,paywall_reached_at` +
+        `&order=created_date_time.asc`,
       "report_price_quote"
     ),
     /**
@@ -421,6 +442,18 @@ export async function buildSubmissionJourney(
         `&order=started_at.asc&limit=500`,
       "report_session"
     ),
+    /**
+     * The succeeded payments, test ones INCLUDED: this reads `is_test` to label a
+     * test, never to sum revenue. Through personal_report because payment has no
+     * submission id; the hint because `personal_report.payment_id` makes the
+     * embed ambiguous.
+     */
+    fetchJson<PaymentRow>(
+      `/rest/v1/payment?select=amount,is_test,` +
+        `personal_report!fk_payment_personal_report!inner(survey_submission_id)` +
+        `&personal_report.survey_submission_id=eq.${submissionId}&status=eq.succeeded`,
+      "payment"
+    ),
   ]);
 
   const sub = subs[0];
@@ -450,6 +483,14 @@ export async function buildSubmissionJourney(
       .filter((v): v is string => Boolean(v))
       .sort()[0] ?? null;
   const reportDwellMs = measureReportDwellMs(reportViewedAt, events, reportSessions);
+  // Earliest of the two again. The server stamp is written by POST /api/price the
+  // first time the reader meets an offer (usually the first offer card scrolling
+  // into view) and is not consent-gated; the event fires only when the pop-up or a
+  // lock tap opens the paywall.
+  const paywallInitiatedAt =
+    [...quotes.map((q) => q.paywall_reached_at), firstOf("paywall_initiated")]
+      .filter((v): v is string => Boolean(v))
+      .sort()[0] ?? null;
   const checkoutStartedAt =
     purchased?.checkout_started_at ??
     quotes.find((q) => q.checkout_started_at)?.checkout_started_at ??
@@ -460,6 +501,7 @@ export async function buildSubmissionJourney(
     submissionId,
     firstName: sub.app_user?.first_name?.trim() || null,
     emailMasked: mask(sub.app_user?.email),
+    internal: isStaffEmail(sub.app_user?.email),
     arms: {
       landing: stamped.landing,
       survey: stamped.survey,
@@ -495,7 +537,7 @@ export async function buildSubmissionJourney(
     },
     milestones: {
       reportViewedAt,
-      paywallInitiatedAt: firstOf("paywall_initiated"),
+      paywallInitiatedAt,
       checkoutStartedAt,
       purchasedAt,
     },
@@ -506,6 +548,8 @@ export async function buildSubmissionJourney(
           currency: (purchased.currency ?? "EUR").toUpperCase(),
         }
       : null,
+    noMoneyTaken:
+      payments.length > 0 && !payments.some((p) => (toNumber(p.amount) ?? 0) > 0 && !p.is_test),
     quoteCount: quotes.length,
     recordingSessionId: sub.posthog_session_id?.trim() || null,
   };
@@ -525,6 +569,8 @@ export function journeyFromPurchase(input: {
   submissionId: number;
   firstName: string | null;
   email: string | null;
+  /** The payment's own `is_test` verdict, from the address that paid. */
+  internal: boolean;
   utmTracker: string | null;
   experimentGroup: string | null;
   basePriceBucket: string | null;
@@ -543,6 +589,7 @@ export function journeyFromPurchase(input: {
     submissionId: input.submissionId,
     firstName: input.firstName?.trim() || null,
     emailMasked: mask(input.email),
+    internal: input.internal,
     arms: {
       // utm_tracker first; the Stripe metadata copy is the fallback.
       landing: stamped.landing ?? input.landingVariant,
@@ -580,6 +627,8 @@ export function journeyFromPurchase(input: {
       amount: input.amount,
       currency: (input.currency ?? "EUR").toUpperCase(),
     },
+    // An unknown amount is not evidence of a free one.
+    noMoneyTaken: input.internal || input.amount === 0,
     quoteCount: 0,
     // This builder deliberately does not touch the database (it exists so the
     // purchase ping cannot be delayed by a read), so there is no session id to

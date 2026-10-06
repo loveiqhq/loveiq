@@ -17,6 +17,7 @@ import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
+  getPurchaseTitle,
   getReportPurchasePlanTitle,
   isReportPurchasePlanId,
   PRICING_CATALOG,
@@ -104,6 +105,7 @@ async function notifySlackPurchase({
   email,
   experimentGroup,
   firstName,
+  internal,
   landingVariant,
   paymentId,
   plan,
@@ -119,6 +121,8 @@ async function notifySlackPurchase({
   email: string | null;
   experimentGroup: string | null;
   firstName: string | null;
+  /** `isInternalPayment` — the verdict `is_test` and the ops lines' tag carry. */
+  internal: boolean;
   landingVariant: string | null;
   paymentId: number;
   plan: ReportPurchasePlanId;
@@ -139,6 +143,7 @@ async function notifySlackPurchase({
     submissionId,
     firstName,
     email,
+    internal,
     utmTracker,
     experimentGroup,
     basePriceBucket,
@@ -363,10 +368,16 @@ import {
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
+  revokeArchetypeTiers,
   unlockAllArchetypesForPersonalReport,
   upsertArchetypeTierForPersonalReport,
+  type ArchetypeTier,
 } from "@features/report/server/personalReport";
-import { isArchetypeName } from "@features/report/server/archetypeSlug";
+import {
+  isArchetypeName,
+  KNOWN_ARCHETYPES,
+  normalizeArchetypeName,
+} from "@features/report/server/archetypeSlug";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
@@ -957,12 +968,13 @@ async function upsertPaymentRecord({
 
 async function ensurePaymentItem({
   amount,
+  itemName,
   paymentId,
-  plan,
 }: {
   amount: number | null;
+  /** What was bought, as the receipt should read it (see `purchaseTitle`). */
+  itemName: string;
   paymentId: number;
-  plan: ReportPurchasePlanId;
 }) {
   const lookupResponse = await supabaseServiceFetch(
     `/rest/v1/payment_item?payment_id=eq.${paymentId}&select=id&limit=1`
@@ -979,7 +991,7 @@ async function ensurePaymentItem({
 
   const createResponse = await supabaseServiceFetch("/rest/v1/payment_item", {
     body: JSON.stringify({
-      item_name: getReportPurchasePlanTitle(plan),
+      item_name: itemName,
       item_type: "report_plan",
       payment_id: paymentId,
       quantity: 1,
@@ -1232,6 +1244,15 @@ async function syncCheckoutSessionPayment({
       ? rawArchetypeMetadata
       : null;
 
+  // Names the archetype when a single report was bought for another one (getPurchaseTitle).
+  const purchaseTitle = getPurchaseTitle(
+    plan,
+    unlockedArchetype,
+    plan === "full_report" && unlockedArchetype
+      ? await lookupPrimaryArchetypeForSubmission(context.submissionId)
+      : null
+  );
+
   const metadata = {
     archetype: unlockedArchetype,
     checkoutSessionId: settledSession.id,
@@ -1300,7 +1321,7 @@ async function syncCheckoutSessionPayment({
     cardExpYear: chargeDetails.cardExpYear,
     cardLast4: chargeDetails.cardLast4,
     currency: settledSession.currency ?? null,
-    description: `LoveIQ ${getReportPurchasePlanTitle(plan)}`,
+    description: `LoveIQ ${purchaseTitle}`,
     failureCode: chargeDetails.failureCode,
     failureMessage: chargeDetails.failureMessage,
     ipAddress: requestIp,
@@ -1325,7 +1346,7 @@ async function syncCheckoutSessionPayment({
   }
 
   if (effectiveStatus === "succeeded") {
-    await ensurePaymentItem({ amount, paymentId, plan });
+    await ensurePaymentItem({ amount, itemName: purchaseTitle, paymentId });
     if (pricingQuoteId) {
       await markReportPriceQuotePurchased({ paymentId, quoteId: pricingQuoteId });
     }
@@ -1432,6 +1453,7 @@ async function syncCheckoutSessionPayment({
         experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
+        internal: isInternalPayment,
         landingVariant: settledSession.metadata?.landingVariant ?? null,
         paymentId,
         plan,
@@ -1475,7 +1497,7 @@ async function syncCheckoutSessionPayment({
         value: amount ?? 0,
         isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
-        itemName: getReportPurchasePlanTitle(plan),
+        itemName: purchaseTitle,
         params: {
           plan,
           archetype: unlockedArchetype ?? undefined,
@@ -1503,7 +1525,7 @@ async function syncCheckoutSessionPayment({
         isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         plan,
-        itemName: getReportPurchasePlanTitle(plan),
+        itemName: purchaseTitle,
         params: {
           archetype: unlockedArchetype ?? undefined,
           pricing_cluster_id: metadata.pricingClusterId ?? undefined,
@@ -1575,6 +1597,133 @@ async function syncCheckoutSessionPayment({
   });
 }
 
+/**
+ * The archetypes one payment paid for, and at which tier: all 14 for all_reports, the
+ * reader's top three for core, else the archetype on the payment (today's name; none
+ * means the reader's own, as fulfillment treats it).
+ */
+async function archetypesPaidFor(
+  metadata: Record<string, unknown> | null,
+  submissionId: number
+): Promise<{ names: string[]; tier: ArchetypeTier } | null> {
+  const plan = metadata?.plan;
+  if (plan === "all_reports") return { names: [...KNOWN_ARCHETYPES], tier: "full_report" };
+  if (plan === "core") {
+    return {
+      names: await lookupTopThreeArchetypesForSubmission(submissionId),
+      tier: "full_report",
+    };
+  }
+  if (plan !== "full_report" && plan !== "essentials") return null;
+  const raw = typeof metadata?.archetype === "string" ? metadata.archetype : null;
+  const name =
+    normalizeArchetypeName(raw) ?? (await lookupPrimaryArchetypeForSubmission(submissionId));
+  return name ? { names: [name], tier: plan } : null;
+}
+
+/**
+ * Take back what one payment unlocked: a full refund, or a dispute opened.
+ *
+ * Marking the payment refunded or disputed used to be the whole of it, and it no longer
+ * locked anything once access moved to `archetype_tiers`: a refunded or charged-back
+ * buyer kept every archetype they had paid for (found 2026-10-06, before any real
+ * refund, with the 14-day money-back guarantee on every pay screen). Whatever another
+ * succeeded payment still covers stays open.
+ *
+ * ponytail: read-modify-write on the row; a purchase landing in the same instant could
+ * be undone. Refunds are rare and Stripe-paced; an RPC with a row lock if that changes.
+ */
+async function revokeAccessGrantedByPayment(paymentId: number, personalReportId: number) {
+  const [paymentRes, reportRes, othersRes] = await Promise.all([
+    supabaseServiceFetch(`/rest/v1/payment?id=eq.${paymentId}&select=metadata&limit=1`),
+    supabaseServiceFetch(
+      `/rest/v1/personal_report?id=eq.${personalReportId}&select=survey_submission_id,archetype_tiers&limit=1`
+    ),
+    supabaseServiceFetch(
+      `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&id=neq.${paymentId}&select=metadata`
+    ),
+  ]);
+  if (!paymentRes.ok || !reportRes.ok || !othersRes.ok) throw new Error("revoke_lookup_failed");
+  const [payment] = (await paymentRes.json()) as Array<{
+    metadata: Record<string, unknown> | null;
+  }>;
+  const [report] = (await reportRes.json()) as Array<{
+    survey_submission_id: number;
+    archetype_tiers: unknown;
+  }>;
+  const others = (await othersRes.json()) as Array<{ metadata: Record<string, unknown> | null }>;
+  if (!payment || !report) throw new Error("revoke_row_missing");
+
+  const granted = await archetypesPaidFor(payment.metadata, report.survey_submission_id);
+  if (!granted) return;
+  const stillCovered = new Map<string, ArchetypeTier>();
+  for (const other of others) {
+    const covered = await archetypesPaidFor(other.metadata, report.survey_submission_id);
+    for (const name of covered?.names ?? []) {
+      if (stillCovered.get(name) !== "full_report") stillCovered.set(name, covered!.tier);
+    }
+  }
+  const tiers = revokeArchetypeTiers(report.archetype_tiers, granted.names, stillCovered);
+  const patch = await supabaseServiceFetch(`/rest/v1/personal_report?id=eq.${personalReportId}`, {
+    body: JSON.stringify({
+      archetype_tiers: tiers,
+      unlocked_archetypes: Object.keys(tiers),
+      updated_date_time: new Date().toISOString(),
+    }),
+    headers: { Prefer: "return=minimal" },
+    method: "PATCH",
+  });
+  if (!patch.ok) throw new Error("revoke_patch_failed");
+}
+
+/** A dispute won: open again what the payment paid for (the reverse of the revoke above). */
+async function regrantAccessForPayment(paymentId: number, personalReportId: number) {
+  const [paymentRes, reportRes] = await Promise.all([
+    supabaseServiceFetch(`/rest/v1/payment?id=eq.${paymentId}&select=metadata&limit=1`),
+    supabaseServiceFetch(
+      `/rest/v1/personal_report?id=eq.${personalReportId}&select=survey_submission_id&limit=1`
+    ),
+  ]);
+  if (!paymentRes.ok || !reportRes.ok) throw new Error("regrant_lookup_failed");
+  const [payment] = (await paymentRes.json()) as Array<{
+    metadata: Record<string, unknown> | null;
+  }>;
+  const [report] = (await reportRes.json()) as Array<{ survey_submission_id: number }>;
+  if (!payment || !report) throw new Error("regrant_row_missing");
+  if (payment.metadata?.plan === "all_reports") {
+    await unlockAllArchetypesForPersonalReport(personalReportId);
+    return;
+  }
+  const granted = await archetypesPaidFor(payment.metadata, report.survey_submission_id);
+  for (const archetype of granted?.names ?? []) {
+    await upsertArchetypeTierForPersonalReport({
+      archetype,
+      personalReportId,
+      tier: granted!.tier,
+    });
+  }
+}
+
+/** Access follows the money; a failure here must be loud, never a silently open report. */
+async function changeAccessOrAlert(
+  action: "revoke" | "regrant",
+  paymentId: number,
+  personalReportId: number
+) {
+  try {
+    if (action === "revoke") await revokeAccessGrantedByPayment(paymentId, personalReportId);
+    else await regrantAccessForPayment(paymentId, personalReportId);
+  } catch (err) {
+    logger.error({ err, paymentId, personalReportId, action }, "Report access change failed");
+    await notifySlack({
+      channel: "ops",
+      kind: "report_access_change_failed",
+      text: `:warning: Could not ${action === "revoke" ? "lock" : "re-open"} the report for payment #${paymentId} (personal_report ${personalReportId}). Fix archetype_tiers by hand.`,
+      username: "ops_alerts",
+    });
+  }
+}
+
 async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event: Stripe.Event }) {
   const existingPayment = await fetchExistingPayment({
     stripeChargeId: charge.id,
@@ -1632,6 +1781,7 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
       personalReportId: existingPayment.personal_report_id,
       status: "refunded",
     });
+    await changeAccessOrAlert("revoke", existingPayment.id, existingPayment.personal_report_id);
   }
 
   await upsertWebhookEventRecord({
@@ -1717,6 +1867,12 @@ async function syncDisputeEvent({
       personalReportId: existingPayment.personal_report_id,
       status: nextStatus,
     });
+    // Opened: lock what it paid for. Won: open it again. Lost: it stays locked from the open.
+    if (outcome === "opened") {
+      await changeAccessOrAlert("revoke", existingPayment.id, existingPayment.personal_report_id);
+    } else if (restoreToSucceeded) {
+      await changeAccessOrAlert("regrant", existingPayment.id, existingPayment.personal_report_id);
+    }
   }
 
   await upsertWebhookEventRecord({

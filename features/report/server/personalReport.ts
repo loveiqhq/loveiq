@@ -7,7 +7,12 @@ import {
   type ReportAccessPlan,
 } from "@features/report/server/access";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
-import { KNOWN_ARCHETYPES, isArchetypeName } from "@features/report/server/archetypeSlug";
+import {
+  KNOWN_ARCHETYPES,
+  isArchetypeName,
+  normalizeArchetypeName,
+  type ArchetypeName,
+} from "@features/report/server/archetypeSlug";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 
@@ -34,13 +39,16 @@ function isArchetypeTier(value: unknown): value is ArchetypeTier {
 
 function sanitizeArchetypeTierMap(value: unknown): ArchetypeTierMap {
   if (!value || typeof value !== "object") return {};
-  const result: ArchetypeTierMap = {};
+  const tiers = new Map<ArchetypeName, ArchetypeTier>();
   for (const [key, tier] of Object.entries(value as Record<string, unknown>)) {
-    if (isArchetypeName(key) && isArchetypeTier(tier)) {
-      result[key] = tier;
+    // Pre-2026-05-21 names ("Approval Seeker") are mapped to today's, not dropped: a
+    // buyer of one could not open what they paid for. The stronger tier wins a clash.
+    const name = normalizeArchetypeName(key);
+    if (name && isArchetypeTier(tier) && tiers.get(name) !== "full_report") {
+      tiers.set(name, tier);
     }
   }
-  return result;
+  return Object.fromEntries(tiers);
 }
 
 interface PersonalReportRow {
@@ -333,6 +341,47 @@ export async function getPaidPlansForSubmission(
   return Array.from(paid);
 }
 
+/**
+ * `archetype_tiers` with one purchase taken back: a full refund, or a dispute opened.
+ *
+ * Every archetype the payment unlocked comes off, except where another succeeded payment
+ * still covers it (`stillCovered`, at that payment's tier). Nothing else is touched, so a
+ * hand-granted comp on an unrelated archetype survives. Legacy names come back under
+ * today's name, as every reader sees them anyway.
+ */
+export function revokeArchetypeTiers(
+  tiers: unknown,
+  granted: readonly string[],
+  stillCovered: ReadonlyMap<string, ArchetypeTier>
+): ArchetypeTierMap {
+  const result = new Map(Object.entries(sanitizeArchetypeTierMap(tiers)));
+  for (const raw of granted) {
+    const name = normalizeArchetypeName(raw);
+    if (!name) continue;
+    const kept = stillCovered.get(name);
+    if (kept) result.set(name, kept);
+    else result.delete(name);
+  }
+  return Object.fromEntries(result);
+}
+
+/**
+ * Whether THIS checkout session's payment is recorded (fulfillment stamps the session id
+ * on the payment row as metadata.checkoutSessionId). The checkout return page waits on
+ * this, not on "does the reader hold any plan": a returning buyer already holds one from
+ * an earlier purchase, so that answer sent them back before this purchase was written.
+ */
+export async function isCheckoutSessionRecorded(checkoutSessionId: string): Promise<boolean> {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/payment?metadata->>checkoutSessionId=eq.${encodeURIComponent(checkoutSessionId)}&status=eq.succeeded&select=id&limit=1`
+  );
+  if (!response.ok) {
+    throw new Error("payment_lookup_failed");
+  }
+  const rows = (await response.json()) as unknown[];
+  return Array.isArray(rows) && rows.length > 0;
+}
+
 export async function getReportAccessPlanForSubmission(
   submissionId: number,
   /**
@@ -343,9 +392,22 @@ export async function getReportAccessPlanForSubmission(
    * report view, one wasted Supabase round trip on the hottest route. Passing it
    * through removes the second read. Omitted, the behaviour is unchanged.
    */
-  prefetchedReport?: PersonalReportRow | null
+  prefetchedReport?: PersonalReportRow | null,
+  /**
+   * The reader's own archetype. Given, `accessPlan` answers "which plan covers
+   * THIS reader's own report", and a single report bought for a different
+   * archetype no longer counts towards it: that purchase opens its own archetype
+   * through `archetype_tiers`, and nothing else. Without it, buying "Only the
+   * Minimalist Companion Report" also opened the buyer's own report for free
+   * (reproduced on staging 2026-10-06). A payment with no archetype predates
+   * per-archetype pricing and was always for the reader's own report, so it still
+   * counts. Omitted, `accessPlan` is the strongest plan across every payment.
+   */
+  primaryArchetype?: string | null
 ): Promise<{
   accessPlan: ReportAccessPlan;
+  /** The strongest plan across EVERY payment, archetype ignored: "has bought anything". */
+  anyPlan: ReportAccessPlan;
   archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
@@ -358,6 +420,7 @@ export async function getReportAccessPlanForSubmission(
   if (!personalReport) {
     return {
       accessPlan: null,
+      anyPlan: null,
       archetypeTiers: {},
       personalReportId: null,
       unlockedArchetypeColumn: [],
@@ -381,16 +444,37 @@ export async function getReportAccessPlanForSubmission(
   const strongestPlan = getStrongestReportAccessPlan(
     payments.map((payment) => {
       const candidate = payment.metadata?.plan;
-      return isReportPurchasePlan(candidate) ? candidate : null;
+      if (!isReportPurchasePlan(candidate)) return null;
+      const archetype = payment.metadata?.archetype;
+      // Compared by current name: a payment from before the 2026-05-21 rename names
+      // the reader's own archetype the old way (report 102, "Approval Seeker").
+      const boughtForAnotherArchetype =
+        Boolean(primaryArchetype) &&
+        (candidate === "full_report" || candidate === "essentials") &&
+        typeof archetype === "string" &&
+        archetype !== "" &&
+        normalizeArchetypeName(archetype) !== normalizeArchetypeName(primaryArchetype);
+      return boughtForAnotherArchetype ? null : candidate;
     })
   );
 
   const columnValues = Array.isArray(personalReport.unlocked_archetypes)
-    ? personalReport.unlocked_archetypes.filter(isArchetypeName)
+    ? [
+        ...new Set(
+          personalReport.unlocked_archetypes
+            .map((name) => normalizeArchetypeName(name))
+            .filter((name): name is ArchetypeName => name !== null)
+        ),
+      ]
     : [];
 
   return {
     accessPlan: strongestPlan,
+    anyPlan: getStrongestReportAccessPlan(
+      payments.map((payment) =>
+        isReportPurchasePlan(payment.metadata?.plan) ? payment.metadata.plan : null
+      )
+    ),
     archetypeTiers: sanitizeArchetypeTierMap(personalReport.archetype_tiers ?? {}),
     personalReportId: personalReport.id,
     unlockedArchetypeColumn: columnValues,

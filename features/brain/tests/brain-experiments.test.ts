@@ -169,7 +169,7 @@ describe("experiments: the registry, read", () => {
       vi.fn(async () => priced)
     );
     expect(text).toMatch(/RUNNING NOW\n- #6 .*\(paused, Report pricing, 2026-09-22 onwards\)/);
-    expect(text).toMatch(/ {2}So far: .*Pricing 3\.0 B 1 of 3 bought \(33\.3%\)/);
+    expect(text).toMatch(/ {2}So far: .*Pricing 3\.0 lower 1 of 3 bought \(33\.3%\)/);
   });
 
   it("says why a running test has no live numbers when it has no axis, or one nothing stamps", async () => {

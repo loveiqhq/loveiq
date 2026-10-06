@@ -111,8 +111,8 @@ describe("axis trend charts — which experiments may be drawn", () => {
     const days = (Date.parse("2026-10-20") - Date.parse(launch)) / 86_400_000 + 1;
     const trends = buildAxisTrends(input, "2026-10-20");
     const chart = trends.charted.find((c) => c.axis === "pricing");
-    expect(chart?.legendFirst).toBe("Pricing 3.0 A");
-    expect(chart?.legendLast).toBe("Pricing 3.0 B");
+    expect(chart?.legendFirst).toBe("Pricing 3.0 higher");
+    expect(chart?.legendLast).toBe("Pricing 3.0 lower");
     expect(chart?.headline).toContain(`${4 * days}/${20 * days}`);
     expect(chart?.headline).toContain(`${2 * days}/${20 * days}`);
 

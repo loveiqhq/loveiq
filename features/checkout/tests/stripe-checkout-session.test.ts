@@ -228,6 +228,56 @@ describe("POST /api/stripe/checkout-session", () => {
   });
 
   /**
+   * Backing out of Stripe returns to the archetype the reader was READING. It used to
+   * return to the one being bought, which they cannot view yet, so the report fell back
+   * to their own: on 2026-10-06 the founder, reading Minimalist Companion, cancelled a
+   * Quiet Withdrawer checkout and was moved to his own report without a word.
+   */
+  it.each([
+    [
+      "a single report bought from another archetype's row",
+      "full_report",
+      "Quiet Withdrawer",
+      "http://localhost/report?archetype=minimalist-companion",
+      "archetype=quiet-withdrawer",
+    ],
+    [
+      "all 14 bought while reading another archetype",
+      "all_reports",
+      undefined,
+      "http://localhost/report?archetype=minimalist-companion",
+      "archetype=minimalist-companion",
+    ],
+  ])(
+    "%s: cancel returns to the report being read",
+    async (_label, plan, archetype, cancelUrl, successArchetype) => {
+      const createSession = vi.fn().mockResolvedValue({
+        id: "cs_test_view",
+        url: "https://checkout.stripe.com/c/pay/cs_test_view",
+      });
+      vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+      vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+      vi.mocked(getStripeServerClient).mockReturnValue({
+        checkout: { sessions: { create: createSession } },
+      } as never);
+
+      const res = await POST(
+        makeRequest({
+          ...(archetype ? { archetype } : {}),
+          viewArchetype: "Minimalist Companion",
+          plan,
+          reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        })
+      );
+
+      expect(res.status).toBe(200);
+      const [params] = createSession.mock.calls[0];
+      expect(params.cancel_url).toBe(cancelUrl);
+      expect(params.success_url).toContain(successArchetype);
+    }
+  );
+
+  /**
    * `checkout_started_at` is now the SERVER-SIDE TRUTH for the funnel's
    * begin_checkout stage (migration 20260905180000) and for the Slack journey
    * rail's "Checkout" dot. A session Stripe returns without a hosted URL cannot

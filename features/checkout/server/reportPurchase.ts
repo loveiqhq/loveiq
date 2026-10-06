@@ -171,6 +171,24 @@ export function getReportPurchasePlanTitle(plan: ReportPurchasePlanId): string {
   return getReportPurchasePlan(plan).title;
 }
 
+/**
+ * What was bought, in words, for the receipt line, the payment description and the
+ * analytics item name. A single report bought for ANOTHER archetype (its row in
+ * "Other Archetypes") is not "Only Your Highest Archetype", so it is named, as the
+ * Stripe line item and the purchase email already were. Payments 462 and 463 on
+ * 2026-10-06 both read "Only Your Highest Archetype"; the second bought Minimalist
+ * Companion.
+ */
+export function getPurchaseTitle(
+  plan: ReportPurchasePlanId,
+  archetype: string | null,
+  primaryArchetype: string | null
+): string {
+  return plan === "full_report" && archetype && archetype !== primaryArchetype
+    ? `Only the ${archetype} Report`
+    : getReportPurchasePlanTitle(plan);
+}
+
 export function isReportAccessToken(value: string | null | undefined): value is string {
   return typeof value === "string" && REPORT_ACCESS_TOKEN_REGEX.test(value);
 }

@@ -231,7 +231,7 @@ describe("POST /api/survey notifications", () => {
     expect(flat).toContain("Landing page design: *Landing Page V1* (First Design)");
     // …and so is the price test, Pricing 3.0, once a quote has stamped its list.
     expect(flat).toContain("Report pricing");
-    expect(flat).toContain("Pricing 3.0 A");
+    expect(flat).toContain("Pricing 3.0 higher");
     // Concluded experiments are not listed as ones they were in — the paywall and
     // the survey theme since 2026-08-25. The fixture still carries both arms, so this
     // proves the axis list excludes them rather than the values being absent; they are

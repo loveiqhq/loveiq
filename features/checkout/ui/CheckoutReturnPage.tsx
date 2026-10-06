@@ -63,6 +63,14 @@ const CheckoutReturnPage: FC<Props> = ({
 }) => {
   const router = useRouter();
   const planTitle = getReportPurchasePlanTitle(planId);
+  // Say WHAT is now open. A report bought from another archetype's row returns to that
+  // report, and "Your report is unlocked" left the buyer unsure which one they had paid for.
+  const unlockedWhat =
+    planId === "all_reports"
+      ? "All 14 archetype reports are"
+      : planId === "full_report" && archetype
+        ? `Your ${archetype} report is`
+        : "Your report is";
   const trackedTransactionIdRef = useRef<string | null>(null);
   const [state, setState] = useState<ReturnState>(
     sessionId
@@ -275,7 +283,7 @@ const CheckoutReturnPage: FC<Props> = ({
             <p className="checkout-return__copy">{state.message}</p>
           ) : isRedirecting ? (
             <p className="checkout-return__copy">
-              <strong className="checkout-return__done">Payment complete.</strong> Your report is
+              <strong className="checkout-return__done">Payment complete.</strong> {unlockedWhat}{" "}
               unlocked. Redirecting you now…
             </p>
           ) : state.status === "ready" && isPaidAndComplete ? (
