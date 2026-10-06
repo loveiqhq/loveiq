@@ -1,0 +1,297 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const analytics = vi.hoisted(() => ({
+  trackHeroVideoPlay: vi.fn(),
+  trackHeroVideoProgress: vi.fn(),
+  trackHeroVideoComplete: vi.fn(),
+  trackHeroVideoPaused: vi.fn(),
+  trackHeroVideoResumed: vi.fn(),
+}));
+vi.mock("@features/analytics/client", () => analytics);
+
+import WHeroVideo, {
+  HERO_POSTER_SRC,
+  HERO_PREVIEW_SRC,
+  HERO_VIDEO_SRC,
+} from "@features/landing/ui/white/WHeroVideo";
+
+/** An IntersectionObserver the test drives (same shape as cta-seen.test.tsx). */
+class FakeObserver {
+  static all: FakeObserver[] = [];
+  el: Element | null = null;
+  disconnected = false;
+  constructor(
+    public cb: IntersectionObserverCallback,
+    public opts?: IntersectionObserverInit
+  ) {
+    FakeObserver.all.push(this);
+  }
+  observe(el: Element) {
+    this.el = el;
+  }
+  disconnect() {
+    this.disconnected = true;
+  }
+  /** The element is now `ratio` in view. */
+  show(ratio: number) {
+    if (this.disconnected) return;
+    this.cb(
+      [{ isIntersecting: ratio > 0, intersectionRatio: ratio, target: this.el } as never],
+      this as never
+    );
+  }
+}
+
+let played: HTMLMediaElement[] = [];
+let paused: HTMLMediaElement[] = [];
+let playResult: () => Promise<void> = () => Promise.resolve();
+const originalMatchMedia = window.matchMedia;
+
+const setReducedMotion = (reduce: boolean) => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: reduce && query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  });
+};
+
+const setConnection = (connection: { saveData?: boolean; effectiveType?: string } | undefined) => {
+  Object.defineProperty(navigator, "connection", { configurable: true, value: connection });
+};
+
+const setVisibility = (state: "visible" | "hidden") => {
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: state });
+  document.dispatchEvent(new Event("visibilitychange"));
+};
+
+const media = () => ({
+  preview: screen.getByTestId("hero-video-preview") as HTMLVideoElement,
+  full: screen.getByTestId("hero-video-full") as HTMLVideoElement,
+});
+
+/** Tap play, then let the first frames arrive. */
+const startAndPlay = () => {
+  const { full } = media();
+  fireEvent.click(screen.getByTestId("hero-video-play"));
+  act(() => {
+    fireEvent(full, new Event("playing"));
+  });
+  return full;
+};
+
+beforeEach(() => {
+  played = [];
+  paused = [];
+  playResult = () => Promise.resolve();
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    played.push(this);
+    return playResult();
+  });
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (
+    this: HTMLMediaElement
+  ) {
+    paused.push(this);
+  });
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  FakeObserver.all = [];
+  vi.stubGlobal("IntersectionObserver", FakeObserver);
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+    cb(0);
+    return 0;
+  });
+  setReducedMotion(false);
+  setConnection(undefined);
+  setVisibility("visible");
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  for (const fn of Object.values(analytics)) fn.mockClear();
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: originalMatchMedia,
+  });
+  setConnection(undefined);
+});
+
+describe("hero video — what the server sends", () => {
+  it("renders the poster at high priority, the full video unloaded, and no loop yet", () => {
+    const html = renderToString(<WHeroVideo />);
+    // The loop is a per-device decision (reduced motion, Save-Data), so it waits for the browser.
+    expect(html).not.toContain(HERO_PREVIEW_SRC);
+    // The full video is in the page, but preload="none" fetches nothing until the tap.
+    const fullTag = /<video[^>]*data-testid="hero-video-full"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(fullTag).toContain(`src="${HERO_VIDEO_SRC}"`);
+    expect(fullTag).toContain('preload="none"');
+    // The poster: eager and high priority, because on a desktop it is the largest thing above the fold.
+    const img = /<img[^>]*>/.exec(html)?.[0] ?? "";
+    expect(img).toContain(encodeURIComponent(HERO_POSTER_SRC));
+    expect(img).toMatch(/fetchpriority="high"/i);
+    expect(img).toMatch(/loading="eager"/);
+  });
+});
+
+describe("hero video — the silent loop", () => {
+  it("rolls once a quarter of it is on screen and stops when it leaves", () => {
+    render(<WHeroVideo />);
+    const { preview } = media();
+    expect(preview.getAttribute("src")).toBe(HERO_PREVIEW_SRC);
+    const [io] = FakeObserver.all;
+    expect(io!.opts?.threshold).toEqual([0, 0.25]);
+
+    act(() => io!.show(0.1));
+    expect(played).not.toContain(preview);
+
+    act(() => io!.show(0.3));
+    expect(played).toContain(preview);
+    expect(preview.muted).toBe(true);
+
+    paused = [];
+    act(() => io!.show(0));
+    expect(paused).toContain(preview);
+  });
+
+  it("stops in a hidden tab and rolls again when the tab comes back", () => {
+    render(<WHeroVideo />);
+    const { preview } = media();
+    act(() => FakeObserver.all[0]!.show(1));
+    paused = [];
+    played = [];
+    act(() => setVisibility("hidden"));
+    expect(paused).toContain(preview);
+    act(() => setVisibility("visible"));
+    expect(played).toContain(preview);
+  });
+
+  it.each([
+    ["reduced motion", () => setReducedMotion(true)],
+    ["Save-Data", () => setConnection({ saveData: true })],
+    ["a 3G link", () => setConnection({ effectiveType: "3g" })],
+    ["a 2G link", () => setConnection({ effectiveType: "2g" })],
+  ])("never rolls under %s: the poster and the button stay", (_name, arrange) => {
+    arrange();
+    render(<WHeroVideo />);
+    const { preview } = media();
+    expect(preview.getAttribute("src")).toBeNull();
+    expect(FakeObserver.all).toHaveLength(0);
+    expect(screen.getByTestId("hero-video-play")).toBeTruthy();
+  });
+
+  it("still rolls on a 4G link", () => {
+    setConnection({ effectiveType: "4g" });
+    render(<WHeroVideo />);
+    expect(media().preview.getAttribute("src")).toBe(HERO_PREVIEW_SRC);
+  });
+});
+
+describe("hero video — playing it", () => {
+  it("starts the full video with sound inside the tap itself", () => {
+    render(<WHeroVideo />);
+    const { preview, full } = media();
+    fireEvent.click(screen.getByTestId("hero-video-play"));
+
+    // Synchronously, inside the click: iOS plays with sound only from within a gesture.
+    expect(played).toContain(full);
+    expect(full.muted).toBe(false);
+    expect(paused).toContain(preview);
+    expect(analytics.trackHeroVideoPlay).toHaveBeenCalledWith({ replay: false });
+    // Until frames arrive the button stays, showing that it is loading.
+    expect((screen.getByTestId("hero-video-play") as HTMLButtonElement).disabled).toBe(true);
+    expect(full.controls).toBe(false);
+  });
+
+  it("hands over to the video's own controls once frames arrive", () => {
+    render(<WHeroVideo />);
+    const full = startAndPlay();
+    expect(full.controls).toBe(true);
+    expect(full.tabIndex).toBe(0);
+    expect(screen.queryByTestId("hero-video-play")).toBeNull();
+    expect(document.activeElement).toBe(full);
+  });
+
+  it("goes back to the poster when the browser refuses to play", async () => {
+    playResult = () =>
+      Promise.reject(Object.assign(new Error("denied"), { name: "NotAllowedError" }));
+    render(<WHeroVideo />);
+    fireEvent.click(screen.getByTestId("hero-video-play"));
+    await act(async () => {});
+    const button = screen.getByTestId("hero-video-play") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(media().full.controls).toBe(false);
+  });
+
+  it("names the button with both of its visible words", () => {
+    render(<WHeroVideo />);
+    const button = screen.getByTestId("hero-video-play");
+    expect(button.textContent).toContain("Watch");
+    expect(button.textContent).toContain("1:10");
+    const name = button.getAttribute("aria-label") ?? "";
+    expect(name.startsWith("Watch")).toBe(true);
+    expect(name).toContain("1:10");
+  });
+});
+
+describe("hero video — what it records", () => {
+  it("sends each progress milestone once", () => {
+    render(<WHeroVideo />);
+    const full = startAndPlay();
+    Object.defineProperty(full, "duration", { configurable: true, value: 70.4 });
+    for (const t of [10, 18, 18.5, 36, 53, 60]) {
+      full.currentTime = t;
+      fireEvent(full, new Event("timeupdate"));
+    }
+    expect(analytics.trackHeroVideoProgress.mock.calls).toEqual([
+      [{ percent: 25 }],
+      [{ percent: 50 }],
+      [{ percent: 75 }],
+    ]);
+  });
+
+  it("records a viewer's pause and resume, but not the pause the browser fires at the end", () => {
+    render(<WHeroVideo />);
+    const full = startAndPlay();
+    full.currentTime = 30.4;
+    fireEvent(full, new Event("pause"));
+    fireEvent(full, new Event("play"));
+    expect(analytics.trackHeroVideoPaused).toHaveBeenCalledWith({ current_time_sec: 30 });
+    expect(analytics.trackHeroVideoResumed).toHaveBeenCalledWith({ current_time_sec: 30 });
+
+    Object.defineProperty(full, "ended", { configurable: true, value: true });
+    fireEvent(full, new Event("pause"));
+    act(() => {
+      fireEvent(full, new Event("ended"));
+    });
+    expect(analytics.trackHeroVideoPaused).toHaveBeenCalledTimes(1);
+    expect(analytics.trackHeroVideoComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns to the poster after the end and counts the next watch as a replay", () => {
+    render(<WHeroVideo />);
+    const full = startAndPlay();
+    Object.defineProperty(full, "ended", { configurable: true, value: true });
+    act(() => {
+      fireEvent(full, new Event("ended"));
+    });
+    expect(full.controls).toBe(false);
+    const button = screen.getByTestId("hero-video-play");
+
+    Object.defineProperty(full, "ended", { configurable: true, value: false });
+    full.currentTime = 70;
+    fireEvent.click(button);
+    expect(full.currentTime).toBe(0);
+    expect(analytics.trackHeroVideoPlay).toHaveBeenLastCalledWith({ replay: true });
+  });
+});
