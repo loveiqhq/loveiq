@@ -273,6 +273,26 @@ describe("a walk", () => {
     expect(ARCHETYPE_ROW_UNLOCK.test("Only Unlock This Report")).toBe(false);
   });
 
+  it("finds the purchase sequence's list, pay screen and return words by main's own names", () => {
+    // What walk.ts --sequence looks for, read from where main renders it, so a rename fails
+    // here first instead of stopping the nightly walk.
+    const read = (f: string) => readFileSync(join(process.cwd(), f), "utf8");
+    const list = read("features/report/ui/sections/ConstellationSection.tsx");
+    for (const name of ["__row", "__name", "__view"]) {
+      expect(list).toContain(`report-constellation${name}`);
+    }
+    expect(list).toMatch(/<PadlockIcon open=\{false\} \/>\s*Unlock\s*</);
+    expect(list).toContain('"View report"');
+    expect(list).toContain("`View your ${name} report`");
+    const paywall = read("features/report/ui/ReportPricingModal.tsx");
+    expect(paywall).toContain("`${card.titleLead} the ${targetArchetype} Report`");
+    expect(paywall).toContain('"Only Unlock This Report"');
+    expect(paywall).toContain("rpg-card--${card.plan}");
+    const back = read("features/checkout/ui/CheckoutReturnPage.tsx");
+    expect(back).toContain("`Your ${archetype} report is`");
+    expect(back).toMatch(/checkout-return__copy">\s*<strong[^>]*>Payment complete\./);
+  });
+
   it("recognises every question by the words of its heading", () => {
     for (const q of surveyQuestions) {
       expect(findQuestion(["Skip to main content", q.question])?.qId).toBe(q.qId);
@@ -418,6 +438,70 @@ describe("what a walk proves on its own", () => {
     expect(
       checkWalk(walk({ consoleErrors: [toolbar, "TypeError: x is undefined"] })).some((c) => !c.ok)
     ).toBe(true);
+  });
+
+  const held = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      what: `check ${i + 1}`,
+      ok: true,
+      observed: "as it should",
+    }));
+
+  it("passes a purchase sequence only when every check held and the walk reached the end", () => {
+    const passed = checkWalk(
+      walk({ sequence: { mode: "other-first", other: "Minimalist Companion", checks: held(9) } })
+    );
+    expect(passed.every((c) => c.ok)).toBe(true);
+    expect(passed.map((c) => c.what)).toContain(
+      "Bought Minimalist Companion from Other Archetypes, then the own report: all 9 sequence checks held."
+    );
+    // Stopped part-way with every check so far holding (Stripe never came back): the stop is
+    // the finding, and nothing says the sequence held.
+    const cut = checkWalk(
+      walk({
+        finished: false,
+        stoppedAt: "page.waitForURL: Timeout 120000ms exceeded.",
+        sequence: { mode: "other-first", other: "Minimalist Companion", checks: held(2) },
+      })
+    );
+    expect(cut.some((c) => !c.ok && c.what.includes("page.waitForURL"))).toBe(true);
+    expect(cut.some((c) => c.what.includes("sequence checks held"))).toBe(false);
+    // A sequence that checked nothing never passes.
+    expect(
+      checkWalk(walk({ sequence: { mode: "other-first", checks: [] } })).some(
+        (c) => !c.ok && c.what === "The purchase sequence recorded no checks."
+      )
+    ).toBe(true);
+  });
+
+  it("fails the walk on any failed sequence check, with what was expected and what was seen", () => {
+    const leak = {
+      what: 'the reader\'s own report (Spark Seeker) still locked, with the "Unlock full report" bar',
+      ok: false,
+      observed: "0 locks, the bar not shown",
+    };
+    const stopped = checkWalk(
+      walk({
+        finished: false,
+        stoppedAt: `purchase sequence: expected ${leak.what}; saw ${leak.observed}`,
+        sequence: {
+          mode: "other-first",
+          other: "Minimalist Companion",
+          checks: [...held(6), leak],
+        },
+      })
+    );
+    expect(stopped.filter((c) => !c.ok).map((c) => c.what)).toContain(
+      'Buying Minimalist Companion first: expected the reader\'s own report (Spark Seeker) still locked, with the "Unlock full report" bar; saw 0 locks, the bar not shown.'
+    );
+    // A failed check fails the walk even in a record that says it reached the end.
+    const finished = checkWalk(
+      walk({ sequence: { mode: "other-first", other: "Minimalist Companion", checks: [leak] } })
+    );
+    expect(finished.some((c) => !c.ok && c.what.startsWith("Buying Minimalist Companion"))).toBe(
+      true
+    );
+    expect(finished.some((c) => c.what.includes("sequence checks held"))).toBe(false);
   });
 
   it("reports a stopped walk, a locked scroll and a sideways page", () => {
