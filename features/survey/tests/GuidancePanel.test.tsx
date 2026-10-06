@@ -17,64 +17,54 @@ afterEach(() => {
 const baseQuestion = makeOpenQuestion({ qId: "q1", question: "Test question?" });
 
 describe("GuidancePanel", () => {
-  it("returns null when the question has no guidance and no reason", () => {
+  it("returns null when the question has no reason to give", () => {
     const { container } = render(<GuidancePanel question={baseQuestion} />);
     expect(container.innerHTML).toBe("");
   });
 
-  it("shows both rows closed until tapped (Figma 11303:174)", () => {
+  // Marcus and Mark, LoveIQ Sync 2026-10-06 (Figma 11303:174, marked ready for dev that
+  // day): the guidance is shown under the title all the time, so its expander went.
+  it("has no Info & guidance row: the guidance alone draws nothing here", () => {
+    const q = {
+      ...baseQuestion,
+      supportAndGuidance: "Guide text",
+      formatGuidance: "Select one option.",
+    };
+    const { container } = render(<GuidancePanel question={q} />);
+    expect(screen.queryByRole("button", { name: "Info & guidance" })).toBeNull();
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("shows Why we ask this closed until tapped", () => {
     const q = { ...baseQuestion, supportAndGuidance: "Guide text", howAnswerIsUsed: "Reason text" };
     render(<GuidancePanel question={q} />);
 
-    const info = screen.getByRole("button", { name: "Info & guidance" });
     const why = screen.getByRole("button", { name: "Why we ask this" });
-    expect(info).toHaveAttribute("aria-expanded", "false");
     expect(why).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByText("Guide text")).not.toBeVisible();
     expect(screen.getByText("Reason text")).not.toBeVisible();
+    expect(screen.queryByRole("button", { name: "Info & guidance" })).toBeNull();
+    expect(screen.queryByText("Guide text")).toBeNull();
   });
 
-  it("opens and closes a row, and only that row", async () => {
+  it("opens and closes Why we ask this", async () => {
     const user = userEvent.setup();
-    const q = { ...baseQuestion, supportAndGuidance: "Guide text", howAnswerIsUsed: "Reason text" };
+    const q = { ...baseQuestion, howAnswerIsUsed: "Reason text" };
     render(<GuidancePanel question={q} />);
 
     const why = screen.getByRole("button", { name: "Why we ask this" });
     await user.click(why);
     expect(why).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Reason text")).toBeVisible();
-    expect(screen.getByText("Guide text")).not.toBeVisible();
 
     await user.click(why);
     expect(why).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Reason text")).not.toBeVisible();
   });
 
-  it("puts the guide in Info & guidance, plus a separate answer instruction", async () => {
-    const user = userEvent.setup();
-    const q = {
-      ...baseQuestion,
-      supportAndGuidance: "Think about the last month.",
-      formatGuidance: "Select one option.",
-    };
-    render(<GuidancePanel question={q} />);
-    await user.click(screen.getByRole("button", { name: "Info & guidance" }));
-    expect(screen.getByText(/Think about the last month\.\s+Select one option\./)).toBeVisible();
-  });
-
-  it("falls back to the instruction alone when there is no guide", async () => {
-    const user = userEvent.setup();
-    const q = { ...baseQuestion, formatGuidance: "Use your main place of residence." };
-    render(<GuidancePanel question={q} />);
-    await user.click(screen.getByRole("button", { name: "Info & guidance" }));
-    expect(screen.getByText("Use your main place of residence.")).toBeVisible();
-  });
-
   it("falls back to the legacy comment field for Why we ask this", async () => {
     const user = userEvent.setup();
     const q = { ...baseQuestion, comment: "Legacy comment text" };
     render(<GuidancePanel question={q} />);
-    expect(screen.queryByRole("button", { name: "Info & guidance" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Why we ask this" }));
     expect(screen.getByText("Legacy comment text")).toBeVisible();
   });
@@ -83,19 +73,19 @@ describe("GuidancePanel", () => {
     const user = userEvent.setup();
     const q = { ...baseQuestion, supportAndGuidance: "Guide", howAnswerIsUsed: "Reason" };
     render(<GuidancePanel question={q} />);
-    const info = screen.getByRole("button", { name: "Info & guidance" });
-    await user.click(info);
-    await user.click(info);
+    const why = screen.getByRole("button", { name: "Why we ask this" });
+    await user.click(why);
+    await user.click(why);
     expect(guidanceSpy.mock.calls).toEqual([
-      [{ question_id: "q1", section: "info", expanded: true }],
-      [{ question_id: "q1", section: "info", expanded: false }],
+      [{ question_id: "q1", section: "why", expanded: true }],
+      [{ question_id: "q1", section: "why", expanded: false }],
     ]);
   });
 
   it("never renders the legacy 'Answer option(s) explained' block", () => {
     const q = {
       ...baseQuestion,
-      supportAndGuidance: "Guidance",
+      howAnswerIsUsed: "Reason",
       answerOptionsExplained: [{ option: "Option A", explanation: "Explanation for A" }],
     };
     render(<GuidancePanel question={q} />);
