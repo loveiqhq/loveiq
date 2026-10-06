@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup, act, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 const mockSetAnswer = vi.fn();
@@ -139,11 +140,13 @@ vi.mock("@features/survey/ui/SurveyNav", () => ({
     hasAnswer: boolean;
     onNext: () => void;
     onPrevious: () => void;
+    progress?: ReactNode;
   }) => (
     <div data-testid="survey-nav" data-ready={String(props.hasAnswer)}>
       <button data-testid="survey-nav-prev" onClick={props.onPrevious}>
         Previous
       </button>
+      {props.progress}
       <button data-testid="survey-nav-next" onClick={props.onNext} disabled={!props.canGoNext}>
         Next
       </button>
@@ -316,6 +319,13 @@ describe("SurveyEngine", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("survey-nav")).toBeInTheDocument();
     expect(screen.getByTestId("survey-progress")).toBeInTheDocument();
+  });
+
+  it("draws the progress strip inside the footer row, between Previous and Next", () => {
+    // Figma 11303:174, ready for dev 2026-10-06: one slim row, not two.
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    const nav = screen.getByTestId("survey-nav");
+    expect(nav).toContainElement(screen.getByTestId("survey-progress"));
   });
 
   it("feeds the progress strip the position on screen, out of the questions asked", () => {
