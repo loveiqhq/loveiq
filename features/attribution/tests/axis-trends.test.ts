@@ -9,6 +9,14 @@ import {
   type AxisFunnelRow,
 } from "@features/attribution/server/axis-trends";
 import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { LANDING_HERO_VIDEO_LAUNCH_DAY } from "@shared/experiments/landingVariant";
+
+/**
+ * Most tests below read ROUND 2 of the landing test (V1 vs V2, from 21 Aug): a
+ * historical read, the reason `includeRetired` and `validFrom` exist. Production's
+ * own landing cut is round 3's launch day (asserted in the first test).
+ */
+const ROUND2 = { landing: "2026-08-21" } as const;
 
 /** Days of rows for one axis+arm, ending on `lastDay`. */
 function rows(
@@ -27,15 +35,21 @@ function rows(
   }));
 }
 
+/** `day` moved by `n` days, as YYYY-MM-DD. */
+const plusDays = (day: string, n: number) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
 describe("axis trend charts — which experiments may be drawn", () => {
-  it("charts Pricing 3.0 and nothing else, because nothing else is running", () => {
+  it("charts Pricing 3.0 and the landing test's round 3, and nothing else", () => {
     /**
      * This is the live-list assertion, and it is the one thing in this file that
      * must track production rather than a fixture — an axis quietly re-added here
-     * without being randomised is a chart of a test nobody is running. `landing`
-     * concluded on 2026-09-19 in favour of V2; Pricing 3.0 (A3 vs B3) is live.
+     * without being randomised is a chart of a test nobody is running. Pricing 3.0
+     * (A3 vs B3) is live, and the landing test is live again for round 3 (V2's card
+     * vs V3's video), cut at that round's own launch day.
      */
-    expect([...CHART_AXES]).toEqual(["pricing"]);
+    expect([...CHART_AXES]).toEqual(["pricing", "landing"]);
+    expect(AXIS_VALID_FROM.landing!.day).toBe(LANDING_HERO_VIDEO_LAUNCH_DAY);
     const trends = buildAxisTrends(
       [
         ...rows("landing", "white", {
@@ -53,10 +67,10 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30"
     );
-    // The concluded landing test's rows reach nothing; pricing, with no rows, says so.
+    // Round 2's rows reach nothing: their arms are retired and their days predate round 3.
     expect(trends.charted).toHaveLength(0);
     expect(trends.counts).toHaveLength(0);
-    expect(trends.skipped.map((s) => s.axis)).toEqual(["pricing"]);
+    expect(trends.skipped.map((s) => s.axis)).toEqual(["pricing", "landing"]);
   });
 
   it("drops rows for an axis that is not in the list it was given", () => {
@@ -80,7 +94,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
         ],
         "2026-09-30",
         ["landing"],
-        { includeRetired: true }
+        { includeRetired: true, validFrom: ROUND2 }
       );
       expect(trends.charted).toHaveLength(0);
       expect(trends.counts.map((c) => c.axis)).not.toContain(axis);
@@ -144,14 +158,14 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     const chart = trends.charted.find((c) => c.axis === "landing");
     expect(chart).toBeDefined();
     // 30 days x 10 = 300 completions, x2 = 60 checkouts => 20%.
     expect(chart!.headline).toContain("60/300 = 20%");
     expect(chart!.headline).toContain("30/300 = 10%");
-    // Ordered by LABEL ("Landing Page V1 (First Design)" < "Landing Page V2 (Survey in Hero)"), not by volume. Volume
+    // Ordered by LABEL ("Landing Page V1 (First Design)" < "Landing Page V2 (Survey in Hero, before V3)"), not by volume. Volume
     // order flipped colours between consecutive digests once two arms were
     // within one day of each other.
     expect(chart!.arms[0]).toBe("white_prev");
@@ -184,7 +198,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     const chart = many.charted.find((c) => c.axis === "landing")!;
     expect(chart.caption).toContain("90 paid");
@@ -196,7 +210,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // line needs 7 days; the numbers do not, and they are what the reader came
     // for. Two reviews of a charted version agreed a picture at this volume
     // invites a conclusion the data cannot support.
-    const validFrom = AXIS_VALID_FROM.landing!.day;
+    const validFrom = ROUND2.landing;
     const trends = buildAxisTrends(
       [
         ...rows("landing", "white", {
@@ -214,7 +228,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-08-23",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("landing");
     expect(trends.skipped.map((s) => s.axis)).not.toContain("landing");
@@ -249,7 +263,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-08-21",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     expect(trends.counts.find((c) => c.axis === "landing")!.text).toContain("chart from 28 Aug");
   });
@@ -273,7 +287,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("survey");
     const young = trends.counts.find((c) => c.axis === "landing")!;
@@ -305,11 +319,13 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     const chart = trends.charted.find((c) => c.axis === "landing")!;
     expect(chart.arms[0]).toBe("white_prev");
-    expect(chart.caption).toContain("Landing Page V2 (Survey in Hero) is genuinely ahead");
+    expect(chart.caption).toContain(
+      "Landing Page V2 (Survey in Hero, before V3) is genuinely ahead"
+    );
     expect(chart.caption).not.toContain("Landing Page V1 (First Design) is genuinely ahead");
     // The winner's gap reads as a gain, not a loss.
     expect(chart.caption).toMatch(/ahead \(\+\d/);
@@ -320,11 +336,11 @@ describe("axis trend charts — which experiments may be drawn", () => {
       rows("landing", "white", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
       "2026-09-30",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     const gap = trends.skipped.find((s) => s.axis === "landing")!;
     expect(gap.caption).toContain("nothing to compare");
-    expect(gap.caption).toContain("only Landing Page V2 (Survey in Hero) has data");
+    expect(gap.caption).toContain("only Landing Page V2 (Survey in Hero, before V3) has data");
   });
 
   it("reads as English when NO arm has data", () => {
@@ -332,7 +348,10 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // zero-arm caption read "no chart yet: only no arms have data". Two calls
     // rather than one: with `landing` the sole charted axis, a single fixture
     // can no longer supply one arm to one axis and none to another.
-    const empty = buildAxisTrends([], "2026-09-30", ["landing"], { includeRetired: true });
+    const empty = buildAxisTrends([], "2026-09-30", ["landing"], {
+      includeRetired: true,
+      validFrom: ROUND2,
+    });
     for (const gap of empty.skipped) {
       expect(gap.caption).not.toContain("only no");
       expect(gap.caption).not.toMatch(/only no arms? have/);
@@ -343,64 +362,73 @@ describe("axis trend charts — which experiments may be drawn", () => {
       rows("landing", "white", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
       "2026-09-30",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     expect(oneArmTrends.skipped.find((s) => s.axis === "landing")!.caption).toContain(
-      "only Landing Page V2 (Survey in Hero) has data"
+      "only Landing Page V2 (Survey in Hero, before V3) has data"
     );
   });
 
   it("clips each axis to its own like-for-like window", () => {
-    const validFrom = AXIS_VALID_FROM.landing!.day;
+    // Round 3: a day before its launch day is cut, whatever arm name it carries.
+    const launch = LANDING_HERO_VIDEO_LAUNCH_DAY;
     const all = [
-      // A day BEFORE round 2 began: same arm name, different experiment.
-      ...rows("landing", "white", {
+      ...rows("landing", "white_card", {
         days: 1,
-        lastDay: "2026-08-01",
+        lastDay: plusDays(launch, -3),
         completions: 99,
         checkouts: 99,
       }),
-      ...rows("landing", "white", {
+      ...rows("landing", "white_card", {
         days: 5,
-        lastDay: "2026-08-25",
+        lastDay: plusDays(launch, 4),
         completions: 10,
         checkouts: 1,
       }),
     ];
     const scoped = rowsForAxis(all, "landing");
-    expect(scoped.validFrom).toBe(validFrom);
-    expect(scoped.rows.every((r) => r.day >= validFrom)).toBe(true);
-    // The pre-round-2 day, which would have dragged the rate to ~70%, is gone.
+    expect(scoped.validFrom).toBe(launch);
+    expect(scoped.rows.every((r) => r.day >= launch)).toBe(true);
+    // The pre-launch day, which would have dragged the rate to ~70%, is gone.
     expect(scoped.rows).toHaveLength(5);
-  });
 
-  it("drops unattributable and retired arms rather than charting them as arms", () => {
-    const scoped = rowsForAxis(
+    // Round 2, read historically, keeps its own floor.
+    const round2 = rowsForAxis(
       [
+        ...rows("landing", "white", {
+          days: 1,
+          lastDay: "2026-08-01",
+          completions: 99,
+          checkouts: 99,
+        }),
         ...rows("landing", "white", {
           days: 5,
           lastDay: "2026-08-25",
           completions: 10,
           checkouts: 1,
         }),
-        // tracker_arm returns the literal 'unknown' for a missing stamp, and
-        // `control` is the retired round-1 dark landing page.
-        ...rows("landing", "unknown", {
-          days: 5,
-          lastDay: "2026-08-25",
-          completions: 5,
-          checkouts: 1,
-        }),
-        ...rows("landing", "control", {
-          days: 5,
-          lastDay: "2026-08-25",
-          completions: 5,
-          checkouts: 1,
-        }),
+      ],
+      "landing",
+      { includeRetired: true, validFrom: ROUND2 }
+    );
+    expect(round2.validFrom).toBe(ROUND2.landing);
+    expect(round2.rows).toHaveLength(5);
+  });
+
+  it("drops unattributable and retired arms rather than charting them as arms", () => {
+    const lastDay = plusDays(LANDING_HERO_VIDEO_LAUNCH_DAY, 4);
+    const scoped = rowsForAxis(
+      [
+        ...rows("landing", "white_card", { days: 5, lastDay, completions: 10, checkouts: 1 }),
+        // tracker_arm returns the literal 'unknown' for a missing stamp; `control` is
+        // round 1's dark landing and `white` round 2's V2, both retired.
+        ...rows("landing", "unknown", { days: 5, lastDay, completions: 5, checkouts: 1 }),
+        ...rows("landing", "control", { days: 5, lastDay, completions: 5, checkouts: 1 }),
+        ...rows("landing", "white", { days: 5, lastDay, completions: 5, checkouts: 1 }),
       ],
       "landing"
     );
-    expect([...new Set(scoped.rows.map((r) => r.arm))]).toEqual(["white"]);
+    expect([...new Set(scoped.rows.map((r) => r.arm))]).toEqual(["white_card"]);
   });
 
   it("will not claim a winner off too few conversions, however many surveys", () => {
@@ -423,7 +451,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30",
       ["landing"],
-      { includeRetired: true }
+      { includeRetired: true, validFrom: ROUND2 }
     );
     const chart = trends.charted.find((c) => c.axis === "landing")!;
     expect(chart.caption).toContain("Not enough to compare yet");

@@ -268,16 +268,14 @@ function landingChartPayloads(blocks: SlackBlock[]): Array<{
 }
 
 /**
- * The same message the handler builds, but with the landing axis LIVE.
+ * The same message the handler builds, read as ROUND 2 of the landing test.
  *
- * VERDICT_AXES is empty in production as of 2026-09-19 — `landing` concluded in
- * favour of V2 — so the handler no longer emits a per-arm landing chart or a
- * landing verdict, and it should not. The block-building code behind those is
- * still there and still correct, and it is what the next experiment will run
- * through, so it stays under test rather than being deleted with the test that
- * ran it. These tests therefore go through `buildConversionDigest` with the axis
- * switched on, and the separate handler test below asserts that the LIVE message
- * carries none of it.
+ * The shared fixtures are round 2's (V1 "white_prev" vs V2 "white", from 21 Aug),
+ * so these tests pass that pair and floor explicitly: production now compares
+ * round 3's arms (V2's question card vs V3's video) from its own launch day, and
+ * a historical read is exactly what `landingArms` / `landingFrom` exist for. The
+ * block-building code is the same for both rounds, so it stays under test here;
+ * the handler test below asserts what the LIVE message compares.
  *
  * Reads the mocks rather than restating their fixtures, so a change to the
  * shared `beforeEach` reaches these tests the same way it reaches the handler.
@@ -292,6 +290,11 @@ async function landingLiveBlocks(): Promise<SlackBlock[]> {
   const digest = await buildConversionDigest({
     dayKey,
     liveAxesOverride: ["landing"],
+    landingArms: ["white_prev", "white"],
+    // The fixtures model V2 alone from 25 Jul and V1 joining it on 21 Aug, written
+    // for a series read uncut; the trend charts keep round 2's own 21 Aug floor.
+    landingFrom: "2026-07-25",
+    trendValidFrom: { landing: "2026-08-21" },
     funnel: (await mockFetchLandingArmFunnel()) ?? null,
     cohorts: (await mockFetchArmCohorts()) ?? null,
     startFunnel: (await mockFetchLandingStartFunnel()) ?? null,
@@ -410,7 +413,8 @@ describe("conversion-digest handler", () => {
     // the moment it changes how they read the number next to it.
     const blocks = await landingLiveBlocks();
     const landing = blocks.find((b) => JSON.stringify(b).includes("Landing page \u2192 survey"));
-    expect(JSON.stringify(landing)).toContain("keep the design they first saw");
+    // ...and points at the number the test is actually decided on.
+    expect(JSON.stringify(landing)).toContain("decided on survey starts per visit");
   });
 
   it("embeds a signed chart URL for the arm comparison", async () => {
@@ -693,7 +697,8 @@ describe("conversion-digest handler", () => {
     expect(funnelCaption(arg.blocks)).toContain("Biggest drop: of ");
     expect(flat).toContain("*Visits that reach the survey*");
     expect(flat).toContain("Break-even");
-    expect(flat).toContain("Landing page test concluded");
+    // The landing test is live again (round 3), so its block is in the message.
+    expect(flat).toContain("*Landing page → survey*");
     // The friction table's footnote is guarded in friction-metrics.test.ts: that
     // section needs a database this suite does not mock, so it is absent here.
     for (const jargon of ["visitor-days", "visit-days", "no end date", "trailing", "per-arm"]) {
@@ -1015,7 +1020,7 @@ describe("conversion-digest handler", () => {
     expect(flat).toContain("Midway progress, by landing page");
     // Plain-English arm names, never a raw stored value.
     expect(flat).toContain("Landing Page V1 (First Design)");
-    expect(flat).toContain("Landing Page V2 (Survey in Hero)");
+    expect(flat).toContain("Landing Page V2 (Survey in Hero, before V3)");
     expect(flat).not.toContain("white_prev");
     // The counts are named, not bare percentages.
     expect(flat).toContain("224 of 420 drafts reached question 30");
@@ -1583,7 +1588,7 @@ describe("conversion-digest handler", () => {
     ) as { text: { text: string } } | undefined;
     expect(block).toBeDefined();
     expect(block!.text.text.split("\n")).toHaveLength(1);
-    expect(block!.text.text).toContain("no per-arm data in this window yet");
+    expect(block!.text.text).toContain("no visits recorded for either version yet");
     expect(block!.text.text).not.toContain("no visits recorded yet");
   });
 
@@ -1604,11 +1609,11 @@ describe("conversion-digest handler", () => {
     });
     const blocks = await landingLiveBlocks();
     const text = blockText(blocks);
-    expect(text).toContain("*Landing page → survey* — one day of per-arm data");
+    expect(text).toContain("*Landing page → survey* — one day of data for each version");
     // first day + 7, not +6: 20 Aug -> 27 Aug.
     expect(text).toContain("chart from 27 Aug");
-    expect(text).toContain("80 visit-days → 13 started the survey");
-    expect(text).toContain("64 visit-days → 10 started the survey");
+    expect(text).toContain("80 visits → 13 started the survey");
+    expect(text).toContain("64 visits → 10 started the survey");
     expect(text).toContain("Not a like-for-like comparison");
     // No trend image while it cannot honestly draw one.
     expect(trendImages(blocks)).toHaveLength(0);
@@ -1794,20 +1799,19 @@ describe("conversion-digest handler", () => {
     expect(arg.text).not.toContain("ever paid");
   });
 
-  it("ships no landing comparison at all, because the test is over", async () => {
+  it("compares only round 3's two versions in the message it really sends", async () => {
     /**
      * THE TEST THE OTHER LANDING TESTS CANNOT BE.
      *
-     * Every one of them goes through `landingLiveBlocks()`, which switches the
-     * axis back ON so the block-building code stays covered. That leaves nobody
-     * asserting the thing that actually changed on 2026-09-19 — and a mutation
-     * forcing `landingIsLive` to true survived all 110 of them, because not one
-     * looked at the message the handler really sends.
+     * Every one of them goes through `landingLiveBlocks()`, which reads ROUND 2 so
+     * the block-building code stays covered. That leaves nobody asserting what the
+     * handler really sends: since round 3 started, production compares V2's
+     * question card with V3's video — and nothing of round 2's arms.
      *
-     * Asserted on the LIVE path, with fixtures that would happily draw the
-     * chart: makeStartFunnel() and makeAxisRows() both carry two landing arms,
-     * and the midway fixture below carries both arms plus an unattributed bucket.
-     * If they did not, this would pass by having nothing to omit.
+     * Asserted on the LIVE path, with fixtures that would happily draw round 2's
+     * charts: makeStartFunnel() and makeAxisRows() carry V1 and V2, and the midway
+     * fixture below carries both plus an unattributed bucket. Round 3's versions
+     * have no data in them, which is the point.
      */
     mockFetchMidwayProgress.mockResolvedValue({
       // Above the fixture's 510 finishers, so the funnel keeps the midway row.
@@ -1830,34 +1834,61 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const json = JSON.stringify(arg.blocks);
 
-    // No per-arm headline, no per-arm chart, no verdict.
-    expect(json).not.toContain("Landing page → survey");
-    expect(json).not.toContain("visit-days →");
+    // The landing block is there, for round 3's versions, which have no visits here.
+    expect(json).toContain("Landing page → survey");
+    expect(json).toContain("no visits recorded for either version yet");
+    // Nothing of round 2's arms: no counts, no chart legending them, no verdict.
+    expect(json).not.toContain(armLabel("landing", "white_prev").short);
+    expect(json).not.toContain(armLabel("landing", "white").short);
+    expect(json).not.toContain("visits →");
     expect(json).not.toContain("genuinely ahead");
     expect(json).not.toContain("no clear winner yet");
-    const landingCharts = landingChartPayloads(arg.blocks);
-    expect(landingCharts, "no chart may legend a landing arm").toHaveLength(0);
+    expect(landingChartPayloads(arg.blocks), "no chart may legend a landing arm").toHaveLength(0);
 
-    // Midway by landing page goes with it. The funnel's own midway row stays:
-    // that is the number, and it was never split by arm.
+    // No per-landing midway split of round 2's drafts, and no false start date for
+    // round 3's. The funnel's own midway row stays: it was never split by arm.
     expect(json).toContain("Midway (question 30)");
     expect(json).not.toContain("Midway progress");
-    expect(json).not.toContain("no landing page recorded");
     expect(json).not.toContain("drafts reached question");
-
-    // And it says why, rather than the chart simply vanishing.
-    expect(json).toContain("Landing page test concluded");
-    expect(json).toContain(armLabel("landing", "white").short);
+    // And no "concluded" notice: the test is running.
+    expect(json).not.toContain("Landing page test concluded");
   });
 
-  it("stops repeating the conclusion once it falls out of the window", async () => {
-    // The notice is news while the window still covers days the test ran, and
-    // filler after that. It expires on the window, with no second constant to
-    // remember to delete.
+  it("says round 2 concluded while its days are in the window, and stops once they are not", async () => {
+    /**
+     * The notice belongs to a landing axis that is NOT live, which round 3 is not.
+     * Driven with landing switched off so it stays covered for the day round 3
+     * ends (move LANDING_CONCLUDED_ON then): present while the window still holds
+     * days the test ran, gone once it does not.
+     */
+    const build = async () => {
+      const now = new Date();
+      const dayKey = reportingDay(new Date(reportingDayStart(reportingDay(now)).getTime() - 1));
+      return blockText(
+        (
+          await buildConversionDigest({
+            dayKey,
+            liveAxesOverride: ["pricing"],
+            funnel: (await mockFetchLandingArmFunnel()) ?? null,
+            cohorts: (await mockFetchArmCohorts()) ?? null,
+            startFunnel: (await mockFetchLandingStartFunnel()) ?? null,
+            axisRows: (await mockFetchAxisFunnelDaily()) ?? [],
+            cvrDays: null,
+            midway: null,
+            paywall: null,
+            emailExperiments: null,
+            unitEconomics: null,
+            adSpend: null,
+            friction: null,
+            now,
+          })
+        ).blocks
+      );
+    };
+    vi.setSystemTime(new Date("2026-09-24T09:05:00.000Z"));
+    expect(await build()).toContain("Landing page test concluded");
     vi.setSystemTime(new Date("2026-11-30T09:05:00.000Z"));
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    expect(JSON.stringify(arg.blocks)).not.toContain("Landing page test concluded");
+    expect(await build()).not.toContain("Landing page test concluded");
   });
 });
 
@@ -2466,20 +2497,18 @@ describe("conversion-digest verdicts", () => {
     // 60/500 vs 20/500 — a wide, unambiguous gap. On the LANDING axis: the survey
     // axis used to host this fixture, and its `dark` arm is retired now, so
     // buildArmVerdict correctly filters it and the pair collapses to one arm.
-    const verdict = buildArmVerdict(
-      "landing",
-      [
-        { arm: "white", n: 500, conversions: 60 },
-        { arm: "white_prev", n: 500, conversions: 20 },
-      ],
-      { includeRetired: true }
-    );
+    // Round 3's two live arms, so no includeRetired is needed.
+    const verdict = buildArmVerdict("landing", [
+      { arm: "white_card", n: 500, conversions: 60 },
+      { arm: "white_video", n: 500, conversions: 20 },
+    ]);
     expect(verdict.state).toBe("winner");
     expect(verdict.sentence).toContain("genuinely ahead");
     expect(verdict.sentence).toContain("95% CI");
     // Plain-English arm names only — never a raw stored value.
+    // The sentence names the leading arm, V2 here.
     expect(verdict.sentence).toContain("Landing Page V2 (Survey in Hero)");
-    expect(verdict.sentence).not.toContain("white_prev");
+    expect(verdict.sentence).not.toMatch(/white_card|white_video/);
   });
 
   it("refuses to call the real 308-vs-13 landing split, however tempting the rates", () => {
@@ -2563,7 +2592,7 @@ describe("conversion-digest verdicts", () => {
     const verdict = buildArmVerdict(
       "landing",
       [
-        { arm: "white", n: 300, conversions: 10 },
+        { arm: "white_card", n: 300, conversions: 10 },
         // `control` is the retired dark landing — nobody has been served it for months.
         { arm: "control", n: 800, conversions: 40 },
       ]

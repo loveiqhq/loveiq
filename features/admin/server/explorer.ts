@@ -113,11 +113,14 @@ export const DIMENSION_ORDER: Partial<Record<DimensionKey, readonly string[]>> =
   sessionBucket: SESSION_ORDER,
   reportViewed: ["Viewed", "Not viewed"],
   paidStatus: ["Paid", "Free"],
-  // Display names, in reading order: the two live arms, then the retired one, then
-  // traffic that carried no arm. Must be the strings parseLandingVariant returns —
-  // it used to be the raw values ["white", "control"], which stopped matching the
-  // moment the round-2 arm existed, so V1 rows fell out of the ordering entirely.
+  // Display names, in reading order: round 3's two live arms (V2, V3), then the
+  // earlier rounds' arms newest first, then traffic that carried no arm. Must be the
+  // strings parseLandingVariant returns — it used to be the raw values ["white",
+  // "control"], which stopped matching the moment the round-2 arm existed, so V1
+  // rows fell out of the ordering entirely.
   landingVariant: [
+    armLabel("landing", "white_card").short,
+    armLabel("landing", "white_video").short,
     armLabel("landing", "white").short,
     armLabel("landing", "white_prev").short,
     armLabel("landing", "control").short,
