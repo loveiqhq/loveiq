@@ -92,6 +92,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Most of your sexual life feels good, aligned, and meaningfully fulfilling, with only limited dissatisfaction.",
       "7": "Completely true: Your current sexual life feels deeply fulfilling, aligned, and broadly good for you overall.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "01005",
@@ -119,6 +120,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Newness, change, or experimentation are often important parts of what keeps sexuality engaging for you.",
       "7": "Completely true: Novelty, variety, experimentation, or freshness are strong and recurring parts of what keeps sexuality alive for you.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "01006",
@@ -146,6 +148,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Pain or physical discomfort happens fairly often and meaningfully shapes how sex feels for you.",
       "7": "Completely true: Discomfort or pain is a frequent, important, or defining part of your sexual experience.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "02001",
@@ -198,6 +201,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Desire usually needs affectionate, relational, or erotic cues before it really starts to build.",
       "7": "Completely true: Desire usually needs affectionate, relational, or erotic activation before it comes online.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "02003",
@@ -225,6 +229,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Planned sex usually feels easier, safer, or more successful for you than spontaneous intimacy.",
       "7": "Completely true: Planned sex usually feels easier, safer, more enjoyable, or more successful than spontaneous intimacy.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "02004",
@@ -302,6 +307,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Emotional closeness strongly supports your ability to access, sustain, or enjoy desire.",
       "7": "Completely true: Without emotional closeness, desire is often hard to access, sustain, or enjoy fully.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "03005",
@@ -373,6 +379,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: You are usually drawn to stronger, faster, or more charged erotic energy.",
       "7": "Completely true: You strongly prefer high-intensity, high-charge, or high-activation erotic energy",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "03009",
@@ -400,6 +407,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Anticipation, longing, teasing, or pursuit are often meaningful parts of what turns you on.",
       "7": "Completely true: Tension, longing, teasing, or the energy of pursuit are strong and recurring parts of what turns you on.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "03010",
@@ -451,6 +459,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Significance, ritual, or a deeper sense of meaning are often important parts of fulfillment for you.",
       "7": "Completely true: Sex feels most fulfilling when it carries significance, ritual, reverence, or a deeper sense of meaning.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "03012",
@@ -479,6 +488,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Without enough charge, edge, or intensity, sex often feels less engaging or less alive for you.",
       "7": "Completely true: Without some intensity, taboo flavor, or erotic charge, sex often feels less alive or less engaging for you.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "03013",
@@ -527,6 +537,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: You usually feel relatively safe, trusting, and steady in relationships, even if not perfectly all the time.",
       "7": "Completely true: You generally feel worthy of love, able to trust closeness, and able to stay relatively steady through distance or conflict.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "08003",
@@ -578,6 +589,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: You strongly prefer closeness and togetherness; you feel less satisfied without frequent connection.",
       "7": "Completely true: You strongly prefer closeness and togetherness; independence feels much less important than connection.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "08005",
@@ -604,6 +616,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: When repair happens well, desire usually increases or becomes more accessible for you.",
       "7": "Completely true: When emotional repair happens well, desire often returns or rises noticeably.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "08006",
@@ -632,6 +645,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Pressure fairly often makes your body or mind close down, withdraw, or lose desire.",
       "7": "Completely true: Pressure reliably makes your body or mind close down, pull back, or lose openness.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "08012",
@@ -659,6 +673,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Emotional overdependence fairly often reduces your erotic interest or sense of attraction.",
       "7": "Completely true: When a partner becomes too emotionally dependent, your attraction or erotic interest often drops noticeably.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "09013",
@@ -687,6 +702,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Using flirtation or sexuality to influence the dynamic or secure something relational is a fairly common pattern for you.",
       "7": "Completely true: Using flirtation or sexuality to shape the dynamic, secure closeness, or steer the relationship is a recurring pattern for you.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "10002",
@@ -740,6 +756,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: You are usually able to name, signal, or communicate what turns you on with relatively little hesitation.",
       "7": "Completely true: You can usually name, signal, or communicate what turns you on with relative ease and low shame.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "10004",
@@ -768,6 +785,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly comfortable: You are usually able to name limits and protect your boundaries with relatively little hesitation.",
       "7": "Completely comfortable: You can usually express what you do not want clearly and protect your boundaries without major shutdown or guilt.",
     },
+    formatGuidance: "Select how comfortable you are with this.",
   },
   {
     qId: "10005",
@@ -795,6 +813,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Visible feedback is usually important for your arousal, and neutrality often reduces your engagement.",
       "7": "Completely true: When the other person is hard to read, your arousal often drops noticeably.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "11001",
@@ -844,6 +863,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Clear rules, roles, or agreed structure usually make sex feel easier, safer, or more erotically alive for you.",
       "7": "Completely true: Clear rules, roles, or agreed structure often make sex feel more open, safe, or erotically alive for you.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "11003",
@@ -871,6 +891,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: My attention usually goes more toward the other person’s experience than toward my own.",
       "7": "Completely true: My attention strongly and naturally goes more toward the other person’s experience than toward my own.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "11004",
@@ -896,6 +917,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Reassuring or grounding them often deepens your sexual connection.",
       "7": "Completely true: Helping them feel emotionally safe strongly increases intimacy and connection.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "14020",
@@ -952,6 +974,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: Intense sex fairly often functions as a way to feel more alive or move out of stress, numbness, or disconnection.",
       "7": "Completely true: When stressed, numb, or disconnected, you often seek stronger sexual intensity to shift your state or feel more alive.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "15001",
@@ -1236,6 +1259,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: This feels like a strong current priority and something you genuinely want to address.",
       "7": "Completely true: This feels urgent, central, or highly important to focus on now.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "16005",
@@ -1406,6 +1430,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "6": "Mostly true: This feels like a strong area of importance for your life and self-understanding.",
       "7": "Completely true: Understanding your sexuality feels deeply important to your life, wellbeing, or growth.",
     },
+    formatGuidance: "Select how true this statement is for you.",
   },
   {
     qId: "16014",

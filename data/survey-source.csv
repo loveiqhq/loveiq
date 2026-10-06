@@ -1,7 +1,7 @@
 QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info and guidance,Answer options,1-7 Explanations,How this answer will be used
 00000,15,Background & Lifestyle,What is your email?,Open response,Enter a valid email address.,Use an inbox you actually check. Pick a private one if you don't want this report landing next to work or shared mail.,Email address,N/A,Used to deliver your report and any relevant LoveIQ communication.
 00001,15,Background & Lifestyle,What is your name?,Open response,Enter a name or nickname.,"Whatever you'd like us to call you in your report — first name, initials, or a nickname is fine.",Free text,N/A,Used to personalize your report and communication.
-01002,1,Current Sexual Wellbeing & Pain Points,"Right now, I feel satisfied with my sex life.",1-7 scale,,"Think about the last 1–2 months overall, not your best or worst day. If you're not having sex right now, rate how you feel about that.","1 = Not true at all
+01002,1,Current Sexual Wellbeing & Pain Points,"Right now, I feel satisfied with my sex life.",1-7 scale,Select how true this statement is for you.,"Think about the last 1–2 months overall, not your best or worst day. If you're not having sex right now, rate how you feel about that.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -14,7 +14,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: Your sexual life feels more satisfying than not, even if some frustrations, gaps, or unmet needs remain.
 6 = Mostly true: Most of your sexual life feels good, aligned, and meaningfully fulfilling, with only limited dissatisfaction.
 7 = Completely true: Your current sexual life feels deeply fulfilling, aligned, and broadly good for you overall.",Provides baseline context for interpreting your report. This does not directly define your archetype.
-01005,1,Current Sexual Wellbeing & Pain Points,"I want more variety — new positions, places, fantasies, or kinds of sex.",1-7 scale,,"""Variety"" can mean new acts, fantasies, locations, pacing, or roles — anything that breaks the same-old pattern.","1 = Not true at all
+01005,1,Current Sexual Wellbeing & Pain Points,"I want more variety — new positions, places, fantasies, or kinds of sex.",1-7 scale,Select how true this statement is for you.,"""Variety"" can mean new acts, fantasies, locations, pacing, or roles — anything that breaks the same-old pattern.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -27,7 +27,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: Novelty does matter to you, and some freshness or variation can noticeably improve your sexual experience.
 6 = Mostly true: Newness, change, or experimentation are often important parts of what keeps sexuality engaging for you.
 7 = Completely true: Novelty, variety, experimentation, or freshness are strong and recurring parts of what keeps sexuality alive for you.",Helps estimate whether your erotic style leans more toward novelty-seeking or familiarity and steadiness.
-01006,1,Current Sexual Wellbeing & Pain Points,Sex often hurts or feels physically bad for me.,1-7 scale,,"Include any sexual contact, not only penetration. Answer from your usual recent experience, not one bad time.","1 = Not true at all
+01006,1,Current Sexual Wellbeing & Pain Points,Sex often hurts or feels physically bad for me.,1-7 scale,Select how true this statement is for you.,"Include any sexual contact, not only penetration. Answer from your usual recent experience, not one bad time.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -46,7 +46,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Sex was planned, with time and privacy set aside
 - It depends — varies by person or situation
 - I haven't felt much desire lately",N/A,"Helps identify your primary desire activation pattern, which is important for archetype scoring and recommendation logic."
-02002,2,Spontaneous Desire VS Responsive Desire,"My desire only kicks in after touch, kissing, or feeling close — it rarely shows up out of nowhere.",1-7 scale,,"This is about how desire usually starts for you. Cues can be physical (touch) or emotional (closeness, flirting, fantasy).","1 = Not true at all
+02002,2,Spontaneous Desire VS Responsive Desire,"My desire only kicks in after touch, kissing, or feeling close — it rarely shows up out of nowhere.",1-7 scale,Select how true this statement is for you.,"This is about how desire usually starts for you. Cues can be physical (touch) or emotional (closeness, flirting, fantasy).","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -59,7 +59,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: Desire often comes more easily after affection or initiation, even if it does not always require it.
 6 = Mostly true: Desire usually needs affectionate, relational, or erotic cues before it really starts to build.
 7 = Completely true: Desire usually needs affectionate, relational, or erotic activation before it comes online.",A strong indicator of whether desire tends to be responsive rather than internally self-starting.
-02003,2,Spontaneous Desire VS Responsive Desire,I enjoy sex more when it's planned ahead than when it just happens.,1-7 scale,,"Answer from what actually feels better in your body, not what sounds more romantic. 'Planned' can mean scheduled or just expected.","1 = Not true at all
+02003,2,Spontaneous Desire VS Responsive Desire,I enjoy sex more when it's planned ahead than when it just happens.,1-7 scale,Select how true this statement is for you.,"Answer from what actually feels better in your body, not what sounds more romantic. 'Planned' can mean scheduled or just expected.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -84,7 +84,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - A bit forbidden, edgy, or rule-breaking
 - Being seen — or almost being seen — by others
 - Something else",N/A,"Helps identify whether privacy, ritual, spontaneity, adventure, or edge is part of your arousal style."
-03004,3,"Arousal Styles — Cues, Conditions & Brakes",I need to feel emotionally close before I want sex.,1-7 scale,,This is about whether emotional closeness actually opens your desire — not whether you value connection in general.,"1 = Not true at all
+03004,3,"Arousal Styles — Cues, Conditions & Brakes",I need to feel emotionally close before I want sex.,1-7 scale,Select how true this statement is for you.,This is about whether emotional closeness actually opens your desire — not whether you value connection in general.,"1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -108,7 +108,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - I learn by trying things and seeing what happens
 - I follow what feels natural in the moment, no overthinking
 - I'd rather not treat sex as a project to work on",N/A,"Helps distinguish guided, analytical, and intuitive approaches to sexual growth and exploration."
-03008,3,"Arousal Styles — Cues, Conditions & Brakes",I prefer sex that is intense and high-energy over sex that is soft and slow.,1-7 scale,,"Pick the energy you usually prefer, not what fits one mood or one experience.","1 = Not true at all
+03008,3,"Arousal Styles — Cues, Conditions & Brakes",I prefer sex that is intense and high-energy over sex that is soft and slow.,1-7 scale,Select how true this statement is for you.,"Pick the energy you usually prefer, not what fits one mood or one experience.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -121,7 +121,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: You often prefer more charge, edge, or activation, though softness still matters.
 6 = Mostly true: You are usually drawn to stronger, faster, or more charged erotic energy.
 7 = Completely true: You strongly prefer high-intensity, high-charge, or high-activation erotic energy",Helps position your erotic style on a calm-to-intense spectrum.
-03009,3,"Arousal Styles — Cues, Conditions & Brakes","Sexual tension, anticipation, and being chased or pursued reliably turn me on.",1-7 scale,,"Think about what creates real erotic pull for you over time, not just a one-off thrill.","1 = Not true at all
+03009,3,"Arousal Styles — Cues, Conditions & Brakes","Sexual tension, anticipation, and being chased or pursued reliably turn me on.",1-7 scale,Select how true this statement is for you.,"Think about what creates real erotic pull for you over time, not just a one-off thrill.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -139,7 +139,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - A balance of familiar and new
 - Adventurous, as long as the limits are clear
 - Intense or taboo energy — within limits we've both agreed to.",N/A,"Strong signal for whether your style stays mostly safe and private or includes more edge, novelty, or taboo energy."
-03011,3,"Arousal Styles — Cues, Conditions & Brakes",Sex feels best to me when it feels meaningful or sacred — not just physical.,1-7 scale,,"You don't need to be religious. Picture sex that feels emotionally or spiritually significant, vs. sex that's purely about pleasure.","1 = Not true at all
+03011,3,"Arousal Styles — Cues, Conditions & Brakes",Sex feels best to me when it feels meaningful or sacred — not just physical.,1-7 scale,Select how true this statement is for you.,"You don't need to be religious. Picture sex that feels emotionally or spiritually significant, vs. sex that's purely about pleasure.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -152,7 +152,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: Sex often feels more fulfilling when it carries some emotional, symbolic, or meaningful depth.
 6 = Mostly true: Significance, ritual, or a deeper sense of meaning are often important parts of fulfillment for you.
 7 = Completely true: Sex feels most fulfilling when it carries significance, ritual, reverence, or a deeper sense of meaning.","Helps identify whether meaning, ritual, and depth are central to sexual fulfillment for you."
-03012,3,"Arousal Styles — Cues, Conditions & Brakes","Without something a bit forbidden, taboo, or high-intensity, sex can feel flat to me.",1-7 scale,,"This is checking whether sex generally needs an extra charge — like risk, role-play, power dynamics, dirty talk, or pushing against rules — to feel engaging for you. ","1 = Not true at all
+03012,3,"Arousal Styles — Cues, Conditions & Brakes","Without something a bit forbidden, taboo, or high-intensity, sex can feel flat to me.",1-7 scale,Select how true this statement is for you.,"This is checking whether sex generally needs an extra charge — like risk, role-play, power dynamics, dirty talk, or pushing against rules — to feel engaging for you. ","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -170,7 +170,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Getting fully absorbed in the feeling, with no focus on watching either way
 - Not sure",N/A,"Helps distinguish being seen, watching, and inward/relational arousal patterns."
 08000,8,Attachment Style & Emotional Safety,"How you bond — closeness, distance, and how you make up after conflict — shapes how safe your body feels during sex.",,,,,,
-08002,8,Attachment Style & Emotional Safety,I generally feel secure in my close relationships.,1-7 scale,,"Answer from your usual relational baseline, not one rough week. If your current relationship reflects a real shift, let it count.","1 = Not true at all
+08002,8,Attachment Style & Emotional Safety,I generally feel secure in my close relationships.,1-7 scale,Select how true this statement is for you.,"Answer from your usual relational baseline, not one rough week. If your current relationship reflects a real shift, let it count.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -188,7 +188,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Get frustrated, irritated, or push back at them
 - Stay calm and handle it on your own
 - It depends on the person or situation",N/A,"Helps identify pursuit, withdrawal, protest, or self-regulation patterns that shape intimacy dynamics."
-08004,8,Attachment Style & Emotional Safety,I usually want more closeness and togetherness than space and independence.,1-7 scale,,"If your current relationship reflects a lasting shift in how you handle closeness vs. space, let that matter.","1 = Not true at all
+08004,8,Attachment Style & Emotional Safety,I usually want more closeness and togetherness than space and independence.,1-7 scale,Select how true this statement is for you.,"If your current relationship reflects a lasting shift in how you handle closeness vs. space, let that matter.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -201,7 +201,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: You usually prefer more togetherness than space, though independence still matters to you.
 6 = Mostly true: You strongly prefer closeness and togetherness; you feel less satisfied without frequent connection.
 7 = Completely true: You strongly prefer closeness and togetherness; independence feels much less important than connection.",Places you on a closeness-versus-distance pattern that shapes intimacy recommendations.
-08005,8,Attachment Style & Emotional Safety,"After a real make-up talk where we both opened up, I often want them sexually.",1-7 scale,,Think about a real reconnection moment after tension — not a quick patch-up. What usually happens to your desire after?,"1 = Not true at all
+08005,8,Attachment Style & Emotional Safety,"After a real make-up talk where we both opened up, I often want them sexually.",1-7 scale,Select how true this statement is for you.,Think about a real reconnection moment after tension — not a quick patch-up. What usually happens to your desire after?,"1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -214,7 +214,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: A good repair conversation often helps desire return at least somewhat.
 6 = Mostly true: When repair happens well, desire usually increases or becomes more accessible for you.
 7 = Completely true: When emotional repair happens well, desire often returns or rises noticeably.",Strong clue for whether emotional reconnection reliably reopens desire for you.
-08006,8,Attachment Style & Emotional Safety,"When I feel pressure during sex — to perform, to talk, or to take it further — I tend to shut down or want to pull away.",1-7 scale,,"Pressure can be obvious or subtle. Go with what reliably happens in your body when you feel pushed, rushed, or watched.","1 = Not true at all
+08006,8,Attachment Style & Emotional Safety,"When I feel pressure during sex — to perform, to talk, or to take it further — I tend to shut down or want to pull away.",1-7 scale,Select how true this statement is for you.,"Pressure can be obvious or subtle. Go with what reliably happens in your body when you feel pushed, rushed, or watched.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -227,7 +227,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: Pressure often reduces your openness and can start to make you pull back.
 6 = Mostly true: Pressure fairly often makes your body or mind close down, withdraw, or lose desire.
 7 = Completely true: Pressure reliably makes your body or mind close down, pull back, or lose openness.","High-weight indicator of pressure sensitivity, which strongly affects pacing, safety, and the kinds of recommendations that are likely to be useful."
-08012,8,Attachment Style & Emotional Safety,I lose interest in sex when the other person leans on me too much emotionally.,1-7 scale,,Answer from what actually happens when their need starts feeling like weight or pressure — not what you think should happen.,"1 = Not true at all
+08012,8,Attachment Style & Emotional Safety,I lose interest in sex when the other person leans on me too much emotionally.,1-7 scale,Select how true this statement is for you.,Answer from what actually happens when their need starts feeling like weight or pressure — not what you think should happen.,"1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -240,7 +240,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: When a partner becomes more emotionally dependent, your attraction can start to drop in noticeable ways.
 6 = Mostly true: Emotional overdependence fairly often reduces your erotic interest or sense of attraction.
 7 = Completely true: When a partner becomes too emotionally dependent, your attraction or erotic interest often drops noticeably.",We use this to tell whether too much emotional dependence or neediness tends to cool desire for you.
-09013,9,Relational Patterns & Boundaries,"I sometimes use flirting or sex to calm tension, get reassurance, or avoid asking for what I need directly.",1-7 scale,,"Think about patterns under stress in close relationships. If this has become a stable way you handle tension, count it.","1 = Not true at all
+09013,9,Relational Patterns & Boundaries,"I sometimes use flirting or sex to calm tension, get reassurance, or avoid asking for what I need directly.",1-7 scale,Select how true this statement is for you.,"Think about patterns under stress in close relationships. If this has become a stable way you handle tension, count it.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -260,7 +260,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Checking in emotionally — asking how they feel, sharing how I feel
 - Mostly through sounds, looks, and body language
 - I don't communicate much during sex",N/A,"This tells us whether your communication style is more quiet, embodied, concise, expressive, or emotionally transparent."
-10003,10,Communication Style,I'm comfortable expressing what turns me on.,1-7 scale,,Think about real situations with another person — not private thoughts. How easily can you actually say it out loud?,"1 = Not true at all
+10003,10,Communication Style,I'm comfortable expressing what turns me on.,1-7 scale,Select how true this statement is for you.,Think about real situations with another person — not private thoughts. How easily can you actually say it out loud?,"1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -273,7 +273,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: You can often communicate what turns you on, even if some inhibition or self-consciousness remains.
 6 = Mostly true: You are usually able to name, signal, or communicate what turns you on with relatively little hesitation.
 7 = Completely true: You can usually name, signal, or communicate what turns you on with relative ease and low shame.","This shows how easily you can name and voice what turns you on, which changes the communication style we recommend."
-10004,10,Communication Style,"I'm comfortable saying what I don't want — slowing things down, stopping, or naming a limit.",1-7 scale,,"Think about in-the-moment situations. How easily can you slow, stop, redirect, or say no when something feels off?","1 = Not comfortable at all
+10004,10,Communication Style,"I'm comfortable saying what I don't want — slowing things down, stopping, or naming a limit.",1-7 scale,Select how comfortable you are with this.,"Think about in-the-moment situations. How easily can you slow, stop, redirect, or say no when something feels off?","1 = Not comfortable at all
 2 = Mostly not comfortable
 3 = Slightly not comfortable
 4 = Mixed / depends
@@ -286,7 +286,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly comfortable: You can often communicate what you do not want, even if some discomfort or self-consciousness remains.
 6 = Mostly comfortable: You are usually able to name limits and protect your boundaries with relatively little hesitation.
 7 = Completely comfortable: You can usually express what you do not want clearly and protect your boundaries without major shutdown or guilt.","This shows how easily you can protect your boundaries in sexual moments, which helps us avoid advice that assumes over-accommodating is fine."
-10005,10,Communication Style,"If the other person is quiet or hard to read during sex, I lose arousal.",1-7 scale,,"Does low feedback from them make you lose momentum, confidence, or interest in continuing?","1 = Not true at all
+10005,10,Communication Style,"If the other person is quiet or hard to read during sex, I lose arousal.",1-7 scale,Select how true this statement is for you.,"Does low feedback from them make you lose momentum, confidence, or interest in continuing?","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -304,7 +304,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Switching — sometimes leading, sometimes letting go
 - Equal — we meet in the middle, no one's in charge
 - Not sure / depends on the situation",N/A,"This gives us a direct clue about whether your energy tends toward leading, surrendering, switching, or staying mostly role-light."
-11002,11,Partner-Related Needs,"I enjoy clear roles, agreements, or rules during sex.",1-7 scale,,"Do clear expectations, defined roles, or agreed rules tend to make sex feel easier, safer, or hotter for you?","1 = Not true at all
+11002,11,Partner-Related Needs,"I enjoy clear roles, agreements, or rules during sex.",1-7 scale,Select how true this statement is for you.,"Do clear expectations, defined roles, or agreed rules tend to make sex feel easier, safer, or hotter for you?","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -317,7 +317,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: Clear roles, agreements, or structure often improve the experience, even if you do not always need them.
 6 = Mostly true: Clear rules, roles, or agreed structure usually make sex feel easier, safer, or more erotically alive for you.
 7 = Completely true: Clear rules, roles, or agreed structure often make sex feel more open, safe, or erotically alive for you.","We use this to tell whether rules, roles, and explicit agreements make sex feel freer for you rather than restrictive."
-11003,11,Partner-Related Needs,"During sex, I focus more on the other person's pleasure than on my own.",1-7 scale,,Think about where your attention actually lands during sex — not where you think it ought to go.,"1 = Not true at all
+11003,11,Partner-Related Needs,"During sex, I focus more on the other person's pleasure than on my own.",1-7 scale,Select how true this statement is for you.,Think about where your attention actually lands during sex — not where you think it ought to go.,"1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -330,7 +330,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: My attention tends to go somewhat more toward the other person’s experience than toward my own.
 6 = Mostly true: My attention usually goes more toward the other person’s experience than toward my own.
 7 = Completely true: My attention strongly and naturally goes more toward the other person’s experience than toward my own.","This helps us distinguish giving-focused, balanced, and receiving-or-guided dynamics in the way you naturally relate during sex."
-11004,11,Partner-Related Needs,"Taking care of someone — being attentive, soothing, healing — turns me on.",1-7 scale,,Rate how much giving care fuels your desire.,"1 = Not true at all
+11004,11,Partner-Related Needs,"Taking care of someone — being attentive, soothing, healing — turns me on.",1-7 scale,Select how true this statement is for you.,Rate how much giving care fuels your desire.,"1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -352,7 +352,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Meaning, depth, or devotion
 - Pleasing or taking care of the other person
 - Comfort, soothing, or stress relief",N/A,"This is one of the most important direct questions in the assessment because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service."
-14021,14,Identity & Conditioning,"I sometimes go for intense sex to snap out of feeling stressed, flat, or shut down.",1-7 scale,,"If intensity has become a regular way you move through stress, numbness, or feeling cut off, let that count here.","1 = Not true at all
+14021,14,Identity & Conditioning,"I sometimes go for intense sex to snap out of feeling stressed, flat, or shut down.",1-7 scale,Select how true this statement is for you.,"If intensity has become a regular way you move through stress, numbness, or feeling cut off, let that count here.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -434,7 +434,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Healing past experiences that still affect me sexually
 - Being more on the same page with someone I'm involved with
 - Something else",N/A,"This sets the main focus of your next-step suggestions, so the report starts with what matters most to you now."
-16002,16,Next Steps & Preferences,Working on my sexuality is a priority for me right now.,1-7 scale,,"Think about real life right now — bandwidth, motivation, life pressures — not how important it feels in theory.","1 = Not true at all
+16002,16,Next Steps & Preferences,Working on my sexuality is a priority for me right now.,1-7 scale,Select how true this statement is for you.,"Think about real life right now — bandwidth, motivation, life pressures — not how important it feels in theory.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
@@ -475,7 +475,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - €300–699
 - €700–1,499
 - €1,500+",N/A,This gives a rough sense of the level of depth and commitment that may feel realistic in your next-step suggestions.
-16013,16,Next Steps & Preferences,Understanding my sexuality is important to me.,1-7 scale,,"Look at the bigger picture of your life. For some, sexuality is central; for others it matters but isn't the main focus.","1 = Not true at all
+16013,16,Next Steps & Preferences,Understanding my sexuality is important to me.,1-7 scale,Select how true this statement is for you.,"Look at the bigger picture of your life. For some, sexuality is central; for others it matters but isn't the main focus.","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
 4 = Mixed / depends
