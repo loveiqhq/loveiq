@@ -15,6 +15,7 @@ import {
   assignQuestionOrderArm,
   isQuestionOrderArm,
   QUESTION_ORDER_ARM_KEY,
+  resolveDraftQuestionOrderArm,
   resolveQuestionOrderOverride,
 } from "@shared/experiments/questionOrderArm";
 
@@ -200,5 +201,55 @@ describe("arm assignment", () => {
 
   it("names the stamp key the analysis will group by", () => {
     expect(QUESTION_ORDER_ARM_KEY).toBe("question_order_arm");
+  });
+});
+
+describe("a draft reopened after C13 launched", () => {
+  // The e2e fixtures (e2e/surveyArm.ts): one session id that hashes to each arm.
+  const VARIANT_ID = "00000000-0000-4000-8000-000000000001";
+  const CONTROL_ID = "00000000-0000-4000-8000-000000000007";
+  const fresh = { currentIndex: 0, answers: {}, prefilled: [] as string[] };
+  const pastTheOpening = { currentIndex: 20, answers: { "00001": "x" }, prefilled: [] as string[] };
+
+  it("uses session ids that bucket as named", () => {
+    expect(assignQuestionOrderArm(VARIANT_ID)).toBe("variant");
+    expect(assignQuestionOrderArm(CONTROL_ID)).toBe("control");
+  });
+
+  it("keeps a draft begun before C13 in control, whatever its session hashes to", () => {
+    // Saved by the build before C13, so no arm is recorded. In the variant, the five
+    // questions it moves forward would sit behind this reader's saved position.
+    expect(resolveDraftQuestionOrderArm(VARIANT_ID, pastTheOpening)).toBe("control");
+    // An answer given without moving on is progress too.
+    expect(resolveDraftQuestionOrderArm(VARIANT_ID, { ...fresh, answers: { "00001": "x" } })).toBe(
+      "control"
+    );
+  });
+
+  it("reopens a draft in the arm it recorded", () => {
+    for (const arm of ["control", "variant"] as const) {
+      expect(resolveDraftQuestionOrderArm(VARIANT_ID, { ...pastTheOpening, orderArm: arm })).toBe(
+        arm
+      );
+      expect(resolveDraftQuestionOrderArm(CONTROL_ID, { ...pastTheOpening, orderArm: arm })).toBe(
+        arm
+      );
+    }
+  });
+
+  it("buckets a fresh run by its session id, the landing card's answer included", () => {
+    expect(resolveDraftQuestionOrderArm(VARIANT_ID, fresh)).toBe("variant");
+    expect(resolveDraftQuestionOrderArm(CONTROL_ID, fresh)).toBe("control");
+    const landingCard = { currentIndex: 0, answers: { "01002": 3 }, prefilled: ["01002"] };
+    expect(resolveDraftQuestionOrderArm(VARIANT_ID, landingCard)).toBe("variant");
+  });
+
+  it("treats an arm it does not recognise as none", () => {
+    expect(resolveDraftQuestionOrderArm(VARIANT_ID, { ...fresh, orderArm: "purple" })).toBe(
+      "variant"
+    );
+    expect(
+      resolveDraftQuestionOrderArm(VARIANT_ID, { ...pastTheOpening, orderArm: "purple" })
+    ).toBe("control");
   });
 });

@@ -24,12 +24,6 @@ import {
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { orderAskedQuestions } from "./questionOrder";
-import {
-  assignQuestionOrderArm,
-  resolveQuestionOrderOverride,
-  type QuestionOrderArm,
-} from "@shared/experiments/questionOrderArm";
-import { getSessionId } from "./hooks/surveySession";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -87,6 +81,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     currentIndex,
     startedAt,
     prefilled,
+    orderArm,
     setAnswer,
     getAnswer,
     getLatestAnswers,
@@ -146,20 +141,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // `orderEmailLast` moves the email question from its generated index 0 to just
   // before the marketing opt-in, for everyone (the email-position A/B that used
   // to pick this per visitor was retired 2026-08-16 in favour of "last").
-  // C13 — the opening-order experiment. Resolved once, on first render, from the
-  // session id: the order must not change under a respondent who reloads or goes
-  // back, and the session id is the one value that already survives both. No
-  // session id (storage blocked) means control, because the submit path would
-  // have nothing to slice that respondent by. `?order=control|variant` previews
-  // either arm on dev and staging, never on production.
-  const [orderArm] = useState<QuestionOrderArm>(() => {
-    const devParam =
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("order");
-    return resolveQuestionOrderOverride(devParam) ?? assignQuestionOrderArm(getSessionId());
-  });
-
+  // C13 — the opening-order experiment. Resolved once per run by useSurveyState and kept
+  // in the draft: the order must not change under a respondent who reloads, goes back or
+  // resumes, so a draft begun before C13 keeps the control order (its saved position
+  // would otherwise skip the questions the variant moves forward). A fresh run is
+  // bucketed by its session id; no session id (storage blocked) means control.
+  // `?order=control|variant` previews either arm on dev and staging, never on production.
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(

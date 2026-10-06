@@ -413,6 +413,12 @@ export async function POST(request: Request) {
    * here rather than fixed, because the alternative is letting the client tell the
    * server its arm, which is the property this derivation exists to remove.
    *
+   * AND ONE ON PRODUCTION, outside every readout. A draft begun before C13 launched
+   * keeps the control order when it is resumed (`resolveDraftQuestionOrderArm`), so
+   * its stamp can say "variant" for a control run. Such a run started before the
+   * launch, and every C13 readout must filter on sessions started after it (see
+   * questionOrderArm.ts), so these rows never reach one.
+   *
    * Only stamped when a session id is present, which preserves the
    * "no session, no stamp" rule the landing arm follows: a crawler or a direct
    * hit still produces no utm_tracker at all rather than a bare {} .

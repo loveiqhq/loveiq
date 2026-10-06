@@ -131,3 +131,35 @@ export function assignQuestionOrderArm(sessionId: string | null | undefined): Qu
   if (!sessionId?.trim()) return "control";
   return hash(`c13-opening-order:${sessionId}`) % 2 === 0 ? "control" : "variant";
 }
+
+/**
+ * The arm for a survey opened over what this device already holds.
+ *
+ * A DRAFT FROM BEFORE C13 KEEPS THE CONTROL ORDER. `assignQuestionOrderArm` hands an arm
+ * to any session id, including one whose draft was begun before C13 reached production,
+ * so about half of those drafts would reopen in the variant order under their saved
+ * position. The variant pulls five later questions into the opening, and the survey only
+ * moves forward from where it left off, so a reader resumed past the opening is never
+ * asked them — the five strongest trait questions in the scoring. On 2026-10-06 production
+ * held 260 unfinished drafts from the previous 14 days that were past the opening.
+ *
+ * So the arm a draft recorded wins. A draft with progress and no recorded arm predates C13
+ * and stays in control. Only a fresh run (nothing answered, or only the landing card's
+ * question) is bucketed by its session id. `useSurveyState` records the result in the
+ * draft, so it is decided once per run.
+ */
+export function resolveDraftQuestionOrderArm(
+  sessionId: string | null | undefined,
+  draft: {
+    orderArm?: unknown;
+    currentIndex: number;
+    answers: Readonly<Record<string, unknown>>;
+    prefilled: readonly string[];
+  }
+): QuestionOrderArm {
+  if (isQuestionOrderArm(draft.orderArm)) return draft.orderArm;
+  const hasProgress =
+    draft.currentIndex > 0 ||
+    Object.keys(draft.answers).some((qId) => !draft.prefilled.includes(qId));
+  return hasProgress ? "control" : assignQuestionOrderArm(sessionId);
+}
