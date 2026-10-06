@@ -101,6 +101,50 @@ describe("a single report bought for another archetype", () => {
   });
 });
 
+/**
+ * The 2026-05-21 rename migrated scoring_result only; payments and archetype_tiers kept
+ * the old names, and a strict name check dropped them. Report 165 paid twice in May for
+ * "Approval Seeker" and "Exhibitionist Performer" and could open neither.
+ */
+describe("archetype names from before the 2026-05-21 rename", () => {
+  beforeEach(() => {
+    mockFetchWithTimeout.mockReset();
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
+  });
+
+  it("opens the archetypes bought under their old names", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(payments());
+    const res = await getReportAccessPlanForSubmission(
+      42,
+      row({ "Approval Seeker": "full_report", "Exhibitionist Performer": "essentials" }),
+      OWN
+    );
+    expect(res.archetypeTiers).toEqual({
+      "Tender Devotee": "full_report",
+      "Radiant Performer": "essentials",
+    });
+  });
+
+  it("counts an old-name payment for the reader's own archetype as their own", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      payments({ plan: "full_report", archetype: "Approval Seeker" })
+    );
+    const res = await getReportAccessPlanForSubmission(42, row(), "Tender Devotee");
+    expect(res.accessPlan).toBe("full_report");
+  });
+
+  it("keeps the stronger tier when the old and new name are both stored", async () => {
+    mockFetchWithTimeout.mockResolvedValueOnce(payments());
+    const res = await getReportAccessPlanForSubmission(
+      42,
+      row({ "Tender Devotee": "essentials", "Approval Seeker": "full_report" }),
+      OWN
+    );
+    expect(res.archetypeTiers["Tender Devotee"]).toBe("full_report");
+  });
+});
+
 describe("ownsFullReportFor (the unlock bar)", () => {
   it("is true on the own report once the own report is bought", () => {
     expect(ownsFullReportFor("full_report", {}, OWN)).toBe(true);

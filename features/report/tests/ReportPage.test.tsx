@@ -707,6 +707,8 @@ describe("ReportPage", () => {
       const { anchor, ...checkout } = mockStartReportCheckout.mock.calls[0][0];
       expect(checkout).toEqual({
         archetype: "Emotional Voyeur",
+        // The archetype on screen, for Stripe's way back (cancel returns to it).
+        viewArchetype: "Emotional Voyeur",
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
@@ -856,6 +858,20 @@ describe("ReportPage", () => {
     // bought must land on their report, never the payment modal.
     const paid = buildSuccessResponse();
     paid.data.accessPlan = "full_report";
+    mockUseReportData.mockReturnValue(paid);
+    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
+
+    render(<ReportPage />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does NOT open the offer modal for a buyer of ANOTHER archetype's report either", () => {
+    // `accessPlan` covers the reader's own report only, so it is null for someone who
+    // bought just another archetype. "Has paid at all" is `purchasedPlan`.
+    const paid = buildSuccessResponse();
+    paid.data.accessPlan = null;
+    (paid.data as { purchasedPlan?: string }).purchasedPlan = "full_report";
     mockUseReportData.mockReturnValue(paid);
     mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 

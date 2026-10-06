@@ -667,9 +667,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // The report shows locked premium cards (inline price + countdown) when it
   // isn't fully unlocked and has at least one premium section. Gates both the
   // shared countdown ticker and the price-exposure analytics event.
+  // Asked of the archetype on screen, like the unlock bar: the hand-written plan list it
+  // replaces missed `core`, and a buyer of only another archetype reads null here.
   const hasLockedPremiumCards =
-    accessPlan !== "full_report" &&
-    accessPlan !== "all_reports" &&
+    !ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) &&
     resolvedSections.some((section) => section.isPremium);
 
   // Fire one "locked chapter card price shown" event per report when the inline
@@ -2719,6 +2720,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const ownerToken = viewMode === "owner" ? (token ?? data?.ownerToken ?? null) : null;
 
   const accessPlan = data?.accessPlan ?? null;
+  // "Has this reader paid for anything?" `accessPlan` answers for their own report only, so
+  // a buyer of another archetype's report reads null there and would be shown the pay
+  // screen unprompted (the pop-up test, offer links, the discount ladder).
+  const hasPurchased = accessPlan !== null || (data?.purchasedPlan ?? null) !== null;
 
   // The report token this visit is keyed on — URL token first, else the
   // server-resolved owner token — so session-based (/report?sessionId /
@@ -2787,7 +2792,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (autoOpenedPricingRef.current) return;
     if (!data) return;
     if (viewMode === "shared") return;
-    if (accessPlan !== null) return;
+    if (hasPurchased) return;
     // Only auto-open when the discount ladder has progressed (24h+ since
     // survey). At step 0 (just finished the report) the modal stays closed —
     // user opens it explicitly via locked-section CTAs or archetype tiles.
@@ -2799,7 +2804,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
-  }, [accessPlan, data, viewMode]);
+  }, [accessPlan, data, hasPurchased, viewMode]);
 
   useEffect(() => {
     if (!isOfferLink) return;
@@ -2812,7 +2817,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // auto-opened. A paying customer who clicks an old nurture link from their
     // inbox lands on their report, not a checkout prompt; tier upgrades happen
     // on demand via locked-section CTAs.
-    if (!shouldAutoOpenOfferModal({ isOfferLink, accessPlan, viewMode })) {
+    if (
+      !shouldAutoOpenOfferModal({
+        isOfferLink,
+        accessPlan: hasPurchased ? (accessPlan ?? data?.purchasedPlan ?? null) : null,
+        viewMode,
+      })
+    ) {
       return;
     }
     // Intent signal — user clicked an email-deep-link to land here. Counts
@@ -2823,7 +2834,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingTargetArchetype(null);
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
-  }, [data, isOfferLink, viewMode, accessPlan]);
+  }, [data, isOfferLink, viewMode, accessPlan, hasPurchased]);
 
   useEffect(() => {
     isPricingModalOpenRef.current = isPricingModalOpen;
@@ -2872,7 +2883,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   useEffect(() => {
     if (!data) return;
-    if (accessPlan !== null) return;
+    if (hasPurchased) return;
     if (viewMode === "shared") return;
 
     // Open the plans pop-up once the reader REACHES "Attachment Style" (MO,
@@ -3049,7 +3060,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant, isV4, popupArm]);
+  }, [
+    accessPlan,
+    hasPurchased,
+    notifyPaywallReached,
+    data,
+    viewMode,
+    shouldShowOfferVariant,
+    isV4,
+    popupArm,
+  ]);
 
   // Every other route to the paywall reports it too: an ?offer=1 email deep-link,
   // the 24h ladder auto-open, and every manual "Unlock" CTA. Whichever comes first
@@ -3188,6 +3208,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     void startReportCheckout({
       anchor,
       archetype: archetypeForCheckout,
+      viewArchetype,
       plan,
       quote: quote ?? null,
       reportSessionId: token ? null : sessionId,
