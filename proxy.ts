@@ -834,7 +834,12 @@ export const config = {
       // logging) means anything for a request that is forwarded verbatim to PostHog.
       // The staging gate exclusion is deliberate, not incidental: a gated preview must
       // still be able to send analytics, which is how this proxy gets verified at all.
-      source: "/((?!_next/static|_next/image|favicon.ico|images/|relay/).*)",
+      //
+      // `videos/` (the landing hero video) is skipped like `images/`: a browser fetches a
+      // video in many byte-range requests, and every one would otherwise run this whole
+      // middleware for a static file it has nothing to add to. The staging gate already
+      // lets .mp4 through (STATIC_MEDIA_RE), so a gated preview loses nothing either.
+      source: "/((?!_next/static|_next/image|favicon.ico|images/|videos/|relay/).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },
