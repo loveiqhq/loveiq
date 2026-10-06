@@ -370,6 +370,11 @@ describe("ReportPage", () => {
   });
 
   afterEach(() => {
+    // Unmount BEFORE the stubs go. cleanup() flushes effects still pending from the
+    // test, and a chart's reveal effect builds an IntersectionObserver: run after
+    // unstubAllGlobals, jsdom has none, and the test fails with a ReferenceError
+    // depending on timing (seen once in CI on 2026-10-06).
+    cleanup();
     vi.unstubAllGlobals();
     mockScrollTo.mockReset();
     document.documentElement.style.overflow = "";
@@ -379,7 +384,6 @@ describe("ReportPage", () => {
     document.body.style.right = "";
     document.body.style.top = "";
     document.body.style.width = "";
-    cleanup();
   });
 
   beforeEach(() => {
