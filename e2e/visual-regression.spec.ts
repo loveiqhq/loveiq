@@ -236,7 +236,10 @@ test.describe("Component Visual Regression", () => {
   });
 
   test("nav mobile menu open state", async ({ page }) => {
-    await page.goto("/");
+    // The open menu is a floating panel, so the hero shows around and below it, and
+    // the hero is what the two landing arms differ in. Pinned like the full-page
+    // shots above: in this job's production build a bare "/" is a coin flip.
+    await page.goto("/?variant=white_card");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
 
