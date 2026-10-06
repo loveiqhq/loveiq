@@ -735,13 +735,6 @@ export const trackBeginCheckout = (
 };
 
 /**
- * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
- * price (the `PremiumOverlay` surface — distinct from the
- * pricing modal's `price_shown`). Lets the funnel measure the inline card as
- * its own price-exposure surface, tagged `surface: "locked_chapter_card"`.
- * Caller dedupes to one fire per report load.
- */
-/**
  * Report 3.0 has locked chapters but shows no price on them, so it says only that: the
  * marker the "CTA visibility" signal needs to know a visit had something locked to see.
  * GA4/PostHog only; nothing reads it from analytics_event.
@@ -750,6 +743,13 @@ export const trackLockedChaptersShown = () => {
   track("locked_chapters_shown", { surface: "v4" });
 };
 
+/**
+ * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
+ * price (the `PremiumOverlay` surface — distinct from the
+ * pricing modal's `price_shown`). Lets the funnel measure the inline card as
+ * its own price-exposure surface, tagged `surface: "locked_chapter_card"`.
+ * Caller dedupes to one fire per report load.
+ */
 export const trackLockedCardPriceShown = (params: PriceShownParams) => {
   const payload = {
     ...params,
