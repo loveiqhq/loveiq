@@ -727,9 +727,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
 
   return (
-    // The question screen, Figma 11303:174 (2026-10-04): one card holding the
-    // question, then Previous / Next, then the progress strip. The theme provider
-    // stays for the components that still read it; it is always "white".
+    // The question screen, Figma 11303:174 (ready for dev 2026-10-06): one card holding
+    // the question, then one footer row with Previous, the progress strip and Next. The
+    // theme provider stays for the components that still read it; it is always "white".
     <SurveyThemeProvider variant={surveyVariant}>
       {/* NOTE: the survey root is deliberately NOT masked from session replay
           (owner decision, 2026-08-10) — this reverses audit finding L8. It
