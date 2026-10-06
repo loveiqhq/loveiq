@@ -17,7 +17,8 @@ import {
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
 import { readStampedArms } from "@features/attribution/server/traffic";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { PRICING_3_LAUNCH_AT } from "@features/checkout/server/reportPurchase";
+import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 
 /** Hard ceiling per collection, paged 1000 at a time. */
@@ -34,10 +35,14 @@ const QUOTE_COLUMNS = [
   "survey_submission_id",
   "experiment_group",
   "base_price_bucket",
-  "current_price",
-  "purchased_at",
   "checkout_started_at",
 ].join(",");
+
+/**
+ * Pricing 3.0's arms. A reader re-priced at its launch also holds retired essentials and
+ * core quotes on list B, so their arm is read from these and nothing else.
+ */
+const PRICING_3_ARMS = new Set(["A3", "B3"]);
 
 export interface ArmStat {
   arm: string;
@@ -77,9 +82,12 @@ interface QuoteRow {
   survey_submission_id: number;
   experiment_group: string | null;
   base_price_bucket: string | null;
-  current_price: number | string | null;
-  purchased_at: string | null;
   checkout_started_at: string | null;
+}
+
+interface PaymentRow {
+  amount: number | string | null;
+  personal_report: { survey_submission_id: number | null } | null;
 }
 
 /**
@@ -198,7 +206,7 @@ function buildReadout(
   return { axis, title, arms, unattributed, verdict, significance };
 }
 
-/** Completed submissions in a window, and what each one bought, joined to its quote. */
+/** Completed submissions in a window, staff left out, and what each one paid. */
 export interface ArmOutcomes {
   submissions: SubmissionRow[];
   bySubmission: Map<
@@ -210,15 +218,20 @@ export interface ArmOutcomes {
 }
 
 export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
-  const subsPage = await fetchAllPages<SubmissionRow>(
+  const subsPage = await fetchAllPages<
+    SubmissionRow & { app_user: { email: string | null } | null }
+  >(
     (offset, pageSize) =>
-      // status=eq.completed matches what fetchFunnelStages counts as a completion, so
-      // the headline number and the funnel step can never drift apart.
+      // status=eq.completed is what fetchFunnelStages counts as a completion. /admin's
+      // "Finished the survey" step is this scan's count, so it and the headline agree.
       `/rest/v1/survey_submission?created_date_time=gte.${since}&status=eq.completed` +
-      `&select=id,created_date_time,utm_tracker&order=id.asc&offset=${offset}&limit=${pageSize}`,
+      `&select=id,created_date_time,utm_tracker,app_user!fk_survey_submission_user(email)` +
+      `&order=id.asc&offset=${offset}&limit=${pageSize}`,
     "survey_submission"
   );
-  const submissions = subsPage.rows;
+  // Our own test runs are not readers: the rule that marks a staff payment `is_test`.
+  const submissions = subsPage.rows.filter((s) => !isStaffEmail(s.app_user?.email));
+  const ids = new Set(submissions.map((s) => s.id));
 
   // Join the quotes by SUBMISSION ID RANGE rather than by their own created date:
   // a quote can be created outside the submission window, and filtering it by date
@@ -238,35 +251,54 @@ export async function loadArmOutcomes(since: string): Promise<ArmOutcomes> {
       : { rows: [] as QuoteRow[], truncated: false };
   const quotes = quotesPage.rows;
 
-  // Collapse quotes to one entry per submission: did they buy, for how much, and
-  // which arms were they in. A reader has one pricing arm across all their plans.
-  const bySubmission = new Map<
-    number,
-    {
-      pricing: string | null;
-      purchased: boolean;
-      startedCheckout: boolean;
-      revenue: number;
-    }
-  >();
-  for (const q of quotes) {
-    const key = q.survey_submission_id;
-    const existing = bySubmission.get(key) ?? {
+  // Purchases are money that settled, not a quote's purchased_at: that is also set by a
+  // 100%-off unlock and a staff test, and its price is the list price, not what was paid.
+  // A payment comes after its survey, so one for this window was created inside it.
+  const paymentsPage =
+    submissions.length > 0
+      ? await fetchAllPages<PaymentRow>(
+          (offset, pageSize) =>
+            `/rest/v1/payment?status=eq.succeeded&is_test=is.false&amount=gt.0` +
+            `&created_date_time=gte.${since}` +
+            `&select=amount,personal_report!fk_payment_personal_report(survey_submission_id)` +
+            `&order=id.asc&offset=${offset}&limit=${pageSize}`,
+          "payment"
+        )
+      : { rows: [] as PaymentRow[], truncated: false };
+
+  // One entry per submission: did they start checkout, did they pay and how much, and
+  // which Pricing 3.0 arm they were in.
+  const bySubmission: ArmOutcomes["bySubmission"] = new Map();
+  const entry = (id: number) => {
+    const existing = bySubmission.get(id) ?? {
       pricing: null,
       purchased: false,
       startedCheckout: false,
       revenue: 0,
     };
+    bySubmission.set(id, existing);
+    return existing;
+  };
+  for (const q of quotes) {
+    if (!ids.has(q.survey_submission_id)) continue;
+    const existing = entry(q.survey_submission_id);
     if (q.checkout_started_at) existing.startedCheckout = true;
-    existing.pricing ??= q.experiment_group ?? q.base_price_bucket ?? null;
-    if (q.purchased_at) {
-      existing.purchased = true;
-      existing.revenue += num(q.current_price);
-    }
-    bySubmission.set(key, existing);
+    const arm = q.experiment_group ?? q.base_price_bucket;
+    if (arm && PRICING_3_ARMS.has(arm)) existing.pricing ??= arm;
+  }
+  for (const p of paymentsPage.rows) {
+    const id = p.personal_report?.survey_submission_id;
+    if (id == null || !ids.has(id)) continue;
+    const existing = entry(id);
+    existing.purchased = true;
+    existing.revenue += num(p.amount);
   }
 
-  return { submissions, bySubmission, truncated: subsPage.truncated || quotesPage.truncated };
+  return {
+    submissions,
+    bySubmission,
+    truncated: subsPage.truncated || quotesPage.truncated || paymentsPage.truncated,
+  };
 }
 
 /** Tally purchases and revenue per arm for one axis. */
@@ -343,7 +375,7 @@ export function tallyAxis(
  * are stamped on the submission, pricing on its quote. Nothing stamps a paywall arm since
  * the forced paywall was removed on 2026-08-31, so that axis reads nothing.
  *
- * Pricing counts only readers who finished from Pricing 3.0's launch day: the launch
+ * Pricing counts only readers who finished after Pricing 3.0 went live: the launch
  * re-priced everyone who had not bought yet, after they had seen the 2.x prices, so their
  * A3/B3 stamp is not the test's. They read as unattributed rather than in either list.
  */
@@ -355,11 +387,12 @@ export function armReader(
     // eslint-disable-next-line security/detect-object-injection -- axis is "landing" or "survey" here.
     return (_id, tracker) => readStampedArms(tracker)[axis];
   if (axis === "pricing") {
-    const finishedOn = new Map(outcomes.submissions.map((s) => [s.id, s.created_date_time]));
+    const launch = Date.parse(PRICING_3_LAUNCH_AT);
+    const finishedAt = new Map(
+      outcomes.submissions.map((s) => [s.id, Date.parse(s.created_date_time ?? "")])
+    );
     return (id) =>
-      (finishedOn.get(id) ?? "") >= PRICING_3_LAUNCH_DAY
-        ? (outcomes.bySubmission.get(id)?.pricing ?? null)
-        : null;
+      (finishedAt.get(id) ?? 0) >= launch ? (outcomes.bySubmission.get(id)?.pricing ?? null) : null;
   }
   return null;
 }
@@ -368,7 +401,7 @@ export function armReader(
  * Only genuinely randomised, currently-running splits belong here.
  *
  * Pricing 3.0 (A3 vs B3, 50/50 by report id) is the one running now, read from its
- * launch day by `armReader`. The landing test moved to `concluded` below on
+ * launch by `armReader`. The landing test moved to `concluded` below on
  * 2026-09-19: V2 serves 100% of traffic, so there is one design and nothing to
  * compare. Every other axis left on 2026-08-31. The forced paywall was REMOVED from
  * the product, so nothing stamps an arm at all. The 2.x price test was settled by

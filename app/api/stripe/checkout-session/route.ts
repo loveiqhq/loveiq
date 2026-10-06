@@ -43,6 +43,7 @@ import logger from "@shared/observability/logger";
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
+  markReportPriceQuotePaywallReached,
 } from "@features/pricing/logic/reportPricing";
 
 export const runtime = "nodejs";
@@ -452,6 +453,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
+    // The sticky "Unlock Full Report" bar goes straight to Stripe without the pricing
+    // pop-up, so /api/price never stamped those readers: a checkout reached the paywall.
+    // Writes only where it is empty, and never costs the reader their checkout.
+    if (accessContext) {
+      await markReportPriceQuotePaywallReached({ submissionId: accessContext.submissionId }).catch(
+        (err) => logger.warn({ err }, "checkout-session: paywall_reached_at stamp failed")
+      );
+    }
     await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
 
     // Advance the Slack journey message to "checkout". After-response so the

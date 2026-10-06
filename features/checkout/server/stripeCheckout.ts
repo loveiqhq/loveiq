@@ -49,6 +49,8 @@ export interface StripeCheckoutPurchaseAnalytics {
   coupon_percent_off?: number;
   coupon_amount_off?: number;
   discount_amount?: number;
+  /** A staff payer: never a GA4 purchase or an Ads conversion. */
+  isTest: boolean;
 }
 
 export type StripeCheckoutSessionStatusResponse =

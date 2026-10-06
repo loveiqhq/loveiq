@@ -23,6 +23,9 @@ vi.mock("@features/report/server/personalReport", () => ({
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
+vi.mock("@features/analytics/server/ga4", () => ({ sendGa4PurchaseEvent: vi.fn() }));
+vi.mock("@features/analytics/server/posthog", () => ({ sendPosthogPurchaseEvent: vi.fn() }));
+
 // Spread the real module rather than listing exports: the purchase notification
 // reads the live price catalogue (getPricingBucketsForPlan) to say which SIDE of
 // the price test the buyer was on, and a hand-listed mock silently breaks the
@@ -40,6 +43,8 @@ import {
   upsertArchetypeTierForPersonalReport,
 } from "@features/report/server/personalReport";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
+import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
+import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {
@@ -256,6 +261,10 @@ describe("checkout fulfillment", () => {
     );
     expect(markReportPriceQuotePurchased).toHaveBeenCalledWith({ paymentId: 41, quoteId: 8 });
     expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
+    // The server's purchase sends carry the promo, as the browser's does.
+    const promo = { promotion_code: "LOVEIQ100", coupon_percent_off: 100, discount_amount: 24.49 };
+    expect(vi.mocked(sendGa4PurchaseEvent).mock.calls[0]?.[0].params).toMatchObject(promo);
+    expect(vi.mocked(sendPosthogPurchaseEvent).mock.calls[0]?.[0].params).toMatchObject(promo);
   });
 
   it("appends unlocked archetype when full_report checkout includes metadata.archetype", async () => {

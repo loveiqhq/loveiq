@@ -54,7 +54,7 @@ vi.mock("@features/brain/server/people", () => {
 
 import { listExperiments, recordExperiment } from "@features/brain/server/experiments";
 import type { ArmOutcomes } from "@features/admin/server/experiment-readouts";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { PRICING_3_LAUNCH_AT } from "@features/checkout/server/reportPurchase";
 
 const NOW = Date.parse("2026-09-26T09:00:00Z");
 const row = (over: Record<string, unknown> = {}) => ({
@@ -150,11 +150,11 @@ describe("experiments: the registry, read", () => {
 
   it("counts a paused test as running, and reads a pricing test from the arm on its quote", async () => {
     rows = [row({ id: 6, status: "paused", axis: "pricing", start_date: "2026-09-22" })];
-    // Pricing 3.0's arm, on readers who finished from its launch day.
+    // Pricing 3.0's arm, on readers who finished once it was live.
     const priced: ArmOutcomes = {
       submissions: [1, 2, 3].map((id) => ({
         id,
-        created_date_time: `${PRICING_3_LAUNCH_DAY}T10:00:00Z`,
+        created_date_time: PRICING_3_LAUNCH_AT,
         utm_tracker: null,
       })),
       bySubmission: new Map([

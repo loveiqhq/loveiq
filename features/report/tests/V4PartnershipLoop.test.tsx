@@ -231,7 +231,9 @@ describe("V4PartnershipLoop — The Situation pulses as the loop comes into view
   it("never pulses a locked loop, and watches nothing for it", () => {
     installRevealObserver();
     const { container } = renderLoop({ stages: LOCKED.loop, locked: true, onUnlock: () => {} });
-    expect(RevealObserver.instances).toHaveLength(0);
+    // The unlock tile's own "CTA seen" watch is the only one: nothing watches the loop itself.
+    const watched = RevealObserver.instances.flatMap((observer) => [...observer.elements]);
+    expect(watched.map((el) => el.className)).toEqual(["rv4-lockbadge"]);
     expect(indicator(container)).not.toHaveClass("is-pulsing");
   });
 });

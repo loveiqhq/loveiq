@@ -15,6 +15,7 @@ import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
+import { isStaffEmail } from "@shared/env/staff-email";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -58,6 +59,9 @@ function getPurchaseAnalytics(session: Stripe.Checkout.Session) {
     value: amountTotal,
     currency,
     transaction_id: session.id,
+    // The payer, by the rule that writes `payment.is_test`: the browser must not send a
+    // staff purchase to GA4 or Google Ads at any price.
+    isTest: isStaffEmail(session.customer_details?.email ?? session.customer_email ?? null),
   };
 
   const pricingClusterId = getMetadataString(session.metadata?.pricingClusterId);

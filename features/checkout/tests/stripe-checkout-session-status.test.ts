@@ -181,6 +181,7 @@ describe("GET /api/stripe/checkout-session-status", () => {
         coupon_name: "LOVEIQ 20% Off",
         coupon_percent_off: 20,
         discount_amount: 5.5,
+        isTest: false,
       },
       sessionStatus: "complete",
       surveySubmissionId: 63,
@@ -190,5 +191,34 @@ describe("GET /api/stripe/checkout-session-status", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
     expect(getReportAccessPlanForSubmission).toHaveBeenCalledWith(63);
+  });
+
+  it("marks a staff payer's purchase as a test, by the rule behind payment.is_test", async () => {
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue(null);
+    const session = (customerDetailsEmail: string | null, customerEmail: string | null) => ({
+      id: "cs_test_staff",
+      amount_total: 2999,
+      currency: "eur",
+      customer_details: customerDetailsEmail ? { email: customerDetailsEmail } : null,
+      customer_email: customerEmail,
+      metadata: {},
+      payment_status: "paid",
+      status: "complete",
+    });
+    const isTestFor = async (details: string | null, email: string | null) => {
+      vi.mocked(getStripeServerClient).mockReturnValue({
+        checkout: { sessions: { retrieve: vi.fn().mockResolvedValue(session(details, email)) } },
+      } as never);
+      const res = await GET(
+        new Request("http://localhost/api/stripe/checkout-session-status?session_id=cs_test_staff")
+      );
+      return (await res.json()).purchaseAnalytics.isTest;
+    };
+
+    // The address typed at Stripe decides, then the one the session was opened with.
+    expect(await isTestFor("qa@loveiq.org", "reader@example.com")).toBe(true);
+    expect(await isTestFor(null, "qa@loveiq.org")).toBe(true);
+    expect(await isTestFor("reader@example.com", "qa@loveiq.org")).toBe(false);
   });
 });

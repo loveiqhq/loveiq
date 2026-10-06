@@ -167,6 +167,7 @@ import {
 import {
   setReportSubmissionContext,
   trackLockedCardPriceShown,
+  trackLockedChaptersShown,
   trackBeginCheckout,
   trackExperimentExposure,
   trackLockIconClicked,
@@ -675,6 +676,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   const lockedCardPriceFiredRef = useRef(false);
   useEffect(() => {
     if (lockedCardPriceFiredRef.current) return;
+    // No Report 3.0 surface puts a price on a card (V4PremiumCard), so V4 reports only that
+    // it has locked chapters: what the "CTA visibility" signal counts a visit by.
+    if (isV4) {
+      if (!hasLockedPremiumCards) return;
+      lockedCardPriceFiredRef.current = true;
+      trackLockedChaptersShown();
+      return;
+    }
     if (!hasLockedPremiumCards) return;
     if (!fullReportQuote) return;
     /**
@@ -705,7 +714,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       msrp: fullReportQuote.msrpCents / 100,
       initial_price: fullReportQuote.initialPriceCents / 100,
     });
-  }, [hasLockedPremiumCards, fullReportQuote, submissionId]);
+  }, [hasLockedPremiumCards, fullReportQuote, submissionId, isV4]);
   // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
   // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report/<token>?invite=1
   // — they would silently fail without this auto-open.

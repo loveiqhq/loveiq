@@ -121,12 +121,19 @@ export const PRICING_CATALOG = "3.0";
 
 /**
  * The day Pricing 3.0 started quoting (UTC). The price test is read from here on: the
- * axis trend and the /admin readout count readers who finished the survey from this
- * day, and the conversion digest treats it as the last repricing. Readers from before
- * it were re-priced at launch, after seeing the 2.x prices, so they belong to neither
- * list. Live on production since 2026-10-06 (staging ran it from 2026-10-05).
+ * axis trend counts readers who finished the survey from this day (the /admin readout
+ * from PRICING_3_LAUNCH_AT), and the conversion digest treats it as the last
+ * repricing. Readers from before it were re-priced at launch, after seeing the 2.x
+ * prices, so they belong to neither list. Live on production since 2026-10-06 (staging
+ * ran it from 2026-10-05).
  */
 export const PRICING_3_LAUNCH_DAY = "2026-10-06";
+
+/**
+ * The moment Pricing 3.0 went live on production. The /admin readout cuts its cohort
+ * here rather than at the day: the morning's readers finished under the 2.x prices.
+ */
+export const PRICING_3_LAUNCH_AT = "2026-10-06T18:18:00Z";
 
 /** The plans the paygate sells — and so the only ones quoted or checked out. */
 export const OFFERED_REPORT_PURCHASE_PLAN_IDS: ReportPurchasePlanId[] = REPORT_PURCHASE_PLANS.map(

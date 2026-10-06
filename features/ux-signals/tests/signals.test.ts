@@ -225,6 +225,14 @@ describe("each measure", () => {
   it("CTA visibility: only on a report with locked chapters, and only when one was on screen", () => {
     expect(measure("CTA visibility", [ev(0, "report_viewed")])).toBeNull();
     expect(measure("CTA visibility", [ev(0, "locked_card_price_shown")])).toBe("not seen");
+    // Report 3.0 shows no price, so it marks a locked report with locked_chapters_shown.
+    expect(measure("CTA visibility", [ev(0, "locked_chapters_shown")])).toBe("not seen");
+    expect(
+      measure("CTA visibility", [
+        ev(0, "locked_chapters_shown"),
+        ev(1, "cta_seen", { cta: "locked_chapter" }),
+      ])
+    ).toBe("seen");
     expect(
       measure("CTA visibility", [
         ev(0, "locked_card_price_shown"),

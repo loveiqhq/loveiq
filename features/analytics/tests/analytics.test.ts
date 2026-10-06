@@ -735,6 +735,55 @@ describe("analytics", () => {
 
       expect(dataLayer).toHaveLength(0);
     });
+
+    it("never sends a staff purchase to GA4 or Google Ads, whatever it cost", () => {
+      setConsentCookie({ analytics: true, advertisement: true });
+      const dataLayer: Array<Record<string, unknown>> = [];
+      const mockGtag = vi.fn();
+      globalThis.window = {
+        ...globalThis.window,
+        dataLayer,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportPurchase({
+        value: 29.99,
+        currency: "EUR",
+        transaction_id: "txn_staff",
+        isTest: true,
+      });
+
+      expect(dataLayer).toHaveLength(0);
+      expect(mockGtag).not.toHaveBeenCalled();
+    });
+
+    it("carries the redeemed promo on the purchase push", () => {
+      setConsentCookie({ analytics: true });
+      const dataLayer: Array<Record<string, unknown>> = [];
+      globalThis.window = {
+        ...globalThis.window,
+        dataLayer,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportPurchase({
+        value: 14.99,
+        currency: "EUR",
+        transaction_id: "txn_promo",
+        promotion_code: "LIQ50ABC",
+        coupon_percent_off: 50,
+        discount_amount: 15,
+        isTest: false,
+      });
+
+      expect(dataLayer[0]).toMatchObject({
+        event: "purchase",
+        promotion_code: "LIQ50ABC",
+        coupon_percent_off: 50,
+        discount_amount: 15,
+      });
+    });
   });
 
   describe("trackGoogleAdsPurchaseConversion", () => {

@@ -77,6 +77,16 @@ Canonical role hierarchy from [`features/admin/server/roles.ts`](../features/adm
 | `/api/admin/tags`                               | `GET, POST`          | `GET viewer+`, `POST editor+`                           | [`app/api/admin/tags/route.ts`](../app/api/admin/tags/route.ts)                                                             |
 | `/api/admin/tag-rules`                          | `GET, POST`          | `GET viewer+`, `POST editor+/admin depending on action` | [`app/api/admin/tag-rules/route.ts`](../app/api/admin/tag-rules/route.ts)                                                   |
 
+`/api/admin/ab-overview` (and the brain's `experiments` tool, which shares
+`features/admin/server/experiment-readouts.ts`) leaves the team's own test runs out:
+submissions whose owner email is staff (`isStaffEmail`, the rule that sets
+`payment.is_test`) are not counted. A sale is a succeeded, non-test payment above €0 and its
+revenue is what was paid, not the quote's list price. Pricing 3.0 counts readers who
+finished from its launch time (2026-10-06 18:18 UTC, set in
+`features/checkout/server/reportPurchase.ts`) and reads their arm from the A3/B3
+quote only. The digest's funnel functions exclude staff the same way (migration
+`20261006230000`).
+
 ### Workflow, Registries, and Collaboration
 
 | Route                                     | Methods            | Minimum access                                                                | Source                                                                                                          |
