@@ -30,7 +30,7 @@ on:
         type: boolean
         default: true
       proof:
-        description: "Also run the UX checker's proof walks (production's code, staging's database)"
+        description: "Also run the UX checker's proof walks and the purchase-sequence walk (production's code, staging's database)"
         type: boolean
         default: true
 
@@ -194,11 +194,13 @@ jobs:
   # knowing the truth of what it did. check-signals.ts stores each walk's events and truth,
   # and Jarvis's ux_signals shows a signal only once its measure is right on 80% of them.
   # Not judged and nothing posted; its own runner, alongside the walks above. The log says
-  # counts only: this repository and its logs are public.
+  # counts only: this repository and its logs are public. After them, on the same code, the
+  # purchase-sequence walk (below), which does post when it fails.
   proof:
     if: ${{ inputs.proof }}
     runs-on: macos-latest
-    timeout-minutes: 100
+    # Five walks of up to 20 minutes (four proof walks and the sequence) and about 15 to install.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -249,6 +251,48 @@ jobs:
           # The stall watcher (features/cron/server/cron-stall.ts) alerts #ops when this goes quiet.
           npx tsx scripts/record-cron-run.mjs ux-proof-walks "$outcome"
           [ "$outcome" = success ]
+
+      # What broke on production on 2026-10-06 (#524), which no walk caught because each
+      # bought once: another archetype's report bought from "Other Archetypes" first, then the
+      # walk's own (walk.ts --sequence other-first). On production's code, like the proof
+      # walks: the staging branch does not carry that fix. Its own folder: check-signals.ts
+      # would count a walk with no truth as a proof walk that stopped. A phone and a desktop
+      # on alternate nights, the next persona every second night. A failed check stops the
+      # walk and fails the job.
+      - name: Buy another archetype's report first, then your own
+        id: sequence
+        if: ${{ !cancelled() }}
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          WALK_OUT: ${{ runner.temp }}/sequence
+          WALK_ORIGIN: https://loveiq-staging-git-main-loveiq.vercel.app
+        run: |
+          set -uo pipefail
+          day=$(( $(date -u +%s) / 86400 ))
+          persona=$(jq -r --argjson d "$day" '.personas[($d / 2 | floor) % (.personas | length)].archetype' scripts/walkers/personas.json)
+          device="Desktop Chrome"
+          if [ $((day % 2)) -eq 0 ]; then device="iPhone 15 Pro"; fi
+          npx tsx scripts/walkers/walk.ts --sequence other-first --plan full_report \
+            --persona "$persona" --device "$device" </dev/null
+
+      # Nothing else in this job posts, so this walk says so itself. Its stop reason comes
+      # from walk.ts, redacted: no report token, Stripe session or query string.
+      - name: Tell the brain channel the purchase sequence failed
+        if: ${{ failure() && steps.sequence.outcome == 'failure' && inputs.judge }}
+        env:
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          WALK_OUT: ${{ runner.temp }}/sequence
+        run: |
+          set -uo pipefail
+          if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then exit 0; fi
+          why=$(jq -rs 'map(.stoppedAt // empty) | first // "no reason recorded"' "$WALK_OUT"/*/walk.json 2>/dev/null) ||
+            why="its record could not be read"
+          lead=":walking: Buying another archetype's report first, then your own, failed on production's code (staging's database)"
+          run="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # Escaped for Slack: the reason can quote words from a page.
+          jq -n --arg lead "$lead" --arg why "$why" --arg run "$run" \
+            '{text: ($lead + ": " + ($why | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;")) + ". " + $run)}' |
+            curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL"
 
   # Two layout probes written with Report 3.0 (scripts/probes/README.md), against staging's
   # own report every night, on their own runner: nothing on a phone pans sideways or zooms

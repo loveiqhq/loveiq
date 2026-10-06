@@ -96,6 +96,15 @@ Mark asked for this on 2026-09-05: "a systematic way to thoroughly test" the pro
     by its title in code, not by the model.
 - **Time limits.** Each walk has 20 minutes and records why it stopped. A survey that keeps
   asking stops after the survey's length plus ten.
+- **Buying a second report.** One more walk a night, on production's code (the `proof` job),
+  buys another archetype's report from "Other Archetypes" before its own
+  (`walk.ts --sequence other-first`). Three faults in exactly that reached production on
+  2026-10-06 (#524), because every walk bought once. It checks the list's "Unlock" and
+  "View report" labels, the pay screen's "Only the X Report", the return page's "Your X
+  report is unlocked", that X opens at its top, that the reader's own report stays locked,
+  and that neither report keeps a lock once both are bought. The first failed check stops
+  the walk, fails the run and posts the reason to #brain. Each check is in `walk.json`'s
+  `sequence`, judged by `checks.ts`.
 
 ## Staging only, and why that is safe
 
