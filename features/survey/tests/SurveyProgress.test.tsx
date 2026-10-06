@@ -75,9 +75,11 @@ describe("SurveyProgress", () => {
     );
     expect(strip).not.toHaveClass("border-t");
 
+    // The count's box is the frame's fixed 104 x 22 (node 11303:267), so the bar starts
+    // in the same place on every question.
     const label = screen.getByText("1/57").parentElement as HTMLElement;
     expect(label.parentElement).toBe(strip);
-    expect(label).toHaveClass("sm:h-[22px]", "sm:px-[8.55px]");
+    expect(label).toHaveClass("sm:h-[22px]", "sm:w-[104px]", "sm:px-[8.55px]");
     expect(bar).toHaveClass("sm:flex-1");
   });
 

@@ -51,6 +51,11 @@ const ClockIcon: FC = () => (
  * the bar from 640px, as the frame draws it, and above it on a phone (Marcus, LoveIQ
  * Sync 2026-10-06: "push the 1 out of 59 and 14 minutes above the bar and you stack
  * it"). The row around it draws the hairline and the safe-area padding.
+ *
+ * Beside the bar, the count keeps the frame's fixed 104px box (node 11303:267), so the
+ * bar starts in the same place on every question. A wide count such as "22/62 · ~10
+ * MIN" runs into the box's right padding, as the frame's own sample does; it still
+ * ends about 8px short of the bar.
  */
 const SurveyProgress: FC<SurveyProgressProps> = ({ index, total }) => {
   const percent = progressPercent(index, total);
@@ -59,13 +64,13 @@ const SurveyProgress: FC<SurveyProgressProps> = ({ index, total }) => {
 
   return (
     <div className="flex flex-col gap-[5px] sm:flex-row sm:items-center sm:gap-[13px]">
-      <div className="flex items-center gap-[7.12px] whitespace-nowrap font-sans text-[9.26px] font-semibold uppercase leading-[12.35px] tracking-[0.1em] text-[#a78bfa] [filter:drop-shadow(0_0.712px_1.068px_rgba(0,0,0,0.1))_drop-shadow(0_0.712px_0.712px_rgba(0,0,0,0.1))] sm:h-[22px] sm:shrink-0 sm:px-[8.55px]">
+      <div className="flex items-center gap-[7.12px] whitespace-nowrap font-sans text-[9.26px] font-semibold uppercase leading-[12.35px] tracking-[0.1em] text-[#a78bfa] [filter:drop-shadow(0_0.712px_1.068px_rgba(0,0,0,0.1))_drop-shadow(0_0.712px_0.712px_rgba(0,0,0,0.1))] sm:h-[22px] sm:w-[104px] sm:shrink-0 sm:px-[8.55px]">
         <span>
           {position}/{total}
         </span>
         {minutes > 0 && (
           <>
-            <span aria-hidden className="h-[8.55px] w-px bg-[rgba(167,139,250,0.4)]" />
+            <span aria-hidden className="h-[8.55px] w-px shrink-0 bg-[rgba(167,139,250,0.4)]" />
             <span className="flex items-center gap-[4.27px]">
               <ClockIcon />~{minutes} min
             </span>
