@@ -11,13 +11,14 @@ End-to-end browser tests using Playwright. Tests run against a production build 
 
 ## Test Files
 
-| File                        | Scope                                      |
-| --------------------------- | ------------------------------------------ |
-| `smoke.spec.ts`             | Critical paths (homepage loads, nav works) |
-| `navigation.spec.ts`        | All navigation links and routing           |
-| `pages.spec.ts`             | Page content and metadata                  |
-| `interactions.spec.ts`      | Forms, buttons, interactive elements       |
-| `a11y.spec.ts`              | Accessibility (axe-core WCAG checks)       |
-| `admin.spec.ts`             | Admin panel flows                          |
-| `survey.spec.ts`            | Survey wizard flow                         |
-| `visual-regression.spec.ts` | Screenshot comparison tests                |
+| File                         | Scope                                            |
+| ---------------------------- | ------------------------------------------------ |
+| `smoke.spec.ts`              | Critical paths (homepage loads, nav works)       |
+| `navigation.spec.ts`         | All navigation links and routing                 |
+| `pages.spec.ts`              | Page content and metadata                        |
+| `interactions.spec.ts`       | Forms, buttons, interactive elements             |
+| `a11y.spec.ts`               | Accessibility (axe-core WCAG checks)             |
+| `admin.spec.ts`              | Admin panel flows                                |
+| `survey.spec.ts`             | Survey wizard flow                               |
+| `visual-regression.spec.ts`  | Screenshot comparison tests                      |
+| `landing-hero-video.spec.ts` | Landing arm B: the hero video (playback stubbed) |

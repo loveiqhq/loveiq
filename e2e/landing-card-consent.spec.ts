@@ -21,7 +21,9 @@ test.describe("Homepage question card", () => {
         r.fulfill({ status: 200, contentType: "application/json", body: "{}" })
       );
     }
-    await page.goto("/");
+    // Arm A: the hero card. On arm B the first card on the page is the closing one,
+    // which would pass this by accident.
+    await page.goto("/?variant=white_card");
     const dot = page.getByRole("button", { name: /^4 of 7/ }).first();
     await dot.scrollIntoViewIfNeeded();
     await dot.click();
