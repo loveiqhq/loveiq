@@ -82,6 +82,9 @@ test.describe("Landing arm B — the hero video", () => {
   });
 
   test("sits where Figma puts it", async ({ page }) => {
+    // The slot rises 24px into place on load; under reduced motion it starts there,
+    // so the box is measured where it settles, not part-way up.
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/?variant=white_video");
     const box = await page.getByTestId("hero-video").boundingBox();
     expect(box).not.toBeNull();
