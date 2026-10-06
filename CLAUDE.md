@@ -353,7 +353,7 @@ STRIPE_SECRET_KEY=sk_test_... | sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-Stripe dashboard webhook endpoint: `https://<your-domain>/api/stripe/webhook` — subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`. Disputed payments re-lock the report automatically; if the merchant wins the dispute (`charge.dispute.closed` with `status=won`), access is restored.
+Stripe dashboard webhook endpoint: `https://<your-domain>/api/stripe/webhook` — subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`. Disputed payments re-lock the report automatically; if the merchant wins the dispute (`charge.dispute.closed` with `status=won`), access is restored. A full refund re-locks it too. Both take back exactly what that payment unlocked in `archetype_tiers` (all 14, the top three for `core`, or the one archetype) and keep whatever another succeeded payment still covers; a failure posts to #ops instead of leaving the report open.
 
 For local sandbox testing, install Stripe CLI and run `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Use the printed `whsec_...` as `STRIPE_WEBHOOK_SECRET`.
 

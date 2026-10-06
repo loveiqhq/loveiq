@@ -342,6 +342,30 @@ export async function getPaidPlansForSubmission(
 }
 
 /**
+ * `archetype_tiers` with one purchase taken back: a full refund, or a dispute opened.
+ *
+ * Every archetype the payment unlocked comes off, except where another succeeded payment
+ * still covers it (`stillCovered`, at that payment's tier). Nothing else is touched, so a
+ * hand-granted comp on an unrelated archetype survives. Legacy names come back under
+ * today's name, as every reader sees them anyway.
+ */
+export function revokeArchetypeTiers(
+  tiers: unknown,
+  granted: readonly string[],
+  stillCovered: ReadonlyMap<string, ArchetypeTier>
+): ArchetypeTierMap {
+  const result = new Map(Object.entries(sanitizeArchetypeTierMap(tiers)));
+  for (const raw of granted) {
+    const name = normalizeArchetypeName(raw);
+    if (!name) continue;
+    const kept = stillCovered.get(name);
+    if (kept) result.set(name, kept);
+    else result.delete(name);
+  }
+  return Object.fromEntries(result);
+}
+
+/**
  * Whether THIS checkout session's payment is recorded (fulfillment stamps the session id
  * on the payment row as metadata.checkoutSessionId). The checkout return page waits on
  * this, not on "does the reader hold any plan": a returning buyer already holds one from
