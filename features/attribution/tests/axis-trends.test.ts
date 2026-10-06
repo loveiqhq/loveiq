@@ -105,14 +105,16 @@ describe("axis trend charts — which experiments may be drawn", () => {
     expect(scoped.every((r) => r.day >= launch)).toBe(true);
     expect(scoped.length).toBeGreaterThan(0);
 
-    // 16 days from the launch to 20 Oct, 20 finished a day per arm: a chart, labelled
-    // as the 3.0 lists, off the post-launch days alone.
+    // Every day from the launch to 20 Oct, 20 finished a day per arm: a chart, labelled
+    // as the 3.0 lists, off the post-launch days alone. Counted from the launch day, so
+    // moving the launch moves the totals instead of breaking this.
+    const days = (Date.parse("2026-10-20") - Date.parse(launch)) / 86_400_000 + 1;
     const trends = buildAxisTrends(input, "2026-10-20");
     const chart = trends.charted.find((c) => c.axis === "pricing");
     expect(chart?.legendFirst).toBe("Pricing 3.0 A");
     expect(chart?.legendLast).toBe("Pricing 3.0 B");
-    expect(chart?.headline).toContain("64/320");
-    expect(chart?.headline).toContain("32/320");
+    expect(chart?.headline).toContain(`${4 * days}/${20 * days}`);
+    expect(chart?.headline).toContain(`${2 * days}/${20 * days}`);
 
     // Only the 2.x arms: a live axis with nothing to compare says so; it is never
     // drawn from the concluded test's rows.

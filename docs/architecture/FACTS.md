@@ -188,7 +188,7 @@ were being revised.
 authoritative answer is always `report_price_quote` via `query_product_data` — one row per
 quote, carrying the plan, the base price and every multiplier that moved it.
 
-**Pricing 3.0** (on staging since 2026-10-05, launching with the new report) sells two
+**Pricing 3.0** (live since 2026-10-06, launched with the new report) sells two
 plans, each on two price lists, and every reader is on one list for both (50/50, fixed by
 their report id; the stored arm is `A3` or `B3`):
 
