@@ -746,6 +746,11 @@
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
 }
+.rv3-sci__track:focus-visible {
+  border-radius: 16px;
+  outline: 2px solid var(--rv3-violet, #795fc8);
+  outline-offset: -2px;
+}
 .rv3-sci__track::-webkit-scrollbar {
   display: none;
 }
@@ -6162,19 +6167,38 @@ html {
  * indicator bar stays inside (at 360 it was 11px out). The cards keep their 268px slot
  * and 280px step; only the scrollport narrows. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck {
+  /* How far the bars ride up over the scrollport's foot: 15 here, 8 from 700px. */
+  --rv3-deck-dots-lift: 15px;
   width: 100%;
 }
+/* THE GLOW'S ROOM (review 06.10, "card glow cut off flat"). 1116:1025 clips at 360, under
+ * the indicator (1116:1120, from 345), meaning the focused card's shadow to fade out behind
+ * the bars; but the shadow (0 30px 60px) is wider than the bars, so the clip showed as a
+ * straight line either side of them, and from 700px, where the pager is a short row, all
+ * along the deck. The scrollport now grows by 64px of padding at its foot and gives the
+ * same back as negative margin, so the cards, the bars and everything below stay put. The
+ * margin also carries the bars' overlap: the two negative margins touch and collapse into
+ * the larger, so without it the bars dropped by their lift. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__viewport {
-  height: 360px;
+  --rv3-deck-glow-room: 64px;
+  height: calc(360px + var(--rv3-deck-glow-room));
+  margin-bottom: calc(-1 * (var(--rv3-deck-glow-room) + var(--rv3-deck-dots-lift)));
+  padding-bottom: var(--rv3-deck-glow-room);
   width: 100%;
 }
-/* 1116:1025 clips at 360, under the indicator (1116:1120, from 345), so the focused
- * card's shadow fades out behind the bars. The track runs to 360 and the bars sit over
- * its last 15px; a 345px track cut the shadow 15px higher. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__dots {
-  margin-top: -15px;
+  margin-top: calc(-1 * var(--rv3-deck-dots-lift));
   position: relative;
   width: 100%;
+}
+/* ...and at its left. The card the deck sits in (.rv3-arch, overflow: clip) ends 22px
+ * left of the focused card, where the 60px blur was cut in a straight line too. A -32px
+ * spread keeps the halo's sides inside those 22px; its foot, 30 down, still fades out
+ * under the cards. A card in full view that is not focused has no glow (review 02.10). */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__inner {
+  box-shadow:
+    0 2px 6px 0 rgba(22, 16, 33, 0.06),
+    0 30px 60px -32px rgb(var(--rv3-accent-ink-rgb, 213 69 28) / 0.28);
 }
 /* 15:926 lays the two meters on fixed 57px rows, 20 apart, so they step 77px and the
  * scale overflows its row, as drawn. Each bars row (15:932) is 7px round its 6px track. */
@@ -8683,22 +8707,24 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   /* Fantasy vs. Reality. The map's plot is the phone's 300 at most, placed in
    * percentages, so it scales as one piece: 520 here, the figure centred over the
    * table, so the chapter's two figures share an axis; its labels keep their size and
-   * so crowd less. The table keeps a 760 of its own (at the full 917 its names sat
-   * 600px from their scores), its score columns 140 so a fantasy's name sits on one
-   * line. The copy runs the whole column since 30.09. */
+   * so crowd less. The table runs the whole column like every other chapter (review
+   * 06.10: at 760 its toggles stood 136px short of the others', an empty strip beside
+   * every table). Its score columns take 30% each, as V2's 896 frame spends 430 of it
+   * on them (Figma 8146:76002), so a name sits within reach of its scores rather than
+   * 600px from them; never under 140, so a fantasy's name stays on one line. */
   .rv3.rv4 .rv4-fvm {
-    margin-left: max(0px, (min(760px, 100%) - 548px) / 2);
+    margin-left: max(0px, (100% - 548px) / 2);
     width: min(548px, 100%);
   }
   .rv3.rv4 .rv4-fvm__img {
     --fvm-plot: min(520px, 100cqi - 28px);
   }
   .rv3.rv4 .rv4-fvt {
-    width: min(760px, 100%);
+    width: 100%;
   }
   .rv3.rv4 .rv4-fvt__cols,
   .rv3.rv4 .rv4-fvt__row {
-    grid-template-columns: minmax(0, 1fr) repeat(2, 140px);
+    grid-template-columns: minmax(0, 1fr) repeat(2, clamp(140px, 30%, 280px));
   }
 }
 
@@ -8995,10 +9021,12 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
     cursor: default;
     opacity: 0.35;
   }
+  /* 24px apart, centre to centre, so each dot can own a 24 x 24 target without touching
+   * the next (WCAG 2.2 target size, review 06.10: they were 15 apart, with 15 x 24). */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pips {
     align-items: center;
     display: flex;
-    gap: 7.5px;
+    gap: 16.5px;
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip {
     background: rgba(22, 16, 33, 0.16);
@@ -9018,10 +9046,10 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
     background: linear-gradient(to right, #fe6839, #c36ddf);
     width: 20px;
   }
-  /* A 15 x 24 target round each dot: the dots' own pitch, so no two overlap. */
+  /* A 24 x 24 target round each dot: the dots' own pitch, so no two overlap. */
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__pip::after {
     content: "";
-    inset: -8.25px -3.75px;
+    inset: -8.25px;
     position: absolute;
   }
   .rv3.rv4 .rv3-method.is-v4 .rv3-sci__arrow:focus-visible,
@@ -9066,13 +9094,15 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
    * under its tiles, over the foot of the viewport the focused card's shadow runs into;
    * the deck grows round it, where the phone's fixed 360 holds the lines inside. */
   .rv3.rv4 .rv3-deck {
+    --rv3-deck-dots-lift: 8px;
     height: auto;
   }
+  /* 24px apart, centre to centre, as the gallery's pips: a 24 x 24 target each. */
   .rv3.rv4 .rv3-deck__dots {
-    gap: 7.5px;
+    gap: 16.5px;
     height: auto;
     justify-content: center;
-    margin-top: -8px;
+    margin-top: calc(-1 * var(--rv3-deck-dots-lift));
     padding: 0;
   }
   .rv3.rv4 .rv3-deck__dot {
@@ -9091,7 +9121,7 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   }
   .rv3.rv4 .rv3-deck__dot::after {
     content: "";
-    inset: -8.25px -3.75px;
+    inset: -8.25px;
     position: absolute;
   }
   .rv3.rv4 .rv3-deck__arrow {

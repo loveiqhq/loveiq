@@ -142,6 +142,21 @@ const arrow = (container: HTMLElement, label: "Previous card" | "Next card") =>
 const current = (container: HTMLElement) =>
   pips(container).findIndex((p) => p.getAttribute("aria-current") === "true");
 
+describe("the science strip and the keyboard", () => {
+  // axe scrollable-region-focusable (review 06.10): the strip scrolls and holds nothing
+  // focusable, so it is a labelled region a keyboard can reach, in every chrome.
+  it("is a focusable, labelled region wherever it is drawn", () => {
+    for (const chrome of ["deck", "full"] as const) {
+      const { container, unmount } = render(<V3Methodology chrome={chrome} />);
+      const track = container.querySelector<HTMLElement>(".rv3-sci__track")!;
+      expect(track.getAttribute("role")).toBe("region");
+      expect(track.getAttribute("aria-label")).toBe("The disciplines behind this report");
+      expect(track.tabIndex).toBe(0);
+      unmount();
+    }
+  });
+});
+
 describe("the desktop gallery's pager", () => {
   it("draws Previous, a dot a tile before layout, and Next, in V4's deck only", () => {
     const { container } = render(<V3Methodology chrome="deck" />);

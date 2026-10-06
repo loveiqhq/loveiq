@@ -16,6 +16,46 @@ import { __resetBodyScrollLockForTests } from "@shared/ui/body-scroll-lock";
 afterEach(cleanup);
 
 describe("ReportDesktopSidebar", () => {
+  // Review 06.10: the list's own scroll sliced labels at its edges. An edge fades only while
+  // there is more list beyond it, so at rest at the top the first label stays crisp.
+  // axe aria-prohibited-attr (review 06.10): a label on a bare span is ignored by screen
+  // readers, so the wordmark is an image named "LoveIQ Report", its pieces hidden.
+  it("names the wordmark as one image, in V4 and V1", () => {
+    for (const sidebar of [
+      <ReportDesktopSidebar key="v4" activeSectionId="core_archetype" />,
+      <ReportDesktopSidebarV1 key="v1" activeSectionId="core_archetype" sections={[]} />,
+    ]) {
+      const { container, unmount } = render(sidebar);
+      const mark = container.querySelector(".report-sidebar__brand-text")!;
+      expect(mark.getAttribute("role")).toBe("img");
+      expect(mark.getAttribute("aria-label")).toBe("LoveIQ Report");
+      unmount();
+    }
+  });
+
+  it("fades an edge of the chapter list only while there is more list beyond it", () => {
+    const { container, unmount } = render(
+      <ReportDesktopSidebar activeSectionId="core_archetype" />
+    );
+    const nav = container.querySelector<HTMLElement>(".report-sidebar__nav")!;
+    const set = (top: number) => {
+      Object.defineProperty(nav, "scrollTop", { configurable: true, value: top });
+      Object.defineProperty(nav, "scrollHeight", { configurable: true, value: 1000 });
+      Object.defineProperty(nav, "clientHeight", { configurable: true, value: 400 });
+      nav.dispatchEvent(new Event("scroll"));
+    };
+    set(0);
+    expect(nav.hasAttribute("data-fade-top")).toBe(false);
+    expect(nav.hasAttribute("data-fade-bottom")).toBe(true);
+    set(300);
+    expect(nav.hasAttribute("data-fade-top")).toBe(true);
+    expect(nav.hasAttribute("data-fade-bottom")).toBe(true);
+    set(600);
+    expect(nav.hasAttribute("data-fade-top")).toBe(true);
+    expect(nav.hasAttribute("data-fade-bottom")).toBe(false);
+    unmount();
+  });
+
   it("renders the chapter rail with branding, utility actions, and the curated part nav", () => {
     render(<ReportDesktopSidebar activeSectionId="core_archetype" onShareClick={() => {}} />);
 

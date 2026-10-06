@@ -3398,6 +3398,34 @@
   gap: 2px;
 }
 
+/* An edge with more list beyond it fades over 24px instead of slicing what it cuts
+ * (review 06.10). ReportDesktopSidebar sets the attributes and keeps the active link 36px
+ * from either edge, clear of the fade. */
+.report-sidebar__nav[data-fade-top] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 24px);
+  mask-image: linear-gradient(to bottom, transparent, #000 24px);
+}
+.report-sidebar__nav[data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to top, transparent, #000 24px);
+  mask-image: linear-gradient(to top, transparent, #000 24px);
+}
+.report-sidebar__nav[data-fade-top][data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+}
+
 /* Webkit (Chrome, Safari, Edge) */
 .report-sidebar__nav::-webkit-scrollbar {
   width: 5px;
@@ -12989,11 +13017,11 @@
   font-weight: 400;
   line-height: 1;
   white-space: nowrap;
-  /* Pinned to the widest label ("Neutral likely"). The residual drift was never
-     the numeral — it was this word: with the pair centred, a wider label pushed
-     the whole pair left, so rows with "Neutral likely" sat off from rows with
-     "More likely". Fixing both boxes makes the pair a constant width, so
-     centring it keeps every numeral and every word on the same x. */
+  /* Pinned wider than any label (it was sized for "Neutral likely", now "Neutral").
+     The residual drift was never the numeral — it was this word: with the pair
+     centred, a wider label pushed the whole pair left, so rows sat off from each
+     other. Fixing both boxes makes the pair a constant width, so centring it keeps
+     every numeral and every word on the same x. */
   min-width: 6.6rem;
   text-align: left;
 }

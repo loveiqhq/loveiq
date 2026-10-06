@@ -48,9 +48,13 @@ interface Props {
   onUnlock?: () => void;
 }
 
-/** Maps a 1-10 score to its likelihood, as V2's section does (Figma 8146:76002). */
+/**
+ * Maps a 1-10 score to its likelihood, as V2's section does (Figma 8146:76002). The middle
+ * band reads "Neutral": the frame's "Neutral likely" (and "Neutral likey" beside it) was a
+ * template slip, read as broken in the review of 06.10.
+ */
 const likelihood = (score: number): string =>
-  score >= 7 ? "More likely" : score >= 4 ? "Neutral likely" : "Less likely";
+  score >= 7 ? "More likely" : score >= 4 ? "Neutral" : "Less likely";
 
 /**
  * Drawn under the blur for a decoy row, cycling — never a real score. Since review

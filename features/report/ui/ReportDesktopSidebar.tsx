@@ -53,6 +53,29 @@ const ReportDesktopSidebar: FC<Props> = ({
     return () => nav.removeEventListener("wheel", onWheel);
   }, []);
 
+  // Fade an edge only while there is more list beyond it, so a label the edge cuts dissolves
+  // instead of being sliced in half (review 06.10: "Part 1 · Welcome" halved by the top edge
+  // at load, a "FREE" badge and "Part 2" halved while scrolling). At rest at the top nothing
+  // fades there, so the first label stays crisp. The fade itself is CSS (report.css).
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const update = () => {
+      const { scrollTop, scrollHeight, clientHeight } = nav;
+      nav.toggleAttribute("data-fade-top", scrollTop > 1);
+      nav.toggleAttribute("data-fade-bottom", scrollTop + clientHeight < scrollHeight - 1);
+    };
+    update();
+    nav.addEventListener("scroll", update, { passive: true });
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(update) : null;
+    observer?.observe(nav);
+    if (nav.firstElementChild) observer?.observe(nav.firstElementChild);
+    return () => {
+      nav.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, []);
+
   // Keep the active chapter link in view inside the sidebar as the page
   // scrolls. We adjust only nav.scrollTop — never the window — so the main
   // page scroll position is untouched.
@@ -64,7 +87,8 @@ const ReportDesktopSidebar: FC<Props> = ({
 
     const navRect = nav.getBoundingClientRect();
     const linkRect = activeLink.getBoundingClientRect();
-    const margin = 24;
+    // Clear of the 24px edge fade, so the active link is never the thing fading out.
+    const margin = 36;
     let delta = 0;
     if (linkRect.top < navRect.top + margin) {
       delta = linkRect.top - navRect.top - margin;
@@ -92,7 +116,7 @@ const ReportDesktopSidebar: FC<Props> = ({
             src="/images/loveiq-mark.svg"
             width={45}
           />
-          <span className="report-sidebar__brand-text" aria-label="LoveIQ Report">
+          <span className="report-sidebar__brand-text" role="img" aria-label="LoveIQ Report">
             <span aria-hidden="true" className="report-sidebar__love">
               Love
             </span>

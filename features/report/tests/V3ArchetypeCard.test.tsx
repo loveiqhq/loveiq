@@ -648,16 +648,30 @@ describe("V4 archetype card — reportV3.css, both V4 roots", () => {
     expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 44px/);
   });
 
-  // 1116:1025 clips at 360, under the page indicator (1116:1120 at 345), so the focused
-  // card's shadow fades out behind the bars; a 345px track cut it 15px higher.
-  it("lets the focused card's shadow run under the page indicator, as 1116:1025 clips it", () => {
-    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__viewport")).toMatch(/height: 360px/);
+  // 1116:1025 clips at 360, under the page indicator (1116:1120 at 345), meaning the focused
+  // card's shadow to fade out behind the bars. The shadow is wider than the bars, so the
+  // clip showed as a straight line beside them (review 06.10): the scrollport grows 64px
+  // of glow room at its foot and gives it back as margin, the bars' 15px lift included
+  // (the two negative margins collapse into the larger), so nothing moves.
+  it("lets the focused card's shadow fade out below the cards, with nothing moving", () => {
+    const viewport = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__viewport");
+    expect(viewport).toMatch(/--rv3-deck-glow-room: 64px/);
+    expect(viewport).toMatch(/height: calc\(360px \+ var\(--rv3-deck-glow-room\)\)/);
+    expect(viewport).toMatch(/padding-bottom: var\(--rv3-deck-glow-room\)/);
+    expect(viewport).toMatch(
+      /margin-bottom: calc\(-1 \* \(var\(--rv3-deck-glow-room\) \+ var\(--rv3-deck-dots-lift\)\)\)/
+    );
     const track = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__track");
     expect(track).toMatch(/height: 360px/);
     expect(track).toMatch(/padding-bottom: 22px/);
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck")).toMatch(/--rv3-deck-dots-lift: 15px/);
     const dots = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__dots");
-    expect(dots).toMatch(/margin-top: -15px/);
+    expect(dots).toMatch(/margin-top: calc\(-1 \* var\(--rv3-deck-dots-lift\)\)/);
     expect(dots).toMatch(/position: relative/);
+    // Its sides: the card the deck sits in clips 22px left of the focused card.
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__inner")).toMatch(
+      /0 30px 60px -32px/
+    );
   });
 
   it("keeps the frame's widths at 393 but narrows instead of clipping on smaller phones", () => {
