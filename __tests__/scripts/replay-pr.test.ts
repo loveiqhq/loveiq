@@ -113,7 +113,16 @@ beforeAll(() => {
   chmodSync(stub, 0o755);
 });
 
-describe("openReproductionPr", () => {
+/**
+ * The `gh` stub is a POSIX shell script on a `:`-joined PATH, and Windows can use
+ * neither: there `gh` resolved to the REAL, logged-in gh, which only failed because
+ * the sandbox has no GitHub remote. openReproductionPr runs in ux-review-verify.yml
+ * on ubuntu-latest, so the blocks that can reach `gh` run where it does, and on a
+ * Windows machine they are skipped rather than pointed at a real gh.
+ */
+const ghStubRuns = process.platform !== "win32";
+
+describe.skipIf(!ghStubRuns)("openReproductionPr", () => {
   it("pushes a branch, commits the reproduction, and opens a DRAFT pr", () => {
     const url = call(finding());
     expect(url).toBe("https://github.com/loveiqhq/loveiq/pull/999");
@@ -202,7 +211,7 @@ describe("openReproductionPr", () => {
  * stripped off by `.split("\n")[0]`. It stayed hidden for the whole life of
  * the file. A per-finding failure may stay quiet; a blanket refusal must not.
  */
-describe("when gh refuses", () => {
+describe.skipIf(!ghStubRuns)("when gh refuses", () => {
   /** Swap in a `gh` that fails with `stderr`, run once, put the stub back. */
   function withFailingGh(stderr: string, sessionId: string) {
     const stub = join(root, "stub", "gh");

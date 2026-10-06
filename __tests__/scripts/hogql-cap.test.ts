@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { capQuery, hasOwnLimit, HOG_ROW_CAP, hogQuery } from "../../scripts/lib/hogql.mjs";
@@ -113,7 +113,9 @@ describe("HogQL queries state a row limit", () => {
           continue;
         }
         if (!/\.(ts|tsx|mjs|js)$/.test(name)) continue;
-        const rel = full.replace(`${process.cwd()}/`, "");
+        // Repo-relative with forward slashes on every OS. Stripping `${cwd}/` left
+        // Windows paths absolute (backslashes), so ALLOWED never matched there.
+        const rel = relative(process.cwd(), full).split(sep).join("/");
         if (ALLOWED.includes(rel) || rel.startsWith("__tests__/")) continue;
         if (/kind:\s*"HogQLQuery"/.test(readFileSync(full, "utf8"))) offenders.push(rel);
       }
@@ -125,5 +127,7 @@ describe("HogQL queries state a row limit", () => {
       `these build HogQL directly and so inherit PostHog's silent 100-row cap; ` +
         `route them through scripts/lib/hogql.mjs`
     ).toEqual([]);
-  });
+    // It reads every source file in the repo. About a second alone, but past the
+    // suite's 15 s default on a busy Windows machine, where each read is scanned.
+  }, 60_000);
 });
