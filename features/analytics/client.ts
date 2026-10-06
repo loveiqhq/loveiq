@@ -1104,6 +1104,18 @@ export const trackSurveyConfirmationCtaClicked = (params: {
 export const trackFaqExpanded = (params: { question_index: number; question_text_hash: string }) =>
   track("faq_expanded", params);
 
+/**
+ * The landing hero video (arm `white_video` of the landing A/B). The arm is not a
+ * param: it rides on every event as the `landing_variant` super-property, so these
+ * say only what the video did. `replay` separates a second watch from a first.
+ */
+export const trackHeroVideoPlay = (params: { replay: boolean }) => track("hero_video_play", params);
+
+export const trackHeroVideoProgress = (params: { percent: 25 | 50 | 75 }) =>
+  track("hero_video_progress", params);
+
+export const trackHeroVideoComplete = () => track("hero_video_complete");
+
 export const trackHeroVideoPaused = (params: { current_time_sec: number }) =>
   track("hero_video_paused", params);
 
