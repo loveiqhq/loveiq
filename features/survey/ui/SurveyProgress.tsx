@@ -45,16 +45,21 @@ const ClockIcon: FC = () => (
   </svg>
 );
 
-/** The card's bottom strip: "n/N | ~X min" over the orange bar (Figma 11303:228). */
+/**
+ * The count, the time left and the orange bar (Figma 11303:174, ready for dev
+ * 2026-10-06). It sits between Previous and Next in the footer row: the count beside
+ * the bar from 640px, as the frame draws it, and above it on a phone (Marcus, LoveIQ
+ * Sync 2026-10-06: "push the 1 out of 59 and 14 minutes above the bar and you stack
+ * it"). The row around it draws the hairline and the safe-area padding.
+ */
 const SurveyProgress: FC<SurveyProgressProps> = ({ index, total }) => {
   const percent = progressPercent(index, total);
   const position = Math.min(index + 1, total);
   const minutes = minutesLeft(index, total);
 
   return (
-    // On a phone this strip is the screen's bottom edge, so it clears the home indicator.
-    <div className="border-t border-[rgba(22,16,33,0.09)] px-[18.4px] pb-[max(17.6px,env(safe-area-inset-bottom))] pt-[15px] sm:px-[35px] sm:pb-[16.6px]">
-      <div className="flex h-[23.6px] items-center gap-[7.12px] pl-[8.55px] font-sans text-[9.26px] font-semibold uppercase leading-[12.35px] tracking-[0.1em] text-[#a78bfa]">
+    <div className="flex flex-col gap-[5px] sm:flex-row sm:items-center sm:gap-[13px]">
+      <div className="flex items-center gap-[7.12px] whitespace-nowrap font-sans text-[9.26px] font-semibold uppercase leading-[12.35px] tracking-[0.1em] text-[#a78bfa] [filter:drop-shadow(0_0.712px_1.068px_rgba(0,0,0,0.1))_drop-shadow(0_0.712px_0.712px_rgba(0,0,0,0.1))] sm:h-[22px] sm:shrink-0 sm:px-[8.55px]">
         <span>
           {position}/{total}
         </span>
@@ -75,7 +80,7 @@ const SurveyProgress: FC<SurveyProgressProps> = ({ index, total }) => {
         aria-valuemax={100}
         aria-valuenow={Math.round(percent)}
         aria-valuetext={`Question ${position} of ${total}`}
-        className="relative mt-[12.8px] h-2 rounded-[4px] bg-[rgba(22,16,33,0.09)]"
+        className="relative h-2 rounded-[4px] bg-[rgba(22,16,33,0.09)] sm:flex-1"
       >
         <div
           className="h-full rounded-[4px] bg-gradient-to-r from-[#fe6839] to-[#fe723b] transition-[width] duration-500 ease-out"

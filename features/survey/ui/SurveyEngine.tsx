@@ -837,18 +837,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
               <GuidancePanel question={question} />
             </div>
 
-            {/* Previous / Next and the progress strip stay on screen while a long
-                question scrolls (above the cookie banner while it is up). Not in a
-                window 500px tall or less (a landscape phone, a short desktop window),
-                where they would cover a third to half of it: there they follow the
-                question and the page scrolls to them. */}
+            {/* The footer row (Previous, the progress strip, Next) stays on screen while
+                a long question scrolls (above the cookie banner while it is up). Not in
+                a window 500px tall or less (a landscape phone, a short desktop window),
+                where it would cover a third to half of it: there it follows the
+                question and the page scrolls to it. The row draws its own hairline, so
+                floating adds only the soft shadow. */}
             <div
               ref={footerRef}
               data-survey-footer
               className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
-                footerFloating
-                  ? "shadow-[0_-1px_0_rgba(22,16,33,0.09),0_-12px_24px_-16px_rgba(22,16,33,0.2)]"
-                  : ""
+                footerFloating ? "shadow-[0_-12px_24px_-16px_rgba(22,16,33,0.2)]" : ""
               }`}
             >
               <SurveyNav
@@ -859,8 +858,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 hasAnswer={hasAnswer || !question.required}
                 onPrevious={goPrev}
                 onNext={goNext}
+                progress={<SurveyProgress index={currentIndex} total={totalQuestions} />}
               />
-              <SurveyProgress index={currentIndex} total={totalQuestions} />
             </div>
             <div ref={cardEndRef} aria-hidden className="absolute bottom-0 h-px w-px" />
           </section>
