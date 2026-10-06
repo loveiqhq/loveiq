@@ -10,14 +10,19 @@ import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
 import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
+import { domainMailboxes } from "./gmail";
 import {
   chunkPage,
+  isLegalInstrument,
+  MEETING_NOTE_NAME,
   recordSweep,
   shouldSweep,
   sweepMissing,
   upsertChunks,
   type BrainRow,
   type IngestResult,
+  isJobApplication,
+  isRecruitingConversation,
 } from "./upsert";
 
 /**
@@ -46,12 +51,49 @@ const SOURCE = "drive";
 const API = "https://www.googleapis.com/drive/v3";
 const TIMEOUT_MS = 20_000;
 const PAGE_SIZE = 100;
+/**
+ * How many documents may fail to export before the WALK is called incomplete.
+ *
+ * Drive was the only source that gave up on the first one: calendar tolerates
+ * 10 unreachable calendars and gmail 10 unreadable threads, both counting
+ * failures and comparing at the end. Drive called `stop()` inside the catch, so
+ * a single permanently-unexportable file marked every run incomplete forever.
+ *
+ * Measured 2026-09-17: one document — id begins `1bunyq5j`, and the full id is in the
+ * ingest logs rather than here because this repository is public — has failed on
+ * 224 consecutive runs since 2026-09-08, and drive has not reported a complete
+ * walk once in that time — 0 of ~240. The sweep was never affected (it gates on
+ * the LISTING, not the fetch), but the source has been reporting degraded for
+ * ten days over one file, which is exactly the alert nobody reads any more.
+ */
+const MAX_TOLERATED_EXPORT_FAILURES = 10;
+
 const MAX_PAGES = 20;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v3: v1-v2 indexed Google Docs only — 24 call notes out of ~494 readable files on
 // the company Drive. Sheets, markdown, CSV, JSON and Word documents were invisible.
-export const DRIVE_BUILDER_VERSION = 3;
+// v4: v3 read only the FIRST TAB of every spreadsheet, because it exported them as
+// csv and csv holds one table. 40 spreadsheets were indexed that way. Without this
+// bump the fix is inert on all of them: a file is refetched only when its
+// `modifiedTime` moves, and "Business Case" has not been edited since 2026-09-16,
+// so the tab nobody could find would have stayed missing until somebody typed in it.
+// v5: v4 titled every document neutrally. Two classes are now marked ON THE TITLE —
+// copy we wrote in a customer's voice, and the example figures in a KPI definition
+// table — and the mark is what stops the brain quoting either as measured fact. Same
+// trap as v4: the mark is applied at WRITE time, so without this bump it reaches only
+// documents somebody happens to edit — or knew to delete by hand, which covers the
+// three documents we found and none we did not.
+//
+// A CORRECTION, kept because the wrong version shipped in this comment first. It said
+// deleting a document's chunks does not force a refetch, citing three deleted
+// documents still absent "a full cycle later". The cycle it cited started at 08:52:25
+// and the deletion ran at 09:02:31 — the run was ten minutes older than the thing it
+// was supposed to show. Two of the three were back and marked by 13:52. Deleting DOES
+// force a refetch (absent means unknown, unknown means fetch); what it cannot do is
+// reach the documents nobody thought to delete. Check a run's start time against the
+// action before reading its counters as evidence.
+export const DRIVE_BUILDER_VERSION = 5;
 
 const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
@@ -90,6 +132,12 @@ const PDF_TEXT_LIMIT = 400_000;
  * answer, because a 2,400-character book page matches almost any vocabulary.
  *
  * Kept deliberately: the academic sources. Decision recorded 2026-09-06.
+ *
+ * The walk still skips all fourteen books. Eleven of them, the ones on love, desire and
+ * sex, are searchable since 2026-09-28 as source `book`, loaded whole by
+ * scripts/brain-books.ts and OPT-IN in brain_search, so they cannot crowd out company
+ * answers the way they did here. The other three (leadership, habits, persuasion) are
+ * not relevant to what LoveIQ measures and stay out.
  */
 /* eslint-disable no-secrets/no-secrets -- Google Drive FILE IDS, not credentials.
    They appear in every Drive URL, and each is already stored in this corpus as
@@ -226,11 +274,56 @@ interface DriveFile {
   shortcutDetails?: { targetId?: string; targetMimeType?: string };
 }
 
+/**
+ * Statuses Drive returns transiently under completely normal operation. Google documents
+ * the remedy as retry-with-backoff; the API is explicitly not expected to be 100%.
+ */
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const BACKOFF_MS = [400, 1200];
+
+/**
+ * One Drive request, retried on a transient refusal.
+ *
+ * WHY THIS MATTERS MORE THAN IT LOOKS. The listing walk gave up permanently on the first
+ * non-ok response, so a single 500 on page 4 of 8 ended the whole walk — and because the
+ * sweep only runs after a COMPLETE walk, no deleted document was ever removed from the
+ * corpus. On 2026-09-13 that was the live state: `stopped=listing-refused@p4:500`, with
+ * nothing in the alert reading as a failure. Retrying here rather than in the listing
+ * loop fixes the export path too, which was failing the same way (`stopped=export-failed`).
+ *
+ * A 4xx that is not 429 is the caller's fault and is returned immediately: retrying a
+ * 403 just spends the time budget arriving at the same answer.
+ *
+ * A TIMEOUT IS A 504 HERE. `fetchWithTimeout` throws instead of answering, which skipped
+ * this retry and every caller's refusal handling, so one slow request ended the whole run:
+ * three runs on 2026-09-28, two of them on one colleague's first listing page, which
+ * took 13.8s, 0.6s and 4.8s on three tries that evening against ~0.5s for everyone else.
+ * Retried like the gateway timeout it amounts to, and handed back as one, so it costs
+ * what a slow 504 already could and the callers' own handling decides what it means.
+ */
 async function driveGet(token: string, path: string): Promise<Response> {
-  return fetchWithTimeout(`${API}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    timeoutMs: TIMEOUT_MS,
-  });
+  let res: Response | undefined;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, BACKOFF_MS[attempt - 1] ?? 1200));
+      logger.info({ attempt, status: res?.status }, "brain-ingest drive: retrying");
+    }
+    // An absolute URL passes through, so the Sheets API reuses this retry/backoff
+    // instead of growing a second copy of it.
+    try {
+      res = await fetchWithTimeout(path.startsWith("https://") ? path : `${API}${path}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        timeoutMs: TIMEOUT_MS,
+      });
+    } catch (err) {
+      logger.warn({ attempt, err: String(err) }, "brain-ingest drive: request failed");
+      res = new Response(String(err), { status: 504 });
+    }
+    if (!RETRYABLE.has(res.status)) return res;
+  }
+  // Out of attempts: hand back the last refusal so the caller names it as it always did.
+  return res as Response;
 }
 
 /** Every Google Doc the service account can see. */
@@ -284,14 +377,178 @@ async function listDocs(
       files?: DriveFile[];
       nextPageToken?: string;
     } | null;
-    for (const f of json?.files ?? []) if (f.id) out.push(f);
-    pageToken = json?.nextPageToken;
+    // NOT an empty last page. The timeout also covers reading the body, and a page that
+    // could not be read has no nextPageToken, so it called a cut-short listing complete
+    // and handed the sweep everything after it.
+    if (!json) return { items: out, complete: false, stopped: `listing-unreadable@p${page}` };
+    for (const f of json.files ?? []) if (f.id) out.push(f);
+    pageToken = json.nextPageToken;
     if (!pageToken) break;
     // The cap is PAGE_SIZE * MAX_PAGES documents. Named separately because hitting it
     // is a capacity decision to revisit, not a fault to chase.
     if (page === MAX_PAGES - 1) stop(`page-cap@${MAX_PAGES}x${PAGE_SIZE}`);
   }
   return { items: out, complete, stopped };
+}
+
+/**
+ * Everything in a COLLEAGUE'S Drive, not just the admin's.
+ *
+ * THE GAP THIS CLOSES, measured 2026-09-19. This walk reads as one account, so it
+ * sees only what that account owns or has been shared. Impersonating each colleague
+ * in turn and diffing showed 124 documents invisible to it, 97 of them one person's.
+ * `resolveShortcuts` below names one cause: Meet files a meeting note in the
+ * ORGANISER's Drive, so every meeting we did not organise was unreadable.
+ *
+ * WIDENED FROM MEETING NOTES TO EVERYTHING, on an explicit decision recorded
+ * 2026-09-21. The narrow version indexed only files matching `notes by gemini`,
+ * because reading a colleague's whole Drive also reaches documents that are theirs
+ * rather than the company's. That trade was put to the owner and the answer was to
+ * index everything, so the rule is now the same one the admin walk uses: the file
+ * types below, not trashed, minus the exclusions every listed file passes through in
+ * `ingestDrive`: `SKIP_FILE_IDS`, `isVendorBilling`, `isJobApplication` and
+ * `isLegalInstrument` by name, and `isPrivateLegalMatter` by content once read.
+ *
+ * WHAT THAT MEANS IN PRACTICE, as of 2026-09-23. When this widened, the reachable set
+ * included a shareholders agreement, employee option terms, a confidential information
+ * memorandum and a colleague's landlord dispute. The agreement and the option terms are
+ * now refused by `isLegalInstrument` (2026-09-22), the tenancy matter by
+ * `isPrivateLegalMatter` (2026-09-22/23). The memorandum is still in by the decision
+ * above; `SKIP_FILE_IDS` is the mechanism if that is reconsidered, which is why it is
+ * an explicit id list rather than a rule.
+ *
+ * CVs stay out regardless — `isJobApplication` is applied to this listing too, and a
+ * test drives a colleague's CV through the whole walk to prove it.
+ *
+ * A refusal for one colleague is not an error for the walk. Their files stay
+ * unreadable exactly as they were before this existed.
+ */
+export async function colleagueDocuments(
+  alreadyListed: ReadonlySet<string>,
+  isOutOfTime: () => boolean,
+  oidcToken?: string | null
+): Promise<{
+  items: DriveFile[];
+  /**
+   * The token each note must be READ with, by file id.
+   *
+   * The admin token that lists the rest of Drive cannot fetch these — that is the
+   * whole reason they were invisible. Listing them with a colleague's token and then
+   * exporting them with the admin's produced a 404 for every one, and fourteen of
+   * those tripped the export-failure tolerance, which stopped the walk early AND
+   * blocked the sweep, because the sweep gate is the listing being complete.
+   */
+  tokens: Map<string, string>;
+  asked: number;
+  refused: number;
+  /**
+   * Whether every mailbox was walked to the end.
+   *
+   * THIS IS A SWEEP GATE, not a statistic. `listed.complete` decides whether the sweep
+   * deletes rows that were not listed this run, and it used to read `raw.complete` —
+   * the ADMIN listing alone. That was survivable while this function returned at most
+   * fourteen meeting notes; once it returns a colleague's whole Drive, a run that
+   * stopped early or lost one mailbox to a refused token would make up to a hundred
+   * previously-indexed documents look deleted. Too few to trip the majority guard, so
+   * they would go, come back on the next run, and go again.
+   *
+   * A refusal counts as incomplete for the same reason: a colleague reachable
+   * yesterday and refused today has not lost their documents, and the sweep must not
+   * act as though they had.
+   */
+  complete: boolean;
+}> {
+  const mailboxes = await domainMailboxes(oidcToken);
+  /**
+   * `null` and `[]` are different answers and only one of them is a failure.
+   *
+   * `null` means the directory could not be READ, so we do not know whose files we
+   * are missing — not complete, and the sweep must not run on it. An empty ARRAY
+   * means it was read and there is nobody to walk, which is a complete answer and is
+   * also the normal state anywhere the directory is not configured. Conflating them
+   * blocks the sweep forever in exactly those environments.
+   */
+  if (!mailboxes) return { items: [], tokens: new Map(), asked: 0, refused: 0, complete: false };
+  if (mailboxes.length === 0)
+    return { items: [], tokens: new Map(), asked: 0, refused: 0, complete: true };
+
+  const items: DriveFile[] = [];
+  const tokens = new Map<string, string>();
+  const seen = new Set(alreadyListed);
+  let asked = 0;
+  let refused = 0;
+  let complete = true;
+
+  for (const mailbox of mailboxes) {
+    if (isOutOfTime()) {
+      complete = false;
+      break;
+    }
+    const userToken = await getDelegatedToken(mailbox, DRIVE_SCOPE, Date.now(), oidcToken);
+    if (!userToken) {
+      refused += 1;
+      complete = false;
+      continue;
+    }
+    asked += 1;
+    /**
+     * The same file types the admin walk asks for, so a document is indexed on the
+     * same terms whoever happens to own it — including `SHORTCUT_MIME`, which
+     * `resolveShortcuts` needs to follow a Meet note filed in someone else's Drive.
+     */
+    const q = encodeURIComponent(
+      `'${mailbox.replace(/'/g, "\\'")}' in owners and trashed=false and ` +
+        `(${[...WANTED_MIMES, SHORTCUT_MIME].map((m) => `mimeType='${m}'`).join(" or ")})`
+    );
+    const fields = encodeURIComponent(
+      "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink," +
+        "owners(emailAddress),shortcutDetails(targetId,targetMimeType))"
+    );
+    /**
+     * PAGED, which the meeting-note version did not need to be. One colleague owns
+     * 197 documents on their own, and a single unpaged `pageSize=200` would have
+     * silently returned the first page and called the walk complete — the quiet
+     * truncation this file has been bitten by before.
+     */
+    let pageToken = "";
+    for (let page = 0; page < MAX_PAGES; page++) {
+      if (isOutOfTime()) {
+        complete = false;
+        break;
+      }
+      const res = await driveGet(
+        userToken,
+        `/files?q=${q}&fields=${fields}&pageSize=${PAGE_SIZE}` +
+          (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
+      );
+      if (!res.ok) {
+        refused += 1;
+        complete = false;
+        break;
+      }
+      const body = (await res.json().catch(() => null)) as {
+        files?: DriveFile[];
+        nextPageToken?: string;
+      } | null;
+      // Unreadable is not "no more files" (see listDocs).
+      if (!body) {
+        refused += 1;
+        complete = false;
+        break;
+      }
+      for (const f of body.files ?? []) {
+        if (!f.id || seen.has(f.id)) continue;
+        seen.add(f.id);
+        tokens.set(f.id, userToken);
+        items.push(f);
+      }
+      pageToken = body.nextPageToken ?? "";
+      if (!pageToken) break;
+      // Ran out of pages before running out of files.
+      if (page === MAX_PAGES - 1) complete = false;
+    }
+  }
+  return { items, tokens, asked, refused, complete };
 }
 
 /**
@@ -314,12 +571,22 @@ async function listDocs(
  */
 async function resolveShortcuts(
   token: string,
-  listed: DriveFile[]
-): Promise<{ docs: DriveFile[]; unreachable: number; skippedNonDoc: number }> {
+  listed: DriveFile[],
+  isOutOfTime: () => boolean
+): Promise<{ docs: DriveFile[]; unreachable: number; skippedNonDoc: number; failed: number }> {
   const docs: DriveFile[] = [];
   const seen = new Set<string>();
   let unreachable = 0;
   let skippedNonDoc = 0;
+  /**
+   * Lookups that got no answer about the note: anything but a 404 (a timeout, an
+   * overload, Drive's 403 rate limit, a 401 from a token that expired mid-run), an
+   * unreadable body, or no time left to ask. Unlike an unshared target, the note may well
+   * exist, and leaving it out of a complete listing let the sweep delete it, so any of
+   * these makes the listing incomplete. About 130 shortcuts across the colleagues' Drives
+   * on 2026-09-28, so the clock is checked here too.
+   */
+  let failed = 0;
 
   for (const f of listed) {
     if (f.mimeType && WANTED_MIMES.includes(f.mimeType) && f.id) {
@@ -340,6 +607,10 @@ async function resolveShortcuts(
     // A target can also be directly visible; do not index it twice.
     if (seen.has(targetId)) continue;
 
+    if (isOutOfTime()) {
+      failed += 1;
+      continue;
+    }
     const res = await driveGet(
       token,
       `/files/${encodeURIComponent(targetId)}` +
@@ -347,11 +618,17 @@ async function resolveShortcuts(
         `&supportsAllDrives=true`
     );
     if (!res.ok) {
-      unreachable += 1;
+      // Drive answers 404 for a file this account cannot see: the unshared note above.
+      if (res.status === 404) unreachable += 1;
+      else failed += 1;
       continue;
     }
     const target = (await res.json().catch(() => null)) as DriveFile | null;
-    if (!target?.id) {
+    if (!target) {
+      failed += 1;
+      continue;
+    }
+    if (!target.id) {
       unreachable += 1;
       continue;
     }
@@ -361,7 +638,7 @@ async function resolveShortcuts(
     docs.push({ ...target, name: target.name || f.name });
   }
 
-  return { docs, unreachable, skippedNonDoc };
+  return { docs, unreachable, skippedNonDoc, failed };
 }
 
 /** A Google Doc as plain text. */
@@ -372,12 +649,129 @@ const clean = (t: string): string =>
     .replace(/\r\n/g, "\n")
     .trim();
 
+const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+
+/** Same ceiling as a pdf: a spreadsheet is the other easy way to blow up a chunk. */
+const SHEET_TEXT_LIMIT = 400_000;
+
+/**
+ * EVERY TAB, not just the first one.
+ *
+ * `files.export?mimeType=text/csv` is what this used to do, and CSV is a
+ * single-table format — Drive answers with the FIRST worksheet and silently drops
+ * the rest. Found 2026-09-19: "Business Case" has two tabs, `Costs` and `Core_KPI`,
+ * and the brain held only the cost lines. Asked about the KPI table it said it could
+ * not see the file, which is worse than saying nothing: the file WAS indexed, so
+ * every check that counts documents called it present.
+ *
+ * The Sheets API takes `drive.readonly`, which this token already carries, so no new
+ * scope and no admin grant. Two calls: the tab names, then every tab's values in one
+ * `batchGet`.
+ */
+export async function sheetTabTitles(token: string, fileId: string): Promise<string[]> {
+  const metaRes = await driveGet(
+    token,
+    `${SHEETS_API}/${fileId}?fields=${encodeURIComponent("sheets(properties(title))")}`
+  );
+  if (!metaRes.ok) throw new Error(`sheets-meta ${metaRes.status}`);
+  const meta = (await metaRes.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
+  return (meta.sheets ?? [])
+    .map((sh) => sh?.properties?.title)
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
+}
+
+/**
+ * The tabs that actually PRODUCE a heading — i.e. the ones with at least one
+ * non-empty row.
+ *
+ * `sheetText` skips an empty tab outright (`if (rows.length === 0) return`), so a
+ * reconciliation that expects one heading per TITLE reports a false gap for every
+ * empty tab. Measured 2026-09-20: a tab literally named ">>> Archive", used as a
+ * visual separator and holding nothing, was reported as a missing tab.
+ *
+ * This exists so the check can replicate the ingester's rule instead of a
+ * simplification of it.
+ */
+export async function sheetTabsWithRows(token: string, fileId: string): Promise<string[]> {
+  const titles = await sheetTabTitles(token, fileId);
+  if (titles.length === 0) return [];
+  const ranges = titles
+    .map((t) => `ranges=${encodeURIComponent(`'${t.replace(/'/g, "''")}'`)}`)
+    .join("&");
+  const res = await driveGet(
+    token,
+    `${SHEETS_API}/${fileId}/values:batchGet?${ranges}&majorDimension=ROWS`
+  );
+  if (!res.ok) throw new Error(`sheets-values ${res.status}`);
+  const payload = (await res.json()) as { valueRanges?: Array<{ values?: unknown[][] }> };
+  return titles.filter((_, i) => {
+    const rows = (payload.valueRanges ?? [])[i]?.values ?? [];
+    return rows.some((row) => row.join("").trim().length > 0);
+  });
+}
+
+/**
+ * One cell as `sheetText` writes it. A line inside a cell that starts with "#" gets a
+ * leading space, so a cell can never forge the "## <tab>" heading `markedParts` splits a
+ * spreadsheet at; a forged one would cut an example tab's later rows away from its mark.
+ */
+export function sheetCell(cell: unknown): string {
+  return String(cell ?? "")
+    .trim()
+    .replace(/\n(?=#)/g, "\n ");
+}
+
+async function sheetText(token: string, fileId: string): Promise<string> {
+  const titles = await sheetTabTitles(token, fileId);
+  if (titles.length === 0) return "";
+
+  // A1 notation: the whole tab is just its quoted name, and an apostrophe in that
+  // name is escaped by doubling. Get them all in one request rather than one each.
+  const ranges = titles
+    .map((t) => `ranges=${encodeURIComponent(`'${t.replace(/'/g, "''")}'`)}`)
+    .join("&");
+  const valRes = await driveGet(
+    token,
+    `${SHEETS_API}/${fileId}/values:batchGet?${ranges}&majorDimension=ROWS`
+  );
+  if (!valRes.ok) throw new Error(`sheets-values ${valRes.status}`);
+  const payload = (await valRes.json()) as { valueRanges?: Array<{ values?: unknown[][] }> };
+
+  const parts: string[] = [];
+  (payload.valueRanges ?? []).forEach((vr, i) => {
+    const rows = (vr.values ?? [])
+      .map((row) => row.map(sheetCell).join(", ").trim())
+      .filter((line) => line.replace(/,/g, "").trim().length > 0);
+    if (rows.length === 0) return;
+    // NAME THE TAB. Without it two tables run together and a reader cannot tell which
+    // sheet a number came from — the same reason chunks carry their document title.
+    parts.push(`## ${titles[i] ?? `Sheet ${i + 1}`}\n${rows.join("\n")}`);
+  });
+
+  const joined = clean(parts.join("\n\n"));
+  return joined.length > SHEET_TEXT_LIMIT
+    ? `${joined.slice(0, SHEET_TEXT_LIMIT)}\n\n[truncated: this spreadsheet is longer than the brain indexes]`
+    : joined;
+}
+
 async function docText(token: string, fileId: string, mimeType?: string): Promise<string> {
   // Google-native files must be EXPORTED; everything else downloads with alt=media.
   // Asking for the wrong one is a 403 that reads like a permission problem.
-  if (mimeType === DOC_MIME || mimeType === SHEET_MIME) {
-    const as = mimeType === SHEET_MIME ? "text%2Fcsv" : "text%2Fplain";
-    const res = await driveGet(token, `/files/${fileId}/export?mimeType=${as}`);
+  if (mimeType === SHEET_MIME) {
+    try {
+      return await sheetText(token, fileId);
+    } catch (err) {
+      // Fall back to the old first-tab-only export rather than losing the file
+      // entirely — but say so, because a silent fallback is how this went unnoticed.
+      logger.warn({ err, file: fileId }, "brain-ingest drive: sheets api failed, first tab only");
+      const res = await driveGet(token, `/files/${fileId}/export?mimeType=text%2Fcsv`);
+      if (!res.ok) throw new Error(`export ${res.status}`);
+      return clean(await res.text());
+    }
+  }
+
+  if (mimeType === DOC_MIME) {
+    const res = await driveGet(token, `/files/${fileId}/export?mimeType=text%2Fplain`);
     if (!res.ok) throw new Error(`export ${res.status}`);
     return clean(await res.text());
   }
@@ -387,6 +781,18 @@ async function docText(token: string, fileId: string, mimeType?: string): Promis
 
   if (mimeType === PDF_MIME) {
     const buf = new Uint8Array(await res.arrayBuffer());
+    /**
+     * A ZERO-BYTE PDF IS NOT AN EXPORT FAILURE.
+     *
+     * pdfjs throws `The PDF file is empty, i.e. its size is zero bytes` for one, which
+     * lands in the catch and is reported as a failed export — for ever, because nothing
+     * about the file will change. Measured 2026-09-18: two such files had been failing
+     * on every hourly run since at least 2026-09-08, and one of them used to abort the
+     * whole walk. A file with no bytes is the case `!text.trim()` already handles, and
+     * belongs in `empty=` with the other duds rather than in the failure list, which
+     * should only ever hold things somebody can act on.
+     */
+    if (buf.byteLength === 0) return "";
     const { extractText, getDocumentProxy } = await import("unpdf");
     const doc = await getDocumentProxy(buf);
     const { text } = await extractText(doc, { mergePages: true });
@@ -408,9 +814,239 @@ async function docText(token: string, fileId: string, mimeType?: string): Promis
   return clean(await res.text());
 }
 
+/**
+ * How many distinct email addresses make a document a LIST OF PEOPLE rather than a
+ * document that happens to mention some.
+ *
+ * Measured across every Drive document in the corpus on 2026-09-17, and the two groups do
+ * not overlap remotely. The largest ordinary document — a "Team Members" page — carries
+ * SIX. Everything above that is an export: 1,429 addresses in
+ * `loveiq_audience1_completers_all.csv`, 533 in its opt-in twin, 121 in
+ * `loveiq_audience2_abandoners.csv`, and 100 apiece in four `.json` fixtures. Twenty sits
+ * in the gap with a wide margin on both sides.
+ */
+export const MAX_ADDRESSES_PER_DOC = 20;
+
+const EMAIL_IN_TEXT = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * Is this file a personal-data export?
+ *
+ * `brain_chunk` must never index user-level rows — survey answers, individual reports,
+ * email addresses. That rule was written for the ingesters and then not enforced anywhere:
+ * an audit on 2026-09-17 found three marketing audience exports sitting in Drive and fully
+ * indexed, putting 2,083 real people's addresses into a corpus any team member can search
+ * with one shared token.
+ *
+ * Counted on DISTINCT addresses across the whole document, not per chunk, because that is
+ * the only level where the signal exists. A 2,400-character chunk of a CSV holds five to
+ * nine addresses — indistinguishable from a calendar invite with nine guests.
+ */
+export function isPersonalDataExport(text: string): boolean {
+  const seen = new Set<string>();
+  for (const m of text.match(EMAIL_IN_TEXT) ?? []) {
+    seen.add(m.toLowerCase());
+    // Stop early: a 1,429-address CSV need not be fully de-duplicated to be recognised.
+    if (seen.size > MAX_ADDRESSES_PER_DOC) return true;
+  }
+  return false;
+}
+
+/**
+ * A FILING IN SOMEONE'S PRIVATE LEGAL PROCEEDING.
+ *
+ * The 2026-09-21 widening pulled a colleague's personal landlord dispute and a criminal
+ * complaint into the corpus: 23 documents, 81 chunks, one owner — an eviction case
+ * numbered 00 to 09, a Klageschrift, a Strafanzeige, an evidence schedule. None of it is
+ * about LoveIQ, and all of it is about named third parties.
+ *
+ * A FILENAME RULE CANNOT COVER THIS and that is why the check is on the text. The case
+ * folder is numbered rather than named — the files run 00 to 09 with terse German
+ * suffixes, an overview, a demand, a draft, a checklist — so the documents that say
+ * least about themselves are exactly the ones a title pattern misses.
+ *
+ * DRIVE ONLY. Never apply this to mail. Measured 2026-09-22: 45 gmail chunks contain
+ * "Amtsgericht" or "Landgericht" and NOT ONE is litigation — 24 are plainly the German
+ * register footer every company must carry in its email signature ("Amtsgericht
+ * Charlottenburg HRB 282986"), and zero contain a proceeding word. The same rule that is
+ * clean on 798 Drive documents would have refused 45 ordinary business threads.
+ *
+ * Measured against every Drive document before shipping: 23 selected, all one owner, and
+ * NOT ONE of the three legal-compliance strategy papers — which cite the same statutes a
+ * lawsuit does, and are exactly what we want found. Citing a statute is analysis; naming
+ * a court is a proceeding.
+ *
+ * The durable fix is not code: a private matter should not sit in a Drive the service
+ * account can read. This stops it being indexed meanwhile.
+ */
+const PRIVATE_LEGAL_MATTER =
+  /\b(amtsgericht|landgericht|klageschrift|strafanzeige|r(ä|ae)umungsklage|prozesskostenhilfe|staatsanwaltschaft|zwangsvollstreckung)\b/i;
+/**
+ * THE OTHER HALF, AND IT IS THE HALF THAT LEAKED.
+ *
+ * The rule above reads the TEXT and looks for a court, which catches a filing. It does
+ * not catch the letters AROUND a filing — a notice to quit, a payment demand, a formal
+ * warning, a handover protocol, a resignation. Those name no court because no court is
+ * involved yet, so nine documents and 21 chunks of the same private tenancy matter walked
+ * straight back in after the content rule shipped on 2026-09-22 and had to be deleted by
+ * hand a second time.
+ *
+ * I had this pattern already. It was used for the one-off deletion and never added to the
+ * ingest, which is exactly the shape of half-done work that looks finished — the run log
+ * said `refusedAsLegalMatter=12` and was telling the truth about twelve OTHER documents.
+ *
+ * Measured against all 813 Drive documents when it was written: the two rules together
+ * select 23, every one of them from the same matter and one owner, and NOT ONE of the
+ * three legal-compliance strategy papers, which are analysis we want found.
+ *
+ * TENANCY VOCABULARY WAS ADDED AFTER A THIRD ROUND, and the reason is the lesson. Naming
+ * document TYPES — Kündigung, Mahnung, Abmahnung — leaves a tail, because the same matter
+ * also produces an inspection note and a memo on why the other side's arguments fail, and
+ * those are named after their subject rather than their type. Two more slipped through
+ * and had to be deleted by hand. Words about renting a flat are the subject itself, so
+ * they close the tail rather than chase it: measured across every Drive document they
+ * select exactly those two, both the same owner, and a sexual-wellbeing company has no
+ * legitimate paperwork about tenants, service charges or notice for personal use.
+ */
+const PRIVATE_LEGAL_NAME =
+  /(klageschrift|klage_|r(ä|ae)umungsklage|strafanzeige|beweismittel|zahlungsaufforderung|mahnung|abmahnung|k(ü|ue)ndigung|nutzungsentsch|wohnungs(ü|ue)bergabe|inspektionsank|r(ä|ae)umungsauffor|konzept_r(ä|ae)umung|niederlegung_gesch|wohnung|mieter|vermieter|nebenkosten|eigenbedarf|untermiet|mietvertrag)/i;
+
+export function isPrivateLegalMatter(text: string, name?: string): boolean {
+  if (name && PRIVATE_LEGAL_NAME.test(name)) return true;
+  return PRIVATE_LEGAL_MATTER.test(text);
+}
+
+/**
+ * COPY WE WROTE OURSELVES, WEARING A CUSTOMER'S VOICE.
+ *
+ * The Drive sheet `Testimonials` has two sections: `## Strategically Created` — thirty
+ * first-person quotes written by a copywriter, every `Given by User Name` cell blank —
+ * and `## Authentic by Users`, which holds one. Chunking puts the heading in part 1 and
+ * the quotes in parts 2 to 4, so a search that returns part 4 alone hands the reader
+ * fluent praise with NOTHING marking it as invented. Asked what customers say about the
+ * report, that is exactly what comes back.
+ *
+ * Detected on the TEXT, not the filename, so a rename does not defeat it, and on an
+ * explicit self-label rather than a guess about tone — we are trusting the document's own
+ * word for it. Measured 2026-09-23 across every Drive document: it matches that one file.
+ * That is not a vacuous guard; it is a precise one, and it fires on the document that
+ * caused the problem. The near misses are four sets of meeting notes DISCUSSING
+ * testimonials, which say "sample testimonial" in passing and must not be marked.
+ *
+ * Marked rather than excluded, deliberately. The sheet is a real working document and the
+ * team should be able to find it; what it must not do is pass for customer voice. Same
+ * treatment the `report` source already gives shipped copy with `kind: "shipped"`.
+ */
+const AUTHORED_MARKETING =
+  /##\s*strategically created|written by (us|a copywriter)|not (a )?real (customer|user)/i;
+export function isAuthoredMarketingCopy(text: string): boolean {
+  return AUTHORED_MARKETING.test(text);
+}
+
+/**
+ * A KPI DEFINITION TABLE. THE NUMBERS IN IT ARE EXAMPLES.
+ *
+ * `Business Case` and `KPI Framework` are the same table, and `KPI Framework` still
+ * carries its own column headers:
+ *
+ *   Layer, KPI, EXAMPLE, Source, Owner, Definition, Formula / Calculation, Why it matters
+ *
+ * The value column is literally named Example. €2,000.00 beside "Advertisement spent" is
+ * an illustration of the metric, not a measurement of it — and the giveaway is that
+ * 56.00% appears as BOTH the report-reopen rate and the refer-a-friend rate, which no
+ * real pair of metrics does.
+ *
+ * Chunking is what makes this dangerous. The header lands in part 1 and the rows in parts
+ * 4 and 5, so a search returning those alone hands back €11,400 revenue, 600 paid reports,
+ * a 30% survey-to-paid conversion and an NPS of 8.6, formatted as a table, dated, and with
+ * nothing marking them as a plan. Actuals are EUR 704.91 and 41 reports; we do not measure
+ * NPS at all. Every one of those numbers is wrong in the flattering direction, which is
+ * the worst way for a number to be wrong.
+ *
+ * Keyed on the `Formula / Calculation` column header rather than on a filename or a tone,
+ * because that header is the thing that makes it a definition table. Measured across every
+ * Drive document when this was written: it selected exactly two, both the same owner, the
+ * Business Case and the KPI Framework. "Why it matters" alone was rejected as a signal — it
+ * appears in 24 documents, most of them report copy.
+ *
+ * Marked, not excluded. A definition document is real and the team should find it; it
+ * just must not be quotable as what happened.
+ *
+ * PER TAB when a spreadsheet mixes the two. The Business Case holds real monthly costs on
+ * `Costs` beside the example table on `Core_KPI`, and a mark decided per file labelled the
+ * costs as examples too. So from 2026-09-28 the tab was left out of the index altogether;
+ * on 2026-10-05 Eman asked for it back. `markedParts` now splits such a sheet at its tab
+ * headings first, so no part holds both kinds and only the example tab's parts are marked.
+ */
+const KPI_DEFINITION_TABLE = /formula\s*\/\s*calculation/i;
+export function isIllustrativeFigures(text: string): boolean {
+  return KPI_DEFINITION_TABLE.test(text);
+}
+
+/**
+ * The parts of a document, each with whether it carries the example-figures mark.
+ *
+ * A spreadsheet whose tabs differ (some example tables, some real figures) is split at
+ * the `## <tab>` headings `sheetText` writes before the usual length split, so a part
+ * never straddles a real tab and an example one. Everything else is marked as a whole,
+ * as before: the header is in part 1 and the figures in later parts, so the mark has to
+ * reach parts that do not contain it.
+ *
+ * Only `sheetText` writes those headings: `sheetCell` keeps a cell from writing one.
+ */
+export function markedParts(
+  name: string,
+  text: string,
+  isSheet: boolean
+): Array<{ body: string; illustrative: boolean }> {
+  const tabs = isSheet ? text.split(/\n\n(?=## )/) : [text];
+  const marks = tabs.map(isIllustrativeFigures);
+  if (marks.every((m) => m === marks[0])) {
+    const illustrative = marks[0] ?? false;
+    return splitBody([name, text].filter(Boolean).join("\n\n")).map((body) => ({
+      body,
+      illustrative,
+    }));
+  }
+  return tabs.flatMap((tab, i) =>
+    splitBody(i === 0 ? [name, tab].filter(Boolean).join("\n\n") : tab).map((body) => ({
+      body,
+      illustrative: marks[i]!,
+    }))
+  );
+}
+
 export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
   const name = (file.name ?? "").trim();
   if (!file.id || !name) return [];
+
+  /**
+   * REFUSED BEFORE ANYTHING IS BUILT. Returning no rows also means the file never enters
+   * the walk's written-id set, so `sweepMissing` removes whatever was indexed before this
+   * guard existed — the corpus repairs itself rather than needing a one-off delete.
+   */
+  if (isPersonalDataExport(text)) {
+    logger.warn(
+      { file: name },
+      "brain-ingest drive: refusing a file that is a list of people, not a document"
+    );
+    return [];
+  }
+
+  if (isPrivateLegalMatter(text, name)) {
+    logger.warn(
+      { file: name },
+      "brain-ingest drive: refusing a filing in a private legal proceeding"
+    );
+    return [];
+  }
+
+  // A candidate interview, recognised by Gemini's own summary. Meeting notes only: the
+  // phrases are a hiring call's self-description, not a topic any document may mention.
+  if (MEETING_NOTE_NAME.test(name) && isRecruitingConversation(text)) {
+    logger.warn({ file: name }, "brain-ingest drive: refusing notes from a candidate interview");
+    return [];
+  }
   const edited = file.modifiedTime ?? file.createdTime ?? null;
   const owner = file.owners?.[0]?.emailAddress ?? null;
 
@@ -439,8 +1075,14 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
    * Gemini names every note "… - Notes by Gemini", so that is the detector. Other
    * Drive documents keep the neutral prefix rather than being mislabelled.
    */
-  const isMeetingNote = /notes by gemini/i.test(name);
-  const title = isMeetingNote ? `Meeting notes: ${name}` : `Drive: ${name}`;
+  const isMeetingNote = MEETING_NOTE_NAME.test(name);
+  // On the TITLE, because a title is the one field every search result shows and every
+  // part of a split document carries. Putting it only in `meta` would leave the part that
+  // actually holds the invented quotes looking exactly like customer words.
+  const authored = isAuthoredMarketingCopy(text);
+  const title =
+    (isMeetingNote ? `Meeting notes: ${name}` : `Drive: ${name}`) +
+    (authored ? " [copy we wrote ourselves, not customer words]" : "");
 
   const base: BrainRow = {
     source: SOURCE,
@@ -450,6 +1092,7 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     body: [name, text].filter(Boolean).join("\n\n"),
     meta: {
       kind: isMeetingNote ? "meeting-notes" : "drive-doc",
+      ...(authored ? { authored: true } : {}),
       v: DRIVE_BUILDER_VERSION,
       owner,
       created: file.createdTime ?? null,
@@ -463,7 +1106,8 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
 
   // Split rather than let the write path slice the tail off — a call note is
   // routinely longer than the 2,400-character ceiling.
-  const parts = splitBody(base.body);
+  const marked = markedParts(name, text, file.mimeType === SHEET_MIME);
+  const parts = marked.map((p) => p.body);
 
   /**
    * A GEMINI NOTE IS TWO DOCUMENTS IN ONE FILE: the structured decision record
@@ -495,17 +1139,24 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
   const sectionOf = (i: number): DriveSection | undefined =>
     dividerAt < 0 ? undefined : i <= dividerAt ? "summary" : "transcript";
 
-  return parts.map((body, i) =>
-    i === 0
-      ? { ...base, body, meta: { ...base.meta, section: sectionOf(0) } }
+  return marked.map(({ body, illustrative }, i) => {
+    // On the TITLE for the same reason as `authored`: it is the field every result shows.
+    const own = illustrative
+      ? {
+          title: `${base.title} [example figures from a KPI definition table, not measured]`,
+          meta: { ...base.meta, illustrative: true },
+        }
+      : { title: base.title, meta: base.meta };
+    return i === 0
+      ? { ...base, title: own.title, body, meta: { ...own.meta, section: sectionOf(0) } }
       : {
           ...base,
           source_id: `${base.source_id}#${i + 1}`,
-          title: `${base.title} (part ${i + 1} of ${parts.length})`,
+          title: `${own.title} (part ${i + 1} of ${parts.length})`,
           body,
-          meta: { ...base.meta, part: i + 1, parts: parts.length, section: sectionOf(i) },
-        }
-  );
+          meta: { ...own.meta, part: i + 1, parts: parts.length, section: sectionOf(i) },
+        };
+  });
 }
 
 /** source_id → what is already indexed, for the incremental skip. */
@@ -531,9 +1182,35 @@ async function knownDriveEdits(): Promise<Map<string, { edited: string; v: numbe
   return out;
 }
 
-function partIdsOf(known: Map<string, unknown>, baseId: string): string[] {
+/**
+ * The stored part ids of one document — optionally only those on a given builder
+ * version.
+ *
+ * WHY THE VERSION FILTER EXISTS. These ids go into the sweep's KEEP-set, and they
+ * come from the database rather than from the file, so they include parts the file
+ * no longer produces. A document that re-chunks SHORTER leaves a tail behind:
+ * measured 2026-09-20, the Glossary went from 311 parts to 223 and the 88 orphans
+ * survived every sweep, because the run after the rewrite found the file unchanged,
+ * TOUCHED it, and re-protected all 311 ids. A shrinking file was therefore only
+ * sweepable during the single run that shrank it, and the sweep runs once a day.
+ *
+ * Pass the current version at the touch site: a part left behind by an older, longer
+ * version carries the older version, so filtering on it separates orphans from live
+ * parts exactly. Do NOT pass it for a file the run never reached — its parts may
+ * legitimately all be on an old version, and protecting none of them would delete
+ * the document for being unread.
+ */
+function partIdsOf(
+  known: Map<string, { edited: string; v: number }>,
+  baseId: string,
+  atVersion?: number
+): string[] {
   const prefix = `${baseId}#`;
-  return [...known.keys()].filter((id) => id.startsWith(prefix));
+  return [...known.entries()]
+    .filter(
+      ([id, meta]) => id.startsWith(prefix) && (atVersion === undefined || meta.v === atVersion)
+    )
+    .map(([id]) => id);
 }
 
 /**
@@ -566,6 +1243,77 @@ async function driveToken(oidcToken?: string | null): Promise<string | null> {
   return getGoogleAccessToken(Date.now(), oidcToken);
 }
 
+/**
+ * Vendor billing: a record of what we PAID, not of what we decided.
+ *
+ * A RULE HERE, DELIBERATELY, WHERE `SKIP_FILE_IDS` IS A LIST. The id list exists
+ * because no size, folder or extension test separates a valuable pdf from a
+ * throwaway one. Billing is the exception that survives that objection: the names
+ * are machine-generated by the vendor, a new one arrives every month, and an id list
+ * would be stale by the next billing cycle.
+ *
+ * WHY THEY GO. Measured 2026-09-19: 93 such files were in the corpus, and asking the
+ * brain what was agreed about pricing IN OUR CALLS returned five Slack billing
+ * statements and no meeting note at all — a one-page invoice has far higher term
+ * density than a meeting transcript split across 48 parts, so it wins on vocabulary
+ * every time. Nothing is lost: the same invoices arrive as email (170 of them), which
+ * is where the September cost-sheet audit was built from, and the figures the team
+ * actually works off live in the Business Case sheet.
+ *
+ * NARROW ON PURPOSE. Requires a pdf, the word at a boundary (so "invoicing" does not
+ * match), AND one of two marks of a real vendor file rather than a document ABOUT
+ * billing: a run of digits in the name — a vendor reference — or a name that is the
+ * billing word and its numbering and nothing else.
+ *
+ * THE SECOND TEST EXISTS BECAUSE THE FIRST MISSED. `invoice 1.1.pdf` and
+ * `invoice 1.2.pdf` survived the first rule and sat in the corpus as Amazon Rechnungen,
+ * VAT boilerplate and all: the vendor put the reference number in the DOCUMENT, and
+ * only the filename is known at listing time. A name with nothing left in it once the
+ * word and the numbering are removed cannot be a document about invoicing, because a
+ * document about invoicing has something to say in its title. Measured over all 705
+ * Drive documents: the addition catches those two and nothing else.
+ */
+const BILLING_NAME = /(^|[_\s-])(invoice|receipt|rechnung|billing[_\s-]statement)([_\s-]|\d|\.)/i;
+const BILLING_WORD = /invoice|receipt|rechnung|billing[_\s-]?statement/gi;
+/**
+ * The vendor's reference with no spelled-out word: `MT-INV00945830.pdf`.
+ *
+ * Five of these were in the corpus and three of them came back in the TOP TWELVE for
+ * "what did we agree about pricing in our calls" — the exact question this whole rule
+ * was written for, still answered with invoices a month after the first fix.
+ */
+const VENDOR_REF = /(^|[^a-z])inv[-_]?\d{4,}/i;
+/**
+ * WHAT IS DELIBERATELY NOT HERE: a name of nothing but digits.
+ *
+ * `5419031713.pdf` is a Google invoice and `726933.pdf` is a peer-reviewed paper on
+ * sexual and relationship variables, 26 chunks of exactly the literature this company
+ * exists to read. `18.01.161.20221004.pdf` is another. The filename cannot tell them
+ * apart, and the rule runs at LISTING time — before anything is fetched — so there is
+ * no content to appeal to. A "no words in the name" rule measured beautifully and
+ * would have deleted both papers. The nine numeric invoices are one chunk each and
+ * have never surfaced in a probe; the papers are worth far more than they cost.
+ */
+export function isVendorBilling(name?: string, mimeType?: string): boolean {
+  if (mimeType !== PDF_MIME) return false;
+  const n = (name ?? "").trim();
+  if (VENDOR_REF.test(n)) return true;
+  if (!BILLING_NAME.test(n)) return false;
+  if (/\d{3,}/.test(n)) return true;
+  const rest = n
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(BILLING_WORD, "")
+    .replace(/[\d\s._\-()#]/g, "");
+  return rest.length === 0;
+}
+
+/**
+ * A JOB APPLICATION. The rule lives in `upsert.ts` now, so Gmail attachments, Slack
+ * uploads and calendar titles apply the same one; re-exported for the callers and tests
+ * that import it from here. History and the known edge are recorded there.
+ */
+export { isJobApplication };
+
 export async function ingestDrive(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
@@ -589,15 +1337,43 @@ export async function ingestDrive(
 
   const known = await knownDriveEdits();
   const raw = await listDocs(token, isOutOfTime);
-  const resolved = await resolveShortcuts(token, raw.items);
+  /**
+   * Meeting notes filed in a colleague's Drive, which the single-account listing
+   * above cannot see. Additive and best-effort: if the directory is unreadable or a
+   * colleague refuses, the walk proceeds with exactly what it had before.
+   */
+  const colleagues = await colleagueDocuments(
+    new Set(raw.items.map((f) => f.id ?? "")),
+    isOutOfTime,
+    oidcToken
+  );
+  const resolved = await resolveShortcuts(token, [...raw.items, ...colleagues.items], isOutOfTime);
   // Filtered here rather than at fetch time so the ids never reach `toFetch`,
   // `touch` or `deferred` either: a skipped document must look absent to the
   // sweep, not merely unfetched, or the sweep would protect the rows we are
   // removing.
   const listed = {
-    items: resolved.docs.filter((f) => !SKIP_FILE_IDS.has(f.id ?? "")),
-    complete: raw.complete,
-    stopped: raw.stopped,
+    items: resolved.docs.filter(
+      (f) =>
+        !SKIP_FILE_IDS.has(f.id ?? "") &&
+        !isVendorBilling(f.name, f.mimeType) &&
+        !isJobApplication(f.name) &&
+        !isLegalInstrument(f.name)
+    ),
+    /**
+     * BOTH HALVES, because the sweep reads this. The colleague walk contributes a
+     * colleague's whole Drive now, so a run that lost one mailbox to the clock or a
+     * refused token would otherwise present ~100 live documents to the sweep as
+     * deleted — not enough to trip the majority guard, so they would actually go.
+     */
+    complete: raw.complete && colleagues.complete && resolved.failed === 0,
+    stopped:
+      raw.stopped ??
+      (!colleagues.complete
+        ? "colleague-walk-incomplete"
+        : resolved.failed > 0
+          ? `shortcut-lookup-failed=${resolved.failed}`
+          : undefined),
   };
 
   if (resolved.unreachable > 0 || resolved.skippedNonDoc > 0) {
@@ -625,6 +1401,16 @@ export async function ingestDrive(
   const rows: BrainRow[] = [];
   const touch: string[] = [];
   const toFetch: DriveFile[] = [];
+  /** Documents this run could not export. Tolerated up to a limit; see above. */
+  const exportFailures: string[] = [];
+  /** Files that yielded no text at all, and files refused as a list of people. Counted
+   *  so `docs=` minus the chunks it produced is an arithmetic identity, not a mystery. */
+  let emptyDocs = 0;
+  let refusedDocs = 0;
+  let legalMatterDocs = 0;
+  let recruitingDocs = 0;
+  /** Produced no rows for a reason that is NOT the people-list refusal (no id, no name). */
+  let unusableDocs = 0;
   let complete = listed.complete;
   let stopped: string | undefined = listed.stopped;
   const stop = (why: string) => {
@@ -637,40 +1423,123 @@ export async function ingestDrive(
     const edited = file.modifiedTime ?? file.createdTime ?? null;
     const seen = known.get(sourceId);
     if (edited && seen && seen.edited === edited && seen.v === DRIVE_BUILDER_VERSION) {
-      touch.push(sourceId, ...partIdsOf(known, sourceId));
+      // Current version only: an orphan part from a longer previous version must
+      // look absent to the sweep, not be confirmed by it.
+      touch.push(sourceId, ...partIdsOf(known, sourceId, DRIVE_BUILDER_VERSION));
     } else {
       toFetch.push(file);
     }
   }
+
+  /**
+   * NEWEST FIRST, because the loop below stops at the clock and so ORDER decides what
+   * waits. In listing order a builder bump queued every rebuild ahead of documents
+   * nobody had indexed yet: "KPI Framework", edited 2026-09-17 and readable to this
+   * walk, was still absent on 2026-09-23 with 233 older files ahead of it for the v5
+   * rebuild. New and edited files carry recent timestamps, so they now go out in the
+   * next run; a version-only rebuild of an old file waits, which costs little because
+   * its stored copy stays searchable until then.
+   *
+   * ponytail: a recent file that never yields rows (empty, refused) is re-fetched
+   * first every run. Bounded by how few of those there are; store a tombstone if that
+   * ever shows up as `stopped=time-budget` with nothing new written.
+   */
+  const recency = (f: DriveFile) => f.modifiedTime ?? f.createdTime ?? "";
+  toFetch.sort((a, b) => recency(b).localeCompare(recency(a)));
+
+  /**
+   * The files this run actually GOT TO, whatever came of them.
+   *
+   * Not the same as "produced rows". A document that was read and turned out empty,
+   * or was refused as a list of people, belongs in here — it was reached, and the
+   * decision not to index it is a decision, not an outage. Only files the loop never
+   * arrived at are deferred to the sweep's keep-set below.
+   */
+  const reached = new Set<string>();
 
   for (const file of toFetch) {
     if (isOutOfTime()) {
       stop(`time-budget@fetch:${rows.length}rows`);
       break;
     }
+    reached.add(`doc:${file.id}`);
     try {
-      const text = await docText(token, file.id as string, file.mimeType);
+      // A colleague's meeting note is readable only as that colleague.
+      const readToken = colleagues.tokens.get(file.id as string) ?? token;
+      const text = await docText(readToken, file.id as string, file.mimeType);
       // A file that yields no text -- a scanned pdf with no text layer, an empty
       // doc -- would otherwise be indexed as a chunk whose only content is its own
       // title, which then matches questions it cannot answer. Skipping lets the
       // sweep remove it if it was indexed before.
-      if (!text.trim()) continue;
-      rows.push(...docToRows(file, text, stampedAt));
+      if (!text.trim()) {
+        emptyDocs += 1;
+        continue;
+      }
+      const produced = docToRows(file, text, stampedAt);
+      // `docToRows` returns NOTHING for a file it refuses as a list of people. That
+      // refusal is deliberate and silent, which is the problem: `docs=745` against 727
+      // indexed documents could not be reconciled from outside, so a NEW gap would look
+      // exactly like this known one.
+      //
+      // It also returns nothing for a file with no id or name, which is a DIFFERENT
+      // thing and must not be counted under the same word -- one label for two states
+      // is the exact complaint these counters exist to answer.
+      if (produced.length === 0) {
+        if (isPersonalDataExport(text)) refusedDocs += 1;
+        else if (isPrivateLegalMatter(text, file.name)) legalMatterDocs += 1;
+        else if (MEETING_NOTE_NAME.test(String(file.name ?? "")) && isRecruitingConversation(text))
+          recruitingDocs += 1;
+        else unusableDocs += 1;
+      }
+      rows.push(...produced);
     } catch (err) {
-      // One unreadable document must not cost the rest of the run.
+      // One unreadable document must not cost the rest of the run -- and it must
+      // not cost the run's STATUS either, which is what calling stop() here did.
       logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");
-      // WHICH document, not just that one failed. The id lands in
-      // `cron_run.error_message` via the note, so the answer survives in a table
-      // anyone can query -- the log line above is in a buffer that holds hours, and
-      // this cron runs hourly, so by the time anyone looks it has rolled off. Drive
-      // file ids are opaque and already public in every chunk's url.
-      stop(`export-failed:${file.id}`);
+      // WHY it failed, not just which file. `docText` throws `export <status>` /
+      // `download <status>`, and without that status the summary names three opaque
+      // ids and the log line holding the reason has rolled off hours before anyone
+      // reads them -- which is the same reasoning that put the ids here at all.
+      const why = err instanceof Error ? err.message : String(err);
+      exportFailures.push(`${file.id}(${why.slice(0, 60)})`);
+      // NOT reached: nothing was read, so nothing was decided. Left in `reached`, the
+      // daily sweep deleted the stored copy of a live document on a transient 5xx, and
+      // for a file that always fails to export, every day for good.
+      reached.delete(`doc:${file.id}`);
     }
+  }
+
+  /**
+   * Judged in aggregate, like calendar and gmail already do.
+   *
+   * WHICH documents, not just that some failed: the ids land in
+   * `cron_run.error_message` via the detail below whether or not the run is
+   * called incomplete, because the log line above sits in a buffer that holds
+   * hours and this cron runs hourly, so by the time anyone looks it has rolled
+   * off. Drive file ids are opaque and already public in every chunk's url.
+   */
+  if (exportFailures.length > MAX_TOLERATED_EXPORT_FAILURES) {
+    stop(`export-failed=${exportFailures.length}:${exportFailures[0]}`);
   }
 
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
+  /**
+   * ONLY THE FILES THIS RUN NEVER REACHED.
+   *
+   * This used to defer every file in `toFetch` that produced no rows, which quietly
+   * included the ones that WERE read and deliberately not indexed — an empty
+   * document, or a file refused as a list of people. The empty-document branch above
+   * says in as many words that skipping "lets the sweep remove it if it was indexed
+   * before", and this is what stopped that from ever happening.
+   *
+   * Found 2026-09-19 by chasing the last spreadsheet that would not rebuild: "Discount
+   * sheet" is an empty sheet, one tab, no rows. Its 14-character chunk had survived
+   * since 31 August, protected on every single run, describing a document that holds
+   * nothing.
+   */
   const deferred = toFetch
+    .filter((f) => !reached.has(`doc:${f.id}`))
     .flatMap((f) => [`doc:${f.id}`, ...partIdsOf(known, `doc:${f.id}`)])
     .filter((id) => !writtenIds.has(id));
   /**
@@ -696,12 +1565,33 @@ export async function ingestDrive(
   const swept = sweeping
     ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed]), {
         scopeKey: "owner",
+        /**
+         * Only the owners this run actually saw. The service account sees what
+         * people share with it, so an owner leaves the listing when a folder is
+         * unshared or an account is suspended — lost access, not deleted
+         * documents. Without this their rows are swept whole, and 11 of the 15
+         * owners here (775 rows, every external collaborator among them) sit
+         * under the vanishing-scope heuristic's 5% floor, so nothing else
+         * catches it.
+         *
+         * Built from `resolved.docs`, BEFORE the SKIP_FILE_IDS filter above: a
+         * skipped document must still look absent to the sweep, and protecting
+         * its owner would be the one way to undo that on purpose.
+         */
+        walkedScopes: new Set(
+          resolved.docs
+            .map((f) => f.owners?.[0]?.emailAddress)
+            .filter((o): o is string => Boolean(o))
+        ),
       })
     : 0;
 
   logger.info(
     {
       docs: listed.items.length,
+      colleagueDocs: colleagues.items.length,
+      colleaguesAsked: colleagues.asked,
+      colleaguesRefused: colleagues.refused,
       shortcutsUnreachable: resolved.unreachable,
       written,
       touched,
@@ -721,6 +1611,23 @@ export async function ingestDrive(
     sweepBlocked: !listed.complete,
     detail:
       `docs=${listed.items.length} written=${written} touched=${touched} swept=${swept} ` +
-      `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}`,
+      `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}` +
+      // Colleagues' files are appended to the listing, so without this the only way to
+      // tell "none were found" from "the feature is not running" is a structured log
+      // nobody reads. `asked` is printed even at zero for exactly that reason.
+      //
+      // Named `colleagueDocs`, not `colleagueNotes`: the walk stopped being about
+      // meeting notes on 2026-09-21 and a label that still said "notes" while
+      // reporting hundreds of documents would be read as a fault.
+      ` colleagueDocs=${colleagues.items.length}/${colleagues.asked}asked` +
+      (colleagues.refused > 0 ? ` colleaguesRefused=${colleagues.refused}` : "") +
+      (emptyDocs > 0 ? ` empty=${emptyDocs}` : "") +
+      (refusedDocs > 0 ? ` refusedAsPeopleList=${refusedDocs}` : "") +
+      (legalMatterDocs > 0 ? ` refusedAsLegalMatter=${legalMatterDocs}` : "") +
+      (recruitingDocs > 0 ? ` refusedAsRecruiting=${recruitingDocs}` : "") +
+      (unusableDocs > 0 ? ` unusable=${unusableDocs}` : "") +
+      (exportFailures.length > 0
+        ? ` exportFailed=${exportFailures.length}:${exportFailures.slice(0, 3).join(",")}`
+        : ""),
   };
 }

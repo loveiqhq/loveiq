@@ -154,7 +154,7 @@ describe("ReportMobileNav — tapping a chapter", () => {
     __resetBodyScrollLockForTests();
   });
 
-  it("scrolls to the chapter once the drawer has let go of the page", () => {
+  it("scrolls to the chapter once the drawer has let go of the page", async () => {
     vi.useFakeTimers();
     vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     const target = document.createElement("section");
@@ -185,6 +185,13 @@ describe("ReportMobileNav — tapping a chapter", () => {
       vi.advanceTimersByTime(300);
     });
     expect(document.body.style.position).toBe("");
+    // The menu's history entry is released first (shared/ui/overlay-history.ts), so the
+    // jump can follow a microtask or a popstate later.
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect(window.location.hash).toBe("#core_archetype");
     // A jump, not the page's smooth scroll: a smooth scroll fixes its destination as
     // it starts, and Typical Beliefs' turn rows grow as it passes them (193px locked,
     // 644px unlocked), so it stopped short. After a jump, scroll anchoring holds the

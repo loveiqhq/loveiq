@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
@@ -10,9 +10,19 @@ vi.mock("@/data/countries", () => {
     Germany: "DE",
     "United States": "US",
     "United Kingdom": "GB",
+    Niger: "NE",
+    Nigeria: "NG",
   };
   return {
-    COUNTRIES: ["Austria", "Australia", "Germany", "United States", "United Kingdom"],
+    COUNTRIES: [
+      "Austria",
+      "Australia",
+      "Germany",
+      "United States",
+      "United Kingdom",
+      "Niger",
+      "Nigeria",
+    ],
     COUNTRY_CODE_MAP: map,
     getCountryFlagUrl: (name: string) => {
       const code = map[name];
@@ -155,6 +165,109 @@ describe("CountryQuestion", () => {
     render(<CountryQuestion question={QUESTION} value={null} onChange={vi.fn()} />);
     const input = screen.getByPlaceholderText("Search for a country...");
     await user.type(input, "Zzzzz");
-    expect(screen.getByText("No countries found")).toBeInTheDocument();
+    // The visible box (the status line under it is for screen readers).
+    expect(screen.getByText("No countries found", { selector: "div" })).toBeInTheDocument();
+  });
+
+  describe("finding a country by what people type", () => {
+    it("puts an alias's country first, highlighted, so Enter picks it (UK)", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
+      const input = screen.getByRole("combobox");
+      await user.type(input, "uk");
+      const first = screen.getAllByRole("option")[0]!;
+      expect(first).toHaveTextContent("United Kingdom");
+      expect(input).toHaveAttribute("aria-activedescendant", first.id);
+      await user.keyboard("{Enter}");
+      expect(onChange).toHaveBeenLastCalledWith("United Kingdom");
+    });
+
+    // Next stayed disabled until the reader also tapped the name in the list.
+    it("chooses a whole name typed when the reader leaves the box", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <div>
+          <CountryQuestion question={QUESTION} value={null} onChange={onChange} />
+          <button type="button">elsewhere</button>
+        </div>
+      );
+      await user.type(screen.getByRole("combobox"), "germany");
+      await user.click(screen.getByRole("button", { name: "elsewhere" }));
+      expect(onChange).toHaveBeenLastCalledWith("Germany");
+    });
+
+    // WebKit keeps the box focused when a tap lands on something that cannot take focus,
+    // and sends it no mouse events, only pointer and touch ones: so on an iPhone neither a
+    // blur nor a mousedown came. The pointerdown alone must choose the name.
+    it("chooses a whole name typed on a tap outside, with no blur or mouse events", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
+      const input = screen.getByRole("combobox");
+      await user.type(input, "germany");
+      fireEvent.pointerDown(document.body);
+      expect(onChange).toHaveBeenLastCalledWith("Germany");
+    });
+
+    // Choosing blurs the box, and the blur ran with the text typed before the choice:
+    // typed "Niger", clicked "Nigeria", stored "Niger".
+    it("keeps the row the reader clicks over an exact name they typed", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
+      await user.type(screen.getByRole("combobox"), "Niger");
+      await user.click(screen.getByRole("option", { name: /Nigeria/ }));
+      expect(onChange).toHaveBeenLastCalledWith("Nigeria");
+    });
+
+    it("keeps the row the reader arrows to over an exact name they typed", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={onChange} />);
+      await user.type(screen.getByRole("combobox"), "Niger");
+      await user.keyboard("{ArrowDown}{Enter}");
+      expect(onChange).toHaveBeenLastCalledWith("Nigeria");
+    });
+
+    // Tapping away mid-word wiped the text and left nothing selected.
+    it("keeps a partial name when the reader taps away", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <div>
+          <CountryQuestion question={QUESTION} value={null} onChange={onChange} />
+          <button type="button">elsewhere</button>
+        </div>
+      );
+      const input = screen.getByRole("combobox");
+      await user.type(input, "Germ");
+      await user.click(screen.getByRole("button", { name: "elsewhere" }));
+      expect(input).toHaveValue("Germ");
+      expect(onChange).not.toHaveBeenCalledWith("Germany");
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("tells a screen reader when nothing matches", async () => {
+      const user = userEvent.setup();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={vi.fn()} />);
+      const status = screen.getByRole("status");
+      expect(status).toHaveTextContent("");
+      await user.type(screen.getByRole("combobox"), "Zzzzz");
+      expect(status).toHaveTextContent("No countries found");
+    });
+
+    it("is a combobox a screen reader can follow", async () => {
+      const user = userEvent.setup();
+      render(<CountryQuestion question={QUESTION} value={null} onChange={vi.fn()} />);
+      const input = screen.getByRole("combobox", { name: "Where are you from?" });
+      expect(input).toHaveAttribute("aria-expanded", "false");
+      await user.click(input);
+      expect(input).toHaveAttribute("aria-expanded", "true");
+      expect(input).toHaveAttribute("aria-controls", screen.getByRole("listbox").id);
+      await user.keyboard("{ArrowDown}");
+      expect(input).toHaveAttribute("aria-activedescendant", screen.getAllByRole("option")[0]!.id);
+    });
   });
 });

@@ -9,9 +9,15 @@ import {
   ANSWERS_STORAGE_KEY,
   SURVEY_STEP_KEY,
   clearPersistedSurveyState,
+  hasSurveyConsent,
   loadPendingCompletion,
+  recordSurveyConsent,
 } from "./hooks/surveyStorage";
-import { copySurveySessionToReportSession } from "./hooks/surveySession";
+import {
+  completedReportToken,
+  copySurveySessionToReportSession,
+  forgetCompletedReport,
+} from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
 
@@ -454,6 +460,76 @@ const slides: Slide[] = [
 /* ------------------------------------------------------------------ */
 /*  Screen 0 — Light intro                                             */
 /* ------------------------------------------------------------------ */
+/**
+ * What a reader sees on /survey when THIS TAB has already finished it.
+ *
+ * Submission clears the answers and the step key, and `loadInitialStep()` reads
+ * only those two — so pressing Back from the report used to land on the intro
+ * screen, which says "Let's prepare you well to discover your sexual
+ * archetypes". To someone who had just answered every question that reads as
+ * losing all of it. Four scanners reported it 24 times in 30 days and
+ * `scripts/probes/verify-survey-loop.mjs` reproduces it on every device.
+ *
+ * Deliberately a screen and not a redirect: bouncing Back straight to the
+ * report traps the reader, who then cannot leave at all.
+ */
+const AlreadyFinishedScreen: FC<{
+  token: string;
+  onStartOver: () => void;
+}> = ({ token, onStartOver }) => (
+  <main
+    className="relative flex min-h-dvh flex-col items-center justify-center overflow-x-hidden px-7 py-8 sm:px-8 sm:py-10 md:py-16"
+    style={{
+      backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
+      paddingLeft: "max(1.75rem, env(safe-area-inset-left, 0px))",
+      paddingRight: "max(1.75rem, env(safe-area-inset-right, 0px))",
+    }}
+  >
+    <div className="relative z-10 flex w-full max-w-[700px] flex-col items-center text-center">
+      <h1
+        className="font-serif text-[36px] font-normal leading-[1.18] tracking-[-0.8px] text-[#1a1a2e] sm:text-[52px] sm:tracking-[-1.2px] md:text-[64px] md:tracking-[-1.5px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both" }}
+      >
+        You&rsquo;ve already finished
+        <br />
+        <span
+          className="bg-clip-text text-transparent"
+          style={{
+            backgroundImage: "linear-gradient(90deg, #FE6839 27.4%, #A78BFA 76.92%, #E9D5FF 100%)",
+          }}
+        >
+          your assessment
+        </span>
+      </h1>
+
+      <p
+        className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:max-w-[640px] md:text-[20px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
+      >
+        Your answers are saved and your report is ready. You do not need to answer anything again.
+      </p>
+
+      <a
+        href={`/report/${token}`}
+        className="focus-visible-ring mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both" }}
+      >
+        Open my report
+        <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6" />
+      </a>
+
+      <button
+        type="button"
+        onClick={onStartOver}
+        className="focus-visible-ring mt-6 rounded-full px-4 py-2 font-sans text-[15px] font-light text-[#6a7282] underline underline-offset-4 transition hover:text-[#1a1a2e] sm:text-[16px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 450ms both" }}
+      >
+        Start a new one
+      </button>
+    </div>
+  </main>
+);
+
 const IntroScreen: FC<{
   onContinue: () => void;
   transitioning: boolean;
@@ -1073,7 +1149,7 @@ const ConsentScreen: FC<{
         <div className="mt-6 sm:mt-8 flex gap-4">
           <button
             type="button"
-            onClick={onReturn}
+            onClick={() => onReturn()}
             className="flex-1 rounded-full border border-white/10 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] text-white/60 transition hover:border-white/20 hover:text-white/80 focus-visible-ring"
           >
             Return to site
@@ -1082,11 +1158,48 @@ const ConsentScreen: FC<{
             type="button"
             onClick={handleAgreeClick}
             disabled={!canProceed || isLeaving}
+            // Points at the line below that explains the disabled state. This
+            // is what a screen reader reads out when the button takes focus,
+            // and it is also the machine-readable form of "this control
+            // explains itself" — scripts/probes/verify-dead-click-target.mjs
+            // reads it to tell a dead end apart from a blocked-but-explained
+            // control, which otherwise look identical from the outside.
+            aria-describedby={canProceed ? undefined : "consent-blocked-reason"}
             className="flex-1 rounded-full border border-white/10 bg-white/5 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] shadow-[0_10px_15px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.1)] transition focus-visible-ring disabled:text-white/40 enabled:bg-[#fe6839] enabled:text-white enabled:hover:-translate-y-[1px]"
           >
             I agree
           </button>
         </div>
+
+        {/*
+          Why the button is not working, said out loud.
+
+          A disabled control cannot report anything: it takes no pointer events,
+          so there is no hover, no click, no way for it to explain itself. On
+          production 22 people tapped this exact button while it was disabled in
+          30 days and 3 of them never got past this screen at all — a hard stop
+          at the entrance to the whole funnel.
+
+          The two checkboxes are ABOVE the button and the cookie banner covers
+          the lower one on a Pixel 7 and both on an iPhone SE on a first visit,
+          so "just look up" is not advice this reader can act on without being
+          told. That is the whole defect: not that consent is required, but that
+          nothing says so.
+
+          Consent semantics are deliberately untouched. The button stays
+          disabled until both boxes are ticked; this only explains why.
+          `aria-live` because a sighted reader sees the line appear and a screen
+          reader user otherwise gets nothing at all.
+        */}
+        {!canProceed && (
+          <p
+            id="consent-blocked-reason"
+            aria-live="polite"
+            className="mt-4 text-center text-[13px] font-light leading-[20px] text-white/50"
+          >
+            Tick both boxes above to continue.
+          </p>
+        )}
       </div>
     </main>
   );
@@ -1095,7 +1208,19 @@ const ConsentScreen: FC<{
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+/**
+ * Where a visit opens. Whatever would open the questions (a draft, a pending completion, a
+ * refresh on them) opens the consent screen instead until the reader has agreed for this
+ * run. The homepage question card saves a draft before anyone has seen that screen, and
+ * those readers went straight to question 1, while the server stamps consent on every
+ * submission.
+ */
 function loadInitialStep(): number {
+  const step = loadSavedStep();
+  return step === TOTAL_STEPS + 2 && !hasSurveyConsent() ? TOTAL_STEPS + 1 : step;
+}
+
+function loadSavedStep(): number {
   if (typeof window === "undefined") return 0;
 
   try {
@@ -1138,12 +1263,29 @@ function loadInitialStep(): number {
 /* ------------------------------------------------------------------ */
 /*  Root — orchestrates all steps                                      */
 /* ------------------------------------------------------------------ */
+/**
+ * Entering the survey after this tab finished ("I agree", or Forward onto it) starts a NEW
+ * submission, as "Start a new one" does. Under the finished id, submitSurveyOnce() returned
+ * the old submission and kept nothing (#375). Only when finished: forgetting also resets the
+ * in-memory id a storage-refused reader is partway through.
+ */
+function retireFinishedRun(): void {
+  if (completedReportToken()) forgetCompletedReport();
+}
+
 const SurveyPage: FC = () => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  /** Set only when THIS TAB already finished the survey. See AlreadyFinishedScreen. */
+  const [finishedToken, setFinishedToken] = useState<string | null>(null);
   const [transitioning, setTransitioning] = useState(false);
   const isPopStateNav = useRef(false);
+  /** The step on screen, for the popstate handler, which is bound once. */
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   // Restore step from sessionStorage on mount (hydration-safe).
   // setState in a mount-only effect is intentional here — we need to read
@@ -1151,7 +1293,11 @@ const SurveyPage: FC = () => {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const restored = loadInitialStep();
+    // Straight into the survey from saved answers (the landing page's question saves one)
+    // is a new run too. A pending completion carries its own session and is left alone.
+    if (restored === TOTAL_STEPS + 2 && !loadPendingCompletion()) retireFinishedRun();
     if (restored !== 0) setStep(restored);
+    setFinishedToken(completedReportToken());
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -1173,6 +1319,10 @@ const SurveyPage: FC = () => {
       return;
     }
     if (step > 0) {
+      // A reload restores the step onto the entry it was saved from. Pushing another
+      // copy buried the questions' own entry (SurveyEngine), so the first Back after a
+      // reload landed on the same question and did nothing.
+      if (window.history.state?.surveyStep === step) return;
       window.history.pushState({ surveyStep: step }, "");
     }
   }, [step]);
@@ -1182,7 +1332,17 @@ const SurveyPage: FC = () => {
     const handlePopState = (e: PopStateEvent) => {
       isPopStateNav.current = true;
       const prevStep = e.state?.surveyStep;
-      setStep(prevStep !== undefined ? prevStep : 0);
+      const saved = prevStep !== undefined ? prevStep : 0;
+      // Never onto the questions without consent for this run (see loadInitialStep).
+      const next = saved === TOTAL_STEPS + 2 && !hasSurveyConsent() ? TOTAL_STEPS + 1 : saved;
+      // Only a real entry: a second history entry for the survey, which a reload on it
+      // pushes, lands on step 6 FROM step 6, and must not retire the run just finished.
+      if (next === TOTAL_STEPS + 2 && stepRef.current !== TOTAL_STEPS + 2) {
+        retireFinishedRun();
+        // Back to the start of a new run shows the intro, not the retired report.
+        setFinishedToken(null);
+      }
+      setStep(next);
       setTransitioning(false);
     };
     window.addEventListener("popstate", handlePopState);
@@ -1209,7 +1369,13 @@ const SurveyPage: FC = () => {
     setStep(TOTAL_STEPS + 1); // jump to consent
   }, []);
 
-  const handleReturn = useCallback((clearAnswers?: boolean, reportToken?: string | null) => {
+  const handleReturn = useCallback((clearAnswersArg?: boolean, reportTokenArg?: string | null) => {
+    // Guard against a caller wired straight to onClick: React would pass the
+    // MouseEvent here, which is truthy, wiping answers and sending the user to
+    // the token-less /report ("Can't find your report") screen. The same event
+    // arriving as the token sent a reader to /report/[object Object] (2026-10-03).
+    const clearAnswers = clearAnswersArg === true;
+    const reportToken = typeof reportTokenArg === "string" ? reportTokenArg : null;
     try {
       if (clearAnswers) {
         copySurveySessionToReportSession();
@@ -1225,7 +1391,21 @@ const SurveyPage: FC = () => {
     window.location.href = clearAnswers ? reportUrlAfterSurvey(reportToken) : "/";
   }, []);
 
+  /**
+   * "Start Over" on the failed-submission screen: drop this run (its answers, the
+   * pending completion Retry keeps resending, and its session id, so the next run is
+   * a new submission) and begin again at the intro. It used to be wired to the
+   * success path, which wiped the answers and opened a report that did not exist.
+   */
+  const handleStartOver = useCallback(() => {
+    clearPersistedSurveyState({ clearPendingCompletion: true });
+    window.location.href = "/survey";
+  }, []);
+
   const handleAgree = useCallback(() => {
+    recordSurveyConsent();
+    retireFinishedRun();
+    setFinishedToken(null);
     setStep(TOTAL_STEPS + 2);
   }, []);
 
@@ -1234,8 +1414,24 @@ const SurveyPage: FC = () => {
 
   let content: ReactNode;
 
-  // Intro screen
-  if (step === 0) {
+  // Already finished in this tab — never the intro, which reads as "your
+  // answers are gone" to someone who just spent twenty minutes on them.
+  //
+  // `step === 0` is the whole condition, and it is what keeps this screen out
+  // of everyone else's way: a reader who still has answers is restored to the
+  // engine (step 6) and one mid-wizard to their slide, so neither can land
+  // here. Guarding the token read as well only looked safer.
+  if (step === 0 && finishedToken) {
+    content = (
+      <AlreadyFinishedScreen
+        token={finishedToken}
+        onStartOver={() => {
+          forgetCompletedReport();
+          setFinishedToken(null);
+        }}
+      />
+    );
+  } else if (step === 0) {
     content = <IntroScreen onContinue={handleIntroContinue} transitioning={transitioning} />;
   } else if (step - 1 < TOTAL_STEPS) {
     // Wizard slides
@@ -1256,6 +1452,7 @@ const SurveyPage: FC = () => {
       <SurveyEngine
         onExit={() => handleReturn()}
         onComplete={(token) => handleReturn(true, token)}
+        onStartOver={handleStartOver}
       />
     );
   }

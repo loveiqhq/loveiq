@@ -5,20 +5,58 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 const calls: Array<{ url: string; timeoutMs?: number }> = [];
-let respond: () => Response;
+/** The edge function's answer, given the texts it was sent. */
+let respond: (texts: string[]) => Response;
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string, init?: RequestInit & { timeoutMs?: number }) => {
     calls.push({ url, timeoutMs: init?.timeoutMs });
-    return respond();
+    const texts = (JSON.parse(String(init?.body ?? "{}")) as { texts?: string[] }).texts ?? [];
+    return respond(texts);
   }),
 }));
 
 let chunkRows: Array<{ id: number; title: string; body: string }> = [];
+/** What the rows say when a written batch is read back; null means unchanged. */
+let rowsAfterWrite: typeof chunkRows | null = null;
 /** Every chunk-read path this run issued, so the QUEUE ORDER can be asserted. */
 const chunkReads: string[] = [];
+const patches: Array<{ path: string; body: string }> = [];
+/** The ids of every stored batch. */
+const stored: number[][] = [];
+/** How the read-back after a write goes wrong, if it does; and whether a clear succeeds. */
+let readBack: "ok" | "refused" | "throws" = "ok";
+let clearOk = true;
 vi.mock("@features/admin/server/supabase", () => ({
-  supabaseFetch: vi.fn(async (path: string) => {
+  supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
+    if (init?.method === "PATCH") {
+      patches.push({ path, body: String(init.body) });
+      return {
+        ok: clearOk,
+        status: clearOk ? 204 : 500,
+        headers: new Headers(),
+        json: async () => [],
+      };
+    }
+    if (path.includes("rpc/brain_set_embeddings")) {
+      stored.push((JSON.parse(String(init?.body)) as { ids: number[] }).ids);
+      return { ok: true, headers: new Headers(), json: async () => 0 };
+    }
+    if (path.includes("select=id,title,body") && path.includes("id=in.")) {
+      if (readBack === "throws") throw new Error("circuit open");
+      if (readBack === "refused") {
+        return { ok: false, status: 503, headers: new Headers(), json: async () => [] };
+      }
+      return {
+        ok: true,
+        headers: new Headers(),
+        json: async () => {
+          // Like PostgREST: only the ids asked for.
+          const ids = new Set((/id=in\.\(([^)]*)\)/.exec(path)?.[1] ?? "").split(",").map(Number));
+          return (rowsAfterWrite ?? chunkRows).filter((r) => ids.has(r.id));
+        },
+      };
+    }
     if (path.includes("select=id,title,body")) {
       chunkReads.push(path);
       return { ok: true, headers: new Headers(), json: async () => chunkRows };
@@ -35,6 +73,11 @@ import { embedQuery } from "@features/brain/server/embed";
 
 beforeEach(() => {
   calls.length = 0;
+  patches.length = 0;
+  stored.length = 0;
+  rowsAfterWrite = null;
+  readBack = "ok";
+  clearOk = true;
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
   respond = () => new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), { status: 200 });
@@ -116,6 +159,46 @@ describe("embedding must never outlive the cron that called it", () => {
   });
 });
 
+describe("the backfill waits out the platform saying not now", () => {
+  it("retries a bare 503 and a 429, and gives up at once on a real refusal", async () => {
+    const { embedMissing } = await import("@features/brain/server/embed");
+    chunkRows = [{ id: 1, title: "t", body: "text long enough to be worth embedding" }];
+    const replies = [
+      new Response("", { status: 503 }),
+      new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), { status: 200 }),
+    ];
+    respond = () => replies.shift()!;
+    const ok = await embedMissing(() => false, 1);
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(2);
+    expect(ok.embedded).toBe(1);
+
+    calls.length = 0;
+    respond = () => new Response("bad input", { status: 400 });
+    await embedMissing(() => false, 1);
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(1);
+  });
+});
+
+describe("a timeout is a 503 too", () => {
+  it("retries a call that THROWS (timeout, dropped connection) instead of giving up", async () => {
+    // fetchWithTimeout throws on a timeout rather than returning a status, and only HTTP
+    // answers were retried: the hourly job exited on its first try.
+    const { embedMissing } = await import("@features/brain/server/embed");
+    chunkRows = [{ id: 1, title: "t", body: "text long enough to be worth embedding" }];
+    let first = true;
+    respond = () => {
+      if (first) {
+        first = false;
+        throw new Error("The operation was aborted due to timeout");
+      }
+      return new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), { status: 200 });
+    };
+    const ok = await embedMissing(() => false, 1);
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(2);
+    expect(ok.embedded).toBe(1);
+  });
+});
+
 describe("embedMissing cannot outlive the function that calls it", () => {
   /**
    * `embedBatch` defaults to 6 attempts at 120s each -- the BACKFILL script's
@@ -159,7 +242,7 @@ describe("embedMissing cannot outlive the function that calls it", () => {
 
     await embedMissing(() => false, 1);
     const embedCalls = calls.filter((c) => c.url.includes("brain-embed"));
-    expect(embedCalls.at(-1)?.timeoutMs).toBe(120_000);
+    expect(embedCalls.at(-1)?.timeoutMs).toBe(30_000);
   });
 });
 
@@ -178,14 +261,119 @@ describe("which chunks get embedded first", () => {
    * morning and matching both "September" and "signups" lexically — did not appear at
    * all. It was 181 rows down a queue drained oldest-first.
    */
-  it("drains the queue newest first, so today's numbers are searchable today", async () => {
+  it("drains the queue newest WRITTEN first, so today's numbers are searchable today", async () => {
+    // By `updated_at`, not `id`: the all-time and this-month totals are rewritten in place
+    // every fifteen minutes and keep their old id, so `id.desc` left them behind any
+    // backlog (2026-09-27: four funnel questions failed the battery that way).
     chunkReads.length = 0;
     chunkRows = [];
     respond = () => new Response(JSON.stringify({ embeddings: [] }), { status: 200 });
     const { embedMissing } = await import("@features/brain/server/embed");
     await embedMissing(() => false, 1);
     expect(chunkReads.length).toBeGreaterThan(0);
-    expect(chunkReads[0]).toContain("order=id.desc");
-    expect(chunkReads[0]).not.toContain("order=id.asc");
+    expect(new URL(`http://x${chunkReads[0]}`).searchParams.get("order")).toBe(
+      "updated_at.desc,id.desc"
+    );
+  });
+});
+
+describe("a row rewritten while it was being embedded", () => {
+  it("is cleared for the next run, not left holding its old text's vector", async () => {
+    chunkRows = [
+      { id: 1, title: "Notion page", body: "what it used to say" },
+      { id: 2, title: "Untouched", body: "same text" },
+    ];
+    // Row 1 was rewritten between the queue read and the write.
+    rowsAfterWrite = [
+      { id: 1, title: "Notion page", body: "what it says now" },
+      { id: 2, title: "Untouched", body: "same text" },
+    ];
+    respond = () => new Response(JSON.stringify({ embeddings: [[0.1], [0.2]] }), { status: 200 });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    const result = await embedMissing(() => false, 1);
+    expect(patches).toEqual([
+      { path: "/rest/v1/brain_chunk?id=in.(1)", body: JSON.stringify({ embedding: null }) },
+    ]);
+    expect(result.embedded).toBe(1);
+  });
+
+  it("leaves a batch alone when nothing moved", async () => {
+    chunkRows = [{ id: 3, title: "t", body: "b" }];
+    respond = () => new Response(JSON.stringify({ embeddings: [[0.1]] }), { status: 200 });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    expect((await embedMissing(() => false, 1)).embedded).toBe(1);
+    expect(patches).toEqual([]);
+  });
+});
+
+describe("one text the edge cannot embed", () => {
+  const vectorsFor = (texts: string[]) =>
+    new Response(JSON.stringify({ embeddings: texts.map(() => [0.1]) }), { status: 200 });
+  const rows = (...bodies: string[]) => bodies.map((body, i) => ({ id: i + 1, title: "t", body }));
+
+  it("does not hold the rest of the queue: its batch is retried row by row", async () => {
+    // The queue is read newest first, so a batch that always failed sat at the head of every
+    // later read, and every row behind it waited for good.
+    chunkRows = rows("a", "POISON", "b", "c", "d", "e");
+    respond = (texts) =>
+      texts.some((t) => t.includes("POISON"))
+        ? new Response("bad", { status: 400 })
+        : vectorsFor(texts);
+    const { embedMissing } = await import("@features/brain/server/embed");
+    const result = await embedMissing(() => false, 1);
+    expect(stored).toEqual([[1, 3, 4, 5, 6]]);
+    expect(result.embedded).toBe(5);
+  });
+
+  it("still stops when not one row embeds even alone, because then the edge is down", async () => {
+    chunkRows = rows("a", "b", "c", "d", "e", "f");
+    respond = () => new Response("bad", { status: 400 });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    await embedMissing(() => false, 1);
+    // The first batch, then its three rows alone; the second batch is never tried.
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(4);
+    expect(stored).toEqual([]);
+  });
+
+  it("retries a 500 from the edge (a crashed worker), unlike a 400", async () => {
+    chunkRows = rows("a");
+    const replies = [new Response('{"code":"WORKER_ERROR"}', { status: 500 }), vectorsFor(["a"])];
+    respond = () => replies.shift()!;
+    const { embedMissing } = await import("@features/brain/server/embed");
+    expect((await embedMissing(() => false, 1)).embedded).toBe(1);
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(2);
+  });
+});
+
+describe("checking a stored batch for rewritten rows", () => {
+  beforeEach(() => {
+    chunkRows = [{ id: 7, title: "Old title", body: "same body" }];
+    respond = () => new Response(JSON.stringify({ embeddings: [[0.1]] }), { status: 200 });
+  });
+
+  it("clears a row that was only retitled: the title is embedded too", async () => {
+    rowsAfterWrite = [{ id: 7, title: "New title", body: "same body" }];
+    const { embedMissing } = await import("@features/brain/server/embed");
+    expect((await embedMissing(() => false, 1)).embedded).toBe(0);
+    expect(patches).toHaveLength(1);
+  });
+
+  it("does not count a row deleted since the write as embedded", async () => {
+    rowsAfterWrite = [];
+    const { embedMissing } = await import("@features/brain/server/embed");
+    expect((await embedMissing(() => false, 1)).embedded).toBe(0);
+    expect(patches).toEqual([]);
+  });
+
+  it("keeps the vectors, and the count, when the check cannot read, throws or cannot clear", async () => {
+    const { embedMissing } = await import("@features/brain/server/embed");
+    readBack = "refused";
+    expect((await embedMissing(() => false, 1)).embedded).toBe(1);
+    readBack = "throws";
+    expect((await embedMissing(() => false, 1)).embedded).toBe(1);
+    readBack = "ok";
+    rowsAfterWrite = [{ id: 7, title: "New title", body: "same body" }];
+    clearOk = false;
+    expect((await embedMissing(() => false, 1)).embedded).toBe(1);
   });
 });

@@ -24,11 +24,39 @@
 /** The four experiment axes we can attribute a person to, server-side. */
 export type ExperimentAxis = "landing" | "survey" | "pricing" | "paywall";
 
+/**
+ * The chart colours an arm may be drawn in.
+ *
+ * Validated as a categorical pair against the chart surface (#ffffff) with the
+ * data-viz checker: lightness band PASS, chroma PASS, CVD separation 29.2 protan /
+ * 33.4 tritan, normal-vision 37.3, contrast PASS. `RETIRED` is deliberately the
+ * low-chroma one — a concluded arm should not compete with a live one for the eye.
+ */
+const SERIES = {
+  BLUE: "#2563eb",
+  ORANGE: "#e0552f",
+  RETIRED: "#64748b",
+} as const;
+
 export interface ArmLabel {
   /** Short name for a chart axis or a table cell, e.g. "Landing Page V2 (Survey in Hero)". */
   short: string;
   /** Sentence for Slack, e.g. "Landing Page V2: survey in the hero". */
   long: string;
+  /**
+   * The colour this arm is ALWAYS drawn in. Asked for on the 2026-09-16 sync:
+   * "fixed colour codes for variants, e.g. preventing V1 and V2 colours from
+   * swapping" — V1 blue, V2 orange, permanently.
+   *
+   * REQUIRED, not optional, and that is the whole point. The renderer used to
+   * colour by POSITION (`first` purple, `last` orange), which meant a chart that
+   * filtered an armless series out repainted the SURVIVOR in the first slot's
+   * colour. Sorting the arms by label made the two live charts agree with each
+   * other but does not survive a one-arm day. Binding the colour to the arm does,
+   * and making the field required means a new arm cannot be added without someone
+   * deciding its colour — the compiler asks.
+   */
+  color: string;
   /** Set when the arm is no longer being assigned to new visitors. */
   retired?: boolean;
 }
@@ -36,6 +64,7 @@ export interface ArmLabel {
 const UNKNOWN: ArmLabel = {
   short: "Not recorded",
   long: "not recorded",
+  color: SERIES.RETIRED,
 };
 
 /**
@@ -61,10 +90,22 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     white: {
       short: "Landing Page V2 (Survey in Hero)",
       long: "Landing Page V2: survey in the hero",
+      color: SERIES.ORANGE,
     },
+    // CONCLUDED 2026-09-19 in favour of white (V2). proxy.ts no longer assigns
+    // it and serves "white" even to a returning visitor holding this cookie.
+    //
+    // Keeps SERIES.BLUE rather than taking SERIES.RETIRED. The colour rule Mark
+    // asked for is that V1 is blue and V2 is orange PERMANENTLY; repainting V1
+    // grey the day it retires would change the colour of every historical chart
+    // and /admin screen that still shows the comparison — which is the exact
+    // swap the fixed-colour rule exists to prevent. SERIES.RETIRED is for arms
+    // with no V-number identity to protect, like the round-1 dark landing below.
     white_prev: {
       short: "Landing Page V1 (First Design)",
       long: "Landing Page V1: the first design",
+      color: SERIES.BLUE,
+      retired: true,
     },
     // Round-1 dark landing page. Never assigned since 2026-08-21, but ~5% of stored
     // submissions still carry it, so it needs a truthful label of its own.
@@ -77,17 +118,23 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     control: {
       short: "Dark landing page (before V1)",
       long: "Landing page: the original dark design, before V1",
+      color: SERIES.RETIRED,
       retired: true,
     },
   },
   survey: {
-    white: { short: "White survey", long: "Survey questions: white" },
+    white: { short: "White survey", long: "Survey questions: white", color: SERIES.BLUE },
     // Concluded 2026-08-25 in favour of white. The AXIS is retired too — it is
     // absent from every live-axis list, the same as `paywall` — but the flag is
     // what makes `activeArms("survey")` truthful, and it is a second guard: if
     // anyone re-adds the axis to CHART_AXES, `rowsForAxis` drops this arm and the
     // comparison collapses to one arm rather than quietly reviving a dead test.
-    dark: { short: "Dark survey", long: "Survey questions: dark", retired: true },
+    dark: {
+      short: "Dark survey",
+      long: "Survey questions: dark",
+      color: SERIES.RETIRED,
+      retired: true,
+    },
   },
   pricing: {
     // No "(lower)" / "(higher)" here on purpose. These labels said A was the lower
@@ -100,16 +147,33 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     // Retired 2026-08-31: the higher-priced arm was dropped and the axis concluded.
     // A was the CHEAPER arm until the 2.1 flip on 2026-08-24 and the dearer one after
     // it, which is why the label says neither.
-    A: { short: "Pricing A", long: "Pricing: group A", retired: true },
-    // The surviving 2.x list from 2026-08-31 until Pricing 3.0 replaced it.
-    B: { short: "Pricing B", long: "Pricing: group B", retired: true },
+    A: {
+      short: "Pricing A",
+      long: "Pricing: group A",
+      color: SERIES.RETIRED,
+      retired: true,
+    },
+    // The surviving 2.x list from 2026-08-31 until Pricing 3.0 replaced it. Grey like A
+    // and C: it is never drawn beside A3 and B3, which take the live pair below.
+    B: {
+      short: "Pricing B",
+      long: "Pricing: group B",
+      color: SERIES.RETIRED,
+      retired: true,
+    },
     // Retired 2026-06 in the 3-bucket → 2-bucket cut. Legacy quotes still read back as C.
-    C: { short: "Pricing C", long: "Pricing: group C", retired: true },
+    C: {
+      short: "Pricing C",
+      long: "Pricing: group C",
+      color: SERIES.RETIRED,
+      retired: true,
+    },
     // Pricing 3.0: "All 14" and the single report on two price lists, 50/50. New
     // letters rather than A and B again, so the concluded 2.x test's rows can never
-    // pool into this one (reportPricing.ts, PLAN_BUCKETS).
-    A3: { short: "Pricing 3.0 A", long: "Pricing 3.0: list A" },
-    B3: { short: "Pricing 3.0 B", long: "Pricing 3.0: list B" },
+    // pool into this one (reportPricing.ts, PLAN_BUCKETS). The validated live pair,
+    // list A blue and list B orange, for good.
+    A3: { short: "Pricing 3.0 A", long: "Pricing 3.0: list A", color: SERIES.BLUE },
+    B3: { short: "Pricing 3.0 B", long: "Pricing 3.0: list B", color: SERIES.ORANGE },
   },
   // Whole axis concluded, and the forced wall itself was removed on 2026-08-31,
   // so NEITHER arm is assigned any more — both carry `retired` for the same
@@ -119,21 +183,59 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     treatment: {
       short: "Forced paywall",
       long: "Paywall: forced — had to pay to read on",
+      color: SERIES.RETIRED,
       retired: true,
     },
     control: {
       short: "Dismissible paywall",
       long: "Paywall: dismissible — could close it",
+      color: SERIES.RETIRED,
       retired: true,
     },
   },
 };
 
+/**
+ * Own-property lookup, never an inherited one.
+ *
+ * `LABELS[axis]` is an object literal, so it inherits every `Object.prototype`
+ * member: `LABELS.landing.constructor` is a function, not `undefined`, and
+ * `?? UNKNOWN` cannot catch it because a function is not nullish. That matters
+ * because an arm is a RAW string off `utm_tracker` — `readStampedArms`
+ * deliberately does not allowlist it, and `app/api/survey/route.ts` stores the
+ * client's blob verbatim whenever no arm cookie is present — so `constructor`,
+ * `__proto__` or `toString` reaches here from any crafted client.
+ *
+ * Two things went wrong without this. `armLabel` returned an object whose
+ * `short` was `undefined`, which the compact Slack layout then called
+ * `.indexOf()` on and THREW — and in the backfill cron one throw abandons the
+ * rest of the run. And `isKnownArm`, which is the whitelist deciding what
+ * reaches the conversion digest and the axis trends, answered `true` for an arm
+ * nobody has ever assigned.
+ */
+function ownArm(axis: ExperimentAxis, arm: string): ArmLabel | undefined {
+  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+  const table = LABELS[axis];
+  // eslint-disable-next-line security/detect-object-injection -- own-property checked on the line above.
+  return Object.prototype.hasOwnProperty.call(table, arm) ? table[arm] : undefined;
+}
+
 /** Look up an arm's labels. Never throws; unrecognised or absent values read as "not recorded". */
 export function armLabel(axis: ExperimentAxis, arm: string | null | undefined): ArmLabel {
   if (!arm) return UNKNOWN;
-  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-  return LABELS[axis][arm] ?? UNKNOWN;
+  return ownArm(axis, arm) ?? UNKNOWN;
+}
+
+/**
+ * The colour an arm is drawn in, everywhere, always.
+ *
+ * Callers pass this into the chart payload rather than letting the renderer pick
+ * by series position, so an arm keeps its colour when the other arm has no data
+ * that day, across the several charts in one Slack message, and from one day's
+ * message to the next.
+ */
+export function armColor(axis: ExperimentAxis, arm: string | null | undefined): string {
+  return armLabel(axis, arm).color;
 }
 
 /** Every arm we actively assign for an axis, in a stable order for charts. Excludes retired arms. */
@@ -146,8 +248,7 @@ export function activeArms(axis: ExperimentAxis): string[] {
 
 /** True when the value is an arm we know about (retired ones included). */
 export function isKnownArm(axis: ExperimentAxis, arm: string | null | undefined): boolean {
-  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-  return Boolean(arm && LABELS[axis][arm]);
+  return Boolean(arm && ownArm(axis, arm));
 }
 
 /** Human name for the experiment itself, for chart titles and Slack section headings. */

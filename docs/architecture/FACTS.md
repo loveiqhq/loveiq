@@ -204,16 +204,30 @@ The quote rows also store `country_multiplier`, `device_multiplier`, `traffic_mu
 `behavioral_multiplier` and `engagement_multiplier`, but none of them moves the price while
 the `pricing_uplift_enabled` flag is off, as it has been since 2026-08-03. Earlier uplifted
 quotes and promotion codes are why **what people actually paid ranges from EUR 3.74 to
-EUR 129.49**, and why the average order value in the analytics rows (EUR 18.27 all-time)
-is far below any list price.
+EUR 49.99**, and why the average order value is far below any list price.
+
+**The wrong answer this displaces: EUR 129.49.** That figure stood in this paragraph until
+2026-09-23 and is not a price anyone paid — both rows at it are `is_test = true`, staff
+sandbox purchases. This page ranks first on nearly every pricing question, so the false
+ceiling rode along with the correct table, which is the exact failure the page exists to
+prevent. Reproduce the real range with the test filter, never without it:
+
+```text
+payment?select=amount&status=eq.succeeded&is_test=eq.false&amount=gt.0&order=amount.desc
+```
+
+The `amount=gt.0` is there because EUR 0 coupon unlocks are comps, reported beside paid
+conversions and never inside them — see the decision record of 2026-09-19. The average
+order value is deliberately NOT restated here: it moves on every sale, and the
+`analytics` all-time row already carries it.
 
 A discount also arrives from the nurture email. There are **two** stages —
-`72h_no_unlock` and `78h_no_unlock`, and `type Stage` in
+`72h_no_unlock` alone, and `type Stage` in
 `app/api/cron/nurture-sequence/route.ts` is the source of truth. In practice a reader who
 does not convert receives exactly ONE follow-up: `72h_no_unlock`, which mints a per-user
 50%-off Stripe promotion code from `STRIPE_COUPON_50` with a 24-hour expiry.
-`78h_no_unlock` carries no discount at all — it invites a 20-minute call — and is paused
-by default behind `NURTURE_78H_CALL_ENABLED`. There is a manual 100% post-call grant.
+The 78h call invite was removed with the Calendly integration on 2026-09-14, so one
+nurture email goes out per unconverted reader. The manual 100% grant remains.
 
 Pricing 2.0 retired the earlier escalating ladder; the 6h reminders and the 30h/54h
 discounts are gone. This paragraph previously described that retired ladder, copied from
@@ -229,21 +243,34 @@ that still fires. Both measured 2026-09-10.
 
 ## What the survey asks about, and how long it takes
 
-**65 questions**, generated from `data/survey-source.csv` into `data/survey-data.ts`.
+**58 questions**, generated from `data/survey-source.csv` into `data/survey-data.ts`.
 They fall into ten categories:
 
 | Questions | Category                                   |
 | --------: | ------------------------------------------ |
-|        14 | Background & Lifestyle                     |
-|        12 | Arousal Styles — Cues, Conditions & Brakes |
-|        12 | Next Steps & Preferences                   |
-|         7 | Attachment Style & Emotional Safety        |
-|         5 | Spontaneous Desire vs Responsive Desire    |
-|         5 | Communication Style                        |
+|        13 | Background & Lifestyle                     |
+|        11 | Next Steps & Preferences                   |
+|        10 | Arousal Styles — Cues, Conditions & Brakes |
+|         6 | Attachment Style & Emotional Safety        |
+|         4 | Spontaneous Desire VS Responsive Desire    |
+|         4 | Communication Style                        |
 |         4 | Partner-Related Needs                      |
 |         3 | Current Sexual Wellbeing & Pain Points     |
 |         2 | Identity & Conditioning                    |
 |         1 | Relational Patterns & Boundaries           |
+
+**The wrong answer this displaces: 65.** That headline and six of the ten rows above were
+wrong until 2026-09-23 — counted by hand, never regenerated. 58 is what the frontend
+renders, and it is the number to quote. Reproduce it rather than trusting this table:
+
+```bash
+grep -oE 'qId: *"[^"]+"' data/survey-data.ts | sort -u | wc -l
+```
+
+**Do not confuse it with 66.** The `survey_question` table holds 66 rows, 61 of them
+`active` — a superset including questions the frontend no longer renders. Asked "how many
+questions does the survey have", the answer is 58; asked "how many questions exist in the
+database", it is 66.
 
 The answers themselves are deliberately NOT indexed — see the decision record on verbatim
 survey answers. The _questions_ are, through the repository CSV.

@@ -34,7 +34,7 @@ export default function TermsOfUsePage() {
                 by:
               </p>
               <p className="mb-4">
-                Applied Psychometrics UG (in formation) (haftungsbeschränkt)
+                Applied Psychometrics UG (haftungsbeschränkt)
                 <br />
                 Hasenheide 62
                 <br />

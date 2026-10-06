@@ -31,6 +31,7 @@
 | `contact/`    | `/contact` form pipeline                                                            |
 | `cron/`       | scheduled jobs (invite reminders, fulfillment sweep, discount email, survey-paused) |
 | `analytics/`  | client tracking + server event ingest                                               |
+| `ux-signals/` | Marcus's 22 behaviour signals, measured on real visits and proven on the walks      |
 | `admin/`      | internal operator panel (≥280 files, preserves internal subdomain structure)        |
 
 **Does NOT belong:** cross-feature infrastructure (use `shared/`), Next.js routing files (use `app/`), Supabase migrations (use `supabase/`).

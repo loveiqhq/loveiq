@@ -45,6 +45,31 @@ describe("the people roster", () => {
     expect(written().body).toContain("Chief Technology Officer (CTO)");
   });
 
+  /** Measured 2026-09-24: the names in a longer role became "(CEOMBSK)" and "(OMOMB)". */
+  it("abbreviates only the leading title, never the names in the rest of the role", async () => {
+    roster([
+      {
+        canonical: "Mark Oldenburg",
+        kind: "person",
+        active: true,
+        role: "Chief Executive Officer; owns design decisions together with Marcus Börner and Sanjin Kacevac",
+        role_confidence: "confirmed",
+      },
+      {
+        canonical: "Sanjin Kacevac",
+        kind: "person",
+        active: true,
+        role: "Owns design decisions together with Mark Oldenburg and Marcus Börner",
+        role_confidence: "confirmed",
+      },
+    ]);
+    await ingestPeople(STAMP);
+    expect(written().body).toContain("Chief Executive Officer (CEO); owns design decisions");
+    expect(written().body).toContain("together with Marcus Börner and Sanjin Kacevac\n");
+    expect(written().body).toContain("together with Mark Oldenburg and Marcus Börner\n");
+    expect(written().body).not.toMatch(/\((?:CEOMBSK|OMOMB)\)/);
+  });
+
   it("does not invent an acronym for a one-word role", async () => {
     roster([
       {
@@ -129,5 +154,69 @@ describe("the metadata filter", () => {
   it("passes an array through unchanged", async () => {
     const { normaliseMetaFilter } = await import("@features/brain/server/retrieve");
     expect(normaliseMetaFilter({ people: ["A", "B"] })).toEqual({ people: ["A", "B"] });
+  });
+});
+
+/**
+ * A colleague who has left is still all over the corpus.
+ *
+ * Marking someone inactive used to remove them from the roster entirely: `withoutRole`
+ * excluded them and `withRole` never held them, because a departed colleague rarely has
+ * a role recorded. `line()`'s "has left the company" suffix became unreachable for
+ * exactly the people it was written for. Measured 2026-09-20, one of the five is named
+ * in 315 chunks across six sources — so the corpus invites "who is this?" and the
+ * roster could no longer answer.
+ */
+describe("people who have left", () => {
+  const LEFT = {
+    canonical: "Gone Person",
+    kind: "person",
+    active: false,
+    role: null,
+    role_confidence: null,
+  };
+  const HERE = {
+    canonical: "Here Person",
+    kind: "person",
+    active: true,
+    role: null,
+    role_confidence: null,
+  };
+
+  it("still names someone who has left, rather than dropping them silently", async () => {
+    roster([LEFT, HERE]);
+    await ingestPeople(STAMP);
+    expect(written().body).toContain("Gone Person");
+  });
+
+  it("does not list them as being on the team", async () => {
+    roster([LEFT, HERE]);
+    await ingestPeople(STAMP);
+    const body = written().body;
+    const teamAt = body.indexOf("Also on the team");
+    const leftAt = body.indexOf("No longer at LoveIQ");
+    expect(leftAt).toBeGreaterThan(-1);
+    // "Here Person" sits under the team heading; "Gone Person" must be below the split.
+    expect(body.indexOf("Here Person")).toBeGreaterThan(teamAt);
+    expect(body.indexOf("Gone Person")).toBeGreaterThan(leftAt);
+  });
+
+  it("says plainly that they are not to be contacted or assigned work", async () => {
+    roster([LEFT, HERE]);
+    await ingestPeople(STAMP);
+    expect(written().body).toMatch(/Do not assign them work or contact them/i);
+  });
+
+  it("omits the section entirely when nobody has left", async () => {
+    roster([HERE]);
+    await ingestPeople(STAMP);
+    expect(written().body).not.toContain("No longer at LoveIQ");
+  });
+
+  it("keeps a departed person who DID have a role out of the current list", async () => {
+    roster([{ ...LEFT, role: "Head of Data", role_confidence: "confirmed" }, HERE]);
+    await ingestPeople(STAMP);
+    const body = written().body;
+    expect(body.indexOf("Gone Person")).toBeGreaterThan(body.indexOf("No longer at LoveIQ"));
   });
 });

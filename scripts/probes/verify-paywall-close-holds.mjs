@@ -39,7 +39,15 @@ const PATH = process.env.PATH_ ?? "/report?preview=1&v4=1";
 const WIDTHS = (process.env.WIDTHS ?? "1280,1440,1920").split(",").map(Number);
 const MUTATE = process.env.MUTATE === "1";
 
-/** Load the locked report and wheel down until the pop-up opens by itself. */
+/**
+ * Load the locked report, wheel well down it, and open the paywall there.
+ *
+ * Report 3.0 has no pop-up from 700px (Mark, desktop review 01.10), so a desktop reader
+ * opens it from a lock. The lock is clicked from script, which opens it WITHOUT moving
+ * focus: what had focus when it opened (with `clickFirst`, a chapter head far above) is
+ * then what the close hands focus back to, the case the focus fix exists for. A pop-up
+ * that does open by itself on the way down (a phone) is used as it is.
+ */
 async function openByScrolling(browser, width, { clickFirst }) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   await context.addCookies(stagingCookies(ORIGIN));
@@ -59,10 +67,22 @@ async function openByScrolling(browser, width, { clickFirst }) {
   }
   const isOpen = () =>
     page.evaluate(() => !!document.querySelector(".report-pricing-modal.is-visible"));
-  for (let i = 0; i < 160 && !(await isOpen()); i++) {
+  for (let i = 0; i < 40 && !(await isOpen()); i++) {
     await page.mouse.move(width / 2, 450);
     await page.mouse.wheel(0, 300);
     await page.waitForTimeout(150);
+  }
+  if (!(await isOpen())) {
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
+      const mid = innerHeight / 2;
+      const locks = [...document.querySelectorAll(".rv4-chapter.is-locked .rv4-chapter__button")];
+      const near = locks
+        .map((el) => ({ el, d: Math.abs(el.getBoundingClientRect().top - mid) }))
+        .sort((a, b) => a.d - b.d)[0];
+      near?.el.click();
+    });
+    await page.waitForTimeout(400);
   }
   if (!(await isOpen())) return { context, page, skip: "the paywall never opened" };
   await page.waitForTimeout(1500);

@@ -9,11 +9,27 @@
  * than trusting a human to spot a subtle miss in twenty paragraphs.
  *
  * Usage: npx tsx scripts/brain-battery.ts [--only <substring>]
+ *        npx tsx scripts/brain-battery.ts --retrieval|--mcp [--record] [--live]
+ *
+ * `--record` stores the run's result in cron_run for the brain's weekly report
+ * (`brain_health`), and exits 0 once it is stored, whatever failed.
  */
 
 import { answerQuestion } from "@features/brain/server/answer";
 import { retrieve, type BrainChunk, type RetrieveOptions } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
+
+/** What one battery run found, as `--record` stores it for the brain's weekly report. */
+interface BatteryResult {
+  total: number;
+  clean: number;
+  /** Failed twice, or a KNOWN_RED probe that now passes (its entry must go). */
+  failing: string[];
+  /** Passed only on the retry: counted apart, never as clean. */
+  flaky: string[];
+  /** Red on purpose, listed in KNOWN_RED. */
+  known: number;
+}
 
 interface Probe {
   kind: string;
@@ -50,6 +66,11 @@ function monthKey(offset: number, now = new Date()): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1))
     .toISOString()
     .slice(0, 7);
+}
+
+/** A figure read from prose is interpolated into a RegExp; `.` must not mean "any". */
+function escapeRe(v: string): string {
+  return v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Pull one figure out of a rendered analytics chunk body. */
@@ -308,6 +329,63 @@ function buildProbes(f: LiveFigures): Probe[] {
  * EVERY PROBE HERE IS A DEFECT THAT REALLY HAPPENED. A battery of invented cases
  * measures imagination; this one measures the bugs that got through.
  */
+/**
+ * PROBES THAT ARE RED ON PURPOSE, AND WHY.
+ *
+ * Three of these have been failing for days with their causes written out in full
+ * above their definitions — measured, candidate fixes tried and rejected, left red
+ * deliberately. Reported as plain FAILs they are indistinguishable from a regression
+ * that appeared five minutes ago, which is the whole problem: a run that always shows
+ * red trains everyone to skim the number and move on. Today that cost an hour
+ * re-deriving `record-beats-transcript` from scratch when the answer was three lines
+ * above the probe.
+ *
+ * So they are named here, and the summary separates REGRESSIONS from KNOWN. Only
+ * regressions set the exit code.
+ *
+ * THE ENTRY MUST NOT OUTLIVE ITS SUBJECT. A probe listed here that starts PASSING is
+ * reported as RECOVERED and fails the run, so whoever fixed it is made to delete the
+ * line. An allowance nobody notices has gone stale is how a suite quietly stops
+ * asserting things — the same reason the /survey contrast pin in `e2e/a11y.spec.ts`
+ * fails when its gap disappears.
+ */
+const KNOWN_RED: Record<string, string> = {
+  "decision-pivot":
+    "red again 2026-09-27, the same gauge as before: decision records went from 82 to 267, " +
+    "and two recorded 2026-09-26 (anonymous user totals, dropping subscriptions) rank #2-#3 " +
+    "at 2.37/2.35 with the full recency bonus, above the meeting summary this wants. The " +
+    "phrase 'what did we decide' favours decision records by design; fixing the crowding " +
+    "needs a measured ranking sweep, not a threshold.",
+  "record-beats-transcript":
+    "red since 2026-09-20: no meeting SUMMARY chunk mentions pricing, so only transcripts " +
+    "match at all. Two fixes measured and rejected — see the comment on the probe.",
+  "dr-record-label":
+    "red since 2026-09-23, and it is the first-pass slot rule, not missing content: the " +
+    "answering meeting summary scores 2.52 behind a drive doc at 2.66, the drive bucket is " +
+    "taken, and weaker single-row sources keep reserved slots. FOUR ranking fixes are now " +
+    "measured and rejected; the latest, a relevance floor on reserved slots, fixed this and " +
+    "dc-env-purge but broke ga4-campaign, ga4-channels and decision-pricing, identically on " +
+    "two runs. The reservation protects which rows are CHOSEN, not where they SIT: the page " +
+    "is sorted by score, so any rule admitting a stronger second row from one source pushes " +
+    "the reserved rows down. The tool now names the held-back row by id and score instead.",
+  "dc-env-purge":
+    "red again 2026-09-23, same class as dr-record-label: the answering CLAUDE.md section " +
+    "is the third doc row and doc holds one reserved slot. Proven at three limits " +
+    "(2026-09-19); narrowing to sources:[doc] returns it at #3. See dr-record-label for why " +
+    "the ranking is left alone.",
+  "ga4-brand":
+    "the brand campaign stopped running on 2026-08-31, so only August records name it. " +
+    "Its month chunk scores 1.692 and the CURRENT partial month scores 1.724 — grainCap " +
+    "gives the single ga4:month slot to the winner, and 0.03 decides it. Measured " +
+    "2026-09-22: five other historical-analytics questions return their record at #1, so " +
+    "this is not a current-period bias, and narrowing to sources:[ga4] finds it at #1. " +
+    "Re-tuning global ranking on a 0.03 margin would risk the other 228 probes.",
+  "cm-marcus-line":
+    "a pressure gauge, not a regression signal: reddens on corpus growth, recovers on " +
+    "shrinkage. Measured 2026-09-21 — the answer is #2 WITHIN `doc` at 2.00 against " +
+    "2.01, so the ranking is fine and the probe is reading the edge.",
+};
+
 interface RetrievalProbe {
   kind: string;
   q: string;
@@ -432,6 +510,21 @@ function retrievalProbes(): RetrievalProbe[] {
        * shoes". The record must win whenever a meeting document comes back at all.
        */
       kind: "record-beats-transcript",
+      /**
+       * RED SINCE 2026-09-20, and measured rather than left a mystery.
+       *
+       * The three meetings that come back have no SUMMARY chunk matching "pricing" —
+       * their summaries are about other things, so only their transcripts match at all
+       * and `bestPerParent` can only return what matched. Two candidate fixes were
+       * measured and both rejected: preferring a document's summary part when one is
+       * among the candidates moved the battery not at all (218 before, 218 after) and
+       * can hand the model a chunk without the evidence in it; and the five `MT-INV`
+       * vendor invoices that were also crowding these results have since been removed,
+       * which changed nothing here either.
+       *
+       * So this needs a summary that talks about pricing, or a different question. It
+       * is NOT the invoice problem it was written for — that one is fixed.
+       */
       q: "what did we agree about pricing in our calls",
       // Restricted to drive so a meeting document is GUARANTEED to come back. Without
       // this the probe was vacuous: commits and mail filled the top 8, no meeting hit
@@ -672,6 +765,29 @@ const at = (h: BrainChunk[], n: number) => h.slice(0, n);
  * would pass on a coincidence. Tolerance is generous downward and zero upward: the
  * corpus is written from the table, so it can lag and cannot lead.
  */
+/**
+ * A paid-customer figure that is PRESENT and close, not equal to one read ninety seconds ago.
+ *
+ * Both sides of this comparison come from the same chunk, which `brain-fast` rewrites every
+ * fifteen minutes, so exact equality fails whenever a run straddles a rebuild — and a probe
+ * that flaps teaches its reader to ignore it. Whether the published figure is actually RIGHT
+ * is the reconciler's job, against the payment ledger; it is a comparison this probe
+ * structurally cannot make, because it reads the corpus twice.
+ */
+const customersNear =
+  (liveCount: string | null) =>
+  (h: BrainChunk[]): string[] => {
+    if (liveCount === null)
+      return ["could not read the customer count from the corpus — this probe verified nothing"];
+    const found = at(h, 12)
+      .map((x) => /Paid customers: (\d+)/.exec(x.body)?.[1])
+      .filter((v): v is string => Boolean(v));
+    if (found.length === 0) return ["no paid-customer figure in the results at all"];
+    return found.some((f) => Math.abs(Number(f) - Number(liveCount)) <= 2)
+      ? []
+      : [`corpus says ${found.join("/")}, read ${liveCount} at the start of the run`];
+  };
+
 const signupsNear =
   (liveCount: number | null) =>
   (h: BrainChunk[]): string[] => {
@@ -683,11 +799,22 @@ const signupsNear =
       if (!m) continue;
       const n = Number(m[1]);
       seen.push(n);
-      if (n <= liveCount && n >= liveCount - tolerance) return [];
+      /**
+       * SYMMETRIC, because the corpus can legitimately be AHEAD of the live figure.
+       *
+       * `readLiveCounts()` runs once at the start of the battery; `brain-fast` rebuilds the
+       * analytics chunk every fifteen minutes. A run that straddles a rebuild compares a
+       * count read at t=0 against a chunk written at t+60s, and on a busy afternoon that
+       * chunk is LARGER. The old bound was one-sided (`n <= liveCount`), so the corpus
+       * being fresher than the reading failed the probe — measured 2026-09-15, the live
+       * figure moved from 2025 to 2027 between two runs minutes apart. The tolerance is
+       * for clock skew in both directions, not for the corpus being wrong.
+       */
+      if (Math.abs(n - liveCount) <= tolerance) return [];
     }
     return seen.length === 0
       ? ["no signup figure in the results at all"]
-      : [`corpus says ${seen.join("/")}, live says ${liveCount} (tolerance -${tolerance})`];
+      : [`corpus says ${seen.join("/")}, live says ${liveCount} (tolerance +/-${tolerance})`];
   };
 
 /**
@@ -759,6 +886,24 @@ const topSource =
       : [`no ${want.join("/")} in top ${n}: ${at(h, n).map(describe).join(", ")}`];
   };
 
+/** Not one row of the named source in the top `n`: an opt-in source leaking into search. */
+const noSource =
+  (src: string, n = 12) =>
+  (h: BrainChunk[]): string[] => {
+    const leaked = at(h, n).filter((x) => x.source === src);
+    return leaked.length === 0
+      ? []
+      : [`${leaked.length} ${src} rows in top ${n}: ${leaked.map(describe).join(", ")}`];
+  };
+
+/** A title matching `re` in the top `n`: the right document, not just the right source. */
+const topTitle =
+  (re: RegExp, n = 3) =>
+  (h: BrainChunk[]): string[] =>
+    at(h, n).some((x) => re.test(x.title ?? ""))
+      ? []
+      : [`no title matching ${re} in top ${n}: ${at(h, n).map(describe).join(", ")}`];
+
 /**
  * A literal fact must be present in the top `n` bodies. Correctness, not routing.
  *
@@ -801,7 +946,7 @@ const all =
  * about it. A source that cannot be reached by the words a person actually uses is
  * not indexed in any sense that matters.
  */
-function sourceCoverageProbes(): RetrievalProbe[] {
+function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
   const P = (
     kind: string,
     q: string,
@@ -816,6 +961,124 @@ function sourceCoverageProbes(): RetrievalProbe[] {
       "src-analytics",
       "how many signups did we get last month",
       all(topSource("analytics"), bodyHas(/Signups/))
+    ),
+    /**
+     * THE EDGE THE BATTERY COULD NOT SEE.
+     *
+     * Until 2026-09-20 not one of these 222 probes asserted on `evidence`, so a penalty
+     * large enough to bury the published literature entirely would have scored exactly
+     * as well as a good one — and the value was about to be picked by whichever number
+     * made the battery happiest. These are the questions the evidence base exists to
+     * answer; they are what make a demotion sweep two-sided.
+     *
+     * TOP 3, not the default 5: at a 1.0 penalty the literature was still reachable in
+     * the top TWELVE on all five questions, so a probe that tolerates that cannot tell a
+     * working value from a broken one.
+     *
+     * Mutation-tested by setting the live penalty to 1.0: ONE of these three goes red
+     * (`evidence-construct`). That is a thinner guard than it looks — the other two hold
+     * because their questions have almost no competition in the corpus — so if a future
+     * sweep wants a value above 0.5, take the reach measurement in the migration rather
+     * than trusting these three to object.
+     */
+    P(
+      "evidence-research",
+      "what does the published research say about sexual desire discrepancy",
+      topSource("evidence", 3)
+    ),
+    P(
+      "evidence-construct",
+      "which studies support our attachment style dimension",
+      topSource("evidence", 3)
+    ),
+    P(
+      "evidence-literature",
+      "what does the literature say about relationship satisfaction",
+      topSource("evidence", 3)
+    ),
+    /**
+     * THE BOOKS ARE OPT-IN (20260928010000): searched only when the caller names the
+     * source. Both sides are asserted because each can break alone. Named, the source must
+     * reach the right book; unnamed, a question on the books' own topic must return none
+     * of them, which is the whole reason they were kept out of the corpus until now.
+     */
+    P(
+      "book-perel",
+      "desire in long-term relationships, and why familiarity can dampen it",
+      topTitle(/Mating in Captivity/, 3),
+      { sources: ["book"] }
+    ),
+    P(
+      "book-nagoski",
+      "responsive desire and the dual control model of sexual response",
+      topTitle(/Come As You Are/, 3),
+      { sources: ["book"] }
+    ),
+    P(
+      "book-opt-in",
+      "what does the research say about desire in long-term relationships",
+      noSource("book", 12)
+    ),
+    /**
+     * THE PAPERS ARE OPT-IN TOO (20260930210000), for the same reason, and both sides are
+     * asserted the same way. Named, the source must answer a question in its own field
+     * (it fails while brain-papers has loaded nothing, which is the signal); unnamed, a
+     * question on the papers' own topic must return none of them.
+     */
+    P(
+      "paper-named",
+      "what did studies find about sexual desire and emotional intimacy in couples",
+      topSource("paper", 3),
+      { sources: ["paper"] }
+    ),
+    P(
+      "paper-opt-in",
+      "what does the research say about sexual desire and emotional intimacy",
+      noSource("paper", 12)
+    ),
+    /**
+     * THE CORPORATE WEBSITE IS OPT-IN (20261004150000), because its traffic rows are written in
+     * the same words as LoveIQ's own `ga4` rows. Named, it must answer a question about its own
+     * visits; unnamed, a plain question about our website traffic must return none of it, or
+     * "how many visitors did we have" could be answered with the wrong site's numbers.
+     */
+    P(
+      "corporate-named",
+      "how many people visited the appliedpsychometrics.org website this month",
+      topSource("corporate", 3),
+      { sources: ["corporate"] }
+    ),
+    P(
+      "corporate-opt-in",
+      "how many people visited our website this month and where did they come from",
+      noSource("corporate", 12)
+    ),
+    /**
+     * THE SHIPPED COPY ADDED ON 2026-09-21, probed for the same reason the evidence
+     * base is: a source with nothing asserting it can be demoted into invisibility and
+     * the battery would score exactly the same. All three were measured absent before
+     * the change and at rank 1 after it.
+     *
+     * The legal pages are React components, so `git ls-files "*.md"` never saw them;
+     * the FAQ and the practice-score guidance were data files the builders did not
+     * import. Between them they are what we publish, what we promise and what we are
+     * legally answerable for.
+     */
+    P("legal-imprint", "what is in our imprint", bodyHas(/Hasenheide|Commercial Register|HRB/, 5)),
+    P(
+      "legal-cookies",
+      "what does our cookie policy tell visitors about controlling cookies",
+      bodyHas(/cookie/i, 5)
+    ),
+    P(
+      "faq-reachable",
+      "what do we tell customers about whether the assessment is anonymous",
+      bodyHas(/anonymous/i, 8)
+    ),
+    P(
+      "practice-score-guidance",
+      "what does a high fantasy pull with a low lived pleasure mean",
+      bodyHas(/Fantasy Pull|Lived Pleasure/, 8)
     ),
     P("src-ga4", "how many sessions and users did google analytics record", topSource("ga4")),
     P("src-gsc", "what do people type into google to find us", topSource("gsc")),
@@ -837,15 +1100,28 @@ function sourceCoverageProbes(): RetrievalProbe[] {
     P("fact-aug-signups", "how many people signed up in august 2026", bodyHas(/\b358\b/)),
     P("fact-aug-revenue", "what was our revenue in august 2026", bodyHas(/196\.98/)),
     P("fact-aug-adspend", "what did we spend on google ads in august 2026", bodyHas(/1252\.99/)),
+    /**
+     * Read from the corpus at run time — it was the literal 675.91 until one more
+     * purchase landed and turned a working probe red.
+     *
+     * And NO hardcoded fallback. `?? "675.91"` meant that when the corpus read failed,
+     * the probe quietly asserted a figure from some earlier week instead of saying it
+     * could not check: by 2026-09-15 the real total was 704.91 across 41 customers, so
+     * both fallbacks were stale and one of them was a false claim about revenue dressed
+     * as a passing test. An unreadable figure is INCONCLUSIVE, and a battery that cannot
+     * say so reports a verified zero it never measured.
+     */
     P(
       "fact-alltime-revenue",
       "how much revenue have we made in total since launch",
-      bodyHas(/675\.91/)
+      live.allTimeRevenue
+        ? bodyHas(new RegExp(escapeRe(live.allTimeRevenue)))
+        : () => ["could not read all-time revenue from the corpus — this probe verified nothing"]
     ),
     P(
       "fact-alltime-customers",
       "how many paying customers have we had in total",
-      bodyHas(/\b37\b/)
+      customersNear(live.allTimeCustomers)
     ),
     P("fact-sept-revenue", "what is our revenue this month", bodyHas(/September 2026/)),
     P("fact-visits-aug", "how many people visited the site in august", bodyHas(/11147/)),
@@ -859,10 +1135,15 @@ function sourceCoverageProbes(): RetrievalProbe[] {
       sources: ["slack"],
       meta: { channel: "bugs-issues" },
     }),
-    P("slack-hr-channel", "what is discussed in the hr channel", topSource("slack"), {
-      sources: ["slack"],
-      meta: { channel: "hr" },
-    }),
+    // #hr is excluded since 2026-09-23 (job applicants, owner's decision): asked directly,
+    // it must return nothing. See `hr-excluded` below for why it used to be asserted open.
+    P(
+      "slack-hr-channel",
+      "what is discussed in the hr channel",
+      (h) =>
+        h.length ? [`#hr is excluded but returned ${h.length}: ${h.map(describe).join(", ")}`] : [],
+      { sources: ["slack"], meta: { channel: "hr" } }
+    ),
     P("notion-literature", "what literature and research papers do we track", topSource("notion"), {
       sources: ["notion"],
     }),
@@ -912,6 +1193,21 @@ function sourceCoverageProbes(): RetrievalProbe[] {
       all(topSource(["analytics", "ga4", "gsc"]), bodyHas(/week of/i))
     ),
     P("grain-month", "how did august compare to july", topSource(["analytics", "ga4", "gsc"], 8)),
+    /**
+     * RED SINCE 2026-09-20, BY ONE POSITION. The meeting summary this wants is at #5 of
+     * 12; places 2-4 are decision records about payments, report-opens and coupons —
+     * nothing to do with micro assessments.
+     *
+     * Measured cause: the phrase carries the question. Drop "what did we decide" and ask
+     * "micro assessments and the consumer pivot" and the same summary is at #2 with no
+     * decision record in the top 4. The `decision` source is legitimately favoured for a
+     * decide-question, and this threshold was tuned on 2026-09-16 when there were about
+     * 48 decision records; the miner has since been repaired and there are 82.
+     *
+     * Deliberately NOT fixed by making "decision" a title stopword: that list is
+     * frequency-derived at 3.6% of titles and up, this word is at 0.3%, and stopping it
+     * would break the decide-questions that legitimately want a decision record.
+     */
     P("decision-pivot", "what did we decide about micro assessments and the consumer pivot", (h) =>
       at(h, 4).some((x) => x.source === "drive" && x.meta?.section === "summary")
         ? []
@@ -1191,6 +1487,20 @@ function sourceCoverageProbes(): RetrievalProbe[] {
 interface LiveCounts {
   monthSignups: number | null;
   allTimeSubmissions: number | null;
+  /**
+   * Read from the all-time analytics chunk, because `fact-alltime-revenue` and
+   * `fact-alltime-customers` carried 675.91 and 37 as LITERALS. One more purchase landed
+   * and both went red for a reason that had nothing to do with retrieval — the answering
+   * chunk was still rank 1 at score 3.15. This file's header claims the battery "reads
+   * its expected figures out of the corpus at run time, so it does not go stale"; that
+   * was true of the monthly probes and false of these two.
+   *
+   * This asserts RETRIEVAL — that the question returns the chunk holding the figure — not
+   * that the figure is correct. `get_business_numbers` owns that, and the MCP battery
+   * checks it.
+   */
+  allTimeRevenue: string | null;
+  allTimeCustomers: string | null;
 }
 
 async function readLiveCounts(): Promise<LiveCounts> {
@@ -1206,6 +1516,23 @@ async function readLiveCounts(): Promise<LiveCounts> {
   return {
     monthSignups: await count(`created_date_time=gte.${firstOfMonth}`),
     allTimeSubmissions: await count("id=gt.0"),
+    ...(await allTimeTotals()),
+  };
+}
+
+/** The all-time revenue and customer figures, read from the chunk that carries them. */
+async function allTimeTotals(): Promise<{
+  allTimeRevenue: string | null;
+  allTimeCustomers: string | null;
+}> {
+  const res = await supabaseFetch(
+    "/rest/v1/brain_chunk?select=body&source=eq.analytics&source_id=eq.alltime&limit=1"
+  );
+  if (!res.ok) return { allTimeRevenue: null, allTimeCustomers: null };
+  const body = ((await res.json().catch(() => [])) as Array<{ body?: string }>)[0]?.body ?? "";
+  return {
+    allTimeRevenue: /Revenue: EUR ([\d.]+)/.exec(body)?.[1] ?? null,
+    allTimeCustomers: /Paid customers: (\d+)/.exec(body)?.[1] ?? null,
   };
 }
 
@@ -1344,6 +1671,26 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       "what did the performance max campaign cost in august",
       bodyHas(/August 2026[\s\S]{0,700}Performance Max EUR [\d.]+/, 3)
     ),
+    /**
+     * WENT RED ON 2026-09-20 AND CAME BACK THE SAME NIGHT, for a reason worth keeping.
+     *
+     * The campaign ended: its last appearance in GA4 is 2026-08-31, so an undated
+     * question about it competes with three weeks of newer data, and `ga4` gets one slot
+     * per grain. Within the monthly grain September was winning that slot from the
+     * August chunk holding the answer — the probe sat around #20 unscoped, while
+     * `sources: ["ga4"]` put it at #2.
+     *
+     * What brought it back was not a ranking change. `monthly:2026-09` had been built
+     * from a window starting on the 2nd, because GA4 resolves `NdaysAgo` in the
+     * property's timezone while the window arithmetic counts UTC days; fixing that to an
+     * absolute start date changed the September chunk enough that August reaches the top
+     * twelve again. Confirmed over three consecutive runs, against a battery that
+     * otherwise moves by about one probe between identical runs.
+     *
+     * So this probe is load-bearing in a way its author did not intend: it is sensitive
+     * to the GA4 window being right. If it reddens again, check `monthly:<this month>`
+     * against the sum of that month's daily chunks before touching the ranking.
+     */
     P("ga4-brand", "how much did the brand campaign cost", bodyHas(/LoveIQ - Brand/)),
     P("ga4-channels", "which channels send us the most traffic", bodyHas(/Direct|Paid Search/)),
 
@@ -1626,6 +1973,56 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       { sources: ["gmail"], meta: { mailbox: "hello@loveiq.org" } },
       5
     ),
+    // Bulk mail must not crowd out first-party answers on ORDINARY work questions.
+    // One query cannot establish that. `bulk-must-not-outrank-first-party` above asks
+    // exactly one, and when it went green on 2026-09-14 the reason turned out to be that
+    // no bulk mail competed on THAT query at all — measured, zero bulk in its top 14 —
+    // rather than the -0.25 penalty doing any work. A probe that passes because its one
+    // question stopped being contested is not measuring the thing it names.
+    //
+    // These ask the question across a spread of real work questions instead. Measured
+    // 2026-09-14: bulk appears in the top 5 of ZERO of ten, and once at rank 8 overall.
+    // Gmail is the largest source and grows hourly, so this is a REGRESSION guard on a
+    // property that currently holds for reasons nobody designed.
+    ...(
+      [
+        "what did we decide about pricing",
+        "what is our conversion rate",
+        "how does the paywall work",
+        "what are our biggest problems right now",
+        "who is working on the design system",
+        "what happened with google ads",
+        "what did we agree in the last meeting",
+        "how do we handle customer data",
+      ] as const
+    ).map((q, i) =>
+      P(
+        `bulk-not-in-top5-${i + 1}`,
+        q,
+        (h) => {
+          // THIRD-PARTY bulk, not all bulk. A [JIRA] ticket about our own paywall and
+          // Google Ads reporting OUR conversions are machine-sent and belong in the top
+          // 5 — they are our own work, delivered by a robot. What must not be there is
+          // someone else's marketing. Same discriminator the ranking uses, and it
+          // deliberately excludes the ADDRESS form: every newsletter footer carries
+          // ec@loveiq.org, and a naive match on "loveiq" scores the footer of an OpenAI
+          // pricing newsletter as being about us.
+          const aboutUs = /(^|[^@\w.-])loveiq/i;
+          const bulk = at(h, 5).filter(
+            (x) =>
+              x.source === "gmail" && x.meta?.bulk === true && !aboutUs.test(`${x.title} ${x.body}`)
+          );
+          return bulk.length
+            ? [
+                `third-party bulk mail in the top 5 of a work question: ${bulk.map(describe).join(", ")}`,
+              ]
+            : [];
+        },
+        undefined,
+        10
+      )
+    ),
+
     P(
       "gm-bulk-flagged",
       "what newsletters do we receive",
@@ -1670,6 +2067,28 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     ),
 
     // ── COMMIT ───────────────────────────────────────────────────────────────
+    /**
+     * SITS ON THE BACKFILL EDGE, so it moves whenever the corpus grows. Measured
+     * 2026-09-21 after the Drive walk was widened to every colleague:
+     *
+     *   want=12 (the default this probe uses): the answer is ABSENT
+     *   want=14                              : it is at position 12, five times out of five
+     *
+     * Not flakiness, and not a ranking fault. Within its own source the answer is
+     * SECOND of the `doc` chunks — nothing displaced it there. Every `doc` chunk shares
+     * one `source:grain` bucket, so `grainCap = 1` gives the source a single first-pass
+     * slot and everything after it depends on backfill room. 452 new drive chunks
+     * consumed that room.
+     *
+     * Confirmed by exclusion rather than assumed: re-running with
+     * `exclude_sources: ["drive"]` passes, and it was the only one of five failing
+     * probes for which that was true.
+     *
+     * So this reddens on corpus growth and recovers on corpus shrinkage, which makes it
+     * a poor regression signal and a good pressure gauge. Before tuning anything for it,
+     * check where the answer sits WITHIN `doc` — if it is still near the top there, the
+     * ranking is fine and the probe is simply reading the edge.
+     */
     P(
       "cm-marcus-line",
       "explain a recent change in plain english",
@@ -1785,7 +2204,18 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       "what turns the data purge on",
       all(topSource("doc", 6), bodyHas(/PURGE_OLD_DATA_ENABLED/))
     ),
-    P("dc-78h", "why is the 78 hour call invite paused", bodyHas(/NURTURE_78H|call invite/i)),
+    /**
+     * "Why is this deliberately off" is a real question the corpus has to answer, and it
+     * used to be asked about the 78-hour call invite. That feature was removed with Calendly
+     * on 2026-09-14 and its env vars read by no code at all, so the probe was asserting that
+     * we still document something we deleted. Repointed at Trustpilot rather than deleted:
+     * the capability under test is the same, and a probe removed is coverage removed.
+     */
+    P(
+      "dc-paused-feature",
+      "why are the trustpilot reviews turned off on the site",
+      bodyHas(/trustpilot/i)
+    ),
     P("dc-gdpr", "what is our lawful basis for processing", topSource("doc", 8)),
     P("dc-admin-api", "what admin api routes exist", topSource("doc", 6)),
 
@@ -1960,7 +2390,17 @@ function adversarialProbes(): RetrievalProbe[] {
     P(
       "false-many-sales-sept",
       "how many sales did we make in september",
-      bodyHas(/Paid customers: 0|Revenue: EUR 0/)
+      /**
+       * ASSERTS THAT SEPTEMBER'S OWN FIGURES COME BACK, not what they say.
+       *
+       * This read `Paid customers: 0|Revenue: EUR 0`, which was September's real state
+       * when it was written. A single purchase landed on the 14th and the probe went red
+       * — while retrieval was working perfectly and returning the very chunk that now
+       * said "Paid customers: 1". The false premise in the question is "how MANY sales",
+       * and what defends against it is the month's real line being in front of the model,
+       * whatever number it holds. The number itself belongs to `fact-sept-revenue`.
+       */
+      bodyHas(/Period: September 2026[\s\S]{0,400}Paid customers: \d+/)
     ),
 
     // ── CROSS-SOURCE: the answer needs two places at once ────────────────────
@@ -2057,11 +2497,18 @@ function adversarialProbes(): RetrievalProbe[] {
      * Access is deliberately open — the owner's decision, recorded in CLAUDE.md. These
      * assert the policy holds rather than that content is blocked, and exist so a
      * future change to that policy is a deliberate, visible break rather than a drift.
+     *
+     * ONE SUCH BREAK, MADE DELIBERATELY ON 2026-09-23. `#hr` is the recruiting channel —
+     * it names and assesses job candidates, who are outsiders — and the later, narrower
+     * owner decision keeps applicants' data out of the corpus in every path. So the probe
+     * that asserted it open now asserts it closed. Team compensation discussion is NOT
+     * part of that decision and stays asserted open by `comp-reachable`.
      */
     P(
-      "hr-reachable",
+      "hr-excluded",
       "what is discussed in the hr channel",
-      nonEmpty(1),
+      (h) =>
+        h.length ? [`#hr is excluded but returned ${h.length}: ${h.map(describe).join(", ")}`] : [],
       { sources: ["slack"], meta: { channel: "hr" } },
       4
     ),
@@ -2096,7 +2543,7 @@ function adversarialProbes(): RetrievalProbe[] {
   ];
 }
 
-async function runRetrievalBattery(only: string | null): Promise<number> {
+async function runRetrievalBattery(only: string | null): Promise<BatteryResult> {
   const live = await readLiveCounts();
   console.log(
     `live figures read from the database: ${live.monthSignups ?? "?"} signups this month, ` +
@@ -2104,40 +2551,184 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
   );
   const all = [
     ...retrievalProbes(),
-    ...sourceCoverageProbes(),
+    ...sourceCoverageProbes(live),
     ...perSourceDepthProbes(live),
     ...adversarialProbes(),
   ];
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.q.includes(only)) : all;
   let failures = 0;
 
-  for (const p of probes) {
+  /**
+   * ONE RETRY ON FAILURE, AFTER A PAUSE — and it is not leniency, it is measurement.
+   *
+   * This battery runs against the LIVE corpus, which the ingest crons rewrite every
+   * fifteen minutes; a full run takes about two minutes, so overlapping a write is
+   * ordinary rather than rare. Measured across eight runs on 2026-09-17, EIGHT DIFFERENT
+   * probes failed, one at a time, never the same one twice, and every one of them passed
+   * when its query was run again seconds later. Three consecutive full runs gave 221, 222,
+   * 222. A number that moves like that is a sample, not a gate — and the danger is not the
+   * noise itself, it is that a reader learns to shrug at a red line.
+   *
+   * So a failure is re-run once, and the outcome is reported as one of THREE states rather
+   * than two. A probe that fails twice is FAIL. A probe that fails then passes is FLAKY —
+   * printed, counted separately, and never folded into the clean total, because a probe
+   * that only sometimes works is a real finding about either the corpus or the probe.
+   */
+  const run = async (
+    p: RetrievalProbe
+  ): Promise<{ hits: BrainChunk[]; issues: string[]; ms: number }> => {
     const started = Date.now();
-    let hits: BrainChunk[] = [];
-    let issues: string[] = [];
     try {
-      hits = await retrieve(p.q, p.limit ?? 12, p.opts ?? {});
-      issues = p.check(hits);
+      const hits = await retrieve(p.q, p.limit ?? 12, p.opts ?? {});
+      return { hits, issues: p.check(hits), ms: Date.now() - started };
     } catch (err) {
       // An outage must read as an outage, never as "the corpus has no such thing" —
       // the same distinction the MCP tool draws for callers.
-      issues = [`retrieval threw: ${err instanceof Error ? err.message : String(err)}`];
+      return {
+        hits: [],
+        issues: [`retrieval threw: ${err instanceof Error ? err.message : String(err)}`],
+        ms: Date.now() - started,
+      };
     }
-    const ms = Date.now() - started;
-    if (issues.length) failures++;
+  };
+
+  let flaky = 0;
+  let known = 0;
+  const failing: string[] = [];
+  const flakyKinds: string[] = [];
+  const failedProbes: RetrievalProbe[] = [];
+  const recoveredProbes: RetrievalProbe[] = [];
+  const knownFlaky: RetrievalProbe[] = [];
+  let outage = false;
+  for (const p of probes) {
+    let { hits, issues, ms } = await run(p);
+    let firstIssues: string[] = [];
+    if (issues.length) {
+      firstIssues = issues;
+      // Long enough to clear a chunk being rewritten, short enough that a fully broken
+      // battery does not take an extra four minutes to say so.
+      await new Promise((r) => setTimeout(r, 2_000));
+      ({ hits, issues, ms } = await run(p));
+    }
+
+    const knownWhy = KNOWN_RED[p.kind];
+    const recovered = Boolean(knownWhy) && !issues.length && !firstIssues.length;
+    const state = recovered
+      ? "RECOVERED"
+      : issues.length
+        ? knownWhy
+          ? "KNOWN"
+          : "FAIL"
+        : firstIssues.length
+          ? "flaky"
+          : "ok  ";
+    if (recovered) failures++;
+    else if (issues.length && knownWhy) known++;
+    else if (issues.length) failures++;
+    else if (firstIssues.length) flaky++;
+    // Each list on its own line: an else-if here once attached to the wrong condition.
+    if (recovered || (issues.length && !knownWhy)) failing.push(p.kind);
+    if (!issues.length && firstIssues.length) flakyKinds.push(p.kind);
+    if (!recovered && issues.length && !knownWhy) failedProbes.push(p);
+    if (issues.some((i) => i.startsWith("retrieval threw"))) outage = true;
+    if (recovered) recoveredProbes.push(p);
+    if (knownWhy && !issues.length && firstIssues.length) knownFlaky.push(p);
+
     console.log(
-      `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${JSON.stringify(p.q.slice(0, 62))}` +
+      `\n${state} [${p.kind}] ${JSON.stringify(p.q.slice(0, 62))}` +
         `${p.opts ? ` ${JSON.stringify(p.opts)}` : ""}`
     );
     console.log(`      ${hits.length} hits in ${ms}ms`);
+    if (recovered)
+      console.log(
+        `      RECOVERED — this probe is listed in KNOWN_RED and now passes. ` +
+          `Delete its entry, or the suite stops asserting it.`
+      );
+    if (issues.length && knownWhy) console.log(`      KNOWN: ${knownWhy}`);
     if (issues.length) for (const i of issues) console.log(`      ISSUE: ${i}`);
+    else if (firstIssues.length)
+      console.log(`      PASSED ON RETRY — first attempt said: ${firstIssues.join(" | ")}`);
     console.log("      " + (hits.slice(0, 3).map(describe).join("\n      ") || "(nothing)"));
   }
 
+  /**
+   * A FAILURE DURING BRAIN-FAST'S REWRITE IS NOT A FINDING. brain-fast rewrites the analytics
+   * records at :07, :22, :37 and :52 and takes up to about a minute (p95 47 s, max 65 s,
+   * measured 2026-09-25); a probe landing in that minute finds them half-written. The first
+   * recorded run failed both signup probes at 18:52 UTC for exactly this reason. So each
+   * failure is checked once more outside a rewrite, and passing then makes it flaky: counted
+   * apart, never clean.
+   */
+  if (failedProbes.length || recoveredProbes.length || knownFlaky.length) {
+    // An outage is not a wrong answer either. Three timeouts open the Supabase circuit
+    // breaker for 30 s, and every probe in that window "fails" with "Circuit open": one
+    // slow moment turned into nine failures in a sweep on 2026-09-25. Wait the breaker
+    // out before re-checking, so only a corpus that STAYS unreachable is recorded as such.
+    if (outage) {
+      console.log("\nwaiting 35s for the corpus connection to recover before re-checking");
+      await new Promise((r) => setTimeout(r, 35_000));
+    }
+    // After the outage wait, so that wait cannot carry the re-check into the next rewrite.
+    await outsideRewrite();
+    for (const p of failedProbes) {
+      if ((await run(p)).issues.length) continue;
+      failures--;
+      flaky++;
+      drop(failing, p.kind);
+      flakyKinds.push(p.kind);
+      console.log(`\nflaky [${p.kind}] passed once brain-fast's rewrite was over`);
+    }
+    // The other direction: a known-red probe "recovers" when the rewrite briefly removes the
+    // record that outranks its answer. Seen 2026-09-25 on ga4-brand at 19:22 UTC, red 3 of 3
+    // outside the minute. It recovers only if it also passes outside a rewrite.
+    for (const p of recoveredProbes) {
+      if (!(await run(p)).issues.length) continue;
+      failures--;
+      known++;
+      drop(failing, p.kind);
+      console.log(`\nKNOWN [${p.kind}] passed only during brain-fast's rewrite; still red`);
+    }
+    // Same for a known-red probe that failed and then passed its retry: red outside the
+    // rewrite means it is known, not flaky.
+    for (const p of knownFlaky) {
+      if (!(await run(p)).issues.length) continue;
+      flaky--;
+      known++;
+      drop(flakyKinds, p.kind);
+      console.log(
+        `\nKNOWN [${p.kind}] passed its retry only during brain-fast's rewrite; still red`
+      );
+    }
+  }
+
   console.log(
-    `\n=== retrieval: ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`
+    `\n=== retrieval: ${probes.length - failures - flaky - known}/${probes.length} clean, ` +
+      `${failures} REGRESSION${failures === 1 ? "" : "S"}` +
+      `${known ? `, ${known} known (red on purpose, listed in KNOWN_RED)` : ""}` +
+      `${flaky ? `, ${flaky} FLAKY (passed only on retry — not counted clean)` : ""} ===`
   );
-  return failures;
+  return {
+    total: probes.length,
+    clean: probes.length - failures - flaky - known,
+    failing,
+    flaky: flakyKinds,
+    known,
+  };
+}
+
+/** Remove one entry, and nothing else when it is not there (splice(-1) would take the last). */
+function drop(list: string[], item: string): void {
+  const i = list.indexOf(item);
+  if (i >= 0) list.splice(i, 1);
+}
+
+/** Resolves once no brain-fast rewrite is under way: 90 s after one starts, and not in the 30 s before the next. */
+async function outsideRewrite(): Promise<void> {
+  const sinceStart = (((Date.now() / 1000 - 7 * 60) % 900) + 900) % 900;
+  if (sinceStart >= 90 && sinceStart <= 870) return;
+  const wait = sinceStart < 90 ? 90 - sinceStart : 990 - sinceStart;
+  console.log(`\nwaiting ${Math.ceil(wait)}s for brain-fast's rewrite before re-checking failures`);
+  await new Promise((r) => setTimeout(r, wait * 1000));
 }
 
 /** Strip thousands separators so `1,110.85` matches an expected `1110.85`. The
@@ -2233,7 +2824,56 @@ const both =
   (t: string) =>
     cs.flatMap((c) => c(t));
 
-function mcpProbes(): McpProbe[] {
+/**
+ * A service with no credential set, or null when every one of them has one.
+ *
+ * Read from the same map the route reads, so it cannot drift from what is actually
+ * configured — and it guarantees the probe below never reaches a real API, because the
+ * handler refuses an unconfigured service before it makes any call.
+ */
+async function firstUnconfiguredService(): Promise<string | null> {
+  // Imported here, not at the top: every other use of the route module in this script is
+  // a lazy import, so the module initialises after the env file has been read.
+  const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+  for (const [name, svc] of Object.entries(
+    EXTERNAL_SERVICES as Record<string, { envKeys: string[] }>
+  )) {
+    if (!svc.envKeys.some((k) => process.env[k])) return name;
+  }
+  return null;
+}
+
+async function unconfiguredServiceProbe(): Promise<McpProbe[]> {
+  // Which services lack a key is known to the process that answers. Live, that is the
+  // server, and a key missing HERE says nothing about it.
+  if (process.argv.includes("--live")) {
+    console.log(
+      "note  [mcp-external-unconfigured] omitted with --live: which services lack keys is " +
+        "known only to the server. Not a pass."
+    );
+    return [];
+  }
+  const service = await firstUnconfiguredService();
+  if (!service) {
+    console.log(
+      "note  [mcp-external-unconfigured] omitted: every external service has a credential " +
+        "set, so there is no unconfigured path to exercise. Not a pass."
+    );
+    return [];
+  }
+  return [
+    {
+      kind: "mcp-external-unconfigured",
+      tool: "query_external_service",
+      // A path that cannot exist anywhere, so that if the refusal ever regresses into a
+      // real request, it fails loudly rather than fetching something.
+      args: { service, path: "/__battery_probe_no_such_path" },
+      check: contains("not configured", "not an empty result"),
+    },
+  ];
+}
+
+async function mcpProbes(): Promise<McpProbe[]> {
   /**
    * FIFTEEN OF THE SEVENTEEN TOOLS ARE DRIVEN HERE, AND THE TWO THAT ARE NOT ARE
    * DELIBERATE.
@@ -2423,12 +3063,18 @@ function mcpProbes(): McpProbe[] {
     },
     // An unconfigured service must not read as an empty result. This is the
     // difference between "we have no Stripe data" and "nobody set the key".
-    {
-      kind: "mcp-external-unconfigured",
-      tool: "query_external_service",
-      args: { service: "clarity", path: "/project-live-insights" },
-      check: contains("not configured", "not an empty result"),
-    },
+    //
+    // THE SERVICE IS CHOSEN AT RUNTIME, and it used to be hardcoded to `clarity`. When
+    // CLARITY_API_TOKEN was finally set, this probe did two bad things at once: it failed,
+    // because a configured service correctly does NOT say "not configured" -- and it made
+    // a REAL CALL to Clarity's export API, which allows ten requests per project per day.
+    // Every battery run would have quietly spent one of the ten, including the one the
+    // daily ingest needs. A probe about the unconfigured path must never reach a vendor.
+    //
+    // Omitted entirely rather than failing when every service happens to be configured:
+    // there is then nothing to test, which is not the same as a defect. `mcpProbes`
+    // reports the omission so it cannot pass as coverage it did not have.
+    ...(await unconfiguredServiceProbe()),
     {
       kind: "mcp-external-unknown",
       tool: "query_external_service",
@@ -2778,6 +3424,41 @@ function mcpProbes(): McpProbe[] {
       args: {},
       check: contains("survey_submission"),
     },
+    // user_totals' measures (2026-09-29). Each read is live survey data, so the checks
+    // are the shape and the refusals, never a figure that changes by the day.
+    {
+      kind: "mcp-user-totals-traits",
+      tool: "user_totals",
+      args: { measure: "traits", group_by: ["archetype"] },
+      check: both(contains("Trait profile", "against everyone's average"), absent("@")),
+    },
+    {
+      kind: "mcp-user-totals-answers",
+      tool: "user_totals",
+      args: { measure: "answers", question: "03011" },
+      check: contains("Answers to 03011", "never read or shown"),
+    },
+    // Stored as text: must say so, never "fewer than 5 answered".
+    {
+      kind: "mcp-user-totals-text-question",
+      tool: "user_totals",
+      args: { measure: "answers", question: "15001" },
+      check: both(contains("stored as written text", "group by country"), absent("Fewer than 5")),
+    },
+    // An email address is a free-text answer: it must be refused, never counted.
+    {
+      kind: "mcp-user-totals-refuses-free-text",
+      tool: "user_totals",
+      args: { measure: "answers", question: "00000" },
+      check: both(contains("written answers are never read"), absent("@")),
+    },
+    {
+      kind: "mcp-user-totals-emails",
+      tool: "user_totals",
+      // From 1 Sep: Resend's record starts on the 14th, and the answer must say so.
+      args: { measure: "emails", since: "2026-09-01" },
+      check: both(contains("report reminders recorded", "its record starts on"), absent("@")),
+    },
     // THE SECURITY GUARD. `query_product_data` reads production tables directly, so
     // a column holding an email or a report token must come back masked. A regression
     // here leaks customer data into a chat transcript.
@@ -2789,6 +3470,41 @@ function mcpProbes(): McpProbe[] {
       tool: "post_to_slack",
       args: { channel: "__no_such_channel__", text: "this must never post" },
       check: contains("no channel called", "prod-alerts"),
+    },
+    /**
+     * THE TWO WRITE TOOLS THAT HAD NO LIVE PROBE AT ALL.
+     *
+     * Measured 2026-09-21 by listing the deployed tools and grepping this file:
+     * `record_decision` and `write_to_google_doc` were the only two of seventeen with
+     * no mention here. Both have unit tests, which prove the handler; neither had
+     * anything proving the handler is still REACHABLE on the deployed endpoint, which
+     * is the whole reason this battery exists.
+     *
+     * Refusal paths only, like the three above — a refusal writes nothing. For
+     * `record_decision` that matters more than for most: its `actor` is self-declared,
+     * and a forged decision reappears under this server's most assertive header on
+     * every future search.
+     */
+    {
+      kind: "mcp-decision-needs-an-actor",
+      tool: "record_decision",
+      args: { decision: "This decision must never be recorded by the battery." },
+      check: contains("who decided it"),
+    },
+    {
+      kind: "mcp-decision-refuses-a-fragment",
+      // Too short to be a decision. The refusal is what stops the corpus filling with
+      // one-word records that outrank real ones on the strength of the source alone.
+      tool: "record_decision",
+      args: { decision: "ok", actor: "Battery Probe" },
+      check: absent("recorded"),
+    },
+    {
+      kind: "mcp-google-doc-needs-a-target",
+      // Neither a title to create nor a document to append to: nothing to write.
+      tool: "write_to_google_doc",
+      args: { content: "This must never reach a document." },
+      check: absent("https://docs.google.com"),
     },
     {
       kind: "mcp-notion-unknown-parent",
@@ -2836,7 +3552,8 @@ function mcpProbes(): McpProbe[] {
  * the real corpus and fails when it has.
  */
 async function checkArrayMetaKeysAreHandled(): Promise<string[]> {
-  const { ARRAY_META_KEYS } = await import("@features/brain/server/retrieve");
+  const { ARRAY_META_KEYS, UNFILTERABLE_META_KEYS } =
+    await import("@features/brain/server/retrieve");
   const { supabaseFetch } = await import("@features/admin/server/supabase");
   const sources = [
     "drive",
@@ -2862,13 +3579,16 @@ async function checkArrayMetaKeysAreHandled(): Promise<string[]> {
       }
     }
   }
-  return [...found.entries()]
-    .filter(([k]) => !ARRAY_META_KEYS.has(k))
-    .map(
-      ([k, src]) =>
-        `meta.${k} (on ${src}) is an array but is NOT in ARRAY_META_KEYS — a bare-string ` +
-        `filter on it returns nothing and reads as "no matches"`
-    );
+  return (
+    [...found.entries()]
+      // A key refused with a pointer is handled too: the caller is told, not given nothing.
+      .filter(([k]) => !ARRAY_META_KEYS.has(k) && !UNFILTERABLE_META_KEYS.has(k))
+      .map(
+        ([k, src]) =>
+          `meta.${k} (on ${src}) is an array but is NOT in ARRAY_META_KEYS — a bare-string ` +
+          `filter on it returns nothing and reads as "no matches"`
+      )
+  );
 }
 
 /**
@@ -2945,11 +3665,22 @@ async function checkTitleStopwordsAreCurrent(): Promise<string[]> {
     );
 }
 
-async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
+/**
+ * One MCP call: in this process, or with --live on loveiq.org itself. Live is what the team
+ * actually gets, with production's keys; a GitHub runner has no Figma, Google or Notion
+ * keys, so in-process there the tools that need them fail on the runner, not in the product,
+ * and the weekly report would count that as lost accuracy.
+ */
+async function mcpSend(request: Request): Promise<Response> {
+  if (process.argv.includes("--live")) return fetch(request);
   const { POST } = await import("@/app/api/mcp/route");
+  return POST(request);
+}
+
+async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
   const token = process.env.LOVEIQ_MCP_TOKEN;
   const call = async (tool: string, args: Record<string, unknown>) => {
-    const res = await POST(
+    const res = await mcpSend(
       new Request("https://www.loveiq.org/api/mcp", {
         method: "POST",
         headers: {
@@ -3109,31 +3840,39 @@ async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
   return issues;
 }
 
-async function runMcpBattery(only: string | null): Promise<number> {
-  const { POST } = await import("@/app/api/mcp/route");
+async function runMcpBattery(only: string | null): Promise<BatteryResult> {
   const token = process.env.LOVEIQ_MCP_TOKEN;
   if (!token) {
-    console.error(
+    throw new Error(
       "LOVEIQ_MCP_TOKEN is not set, so the MCP door cannot be opened. Nothing was tested."
     );
-    return 1;
   }
 
-  const all = mcpProbes();
+  const all = await mcpProbes();
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
   let failures = 0;
+  const failing: string[] = [];
+  let checks = 0;
 
   // Not a tool call, so it sits outside the probe list — but it guards the same door.
   if (!only || "mcp-array-keys-all-handled".includes(only)) {
     const drift = await checkArrayMetaKeysAreHandled();
-    if (drift.length) failures += 1;
+    checks++;
+    if (drift.length) {
+      failures += 1;
+      failing.push("mcp-array-keys-all-handled");
+    }
     console.log(`\n${drift.length ? "FAIL" : "ok  "} [mcp-array-keys-all-handled] metadata shapes`);
     for (const d of drift) console.log(`      ISSUE: ${d}`);
   }
 
   if (!only || "mcp-title-stopwords-current".includes(only)) {
     const stale = await checkTitleStopwordsAreCurrent();
-    if (stale.length) failures += 1;
+    checks++;
+    if (stale.length) {
+      failures += 1;
+      failing.push("mcp-title-stopwords-current");
+    }
     console.log(
       `\n${stale.length ? "FAIL" : "ok  "} [mcp-title-stopwords-current] title word frequencies`
     );
@@ -3142,7 +3881,11 @@ async function runMcpBattery(only: string | null): Promise<number> {
 
   if (!only || "mcp-params-all-do-something".includes(only)) {
     const dead = await checkEveryDocumentedParamDoesSomething();
-    if (dead.length) failures += 1;
+    checks++;
+    if (dead.length) {
+      failures += 1;
+      failing.push("mcp-params-all-do-something");
+    }
     console.log(
       `\n${dead.length ? "FAIL" : "ok  "} [mcp-params-all-do-something] documented parameters`
     );
@@ -3154,7 +3897,7 @@ async function runMcpBattery(only: string | null): Promise<number> {
     let issues: string[] = [];
     let text = "";
     try {
-      const res = await POST(
+      const res = await mcpSend(
         new Request("https://www.loveiq.org/api/mcp", {
           method: "POST",
           headers: {
@@ -3187,17 +3930,58 @@ async function runMcpBattery(only: string | null): Promise<number> {
       issues = [`threw: ${err instanceof Error ? err.message : String(err)}`];
     }
     const ms = Date.now() - started;
-    if (issues.length) failures++;
+    if (issues.length) {
+      failures++;
+      failing.push(p.kind);
+    }
     console.log(
       `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${p.tool}  ${ms}ms  ${text.length} chars`
     );
     for (const i of issues) console.log(`      ISSUE: ${i}`);
   }
 
-  console.log(
-    `\n=== mcp: ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`
-  );
-  return failures;
+  const total = probes.length + checks;
+  console.log(`\n=== mcp: ${total - failures}/${total} clean, ${failures} flagged ===`);
+  return { total, clean: total - failures, failing, flaky: [], known: 0 };
+}
+
+/**
+ * `--record`: store the run as a cron_run row, read by the brain's weekly report
+ * (features/brain/server/self-report.ts). Status "success" means the battery RAN; what
+ * failed is in the summary. Lists are capped so the JSON always fits the 1,000-character
+ * column whole: a cut summary would not parse, and the report would lose the week.
+ */
+async function recordRun(
+  name: "brain-battery-retrieval" | "brain-battery-mcp",
+  startedAtMs: number,
+  outcome: BatteryResult | Error
+): Promise<boolean> {
+  const cap = (list: string[]) => list.slice(0, 10).map((k) => k.slice(0, 48));
+  const message =
+    outcome instanceof Error
+      ? outcome.message.slice(0, 1000)
+      : JSON.stringify({
+          total: outcome.total,
+          clean: outcome.clean,
+          failing: cap(outcome.failing),
+          flaky: cap(outcome.flaky),
+          known: outcome.known,
+        });
+  const res = await supabaseFetch("/rest/v1/cron_run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({
+      cron_name: name,
+      started_at: new Date(startedAtMs).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_ms: Date.now() - startedAtMs,
+      status: outcome instanceof Error ? "error" : "success",
+      error_message: message,
+    }),
+  }).catch(() => null);
+  const ok = Boolean(res?.ok);
+  console.log(ok ? `recorded as ${name}` : `COULD NOT RECORD ${name} in cron_run`);
+  return ok;
 }
 
 async function main(): Promise<void> {
@@ -3207,12 +3991,26 @@ async function main(): Promise<void> {
   // Retrieval mode measures the MCP door and needs no model, so it must be checked
   // BEFORE the LLM-key gate below — otherwise the mode that can always run would be
   // refused for a key it never uses.
-  if (process.argv.includes("--retrieval")) {
-    process.exit((await runRetrievalBattery(only)) ? 1 : 0);
+  // With --record the exit code says whether the run was recorded: what failed is a
+  // finding for the weekly report, not a failed job.
+  const record = process.argv.includes("--record");
+  if (record && only) {
+    console.error("--record stores a whole run, so it cannot be combined with --only.");
+    process.exit(2);
   }
-  // Same reason as --retrieval: no model, so it must be reachable without a key.
-  if (process.argv.includes("--mcp")) {
-    process.exit((await runMcpBattery(only)) ? 1 : 0);
+  for (const [flag, name, run] of [
+    ["--retrieval", "brain-battery-retrieval", runRetrievalBattery],
+    // Same reason as --retrieval: no model, so it must be reachable without a key.
+    ["--mcp", "brain-battery-mcp", runMcpBattery],
+  ] as const) {
+    if (!process.argv.includes(flag)) continue;
+    const started = Date.now();
+    const outcome = await run(only).catch((err: unknown) =>
+      err instanceof Error ? err : new Error(String(err))
+    );
+    if (outcome instanceof Error) console.error(outcome.message);
+    if (record) process.exit((await recordRun(name, started, outcome)) ? 0 : 1);
+    process.exit(outcome instanceof Error || outcome.failing.length ? 1 : 0);
   }
   // Without a model every probe reports `unconfigured`, which renders as 24 FAILs
   // and buries the one real cause. Say it once and stop.

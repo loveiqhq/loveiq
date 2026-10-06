@@ -23,7 +23,8 @@ import logger from "@shared/observability/logger";
  * Maximum age of the newest run before a cron counts as stalled, per cron name.
  * Roughly 2-3x the schedule, so one missed tick is tolerated and two are not.
  * Kept explicit rather than parsed from vercel.json, which is not readable at
- * runtime — a test asserts this map and vercel.json's cron list stay in step.
+ * runtime — a test asserts this map stays in step with vercel.json's cron list and the
+ * brain jobs .github/workflows/brain-daily.yml runs (they need the `claude` binary).
  */
 export const CRON_MAX_AGE_MS: Record<string, number> = {
   "survey-paused": 3 * 3_600_000,
@@ -32,8 +33,36 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "payment-fulfillment-sweep": 2 * 3_600_000,
   "security-storm-detector": 3_600_000,
   "anomaly-watcher": 3 * 3_600_000,
+  // Hourly: starts the GitHub jobs below on time. Three hours is two missed starts, and
+  // those jobs' own limits would follow within the hour.
+  "start-github-jobs": 3 * 3_600_000,
+  // Every 30 minutes, so 90 minutes of silence is two missed ticks — the same
+  // window the route itself looks back over.
+  "ux-review": 90 * 60_000,
   "conversion-digest": 26 * 3_600_000,
+  /**
+   * WEEKLY, so eight days of silence is one missed run. Re-enabled 2026-09-19
+   * after 2026-07-26's pause, and weekly rather than daily on purpose: the daily
+   * and weekly messages carry the same 30-day chart rail, and `conversion-digest`
+   * already posts a decision plus the per-experiment charts every morning.
+   *
+   * A generous window matters more here than elsewhere — a weekly cron that dies
+   * is invisible for a week by definition, which is exactly the failure this
+   * watch list exists to catch.
+   */
+  "funnel-digest": 8 * 24 * 3_600_000,
+  // Daily, twenty minutes after the conversion digest, so it checks the numbers that were
+  // just published. Silent on a normal day like the brief and the miner — a disagreement is
+  // the only thing it posts — so it is watched for exactly that reason: a dead reconciler
+  // and a set of numbers that agree look identical from the outside.
+  "brain-reconcile": 26 * 3_600_000,
   "brain-ingest": 26 * 3_600_000,
+  // Monthly, on the 3rd. The house rule is 2-3x the schedule, which would be 62
+  // days — deliberately tighter here at 40, because this one writes to the cost
+  // sheet. Two missed months of invoice filing is a quarter's worth of vendor
+  // changes nobody reconciled, and the sheet feeds runway. 40 days tolerates a
+  // late run and still catches a wholly missed month.
+  "file-invoices": 40 * 24 * 3_600_000,
   // Every 15 minutes, so 45m of silence is two missed ticks.
   "brain-fast": 45 * 60_000,
   // Hourly.
@@ -42,6 +71,8 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-calendar": 3 * 3_600_000,
   // Hourly, but with a 300s ceiling — a full Drive walk is minutes, not seconds.
   "brain-drive": 3 * 3_600_000,
+  // Every two hours, filing recorded calls into the Notion CRM. Five hours is two missed runs.
+  "brain-crm": 5 * 3_600_000,
   // Daily, and the ONLY job here whose normal output is silence -- it posts
   // nothing on a routine day. That makes it the easiest one to be dead without
   // anyone noticing, which is exactly why it is watched: it records a run every
@@ -49,9 +80,90 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-brief": 26 * 3_600_000,
   // Daily, and silent like the brief: it posts nothing to Slack at all, so a dead miner
   // looks exactly like a fortnight of quiet meetings. Watched for the same reason — it
-  // records a run every night whether or not it found a decision, and the thing it is
+  // records a run every day whether or not it found a decision, and the thing it is
   // building, the decision record, is the corpus's thinnest and most valuable material.
   "brain-mine": 26 * 3_600_000,
+  // Daily, and silent like the brief and the miner. Watched for an extra reason: its
+  // budget is TEN REQUESTS A DAY and it spends one, so a run that starts failing is not
+  // self-healing noise -- it is the only automatic read of the one tool that measures
+  // frustration, and the dashboard keeps looking fine while the corpus goes stale.
+  "brain-clarity": 26 * 3_600_000,
+  // Daily, and silent like the brief: it posts only when Europe PMC is unreachable. A dead
+  // run looks exactly like a quiet one, and the corpus it feeds goes stale invisibly —
+  // research cards do not announce their own age.
+  "brain-evidence": 26 * 3_600_000,
+  // Daily, straight after brain-evidence, and silent the same way: it posts only when Europe
+  // PMC is unreachable or the run crashes, so a missing day is the only sign it stopped.
+  "brain-papers": 26 * 3_600_000,
+  // Nightly, in GitHub Actions. It records a run whether or not anything was queued, so a
+  // missing night means the job did not fire, and questions are waiting on it.
+  "brain-night-shift": 26 * 3_600_000,
+  // Daily, straight after the miner in the same GitHub job: decisions that may not both
+  // stand. It records a run whether or not anything changed, so a missing day shows.
+  "brain-radar": 26 * 3_600_000,
+  // WEEKLY, Mondays in GitHub Actions: the two test batteries record their results, then
+  // the brain's report on itself is written. Eight days is one missed Monday, and a missed
+  // Monday means a week with no accuracy measurement at all.
+  "brain-health": 8 * 24 * 3_600_000,
+  "brain-battery-retrieval": 8 * 24 * 3_600_000,
+  "brain-battery-mcp": 8 * 24 * 3_600_000,
+  /**
+   * GitHub jobs that Vercel's clock starts (features/cron/server/github-jobs.ts). Both
+   * record the runs the clock started (scripts/record-cron-run.mjs), so a hand-started
+   * run cannot hide a stopped clock. Tight again because the starts are on time: under
+   * GitHub's own schedule the verifier's gaps reached 7.9h (49 gaps, 2026-09-14 to
+   * 09-25) and these were 9h and 32h. The verifier starts hourly, so three hours is two
+   * missed runs; the audit at 08:41 and 10:41, so a day and two hours is both missed.
+   */
+  "ux-review-verify": 3 * 3_600_000,
+  "ux-digest-audit": 26 * 3_600_000,
+  // The UX checker's proof walks (persona-walkers.yml `proof`), nightly at 02:41: a day and
+  // two hours is one night missed. Quiet, the proofs stop growing and nothing else says so.
+  "ux-proof-walks": 26 * 3_600_000,
+  /**
+   * EVERY FIVE MINUTES ON A LAPTOP, not a server (LAPTOP_JOBS below), so it pauses whenever the Mac is
+   * closed, and only a successful run counts. Three days because a closed laptop only
+   * delays WhatsApp: the servers hold undelivered messages, and keep a linked Mac linked,
+   * for 30 days. Three days is long enough not to page over a weekend away, and leaves
+   * four weeks before anything is lost.
+   */
+  "brain-whatsapp": 3 * 24 * 3_600_000,
+};
+
+/**
+ * Watched jobs that run on a laptop: the script that records the run, and what to do when
+ * one goes quiet. A laptop job is judged on its SUCCESSFUL runs, because the ways it fails
+ * while running (WhatsApp Desktop closed or unlinked) are exactly the ones that matter.
+ * A test checks each script records under its name.
+ */
+export const LAPTOP_JOBS: Record<string, { script: string; remedy: string }> = {
+  "brain-whatsapp": {
+    script: "scripts/whatsapp-sync.ts",
+    remedy:
+      "It runs every five minutes on Eman's Mac (launchd org.loveiq.whatsapp-sync) and reads WhatsApp " +
+      "Desktop there: open the Mac and WhatsApp Desktop, and check the phone still lists it " +
+      "under Linked devices. Nothing is lost until a message is 30 days old.",
+  },
+};
+
+/**
+ * Watched jobs that run in GitHub Actions, and their workflow. Vercel's clock starts every
+ * one (CLOCK_WORKFLOWS), so when one goes quiet the clock or its token is the likeliest
+ * cause, and the remedy is to start it by hand; the alert says where. A test keeps this in
+ * step with the workflows, and fails if one is left on GitHub's own schedule.
+ */
+export const GITHUB_WORKFLOW: Record<string, string> = {
+  "brain-brief": "brain-daily.yml",
+  "brain-mine": "brain-daily.yml",
+  "brain-night-shift": "brain-daily.yml",
+  "brain-radar": "brain-daily.yml",
+  // All three run in brain-daily.yml's `brain-health` job; start that one.
+  "brain-health": "brain-daily.yml",
+  "brain-battery-retrieval": "brain-daily.yml",
+  "brain-battery-mcp": "brain-daily.yml",
+  "ux-review-verify": "ux-review-verify.yml",
+  "ux-digest-audit": "ux-digest-audit.yml",
+  "ux-proof-walks": "persona-walkers.yml",
 };
 
 /**
@@ -80,6 +192,7 @@ export interface StalledCron {
 async function newestRun(cron: string): Promise<string | null | undefined> {
   const res = await supabaseFetch(
     `/rest/v1/cron_run?cron_name=eq.${encodeURIComponent(cron)}&select=started_at` +
+      (cron in LAPTOP_JOBS ? "&status=eq.success" : "") +
       `&order=started_at.desc&limit=1`
   );
   // undefined = could not tell. Distinct from null = genuinely never ran, because
@@ -114,15 +227,31 @@ export async function findStalledCrons(nowMs: number = Date.now()): Promise<Stal
 
 export function describeStall(s: StalledCron): string {
   const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)}h`;
+  const laptop = LAPTOP_JOBS[s.cron];
+  if (laptop) {
+    return (
+      (s.lastRunAt === null
+        ? `*${s.cron}* has never recorded a successful run. `
+        : `*${s.cron}* last succeeded ${hours(s.ageMs ?? 0)} ago (limit ${hours(s.maxAgeMs)}). `) +
+      laptop.remedy
+    );
+  }
+  const workflow = GITHUB_WORKFLOW[s.cron];
+  const github = workflow
+    ? `Vercel's clock starts it in GitHub Actions (${workflow}, via start-github-jobs): ` +
+      `check that cron's last run and its GITHUB_DISPATCH_TOKEN, or start it by hand ` +
+      `from the Actions tab.`
+    : null;
   if (s.lastRunAt === null) {
     return (
       `*${s.cron}* has NEVER recorded a run. If it was deployed within the last ` +
       `${hours(s.maxAgeMs)} this is expected and will clear on its own; otherwise it is ` +
-      `scheduled but never being invoked.`
+      `scheduled but never being invoked.` +
+      (github ? ` ${github}` : "")
     );
   }
   return (
     `*${s.cron}* last ran ${hours(s.ageMs ?? 0)} ago (limit ${hours(s.maxAgeMs)}). ` +
-    `It is scheduled but not firing, or dying before it can record the run.`
+    (github ?? `It is scheduled but not firing, or dying before it can record the run.`)
   );
 }

@@ -33,6 +33,7 @@ const QUOTE = {
 } as never;
 
 const assign = vi.fn();
+const replace = vi.fn();
 let originalLocation: Location;
 
 beforeEach(() => {
@@ -40,7 +41,7 @@ beforeEach(() => {
   originalLocation = window.location;
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { ...originalLocation, assign },
+    value: { ...originalLocation, assign, replace },
   });
 });
 
@@ -48,8 +49,10 @@ afterEach(() => {
   Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
 });
 
-function respond(body: unknown, ok = true) {
-  globalThis.fetch = vi.fn().mockResolvedValue({ ok, json: async () => body } as Response);
+function respond(body: unknown, ok = true, status = ok ? 200 : 400) {
+  // `status` matters: only 4xx bodies are shown to the reader, so a mock that
+  // omitted it made every non-2xx look like a 4xx.
+  globalThis.fetch = vi.fn().mockResolvedValue({ ok, status, json: async () => body } as Response);
 }
 
 describe("startReportCheckout", () => {
@@ -146,8 +149,8 @@ describe("startReportCheckout", () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
-  it("surfaces the server's own error text on a non-2xx", async () => {
-    respond({ error: "Please try again later." }, false);
+  it("surfaces the server's own error text on a 4xx, which is written for the reader", async () => {
+    respond({ error: "Please try again later." }, false, 429);
 
     const result = await startReportCheckout({
       plan: "full_report",
@@ -157,6 +160,45 @@ describe("startReportCheckout", () => {
 
     expect(result).toEqual({ status: "error", message: "Please try again later." });
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("never shows the reader a 5xx body, which is an internal string", async () => {
+    // /api/stripe/checkout-session returns the literal "Unable to process
+    // request." on both of its catch-all paths. This function used to pass it
+    // straight into the handoff card; Mark logged a reader hitting it three
+    // times on a EUR 39.99 purchase (session 01a04d64, 2026-08-30). It is also
+    // criterion E1 of the review protocol.
+    respond({ error: "Unable to process request." }, false, 500);
+
+    const result = await startReportCheckout({
+      plan: "full_report",
+      quote: QUOTE,
+      token: "rpt_ABCDEFGHIJKLMNOPQRST",
+    });
+
+    expect(result).toEqual({
+      status: "error",
+      message: "We couldn't prepare secure checkout right now. Please try again.",
+    });
+    expect(JSON.stringify(result)).not.toContain("Unable to process request");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("falls back safely when the response carries no status at all", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, json: async () => ({ error: "raw" }) } as Response);
+
+    const result = await startReportCheckout({
+      plan: "full_report",
+      quote: QUOTE,
+      token: "rpt_ABCDEFGHIJKLMNOPQRST",
+    });
+
+    expect(result).toEqual({
+      status: "error",
+      message: "We couldn't prepare secure checkout right now. Please try again.",
+    });
   });
 
   it("errors rather than navigating when Stripe returns no url", async () => {
@@ -185,5 +227,43 @@ describe("startReportCheckout", () => {
 
     expect(result?.status).toBe("error");
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The open pricing modal owns a duplicate same-URL history entry
+   * (useCloseOnBack). Stripe must REPLACE it: pushed on top, it left the
+   * duplicate behind, and after an abandoned checkout the reader needed an
+   * extra back press to leave the report, which is served no-store and so is
+   * reloaded onto that leftover entry.
+   */
+  it("replaces the pricing modal's own history entry instead of stacking on it", async () => {
+    respond({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_2" });
+    window.history.pushState({ __loveiqOverlay: "pricing" }, "");
+    try {
+      await startReportCheckout({
+        archetype: null,
+        plan: "full_report",
+        quote: QUOTE,
+        reportSessionId: null,
+        token: "rpt_x",
+      });
+    } finally {
+      window.history.replaceState(null, "");
+    }
+    expect(replace).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_2");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("pushes as it always has when no overlay owns the entry", async () => {
+    respond({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_3" });
+    await startReportCheckout({
+      archetype: null,
+      plan: "full_report",
+      quote: QUOTE,
+      reportSessionId: null,
+      token: "rpt_x",
+    });
+    expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_3");
+    expect(replace).not.toHaveBeenCalled();
   });
 });

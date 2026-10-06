@@ -1,0 +1,70 @@
+name: Cloud session setup still works
+
+# A Claude cloud session in the "loveiq probes" environment runs
+# scripts/cloud-probes-setup.sh (root, Ubuntu 24.04) before its first probe.
+# Nothing else would notice that script breaking until someone asked Claude to
+# run a probe. This runs it on a bare ubuntu:24.04 as root, then one probe on
+# each engine against the live site. It cannot reproduce the cloud's security
+# proxy, so the certificate step is proven in a real session instead; see
+# docs/runbooks/CLOUD_SESSIONS.md.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/cloud-*.sh"
+      - ".claude/settings.json"
+      - "package-lock.json"
+      - ".github/workflows/cloud-setup-smoke.yml"
+  schedule:
+    # Weekly: the Playwright download hosts and Ubuntu's packages move on their own.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    container: ubuntu:24.04
+    steps:
+      # A bare image lacks what the cloud VM ships with: git, certificates and
+      # the build tools npm needs for native modules.
+      - name: What the cloud VM has and a bare image does not
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git xz-utils build-essential python3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: The session hook tells Claude how to get ready
+        env:
+          CLAUDE_CODE_REMOTE: "true"
+        run: bash scripts/cloud-session-start.sh | grep -q "cloud-probes-setup.sh"
+
+      - name: The probe setup, as a cloud session runs it
+        env:
+          CLAUDE_CODE_REMOTE: "true"
+        run: |
+          out=$(timeout 600 bash scripts/cloud-probes-setup.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+          echo "$out" | tail -8
+          case "$out" in
+            *"cloud-probes-setup: ready"*) ;;
+            *) echo "::error::the setup did not end ready"; exit 1 ;;
+          esac
+
+      # 0 is clean and 1 is a finding: both mean the browsers ran. 3 means the
+      # probe could not measure, which is the failure this job exists to catch.
+      - name: A probe runs on Chromium and WebKit
+        run: |
+          set +e
+          npx tsx scripts/probes/verify-consent-banner-clearance.mjs
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            echo "::error::the probe could not measure in the cloud setup (exit $code)"
+            exit 1
+          fi

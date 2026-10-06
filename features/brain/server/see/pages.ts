@@ -53,8 +53,9 @@ export function listPageShots(): string {
     `A page not on this list has no screenshot, which is a gap in what was captured and ` +
     `not a page that looks like nothing.\n\n` +
     PAGE_SHOTS.map((s) => `  ${s.name.padEnd(26)} ${s.width}x${s.height}  ${s.what}`).join("\n") +
-    `\n\nThe two landing entries are the two arms of a live A/B and are different pages, ` +
-    `not two shots of one. Name the arm in any critique of "the landing page".`
+    `\n\nThe two landing entries are different pages, not two shots of one: \`landing-white\` ` +
+    `is what every visitor gets, and \`landing-white-prev\` is the design retired on ` +
+    `2026-09-19 when the A/B ended. Critique the live one unless asked to compare.`
   );
 }
 

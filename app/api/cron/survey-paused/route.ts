@@ -10,7 +10,7 @@
  *     — skip anything newer to give users time to return on their own
  *   - Must have email captured (answers["00000"])
  *   - Must have no matching survey_submission by session_id
- *   - Deduped per session via checkCooldown (30-day cooldown)
+ *   - Deduped per session AND per email address via checkCooldown (30-day cooldown)
  */
 
 import { timingSafeEqual } from "crypto";
@@ -25,7 +25,7 @@ import { surveyPausedEmail } from "@features/survey/server/emails/survey-paused"
 import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
-import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
@@ -178,8 +178,14 @@ export async function GET(request: Request) {
         continue;
       }
 
+      // Per draft AND per address. The draft key stops the hourly run re-sending
+      // one draft; the address key stops two drafts from one person (two tabs, a
+      // restart) each getting the same email, seconds apart in one run.
       const cooldown = await checkCooldown(row.session_id, "survey-paused-email", COOLDOWN_MS);
-      if (!cooldown.allowed) {
+      const perAddress = cooldown.allowed
+        ? await checkCooldown(email, "survey-paused-address", COOLDOWN_MS)
+        : cooldown;
+      if (!perAddress.allowed) {
         summary.skippedCooldown++;
         continue;
       }
@@ -189,7 +195,8 @@ export async function GET(request: Request) {
         ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.surveyPaused)
         : undefined;
 
-      const variant = pickEmailVariant(email, "survey-paused");
+      const experiment = "survey-paused";
+      const variant = pickEmailVariant(email, experiment);
       const tpl =
         variant === "b"
           ? surveyPausedBEmail({ firstName, resumeUrl, siteUrl, unsubscribeUrl })
@@ -204,6 +211,8 @@ export async function GET(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            // Echoed back on every Resend webhook, which is how the A/B result is read.
+            tags: emailExperimentTags(experiment, variant),
             headers: {
               "X-LoveIQ-Variant": variant,
               // P-06: dedicated list identity for per-list reputation in

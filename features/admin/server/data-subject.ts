@@ -13,7 +13,7 @@
  *   - email_suppression        (by email)
  *   - booking_event            (by invitee email + by submission id) [Audit H2]
  *   - app_user                 (by email; the identity root)
- *     - survey_submission      (via app_user_id)
+ *     - survey_submission      (via user_id)
  *       - survey_submission_answer + history + options
  *       - survey_behavior_event (by submission session_id) [Audit M3]
  *       - scoring_result
@@ -33,6 +33,7 @@
  */
 
 import { createHash } from "crypto";
+import { Resend } from "resend";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
@@ -173,7 +174,7 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   const userIdsFilter = inFilter(userIds)!;
 
   const submissions = await fetchRows<SubmissionRow>(
-    `/rest/v1/survey_submission?app_user_id=${userIdsFilter}&select=*`,
+    `/rest/v1/survey_submission?user_id=${userIdsFilter}&select=*`,
     "sub"
   );
   result.exportData!.survey_submission = submissions;
@@ -250,6 +251,32 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   return result;
 }
 
+/**
+ * The Resend marketing list holds the email and first name too, so erasure has
+ * to delete the contact there. Unsubscribing (R-05) only flags it. Tried
+ * whether or not a list is configured: a contact outlives a config change.
+ * not_found means they were never a contact.
+ */
+async function deleteResendContact(emailNorm: string, result: DsrResult): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+  const manual = "delete the contact by hand in the Resend dashboard";
+  try {
+    // The SDK returns API errors instead of throwing.
+    const { error } = await new Resend(apiKey).contacts.remove({ email: emailNorm });
+    if (error && error.name !== "not_found") {
+      logger.warn(
+        { name: error.name, statusCode: error.statusCode },
+        "DSR: Resend contact delete failed"
+      );
+      result.warnings.push(`Resend contact not deleted (${error.message}): ${manual}`);
+    }
+  } catch (err) {
+    logger.warn({ err }, "DSR: Resend contact delete threw");
+    result.warnings.push(`Resend contact not deleted (request failed): ${manual}`);
+  }
+}
+
 export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
   const result: DsrResult = { ok: true, rowsAffected: {}, warnings: [] };
   const enc = encodeURIComponent;
@@ -274,6 +301,7 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
     "wl",
     result
   );
+  await deleteResendContact(emailNorm, result);
   // booking_event stores the Calendly invitee email (plain column) + name/email
   // inside the `raw` jsonb. Its survey_submission_id/personal_report_id FKs are
   // ON DELETE SET NULL, so the cascade below would orphan — not erase — this PII.
@@ -318,7 +346,7 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
   // No payments path falls through to delete app_user; payments path
   // pseudonymizes it below.
   const submissions = await fetchRows<SubmissionRow>(
-    `/rest/v1/survey_submission?app_user_id=${userIdsFilter}&select=id,session_id`,
+    `/rest/v1/survey_submission?user_id=${userIdsFilter}&select=id,session_id`,
     "sub-lookup"
   );
   const subIds = submissions.map((s) => s.id);

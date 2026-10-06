@@ -140,7 +140,16 @@ interface AdDay {
   campaigns: Map<string, number>;
 }
 
-interface Ga4Row {
+/**
+ * Set by runGa4Report and queryGsc when they stop before the last page: the time budget,
+ * the paging budget or the page ceiling. They return the rows they have rather than throw,
+ * so a caller that sweeps must ask, or it deletes whatever the missing pages would have kept.
+ */
+export interface ReportOutcome {
+  truncated: boolean;
+}
+
+export interface Ga4Row {
   dimensionValues?: Array<{ value?: string }>;
   metricValues?: Array<{ value?: string }>;
 }
@@ -168,11 +177,12 @@ const PAGING_BUDGET_MS = 15_000;
  * with no warning, and that figure feeds `Net` and `Cost per paying customer`.
  * `rowCount` is the true total, so it is the loop's terminating condition.
  */
-async function runGa4Report(
+export async function runGa4Report(
   token: string,
   propertyId: string,
   body: Record<string, unknown>,
-  isOutOfTime: () => boolean = () => false
+  isOutOfTime: () => boolean = () => false,
+  outcome?: ReportOutcome
 ): Promise<Ga4Row[]> {
   const pageSize = typeof body.limit === "number" ? body.limit : 10_000;
   const all: Ga4Row[] = [];
@@ -215,6 +225,7 @@ async function runGa4Report(
         { got: all.length, dimensions: body.dimensions },
         "GA4 report stopped early on the time budget — figures derived from it are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -256,6 +267,7 @@ async function runGa4Report(
         { got: all.length, total, dimensions: body.dimensions },
         "GA4 report hit the paging time budget — figures derived from it are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -265,17 +277,18 @@ async function runGa4Report(
         { got: all.length, total, dimensions: body.dimensions },
         "GA4 report hit the page ceiling — figures derived from it are incomplete"
       );
+      if (outcome) outcome.truncated = true;
     }
   }
   return all;
 }
 
 /** `YYYYMMDD` (GA4's `date` dimension) to `YYYY-MM-DD`. */
-function ga4Date(raw: string): string {
+export function ga4Date(raw: string): string {
   return raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw;
 }
 
-function num(v: string | undefined): number {
+export function num(v: string | undefined): number {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
@@ -311,7 +324,7 @@ function periodIsComplete(
 }
 
 /** Monday of the ISO week containing `day`, and the Sunday that ends it. */
-function isoWeekBounds(day: string): { first: string; last: string } {
+export function isoWeekBounds(day: string): { first: string; last: string } {
   const d = new Date(`${day}T00:00:00Z`);
   const shift = (d.getUTCDay() + 6) % 7; // Monday = 0
   const mon = new Date(d.getTime() - shift * 86_400_000);
@@ -370,8 +383,31 @@ export async function ingestGa4(
    * (Search Console is the opposite and genuinely lags: its newest available day
    * on 2026-08-29 was 2026-08-26, so nothing there is gained by asking sooner.)
    */
-  const dateRanges = [{ startDate: `${fetchDays}daysAgo`, endDate: "today" }];
   const windowFrom = isoDaysAgo(fetchDays);
+  /**
+   * AN ABSOLUTE START DATE, because `NdaysAgo` is not resolved where we count.
+   *
+   * Everything above counts UTC days. GA4 resolves a relative date in the PROPERTY's
+   * timezone, which is ahead of UTC — so for the hours between the property rolling
+   * over and UTC doing the same, GA4's "today" is already tomorrow and `NdaysAgo` lands
+   * one day LATER than intended, cutting the first day off the month.
+   *
+   * Measured in production 2026-09-20: `daily:2026-09-01` was last written at 21:52 UTC
+   * and every later chunk at 22:37, because the 22:37 run's window began on the 2nd.
+   * `monthly:2026-09` then read 6,404 sessions while September's own daily chunks summed
+   * to 6,508 — exactly the 104 of 1 September. The same run had already created
+   * `daily:2026-09-21`, which GA4 only returns once ITS day has rolled over. Every
+   * COMPLETED month checked out, so this bites the current month, nightly.
+   *
+   * Widening the day count instead does not work: the snap to the 1st absorbs an extra
+   * day, and forcing one past it starts the window on the last day of the previous month
+   * — rebuilding that complete month from a single trailing day, which is the bug the
+   * widening exists to prevent. The ambiguity has to go, not be compensated for.
+   *
+   * `endDate` stays relative on purpose: "today" in the property's own timezone is
+   * exactly the intraday row we want, and it has no start-of-month to fall off.
+   */
+  const dateRanges = [{ startDate: windowFrom, endDate: "today" }];
 
   const core = await runGa4Report(
     token,
@@ -739,7 +775,7 @@ export async function ingestGa4(
   return { source: GA4_SOURCE, rows: written + touched, swept };
 }
 
-interface GscRow {
+export interface GscRow {
   keys?: string[];
   clicks?: number;
   impressions?: number;
@@ -758,11 +794,12 @@ interface GscRow {
  *
  * There is no `rowCount` here, so a short page is the terminating signal.
  */
-async function queryGsc(
+export async function queryGsc(
   token: string,
   site: string,
   body: Record<string, unknown>,
-  isOutOfTime: () => boolean = () => false
+  isOutOfTime: () => boolean = () => false,
+  outcome?: ReportOutcome
 ): Promise<GscRow[]> {
   const pageSize = typeof body.rowLimit === "number" ? body.rowLimit : 5000;
   const all: GscRow[] = [];
@@ -782,6 +819,7 @@ async function queryGsc(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query stopped early on the time budget — query totals are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -811,6 +849,7 @@ async function queryGsc(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query hit the paging time budget — query totals are incomplete"
       );
+      if (outcome) outcome.truncated = true;
       return all;
     }
 
@@ -819,6 +858,7 @@ async function queryGsc(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query hit the page ceiling — query totals are incomplete"
       );
+      if (outcome) outcome.truncated = true;
     }
   }
   return all;

@@ -91,6 +91,7 @@ import {
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
+import { useCloseOnBack } from "./hooks/useCloseOnBack";
 import { resolveReportSections, type DisplayReportSection } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import { v4InkStyle } from "./v3/v4ArchetypeColors";
@@ -374,12 +375,17 @@ function getErrorState(error: ReportRequestError | null): ReportStatusState {
         actionHref: "/report",
         actionLabel: "Reload report",
       };
+    case 400: // a malformed link (e.g. /report/[object Object]) is not an outage
     case 404:
       return {
-        title: "Report not found",
-        copy: "We could not find a saved report for this survey session. Complete the survey again to generate a fresh report.",
+        // Was "Complete the survey again to generate a fresh report", which asked
+        // for all 56 questions back. Everyone who finished was emailed a
+        // "View your report now" link (features/survey/server/emails/), so the
+        // email is the way back in — not the survey.
+        title: "Can't find your report",
+        copy: "We emailed your report link when you finished. Open that email to get back in.",
         actionHref: "/survey",
-        actionLabel: "Take the survey",
+        actionLabel: "Haven't taken the test yet?",
       };
     case 429:
       return {
@@ -701,7 +707,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     });
   }, [hasLockedPremiumCards, fullReportQuote, submissionId]);
   // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
-  // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report?invite=1
+  // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report/<token>?invite=1
   // — they would silently fail without this auto-open.
   const reportSearchParams = useSearchParams();
   const shouldAutoOpenInvite = viewMode === "owner" && reportSearchParams.get("invite") === "1";
@@ -806,7 +812,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   };
 
   useEffect(() => {
-    const ACTIVATION_LINE = 90;
+    /**
+     * Where a chapter becomes the current one, from the top of the window. Report 3.0
+     * lands a chapter 144px down, under its floating chrome (scroll-margin-top), so at
+     * 90 the first scroll after a nav jump lit the chapter before it again, and on a
+     * desktop a heading sitting 150-200px down still showed the previous chapter, by
+     * then off screen. A quarter of the window, never above 200px, keeps it the chapter
+     * being read. V1 and 2.0 keep their 90.
+     */
+    const activationLine = () => (isV4 ? Math.max(200, window.innerHeight * 0.25) : 90);
 
     // Spy on the NAV's ids, not the section list from `data/report-general.ts`.
     // That list has no row for the Report 2.0 anchors the nav lists (`snapshot`,
@@ -840,7 +854,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       // close, the fonts land — and tops measured at mount ran the highlight ahead of
       // the reader (27.09: at Attachment it lit Love Language). Once a frame at most.
       const sectionTops = buildSectionTops();
-      const threshold = window.scrollY + ACTIVATION_LINE;
+      const threshold = window.scrollY + activationLine();
       let activeId = sectionTops[0]?.id ?? navIds[0] ?? "core_archetype";
       for (const section of sectionTops) {
         if (section.top <= threshold) {
@@ -872,7 +886,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // `navIds` is one of two module constants; `resolvedSections` only matters
     // because the sections have to be in the DOM before the first update measures them.
     // `activeSection` never changes: it is created once.
-  }, [resolvedSections, activeSection, navIds]);
+  }, [resolvedSections, activeSection, navIds, isV4]);
 
   const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
 
@@ -2541,7 +2555,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const v3Param = searchParams.get("v3");
 
   /**
-   * `?v4=1` — Report 3.0, the build due this week.
+   * Report 3.0 (V4), the report every reader gets since it launched (LoveIQ sync,
+   * 2026-10-05: "push the new report live to production"). Asking for an older one by
+   * name still opens it: `?v2=1` Report 2.0, `?v3=1` its V3 chrome, and `?v4=0` the
+   * pre-2.0 report (V1) that was the default until then.
    *
    * It is a COPY OF V2, not a new report. Aligned at the sync of 2026-09-23:
    * "the new report staging version will be built by duplicating the V2 report
@@ -2557,7 +2574,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
    * core_archetype, the_importance_of_sexuality and curiosity_level.
    */
   const v4Param = searchParams.get("v4");
-  const isV4 = v4Param === "1" || v4Param === "true";
+  const asksForOlderReport =
+    v4Param === "0" ||
+    v4Param === "false" ||
+    searchParams.get("v2") === "1" ||
+    v3Param === "1" ||
+    v3Param === "true";
+  const isV4 = v4Param === "1" || v4Param === "true" || !asksForOlderReport;
 
   // Review 24.09: the status bar was dark on an iPhone. Safari 15-18 tints it from
   // `theme-color`, and with none it keeps the site's dark shell (#0b0613), which is
@@ -2572,9 +2595,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const isV3 = isV4 || v3Param === "1" || v3Param === "true";
 
   /**
-   * Which report the reader gets. V1 — the pre-2.0 report — is the DEFAULT for
-   * everyone (WhatsApp 2026-09-12, Mark: "Revert back fully please"), and stays
-   * so until Report 3.0 ships. `?v2=1` reaches Report 2.0.
+   * Which report the reader gets. V4 above is the default; V1, the pre-2.0 report, was
+   * the default from WhatsApp 2026-09-12 (Mark: "Revert back fully please") until
+   * Report 3.0 shipped, and `?v4=0` still opens it. `?v2=1` reaches Report 2.0.
    *
    * `?v3=1` implies it too: V3 is not a separate experience, it is the 2.0
    * `ReportExperience` rendering V3 chrome, so selecting V1 underneath it would
@@ -2638,9 +2661,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works
   // cross-device); sessionId is the legacy in-storage one.
+  // A recipient's rating is not the owner's, and a share token identifies no reader of
+  // ours, so it is kept on screen and stored nowhere.
+  const isSharedView = data?.viewMode === "shared";
   const { feedbacks, submitted, rateSection, submitFeedback } = useSectionFeedback(
-    sessionId,
-    token
+    isSharedView ? null : sessionId,
+    isSharedView ? null : token
   );
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -2719,6 +2745,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const paywallReachedRef = useRef(false);
   const notifyPaywallReached = useCallback(() => {
     if (paywallReachedRef.current) return;
+    // A recipient reaching a lock is not the owner reaching the paywall (and the route
+    // takes only the owner's token).
+    if (isSharedView) return;
     if (!resolvedReportToken && !sessionId) return;
     paywallReachedRef.current = true;
     void fetch("/api/price", {
@@ -2730,14 +2759,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     }).catch(() => {
       // Best-effort: a missed ping costs one funnel step, never the reader's session.
     });
-  }, [resolvedReportToken, sessionId]);
+  }, [isSharedView, resolvedReportToken, sessionId]);
 
   const reportViewedFiredRef = useRef(false);
   useEffect(() => {
     if (reportViewedFiredRef.current) return;
     if (!data) return;
     reportViewedFiredRef.current = true;
-    setReportSubmissionContext(data.submissionId ?? null);
+    // Persisted events need a submission to count against. A recipient's visit is not the
+    // owner's, so it publishes none and theirs stay out of the owner's numbers.
+    setReportSubmissionContext(data.viewMode === "shared" ? null : (data.submissionId ?? null));
     trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
   }, [data, accessPlan]);
 
@@ -3176,6 +3207,26 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   };
 
   const closePricingModal = useCallback(() => {
+    /**
+     * Cancel the scroll teaser as well, or dismissing the modal does not stick.
+     *
+     * The teaser schedules a 1.6s timer and, when it fires, opens the modal if
+     * one is not already open. A reader who arrives with a ladder discount has
+     * the modal auto-opened on mount, scrolling then reaches the paywall and
+     * arms that timer underneath it, and closing the modal inside the window
+     * leaves the timer to throw it straight back — the reader dismisses it and
+     * it reappears a second and a half later.
+     *
+     * 05725c7f removed the forced paywall precisely so the modal is always
+     * dismissible; a pending timer quietly restored it for one case. Found via
+     * an intermittently failing test, which had been treated as a flake: it
+     * only failed when the run was slow enough for the timer to land inside the
+     * assertion, so the test was right and the diagnosis was wrong.
+     */
+    if (scrollTeaserTimerRef.current) {
+      clearTimeout(scrollTeaserTimerRef.current);
+      scrollTeaserTimerRef.current = null;
+    }
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
     setPricingVariant("default");
@@ -3184,6 +3235,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // Paid or not, every reader shares with up to two people (planAccess.ts).
   const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
+  // Back closes whichever of these is open instead of leaving the report — see
+  // useCloseOnBack for the readers it was losing.
+  useCloseOnBack(isPricingModalOpen, closePricingModal);
+  useCloseOnBack(isShareModalOpen, closeShareModal);
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
       // Scope the modal to the archetype the user is currently upgrading. If
@@ -3232,13 +3287,17 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         {v4ThemeColor}
         <div className="report-status-card report-card">
           <p className="report-overline">LoveIQ report</p>
-          <h1 className="report-status-card__title">No saved report session</h1>
+          {/* Was "Complete the survey again to generate a fresh report". Opening
+              the report on a second phone is the common way to land here, and
+              telling someone who already answered 56 questions to redo them is
+              both wrong and the "start the survey from scratch" complaint Mark
+              reported on 2026-08-30. The completion email carries their link. */}
+          <h1 className="report-status-card__title">Can&apos;t find your report</h1>
           <p className="report-status-card__copy">
-            We could not find a saved report session in this browser. Complete the survey again to
-            generate a fresh report.
+            We emailed your report link when you finished. Open that email to get back in.
           </p>
           <a href="/survey" className="report-button mt-3 inline-flex">
-            Take the survey
+            Haven&apos;t taken the test yet?
           </a>
         </div>
       </main>
@@ -3246,7 +3305,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   }
 
   if (status === "error" || !data) {
-    const statusState = getErrorState(error);
+    const notFound = error?.statusCode === 404 || error?.statusCode === 400;
+    // A shared link (rpts_) that is gone was withdrawn by its owner. The usual copy
+    // ("We emailed your report link when you finished") is about someone else's survey.
+    const statusState =
+      notFound && token?.startsWith("rpts_")
+        ? {
+            ...getErrorState(error),
+            title: "This shared report isn't available",
+            copy: "The person who shared it may have withdrawn the link. Ask them to send it again.",
+          }
+        : getErrorState(error);
+    // "Reload report" must reload THIS report. Bare /report only works in the browser
+    // that took the survey, so from an emailed link it could only say "Can't find
+    // your report".
+    const actionHref =
+      token && statusState.actionHref === "/report" ? `/report/${token}` : statusState.actionHref;
 
     return (
       <main className="report-status-screen">
@@ -3255,7 +3329,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           <p className="report-overline">LoveIQ report</p>
           <h1 className="report-status-card__title">{statusState.title}</h1>
           <p className="report-status-card__copy">{statusState.copy}</p>
-          <a href={statusState.actionHref} className="report-button mt-3 inline-flex">
+          <a href={actionHref} className="report-button mt-3 inline-flex">
             {statusState.actionLabel}
           </a>
         </div>
@@ -3452,7 +3526,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           accessPlan={data.accessPlan}
           archetypeTiers={data.archetypeTiers ?? {}}
           diagnostics={data.diagnostics ?? null}
-          submissionSeed={data.submissionId ?? token ?? null}
           submissionId={data.submissionId ?? null}
           feedbacks={feedbacks}
           isPricingModalOpen={isPricingModalOpen}

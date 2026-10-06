@@ -5,6 +5,7 @@ import type { SurveyQuestion } from "@/data/survey-data";
 import { isMultiline } from "@features/survey/questionFlags";
 import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
+import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 
 interface OpenResponseQuestionProps {
   question: SurveyQuestion;
@@ -37,8 +38,12 @@ const MAX_LENGTH = 500;
 // string answer may hold at the API (`surveyAnswersSchema`), so the box never lets someone
 // type an answer the server would then reject.
 const MULTILINE_MAX_LENGTH = 1000;
-// Qs that render without a character limit or counter (email + name).
+// Qs that render without a character counter (email + name).
 const UNLIMITED_QIDS = new Set(["00000", "00001"]);
+// The server keeps 80 characters of a name. Typing past that used to be refused at the
+// final submit, 56 questions later, on every Retry; now the box stops there.
+const NAME_QID = "00001";
+const NAME_MAX_LENGTH = 80;
 
 function getValidationError(
   value: string,
@@ -47,8 +52,7 @@ function getValidationError(
 ): string | null {
   if (!value) return null;
   if (inputType === "email") {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value))
+    if (!isValidSurveyEmail(value))
       return "Hmm, that doesn\u2019t look like a valid email. Make sure it follows the format: name@example.com";
   }
   if (limit !== null && value.length > limit) return `Maximum ${limit} characters allowed`;
@@ -91,8 +95,20 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
     isEmailField &&
     currentValue.trim().length > 0 &&
     confirmCurrent.trim().length > 0 &&
-    currentValue.trim().toLowerCase() !== confirmCurrent.trim().toLowerCase();
+    tidySurveyEmail(currentValue).toLowerCase() !== tidySurveyEmail(confirmCurrent).toLowerCase();
   const showConfirmError = (confirmTouched || forceValidation) && emailMismatch;
+  /**
+   * Next stays disabled until the confirm box matches, and a disabled button
+   * takes no tap, so with the confirm box EMPTY nothing ever said why Next did
+   * nothing: no error fires until the box holds something. Reproduced on iPhone
+   * and Android emulation, 2026-10-04: a valid email, Next greyed out, taps and
+   * the keyboard's Go both ignored, no message. So say it as soon as it is the
+   * one thing missing, and in red once they have tried to go on.
+   */
+  const confirmMissing = isValidSurveyEmail(currentValue) && confirmCurrent.trim().length === 0;
+  /** Red, and announced as an error, rather than a hint. */
+  const confirmInvalid = showConfirmError || (confirmMissing && !!forceValidation);
+  const confirmMessageId = `${question.qId}-confirm-message`;
 
   const white = useSurveyTheme() === "white";
   // White autofill: omit the dark autofill overpaint class (it forces white
@@ -150,7 +166,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             placeholder={question.placeholder || "Type your answer…"}
             autoComplete={question.inputType === "email" ? "email" : "off"}
             spellCheck={question.inputType === "email" ? false : undefined}
-            maxLength={limit ?? undefined}
+            maxLength={limit ?? (question.qId === NAME_QID ? NAME_MAX_LENGTH : undefined)}
             className={`${inputBase} ${
               error
                 ? "border-[#ef4444]"
@@ -200,6 +216,8 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             type="email"
             name={`${question.qId}-confirm`}
             aria-label="Confirm email address"
+            aria-describedby={showConfirmError || confirmMissing ? confirmMessageId : undefined}
+            aria-invalid={confirmInvalid || undefined}
             value={confirmCurrent}
             onChange={(e) => onConfirmChange?.(e.target.value)}
             onBlur={() => setConfirmTouched(true)}
@@ -207,7 +225,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             autoComplete="email"
             spellCheck={false}
             className={`${inputBase} ${
-              showConfirmError
+              confirmInvalid
                 ? "border-[#ef4444]"
                 : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
             }`}
@@ -217,7 +235,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
               ["--autofill-font-size-sm" as string]: "24px",
             }}
           />
-          <div className="flex items-center gap-1.5" aria-live="polite">
+          <div id={confirmMessageId} className="flex items-center gap-1.5" aria-live="polite">
             {showConfirmError && (
               <>
                 <span className="text-[#ef4444]">
@@ -227,6 +245,15 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
                   Emails don&rsquo;t match. Please re-enter.
                 </span>
               </>
+            )}
+            {confirmMissing && (
+              <span
+                className={`font-sans text-[13px] font-medium ${
+                  forceValidation ? "text-[#ef4444]" : white ? "text-black/55" : "text-white/55"
+                }`}
+              >
+                Type your email again to confirm it.
+              </span>
             )}
           </div>
         </div>

@@ -87,4 +87,69 @@ describe("ScaleQuestion", () => {
     expect(screen.getByText("Disagree")).toBeInTheDocument();
     expect(screen.getByText("Agree")).toBeInTheDocument();
   });
+
+  // Figma 11303:174 — the rings grow toward both ends and shrink to the middle.
+  it("sizes the rings largest at the ends and smallest in the middle", () => {
+    render(<ScaleQuestion question={QUESTION} value={null} onChange={vi.fn()} />);
+    const rings = [1, 2, 3, 4, 5, 6, 7].map((v) =>
+      screen.getByRole("button", { name: `${v} of 7` }).style.getPropertyValue("--ring")
+    );
+    expect(rings).toEqual(["46px", "38px", "31px", "27px", "31px", "38px", "46px"]);
+    // Phones use the landing page's scale (Figma 9200:32861), same shape.
+    const phone = [1, 2, 3, 4, 5, 6, 7].map((v) =>
+      screen.getByRole("button", { name: `${v} of 7` }).style.getPropertyValue("--ring-sm")
+    );
+    expect(phone).toEqual(["34px", "29px", "24px", "21px", "24px", "29px", "34px"]);
+  });
+
+  it("marks only the picked point as pressed", () => {
+    render(<ScaleQuestion question={QUESTION} value={5} onChange={vi.fn()} />);
+    for (let v = 1; v <= 7; v++) {
+      expect(screen.getByRole("button", { name: `${v} of 7` })).toHaveAttribute(
+        "aria-pressed",
+        String(v === 5)
+      );
+    }
+  });
+
+  it("colours the rings up to the picked point and leaves the rest grey", () => {
+    render(<ScaleQuestion question={QUESTION} value={5} onChange={vi.fn()} />);
+    const ring = (v: number) =>
+      screen.getByRole("button", { name: `${v} of 7` }).firstElementChild!.className;
+    for (const v of [1, 2, 3, 4, 5]) expect(ring(v)).toContain("border-[#6b5b95]");
+    for (const v of [6, 7]) expect(ring(v)).toContain("border-[rgba(22,16,33,0.16)]");
+    // Only the picked ring carries the halo.
+    expect(ring(5)).toContain("0_0_0_4px");
+    for (const v of [1, 2, 3, 4, 6, 7]) expect(ring(v)).not.toContain("0_0_0_4px");
+  });
+
+  it("shows the guide line under the title", () => {
+    const q = { ...QUESTION, supportAndGuidance: "Think about the last month." };
+    render(<ScaleQuestion question={q} value={null} onChange={vi.fn()} />);
+    expect(screen.getByText("Think about the last month.")).toBeInTheDocument();
+  });
+
+  it("shows the picked point's title and what it means", () => {
+    const q = {
+      ...QUESTION,
+      hoverStates: { 5: "Slightly true: More satisfying than not." } as Record<number, string>,
+    };
+    render(<ScaleQuestion question={q} value={5} onChange={vi.fn()} />);
+    expect(screen.getByText("Slightly true")).toBeInTheDocument();
+    expect(screen.getByText("More satisfying than not.")).toBeInTheDocument();
+  });
+
+  // Marcus, LoveIQ Sync 2026-10-05: the title was centred and what it means sat left-aligned.
+  it("centres what the picked point means, as it centres the title", () => {
+    const q = {
+      ...QUESTION,
+      hoverStates: { 3: "Slightly not true: Emotional connection matters somewhat." } as Record<
+        number,
+        string
+      >,
+    };
+    render(<ScaleQuestion question={q} value={3} onChange={vi.fn()} />);
+    expect(screen.getByText("Slightly not true")).toHaveClass("text-center");
+    expect(screen.getByText("Emotional connection matters somewhat.")).toHaveClass("text-center");
+  });
 });

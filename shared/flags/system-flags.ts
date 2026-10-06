@@ -27,7 +27,8 @@ export type SystemFlagKey =
   | "nurture_sequence"
   | "report_paywall_enforced"
   | "chapter_nudge"
-  | "pricing_uplift_enabled";
+  | "pricing_uplift_enabled"
+  | "ux_review_alerts";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

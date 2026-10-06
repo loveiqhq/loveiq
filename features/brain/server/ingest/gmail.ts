@@ -7,10 +7,13 @@ import {
   googleCredentialShape,
   GMAIL_SCOPE,
 } from "@shared/http/google-oauth";
+import { decodeEntities } from "@shared/format/html-escape";
 import logger from "@shared/observability/logger";
 import { loadPeople } from "@features/brain/server/people";
 import { splitBody } from "./notion";
 import {
+  isJobApplication,
+  isLegalInstrument,
   chunkPage,
   recordSweep,
   shouldSweep,
@@ -31,6 +34,22 @@ import {
  * ONE CHUNK PER THREAD, not per message — the same reasoning as Slack days. A reply
  * saying "yes, agreed, let's do the 39.99" is meaningless without the message above
  * it, and a thread is the unit somebody actually asks about.
+ *
+ * CUSTOMER MAIL IS IN, DELIBERATELY, AND THAT IS NOT A CONTRADICTION OF THE SLACK
+ * DENYLIST. Decided 2026-09-18, after an audit noticed the two look alike and asked.
+ *
+ * `#email-inbox` is denylisted in `slack.ts` because that channel was created to
+ * forward the company address into Slack and was restricted to three people ON
+ * PURPOSE — indexing it would have handed an undifferentiated corpus something its
+ * owner had deliberately fenced off. A shared mailbox the team already reads is not
+ * that: nobody fenced it, and the threads in it are where real answers live.
+ * Measured the same day: 69 chunks from `hello@`, 188 from `teamwork@`, including
+ * contract disputes and cancellations — which is exactly the material somebody asking
+ * "what do customers complain about" needs.
+ *
+ * So the boundary is the ACCESS RESTRICTION somebody set, not the word "customer".
+ * If a mailbox is ever locked down the way that channel was, it belongs on a denylist
+ * here, and this comment is the reason why.
  */
 
 const SOURCE = "gmail";
@@ -75,7 +94,20 @@ const MAX_TOLERATED_THREAD_FAILURES = 25;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
-export const GMAIL_BUILDER_VERSION = 6;
+// v7: v1-v6 read every message BODY and no attachment, so a proposal sent as a pdf
+// or a spec as a docx was invisible while the thread around it read as complete.
+// Without the bump this reaches only threads that happen to change: a thread is
+// refetched on a historyId move, and an old thread's history never moves again.
+// v8: attachments that are signed legal instruments are no longer read. Same reason
+// the bump was needed for v7 and in the other direction — an old thread's history
+// never moves, so without this the contract already indexed would stay indexed.
+// v9: message and attachment text is tidied before chunking — zero-width preheader
+// padding, non-breaking spaces, CRLF and runs of blank lines removed. Measured
+// 2026-09-23: 3,007 of 9,194 chunks were more than half whitespace and zero-width
+// characters, 36.5% of all Gmail text against ~15% for ordinary prose, so a chunk held
+// half its content and a search result spent its budget on blank space. A bump because
+// an unchanged thread is never re-read, so nothing already stored would be re-rendered.
+export const GMAIL_BUILDER_VERSION = 9;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -216,6 +248,142 @@ const EXCLUDE =
   "-in:spam -in:trash -in:chats -category:promotions -category:social -category:forums";
 
 /**
+ * RECRUITING MAIL, kept out at the LISTING (owner's decision, 2026-09-23).
+ *
+ * Applications, CVs, interview invitations and candidate follow-ups hold named
+ * applicants' personal data. Measured 2026-09-23: 85 such threads across the walked
+ * mailboxes, and every subject carrying "interview" was a hiring interview — none was
+ * press. At the listing rather than after the fetch because a thread refused after
+ * fetching is fetched again on every run; excluded here it costs nothing.
+ *
+ * The cost is deliberate and recorded: a future non-hiring subject with one of these
+ * words — a grant "application", say — would be excluded too. Words, not ids, because
+ * recruiting keeps happening. Generic vocabulary, so it can live in the public repo,
+ * unlike the environment-configured terms above.
+ */
+export const RECRUITING_SUBJECT_TERMS = [
+  "application",
+  "applications",
+  "apication", // sic — a real subject line, typo and all
+  "applicant",
+  "applicants",
+  "internship",
+  "interview",
+  "cv",
+  "candidate",
+  "bewerbung",
+  "design intern follow up",
+];
+/**
+ * CONTRACT TEXT ARRIVING AS MAIL. The legal-instrument rule keeps the shareholders'
+ * agreement and individual contracts out of Drive and out of attachments by name; the
+ * same text also arrives as email bodies — a clause-by-clause critique of the SHA draft,
+ * Docs comment notifications quoting it word for word, freelance contract and
+ * salary-and-contract emails setting out a named person's terms. Same documents, a
+ * fourth path. Measured 2026-09-23: these terms select exactly those threads plus the
+ * sharing notifications for the agreement, and no meeting notes: a meeting ABOUT a
+ * contract stays, as it does in Drive, because compensation discussion is inside the
+ * open-access decision and the instrument is not.
+ */
+export const CONTRACT_SUBJECT_TERMS = [
+  "sha",
+  "shareholders",
+  "gesellschaftervertrag",
+  "freelance contract",
+  "salary contract",
+];
+
+/** Every standing listing exclusion, as Gmail `-subject:` terms. */
+export function standingExclusionsQuery(): string {
+  return [...RECRUITING_SUBJECT_TERMS, ...CONTRACT_SUBJECT_TERMS]
+    .map((t) => (t.includes(" ") ? ` -subject:"${t}"` : ` -subject:${t}`))
+    .join("");
+}
+
+/**
+ * The backstop, for recruiting mail whose SUBJECT says nothing: five of the six
+ * "Follow-up :)" threads carry a candidate's application task in the body, and the sixth
+ * — an Academic Board letter — shares the subject exactly. Only the body separates them.
+ *
+ * Widened the same day, after the cleanup query found what the first version missed: two
+ * candidate follow-ups that name the task after the role ("Growth Lead Task") under "we
+ * are looking to fill a long-term position", and offer and contract emails that set out a
+ * named person's pay for a probation period. Measured across every indexed thread, the
+ * two added phrases select exactly six, all of them one of those.
+ *
+ * And again after asking the brain directly, the only test that counts: three
+ * applications still came back — a CV forwarded from hr@ under "MSc in Psychology –
+ * Research Opportunities", an application under "LinkedIn job - product position", and
+ * the emailed Gemini recap of a candidate call whose Drive copy was already refused. An
+ * applicant's own words ("attached my CV", "decided to apply") and the recap's
+ * "recruitment assessment" select exactly those four threads across all mail.
+ *
+ * No trailing word boundary: in a JavaScript regex without the u flag "é" is not a word
+ * character, so `résumé\b` can never match "résumé " and the clause would be dead.
+ */
+const RECRUITING_BODY =
+  /\b(application ta(sk|ks)|applicant task|candidate task|fill a (long-term |full-time |part-time )?(position|role)|probation(ary)? (time|period)|attached (is )?my (cv|resume|résumé)|my (cv|resume|résumé) (is )?attached|(see|find) (on|in) my (cv|resume|résumé)|decided to apply|recruitment assessment)/i;
+export function isRecruitingThread(subject: string, text: string): boolean {
+  return RECRUITING_BODY.test(subject) || RECRUITING_BODY.test(text);
+}
+
+/**
+ * A TRUSTPILOT REVIEW, titled as what it is.
+ *
+ * Every review notification arrives with the same subject — "You've got a new 5-star
+ * review" — and `brain_search` collapses Gmail rows that share a title, so three of the
+ * four reviews could never be returned by any search, including one that said
+ * "Trustpilot". The title now carries the stars, the date and the review's opening words,
+ * so each is its own document and matches how people ask. The reviewer's name stays in
+ * the body only.
+ *
+ * AND LABELLED, because findable is not the same as honest. On 2026-09-18 the team said
+ * in its WhatsApp group that the reviews so far came from friends. Reviews received up to
+ * that day are marked so, on the title that every search result shows, so a question
+ * about what customers think is not answered with friends' praise. Later reviews carry no
+ * such mark; whether they are customers is for whoever reads them to judge.
+ */
+const TRUSTPILOT_REVIEW =
+  /left a new (\d)-star review of [^:]{1,60}:\s*([\s\S]{1,600}?)\s*See this review/i;
+const FRIENDS_REVIEWS_UNTIL = "2026-09-18";
+export function trustpilotReviewTitle(
+  subject: string,
+  text: string,
+  day: string | null
+): string | null {
+  if (!/\bnew \d-star review\b/i.test(subject)) return null;
+  const m = TRUSTPILOT_REVIEW.exec(text);
+  if (!m) return null;
+  const opening = m[2]!.replace(/\s+/g, " ").trim();
+  const firstSentence = (
+    opening.match(/^.{1,90}?[.!?](?=\s|$)/)?.[0] ?? opening.slice(0, 90)
+  ).trim();
+  const early = day !== null && day <= FRIENDS_REVIEWS_UNTIL;
+  return (
+    `Trustpilot review of LoveIQ, ${m[1]} stars${day ? `, ${day}` : ""}: "${firstSentence}"` +
+    (early
+      ? " [one of the first reviews, which the team says came from friends, not customers]"
+      : "")
+  );
+}
+
+/**
+ * Mailboxes that are never company knowledge. Unlike `GMAIL_EXCLUDE_MAILBOXES` — which
+ * stops reading a mailbox but keeps its history — a mailbox here is also removed from the
+ * corpus.
+ *
+ * - `hr@` held 16 threads, 15 of them job applications with CVs attached.
+ * - `hello@` is the address customers write to. The line this system does not move
+ *   (CLAUDE.md, "Who can see what"; the `#email-inbox` note in slack.ts) is that what a
+ *   customer writes to us privately is not indexed — and `#email-inbox` was excluded on
+ *   2026-09-14 precisely because it forwards this address, while the mailbox itself went
+ *   on being walked. Measured 2026-09-23: cancellations and revocations, a contract
+ *   dispute naming a minor, a debt claim, feedback, replies to report emails, contact-form
+ *   submissions, and vendor cold pitches — nothing a teammate needs from the brain.
+ */
+export const NEVER_INDEX_MAILBOXES = new Set(["hr@loveiq.org", "hello@loveiq.org"]);
+
+/**
  * Subjects to keep out of the corpus entirely, as Gmail `-subject:` terms.
  *
  * The company runs more than one product, and a sibling project's issue tracker
@@ -259,7 +427,7 @@ interface GmailHeader {
 interface GmailPart {
   mimeType?: string;
   filename?: string;
-  body?: { data?: string; size?: number };
+  body?: { data?: string; size?: number; attachmentId?: string };
   parts?: GmailPart[];
 }
 interface GmailMessage {
@@ -323,15 +491,17 @@ export function messageText(part?: GmailPart): string {
     }
   }
   if (part.mimeType === "text/html" && part.body?.data) {
-    return decode(part.body.data)
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"');
+    return decodeEntities(
+      decode(part.body.data)
+        // <head> before <style>: a marketing email's stylesheet is often inside a
+        // conditional comment or left unclosed by a truncated part, and then the
+        // <style> rule below cannot match it. Measured 2026-09-19: 115 gmail chunks
+        // held CSS like `line-height: 2em; color:#000; }` as if it were prose.
+        .replace(/<head[\s\S]*?<\/head>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+    );
   }
   return "";
 }
@@ -451,6 +621,164 @@ export function person(addr: string): string {
   return addr.replace(/[<>]/g, "").trim();
 }
 
+/**
+ * ATTACHMENTS ARE CONTENT, and until 2026-09-19 none of them were read.
+ *
+ * The walk indexed every message BODY and nothing hanging off it, so a proposal
+ * sent as a pdf, a spec as a docx or a csv of numbers was invisible — and invisible
+ * in the worst way, because the thread around it WAS indexed, so the conversation
+ * read as complete while the thing it was about was missing.
+ *
+ * Deliberately narrow. Only formats there is already a reader for (`unpdf` and
+ * `mammoth` are both dependencies for Drive), only files small enough to be prose
+ * rather than data, and only a few per thread — a mailbox is not a file store and
+ * this must not turn the hourly walk into one.
+ */
+const ATTACHMENT_MIMES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "text/csv",
+  "text/markdown",
+]);
+/** Past this a file is data, not prose, and the reader is the wrong tool for it. */
+export const MAX_ATTACHMENT_BYTES = 4_000_000;
+export const MAX_ATTACHMENTS_PER_THREAD = 5;
+/** One attachment must not be able to outweigh the conversation that carried it. */
+export const MAX_ATTACHMENT_CHARS = 20_000;
+/**
+ * And five of them must not outweigh the CORPUS.
+ *
+ * Per-file alone, five 20k attachments is 100,000 characters — 42 chunks for a single
+ * thread. Two hundred such threads would add 8,400 chunks to a corpus of 24,694, a
+ * third again of everything, all of it attachment text. That is the drowning problem
+ * the domain vocabulary caused in miniature, and it costs battery probes when it
+ * happens. A thread may contribute ten chunks' worth; past that it is a file store.
+ */
+export const MAX_ATTACHMENT_CHARS_PER_THREAD = 24_000;
+
+export interface AttachmentRef {
+  messageId: string;
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+/** Every readable attachment in a thread. Pure, so the choosing is testable offline. */
+export function attachmentRefs(thread: GmailThread): AttachmentRef[] {
+  const out: AttachmentRef[] = [];
+  const walk = (messageId: string, part?: GmailPart): void => {
+    if (!part || out.length >= MAX_ATTACHMENTS_PER_THREAD) return;
+    const filename = (part.filename ?? "").trim();
+    const attachmentId = part.body?.attachmentId;
+    const mimeType = (part.mimeType ?? "").split(";")[0]!.trim();
+    const size = part.body?.size ?? 0;
+    if (
+      filename &&
+      attachmentId &&
+      ATTACHMENT_MIMES.has(mimeType) &&
+      size <= MAX_ATTACHMENT_BYTES &&
+      // The same rule the Drive walk applies, because the same contract arrives both
+      // ways. Excluding it from Drive alone left 58 chunks of the freelance contract
+      // and the shareholders agreement readable through the mailbox, attached to
+      // "Welcome to the Team" and to a forward of it. The covering message stays —
+      // that Mark sent Eman a contract on 2026-09-09 is a real thing to remember; the
+      // instrument itself does not come with it.
+      !isLegalInstrument(filename) &&
+      !isJobApplication(filename)
+    ) {
+      out.push({ messageId, attachmentId, filename, mimeType, size });
+    }
+    for (const p of part.parts ?? []) walk(messageId, p);
+  };
+  for (const m of thread.messages ?? []) {
+    if (m.id) walk(m.id, m.payload);
+  }
+  // No trim needed: `walk` returns the moment the cap is reached, so `out` can never
+  // exceed it. A `.slice()` here survived mutation precisely because it was dead.
+  return out;
+}
+
+/** Text out of one attachment. Returns "" for anything it cannot read, never throws. */
+async function attachmentText(token: string, mailbox: string, ref: AttachmentRef): Promise<string> {
+  try {
+    const res = await gmailGet(
+      token,
+      mailbox,
+      `/messages/${encodeURIComponent(ref.messageId)}/attachments/${encodeURIComponent(ref.attachmentId)}`
+    );
+    const data = typeof res?.data === "string" ? res.data : "";
+    if (!data) return "";
+    const buf = Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    if (buf.byteLength === 0) return "";
+
+    let text = "";
+    if (ref.mimeType === "application/pdf") {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      const doc = await getDocumentProxy(new Uint8Array(buf));
+      const out = await extractText(doc, { mergePages: true });
+      text = Array.isArray(out.text) ? out.text.join("\n") : out.text;
+    } else if (ref.mimeType.endsWith("wordprocessingml.document")) {
+      const mammoth = await import("mammoth");
+      text = (await mammoth.extractRawText({ buffer: buf })).value;
+    } else {
+      text = buf.toString("utf8");
+    }
+    const clean = text.replace(/\r\n/g, "\n").trim();
+    return clean.length > MAX_ATTACHMENT_CHARS
+      ? `${clean.slice(0, MAX_ATTACHMENT_CHARS)}\n[truncated: this attachment is longer than the brain indexes]`
+      : clean;
+  } catch (err) {
+    // One unreadable attachment must not cost the thread, let alone the walk.
+    logger.warn(
+      { err, file: ref.filename, mime: ref.mimeType },
+      "brain-ingest gmail: attachment unreadable"
+    );
+    return "";
+  }
+}
+
+/** Reads every readable attachment of a thread, newest-first budget permitting. */
+export async function threadAttachmentText(
+  token: string,
+  mailbox: string,
+  thread: GmailThread,
+  isOutOfTime: () => boolean = () => false
+): Promise<string> {
+  const parts: string[] = [];
+  let budget = MAX_ATTACHMENT_CHARS_PER_THREAD;
+  for (const ref of attachmentRefs(thread)) {
+    if (isOutOfTime() || budget <= 0) break;
+    const text = await attachmentText(token, mailbox, ref);
+    if (!text) continue;
+    const kept =
+      text.length > budget
+        ? `${text.slice(0, budget)}\n[truncated: the rest of this thread's attachments exceed what the brain indexes]`
+        : text;
+    budget -= text.length;
+    parts.push(`## Attachment: ${ref.filename}\n${kept}`);
+  }
+  return parts.join("\n\n");
+}
+
+/**
+ * Email text as text. HTML mail — notification templates especially — renders to runs of
+ * spaces and non-breaking spaces, CRLF line ends, and zero-width non-joiners (the
+ * invisible "preheader" padding), none of which carries meaning and all of which counts
+ * against the 2,400-character chunk. Line breaks between paragraphs are kept; everything
+ * else collapses.
+ */
+export function tidyEmailText(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200B-\u200D\u2060\uFEFF\u034F\u00AD]/g, "")
+    .replace(/[ \t\u00A0]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function threadToRows(
   thread: GmailThread,
   mailbox: string,
@@ -460,7 +788,9 @@ export function threadToRows(
    * up here because this runs per thread and there are thousands of them -- the same
    * reason `notion.ts` passes its user directory into `pageToRow`.
    */
-  byAlias: Map<string, { canonical: string }> | null = null
+  byAlias: Map<string, { canonical: string }> | null = null,
+  /** Text already read out of this thread's attachments, appended after the messages. */
+  attachments = ""
 ): BrainRow[] {
   const msgs = (thread.messages ?? []).filter((m) => m.payload);
   if (!thread.id || msgs.length === 0) return [];
@@ -476,13 +806,14 @@ export function threadToRows(
     const from = person(header(m, "From"));
     const date = Number(m.internalDate ?? 0);
     const stamp = date ? new Date(date).toISOString().slice(0, 10) : "";
-    const text = stripQuoted(messageText(m.payload));
+    const text = tidyEmailText(stripQuoted(messageText(m.payload)));
     if (!text) continue;
     lines.push(`${from}${stamp ? ` (${stamp})` : ""}: ${text}`);
   }
   if (lines.length === 0) return [];
   const joined = lines.join(" ").replace(/\s+/g, " ").trim();
   if (lines.length === 1 && joined.length < MIN_STUB_CHARS) return [];
+  if (isRecruitingThread(subject, joined)) return [];
 
   const participants = [
     ...new Set(
@@ -490,13 +821,19 @@ export function threadToRows(
     ),
   ].slice(0, 8);
 
-  const title = `Email: ${subject}`;
+  const title = trustpilotReviewTitle(subject, joined, day) ?? `Email: ${subject}`;
   const base: BrainRow = {
     source: SOURCE,
     source_id: `thread:${thread.id}`,
     title,
     url: `https://mail.google.com/mail/u/0/#all/${thread.id}`,
-    body: [title, `Between: ${participants.join(", ")}`, "", ...lines].join("\n"),
+    body: [
+      title,
+      `Between: ${participants.join(", ")}`,
+      "",
+      ...lines,
+      ...(attachments ? ["", tidyEmailText(attachments)] : []),
+    ].join("\n"),
     meta: {
       kind: "gmail-thread",
       v: GMAIL_BUILDER_VERSION,
@@ -586,6 +923,67 @@ async function knownThreads(): Promise<
   return out;
 }
 
+/**
+ * Threads read and deliberately NOT indexed, with the version they were refused at.
+ *
+ * A refused thread (a stub, a job application, a legal instrument) stores nothing in
+ * brain_chunk, so `knownThreads` has no historyId for it and every run fetched it again:
+ * about a hundred threads an hour, each a full fetch plus its attachments, re-deciding what
+ * was already decided. The version is the builder version plus the thread's historyId, so
+ * a new message or a change to the rules gets it read again.
+ *
+ * Fails OPEN, unlike `knownThreads`: an unreadable log only means re-reading everything,
+ * exactly as before it existed.
+ */
+async function knownRefusals(): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let offset = 0; offset < 100_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_refusal_log?select=source_id,version&source=eq.${SOURCE}` +
+        `&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    const batch = res.ok
+      ? ((await res.json().catch(() => null)) as Array<{
+          source_id?: string;
+          version?: string;
+        }> | null)
+      : null;
+    if (!Array.isArray(batch)) {
+      logger.warn({ status: res.status }, "brain-ingest gmail: refusal log unreadable, re-reading");
+      return new Map();
+    }
+    for (const r of batch) if (r.source_id && r.version) out.set(r.source_id, r.version);
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+const refusalVersion = (historyId: string) => `${GMAIL_BUILDER_VERSION}:${historyId}`;
+
+/** Remember this run's refusals. A failure costs one more re-read next run, nothing else. */
+async function recordRefusals(refused: Map<string, string>, stampedAt: string): Promise<void> {
+  const rows = [...refused].map(([source_id, historyId]) => ({
+    source: SOURCE,
+    source_id,
+    version: refusalVersion(historyId),
+    refused_at: stampedAt,
+  }));
+  for (let i = 0; i < rows.length; i += 500) {
+    const res = await supabaseFetch("/rest/v1/brain_refusal_log?on_conflict=source,source_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(rows.slice(i, i + 500)),
+    });
+    if (!res.ok) {
+      logger.warn(
+        { status: res.status, refused: rows.length },
+        "brain-ingest gmail: could not record refused threads; they will be read again next run"
+      );
+      return;
+    }
+  }
+}
+
 export async function ingestGmail(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
@@ -633,9 +1031,12 @@ export async function ingestGmail(
    * would list no mailboxes, write nothing, and let the sweep delete the corpus.
    */
   const discovered = await domainMailboxes(oidcToken);
-  const boxes = excludeMailboxes(discovered && discovered.length > 0 ? discovered : mailboxes());
+  const boxes = excludeMailboxes(
+    discovered && discovered.length > 0 ? discovered : mailboxes()
+  ).filter((m) => !NEVER_INDEX_MAILBOXES.has(m.trim().toLowerCase()));
 
   const known = await knownThreads();
+  const refusedBefore = await knownRefusals();
   /**
    * The people registry, once for the whole walk.
    *
@@ -673,10 +1074,22 @@ export async function ingestGmail(
    */
   let degraded = false;
   let fetched = 0;
+  /** Threads whose attachments contributed text, reported so the gap stays visible. */
+  let attachmentsRead = 0;
 
   const failedMailboxes: string[] = [];
   /** Threads we listed but could not re-read this run. Protected from the sweep. */
   const failedThreads = new Set<string>();
+  /**
+   * Threads we listed, re-read, and deliberately did not index — a stub, or anything
+   * `threadToRows` refuses. Reaching a thread and deciding against it is a decision, so
+   * its old rows belong to the sweep; this is the Drive ingester's `reached` rule.
+   */
+  const refusedThreads = new Set<string>();
+  /** Refused on THIS run's read, with the historyId the listing gave: the log's new rows. */
+  const newlyRefused = new Map<string, string>();
+  /** Refused before and unchanged since, so not fetched at all. */
+  let refusedUnchanged = 0;
 
   for (const mailbox of boxes) {
     const token = await tokenFor(mailbox);
@@ -698,7 +1111,7 @@ export async function ingestGmail(
       const listed = await gmailGet(
         token,
         mailbox,
-        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + excludeSubjects())}` +
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + standingExclusionsQuery() + excludeSubjects())}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {
@@ -716,6 +1129,13 @@ export async function ingestGmail(
         // thread costs one listing entry and no fetch at all.
         const have = known.get(id);
         if (have?.current && have.historyId && have.historyId === t.historyId) continue;
+        // Read before and refused, and unchanged since: the same decision, for free. Still
+        // a refusal as far as the sweep is concerned, so rows it has from before are not kept.
+        if (t.historyId && refusedBefore.get(id) === refusalVersion(t.historyId)) {
+          refusedThreads.add(id);
+          refusedUnchanged += 1;
+          continue;
+        }
         if (isOutOfTime()) {
           stop(`time-budget@${mailbox}:p${page}:mid-page`);
           break;
@@ -734,7 +1154,14 @@ export async function ingestGmail(
           continue;
         }
         fetched += 1;
-        rows.push(...threadToRows(full, mailbox, stampedAt, people));
+        const attached = await threadAttachmentText(token, mailbox, full, isOutOfTime);
+        if (attached) attachmentsRead += 1;
+        const built = threadToRows(full, mailbox, stampedAt, people, attached);
+        if (built.length === 0) {
+          refusedThreads.add(id);
+          if (t.historyId) newlyRefused.set(id, t.historyId);
+        }
+        rows.push(...built);
       }
 
       pageToken = (listed.nextPageToken as string) ?? "";
@@ -753,6 +1180,9 @@ export async function ingestGmail(
   }
 
   const written = await upsertChunks(rows);
+  // Only successful reads reach `newlyRefused`: a fetch that failed is never recorded as a
+  // decision, so it is simply fetched again (see "an outage is not a decision").
+  await recordRefusals(newlyRefused, stampedAt);
   /**
    * Mailboxes this run walked — the only ones the sweep may judge.
    *
@@ -804,11 +1234,22 @@ export async function ingestGmail(
          * An unattributable row (no mailbox in `meta`) is kept for the same
          * reason — absence of evidence is not evidence of deletion.
          */
+        // Never-index mailboxes are not history, they are a decision: not kept.
+        if (have.mailbox && NEVER_INDEX_MAILBOXES.has(have.mailbox.toLowerCase())) return false;
         if (!have.mailbox || !walked.has(have.mailbox)) return true;
         // Never confirm a stale-version row FROM A MAILBOX WE DID WALK. It was
         // either dropped from the source or is no longer something we would index
         // (a stub, under v2); either way it belongs to the sweep, not the keep set.
-        return have.current;
+        //
+        // AND A CURRENT ROW ONLY IF THIS WALK STILL LISTED ITS THREAD, and did not
+        // refuse it on re-reading. The doc comments on `excludeSubjects` and CLAUDE.md
+        // both promise that "sweepMissing keeps anything in `seen`" — so an excluded or
+        // deleted thread, never listed, is swept. This line never consulted `seen`, before
+        // or after the 2026-08-31 refactor: any current-version row was kept, listed or
+        // not. Exclusions only ever took effect when a builder bump happened to make the
+        // old rows stale. Found 2026-09-23 while excluding job applications, which would
+        // otherwise have stayed indexed until the next unrelated bump.
+        return have.current && seen.has(base) && !refusedThreads.has(base);
       })
       .map(([id]) => id))();
   const touched = confirmed.length;
@@ -832,6 +1273,7 @@ export async function ingestGmail(
       unreachable: failedMailboxes,
       listed: seen.size,
       fetched,
+      refusedUnchanged,
       written,
       touched,
       complete,
@@ -847,6 +1289,8 @@ export async function ingestGmail(
   const detail =
     `boxes=${boxes.length}${discovered ? "" : "(directory unavailable, fell back)"} ` +
     `listed=${seen.size} fetched=${fetched} written=${written} kept=${touched} ` +
+    (refusedUnchanged > 0 ? `refused_unchanged=${refusedUnchanged} ` : "") +
+    (attachmentsRead > 0 ? `attachments=${attachmentsRead} ` : "") +
     `swept=${swept} complete=${complete}` +
     (stopReason ? ` stopped=${stopReason}` : "") +
     (failedMailboxes.length ? ` unreachable=${failedMailboxes.join(",")}` : "");

@@ -28,34 +28,27 @@ import {
   fetchFunnelStages,
 } from "@features/admin/server/digest-metrics";
 import {
-  formatSignalSummary,
-  MIN_CELL_COUNT,
-  twoProportionSignal,
-} from "@features/admin/server/statistics";
+  CONCLUDED,
+  concludedReadouts as finalReadouts,
+  fetchAllPages,
+  liveReadouts,
+  loadArmOutcomes,
+  num,
+  type ConcludedExperiment,
+  type ExperimentReadout,
+} from "@features/admin/server/experiment-readouts";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import {
-  activeArms,
-  armLabel,
-  AXIS_TITLES,
-  type ExperimentAxis,
-} from "@features/attribution/server/labels";
-import { readStampedArms } from "@features/attribution/server/traffic";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 import { surveyQuestions } from "@/data/survey-data";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
-/** Rows are capped so a runaway table cannot turn this into a 100k-row scan. */
-/** Hard ceiling per collection, paged 1000 at a time. */
-const MAX_ROWS = 20_000;
-const CACHE_TTL_MS = 60_000;
+export type {
+  ArmStat,
+  ConcludedExperiment,
+  ExperimentReadout,
+} from "@features/admin/server/experiment-readouts";
 
-/**
- * Below this, an arm is reported as "too early to compare" regardless of what the
- * z-test says — a lopsided split (e.g. 828 vs 9) satisfies the combined-n>=50 rule
- * on the strength of the large arm alone.
- */
-const TINY_ARM = 30;
+const CACHE_TTL_MS = 60_000;
 
 /** Split into parts so the long comma-joined list does not trip no-secrets' entropy check. */
 /**
@@ -146,43 +139,6 @@ async function countFunnelEvent(eventType: string, sinceIso: string): Promise<nu
   }
 }
 
-const QUOTE_COLUMNS = [
-  "survey_submission_id",
-  "experiment_group",
-  "base_price_bucket",
-  "current_price",
-  "purchased_at",
-  "checkout_started_at",
-].join(",");
-
-export interface ArmStat {
-  arm: string;
-  label: string;
-  retired: boolean;
-  /** People we can attribute to this arm. */
-  n: number;
-  purchases: number;
-  /** Purchase rate, 0–100 with one decimal. */
-  rate: number;
-  revenue: number;
-}
-
-export interface ExperimentReadout {
-  axis: ExperimentAxis;
-  title: string;
-  arms: ArmStat[];
-  /** Attributable people with no arm recorded — shown, never hidden. */
-  unattributed: number;
-  /** Plain-English verdict. Always safe to print. */
-  verdict: string;
-  significance: string;
-}
-
-export interface ConcludedExperiment {
-  title: string;
-  outcome: string;
-}
-
 export interface AbOverviewResponse {
   windowDays: number;
   generatedAt: string;
@@ -194,7 +150,10 @@ export interface AbOverviewResponse {
   dropoffCaveats: string[];
   /** Caveats about the main funnel's measurement. */
   funnelCaveats: string[];
+  /** Tests being randomised right now. Empty as of 2026-09-19. */
   experiments: ExperimentReadout[];
+  /** Final per-arm numbers for tests that have ended, retired arms included. */
+  concludedReadouts: ExperimentReadout[];
   /** Finished experiments, listed without rates so nobody reads a winner into them. */
   concluded: ConcludedExperiment[];
   totals: {
@@ -227,127 +186,6 @@ export function __resetAbOverviewCacheForTests(): void {
   cache = null;
 }
 
-interface SubmissionRow {
-  id: number;
-  created_date_time: string | null;
-  utm_tracker: string | null;
-}
-
-interface QuoteRow {
-  survey_submission_id: number;
-  experiment_group: string | null;
-  base_price_bucket: string | null;
-  current_price: number | string | null;
-  purchased_at: string | null;
-  checkout_started_at: string | null;
-}
-
-/**
- * Page through a PostgREST collection.
- *
- * PostgREST enforces its own `max-rows` (1000 here) and silently ignores a larger
- * `limit`, so a single request returns 1000 rows and looks complete. That bit this
- * route during validation: two independently-capped fetches covered different
- * submissions, which inflated "unattributed" to 667 and under-counted purchases
- * per arm. Page explicitly with Range, and report truncation honestly.
- */
-async function fetchAllPages<T>(
-  buildPath: (offset: number, pageSize: number) => string,
-  what: string
-): Promise<{ rows: T[]; truncated: boolean }> {
-  const PAGE = 1000;
-  const rows: T[] = [];
-  for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
-    const res = await supabaseFetch(buildPath(offset, PAGE), {
-      headers: { Range: `${offset}-${offset + PAGE - 1}`, "Range-Unit": "items" },
-    });
-    if (!res.ok) {
-      logger.warn({ status: res.status, what, offset }, "ab-overview: page fetch failed");
-      break;
-    }
-    const page = (await res.json()) as T[];
-    rows.push(...page);
-    if (page.length < PAGE) return { rows, truncated: false };
-  }
-  // Ran to the cap without a short page — there may well be more.
-  return { rows, truncated: rows.length >= MAX_ROWS };
-}
-
-function num(value: number | string | null): number {
-  if (value === null) return 0;
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-/**
- * Compare each arm against the best-performing OTHER arm and describe the result
- * in words. Never claims a winner the statistics do not support.
- */
-function buildReadout(
-  axis: ExperimentAxis,
-  arms: ArmStat[],
-  unattributed: number
-): ExperimentReadout {
-  const contenders = arms.filter((a) => !a.retired && a.n > 0);
-  let verdict = "No data yet.";
-  let significance = "insufficient-data";
-
-  if (contenders.length >= 2) {
-    const sorted = [...contenders].sort((a, b) => b.rate - a.rate);
-    const [leader, runnerUp] = sorted as [ArmStat, ArmStat];
-    const signal = twoProportionSignal(runnerUp.n, runnerUp.purchases, leader.n, leader.purchases);
-    significance = signal.significance;
-
-    const smallest = contenders.reduce((min, a) => (a.n < min.n ? a : min), contenders[0]!);
-
-    /*
-     * Three separate reasons not to decide, each naming its own cause. Testing
-     * `signal.significance === "insufficient-data"` FIRST used to swallow the
-     * other two: once twoProportionSignal also refused on too-few purchases, the
-     * small-arm branch below became unreachable for the very shape it was written
-     * for (300 vs 9), and every case collapsed into one vague sentence.
-     */
-    if (leader.n + runnerUp.n < 50) {
-      verdict = `Not enough data to call this yet — the smallest group has ${smallest.n} ${
-        smallest.n === 1 ? "person" : "people"
-      }. Treat any difference as noise for now.`;
-    } else if (smallest.n < TINY_ARM) {
-      /*
-       * The combined-sample check inside twoProportionSignal is satisfied by a big
-       * arm alone: 828 vs 9 clears n>=50 and comes back "inconclusive", so without
-       * this branch the page would read "Landing Page V2 is ahead (2.1% vs 0.0%)"
-       * and never mention that the comparison rests on nine people. That is exactly
-       * the wrong impression to leave with a non-technical reader.
-       */
-      verdict = `Too early to compare — ${smallest.label} has only ${smallest.n} ${
-        smallest.n === 1 ? "person" : "people"
-      } so far. Ignore the difference until that grows.`;
-    } else if (signal.significance === "insufficient-data") {
-      // Both groups are big enough; it is the PURCHASES that are too few for the
-      // comparison to mean anything. Naming the group sizes here would be
-      // actively misleading — they are not what is short.
-      const purchases = leader.purchases + runnerUp.purchases;
-      verdict = `Not enough purchases yet to compare — ${purchases} ${
-        purchases === 1 ? "person has" : "people have"
-      } bought across both groups. Each side needs at least ${MIN_CELL_COUNT}.`;
-    } else if (signal.significance === "inconclusive") {
-      verdict = `No clear winner yet. ${leader.label} is ahead (${leader.rate}% vs ${runnerUp.rate}%) but the gap could still be chance.`;
-    } else {
-      verdict = `${leader.label} is genuinely ahead — ${leader.rate}% vs ${runnerUp.rate}% (${formatSignalSummary(signal)}).`;
-    }
-  } else if (contenders.length === 1) {
-    verdict = `Only ${contenders[0]!.label} has data, so there is nothing to compare against.`;
-  }
-
-  if (unattributed > 0) {
-    verdict += ` ${unattributed} ${unattributed === 1 ? "person is" : "people are"} not attributable to an arm.`;
-  }
-
-  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-  const title = AXIS_TITLES[axis];
-  return { axis, title, arms, unattributed, verdict, significance };
-}
-
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -375,17 +213,10 @@ export async function GET(request: Request) {
 
   try {
     const nowIso = new Date().toISOString();
-    const [stages, subsPage, dropout, reportOpens, settled, intro1, intro2, intro3, intro4] =
+    const [stages, outcomes, dropout, reportOpens, settled, intro1, intro2, intro3, intro4] =
       await Promise.all([
         fetchFunnelStages(since, nowIso),
-        fetchAllPages<SubmissionRow>(
-          (offset, pageSize) =>
-            // status=eq.completed matches what fetchFunnelStages counts as a completion, so
-            // the headline number and the funnel step can never drift apart.
-            `/rest/v1/survey_submission?created_date_time=gte.${since}&status=eq.completed` +
-            `&select=id,created_date_time,utm_tracker&order=id.asc&offset=${offset}&limit=${pageSize}`,
-          "survey_submission"
-        ),
+        loadArmOutcomes(since),
         fetchDropoutFunnel(since, nowIso),
         countReportOpens(since),
         fetchSettledRevenue(since),
@@ -394,124 +225,11 @@ export async function GET(request: Request) {
         countFunnelEvent("intro_slide_3", since),
         countFunnelEvent("intro_slide_4", since),
       ]);
-    const submissions = subsPage.rows;
 
-    // Join the quotes by SUBMISSION ID RANGE rather than by their own created date:
-    // a quote can be created outside the submission window, and filtering it by date
-    // silently drops real purchases. Ids are monotonic, so ">= the smallest id in the
-    // window" is an index-friendly narrowing that cannot miss one — and it avoids
-    // interpolating a huge `in.(...)` list into the URL the way /api/admin/stats does.
-    const minId = submissions.length > 0 ? Math.min(...submissions.map((s2) => s2.id)) : 0;
-    const quotesPage =
-      submissions.length > 0
-        ? await fetchAllPages<QuoteRow>(
-            (offset, pageSize) =>
-              `/rest/v1/report_price_quote?survey_submission_id=gte.${minId}` +
-              `&select=${QUOTE_COLUMNS}&order=survey_submission_id.asc` +
-              `&offset=${offset}&limit=${pageSize}`,
-            "report_price_quote"
-          )
-        : { rows: [] as QuoteRow[], truncated: false };
-    const quotes = quotesPage.rows;
-
-    // Collapse quotes to one entry per submission: did they buy, for how much, and
-    // which arms were they in. A reader has one pricing arm across all their plans.
-    const bySubmission = new Map<
-      number,
-      {
-        pricing: string | null;
-        purchased: boolean;
-        startedCheckout: boolean;
-        revenue: number;
-      }
-    >();
-    for (const q of quotes) {
-      const key = q.survey_submission_id;
-      const existing = bySubmission.get(key) ?? {
-        pricing: null,
-        purchased: false,
-        startedCheckout: false,
-        revenue: 0,
-      };
-      if (q.checkout_started_at) existing.startedCheckout = true;
-      existing.pricing ??= q.experiment_group ?? q.base_price_bucket ?? null;
-      if (q.purchased_at) {
-        existing.purchased = true;
-        existing.revenue += num(q.current_price);
-      }
-      bySubmission.set(key, existing);
-    }
-
-    /** Tally purchases and revenue per arm for one axis. */
-    function tally(
-      axis: ExperimentAxis,
-      armOf: (id: number, tracker: string | null) => string | null
-    ) {
-      const counts = new Map<string, { n: number; purchases: number; revenue: number }>();
-      let unattributed = 0;
-      for (const sub of submissions) {
-        const arm = armOf(sub.id, sub.utm_tracker);
-        if (!arm) {
-          unattributed += 1;
-          continue;
-        }
-        const entry = counts.get(arm) ?? { n: 0, purchases: 0, revenue: 0 };
-        entry.n += 1;
-        const outcome = bySubmission.get(sub.id);
-        if (outcome?.purchased) {
-          entry.purchases += 1;
-          entry.revenue += outcome.revenue;
-        }
-        counts.set(arm, entry);
-      }
-
-      // Always render the arms we actively assign, even at zero, so an empty arm is
-      // visible rather than missing. Retired arms appear only if they have data.
-      const armKeys = [...new Set([...activeArms(axis), ...counts.keys()])];
-      const arms: ArmStat[] = armKeys.map((arm) => {
-        const c = counts.get(arm) ?? { n: 0, purchases: 0, revenue: 0 };
-        const label = armLabel(axis, arm);
-        return {
-          arm,
-          label: label.short,
-          retired: Boolean(label.retired),
-          n: c.n,
-          purchases: c.purchases,
-          rate: computeRate(c.purchases, c.n),
-          revenue: Math.round(c.revenue * 100) / 100,
-        };
-      });
-      // Retired arms are dropped from the display entirely: they are not being
-      // assigned to anyone, so a row for them is noise at best and an invitation
-      // to compare against a dead arm at worst. Their traffic still shows up in
-      // `unattributed` so no one is silently uncounted.
-      const live = arms.filter((a) => !a.retired);
-      const retiredCount = arms.filter((a) => a.retired).reduce((sum, a) => sum + a.n, 0);
-      return buildReadout(axis, live, unattributed + retiredCount);
-    }
-
-    /*
-     * Only genuinely randomised, currently-running splits belong here.
-     *
-     * Two axes left on 2026-08-31 and both are in `concluded` below rather than
-     * here, so a finished test cannot be mistaken for a live one. The forced
-     * paywall was REMOVED from the product, so nothing stamps an arm at all. The
-     * 2.x price test was settled by dropping the higher-priced arm.
-     *
-     * Pricing is back with Pricing 3.0 (A3 vs B3), counting only readers who
-     * finished from its launch day: everyone before it was re-priced at launch,
-     * after seeing the 2.x prices, so they sit in "unattributed" rather than in
-     * either list.
-     */
-    const finishedOn = new Map(submissions.map((row) => [row.id, row.created_date_time]));
-    const experiments: ExperimentReadout[] = [
-      tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
-      tally("pricing", (id) =>
-        (finishedOn.get(id) ?? "") >= PRICING_3_LAUNCH_DAY
-          ? (bySubmission.get(id)?.pricing ?? null)
-          : null
-      ),
-    ];
+    // Live and concluded readouts come from experiment-readouts.ts, shared with the brain's
+    // `experiments` tool so a test reads the same in both places.
+    const experiments = liveReadouts(outcomes);
+    const concludedReadouts = finalReadouts(outcomes);
 
     /*
      * Order matters and was wrong before. `survey_engine_mount` fires when the
@@ -530,8 +248,10 @@ export async function GET(request: Request) {
     const questions = dropout?.questions ?? [];
     const firstQuestionReach = questions[0]?.sessions ?? 0;
 
-    const purchasedCount = [...bySubmission.values()].filter((v) => v.purchased).length;
-    const checkoutCount = [...bySubmission.values()].filter((v) => v.startedCheckout).length;
+    const purchasedCount = [...outcomes.bySubmission.values()].filter((v) => v.purchased).length;
+    const checkoutCount = [...outcomes.bySubmission.values()].filter(
+      (v) => v.startedCheckout
+    ).length;
 
     const top = stages?.uniqueVisitors ?? 0;
     const steps: Array<{ step: string; count: number }> = [
@@ -600,9 +320,31 @@ export async function GET(request: Request) {
       .sort((a, b) => b.dropPct - a.dropPct)
       .slice(0, WORST_N);
 
+    /*
+     * The first line here USED TO SAY "every step is counted on our own
+     * servers, so declining analytics cookies does not remove anyone from these
+     * numbers". That is false for five of the steps and it is the most
+     * reassuring sentence on the page.
+     *
+     * "Opened the survey page" and the four intro screens come from
+     * `funnel_event.survey_engine_mount` / `intro_slide_*`, which the BROWSER
+     * posts using the `__liq_vid` cookie — and proxy.ts mints that cookie only
+     * after the visitor clicks Accept. So declining analytics removes you from
+     * exactly those rows. Measured 2026-09-19 over 30 days: 637 visitors reached
+     * the consent-gated mount step against 977 server-written survey drafts, so
+     * the client path sees roughly two thirds of the people.
+     *
+     * "Visits" is the opposite: `recordUniqueVisit` writes it server-side with a
+     * throwaway per-day UUID precisely so it does NOT depend on consent — which
+     * is also why the two cannot be joined, and why the rate between them is a
+     * ratio of two different id spaces rather than a conversion of one
+     * population.
+     */
     const funnelCaveats = [
-      "Every step is counted on our own servers, so declining analytics cookies does not remove anyone from these numbers.",
+      "Visits, survey drafts, submissions, report opens, checkouts and payments are counted on our own servers, so declining analytics cookies does not remove anyone from those.",
+      "“Opened the survey page” and the four intro screens are the exception: the browser reports those, and only after someone accepts cookies. Roughly a third of people are missing from those five rows, so the drop between “Visits” and “Opened the survey page” is mostly consent, not people leaving.",
       '"Visits" counts visitor-days: somebody returning on three days counts three times.',
+      "“Visits” and the survey steps are counted with different identifiers and cannot be matched person to person, so a percentage between them is a ratio of two measurements, not a conversion rate of one group.",
     ];
 
     const dropoffCaveats = [
@@ -628,28 +370,10 @@ export async function GET(request: Request) {
       dropoffCaveats,
       funnelCaveats,
       experiments,
-      concluded: [
-        {
-          title: "Report pricing (A vs B)",
-          outcome:
-            "Finished on 31 August 2026. We dropped the more expensive of the two price lists, so everyone now sees the same prices. The cheaper list had taken more money over the test as a whole, but the two prices were swapped over on 24 August, which means the before and after are not really one comparison — with 1 sale against 2 since the swap there was nothing to call it on. It was a decision to simplify, not a verdict.",
-        },
-        {
-          title: "Paywall style",
-          outcome:
-            "Finished. The forced screen was switched off, then removed from the site entirely on 31 August 2026 — the pricing pop-up can always be closed now. Everyone gets the same experience, so there is nothing left to compare.",
-        },
-        {
-          title: "Survey design (white vs dark)",
-          // No rates, by the same rule as the paywall entry above: this section
-          // exists so a finished test cannot be read as a live one. The numbers
-          // that settled it are in the commit and in the digest history.
-          outcome:
-            "Stopped 2026-08-25 and settled on the white survey. White reached checkout more often, but not by a margin this many people can prove — the range the true gap could sit in still includes zero — and purchases were level. It was called on the checkout rate, not because the test reached a verdict. Everyone now sees white, so there is nothing left to compare.",
-        },
-      ],
+      concludedReadouts,
+      concluded: CONCLUDED,
       totals: {
-        submissions: submissions.length,
+        submissions: outcomes.submissions.length,
         purchases: purchasedCount,
         // Stripe-settled, not the list price on the plan. Measured against
         // production the two differ by ~18% (EUR 489.51 settled vs 599.16 list)
@@ -659,7 +383,7 @@ export async function GET(request: Request) {
         charges: settled.charges,
         freeUnlocks: settled.freeUnlocks,
       },
-      truncated: subsPage.truncated || quotesPage.truncated,
+      truncated: outcomes.truncated,
     };
 
     cache = { key: cacheKey, at: Date.now(), payload };

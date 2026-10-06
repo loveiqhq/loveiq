@@ -467,7 +467,11 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
 
           <div className="stage-explorer__mobile-orbit-center">
             <CycleIcon />
-            <p>Flip the below cards to explore other sexual stages.</p>
+            {/* "Swipe", not "Flip" — same correction as the 2.0 copy. These
+                cards are a horizontal scroll-snap carousel (verified live on
+                v1: overflow-x auto, scroll-snap-type x mandatory, 1680px of
+                scrollable width) with no flip face. */}
+            <p>Swipe the cards below to explore other sexual stages.</p>
           </div>
 
           {STAGES.map((stage, idx) => {

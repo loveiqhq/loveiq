@@ -28,6 +28,7 @@ import {
   header,
   linkButton,
   section,
+  SECTION_BUDGET,
 } from "@shared/observability/slack-blocks";
 
 /** ms → "45s" / "12 min" / "1h 4m". Returns null so callers can omit the row entirely. */
@@ -56,7 +57,61 @@ function money(amount: number | null, currency: string): string | null {
  * campaign says so, instead of printing a bare "Paid — google / cpc" that reads
  * like complete attribution when the campaign is simply not being sent.
  */
-function trafficLine(journey: SubmissionJourney): string {
+/**
+ * Split rather than flat, because the compact layout bolds only the SOURCE —
+ * "*Google Ads* — performance_max (x)" — and rebuilding that from a finished
+ * string would mean splitting on an em dash that also appears inside campaign
+ * names. `head` is a classification we produce ("Google Ads", "Paid",
+ * "Direct"); `detail` is assembled from utm values and is already escaped.
+ */
+/**
+ * Google's ValueTrack codes, in words.
+ *
+ * This file's whole premise is that nobody reading Slack meets a raw value, and
+ * these were the last ones that slipped through: over 30 days the live messages
+ * printed "(x)" 146 times, "(p)" 70 and "(e)" 41 — Google's codes for
+ * cross-network, phrase match and exact match, which mean nothing to the person
+ * this message is written for.
+ *
+ * An unrecognised code falls through to itself rather than to a guess, and is
+ * escaped by the caller either way: these arrive as URL parameters and are fully
+ * attacker-controlled.
+ */
+function valueTrackLabel(kind: "network" | "matchtype", code: string): string {
+  const key = code.trim().toLowerCase();
+  if (kind === "network") {
+    switch (key) {
+      case "g":
+        return "Google search";
+      case "s":
+        return "search partner";
+      case "d":
+        return "Display";
+      case "ytv":
+        return "YouTube";
+      case "vp":
+        return "video partner";
+      case "x":
+        // What Performance Max and Demand Gen report — the campaign type that
+        // produced most of the 146.
+        return "cross-network";
+      default:
+        return code;
+    }
+  }
+  switch (key) {
+    case "e":
+      return "exact match";
+    case "p":
+      return "phrase match";
+    case "b":
+      return "broad match";
+    default:
+      return code;
+  }
+}
+
+function trafficParts(journey: SubmissionJourney): { head: string; detail: string | null } {
   const { bucket, source, medium, campaign, isGoogleAds, keyword, matchType, network } =
     journey.traffic;
   const esc = (v: string) => escapeSlack(v);
@@ -65,18 +120,40 @@ function trafficLine(journey: SubmissionJourney): string {
     const detail: string[] = [];
     if (campaign) detail.push(esc(campaign));
     if (keyword) detail.push(`"${esc(keyword)}"`);
-    const qualifiers = [matchType, network].filter(Boolean).map((v) => esc(v!));
+    const qualifiers = [
+      matchType ? valueTrackLabel("matchtype", matchType) : null,
+      network ? valueTrackLabel("network", network) : null,
+    ]
+      .filter(Boolean)
+      .map((v) => esc(v!));
     const tail = qualifiers.length > 0 ? ` (${qualifiers.join(", ")})` : "";
     if (detail.length === 0) {
       // The gap is named, with its cause, because a missing campaign here is a
       // Google Ads settings problem — not an ad that has no campaign.
-      return "Google Ads — campaign not tagged (auto-tagging sends only the click id)";
+      return {
+        head: "Google Ads",
+        detail: "campaign not tagged (auto-tagging sends only the click id)",
+      };
     }
-    return `Google Ads — ${detail.join(" / ")}${tail}`;
+    return { head: "Google Ads", detail: `${detail.join(" / ")}${tail}` };
   }
 
   const parts = [source, medium, campaign].filter(Boolean).map((p) => esc(p!));
-  return parts.length > 0 ? `${bucket} — ${parts.join(" / ")}` : bucket;
+  return { head: bucket, detail: parts.length > 0 ? parts.join(" / ") : null };
+}
+
+/**
+ * The flat form — still what the purchase message renders.
+ *
+ * Same `|| "Not recorded"` as the compact layout: `classifyTraffic` assigns a
+ * bucket on every branch so this is unreachable from real data, but the two
+ * branches of one builder should not disagree about what a malformed journey
+ * looks like. Without it the purchase message rendered a literal "undefined".
+ */
+function trafficLine(journey: SubmissionJourney): string {
+  const { head, detail } = trafficParts(journey);
+  const label = head || "Not recorded";
+  return detail ? `${label} — ${detail}` : label;
 }
 
 /**
@@ -156,10 +233,12 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * axis rather than the arm.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  // Pricing (the Pricing 3.0 test) is assigned when the report first quotes a price,
-  // after the survey, so a survey-completed message has no arm for it yet. That is not
-  // a missing record, and a permanent "Not recorded" row on every one would be noise.
-  const axes: ExperimentAxis[] = journey.arms.pricing ? ["landing", "pricing"] : ["landing"];
+  // `landing` concluded on 2026-09-19 in favour of V2, so it is not shown: an arm
+  // nothing assigns is a permanent constant on every message. Pricing 3.0 is live, but
+  // its arm is assigned when the report first quotes a price, after the survey, so a
+  // survey-completed message has none yet. That is not a missing record, and a
+  // permanent "Not recorded" row on every one would be noise, so it shows when set.
+  const axes: ExperimentAxis[] = journey.arms.pricing ? ["pricing"] : [];
   return fields(
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
@@ -172,6 +251,176 @@ function armFields(journey: SubmissionJourney): SlackBlock {
       };
     })
   );
+}
+
+/**
+ * "9 min", or an em dash when nothing recorded it.
+ *
+ * Rendered with the same `formatDuration` as the survey time beside it, so the
+ * two halves of the line are the same kind of number rather than one duration
+ * and one bucket.
+ *
+ * THE PLUS IS GONE, with the thing that made it necessary. This used to be a
+ * floor off three milestone events at 1/5/10 minutes, so a reader who stayed
+ * eleven minutes and one who stayed fifty both read "10+ min" — and because 79%
+ * of readers who record any milestone record only the first, very nearly every
+ * message in #incoming-surveys read "1+ min" whatever happened. The value is now
+ * measured from the reader's own event stream, so it can be stated plainly.
+ *
+ * It remains a lower bound (we see their last action, not the moment they
+ * closed the tab), which is why the underlying measurement keeps the milestones
+ * in the stream: a quiet reader still leaves a heartbeat at 1, 5 and 10 minutes.
+ *
+ * An em dash — not "0 min", and not "< 1 min" — when nothing was recorded. The
+ * stream sits behind the analytics consent gate, and `report_viewed` alone
+ * already misses ~44% of real opens (96 of 216 over 2026-08-25 → 09-05), so
+ * absence genuinely means "not recorded". Rendering it as a short visit would
+ * put a number in a channel people read to judge the funnel that is wrong in the
+ * most flattering-to-nobody direction.
+ */
+function formatReportDwell(ms: number | null | undefined): string {
+  // Guarded against more than null: a journey assembled by any path that
+  // predates this field arrives with `undefined` here, and arithmetic on it is
+  // NaN — which used to render as a confident "NaN+ min" rather than failing.
+  // Non-finite and non-positive fold into the same honest answer.
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "—";
+  return formatDuration(ms) ?? "—";
+}
+
+/**
+ * Bold the arm's NAME and leave its parenthetical description plain, so
+ * "Landing Page V1 (First Design)" renders as "*Landing Page V1* (First
+ * Design)" — the emphasis Marcus drew.
+ *
+ * Safe to split on " (" because these strings are a curated constant table in
+ * labels.ts, never user input; that is also why they are not escaped here, which
+ * matches how the fields version has always rendered them.
+ */
+function boldArmName(short: string): string {
+  const idx = short.indexOf(" (");
+  return idx === -1 ? `*${short}*` : `*${short.slice(0, idx)}*${short.slice(idx)}`;
+}
+
+/**
+ * The compact incoming-survey layout, as ONE section.
+ *
+ * Requested by Marcus in #all-loveiq on 2026-09-11 ("a bit more compact like
+ * this") and reproduced line for line, including the order — landing arm above
+ * country, rail last.
+ *
+ * One section rather than the previous header + context + section + fields +
+ * section + fields stack, because the height came from the container, not the
+ * content: Slack puts vertical space between every block, and a `fields` grid
+ * additionally puts each label on its own line above its value and reflows into
+ * two ragged columns. That is why "Came from" and its value were never on the
+ * same line. Newlines inside a single section render tight, which is the whole
+ * request.
+ *
+ * What this deliberately DROPS, both visible in the mock as an absence: the
+ * first name and the question count. The submission number carries the title and
+ * still identifies the row for anyone who needs to look it up; the question count
+ * survives in the notification text. The masked email went with them and was then
+ * asked back (#incoming-surveys, 15 Sep) — it rides on the title line, see below.
+ */
+function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneyStep): string[] {
+  const bold = (v: string) => `*${v}*`;
+
+  /**
+   * The masked email sits beside the submission number at Marcus's request
+   * (#incoming-surveys, 15 Sep): it is the cheapest signal of whether a
+   * submission came from someone internal or from a real visitor.
+   *
+   * A CODE SPAN, which is how Marcus wrote it and how every survey message
+   * rendered it before the compact layout dropped it. It also settles the markup
+   * problem outright: a mask is three literal asterisks landing beside the bold
+   * submission number, and `*` is Slack's bold delimiter — inside backticks they
+   * are literal, so nothing has to be escaped and nothing can be re-read as
+   * emphasis.
+   *
+   * Through `codeSpan`, which is how this same field rendered before the compact
+   * layout dropped it and how the purchase branch still renders it twenty lines
+   * below. It strips backticks — the mask keeps the address's own first character
+   * and its whole domain, so the one character that could close the span early is
+   * caller-supplied — and also escapes the HTML trio, which a hand-rolled span
+   * does not. Dropped entirely when there is no email rather than padded, so the
+   * title never ends in a dangling space.
+   */
+  const title = `Survey submission ${bold(`#${journey.submissionId}`)}`;
+  const lines: string[] = [
+    journey.emailMasked ? `${title} ${codeSpan(journey.emailMasked)}` : title,
+  ];
+
+  /**
+   * Both times on one line, and both sides ALWAYS render.
+   *
+   * An em dash for whichever is unknown rather than dropping the clause: these
+   * messages are read as a vertical column in a channel, and a line that changes
+   * shape per message is harder to scan than one with a visible gap. At post
+   * time the report has not been opened yet, so "Report time: —" is the normal
+   * first state — it fills itself in when the message is edited on a later
+   * milestone.
+   */
+  lines.push(
+    `Survey time: ${bold(formatDuration(journey.timings.durationMs) ?? "—")}` +
+      `  |  Report time: ${bold(formatReportDwell(journey.timings.reportDwellMs))}`
+  );
+
+  const traffic = trafficParts(journey);
+  /**
+   * `|| "Not recorded"` because this line is the one place a malformed journey
+   * can take the whole message down. `classifyTraffic` assigns a bucket on every
+   * branch, so the fallback is unreachable in production — but the previous
+   * layout passed the bucket through untouched and rendered a literal
+   * "undefined", where escaping it throws instead. A notification builder should
+   * never be the thing that throws: the survey route builds this message inside
+   * a fire-and-forget task, and the backfill cron turns any throw into a 500
+   * that abandons the rest of the run.
+   */
+  lines.push(
+    `Came from: ${bold(escapeSlack(traffic.head || "Not recorded"))}` +
+      `${traffic.detail ? ` — ${traffic.detail}` : ""}`
+  );
+
+  if (journey.device) lines.push(`Device: ${bold(escapeSlack(journey.device))}`);
+
+  // Kept even when unrecorded, which is the rule the fields version followed: a
+  // live arm that failed to stamp stays visible rather than quietly missing.
+  const landing = armLabel("landing", journey.arms.landing);
+  lines.push(
+    `Landing page design: ${boldArmName(landing.short)}${landing.retired ? " _(retired arm)_" : ""}`
+  );
+
+  // Pricing 3.0 is live; its arm is stamped when the report first quotes a price, so a
+  // survey-completed message usually has none yet and shows the line only when set.
+  if (journey.arms.pricing) {
+    const pricing = armLabel("pricing", journey.arms.pricing);
+    lines.push(
+      `${AXIS_TITLES.pricing}: ${boldArmName(pricing.short)}${pricing.retired ? " _(retired arm)_" : ""}`
+    );
+  }
+
+  // Omitted when unknown rather than falling back to the pricing band — a band
+  // is not an answer to "where are they from".
+  if (journey.country) {
+    lines.push(`Country (self-reported): ${bold(escapeSlack(journey.country))}`);
+  }
+
+  /**
+   * The rail goes last, and `clampBlock` truncates a section from the END at
+   * `SECTION_BUDGET`. So in a one-section layout an oversized line ABOVE the rail
+   * does not shorten itself — it pushes the single most important line in the
+   * message off the end, silently. The old `fields` layout could not do this:
+   * each field was clamped independently and the rail was its own block.
+   *
+   * Every value above is bounded today (utm at 100 by `classifyTraffic`, country
+   * at 100 by `buildSubmissionJourney`, device a closed set, the arm a constant
+   * table). This makes that structural rather than a property four separate call
+   * sites have to keep true: the facts give, the rail never does.
+   */
+  const rail = journeyRail(journey, reachedFloor);
+  const factsBudget = SECTION_BUDGET - rail.length - 2;
+  const facts = lines.join("\n");
+  return [facts.length > factsBudget ? `${facts.slice(0, factsBudget - 1)}\u2026` : facts, rail];
 }
 
 /**
@@ -246,63 +495,68 @@ export function buildJourneyMessage(
     blocks.push(
       context(`*${name}* (${email}) · submission #${journey.submissionId}${archetypeSuffix}`)
     );
-  } else {
-    text = `:memo: Survey completed #${journey.submissionId} — ${name} (${email}) — ${options.questionCount} questions${surveyTime ? ` in ${surveyTime}` : ""}`;
     /**
-     * How many questions and how long, both in the HEADER.
+     * The purchase message keeps the fields layout, deliberately.
      *
-     * These are the two numbers the team scans for, and both were in the wrong
-     * place: the question count sat only in the context line — Slack's smallest,
-     * greyest text, the least prominent thing in the message — while the time was
-     * in the header AND repeated in that same context line. So the more prominent
-     * of the two was the duplicated one.
-     *
-     * A header is plain_text, so it cannot carry bold, but it renders larger than
-     * anything else available and larger than a bolded section. Putting both here
-     * is the strongest emphasis Block Kit offers, and it lets the context line
-     * drop the repetition and go back to being identity only.
-     *
-     * Both degrade independently: no recorded duration drops just that clause.
+     * Only the incoming-survey hook was asked to be compacted, and the two are
+     * not the same job: a purchase is rare, read once, and carries money rows
+     * the survey ping has no equivalent for. Compacting it as a side effect
+     * would be an unrequested change to the one notification where height
+     * costs nothing.
      */
-    const headerFacts = [
-      `${options.questionCount} question${options.questionCount === 1 ? "" : "s"}`,
-      surveyTime,
-    ].filter(Boolean);
-    blocks.push(
-      header(
-        `📝 Survey completed — ${journey.firstName ?? "anonymous"}${
-          headerFacts.length > 0 ? ` · ${headerFacts.join(" · ")}` : ""
-        }`
-      )
-    );
-    blocks.push(context(`*${name}* (${email}) · submission #${journey.submissionId}`));
+    blocks.push(section(journeyRail(journey, options.reachedFloor)));
+
+    // Where they came from and on what.
+    const whereRows: Array<{ label: string; value: string }> = [
+      { label: "Came from", value: trafficLine(journey) },
+    ];
+    if (journey.device) whereRows.push({ label: "Device", value: escapeSlack(journey.device) });
+    // The country only — never the pricing band. The band is an internal key
+    // ("tier_1"), and showing it was the whole reason this row read as broken to
+    // the team. If the country is unknown the row is omitted rather than falling
+    // back to the band, because a band is not an answer to "where are they from".
+    if (journey.country) {
+      whereRows.push({
+        label: "Country (self-reported)",
+        value: escapeSlack(journey.country),
+      });
+    }
+    const toPurchase = formatDuration(journey.timings.msToPurchase);
+    if (toPurchase) whereRows.push({ label: "Bought after finishing", value: toPurchase });
+    const hesitation = formatDuration(journey.timings.msCheckoutHesitation);
+    if (hesitation) whereRows.push({ label: "Time on checkout page", value: hesitation });
+
+    blocks.push(fields(whereRows));
+    /**
+     * Header AND fields, or neither.
+     *
+     * With no axis being randomised (`armFields` returns an empty field list as
+     * of 2026-09-19) this pushed a heading over a `section` with `fields: []`,
+     * which Slack rejects outright — the whole message fails, not just the
+     * block. A heading with nothing under it would be wrong even if it posted.
+     */
+    const armBlock = armFields(journey);
+    if ((armBlock as { fields?: unknown[] }).fields?.length) {
+      blocks.push(section("*Experiments they were in*"));
+      blocks.push(armBlock);
+    }
+  } else {
+    /**
+     * The notification text, which is NOT the message.
+     *
+     * It is what a phone shows on the lock screen, what lands in the dead-letter
+     * table when delivery fails (blocks are not dead-lettered), and its first 100
+     * characters are the 60-second dedup key. So the submission id goes first —
+     * it is the only field guaranteed unique between two people finishing within
+     * the same minute.
+     *
+     * The question count lives on here rather than being lost with the header:
+     * it is genuinely useful (57 vs 58 after the survey work order) and costs
+     * nothing in a line nobody reads in-channel.
+     */
+    text = `:memo: Survey submission #${journey.submissionId} — ${options.questionCount} question${options.questionCount === 1 ? "" : "s"}${surveyTime ? ` in ${surveyTime}` : ""}`;
+    blocks.push(section(compactSurveyLines(journey, options.reachedFloor).join("\n")));
   }
-
-  blocks.push(section(journeyRail(journey, options.reachedFloor)));
-
-  // Where they came from and on what.
-  const whereRows: Array<{ label: string; value: string }> = [
-    { label: "Came from", value: trafficLine(journey) },
-  ];
-  if (journey.device) whereRows.push({ label: "Device", value: escapeSlack(journey.device) });
-  // The country only — never the pricing band. The band is an internal key
-  // ("tier_1"), and showing it was the whole reason this row read as broken to
-  // the team. If the country is unknown the row is omitted rather than falling
-  // back to the band, because a band is not an answer to "where are they from".
-  if (journey.country) {
-    whereRows.push({
-      label: "Country (self-reported)",
-      value: escapeSlack(journey.country),
-    });
-  }
-  const toPurchase = formatDuration(journey.timings.msToPurchase);
-  if (toPurchase) whereRows.push({ label: "Bought after finishing", value: toPurchase });
-  const hesitation = formatDuration(journey.timings.msCheckoutHesitation);
-  if (hesitation) whereRows.push({ label: "Time on checkout page", value: hesitation });
-
-  blocks.push(fields(whereRows));
-  blocks.push(section("*Experiments they were in*"));
-  blocks.push(armFields(journey));
 
   /**
    * The session recording, and nothing else.

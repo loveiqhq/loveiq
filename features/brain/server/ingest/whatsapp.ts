@@ -19,7 +19,8 @@
  * ingester produces.
  */
 
-import { splitBody } from "./notion";
+import { createHash } from "node:crypto";
+import { BODY_LIMIT, splitBody } from "./notion";
 import type { BrainRow } from "./upsert";
 
 /** iOS: `[06/08/2026, 14:23:11] Marcus: text` — the leading mark is WhatsApp's own. */
@@ -178,21 +179,26 @@ export function dayRows(input: DayRowInput): BrainRow[] {
     const from = msgs[0]!.time;
     const speakers = [...new Set(msgs.map((m) => m.sender).filter(Boolean))];
     const title = `WhatsApp: ${chat} — ${day} ${from}`;
-    const head = [title, `Between: ${speakers.join(", ")}`, ""];
-    const full = [...head, ...msgs.map((m) => `${m.sender} (${m.time}): ${m.text}`)].join("\n");
+    const head = [title, `Between: ${speakers.join(", ")}`, ""].join("\n");
+    const lines = msgs.map((m) => `${m.sender} (${m.time}): ${m.text}`).join("\n");
 
     /**
      * Still split on length as well: `upsertChunks` clamps every body to 2,400
      * characters, and a long unbroken conversation was being truncated on write
      * with no error and no log — the messages simply vanished.
+     *
+     * EVERY PART CARRIES THE HEAD, so every part is split leaving room for it. Parts after
+     * the first used to get the head added AFTER splitting, ran past 2,400 by its length,
+     * and lost the end of their last message on write (a stored part sat at exactly 2,400
+     * on 2026-09-27). A one-part day reads exactly as before.
      */
-    const parts = splitBody(full);
+    const parts = splitBody(lines, BODY_LIMIT - head.length - 1);
     return parts.map((body, i) => ({
       source,
       source_id: `${idBase}#wa-${day}-${from.replace(":", "")}${i === 0 ? "" : `-${i + 1}`}`,
       title: parts.length > 1 ? `${title} (${i + 1}/${parts.length})` : title,
       url,
-      body: i === 0 ? body : [...head, body].join("\n"),
+      body: `${head}\n${body}`,
       meta: {
         kind: "whatsapp-chat",
         chat,
@@ -228,4 +234,78 @@ export function whatsappRows(
     messages: parseWhatsApp(text),
     stampedAt,
   });
+}
+
+/**
+ * Days since the group's newest message. A frozen copy of the database (WhatsApp Desktop
+ * closed, or no longer linked) syncs "successfully" forever, so long silence is the sign.
+ * Read from the group's own rows, every kind of message (a reaction or a photo counts):
+ * the database's file times would say it sooner, but reading WhatsApp's folder from node
+ * hung the sync on macOS on 2026-09-26.
+ *
+ * FOURTEEN DAYS, not seven: the group has gone quiet for real for 12 days (2026-07-29 to
+ * 08-10) and 8 days (04-25 to 05-03), and a week-long limit would have failed every run
+ * of the first. With the stall watcher's 3 days on top, a frozen copy is flagged within
+ * 17 days, inside WhatsApp's 30-day window, so nothing is lost by the wait.
+ */
+export const GROUP_QUIET_LIMIT_DAYS = 14;
+
+/**
+ * Which stored parts a sweep may remove: those of days strictly AFTER the first day this
+ * run read, up to the last. After WhatsApp Desktop is linked again it holds a few weeks and
+ * fills in the rest over hours; an unscoped sweep deleted every older day it had not
+ * reached yet (reproduced: 244 of 544 parts gone). The first day read may itself be only
+ * partly filled in, so it is left alone too. A day inside the range with nothing left (all
+ * its messages deleted, or disappearing ones) is swept, since the range covers it. Also
+ * says whether a sweep is needed at all, so a partial copy does not re-read every row every
+ * five minutes.
+ */
+export function sweepScope(
+  storedIds: string[],
+  parts: Array<{ source_id: string; meta?: Record<string, unknown> | null }>
+): { needed: boolean; days: Set<string> } {
+  const current = new Set(parts.map((r) => r.source_id));
+  const read = parts
+    .map((r) => String(r.meta?.day ?? ""))
+    .filter(Boolean)
+    .sort();
+  const first = read[0] ?? "";
+  const last = read.at(-1) ?? "";
+  const dayOf = (id: string) => /#wa-(\d{4}-\d{2}-\d{2})-/.exec(id)?.[1] ?? "";
+  const inRange = (day: string) => day > first && day <= last;
+  const days = new Set([...read, ...storedIds.map(dayOf)].filter(inRange));
+  return { needed: storedIds.some((id) => !current.has(id) && inRange(dayOf(id))), days };
+}
+
+export function groupQuietDays(messageTimesMs: number[], nowMs: number): number {
+  const newest = Math.max(...messageTimesMs.filter((t) => Number.isFinite(t)));
+  return Number.isFinite(newest) ? Math.max(0, (nowMs - newest) / 86_400_000) : Infinity;
+}
+
+/**
+ * A stored day is rewritten only when it changed. Rewriting an unchanged row still rewrites
+ * every index on it (`updated_at` is indexed, so no update is HOT), and rewriting every row
+ * over and over is what exhausted the database's disk budget on 2026-08-31. The sync runs
+ * every five minutes, so it writes the days that changed, usually just today's.
+ *
+ * The fingerprint covers everything a row holds except when it was written, plus the
+ * people the registry resolves for it, so a registry change rewrites the days it touches.
+ * Bump the version to rewrite every day once after changing how a day is built.
+ */
+export const DAY_ROW_VERSION = 1;
+
+export function dayFingerprint(row: BrainRow, people: string[] | undefined): string {
+  const content = { ...row, updated_at: undefined };
+  return createHash("sha256")
+    .update(JSON.stringify([DAY_ROW_VERSION, content, people ?? []]))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/** New days, and days whose stored fingerprint differs: the only ones worth writing. */
+export function daysToWrite<T extends { source_id: string; meta?: Record<string, unknown> | null }>(
+  rows: T[],
+  stored: ReadonlyMap<string, string | null>
+): T[] {
+  return rows.filter((r) => stored.get(r.source_id) !== r.meta?.fingerprint);
 }

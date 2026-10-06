@@ -94,33 +94,36 @@ const LANDING_BOT_UA_REGEX =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator|whatsapp|telegrambot|applebot|gptbot|chatgpt|ccbot|claudebot|claude-web|perplexity|google-extended|amazonbot|bytespider/i;
 
 /**
- * Landing variant for a `/` request — a 50/50 split between the current white
- * landing ("white") and the one that preceded the 2026-08-10 rebuild
- * ("white_prev"). See shared/experiments/landingVariant.ts for the history.
+ * Landing variant for a `/` request. **The round-2 split is over: 100% "white".**
+ *
+ * CONCLUDED 2026-09-19, on Marcus's 2026-09-16 instruction to shut down the
+ * loser. The honest reading of the evidence is that the test could not resolve
+ * at our traffic. Over the 30 days to 2026-09-19, of the people who opened a
+ * report, V2 reached checkout at 9.90% (20/202) and V1 at 6.63% (12/181): a
+ * +3.3pp gap with a 95% CI of -2.2 to +8.8pp, which still straddles zero.
+ * Separating a gap that size needs roughly 1,150 report-opens PER ARM; a month
+ * produced ~200, so resolving it would take about six more months of running a
+ * design we already believe is worse.
+ *
+ * V1 is nominally ahead on payments (2 vs 1), and that is three payments in
+ * total — noise, not a result. V2 leads every upstream metric that has enough
+ * events to mean anything, so V2 ships.
  *
  * Order matters:
- *   - bots always get "white", so crawlers index one canonical landing and never
- *     dilute the split;
- *   - `?variant=` is a QA override (it also re-stamps the cookie below, so the
- *     arm sticks for the rest of the session);
- *   - an existing cookie wins, so a returning visitor keeps their arm;
- *   - otherwise a coin flip from crypto, not Math.random.
+ *   - `?variant=` is still a QA override, so the retired design can be opened
+ *     deliberately (it also re-stamps the cookie, so it sticks for the session);
+ *   - everyone else, INCLUDING a returning visitor holding a "white_prev"
+ *     cookie, gets "white". A concluded arm is not a thing to keep serving:
+ *     leaving the cookie sticky would keep a slice of real traffic on the losing
+ *     design indefinitely and keep feeding it into every per-arm number.
+ *
+ * The bot rule is gone with the split — with one landing there is nothing for a
+ * crawler to dilute.
  */
 function resolveLandingVariant(request: NextRequest): LandingVariant {
-  const ua = request.headers.get("user-agent") || "";
-  if (LANDING_BOT_UA_REGEX.test(ua)) return "white";
-
   const override = request.nextUrl.searchParams.get("variant");
   if (isLandingVariant(override)) return override;
-
-  const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
-  // "control" is a retired round-1 arm: a visitor still carrying that cookie is
-  // re-assigned rather than served a landing that no longer exists.
-  if (existing === "white" || existing === "white_prev") return existing;
-
-  const buf = new Uint8Array(1);
-  crypto.getRandomValues(buf);
-  return (buf[0]! & 1) === 0 ? "white" : "white_prev";
+  return "white";
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the
@@ -132,9 +135,46 @@ function resolveLandingVariant(request: NextRequest): LandingVariant {
 const VISIT_DAY_COOKIE = "liq_dv";
 
 /**
+ * Same idea, same clock, for the SURVEY PAGE: one row per browser per Berlin
+ * day, written server-side and set regardless of analytics consent. Holds only
+ * a date — no identifier, no cross-day linkage.
+ *
+ * WHY A SECOND SERVER-SIDE COUNTER EXISTS. `survey_engine_mount` is posted by
+ * the browser using the `__liq_vid` cookie, which this middleware mints only
+ * AFTER the visitor clicks Accept — so it is consent-gated, while the
+ * `unique_visitor` denominator beside it is not. Measured 2026-09-19 over 30
+ * days: 637 visitors reached the consent-gated step against 977 server-written
+ * survey drafts. The gap was being read as people bouncing on the landing page;
+ * most of it is people declining cookies.
+ *
+ * The identifiers do not match either: of 3,172 mount ids all time, only 632
+ * (20%) ever appear as a `unique_visitor` id, because one is a per-day random
+ * UUID and the other a persistent cookie value. So the old numerator could not
+ * be compared to its denominator even in principle.
+ *
+ * `survey_page_view` fixes both: same writer, same id scheme, same consent
+ * posture, same day clock as `unique_visitor`. It is a NEW event type rather
+ * than a change to the old one, so the existing series keeps its meaning and
+ * nothing is double counted — the two can run side by side and the difference
+ * between them IS the consent gap, which is worth being able to see.
+ */
+const SURVEY_DAY_COOKIE = "liq_ds";
+
+/**
+ * True when this request is the survey page itself, by the same rules
+ * `shouldCountVisit` uses (document GET, not a bot, not a prefetch). Exported
+ * for unit testing.
+ */
+export function shouldCountSurveyView(request: NextRequest): boolean {
+  if (!shouldCountVisit(request)) return false;
+  const path = request.nextUrl.pathname;
+  return path === "/survey" || path.startsWith("/survey/");
+}
+
+/**
  * True when this request is a real, countable page view for the daily
  * unique-visit metric: a top-level document GET on a public page, not a bot, not
- * `/api|/admin|/login|/_next`. (Next prefetches are already excluded by the
+ * `/api|/admin|/jarvis|/login|/_next`. (Next prefetches are already excluded by the
  * matcher; `sec-purpose` is belt-and-suspenders.) Exported for unit testing.
  */
 export function shouldCountVisit(request: NextRequest): boolean {
@@ -143,6 +183,8 @@ export function shouldCountVisit(request: NextRequest): boolean {
   if (
     path.startsWith("/api") ||
     path.startsWith("/admin") ||
+    // The team's Jarvis sign-in page, not a visitor.
+    path.startsWith("/jarvis") ||
     path.startsWith("/_next") ||
     path === "/login"
   ) {
@@ -242,7 +284,42 @@ async function getStagingPasswordHash(password: string): Promise<string> {
   return stagingPasswordHash;
 }
 
+/**
+ * The trailing-slash 308 that Next used to do for us.
+ *
+ * Next's own version of it is switched off in next.config.js, because Next applied that
+ * redirect BEFORE any rewrite — `beforeFiles` included — and the proxy forwards endpoints
+ * that legitimately end in a slash (`/i/v0/e/`, `/e/`, `/s/`). With the automatic redirect
+ * on, every capture POST got a 308 rather than reaching PostHog.
+ *
+ * Doing it here instead restores the exact previous behaviour for pages, because this
+ * middleware does not run on the proxy path at all (see `config.matcher`). `/about/` still
+ * 308s to `/about`; the sitemap, the canonical tags and every existing inbound link keep
+ * working, and search engines are not handed a second URL for every page.
+ *
+ * Root is excluded: "/" is entirely a trailing slash, and stripping it yields "".
+ */
+export function stripTrailingSlash(request: NextRequest): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  if (pathname === "/" || !pathname.endsWith("/")) return null;
+  // A PLAIN `URL` built from `request.url`, not `request.nextUrl.clone()`.
+  //
+  // `nextUrl` is a NextURL, which re-applies Next's own trailing-slash normalisation when
+  // `pathname` is assigned — so the slash came straight back and the response redirected
+  // /about/ to /about/. Verified on a preview deployment: five hops and still 308, an
+  // infinite loop on every page with a trailing slash, and browsers cache a 308.
+  // A plain URL stores exactly what it is given.
+  const url = new URL(request.url);
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  return NextResponse.redirect(url, 308);
+}
+
 export async function proxy(request: NextRequest) {
+  // Restore Next's trailing-slash redirect, which next.config.js disables for the
+  // PostHog proxy's sake. Must run first: everything below assumes a normalised path.
+  const trailingSlashRedirect = stripTrailingSlash(request);
+  if (trailingSlashRedirect) return trailingSlashRedirect;
+
   // Staging gate: when STAGING_PASSWORD is set, require a valid session cookie
   const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
   if (STAGING_PASSWORD) {
@@ -251,7 +328,6 @@ export async function proxy(request: NextRequest) {
       path === "/login" ||
       path === "/api/health" ||
       path === "/api/stripe/webhook" ||
-      path === "/api/calendly/webhook" ||
       // Slack posts events here signed, not cookied, so it can never satisfy the
       // staging gate — same reason the two webhooks above are exempt. Without
       // this the staging deployment answers Slack with a redirect to /login and
@@ -328,6 +404,16 @@ export async function proxy(request: NextRequest) {
     }
   })();
 
+  /**
+   * Still emitted, though the browser no longer talks to PostHog directly.
+   *
+   * Since the /relay proxy every analytics request is same-origin and covered by 'self',
+   * so these entries grant nothing that is currently used. They are kept deliberately
+   * rather than tidied away: posthog-js reaches for an absolute host in paths this proxy
+   * has not been exercised on — a toolbar load, a replay upload retry — and a CSP refusal
+   * is invisible outside the browser console. Removing them is a separate change that
+   * needs its own evidence, not a side effect of adding the proxy.
+   */
   const posthogCspSources = (() => {
     const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
     if (!host) return "";
@@ -405,6 +491,7 @@ export async function proxy(request: NextRequest) {
   // funnel_event. These headers are only ever produced by this middleware.
   requestHeaders.delete("x-liq-new-visit");
   requestHeaders.delete("x-liq-new-visit-utm");
+  requestHeaders.delete("x-liq-new-survey");
 
   // R-22: mint a request correlation id per request. Honor an inbound
   // x-request-id from the client/edge if present (helps trace across
@@ -469,6 +556,24 @@ export async function proxy(request: NextRequest) {
       sanitizeUtmSource(request.nextUrl.searchParams.get("utm_source")) ??
       (hasGoogleClickId ? "google" : undefined);
     if (utmSource) requestHeaders.set("x-liq-new-visit-utm", utmSource);
+  }
+
+  /**
+   * First survey-page view per browser per day — the consent-independent
+   * sibling of the visit count above. Written by the survey page via after(),
+   * so the DB write stays in Node app code rather than edge middleware.
+   */
+  const isNewSurveyView =
+    shouldCountSurveyView(request) && request.cookies.get(SURVEY_DAY_COOKIE)?.value !== visitDay;
+  if (isNewSurveyView) {
+    // Same arm resolution as the visit above: an unresolvable arm is "unknown",
+    // never "white". /survey is exactly the entry path that used to inflate
+    // white's denominator by defaulting.
+    const surveyCookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
+    requestHeaders.set(
+      "x-liq-new-survey",
+      landingVariant ?? (isLandingVariant(surveyCookieVariant) ? surveyCookieVariant : "unknown")
+    );
   }
 
   // Create response with security headers
@@ -684,6 +789,16 @@ export async function proxy(request: NextRequest) {
     });
   }
 
+  if (isNewSurveyView) {
+    response.cookies.set(SURVEY_DAY_COOKIE, visitDay, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 36,
+    });
+  }
+
   // Security logging for API routes (3.4)
   // Note: This IP is for observability logging only, not for security decisions
   // (rate limiting uses getClientIp() which trusts only x-real-ip).
@@ -712,7 +827,14 @@ export const config = {
   matcher: [
     // Match all paths except static files and API routes that don't need CSP
     {
-      source: "/((?!_next/static|_next/image|favicon.ico|images/).*)",
+      // `relay` is the PostHog reverse proxy (see shared/analytics/posthog-proxy.ts).
+      // Excluded for two reasons: this middleware would otherwise run on EVERY analytics
+      // event and every session-replay chunk — by far the highest-volume path on the site
+      // — and none of what it does (CSP headers, CSRF cookie, staging gate, security
+      // logging) means anything for a request that is forwarded verbatim to PostHog.
+      // The staging gate exclusion is deliberate, not incidental: a gated preview must
+      // still be able to send analytics, which is how this proxy gets verified at all.
+      source: "/((?!_next/static|_next/image|favicon.ico|images/|relay/).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

@@ -6,6 +6,7 @@ import {
   archetypeBreakdownStaticAssets,
   archetypePresentation,
 } from "@features/report/data/archetypePresentation";
+import { ARCHETYPES_COMPARED, QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 import { isArchetypeName } from "@features/report/server/archetypeSlug";
 
 interface Props {
@@ -20,10 +21,6 @@ interface Props {
    *  per-user "Dimensions Scored" methodology stat. Optional / nullable so
    *  reports that lack diagnostics still render with a sensible fallback. */
   diagnostics?: { uDimensions?: Record<string, number> } | null;
-  /** Stable identifier (submission_id or report token) used to seed the
-   *  per-user variation on the "Reference Sample" methodology stat. Same
-   *  user always sees the same number on refresh. */
-  submissionSeed?: string | number | null;
 }
 
 type CssVarStyle = CSSProperties & Record<`--${string}`, string | number>;
@@ -44,36 +41,10 @@ const MOBILE_ARCHETYPES_GRADIENT =
 const padRank = (n: number) => n.toString().padStart(2, "0");
 const formatPct = (pct: number) => `${pct.toFixed(1)}%`;
 
-// ── Methodology stat helpers ──────────────────────────────────────────────────
-// The "Reference Sample" and "Dimensions Scored" values in the methodology
-// aside used to be hardcoded ("n = 124,638", "5 of 28") and identical for
-// every user. These helpers add deterministic per-user variation around the
-// reference base and surface the user's actual driving-dimension count.
-
-const REFERENCE_SAMPLE_BASE = 124_638;
-const REFERENCE_SAMPLE_RANGE = 600;
-
-/** FNV-1a 32-bit hash. Stable, no dependencies, fine for non-crypto seeding. */
-function fnv1aHash(input: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    // Equivalent to `hash *= 0x01000193` in 32-bit space.
-    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
-  }
-  return hash >>> 0;
-}
-
-/** Deterministic per-user "Reference Sample" count near REFERENCE_SAMPLE_BASE.
- *  Returns the base when no seed is supplied so the value remains stable in
- *  preview / SSR contexts that lack a submission identifier. */
-export function computeReferenceSample(seed: string | number | null | undefined): number {
-  if (seed === null || seed === undefined || seed === "") return REFERENCE_SAMPLE_BASE;
-  const hash = fnv1aHash(String(seed));
-  const span = REFERENCE_SAMPLE_RANGE * 2 + 1;
-  const offset = (hash % span) - REFERENCE_SAMPLE_RANGE;
-  return REFERENCE_SAMPLE_BASE + offset;
-}
+// ── Methodology stats ─────────────────────────────────────────────────────────
+// Only numbers this code computes: the questions asked, the archetypes compared, and how
+// many of this reader's traits stand out from neutral. Until 2026-09-29 the box also showed
+// a reference sample, a reliability and a test-retest figure that nothing here computes.
 
 const MEANINGFUL_DIMENSION_DELTA = 0.15;
 
@@ -196,8 +167,8 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
   onUnlock,
   onPurchaseFullReport,
   diagnostics,
-  submissionSeed,
 }) => {
+  const driving = countDrivingDimensions(diagnostics?.uDimensions);
   const sectionRef = useRef<HTMLElement | null>(null);
   const listRef = useRef<HTMLOListElement | null>(null);
   const [isInView, setIsInView] = useState(false);
@@ -337,25 +308,13 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
             </span>
           </div>
           <dl className="mt-[20px] grid grid-cols-2 gap-x-[16px] gap-y-[24px]">
-            <MethodologyStat label="Reference Sample">
-              <span className="text-[#6b5b95]">n</span>
-              {` = ${computeReferenceSample(submissionSeed ?? null).toLocaleString("en-US")}`}
-            </MethodologyStat>
-            <MethodologyStat label="Dimensions Scored">
-              {(() => {
-                const driving = countDrivingDimensions(diagnostics?.uDimensions);
-                // Defensive fallback only fires when diagnostics is missing or
-                // empty — in normal /api/report responses uDimensions has all
-                // 21 keys, so users see the real per-user count.
-                if (!driving) return "5 of 28";
-                return `${driving.count} of ${driving.total}`;
-              })()}
-            </MethodologyStat>
-            <MethodologyStat label="Reliability (α)">0.94</MethodologyStat>
-            <MethodologyStat label="Test — Retest (ICC)">
-              <span className="text-[#6b5b95]">r</span>
-              {" = 0.87"}
-            </MethodologyStat>
+            <MethodologyStat label="Questions Answered">{QUESTIONS_ASKED}</MethodologyStat>
+            <MethodologyStat label="Archetypes Compared">{ARCHETYPES_COMPARED}</MethodologyStat>
+            {driving ? (
+              <MethodologyStat label="Stand-out Traits">
+                {`${driving.count} of ${driving.total}`}
+              </MethodologyStat>
+            ) : null}
           </dl>
         </aside>
       </header>
@@ -380,6 +339,10 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
             <li
               key={name}
               style={rowStyle}
+              // Invisible. Lets a tap on a locked row be counted as a tap on the
+              // paywall: the tracker records only a tag and one class, and that
+              // is the same for a locked row and an unlocked one.
+              data-paywall-locked={isRowUnlocked ? undefined : "archetype-row"}
               className={`archetype-breakdown__row group px-[12px] pb-[15px] pt-[14px] transition-colors duration-200 hover:bg-[rgba(22,16,33,0.02)] ${
                 isLast ? "" : "border-b border-[rgba(22,16,33,0.1)]"
               }`}
@@ -527,7 +490,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
           <button
             type="button"
             onClick={onPurchaseFullReport}
-            className="archetype-breakdown__cta group relative inline-flex h-[39.5px] w-[227.84px] items-center justify-center rounded-full bg-gradient-to-r from-[#f97316] to-[#a855f7] text-[13px] font-semibold leading-[19.5px] text-white drop-shadow-[0_0_10px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-[1.02] hover:drop-shadow-[0_0_18px_rgba(168,85,247,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+            className="archetype-breakdown__cta group relative inline-flex h-[39.5px] min-w-[227.84px] items-center justify-center gap-[10px] px-[16px] rounded-full bg-gradient-to-r from-[#f97316] to-[#a855f7] text-[13px] font-semibold leading-[19.5px] text-white drop-shadow-[0_0_10px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-[1.02] hover:drop-shadow-[0_0_18px_rgba(168,85,247,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             <Image
               src={archetypeBreakdownStaticAssets.ctaIconLeft}
@@ -536,8 +499,19 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               width={14}
               height={14}
               unoptimized
-              className="pointer-events-none absolute left-[calc(50%-82.92px)] top-1/2 h-[14px] w-[14px] -translate-y-1/2"
+              className="pointer-events-none h-[14px] w-[14px] shrink-0"
             />
+            {/*
+              A ROW, NOT THREE ABSOLUTE SLOTS.
+              Both icons used to be `absolute` at `calc(50% ± 82.92px)` — Figma
+              offsets measured for one exact label. But `footerCtaLabel` is
+              variable ("Unlock the Full Report" / "Unlock All Reports") and the
+              text is centred, so the longer label grew outward into icons that
+              could not move: measured 1px of clearance on a Pixel 7, which is
+              the padlock sitting on the U. `min-w` keeps the designed width for
+              the short label and lets the long one push the button wider
+              instead of through the icon.
+            */}
             <span>{footerCtaLabel}</span>
             <Image
               src={archetypeBreakdownStaticAssets.ctaIconRight}
@@ -546,7 +520,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               width={14}
               height={14}
               unoptimized
-              className="pointer-events-none absolute left-[calc(50%+82.92px)] top-1/2 h-[14px] w-[14px] -translate-y-1/2"
+              className="pointer-events-none h-[14px] w-[14px] shrink-0"
             />
           </button>
         </div>

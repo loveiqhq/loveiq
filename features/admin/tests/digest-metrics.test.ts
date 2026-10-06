@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { delta, dayString, isoWeekString } from "@features/admin/server/digest-metrics";
 
 describe("delta", () => {
-  it("returns +∞% when prev is 0 and curr is positive", () => {
-    expect(delta(5, 0)).toBe("+∞%");
+  it('says "vs none" rather than inventing a percentage, when the base is 0', () => {
+    // "+∞%" is not a fact about the business. One sale after a quiet week
+    // rendered as "EUR 29.00 (+∞%)", which reads like a spike and means
+    // nothing — a change from zero has no percentage.
+    expect(delta(5, 0)).toBe("vs none");
+    expect(delta(5, 0)).not.toContain("∞");
   });
 
   it('returns "—" when both are 0', () => {
@@ -22,9 +26,18 @@ describe("delta", () => {
     expect(delta(80, 100, 0)).toBe("-20%");
   });
 
-  it("appends (low base) when prev is below threshold", () => {
-    // Default threshold is 5
-    expect(delta(10, 2)).toBe("+400% (low base)");
+  it("says nothing at all when the baseline is too small to compare against", () => {
+    /**
+     * It used to return "-100% (low base)". On the daily message that is what
+     * "Paid" showed almost every day: yesterday 0 against one sale a week, which
+     * the average turns into 0.14, so the arithmetic is -100% and the statement
+     * is noise. A reader cannot tell that from a real collapse, and "(low base)"
+     * is jargon that flags the caveat without removing it.
+     */
+    expect(delta(0, 0.14)).toBe("");
+    expect(delta(1, 2)).toBe("");
+    // The threshold is the caller's to choose.
+    expect(delta(1, 2, 1)).toBe("-50%");
   });
 
   it("caps absurd deltas at ±999%", () => {

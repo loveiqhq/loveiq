@@ -6,7 +6,7 @@
 
 ## Prerequisites
 
-- Node.js `20` as used in CI. See [docs/versions.md](../versions.md) for the pinned toolchain list.
+- Node.js `22`, as used in CI and by production on Vercel. See [docs/versions.md](../versions.md) for the pinned toolchain list.
 - npm from the bundled Node.js installation.
 - Optional service credentials only when you need live integrations.
 
@@ -123,6 +123,186 @@ The route requires:
 - `RESEND_API_KEY`
 
 It also checks live Supabase reachability, so invalid credentials or a down Supabase project still return `503`.
+
+## Letting the pipeline write a fix
+
+`.github/workflows/generate-fix.yml` — **Actions → Generate and prove a fix →
+Run workflow**. Give it three things: the probe that reproduces the defect, the
+JSON environment that probe needs, and one plain sentence describing what a
+visitor experienced. It proposes a fix, then proves it, then opens a pull
+request — and only in that order.
+
+It authenticates with the **team Claude subscription, not an API key**. Mint the
+token once with `claude setup-token` (it needs a real terminal — Claude Code
+cannot give it one) and store it as the repository secret
+`CLAUDE_CODE_OAUTH_TOKEN`. Without it the workflow skips with a warning instead
+of failing every run.
+
+Two things it will not do, both enforced mechanically rather than by the prompt:
+
+- **It cannot merge its own work.** The pull request opens ready for review and
+  a person merges it — which is also the label the pipeline learns from, so
+  automating the click would destroy the only signal that does not come from
+  our own machinery judging itself.
+- **It cannot touch anything a probe cannot vouch for.** `scripts/prove-fix.mjs`
+  refuses any diff reaching API routes, migrations, auth, payments or the probes
+  themselves, and refuses a change over the line cap. A green probe says the UI
+  behaves; it says nothing about whether a payment still settles.
+
+**What it is allowed to change.** Presentation code and tests only. Paths and
+size are judged differently, because they answer different questions:
+
+|          | question                             | answer                                                                                                                       |
+| -------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| **path** | can a probe speak to this at all?    | a hard gate — API routes, migrations, auth, payments and the probes themselves are refused before anything runs, at any size |
+| **size** | how much should one green probe buy? | a tier — an oversize change is still proven, and opens as a **draft** rather than ready-to-merge                             |
+
+Refusing a large diff unmeasured threw away the measurement too. The real
+survey-loop fix was 171 product lines across a hook, a submit path and the
+probe, and the honest verdict on it is "proven, and too big to merge on the
+proof alone" — not silence.
+
+The size cap counts PRODUCT lines, not test lines. A test changes no runtime
+behaviour, so it cannot widen what the probe failed to check, and a fix that
+brings its own regression test should not be penalised for it. (Measured: this
+morning's consent-gate fix was 37 lines of product code and 56 of test.)
+
+**Three ways the proposal step can fail, which need opposite responses.** The
+job names them rather than reporting a bare failure, because the natural reading
+of "failed" is "the model could not do it", and that is wrong in two of the three:
+
+| what the log says   | what it means                        | what to do                                                      |
+| ------------------- | ------------------------------------ | --------------------------------------------------------------- |
+| `session limit`     | the Claude subscription is exhausted | wait for the reset and re-run; nothing about the task was wrong |
+| `Reached max turns` | the defect is too large for one pass | narrow the defect, or fix it by hand                            |
+| anything else       | a real error                         | read it                                                         |
+
+In all three the partial work is committed, printed and pushed, so what it had
+got to is readable.
+
+**One organisation setting gates the pull request.** "Allow GitHub Actions to
+create and approve pull requests" is off by default, and while it is off the
+last step fails with `GitHub Actions is not permitted to create or approve pull
+requests`. That is why this repo had never opened an automatic pull request —
+including from `replay-pr.mjs`, since the day it was written. An org owner
+enables it at <https://github.com/organizations/loveiqhq/settings/actions>.
+
+Nothing is lost while it is off: the branch is pushed and the proof is in the
+log, so the pull request can be opened by hand from `autofix/<timestamp>`.
+
+Worth knowing before enabling it: the same toggle also lets Actions _approve_
+pull requests. That is harmless today because `main` requires **zero**
+approvals, so an approval gates nothing — but if required approvals is ever
+raised to make review the human gate, this setting would let a workflow satisfy
+it, and the two must be reconsidered together.
+
+**What a proven run produces.** `prove-fix.mjs` prints `PROVEN` and then a
+machine-readable `PROVEN_TIER=small|large`, which is what the workflow reads to
+decide ready-for-review versus draft. That line going missing once cost a
+genuinely proven fix its pull request — `grep` found nothing, exited 1, and
+`bash -e` failed the step after six green checks — so the workflow now tolerates
+a missing tier and a test requires the line to exist.
+
+**When it fails.** The proof refusing a fix is a normal outcome, not a
+malfunction — the first live run produced a plausible twelve-line change that
+simply did not work, and was refused. The run then leaves two things behind so
+the attempt can be read rather than guessed at: the proposed diff in the job
+summary, and the branch itself (`autofix/<timestamp>`), pushed whether or not
+the proof passed. It stays a BRANCH — unproven work must not sit in the review
+queue wearing the same badge as proven work.
+
+Reading that diff is how you tell apart a model that misunderstood the defect,
+one that fixed the wrong thing, and a task no small change could satisfy. Those
+call for rewording, retrying, and doing it by hand respectively.
+
+`base_ref` replays a defect from history. That is how the machine is tested: a
+healthy production has nothing to fix, and waiting for a customer to hit
+something is not verification.
+
+**A ref can be a local branch, a remote branch or a SHA** — the harness tries
+each spelling, because in CI a branch pushed from a laptop exists only on the
+remote and `actions/checkout` does not fetch it. An unresolvable ref fails
+rather than falling back to `HEAD`, which would quietly prove a diff nobody
+asked about.
+
+Proving a candidate on its own, without generating anything:
+`.github/workflows/prove-fix.yml`, or locally —
+
+```bash
+FIX_REF=my-branch PROBE=verify-survey-loop.mjs node scripts/prove-fix.mjs
+```
+
+## Every probe must be run by something
+
+`scripts/probes/` holds ~27 Playwright probes. A probe is only a check if
+something invokes it, and there are exactly three things that can:
+
+- a **criterion** in `scripts/verify-ux-findings.mjs` (`probes: [...]`), which
+  runs it against a real finding;
+- a **`runProbe()` call site** in that file, for probes attached to the session
+  rather than the criterion — `verify-probe-falsifiability.mjs` discovers these
+  too, so they get the 0/1/3 contract check for free;
+- a **step in `.github/workflows/probe-guard.yml`**, for standing checks that
+  are not tied to a finding.
+
+`__tests__/scripts/every-probe-runs-somewhere.test.ts` fails if a probe is
+reachable from none of them. It carries a `KNOWN_ORPHANS` list of nine that
+already ran nowhere when the check was written; that list may only shrink, and
+every name on it is verified to still exist and still be uninvoked, so a stale
+entry cannot quietly forgive a probe.
+
+This is the fourth thing in this repository found running nowhere —
+`sync-vision-scanners.ts` was in no workflow, three CI lanes skipped on an unset
+secret, and the auto-PR flag had never once executed. The symptom is always a
+green tree with nothing behind it, so the rule is worth the test.
+
+## Reading a Supabase failure alert
+
+Every write through `supabaseFetch` is checked, and a non-2xx is logged at
+`error` — which mirrors to the ops Slack channel. Two things about that alert
+are worth knowing before you go looking for a lost row.
+
+**A 409 is not a failure.** It is how idempotency is expressed: a replayed
+Stripe webhook hits the unique constraint on
+`payment_webhook_event.stripe_event_id` and is refused on purpose. Logged at
+`warn`, so it stays out of Slack.
+
+**An RPC is a call, not a write.** PostgREST expresses both a table insert and
+a database function call as a `POST`, and every analysis function in this
+codebase (`get_conversion_funnel` and the rest of the analysis RPCs) is reached that
+way. A failed function call reports
+
+    supabase: a database function call was REFUSED — nothing was written
+
+and carries `kind=rpc`. A refused INSERT reports "the row was not written" and
+carries `kind=write`. Before 2026-09-23 both said the second thing, and a
+mistyped report query was chased for an hour as data loss.
+
+**`PGRST202` means the arguments did not match**, not that the function is
+missing. `get_conversion_funnel` takes `(since_ts, utm_filter)`; a caller
+sending `{days: 7}` gets a 404 while the function sits there perfectly healthy.
+Check the signature before assuming a migration was skipped:
+
+```sql
+select proname, pg_get_function_identity_arguments(oid)
+from pg_proc where proname = 'the_function';
+```
+
+**The alert carries the identifiers you need.** `path`, `method`, `status`,
+`code` and `kind` are appended to the Slack line from an allowlist — objects
+are never expanded, because a payload is where an email or a report token
+hides. If you need more than that, Supabase's own gateway log has the request:
+
+```sql
+select log_attributes['request.path'] as path,
+       toInt32OrZero(log_attributes['response.status_code']) as status,
+       count() as n
+from logs
+where source = 'edge_logs'
+  and log_attributes['request.method'] in ('POST','PATCH','PUT','DELETE')
+  and toInt32OrZero(log_attributes['response.status_code']) >= 400
+group by path, status order by n desc limit 25;
+```
 
 ## Related Docs
 

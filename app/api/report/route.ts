@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { scheduleAfterResponse } from "@shared/http/after-response";
+import { isProbeRequest } from "@shared/http/probe-cookie";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
@@ -52,9 +53,15 @@ const tokenSchema = z.object({
   token: z.string().regex(/^(rpt_[a-zA-Z0-9]{20}|rpts_[A-Za-z0-9]{20})$/),
 });
 
+/**
+ * Per IP. It was 10, and every archetype a reader switches to is a fetch, so an
+ * all-reports buyer looking through their 14 got "Too many attempts" on the 11th within
+ * a minute, as did people sharing one address (a mobile carrier's, an office's). The
+ * links are 20 random characters, so the limit guards load, not guessing.
+ */
 const RATE_LIMIT_CONFIG = {
   bucket: "report-view",
-  limit: 10,
+  limit: 60,
   windowMs: 60_000,
 };
 
@@ -388,7 +395,38 @@ export async function GET(request: Request) {
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
 
-      if (access.personalReportId && !accessPlan) {
+      /**
+       * A PROBE IS NOT A READER.
+       *
+       * scripts/probes/ opens `/report/<token>` on every CI run and the server
+       * records a row per open. Measured 2026-09-21: 73% of `report_session`
+       * over 30 days is internal traffic, 1,505 rows of it on the one report
+       * the probes hammer, and the share is climbing — 52% all time, 63% over
+       * 90 days, 73% over 30 — as this pipeline runs more often. Eight admin
+       * routes read that table for retention, journey, flow and embed
+       * performance and none of them filter, so those dashboards are computed
+       * over data that is now mostly robots.
+       *
+       * The probes cannot be spotted any other way: they emulate real devices,
+       * so the user agent is a real phone's by design, and the account is no
+       * help because the team genuinely reads its own reports in a real browser
+       * — that IS a visit. So they say so, in a cookie set by the one helper 27
+       * of the 34 already share.
+       *
+       * Everything else on this request is unaffected: the report renders, the
+       * access plan resolves, the Slack journey still advances. Only the
+       * telemetry row is skipped.
+       */
+      // Read off the raw Cookie header: this handler takes a plain `Request`,
+      // which has no `cookies` accessor.
+      const isProbe = isProbeRequest(request.headers.get("cookie"));
+      if (isProbe) {
+        logger.info({ path: "/api/report" }, "probe request — report_session row skipped");
+      }
+
+      if (isProbe) {
+        // no row
+      } else if (access.personalReportId && !accessPlan) {
         await recordReportSessionView({
           ipAddress: ip,
           personalReportId: access.personalReportId,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { readerSessionDurationsMs } from "@features/admin/server/reader-sessions";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
@@ -15,6 +16,8 @@ interface SessionRow {
   personal_report_id: number;
   started_at: string;
   ended_at: string | null;
+  /** Embedded so a staff session can be kept out of the duration average. */
+  app_user: { email: string | null } | null;
 }
 
 interface SectionRatingRow {
@@ -88,7 +91,7 @@ export async function GET(request: Request) {
         ),
         // Q2: Sessions with duration data
         supabaseFetch(
-          `/rest/v1/report_session?select=id,personal_report_id,started_at,ended_at${sessionDateFilter}&order=started_at.asc`,
+          `/rest/v1/report_session?select=id,personal_report_id,started_at,ended_at,app_user(email)${sessionDateFilter}&order=started_at.asc`,
           { headers: { Range: "0-49999" } }
         ),
         // Q3: Section ratings (join through personal_report_section to get report_section_id)
@@ -139,20 +142,33 @@ export async function GET(request: Request) {
     const viewRate = totalReports > 0 ? Math.round((reportsWithSessions / totalReports) * 100) : 0;
 
     // Average session duration
-    const durations: number[] = [];
-    for (const s of sessions) {
-      if (s.ended_at) {
-        const durationSec =
-          (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 1000;
-        if (durationSec > 0 && durationSec < 86400) {
-          durations.push(durationSec);
-        }
-      }
-    }
+    // Staff excluded and the 24h sanity cap applied in one place, shared with
+    // the core-KPI card so the two can no longer disagree.
+    const durations = readerSessionDurationsMs(sessions, 86_400_000).map((ms) => ms / 1000);
+    /**
+     * NULL, not 0, when no session was ever closed.
+     *
+     * A zero is a measurement; "nobody closed a session" is the absence of one,
+     * and this card showed a confident "Avg Session Duration: 0m" for months
+     * because it could not tell the two apart.
+     *
+     * **This is no longer always empty.** `ead7ebf3` (2026-09-18) shipped
+     * `/api/report-session-end`, a `sendBeacon` on the way out of the report,
+     * and it works: measured 2026-09-19, 0% of sessions closed up to and
+     * including 17 Sep, then 19.5% on the 18th and 47.8% on the 19th as cached
+     * pages picked up the new bundle. 34 of 11,371 rows all time.
+     *
+     * So the average is now REAL but PARTIAL, and partial in a way that is not
+     * random: a beacon fires on a clean exit and is lost on a crash, a hard
+     * kill, or a browser that drops it — the sessions most likely to be missing
+     * are the ones that ended badly. Treat the figure as a floor on engagement
+     * from the readers who left normally, not as the average reader. The NULL
+     * is still the honest answer while coverage is this thin.
+     */
     const avgSessionDurationSec =
       durations.length > 0
         ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-        : 0;
+        : null;
 
     // --- Section Ratings (graceful degradation) ---
     let sectionRatings: Array<{

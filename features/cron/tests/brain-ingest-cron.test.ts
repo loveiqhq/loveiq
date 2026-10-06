@@ -26,6 +26,9 @@ vi.mock("@features/brain/server/ingest/google", () => ({
   ingestGa4: mk("ga4"),
   ingestSearchConsole: mk("gsc"),
 }));
+vi.mock("@features/brain/server/ingest/corporate", () => ({
+  ingestCorporateSite: mk("corporate"),
+}));
 vi.mock("@features/brain/server/ingest/slack", () => ({ ingestSlack: mk("slack") }));
 vi.mock("@features/brain/server/ingest/notion", () => ({ ingestNotion: mk("notion") }));
 
@@ -61,7 +64,7 @@ describe("/api/cron/brain-ingest wiring", () => {
     // was ingested nightly as "deliberate redundancy" — documentation describing
     // something that was not happening.
     await GET(req());
-    expect(calls.map((c) => c.name).sort()).toEqual(["gsc"].sort());
+    expect(calls.map((c) => c.name).sort()).toEqual(["corporate", "gsc"].sort());
   });
 
   it("runs ONLY the sources whose upstream changes daily", async () => {
@@ -73,17 +76,18 @@ describe("/api/cron/brain-ingest wiring", () => {
      * back to being up to 24 hours stale without anything looking broken.
      */
     await GET(req());
-    // GSC ONLY. GA4 moved to the 15-minute lane once it was found to serve
-    // intraday data; Search Console genuinely lags ~3 days, so nightly is live
-    // for it and asking sooner returns identical numbers.
-    expect(calls.map((c) => c.name).sort()).toEqual(["gsc"]);
+    // GSC, plus the corporate website. GA4 moved to the 15-minute lane once it was
+    // found to serve intraday data; Search Console genuinely lags ~3 days, so nightly
+    // is live for it and asking sooner returns identical numbers. The corporate site
+    // reads both for a site with a handful of visits a day, where nightly is plenty.
+    expect(calls.map((c) => c.name).sort()).toEqual(["corporate", "gsc"]);
   });
 
   it("passes the OIDC token from the REQUEST HEADER to every Google-dependent source", async () => {
     // The token is a header, not an env var. Reading it from process.env is what
     // made keyless auth fail silently in production with oidc=0.
     await GET(req({ [VERCEL_OIDC_HEADER]: OIDC }));
-    for (const name of ["gsc"]) {
+    for (const name of ["gsc", "corporate"]) {
       const call = calls.find((c) => c.name === name)!;
       expect(call.args, name).toContain(OIDC);
     }
@@ -94,6 +98,8 @@ describe("/api/cron/brain-ingest wiring", () => {
     // OIDC token. Those three now live in brain-fast, so the meaningful assertion
     // moved with them; here the point is that this lane is Google-only.
     await GET(req({ [VERCEL_OIDC_HEADER]: OIDC }));
-    expect(calls.every((c) => c.name === "gsc")).toBe(true);
+    // The corporate website's ingester reads GA4 and Search Console only, so it belongs here.
+    const google = new Set(["gsc", "corporate"]);
+    expect(calls.every((c) => google.has(c.name))).toBe(true);
   });
 });

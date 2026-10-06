@@ -229,4 +229,53 @@ describe("GET /api/cron/survey-paused", () => {
     // Confirm the address routed to Resend matches the email in the candidate answers.
     expect(mockResendSend.mock.calls[0]![0].to).toBe("user@example.com");
   });
+
+  // The cooldown mock above answers the same for every key. These two need the real
+  // SET-NX behaviour: the first claim of a key passes, every later one is refused.
+  function realCooldown(preClaimed: string[] = []) {
+    const claimed = new Set(preClaimed);
+    mockCheckCooldown.mockImplementation(async (key: string, bucket: string) => {
+      const k = `${bucket}:${key}`;
+      if (claimed.has(k)) return { allowed: false };
+      claimed.add(k);
+      return { allowed: true };
+    });
+  }
+
+  it("sends one email when two drafts share an address", async () => {
+    /**
+     * Two drafts from one person (two tabs, a restart) each got the same email,
+     * seconds apart in one run, while the cooldown was keyed on the draft alone.
+     */
+    realCooldown();
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/survey_partial_save")) {
+        return {
+          ok: true,
+          json: async () => [
+            { ...candidateRow, session_id: "sess-a" },
+            { ...candidateRow, session_id: "sess-b", answers: { "00000": " User@Example.com " } },
+          ],
+        };
+      }
+      if (url.includes("/rest/v1/survey_submission")) return { ok: true, json: async () => [] };
+      throw new Error(`Unexpected fetchWithTimeout call: ${url}`);
+    });
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    mockResendSend.mockResolvedValue({ id: "resend-msg-1" });
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.sent).toBe(1);
+    expect(body.skippedCooldown).toBe(1);
+    expect(mockResendSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("still skips a draft emailed before the address key existed", async () => {
+    // The deploy itself: the old code set the draft key, never the address key.
+    realCooldown(["survey-paused-email:sess-abc"]);
+    mockSupabaseSequence();
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    const body = await (await GET(makeRequest("test-cron-secret"))).json();
+    expect(body.skippedCooldown).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
 });

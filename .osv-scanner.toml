@@ -23,3 +23,55 @@ id = "GHSA-w5hq-g745-h8pq"
 # remaining v10 reference is a manifest-only declaration in a
 # transitive dep, not an installed version.
 reason = "Transitive uuid pinned to >=11.0.0 via npm overrides"
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-12-04
+# braces stack-exhaustion DoS (CVE-2026-93687). Every release up to 3.0.3 is
+# affected and none is fixed (micromatch/braces#70; fix PRs #72 and #75 still
+# unmerged on 2026-10-04). braces reaches us only through build tooling:
+# tailwindcss 3 (chokidar, fast-glob, micromatch), eslint-config-next
+# (fast-glob) and markdownlint-cli2 (globby). `npm ls braces --omit=dev` is
+# empty and `npm audit --omit=dev` is clean, so nothing ships to production.
+# The DoS needs an attacker-controlled brace pattern; these tools only expand
+# patterns from our own config files. Also read by security.yml's npm audit
+# step (scripts/npm-audit-gate.mjs). When the date passes, both scanners fail
+# again: check for a fixed braces, update it, and delete this entry.
+reason = "No fixed braces release; dev-only build tooling, patterns are our own"
+
+# The four below were published overnight 2026-10-05/06 against build tooling
+# only (osv-scanner marks each "dev"; `npm audit --omit=dev` stays clean). None
+# has a fix inside the range its parent asks for. When the date passes, check
+# whether the parent moved, update it, and delete the entry.
+
+[[IgnoredVulns]]
+id = "GHSA-238p-pmpm-9mq7"
+ignoreUntil = 2026-11-06
+# katex 0.16.47 (LOW), via markdownlint-cli2 -> micromark-extension-math, which
+# asks ^0.16.0; the fix is 0.18.2. It only parses our own docs, renders nothing.
+reason = "Dev-only markdown linting; fix is outside micromark-extension-math's range"
+
+[[IgnoredVulns]]
+id = "GHSA-rj75-hqrm-r3gf"
+ignoreUntil = 2026-11-06
+# postcss-selector-parser 6.1.4, via tailwindcss 3 (^6.1.2) and postcss-nested
+# (^6.1.1); the fix is 7.1.6, a major neither accepts. Quadratic parsing of
+# selectors, and the build only parses our own stylesheets.
+reason = "Build-time only, our own CSS; fix is a major tailwindcss 3 does not accept"
+
+[[IgnoredVulns]]
+id = "GHSA-r4xh-jqrq-34v2"
+ignoreUntil = 2026-11-06
+# smol-toml 1.8.0, pinned exactly by markdownlint-cli2 (cspell-config-lib
+# dedupes onto it); the fix is 1.9.0. Quadratic parsing of TOML, and these
+# tools only read our own config files.
+reason = "Dev-only linters reading our own config; markdownlint-cli2 pins 1.8.0"
+
+[[IgnoredVulns]]
+id = "GHSA-hp3w-g68c-fv3c"
+ignoreUntil = 2026-11-06
+# sprintf-js 1.0.3, no fixed release (last affected 1.1.3). Reached only via
+# mammoth's command-line wrapper (bin/mammoth -> argparse); the library the
+# brain ingest imports (lib/index.js) never loads argparse, and argparse only
+# formats its own help strings.
+reason = "No fixed release; only mammoth's CLI loads it, never the library we import"

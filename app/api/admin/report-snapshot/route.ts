@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -35,10 +35,10 @@ export async function GET(request: Request) {
       supabaseFetch(`/rest/v1/waitlist_user?select=id&created_date_time=gte.${since}`, {
         headers: { Prefer: "count=exact" },
       }),
-      // eslint-disable-next-line no-secrets/no-secrets
-      supabaseFetch(`/rest/v1/scoring_result?select=primary_archetype,survey_submission_id`, {
-        headers: { Range: "0-49999" },
-      }),
+      // Paged: 1,987 scoring results, past the 1,000-row cap.
+      fetchAllRows<{ primary_archetype: string; survey_submission_id: number }>(
+        `/rest/v1/scoring_result?select=primary_archetype,survey_submission_id&order=survey_submission_id.asc`
+      ),
     ]);
 
     const totalSub = parseInt(subRes.headers.get("content-range")?.split("/")[1] || "0", 10);
@@ -61,8 +61,8 @@ export async function GET(request: Request) {
     const waitlistTotal = parseInt(wlRes.headers.get("content-range")?.split("/")[1] || "0", 10);
 
     const archetypes = new Map<string, number>();
-    if (scoreRes.ok) {
-      const scores: Array<{ primary_archetype: string }> = await scoreRes.json();
+    if (scoreRes !== null) {
+      const scores: Array<{ primary_archetype: string }> = scoreRes;
       for (const s of scores) {
         incrementCount(archetypes, s.primary_archetype);
       }

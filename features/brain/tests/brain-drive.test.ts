@@ -1,4 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * The colleague half of the walk is real in these tests, not stubbed, so the
+ * exclusions can be proved to cover files that arrive through it. `colleagueMailboxes`
+ * is empty by default, which is what every pre-existing test here assumes.
+ */
+const colleagueMailboxes: { value: string[] } = { value: [] };
+/** Mailboxes whose delegated token is refused, to drive the sweep gate. */
+const refuseColleagueToken = new Set<string>();
+/** Files owned by a colleague, keyed by mailbox. */
+const colleagueFiles: Record<string, Array<Record<string, unknown>>> = {};
+vi.mock("@features/brain/server/ingest/gmail", () => ({
+  domainMailboxes: vi.fn(async () => colleagueMailboxes.value),
+}));
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -11,6 +25,8 @@ vi.mock("@shared/http/google-oauth", () => ({
   getGoogleAccessToken: vi.fn(async () => "test-token"),
   getDelegatedToken: vi.fn(async (subject: string) => {
     delegatedFor.push(subject);
+    // A colleague whose token is refused is how the sweep gate gets exercised.
+    if (refuseColleagueToken.has(subject)) return null;
     return delegatedToken;
   }),
   isGoogleConfigured: () => true,
@@ -80,15 +96,76 @@ vi.mock("@features/admin/server/supabase", () => ({
 
 let files: unknown[] = [];
 let exportBody = "Summary\n\nWe agreed to ship the paywall.";
+const exportOverrides: Record<string, string> = {};
 let listOk = true;
 let targets: Record<string, unknown> = {};
 let alwaysMorePages = false;
 let exportFails = false;
+/** 500 is retried with backoff; a 4xx is returned immediately. See driveGet. */
+let exportFailStatus = 500;
+/** How many times the listing should answer with a transient 5xx before succeeding. */
+let listTransientFailures = 0;
+/** Listing requests that time out (fetchWithTimeout throws) before one answers. */
+let listTimeouts = 0;
+/** The first listing page names a successor whose body cannot be read. */
+let secondPageUnreadable = false;
+/** How a shortcut target lookup fails: a timeout, a status, an unreadable body, or not at all. */
+let targetFailure: "timeout" | "unreadable" | number | null = null;
+const timeout = (url: string) => new Error(`Request timeout after 20000ms: ${url}`);
 const httpCalls: string[] = [];
+/** Tab names and their rows, as the Sheets API would answer. */
+let sheetTabs: string[] = ["Costs", "Core_KPI"];
+let sheetValues: Array<{ values?: unknown[][] }> = [
+  {
+    values: [
+      ["Name", "Cost"],
+      ["Slack", "(41.25)"],
+    ],
+  },
+  {
+    values: [
+      ["Layer", "KPI"],
+      ["Monetization", "Paid Reports"],
+    ],
+  },
+];
+let sheetsApiFails = false;
+
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
     httpCalls.push(url);
+    if (url.startsWith("https://sheets.googleapis.com/")) {
+      if (sheetsApiFails) return { ok: false, status: 500, text: async () => "boom" };
+      if (url.includes("values:batchGet")) {
+        return { ok: true, status: 200, json: async () => ({ valueRanges: sheetValues }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ sheets: sheetTabs.map((t) => ({ properties: { title: t } })) }),
+      };
+    }
     if (url.includes("/files?q=")) {
+      if (listTimeouts > 0) {
+        listTimeouts -= 1;
+        throw timeout(url);
+      }
+      if (secondPageUnreadable) {
+        const second = /pageToken=/.test(url);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            if (second) throw new DOMException("This operation was aborted", "AbortError");
+            return { files, nextPageToken: "more" };
+          },
+          text: async () => "",
+        };
+      }
+      if (listTransientFailures > 0) {
+        listTransientFailures -= 1;
+        return { ok: false, status: 500, text: async () => "backend error" };
+      }
       if (!listOk) return { ok: false, status: 403, text: async () => "denied" };
       // `alwaysMorePages` makes every page claim a successor, so the loop hits
       // MAX_PAGES with items in hand — an INCOMPLETE but non-empty listing, which
@@ -96,17 +173,39 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       return {
         ok: true,
         status: 200,
-        json: async () => (alwaysMorePages ? { files, nextPageToken: "more" } : { files }),
+        json: async () => {
+          // A colleague listing names its owner; serve that person's files, not the
+          // admin's, so an exclusion can be proved against a file only they own.
+          const owner = decodeURIComponent(url).match(/'([^']+)' in owners/)?.[1];
+          if (owner) return { files: colleagueFiles[owner] ?? [] };
+          return alwaysMorePages ? { files, nextPageToken: "more" } : { files };
+        },
         text: async () => "",
       };
     }
     if (url.includes("/export?")) {
-      if (exportFails) return { ok: false, status: 500, text: async () => "boom" };
-      return { ok: true, status: 200, text: async () => "﻿" + exportBody.replace(/\n/g, "\r\n") };
+      if (exportFails) return { ok: false, status: exportFailStatus, text: async () => "boom" };
+      // Per-file override, so one document can be empty while another still has
+      // content — the sweep only deletes on a run that wrote something.
+      const exportId = /\/files\/([^/]+)\/export/.exec(url)?.[1] ?? "";
+      const chosen = exportId in exportOverrides ? exportOverrides[exportId] : exportBody;
+      return { ok: true, status: 200, text: async () => "﻿" + chosen.replace(/\n/g, "\r\n") };
     }
     // single-file metadata GET, which is how a shortcut's TARGET is resolved
     const meta = /\/files\/([^?]+)\?fields=id,name/.exec(url);
     if (meta) {
+      if (targetFailure === "timeout") throw timeout(url);
+      if (targetFailure === "unreadable") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new DOMException("This operation was aborted", "AbortError");
+          },
+          text: async () => "",
+        };
+      }
+      if (targetFailure !== null) return { ok: false, status: targetFailure, text: async () => "" };
       const target = targets[decodeURIComponent(meta[1])];
       return target
         ? { ok: true, status: 200, json: async () => target, text: async () => "" }
@@ -118,20 +217,47 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       status: 200,
       json: async () => ({}),
       text: async () => "",
-      arrayBuffer: async () => new Uint8Array([37, 80, 68, 70]).buffer,
+      arrayBuffer: async () => pdfBytes.slice().buffer,
     };
   }),
 }));
 
 // unpdf is stubbed rather than fed a real pdf: this test is about what the
 // ingester DOES with extracted text, not about whether pdfjs can parse.
+/** Raw bytes the alt=media download hands back. A zero-length one is a real Drive file. */
+let pdfBytes: Uint8Array = new Uint8Array([37, 80, 68, 70]);
 let pdfText = "";
 vi.mock("unpdf", () => ({
-  getDocumentProxy: vi.fn(async () => ({})),
+  // FAITHFUL TO pdfjs: it throws on a zero-byte buffer rather than returning no text.
+  // A mock that quietly returned "" here made the zero-byte test pass with the guard
+  // REMOVED — the doc reached `empty=` either way — so the test proved nothing. Caught
+  // by mutation, which is the only thing that can catch it.
+  getDocumentProxy: vi.fn(async (buf: Uint8Array) => {
+    if (!buf || buf.byteLength === 0) {
+      throw new Error("The PDF file is empty, i.e. its size is zero bytes.");
+    }
+    return {};
+  }),
   extractText: vi.fn(async () => ({ totalPages: 1, text: pdfText })),
 }));
 
-import { docToRows, ingestDrive } from "@features/brain/server/ingest/drive";
+import {
+  docToRows,
+  ingestDrive,
+  isAuthoredMarketingCopy,
+  isIllustrativeFigures,
+  isPersonalDataExport,
+  isPrivateLegalMatter,
+  isJobApplication,
+  isVendorBilling,
+  markedParts,
+  sheetCell,
+  sheetTabsWithRows,
+} from "@features/brain/server/ingest/drive";
+// The predicate lives in `upsert` rather than here: `drive` imports `gmail`, so the
+// mailbox walk cannot import it back, and the same contract arrives both ways.
+import { isLegalInstrument } from "@features/brain/server/ingest/upsert";
+import { COST_SHEET_ID } from "@features/brain/server/cost-sheet";
 
 const STAMP = "2026-08-28T04:47:00.000Z";
 const FILE = {
@@ -239,10 +365,158 @@ describe("ingestDrive", () => {
     httpCalls.length = 0;
     existing = [];
     files = [FILE];
+    colleagueMailboxes.value = [];
+    refuseColleagueToken.clear();
+    for (const k of Object.keys(colleagueFiles)) delete colleagueFiles[k];
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
+    exportBody = "Summary\n\nWe agreed to ship the paywall.";
     targets = {};
+  });
+
+  /**
+   * `docs=745` against 727 indexed documents could not be reconciled from outside the
+   * run: an empty file and a refused people-list both vanish silently. A NEW gap would
+   * therefore look exactly like the known one, which is what this summary exists to stop.
+   */
+  /**
+   * Printed even at zero, unlike every other counter here.
+   *
+   * Colleague notes are appended to the listing and then compete with the whole
+   * backlog for the fetch budget, so "none are indexed yet" is the NORMAL state for
+   * hours after a rebuild. Without a counter that is always present, that is
+   * indistinguishable from the feature not running at all — which is exactly the
+   * confusion this hit on the night it shipped.
+   */
+  it("always reports whether colleagues were asked for meeting notes", async () => {
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/colleagueDocs=\d+\/\d+asked/);
+  });
+
+  /**
+   * THE FILTER, NOT THE PREDICATE.
+   *
+   * `isVendorBilling` and `isJobApplication` were each covered by two dozen cases, and
+   * deleting either one from the listing filter left every one of those green — 1,482
+   * tests passing while the walk indexed receipts and strangers' CVs again. A predicate
+   * nothing calls is decoration. These two drive the whole run and read the rows it
+   * actually wrote.
+   *
+   * Filtered at LISTING time on purpose, so the ids never reach `touch` or `deferred`
+   * either: a skipped document has to look ABSENT to the sweep, not merely unfetched,
+   * or the sweep would protect the very rows being removed.
+   */
+  it.each([
+    ["a vendor invoice", "ZZbillingZZ", "MT-INV00945830.pdf", "application/pdf"],
+    ["a candidate's CV", "ZZcandidateZZ", "Nejra_Rizvic_CV.pdf", "application/pdf"],
+    [
+      "a colleague's contract",
+      "ZZcontractZZ",
+      "Freelancer Agreement_Fatih.docx",
+      "application/pdf",
+    ],
+    [
+      "the cap table",
+      "ZZcaptableZZ",
+      "Shareholders Agreement Applied Psychometrics GmbH",
+      "application/pdf",
+    ],
+  ])("never even fetches %s that reached the listing", async (_what, id, name, mimeType) => {
+    files = [FILE, { ...FILE, id, name, mimeType }];
+    await ingestDrive(STAMP);
+    const written = dbCalls
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
+      .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string }>);
+    // Positive control, or a run that indexed NOTHING would pass this just as well.
+    expect(written.map((r) => r.source_id)).toEqual(["doc:1AbCdEf"]);
+    // Asserted on the HTTP calls, not on what was written: a filtered file must never
+    // be requested at all. Asserting only "no row was written" is vacuous here — a pdf
+    // whose export yields no text is dropped as empty anyway, so the first version of
+    // this test passed with the filter deleted.
+    expect(httpCalls.some((u) => u.includes(id))).toBe(false);
+  });
+
+  /**
+   * THE COLLEAGUE HALF GOES THROUGH THE SAME EXCLUSIONS.
+   *
+   * The walk was widened on 2026-09-21 from "a colleague's meeting notes" to a
+   * colleague's whole Drive, on an explicit decision. That makes `isJobApplication`
+   * load-bearing in a way it was not before: personal Drives are exactly where CVs
+   * live, and the owner's instruction was that CVs stay out.
+   *
+   * Asserted on the HTTP calls, so the file must never be REQUESTED — and with a
+   * positive control from the same colleague, or a run that fetched nothing from
+   * them would pass this just as well.
+   */
+  it("fetches a colleague's ordinary document and never their CV", async () => {
+    colleagueMailboxes.value = ["mo@loveiq.org"];
+    colleagueFiles["mo@loveiq.org"] = [
+      { ...FILE, id: "ZZcolleagueDocZZ", name: "Report Review notes" },
+      { ...FILE, id: "ZZcolleagueCvZZ", name: "Nejra_Rizvic_CV.pdf", mimeType: "application/pdf" },
+      // A personal Drive is exactly where a person's own contract lives, which is why
+      // this half has to carry the exclusion too and not just the shared folders.
+      {
+        ...FILE,
+        id: "ZZcolleagueContractZZ",
+        name: "Freelancer Agreement Marc.docx",
+        mimeType: "application/pdf",
+      },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.some((u) => u.includes("ZZcolleagueDocZZ"))).toBe(true);
+    expect(httpCalls.some((u) => u.includes("ZZcolleagueCvZZ"))).toBe(false);
+    expect(httpCalls.some((u) => u.includes("ZZcolleagueContractZZ"))).toBe(false);
+  });
+
+  it("indexes a colleague's document that is not a meeting note at all", async () => {
+    // The whole point of widening: a plain document nobody organised a meeting for.
+    colleagueMailboxes.value = ["mb@loveiq.org"];
+    colleagueFiles["mb@loveiq.org"] = [{ ...FILE, id: "ZZkpiZZ", name: "KPI Framework" }];
+    await ingestDrive(STAMP);
+    const written = dbCalls
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
+      .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string }>);
+    expect(written.map((r) => r.source_id)).toContain("doc:ZZkpiZZ");
+  });
+
+  it("counts the files it skipped for having no text", async () => {
+    exportBody = "   ";
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/empty=1/);
+  });
+
+  it("counts the files it refused as a list of people, separately from empty ones", async () => {
+    // Over MAX_ADDRESSES_PER_DOC, which is what makes it an export rather than a document.
+    exportBody = Array.from({ length: 25 }, (_, i) => `person${i}@example.com`).join("\n");
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/refusedAsPeopleList=1/);
+    // The two must not be conflated: an empty file is a dud, a people list is a refusal.
+    expect(res.detail).not.toMatch(/empty=/);
+    expect(res.detail).not.toMatch(/unusable=/);
+  });
+
+  it("does not file a nameless file under the people-list refusal", async () => {
+    // `docToRows` returns [] for a people list AND for a file with no name. Counting
+    // both as "refusedAsPeopleList" would be one label for two states — the exact
+    // defect these counters exist to answer.
+    files = [{ ...FILE, name: "" }];
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/unusable=1/);
+    expect(res.detail).not.toMatch(/refusedAsPeopleList=/);
+  });
+
+  it("says nothing when there is nothing to say, so the summary stays readable", async () => {
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).not.toMatch(/empty=/);
+    expect(res.detail).not.toMatch(/refusedAsPeopleList=/);
   });
 
   it("strips the BOM and CRLFs that Google's text export adds", async () => {
@@ -335,15 +609,45 @@ describe("ingestDrive", () => {
    * which recorded a drive sweep at the very run that reported `complete=false
    * stopped=export-failed`.
    */
-  it("does not call the sweep blocked when only an export failed", async () => {
+  it("tolerates a few failed exports instead of calling the whole walk incomplete", async () => {
+    // It used to `stop()` inside the catch, so ONE unexportable file marked
+    // every run incomplete forever. Measured 2026-09-17: document
+    // 1bunyq5jy7fbERkhDGswQlQPE-v090F88 had failed on 224 consecutive runs since
+    // 2026-09-08, and drive had not reported a complete walk once in that time.
+    // Calendar tolerates 10 unreachable calendars and gmail 10 unreadable
+    // threads; drive was the only one that gave up on the first.
     exportFails = true;
     const res = await ingestDrive(STAMP);
-    expect(res.complete).toBe(false);
-    // The FILE ID, not just the failure class. The log line naming it sits in a
-    // buffer that holds hours while this cron runs hourly, so by the time anyone
-    // looks it has rolled off; the note in `cron_run` is what survives.
-    expect(res.detail).toMatch(/stopped=export-failed:1AbCdEf/);
+
+    expect(res.complete).toBe(true);
+    expect(res.detail).not.toMatch(/stopped=/);
+    // The FILE ID survives regardless. The log line naming it sits in a buffer
+    // that holds hours while this cron runs hourly, so by the time anyone looks
+    // it has rolled off; the note in `cron_run` is what lasts.
+    expect(res.detail).toMatch(/exportFailed=1:1AbCdEf/);
+    // ...and WHY it failed, by the same argument. Three opaque ids and no status
+    // is a note nobody can act on without the logs that have already rolled off:
+    // an unexportable TYPE, a 404 and a permission error need different fixes.
+    expect(res.detail).toMatch(/exportFailed=1:1AbCdEf\(export 500\)/);
     // The listing was fine, so deletion is still safe.
+    expect(res.sweepBlocked).toBe(false);
+  });
+
+  it("DOES call the walk incomplete once the failures pass the tolerance", async () => {
+    // The positive control: a genuine export outage must still be reported, or
+    // the tolerance is just a way of never noticing.
+    exportFails = true;
+    // 403, not 500: a 4xx is returned immediately while a 500 is retried with
+    // backoff, and eleven files through the backoff path takes longer than the
+    // test timeout.
+    exportFailStatus = 403;
+    files = Array.from({ length: 11 }, (_, i) => ({ ...FILE, id: `dead-${i}` }));
+
+    const res = await ingestDrive(STAMP);
+
+    expect(res.complete).toBe(false);
+    expect(res.detail).toMatch(/stopped=export-failed=11:dead-0/);
+    // Still the LISTING that gates deletion, not the fetch.
     expect(res.sweepBlocked).toBe(false);
   });
 
@@ -371,6 +675,39 @@ describe("ingestDrive", () => {
     expect(deletedIds()).not.toContain("doc:1AbCdEf");
   });
 
+  /**
+   * The bump is the whole delivery mechanism for a reader change, and it had no test.
+   * A file is refetched when its `modifiedTime` moves — so a fix to HOW a file is read
+   * reaches nothing until the version says the stored row is the wrong shape. v3 -> v4
+   * (spreadsheets, first tab only) depended on exactly this: "Business Case" had not
+   * been edited since 2026-09-16, so without the bump its missing tab stayed missing.
+   */
+  it("re-exports an UNCHANGED document when the builder version moved on", async () => {
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [{ source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v: v - 1 } }];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The fetch loop stops at the clock, so ORDER decides what waits. In listing order a
+   * builder bump queued every rebuild ahead of documents nobody had indexed at all:
+   * "KPI Framework", edited 2026-09-17 and readable to the walk, was still absent on
+   * 2026-09-23 with 233 older files ahead of it in the v5 rebuild.
+   */
+  it("fetches a document nobody has indexed before one that only needs rebuilding", async () => {
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    const OLD = { ...FILE, id: "1OldRebuild", modifiedTime: "2026-06-01T00:00:00.000Z" };
+    const NEW = { ...FILE, id: "1NeverIndexed", modifiedTime: "2026-09-17T07:19:36.742Z" };
+    files = [OLD, NEW]; // the listing hands over the rebuild first
+    existing = [{ source_id: "doc:1OldRebuild", meta: { edited: OLD.modifiedTime, v: v - 1 } }];
+    // Room for exactly one export: the clock runs out the moment one has happened.
+    await ingestDrive(STAMP, () => httpCalls.some((u) => u.includes("/export?")));
+    const exported = httpCalls.filter((u) => u.includes("/export?"));
+    expect(exported).toHaveLength(1);
+    expect(exported[0]).toContain("1NeverIndexed");
+  });
+
   it("re-exports when the document changed", async () => {
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
     existing = [{ source_id: "doc:1AbCdEf", meta: { edited: "2026-08-01T00:00:00.000Z", v } }];
@@ -390,6 +727,55 @@ describe("ingestDrive", () => {
     expect(deletedIds()).not.toContain("doc:1AbCdEf#2");
   });
 
+  /**
+   * A FAILED EXPORT IS AN OUTAGE, NOT A DECISION.
+   *
+   * `reached` exists so that a file read and deliberately not indexed (empty, refused)
+   * can be swept. A file whose export THREW was never read at all, but it was in
+   * `reached` too, so the daily sweep deleted its stored copy: a transient Google 5xx on
+   * sweep day emptied a live document for an hour, and a file that always fails to export
+   * (over the export size limit) lost its content every day for good.
+   */
+  describe("the sweep and a failed export", () => {
+    const v = () => (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    const keep = ["1Keep1", "1Keep2", "1Keep3"].map((id) => ({ ...FILE, id }));
+    function seed() {
+      files = [FILE, ...keep];
+      existing = [
+        // Stale version, so this run re-fetches it.
+        { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v: v() - 1 } },
+        ...keep.map((f) => ({
+          source_id: `doc:${f.id}`,
+          meta: { edited: f.modifiedTime, v: v() },
+        })),
+      ];
+    }
+    const swept = () =>
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length > 0;
+
+    it("keeps the stored copy of a document whose export failed on the sweep run", async () => {
+      seed();
+      exportFails = true;
+      exportFailStatus = 403;
+      await ingestDrive(STAMP);
+      expect(swept()).toBe(true);
+      expect(deletedIds()).not.toContain("doc:1AbCdEf");
+    });
+
+    // The control: the same run DOES remove a document that was read and turned out empty.
+    it("still sweeps a document that was read and turned out empty", async () => {
+      seed();
+      exportOverrides["1AbCdEf"] = "";
+      try {
+        await ingestDrive(STAMP);
+      } finally {
+        delete exportOverrides["1AbCdEf"];
+      }
+      expect(swept()).toBe(true);
+      expect(deletedIds()).toContain("doc:1AbCdEf");
+    });
+  });
+
   it("DOES sweep when the listing was complete", async () => {
     // The control for the test below. Without it, "no sweep" proves nothing —
     // an earlier version of that test passed only because a failed listing
@@ -399,6 +785,37 @@ describe("ingestDrive", () => {
     // The bookkeeping write happens if and only if this run swept, so it is the
     // unambiguous marker. `updated_at=lt.` no longer appears -- that was the
     // timestamp sweep, which drive no longer uses.
+    expect(
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length
+    ).toBeGreaterThan(0);
+  });
+
+  /**
+   * A COLLEAGUE LOST TO A REFUSED TOKEN MUST BLOCK THE SWEEP TOO.
+   *
+   * The sweep gate read the ADMIN listing alone. That was survivable while the
+   * colleague walk returned at most fourteen meeting notes; once it returns a
+   * colleague's whole Drive, one refused token presents ~100 live documents to the
+   * sweep as deleted — too few to trip the majority guard, so they would go, return
+   * on the next run, and go again. Regression found before it ran, on 2026-09-21.
+   */
+  it("does NOT sweep when a colleague's Drive could not be walked", async () => {
+    colleagueMailboxes.value = ["mo@loveiq.org"];
+    // No files served for that owner and the token refused — see the drive mock.
+    refuseColleagueToken.add("mo@loveiq.org");
+    files = [FILE];
+    await ingestDrive(STAMP);
+    expect(
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length
+    ).toBe(0);
+  });
+
+  it("DOES still sweep when every colleague was walked", async () => {
+    // The control: without it, "no sweep" above could come from any other cause.
+    colleagueMailboxes.value = ["mo@loveiq.org"];
+    colleagueFiles["mo@loveiq.org"] = [{ ...FILE, id: "ZZokZZ", name: "Fine" }];
+    files = [FILE];
+    await ingestDrive(STAMP);
     expect(
       dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length
     ).toBeGreaterThan(0);
@@ -462,6 +879,7 @@ describe("Google Meet shortcuts", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
     process.env.NOTION_TOKEN = "ntn_test";
   });
@@ -560,6 +978,90 @@ describe("Google Meet shortcuts", () => {
   });
 });
 
+describe("spreadsheets — every tab, not just the first", () => {
+  const SHEET = {
+    id: "sheet1",
+    name: "Business Case",
+    mimeType: "application/vnd.google-apps.spreadsheet",
+    modifiedTime: "2026-09-16T14:05:00.000Z",
+    createdTime: "2026-08-26T14:00:00.000Z",
+    webViewLink: "https://docs.google.com/spreadsheets/d/sheet1/edit",
+    owners: [{ emailAddress: "ec@loveiq.org" }],
+  };
+
+  beforeEach(() => {
+    files = [SHEET];
+    existing = [];
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    listOk = true;
+    alwaysMorePages = false;
+    sheetsApiFails = false;
+    sheetTabs = ["Costs", "Core_KPI"];
+    sheetValues = [
+      {
+        values: [
+          ["Name", "Cost"],
+          ["Slack", "(41.25)"],
+        ],
+      },
+      {
+        values: [
+          ["Layer", "KPI"],
+          ["Monetization", "Paid Reports"],
+        ],
+      },
+    ];
+  });
+
+  const writtenBody = () =>
+    dbCalls
+      .filter((c) => c.method === "POST" && c.path.includes("brain_chunk"))
+      .map((c) => c.body)
+      .join(" ");
+
+  /**
+   * FOUND IN PRODUCTION 2026-09-19. `files.export?mimeType=text/csv` answers with the
+   * FIRST worksheet and drops the rest, because CSV is a single-table format. "Business
+   * Case" has `Costs` and `Core_KPI`; the brain held only the cost lines, so asked about
+   * the KPI table it reported it could not see the file — while every count of indexed
+   * documents called that file present.
+   */
+  it("indexes a tab that is not the first one", async () => {
+    await ingestDrive(STAMP, () => false, null);
+    const body = writtenBody();
+    expect(body).toContain("Paid Reports");
+    expect(body).toContain("Core_KPI");
+  });
+
+  it("still indexes the first tab, and names both", async () => {
+    await ingestDrive(STAMP, () => false, null);
+    const body = writtenBody();
+    expect(body).toContain("Slack");
+    expect(body).toContain("Costs");
+  });
+
+  it("asks the Sheets API rather than exporting csv", async () => {
+    await ingestDrive(STAMP, () => false, null);
+    expect(httpCalls.some((u) => u.includes("sheets.googleapis.com"))).toBe(true);
+    expect(httpCalls.some((u) => u.includes("export?mimeType=text%2Fcsv"))).toBe(false);
+  });
+
+  it("falls back to the first tab rather than losing the file when Sheets fails", async () => {
+    // Worse than the new behaviour, better than nothing — and the warn says which.
+    sheetsApiFails = true;
+    const res = await ingestDrive(STAMP, () => false, null);
+    expect(res.complete).toBe(true);
+    expect(httpCalls.some((u) => u.includes("export?mimeType=text%2Fcsv"))).toBe(true);
+  });
+
+  it("skips a spreadsheet whose tabs are all empty", async () => {
+    sheetValues = [{ values: [] }, { values: [[""], [" "]] }];
+    await ingestDrive(STAMP, () => false, null);
+    expect(writtenBody()).not.toContain("Business Case");
+  });
+});
+
 describe("PDFs — the 213 files that used to be invisible", () => {
   const PDF = {
     id: "pdf1",
@@ -573,12 +1075,14 @@ describe("PDFs — the 213 files that used to be invisible", () => {
 
   beforeEach(() => {
     files = [PDF];
+    pdfBytes = new Uint8Array([37, 80, 68, 70]);
     existing = [];
     dbCalls.length = 0;
     httpCalls.length = 0;
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
   });
 
@@ -618,6 +1122,21 @@ describe("PDFs — the 213 files that used to be invisible", () => {
     expect(written).not.toContain("Term Sheet 2026");
   });
 
+  /**
+   * MEASURED IN PRODUCTION 2026-09-18. Two Drive files are zero-byte PDFs; pdfjs throws
+   * `The PDF file is empty, i.e. its size is zero bytes`, which landed in the catch and
+   * was reported as a failed export on EVERY hourly run since at least 2026-09-08 — and
+   * one of them used to abort the whole walk. Nothing about the file will ever change,
+   * so a failure list containing it is a list nobody can act on.
+   */
+  it("treats a zero-byte pdf as an empty document, not as an export failure", async () => {
+    pdfBytes = new Uint8Array(0);
+    const res = await ingestDrive(STAMP, () => false, null);
+    expect(res.detail).toMatch(/empty=1/);
+    expect(res.detail).not.toMatch(/exportFailed/);
+    expect(res.complete).toBe(true);
+  });
+
   it("caps one pdf, and says so in the text rather than truncating silently", async () => {
     pdfText = "word ".repeat(200_000); // ~1M chars, larger than the cap
     await ingestDrive(STAMP, () => false, null);
@@ -640,6 +1159,7 @@ describe("Drive reads as a PERSON, not as the service account", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
     exportBody = "Summary\n\nWe agreed to ship the paywall.";
     delete process.env.GOOGLE_WORKSPACE_ADMIN;
@@ -726,6 +1246,7 @@ describe("a failed sweep must not retry every hour", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
     existing = [];
   });
@@ -753,6 +1274,129 @@ describe("a failed sweep must not retry every hour", () => {
 
     expect(deletedIds()).toEqual([]); // nothing deleted at all
     expect(res.swept).toBe(0);
+  });
+
+  /**
+   * A DOCUMENT THAT HAS BECOME EMPTY MUST LOSE ITS OLD CHUNK.
+   *
+   * The empty branch says skipping "lets the sweep remove it if it was indexed
+   * before" — and for a long time it could not, because `deferred` protected every
+   * file in `toFetch` that produced no rows, which includes the ones that were READ
+   * and deliberately not indexed. Found 2026-09-19 on "Discount sheet", a real
+   * spreadsheet with one tab and no rows, whose 14-character chunk had survived
+   * every run since 31 August while describing a document that holds nothing.
+   */
+  it("sweeps the stale chunk of a document that has become empty", async () => {
+    const other = {
+      ...FILE,
+      id: "2ZyXwV",
+      webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+    };
+    files = [FILE, other];
+    exportOverrides[FILE.id] = "   "; // this one is now empty; `other` still has text
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+      { source_id: "doc:2ZyXwV", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+    ];
+
+    await ingestDrive(STAMP);
+
+    // The emptied document's row goes; the one that still has content stays.
+    expect(deletedIds()).toContain("doc:1AbCdEf");
+    expect(deletedIds()).not.toContain("doc:2ZyXwV");
+  });
+
+  /**
+   * THE CONTROL FOR THE VERSION FILTER, and it has to use OLD-version parts.
+   *
+   * The touch path protects only parts on the current builder version, so orphans
+   * from a shorter re-chunk are swept. Applying that same filter to DEFERRED files
+   * looks equally reasonable and is catastrophic: during a rebuild every unreached
+   * file still sits on the OLD version, so the filter would protect none of them and
+   * the sweep would delete the backlog for the crime of not having been read yet.
+   *
+   * A mutation applying the filter to `deferred` passed the whole suite on
+   * 2026-09-20 — every existing test used current-version parts, so none could see
+   * it. This one uses old-version parts deliberately.
+   */
+  it("protects an unreached file whose parts are still on the OLD builder version", async () => {
+    const other = {
+      ...FILE,
+      id: "2ZyXwV",
+      webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+    };
+    files = [FILE, other];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: "2026-01-01T00:00:00.000Z", v: v - 1 } },
+      // Never reached this run, and every part is on the previous builder version —
+      // which is the normal state of a rebuild backlog.
+      { source_id: "doc:2ZyXwV", meta: { edited: "2026-01-01T00:00:00.000Z", v: v - 1 } },
+      { source_id: "doc:2ZyXwV#2", meta: { edited: "2026-01-01T00:00:00.000Z", v: v - 1 } },
+    ];
+
+    let ticks = 0;
+    await ingestDrive(STAMP, () => ++ticks > 2);
+
+    expect(deletedIds()).not.toContain("doc:2ZyXwV");
+    expect(deletedIds()).not.toContain("doc:2ZyXwV#2");
+  });
+
+  it("still protects a file the clock never reached", async () => {
+    // The control. Deferring exists for genuine outages, and removing that would
+    // delete most of the corpus on any run that runs out of time.
+    const other = {
+      ...FILE,
+      id: "2ZyXwV",
+      webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+    };
+    files = [FILE, other];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+      { source_id: "doc:2ZyXwV", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+    ];
+
+    // Out of time immediately after the first file is taken.
+    let ticks = 0;
+    await ingestDrive(STAMP, () => ++ticks > 2);
+
+    expect(deletedIds()).not.toContain("doc:2ZyXwV");
+  });
+
+  /**
+   * A DOCUMENT THAT RE-CHUNKS SHORTER MUST LOSE ITS TAIL.
+   *
+   * The part ids handed to the sweep come from the DATABASE, not from the file, so
+   * they include parts the file no longer produces. The run that shrinks a file
+   * writes the new parts and the orphans go unwritten — but the sweep runs once a
+   * day, and the NEXT run finds the file unchanged, touches it, and re-protects
+   * every stored id including the orphans. A shrinking file was therefore only
+   * sweepable during the single run that shrank it.
+   *
+   * Measured 2026-09-20: the Glossary went from 311 parts to 223 and all 88 orphans
+   * survived, still titled "part 224 of 311" and dated three weeks earlier.
+   */
+  it("sweeps orphan parts of a file that re-chunked shorter, even when it is untouched since", async () => {
+    files = [FILE];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      // Current parts, on this builder version, unchanged -> the file is TOUCHED.
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+      // The tail of a longer previous version, left on the OLD builder version.
+      { source_id: "doc:1AbCdEf#3", meta: { edited: FILE.modifiedTime, v: v - 1 } },
+      { source_id: "doc:1AbCdEf#4", meta: { edited: FILE.modifiedTime, v: v - 1 } },
+    ];
+
+    await ingestDrive(STAMP);
+
+    expect(deletedIds()).toContain("doc:1AbCdEf#3");
+    expect(deletedIds()).toContain("doc:1AbCdEf#4");
+    // The live parts must survive.
+    expect(deletedIds()).not.toContain("doc:1AbCdEf");
+    expect(deletedIds()).not.toContain("doc:1AbCdEf#2");
   });
 
   it("deletes a minority of orphans, so the guard is a majority rule and not a veto", async () => {
@@ -793,5 +1437,874 @@ describe("a failed sweep must not retry every hour", () => {
     expect(record).toBeLessThan(firstDelete); // and recorded FIRST
     // And it deleted the orphan ONLY.
     expect(deletedIds()).toEqual(["doc:ZZZ_deleted_from_drive"]);
+  });
+});
+
+/**
+ * Drive answers 500/503 transiently under normal operation. Giving up on the first one
+ * ended the entire walk — and since the sweep only runs after a COMPLETE walk, nothing
+ * deleted was ever removed from the corpus. Observed live on 2026-09-13:
+ * `stopped=listing-refused@p4:500`, in an alert whose own text said "Nothing failed, so
+ * this looks healthy".
+ */
+describe("a transient Drive refusal is retried, not fatal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    httpCalls.length = 0;
+    files = [FILE];
+    listOk = true;
+    exportFails = false;
+    exportFailStatus = 500;
+    alwaysMorePages = false;
+    listTransientFailures = 0;
+    targets = {};
+    pdfText = "";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
+  });
+
+  const listCalls = () => httpCalls.filter((u) => u.includes("/files?q=")).length;
+
+  it("completes the walk when the listing 500s once", async () => {
+    listTransientFailures = 1;
+
+    const result = await ingestDrive(STAMP);
+
+    // `complete: true` is the whole point — it is what unblocks the sweep.
+    expect(result.complete).toBe(true);
+    expect(result.sweepBlocked).toBe(false);
+    expect(result.detail).not.toMatch(/stopped=/);
+    // Two listing calls for one page: the refusal, then the retry that worked.
+    expect(listCalls()).toBe(2);
+  });
+
+  it("still gives up once the attempts run out, rather than retrying forever", async () => {
+    listTransientFailures = 99;
+
+    const result = await ingestDrive(STAMP);
+
+    expect(result.skipped).toBe("drive-list-failed");
+    expect(listCalls()).toBe(3);
+  });
+
+  /**
+   * A 403 is a permissions answer, not a blip. Retrying it spends the time budget
+   * arriving at the same refusal — and this walk shares that budget with the export pass.
+   */
+  it("does not retry a 403, which would say the same thing three times", async () => {
+    listOk = false;
+
+    const result = await ingestDrive(STAMP);
+
+    expect(result.skipped).toBe("drive-list-failed");
+    expect(listCalls()).toBe(1);
+  });
+});
+
+/**
+ * A TIMEOUT THROWS instead of answering, and until 2026-09-28 it escaped the retry above
+ * and every caller's refusal handling, so one slow request ended the whole run: three
+ * runs that day, two on one colleague's first listing page. Treating it as a refusal
+ * also needs every "no answer" to keep the listing incomplete, or the sweep deletes
+ * what it did not see.
+ */
+describe("a Drive request that times out is a refusal, not the end of the run", () => {
+  const OTHER = {
+    ...FILE,
+    id: "2ZyXwV",
+    webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+  };
+  const shortcut = (n: number) => ({
+    id: `sc${n}`,
+    name: `Meeting ${n} - Notes by Gemini`,
+    mimeType: "application/vnd.google-apps.shortcut",
+    shortcutDetails: {
+      targetId: `tgt${n}`,
+      targetMimeType: "application/vnd.google-apps.document",
+    },
+  });
+  const target = (n: number) => ({
+    ...FILE,
+    id: `tgt${n}`,
+    name: `Meeting ${n} - Notes by Gemini`,
+  });
+  // Old enough to be re-read, so both live documents are written and kept, and a third
+  // row is a minority the sweep's majority guard would let go.
+  const row = (id: string) => ({
+    source_id: `doc:${id}`,
+    meta: { edited: "2026-01-01T00:00:00.000Z" },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    files = [FILE, OTHER];
+    existing = [];
+    listOk = true;
+    exportFails = false;
+    alwaysMorePages = false;
+    listTransientFailures = 0;
+    targets = {};
+    pdfText = "";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
+  });
+  afterEach(() => {
+    listTimeouts = 0;
+    secondPageUnreadable = false;
+    targetFailure = null;
+  });
+
+  const listCalls = () => httpCalls.filter((u) => u.includes("/files?q=")).length;
+
+  it("retries a listing page that timed out, and completes the walk", async () => {
+    listTimeouts = 1;
+    const result = await ingestDrive(STAMP);
+    expect(result.complete).toBe(true);
+    expect(result.sweepBlocked).toBe(false);
+    expect(listCalls()).toBe(2);
+  });
+
+  it("gives up on a page that never answers without ending the run", async () => {
+    listTimeouts = 99;
+    await expect(ingestDrive(STAMP)).resolves.toMatchObject({ skipped: "drive-list-failed" });
+    expect(listCalls()).toBe(3);
+  });
+
+  it("does not take a page it could not read for the last one", async () => {
+    // Page 0 names a successor, whose body the timeout cut off. Called complete, the
+    // sweep deleted every indexed document that page would have listed.
+    secondPageUnreadable = true;
+    existing = [row(FILE.id), row(OTHER.id), row("on-page-two")];
+    const result = await ingestDrive(STAMP);
+    expect(result.sweepBlocked).toBe(true);
+    expect(result.detail).toMatch(/stopped=listing-unreadable@p1/);
+    expect(deletedIds()).not.toContain("doc:on-page-two");
+  });
+
+  it("keeps a shortcut's note when looking it up timed out", async () => {
+    files = [FILE, OTHER, shortcut(1)];
+    targetFailure = "timeout";
+    existing = [row(FILE.id), row(OTHER.id), row("tgt1")];
+    const result = await ingestDrive(STAMP);
+    expect(result.sweepBlocked).toBe(true);
+    expect(result.detail).toMatch(/stopped=shortcut-lookup-failed=1/);
+    expect(deletedIds()).not.toContain("doc:tgt1");
+  });
+
+  it("keeps it on any answer but a 404, which is the only one that means unshared", async () => {
+    // 503 an overload, 403 Drive's rate limit, 401 a token that expired mid-run.
+    files = [FILE, OTHER, shortcut(1)];
+    for (const failure of [503, 403, 401, "unreadable"] as const) {
+      targetFailure = failure;
+      expect((await ingestDrive(STAMP)).sweepBlocked, String(failure)).toBe(true);
+    }
+    targetFailure = 404; // the organiser has not shared it: the normal state
+    expect((await ingestDrive(STAMP)).sweepBlocked).toBe(false);
+  });
+
+  it("stops looking shortcuts up once the time is gone, and calls the listing short", async () => {
+    files = [FILE, OTHER, shortcut(1), shortcut(2)];
+    targets = { tgt1: target(1), tgt2: target(2) };
+    const asked = (n: number) => httpCalls.some((u) => u.includes(`/files/tgt${n}?fields=`));
+    const result = await ingestDrive(STAMP, () => asked(1));
+    expect(asked(2)).toBe(false);
+    expect(result.sweepBlocked).toBe(true);
+  });
+});
+
+describe("personal-data exports are refused", () => {
+  const addresses = (n: number, domain = "example.org") =>
+    Array.from({ length: n }, (_, i) => `person${i}@${domain}`).join("\n");
+
+  it("refuses a file that is a list of people", () => {
+    /**
+     * Found by audit 2026-09-17: three marketing audience exports were sitting in Drive
+     * and fully indexed, putting 2,083 real people's email addresses into a corpus any
+     * team member can search with one shared token. The rule against indexing user-level
+     * rows existed; nothing enforced it.
+     */
+    expect(isPersonalDataExport(addresses(200))).toBe(true);
+    expect(isPersonalDataExport(`email,name\n${addresses(1429)}`)).toBe(true);
+  });
+
+  it("leaves an ordinary document alone", () => {
+    // The largest legitimate Drive document measured carries six addresses — a team page.
+    expect(isPersonalDataExport(`Team:\n${addresses(6)}\n\nNotes about the project.`)).toBe(false);
+    expect(isPersonalDataExport("A document with no addresses at all.")).toBe(false);
+  });
+
+  it("counts DISTINCT addresses, not mentions", () => {
+    // One person cc'd on a long thread is not a list. Counting raw matches would refuse
+    // real correspondence.
+    const repeated = Array.from({ length: 200 }, () => "same.person@example.org").join(" ");
+    expect(isPersonalDataExport(repeated)).toBe(false);
+  });
+
+  it("does not index a refused file, so the sweep can remove what is already stored", () => {
+    // Returning zero rows keeps the file out of the walk's written-id set, which is what
+    // lets `sweepMissing` clear the chunks indexed before this guard existed.
+    const rows = docToRows(
+      { id: "f1", name: "loveiq_audience1_completers_all.csv" } as never,
+      addresses(500),
+      "2026-09-17T00:00:00Z"
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("still indexes a normal file", () => {
+    const rows = docToRows(
+      { id: "f2", name: "Strategy notes" } as never,
+      "We decided to focus on mobile. Contact anna@example.org for detail.",
+      "2026-09-17T00:00:00Z"
+    );
+    expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Vendor billing is filtered by a RULE, where every other exclusion here is an id
+ * list — so the rule has to be proven against the real names on both sides.
+ *
+ * Measured 2026-09-19: 93 billing files were in the corpus, and a drive-only search
+ * for what was agreed about pricing in our calls returned five Slack billing
+ * statements and NO meeting note.
+ */
+/**
+ * Every name below is a real document that was in the corpus on 2026-09-22, and every
+ * SPARED one is a real document that has to stay. Written from the measurement across
+ * all 814 Drive documents rather than from imagination — the last title rule written
+ * blind would have deleted two research papers.
+ */
+describe("docToRows refuses a private legal filing", () => {
+  /**
+   * THE REFUSAL, NOT THE PREDICATE. `isPrivateLegalMatter` could be perfectly tested and
+   * never called — which is exactly what happened to the vendor-invoice and CV rules
+   * once, with 1,482 tests green while the walk indexed both.
+   *
+   * Returning no rows also keeps the file out of the walk's written-id set, so the sweep
+   * removes whatever was indexed before the guard existed.
+   */
+  const file = { id: "f1", name: "00_Uebersicht_aktualisiert", modifiedTime: STAMP };
+
+  /**
+   * THE NAME MUST REACH THE PREDICATE, and this test exists because it did not.
+   *
+   * Mutating the call site from `isPrivateLegalMatter(text, name)` back to
+   * `isPrivateLegalMatter(text)` left all 187 tests green — the name half was covered by
+   * nine predicate tests and called by nothing. That is the same failure the
+   * vendor-invoice and CV rules had once: a predicate nothing passes the right argument
+   * to is decoration.
+   */
+  it("writes nothing for a document whose NAME is a legal matter, text innocuous", () => {
+    const file = { id: "f9", name: "05b_Kündigung_wegen_Eigenbedarf", modifiedTime: STAMP };
+    const text = "Sehr geehrte Damen und Herren,\n\nanbei das Schreiben. Mit freundlichen Grüßen.";
+    expect(docToRows(file as never, text, STAMP)).toHaveLength(0);
+  });
+
+  it("writes nothing for a document that names a court", () => {
+    const text = "Übersicht\n\nKlageschrift beim Amtsgericht eingereicht am 12.01.2026.";
+    expect(docToRows(file as never, text, STAMP)).toHaveLength(0);
+  });
+
+  it("still writes an ordinary document, so the test above is a filter and not a wall", () => {
+    const text = "Übersicht\n\nDie Roadmap für Q4 steht: Report 2.0 und die neue Landing.";
+    expect(docToRows(file as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+
+  it("still writes a compliance paper that cites the same statutes", () => {
+    const text =
+      "Legal Compliance\n\nNach § 13 TMG und § 823 BGB ergeben sich folgende Pflichten " +
+      "für Dating-Apps in Deutschland, die wir im Produkt abbilden müssen.";
+    expect(docToRows(file as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+});
+
+describe("authored marketing copy", () => {
+  /**
+   * The harm is specific and measured: the `Testimonials` sheet holds thirty
+   * copywriter-written first-person quotes under `## Strategically Created` and one real
+   * one under `## Authentic by Users`. Chunking puts the heading in part 1 and the quotes
+   * in parts 2-4, so a search returning part 4 alone hands back invented praise with
+   * nothing marking it.
+   */
+  it.each([
+    "## Strategically Created\n\n1. This changed how I see myself.",
+    "These were written by a copywriter for the landing page.",
+    "Placeholder — not a real customer, do not attribute.",
+  ])("recognises copy that says it is ours: %j", (text) => {
+    expect(isAuthoredMarketingCopy(text)).toBe(true);
+  });
+
+  it.each([
+    // Four sets of meeting notes say this in passing and must NOT be marked.
+    "Mark asked for a sample testimonial to show the layout.",
+    "We should collect more reviews from real users.",
+    "The Hite Report summary discusses example quotes from respondents.",
+  ])("leaves a document merely DISCUSSING testimonials alone: %j", (text) => {
+    expect(isAuthoredMarketingCopy(text)).toBe(false);
+  });
+
+  it("marks the title, so every part of a split document carries it", () => {
+    const rows = docToRows(
+      { id: "t1", name: "Testimonials", modifiedTime: STAMP } as never,
+      "## Strategically Created\n\n" + "Quote text. ".repeat(400),
+      STAMP
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    // EVERY part, not just the one holding the heading — that is the whole defect.
+    for (const r of rows) {
+      expect(r.title).toContain("[copy we wrote ourselves, not customer words]");
+      expect((r.meta as Record<string, unknown>).authored).toBe(true);
+    }
+  });
+
+  it("leaves an ordinary document's title untouched", () => {
+    // The control: without it, a marker applied unconditionally would pass the test above.
+    const rows = docToRows(
+      { id: "t2", name: "Q4 roadmap", modifiedTime: STAMP } as never,
+      "The roadmap for Q4 is Report 3.0 and the new landing.",
+      STAMP
+    );
+    expect(rows[0]!.title).toBe("Drive: Q4 roadmap");
+    expect((rows[0]!.meta as Record<string, unknown>).authored).toBeUndefined();
+  });
+});
+
+describe("KPI definition tables carry example figures, not measurements", () => {
+  /**
+   * `KPI Framework` still has its own column headers and they settle it:
+   *   Layer, KPI, EXAMPLE, Source, Owner, Definition, Formula / Calculation, Why it matters
+   * The value column is named Example. `Business Case` is the same table with that header
+   * lost to chunking, which is why parts 4 and 5 read as measurements: EUR 11,400 revenue,
+   * 600 paid reports, 30% survey-to-paid, NPS 8.6. Actuals are EUR 704.91 and 41, and NPS
+   * is not measured at all.
+   */
+  it.each([
+    "Layer, KPI, Example, Source, Owner, Definition, Formula / Calculation, Why it matters",
+    "Advertisement spent, €2,000.00, Growth, Σ channel spend, Formula/Calculation",
+  ])("recognises the definition-table header: %j", (text) => {
+    expect(isIllustrativeFigures(text)).toBe(true);
+  });
+
+  it.each([
+    // "Why it matters" alone appears in 24 Drive documents, most of them report copy.
+    // It was rejected as a signal for exactly this reason and must not mark anything.
+    "Why it matters: readers who feel understood come back.",
+    "Revenue to date is EUR 704.91 across 41 paid reports.",
+    "The Q4 roadmap covers Report 3.0 and the new landing page.",
+  ])("does not mark ordinary text: %j", (text) => {
+    expect(isIllustrativeFigures(text)).toBe(false);
+  });
+
+  it("marks every part, because the header is in part 1 and the figures are in part 4", () => {
+    const rows = docToRows(
+      { id: "bc1", name: "Business Case", modifiedTime: STAMP } as never,
+      "Formula / Calculation\n\n" + "Gross Contribution, EUR 9,400.00. ".repeat(300),
+      STAMP
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows) {
+      expect(r.title).toContain("[example figures from a KPI definition table, not measured]");
+      expect((r.meta as Record<string, unknown>).illustrative).toBe(true);
+    }
+  });
+
+  /**
+   * The Business Case: real costs on one tab, the example KPI table on the other. Marked
+   * per file, the costs read as examples, which is why the KPI tab was left out of the
+   * index from 2026-09-28. Both tabs are long here, so each splits into several parts and
+   * the KPI tab's later parts do not contain its header.
+   */
+  const SHEET_FILE = {
+    id: "bc3",
+    name: "Business Case",
+    mimeType: "application/vnd.google-apps.spreadsheet",
+    modifiedTime: STAMP,
+  } as never;
+  const COSTS_TAB = "## Costs\n" + "Software, Claude, EUR 576.00\n".repeat(200);
+  const KPI_TAB =
+    "## Core_KPI\nLayer, KPI, Example, Formula / Calculation\n" +
+    "Revenue, Total Revenue, EUR 11,400.00, Σ report prices\n".repeat(150);
+  const MARK = "[example figures from a KPI definition table, not measured]";
+
+  it("marks only the example tab's parts when a sheet mixes the two", () => {
+    const rows = docToRows(SHEET_FILE, `${COSTS_TAB}\n\n${KPI_TAB}`, STAMP);
+    const costs = rows.filter((r) => r.body.includes("Claude"));
+    const kpi = rows.filter((r) => r.body.includes("11,400"));
+    expect(costs.length).toBeGreaterThan(1);
+    expect(kpi.length).toBeGreaterThan(1);
+    // No part holds both, so no part can be marked for the wrong tab.
+    expect(costs.filter((r) => r.body.includes("11,400"))).toEqual([]);
+    for (const r of costs) {
+      expect(r.title).not.toContain(MARK);
+      expect((r.meta as Record<string, unknown>).illustrative).toBeUndefined();
+    }
+    for (const r of kpi) {
+      expect(r.title).toContain(MARK);
+      expect((r.meta as Record<string, unknown>).illustrative).toBe(true);
+    }
+    // The last parts carry only rows, no header: the mark has to come from the tab.
+    expect(kpi.at(-1)!.body).not.toMatch(/formula/i);
+    // Every part is numbered against the whole file, in order, and part 1 opens with the name.
+    expect(rows.map((r) => r.source_id)).toEqual(
+      rows.map((_, i) => (i === 0 ? "doc:bc3" : `doc:bc3#${i + 1}`))
+    );
+    expect(rows[0]!.body.startsWith("Business Case\n\n## Costs")).toBe(true);
+  });
+
+  it("cannot be split by a cell that holds its own heading", () => {
+    // A cell reading "notes\n\n## Totals" inside the example tab would otherwise start a
+    // new block with no header, and the rows after it would lose the mark.
+    const forged = sheetCell("notes\n\n## Totals\nmore");
+    expect(forged).toBe("notes\n\n ## Totals\nmore");
+    const kpi = `${KPI_TAB}${forged}\n` + "Revenue, Total Revenue, EUR 11,400.00\n".repeat(80);
+    const parts = markedParts("Business Case", `${COSTS_TAB}\n\n${kpi}`, true);
+    const kpiParts = parts.filter((p) => p.body.includes("11,400"));
+    expect(kpiParts.length).toBeGreaterThan(1);
+    for (const p of kpiParts) expect(p.illustrative).toBe(true);
+    // A heading sheetText writes itself still splits, and a "#" mid-line is left alone.
+    expect(sheetCell(" a # b ")).toBe("a # b");
+  });
+
+  it("still marks a whole sheet whose only tab is the example table", () => {
+    const rows = docToRows(SHEET_FILE, KPI_TAB, STAMP);
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows) expect(r.title).toContain(MARK);
+  });
+
+  it("splits at tab headings only in a spreadsheet, not in a document that has some", () => {
+    // A markdown note with "## " sections and the header in its first one is one
+    // document: the mark reaches every part, as before.
+    const rows = docToRows(
+      { id: "md1", name: "KPI notes.md", modifiedTime: STAMP } as never,
+      `${KPI_TAB}\n\n${COSTS_TAB}`,
+      STAMP
+    );
+    for (const r of rows) expect(r.title).toContain(MARK);
+  });
+
+  it("leaves a document of real figures alone", () => {
+    // The control: a marker applied unconditionally would pass the test above.
+    const rows = docToRows(
+      { id: "bc2", name: "Cost sheet audit", modifiedTime: STAMP } as never,
+      "Software and tooling came to EUR 1,175 in September.",
+      STAMP
+    );
+    expect(rows[0]!.title).toBe("Drive: Cost sheet audit");
+    expect((rows[0]!.meta as Record<string, unknown>).illustrative).toBeUndefined();
+  });
+});
+
+describe("isPrivateLegalMatter", () => {
+  /**
+   * The line is: citing a statute is ANALYSIS, naming a court is a PROCEEDING.
+   *
+   * Measured 2026-09-22 across all 798 Drive documents — the litigation carried 2 to 4
+   * court words each and the three legal-compliance strategy papers carried zero, while
+   * BOTH cite the same German statutes. A rule built on "§ 823 BGB" would have taken the
+   * compliance papers with the lawsuit.
+   */
+  /**
+   * ONE WORD PER CASE, on purpose. The first version of this table put several
+   * proceeding words in each sentence, so dropping any single word from the pattern left
+   * all four green — the table proved the pattern matched SOMETHING, never that it
+   * matched each thing it names.
+   */
+  it.each([
+    ["amtsgericht", "Der Termin wurde vom Amtsgericht auf den 3. März gelegt."],
+    ["landgericht", "Die Sache geht in zweiter Instanz an das Landgericht."],
+    ["klageschrift", "Anbei die Klageschrift zur Durchsicht."],
+    ["strafanzeige", "Wir haben am Montag Strafanzeige erstattet."],
+    ["räumungsklage", "Die Räumungsklage ist eingereicht."],
+    ["prozesskostenhilfe", "Der Antrag auf Prozesskostenhilfe läuft."],
+    ["staatsanwaltschaft", "Die Staatsanwaltschaft hat das Verfahren eröffnet."],
+    ["zwangsvollstreckung", "Nächster Schritt wäre die Zwangsvollstreckung."],
+  ])("refuses a filing on %s alone", (_word, text) => {
+    expect(isPrivateLegalMatter(text)).toBe(true);
+  });
+
+  /**
+   * THE NAME HALF. These nine are real documents from the same private tenancy matter that
+   * walked back into the corpus AFTER the content rule shipped, because a notice to quit
+   * names no court. The content rule reported `refusedAsLegalMatter=12` throughout and was
+   * telling the truth about twelve other documents — which is how half-done work passes
+   * for finished.
+   */
+  it.each([
+    "05b_Kündigung_wegen_Eigenbedarf",
+    "05_Hilfsweise_Kuendigung_Nutzungsentschädigung",
+    "00a_Inspektionsankuendigung",
+    "02_Zahlungsaufforderung",
+    "03_Mahnung",
+    "04_Abmahnung_Zahlungsverzug",
+    "07_Wohnungsuebergabeprotokoll",
+    "Kuendigungsschreiben_Boerner_AQVC",
+    "Niederlegung_Geschäftsführeramt_AQVC_Management_GmbH_überarbeitet",
+    // Named after their SUBJECT rather than their type, which is why naming document
+    // types alone left a tail and these two needed a third round of deletion.
+    "Wohnungsinspektion_Realini",
+    "Warum die gängigen Mieter Gegenargumente nicht durchgreifen.docx",
+  ])("refuses %j on its NAME, with no court named in the text", (name) => {
+    // Body deliberately innocuous: the name is doing all the work here.
+    expect(isPrivateLegalMatter("Sehr geehrte Damen und Herren, anbei das Schreiben.", name)).toBe(
+      true
+    );
+  });
+
+  it.each([
+    "Q4 roadmap",
+    "LoveIQ_Market_Analysis_Competitive_Matrix_EN",
+    "Legal_Compliance_Summary_EU_DE.pdf",
+    "Development Agreements.md",
+    "Report Section Properties",
+  ])("leaves %j alone on its name", (name) => {
+    expect(isPrivateLegalMatter("An ordinary working document about the product.", name)).toBe(
+      false
+    );
+  });
+
+  it("still refuses on the TEXT when the name says nothing", () => {
+    // The control for the other half: without it, a name-only rule would pass the set
+    // above while losing everything the content rule was added for.
+    expect(
+      isPrivateLegalMatter("Die Klageschrift ging beim Amtsgericht ein.", "00_Uebersicht")
+    ).toBe(true);
+  });
+
+  it.each([
+    // Analysis about law. These are three real documents that must stay findable.
+    "Nach § 13 TMG und § 823 BGB ergeben sich für Dating-Apps folgende Pflichten.",
+    "Legal compliance summary for the EU and Germany: GDPR Art. 6, § 25 TTDSG.",
+    "Our terms of use were reviewed against consumer-protection law in Q2.",
+    // Ordinary product text that happens to be German.
+    "Die Nutzer sehen ihr Ergebnis direkt nach dem Test.",
+  ])("leaves analysis alone: %j", (text) => {
+    expect(isPrivateLegalMatter(text)).toBe(false);
+  });
+});
+
+describe("isLegalInstrument", () => {
+  it.each([
+    "Freelancer Agreement_Fatih.docx",
+    "Freelancer Agreement_\u2060Eman \u010ci\u010dku\u0161i\u0107.docx",
+    "Freelancer Agreement Sanjin _SIGNED_mb_signed.pdf",
+    "Freelancer Agreement Marc.docx",
+    "Shareholders Agreement Applied Psychometrics GmbH",
+    "Shareholders Agreement Applied Psychometrics GmbH - For Commenting",
+    "AppliedPsychometrics_VSOP_Terms_of_Options",
+    "Freelance Contract - Applied Psychometrics UG template.docx",
+    "applied_psychometrics_freelance_contract_adapted.docx",
+    "Confidentiality, Data Protection & Responsible Data Handling Agreement",
+    "Ismar Fazlic Confidentiality, Data Protection & Responsible Data Handling Agreement",
+    "Copy of Confidentiality, Data Protection & Responsible Data Handling Agreement",
+    // Drive URL-encoded the spaces AND truncated "Agreement" to "Agree", so the
+    // undecoded name read as an ordinary file and this one was indexed.
+    "Confidentiality,%20Data%20Protection%20&%20Responsible%20Data%20Handling%20Agree.pdf",
+    // The German originals of what the English rule already excludes.
+    "Gesellschaftsvertrag_20260112_1156_UVZ-Nr. 39_2026.pdf",
+    "20260112_1156_Liste der Gesellschafter der Applied Pyschometrics UG.pdf",
+  ])("keeps %j out", (name) => {
+    expect(isLegalInstrument(name)).toBe(true);
+  });
+
+  it.each([
+    // The team's working norms, not an instrument. Plural is the whole difference, and
+    // an earlier draft of this rule buried it.
+    "Development Agreements.md",
+    "Development_Agreements.pdf",
+    // Analysis ABOUT law, which is exactly what we want found.
+    "DE_Dating_App_Legal_Compliance_Strategiepapier_Final.pdf",
+    "EN_Dating_App_Legal_Compliance_Strategic_Paper_EN.pdf",
+    "Legal_Compliance_Summary_EU_DE.pdf",
+    // Ordinary documents that merely contain a matching word.
+    "32 - Recommendations",
+    "ShowUp_Epic_1_Backend_Foundation_Report.docx",
+    "LoveIQ_Market_Analysis_Competitive_Matrix_EN",
+  ])("leaves %j alone", (name) => {
+    expect(isLegalInstrument(name)).toBe(false);
+  });
+
+  it("spares a MEETING about a contract, which is a discussion and not the instrument", () => {
+    expect(
+      isLegalInstrument("Eman <> Mark - Contract Sync - 2026/09/09 16:01 WEST - Notes by Gemini")
+    ).toBe(false);
+  });
+
+  it("still excludes a contract whose name happens to mention notes", () => {
+    // Guards the meeting carve-out from becoming a way through: only Gemini's own
+    // "Notes by Gemini" suffix spares a file, not the word "notes".
+    expect(isLegalInstrument("Freelancer Agreement Marc - notes.docx")).toBe(true);
+  });
+
+  it("is empty-safe", () => {
+    expect(isLegalInstrument(undefined)).toBe(false);
+    expect(isLegalInstrument("   ")).toBe(false);
+  });
+});
+
+describe("isJobApplication", () => {
+  /**
+   * The real filenames. Fifteen external candidates' CVs were sitting in a corpus the
+   * whole team can ask questions of — personal data of people who applied for a job
+   * here, and nothing at all about how LoveIQ works.
+   */
+  it.each([
+    "Adna Njuhović – CV.pdf (2).pdf",
+    "CV Saša Arslanagić (1).pdf",
+    "Habiba-Raafat-CV-Resume (1).pdf",
+    "Iman_Beslija_CV.pdf",
+    "Lejla Viteškić Resume (3).docx (1).pdf",
+    "Naida Smailbegovic-cv.pdf",
+    "Nađa Sinić 2026 _CV.pdf",
+    "Resume (2).pdf",
+    "hamza_ramic_cv.pdf",
+  ])("drops %s", (name) => {
+    expect(isJobApplication(name)).toBe(true);
+  });
+
+  /**
+   * The line it must not cross. A document ABOUT hiring is company knowledge; the
+   * pattern is anchored at word boundaries so none of these is touched, and measuring
+   * across all 705 Drive documents produced no near miss.
+   */
+  it.each([
+    "Business Case",
+    "LoveIQ_Explorer_of_Edges_Preview.pdf",
+    "Recruiting pipeline 2026",
+    "cover-letter-template.docx",
+    "curriculum-of-the-onboarding-week.md",
+    "Onthology_Enity_Model",
+  ])("keeps %s", (name) => {
+    expect(isJobApplication(name)).toBe(false);
+  });
+
+  /**
+   * A KNOWN EDGE, recorded rather than fixed — the same trade as "Invoice 2026
+   * policy.pdf" below. A candidate's file often leads with the word ("CV Saša
+   * Arslanagić"), so a document ABOUT CVs leads with it identically and the filename
+   * cannot separate them. Narrowing to catch only a trailing token would miss five of
+   * the fifteen real ones. No such document exists among the 705 Drive files, so it
+   * costs nothing today, and this says so out loud.
+   */
+  it("drops a document named like a CV but about screening them", () => {
+    expect(isJobApplication("CV screening process.docx")).toBe(true);
+  });
+
+  /** The real ones, measured 2026-09-23: four applicant sheets, three interview notes. */
+  it.each([
+    "Chief of Staff - Applicants",
+    "Copy of Growth Lead Applicants",
+    "Design Intern Applicants",
+    "Growth Lead Applicants",
+    "Notes - Interview LoveIQ Jane Doe",
+    "Jane Growth Interview - 2026/03/19 17:00 CET - Notes by Gemini",
+    "Jane <> Mark Interview - 2026/09/07 14:58 CEST - Notes by Gemini",
+  ])("drops %s", (name) => {
+    expect(isJobApplication(name)).toBe(true);
+  });
+
+  it.each([
+    "User Interview - participant 3",
+    "Customer interview synthesis",
+    "Hiring Guide",
+    "30 min with Mark (Jane Doe) - 2026/09/14 15:29 CEST - Notes by Gemini",
+  ])("keeps %s", (name) => {
+    expect(isJobApplication(name)).toBe(false);
+  });
+});
+
+describe("docToRows refuses notes from a candidate interview", () => {
+  /**
+   * The booking slot is generic — "30 min with Mark (<name>)" also carries partner and
+   * domain conversations — so the NAME cannot tell. Gemini's summary can: it calls a
+   * hiring call a "recruitment discussion" and records "candidate fit". Tested at the
+   * call site, because a predicate nothing calls is decoration.
+   */
+  const note = {
+    id: "n1",
+    name: "30 min with Mark (Jane Doe) - 2026/09/21 17:27 WEST - Notes by Gemini",
+    modifiedTime: STAMP,
+  };
+
+  it("writes nothing for a recruitment discussion", () => {
+    const text =
+      "Summary\n\nThe recruitment discussion covered company vision, with an evaluation of candidate qualifications and fit.";
+    expect(docToRows(note as never, text, STAMP)).toHaveLength(0);
+  });
+
+  it("still writes a call in the same slot about the product", () => {
+    const text =
+      "Summary\n\nDiscussed biometric tracking, psychometrics and family-systems frameworks for the next assessment.";
+    expect(docToRows(note as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+
+  it("still writes a team sync that merely mentions hiring", () => {
+    const sync = {
+      id: "n2",
+      name: "LoveIQ Sync - 2026/08/05 16:30 CEST - Notes by Gemini",
+      modifiedTime: STAMP,
+    };
+    const text =
+      "Summary\n\nWe agreed to make a hiring decision on the growth role next week and to ship Report 2.0.";
+    expect(docToRows(sync as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+
+  it("applies only to meeting notes, not to any document using the phrase", () => {
+    const doc = { id: "d1", name: "Recruiting playbook", modifiedTime: STAMP };
+    const text = "How we run a recruitment interview: assess candidate fit against the role.";
+    expect(docToRows(doc as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+});
+
+describe("isVendorBilling", () => {
+  const PDF = "application/pdf";
+
+  // Every distinct naming shape actually present in the corpus.
+  const BILLING = [
+    "Atlassian_Invoice_IN-EU-002-332-278.pdf",
+    "CookieYes_invoice_5256BCEE-848972_www.loveiq.org_Jun_2026.pdf",
+    "github-loveiqhq-receipt-2026-03-20.pdf",
+    "Invoice-MKWVRQXU-0008.pdf",
+    "Invoice-2026-01-EmaDjedovic-AppliedPsychometrics-Feb2026.pdf",
+    "Receipt-2124-3214-5234.pdf",
+    "slack_fair_billing_statement_SBIE-11862133.pdf",
+    "slack_invoice_11511445020947.pdf",
+    "Invoice January 2026.pdf",
+    // THE TWO THAT ESCAPED. Amazon Rechnungen, VAT boilerplate and all, still sitting
+    // in the corpus on 2026-09-20 — the vendor put the reference number in the
+    // document, and only the filename is known when the walk decides.
+    "invoice 1.1.pdf",
+    "invoice 1.2.pdf",
+    "Rechnung.pdf",
+    // The vendor reference with no spelled-out word. Three of these came back in the
+    // top twelve for "what did we agree about pricing in our calls" — the question
+    // this rule exists for — a day after the rule was supposedly fixed.
+    "MT-INV00945830.pdf",
+    "MT-INV00894286.pdf",
+  ];
+
+  it.each(BILLING)("drops %s", (name) => {
+    expect(isVendorBilling(name, PDF)).toBe(true);
+  });
+
+  // Real documents from the same corpus that must NEVER be dropped.
+  const KEEP: Array<[string, string]> = [
+    ["Freelancer Agreement Sanjin _SIGNED_mb_signed.pdf", PDF],
+    ["LoveIQ_Explorer_of_Edges_Preview.pdf", PDF],
+    ["C-BRAIN UAT Milestone 2", "application/vnd.google-apps.document"],
+    ["Business Case", "application/vnd.google-apps.spreadsheet"],
+    ["Cost sheet audit — software & tooling, 19 Sep 2026", "application/vnd.google-apps.document"],
+    ["LoveIQ Dynamic Pricing Engine — MVP Requirements", "application/vnd.google-apps.document"],
+    ["Data_Acquisition_Automation.docx", PDF],
+  ];
+
+  it.each(KEEP)("keeps %s", (name, mime) => {
+    expect(isVendorBilling(name, mime)).toBe(false);
+  });
+
+  it("keeps a document ABOUT invoicing, which has no vendor reference", () => {
+    expect(isVendorBilling("Invoice process redesign.pdf", PDF)).toBe(false);
+    expect(isVendorBilling("How our invoicing works.pdf", PDF)).toBe(false);
+  });
+
+  /**
+   * The line the second test walks. A vendor's file is the word and its numbering; a
+   * document about billing has something to say in its title, and that is exactly what
+   * separates them once the reference number turns out to be unreliable.
+   */
+  it.each(["Invoice template.pdf", "Receipt tracker.pdf"])(
+    "keeps %s — a title with something left in it once the numbering goes",
+    (name) => {
+      expect(isVendorBilling(name, PDF)).toBe(false);
+    }
+  );
+
+  /**
+   * A KNOWN EDGE, recorded rather than fixed. A year reads as a vendor reference, so
+   * "Invoice 2026 policy.pdf" would be dropped even though it is a policy document.
+   * Tightening the digit rule to exclude years would un-drop "Invoice January 2026.pdf",
+   * a real invoice sitting in the list above, so the trade is deliberate. No such name
+   * exists among the 705 Drive documents, so it costs nothing today; this test says so
+   * out loud, so the next person meets a decision rather than a surprise.
+   */
+  it("drops a year-named document about billing, which is the accepted cost", () => {
+    expect(isVendorBilling("Invoice 2026 policy.pdf", PDF)).toBe(true);
+  });
+
+  /**
+   * THE TWO THIS RULE MUST NEVER REACH.
+   *
+   * `5419031713.pdf` is a Google invoice; `726933.pdf` is a peer-reviewed paper on
+   * sexual and relationship variables, 26 chunks of it. Their names are the same shape,
+   * and the rule decides before anything is fetched — so a "nothing but digits" test,
+   * which catches every numeric invoice cleanly, also deletes the literature. Measured
+   * before it shipped; these cases are why it did not.
+   */
+  it.each(["726933.pdf", "18.01.161.20221004.pdf", "5419031713.pdf"])(
+    "never drops %s — a numeric name is not evidence either way",
+    (name) => {
+      expect(isVendorBilling(name, PDF)).toBe(false);
+    }
+  );
+
+  it("never drops a non-pdf, whatever it is called", () => {
+    // A spreadsheet named like an invoice is a ledger someone maintains, not a receipt.
+    expect(
+      isVendorBilling("Invoice-MKWVRQXU-0008", "application/vnd.google-apps.spreadsheet")
+    ).toBe(false);
+  });
+
+  it("is not fooled by the word appearing mid-word", () => {
+    expect(isVendorBilling("invoicing-2026-guide.pdf", PDF)).toBe(false);
+  });
+});
+
+/**
+ * The reconciler asks which tabs SHOULD have produced a heading, and the honest
+ * answer is not "all of them".
+ *
+ * `sheetText` skips a tab with no rows, so a check expecting one heading per tab
+ * title reports a gap the corpus can never close. Measured 2026-09-20: a tab named
+ * ">>> Archive", used as a visual separator and holding nothing, was reported as a
+ * missing tab by the nightly reconciler — a false alarm on a daily job, which is how
+ * a check stops being read.
+ */
+describe("sheetTabsWithRows", () => {
+  it("leaves out a tab that holds nothing", async () => {
+    sheetTabs = ["Costs", ">>> Archive", "Core_KPI"];
+    sheetValues = [
+      { values: [["Slack", "41.25"]] },
+      { values: [] },
+      { values: [["Paid Reports", "600"]] },
+    ];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["Costs", "Core_KPI"]);
+  });
+
+  it("treats a tab of blank cells as empty, not as content", async () => {
+    sheetTabs = ["Real", "Blank"];
+    sheetValues = [{ values: [["x"]] }, { values: [["", "  "], [""]] }];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["Real"]);
+  });
+
+  it("keeps every tab when they all hold something", async () => {
+    sheetTabs = ["A", "B"];
+    sheetValues = [{ values: [["1"]] }, { values: [["2"]] }];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["A", "B"]);
+  });
+
+  it("returns nothing for a spreadsheet with no tabs at all", async () => {
+    sheetTabs = [];
+    sheetValues = [];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual([]);
+  });
+
+  it("keeps the Business Case's example-figures tab, which it left out from 28 Sep to 5 Oct", async () => {
+    // Eman asked for Core_KPI back on 2026-10-05. It is marked per tab now instead
+    // (markedParts), so the real Costs tab no longer needs it gone.
+    sheetTabs = ["Costs", "Core_KPI"];
+    sheetValues = [{ values: [["Slack", "41.25"]] }, { values: [["Paid Reports", "600"]] }];
+    await expect(sheetTabsWithRows("t", COST_SHEET_ID)).resolves.toEqual(["Costs", "Core_KPI"]);
   });
 });

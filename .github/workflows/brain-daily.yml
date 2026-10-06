@@ -1,0 +1,164 @@
+name: Company Brain daily jobs
+
+# The brain crons that need a language model run here instead of on Vercel: the brief,
+# the decision miner, and the Night Shift that answers questions queued with queue_research.
+#
+# THE MODEL IS THE TEAM SUBSCRIPTION, NOT AN API KEY. Only the `claude` binary may use it:
+# `claude setup-token` mints CLAUDE_CODE_OAUTH_TOKEN, billed against the plan we already
+# pay for (the same secret generate-fix.yml uses). Vercel has no `claude` binary; this
+# runner does. scripts/brain-cron.ts calls the same route handlers Vercel used to, so the
+# day claim, the cron_run row, the Slack post and the stall watch behave exactly as before.
+#
+# NO `schedule:`. Vercel's clock starts each job through `inputs.job`
+# (features/cron/server/github-jobs.ts), UTC: the Night Shift at 00:41, the Monday health
+# report at 01:41, the brief at 06:41 with retries at 07:41 and 08:41, and the decision
+# miner, with the radar after it, at 09:41. GitHub's own schedule starts this repo's jobs
+# hours late and drops some: on 2026-09-28 the miner ran 8.5 hours late. The brief's
+# retries are no-ops once it delivered: claim_slack_alert re-grants an undelivered day
+# only once its claim is ten minutes old.
+
+run-name: ${{ inputs.job }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        type: choice
+        options: [brain-brief, brain-mine, brain-night-shift, brain-health, brain-radar]
+      query:
+        description: "Optional query string, e.g. ?day=2026-09-22 or ?limit=3"
+        required: false
+        default: ""
+      dry_run:
+        description: "brain-brief only: print the brief in the log instead of posting it"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # The Night Shift answers up to three questions of up to 20 minutes each. The miner and
+    # the decision radar after it get 40: the radar's first run reads every topic.
+    timeout-minutes: ${{ inputs.job == 'brain-night-shift' && 75 || (inputs.job == 'brain-mine' || inputs.job == 'brain-radar') && 40 || 20 }}
+    env:
+      JOB: ${{ inputs.job }}
+    # One of each job at a time. Overlap would be harmless (the brief's day claim and the
+    # miner's tombstones both dedupe), but it would spend the seat's allowance twice.
+    concurrency:
+      group: brain-daily-${{ inputs.job }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      # The routes import the app's own modules, so the app's dependencies are needed.
+      - run: npm ci
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run the job
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          # The Night Shift's researcher reads the brain over MCP with this bearer.
+          LOVEIQ_MCP_TOKEN: ${{ secrets.LOVEIQ_MCP_TOKEN }}
+          # The routes run only when this names production (isProdCronHost), so it is
+          # pinned here rather than read from a secret.
+          NEXT_PUBLIC_SITE_URL: https://loveiq.org
+          # The mode Vercel runs the routes in: plain JSON logs, production code paths.
+          NODE_ENV: production
+          BRAIN_LLM_CLI: claude
+          # Inputs travel through the environment: `${{ }}` inside `run:` is substituted
+          # before bash sees it, so a quote in the query would be command execution.
+          QUERY: ${{ inputs.query }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          set -o pipefail
+          # FAIL, do not skip. Without the Slack webhook the brief is "delivered" into
+          # nothing (notifySlack skips an unset channel and the day is still marked done),
+          # and a green run that did nothing is the failure this corpus keeps relearning.
+          missing=""
+          need="SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY CLAUDE_CODE_OAUTH_TOKEN SLACK_BRAIN_WEBHOOK_URL"
+          [ "$JOB" = "brain-night-shift" ] && need="$need LOVEIQ_MCP_TOKEN"
+          # The tool battery opens the MCP door with the same bearer.
+          [ "$JOB" = "brain-health" ] && need="$need LOVEIQ_MCP_TOKEN"
+          for v in $need; do
+            [ -n "${!v:-}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+          case "$JOB" in
+            brain-brief) npx tsx scripts/brain-cron.ts brain-brief $DRY_RUN "$QUERY" ;;
+            # The decision radar follows the miner, so tonight's new decisions are checked
+            # against the ones already recorded. Both run; the job fails if either did.
+            brain-mine)
+              rc=0
+              npx tsx scripts/brain-cron.ts brain-mine "$QUERY" || rc=1
+              npx tsx scripts/brain-cron.ts brain-radar || rc=1
+              exit $rc ;;
+            brain-radar) npx tsx scripts/brain-cron.ts brain-radar ;;
+            brain-night-shift) npx tsx scripts/brain-cron.ts brain-night-shift ;;
+            # Each battery exits 0 once its result is recorded, whatever failed: failures are
+            # the report's findings. All three run; the job fails if any could not.
+            brain-health)
+              rc=0
+              npx tsx scripts/brain-battery.ts --retrieval --record || rc=1
+              # --live: the tools are probed on loveiq.org, which has the keys this runner lacks.
+              npx tsx scripts/brain-battery.ts --mcp --record --live || rc=1
+              npx tsx scripts/brain-cron.ts brain-health || rc=1
+              exit $rc ;;
+            *) echo "::error::Unknown job: $JOB"; exit 2 ;;
+          esac | tee /tmp/brain-job.log
+
+      # Every failure, whatever stopped it: a missing secret, a failed install, the model
+      # refusing, or a miner run that read nothing. The route also writes the details to
+      # cron_run. This is the only alert: the logger's own mirror to Slack needs
+      # SLACK_OPS_WEBHOOK_URL, a Vercel secret marked sensitive that cannot be read back
+      # out, so the mirror is off here and a failure is never reported twice.
+      - name: Tell the brain channel the job failed
+        # cancelled() too: a job killed at its timeout skips failure() steps, writes no
+        # cron_run row (the route's finally never runs) and would otherwise alert nobody.
+        if: failure() || cancelled()
+        env:
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          # Slack member id of whoever looks after the seat CLAUDE_CODE_OAUTH_TOKEN belongs to (a
+          # repository variable, not a secret). Change it, and the message below, whenever the
+          # token changes hands.
+          TOKEN_OWNER: ${{ vars.CLAUDE_TOKEN_OWNER_SLACK_ID }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then
+            echo "::warning::SLACK_BRAIN_WEBHOOK_URL is not set, so this failure alerts nobody"
+            exit 0
+          fi
+          # The job's one-line result (status, and the route's reason), when it got that far.
+          result=$(grep -h '^{"status"' /tmp/brain-job.log 2>/dev/null | tail -1 | cut -c1-300 || true)
+          # A usage limit is the one failure with a known fix, so it pings whoever looks after
+          # the seat. Since 2026-09-26 the token is the teamwork@ seat, which Claude Code on
+          # Eman's laptop also uses, so a heavy day of sessions can use up the jobs' share
+          # (COMPANY_BRAIN.md, "Whose seat").
+          hint=""
+          if grep -qiE "hit your .*limit|usage limit|rate_limited" /tmp/brain-job.log 2>/dev/null; then
+            who=""
+            if [ -n "${TOKEN_OWNER:-}" ]; then who=" <@${TOKEN_OWNER}>"; fi
+            hint=" The Claude usage limit on the teamwork@ seat stopped it.${who} It resets on its own; run the job again from Actions once it has (COMPANY_BRAIN.md, \"Whose seat\")."
+          fi
+          how="failed"
+          if [ "${JOB_STATUS:-}" = "cancelled" ]; then how="was stopped before it finished (cancelled or timed out)"; fi
+          text=":brain: ${JOB} ${how} in GitHub Actions.${hint} ${result:-It did not get as far as running.} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          jq -n --arg text "$text" '{text: $text}' |
+            curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL"

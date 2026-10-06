@@ -38,14 +38,20 @@ vi.mock("@features/report/ui/hooks/useReportData", () => ({
   useReportData: (...args: unknown[]) => mockUseReportData(...args),
 }));
 
-const { mockRateSection } = vi.hoisted(() => ({ mockRateSection: vi.fn() }));
+const { mockRateSection, mockFeedbackIdentity } = vi.hoisted(() => ({
+  mockRateSection: vi.fn(),
+  mockFeedbackIdentity: vi.fn(),
+}));
 vi.mock("@features/report/ui/hooks/useSectionFeedback", () => ({
-  useSectionFeedback: () => ({
-    feedbacks: {},
-    submitted: {},
-    rateSection: mockRateSection,
-    submitFeedback: vi.fn(),
-  }),
+  useSectionFeedback: (sessionId: string | null, token?: string | null) => (
+    mockFeedbackIdentity(sessionId, token ?? null),
+    {
+      feedbacks: {},
+      submitted: {},
+      rateSection: mockRateSection,
+      submitFeedback: vi.fn(),
+    }
+  ),
 }));
 
 const mockTrackReportViewed = vi.fn();
@@ -394,9 +400,15 @@ describe("ReportPage", () => {
 
     render(<ReportPage />);
 
-    expect(screen.getByRole("heading", { name: /no saved report session/i })).toBeInTheDocument();
-    expect(screen.getByText(/in this browser/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /take the survey/i })).toHaveAttribute(
+    // Copy changed deliberately: this screen used to say "Complete the survey
+    // again to generate a fresh report", which told someone who had already
+    // answered 56 questions to redo them. Opening the report on a second phone
+    // is the ordinary way to land here, and the completion email carries their
+    // link, so the email is the way back in. The survey link stays for people
+    // who genuinely have not taken it, but as an aside rather than the fix.
+    expect(screen.getByRole("heading", { name: /can.t find your report/i })).toBeInTheDocument();
+    expect(screen.getByText(/we emailed your report link/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /taken the test yet/i })).toHaveAttribute(
       "href",
       "/survey"
     );
@@ -419,6 +431,67 @@ describe("ReportPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/saved report session/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /reload report/i })).toHaveAttribute("href", "/report");
+  });
+
+  it("reloads the reader's own report, not bare /report, when they came by link", () => {
+    // Bare /report only works in the browser that took the survey. From an emailed
+    // link it could only lead to "Can't find your report" (2026-10-03).
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 500, message: "Unable to process request." },
+    });
+
+    render(<ReportPage token="rpt_abc123" />);
+
+    expect(screen.getByRole("link", { name: /reload report/i })).toHaveAttribute(
+      "href",
+      "/report/rpt_abc123"
+    );
+  });
+
+  it("says a withdrawn shared link is not available, not 'we emailed your report link'", () => {
+    // A share recipient never took the survey; the owner's copy sent them looking
+    // for an email that does not exist.
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 404, message: "Report not found." },
+    });
+
+    render(<ReportPage token="rpts_abcdefghijklmnopqrst" />);
+
+    expect(
+      screen.getByRole("heading", { name: "This shared report isn't available" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ask them to send it again/i)).toBeInTheDocument();
+    expect(screen.queryByText(/we emailed your report link/i)).toBeNull();
+  });
+
+  it("keeps the owner's not-found copy for an owner's link", () => {
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 404, message: "Report not found." },
+    });
+
+    render(<ReportPage token="rpt_abcdefghijklmnopqrst" />);
+
+    expect(screen.getByRole("heading", { name: /can.t find your report/i })).toBeInTheDocument();
+    expect(screen.getByText(/we emailed your report link/i)).toBeInTheDocument();
+  });
+
+  it("treats a malformed report link (400) as not found, not as an outage", () => {
+    mockUseReportData.mockReturnValue({
+      data: null,
+      status: "error",
+      error: { statusCode: 400, message: "Invalid input" },
+    });
+
+    render(<ReportPage token="[object Object]" />);
+
+    expect(screen.getByRole("heading", { name: /can.t find your report/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /temporarily unavailable/i })).toBeNull();
   });
 
   it("does not render pre-2.0 sections the redesign retired", () => {
@@ -860,21 +933,34 @@ describe("ReportPage", () => {
    */
   describe("V1 — the restored pre-2.0 report", () => {
     beforeEach(() => {
-      // No `v2=1`: this is what a real visitor gets.
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
+      // The default until Report 3.0 launched; `?v4=0` still opens it.
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=0"));
     });
 
-    it("is what renders by default, and Report 2.0 only behind ?v2=1", () => {
+    it("is what ?v4=0 renders, Report 3.0 is the default, and Report 2.0 is behind ?v2=1", () => {
       mockUseReportData.mockReturnValue(buildSuccessResponse());
       const { container: v1 } = render(<ReportPage />);
       // `welcome` is the clearest tell: Report 2.0 retires it, V1 opens on it.
       expect(v1.querySelector("#welcome")).not.toBeNull();
+      expect(v1.querySelector(".rv4-rule")).toBeNull();
+      cleanup();
+
+      // What a real visitor gets: no parameter at all.
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container: v4 } = render(<ReportPage />);
+      expect(v4.querySelector("#welcome")).toBeNull();
+      expect(v4.querySelector(".rv4-rule")).not.toBeNull();
+      expect(mockUseReportData.mock.calls.at(-1)?.[0]).toEqual(
+        expect.objectContaining({ v4: true })
+      );
       cleanup();
 
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
       const { container: v2 } = render(<ReportPage />);
       expect(v2.querySelector("#welcome")).toBeNull();
+      expect(v2.querySelector(".rv4-rule")).toBeNull();
     });
 
     it("renders every chapter of report-general, in sectionNumber order", () => {
@@ -1536,6 +1622,7 @@ describe("ReportPage", () => {
       const article = REPORT_V4_LEARN_MORE[FVR]!;
       Object.assign(response.data as Record<string, unknown>, {
         viewMode,
+        submissionId: 42,
         ownerFirstName: "Eman",
         // /api/report prices nothing for a shared viewer.
         ...(viewMode === "shared" ? { pricingQuotes: null } : {}),
@@ -1586,6 +1673,43 @@ describe("ReportPage", () => {
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: FVR })
       );
+    });
+
+    it("counts nothing a recipient does against the owner: no paywall ping, no events, no ratings", async () => {
+      const user = userEvent.setup();
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+      mockGetReportSessionId.mockReturnValue("2f1c0b8e-3d4a-4c5b-8e6f-7a8b9c0d1e2f");
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(view("shared"));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-fvr__gate")!);
+
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("/api/price"))).toBe(false);
+      expect(vi.mocked(analytics.setReportSubmissionContext)).toHaveBeenLastCalledWith(null);
+      expect(mockFeedbackIdentity).toHaveBeenLastCalledWith(null, null);
+      fetchSpy.mockRestore();
+    });
+
+    it("counts the owner's, by the same lock", async () => {
+      const user = userEvent.setup();
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+      mockGetReportSessionId.mockReturnValue("2f1c0b8e-3d4a-4c5b-8e6f-7a8b9c0d1e2f");
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(view("owner"));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-fvr__gate")!);
+
+      await waitFor(() =>
+        expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("/api/price"))).toBe(true)
+      );
+      expect(vi.mocked(analytics.setReportSubmissionContext)).toHaveBeenLastCalledWith(42);
+      expect(mockFeedbackIdentity).toHaveBeenLastCalledWith(
+        "2f1c0b8e-3d4a-4c5b-8e6f-7a8b9c0d1e2f",
+        null
+      );
+      fetchSpy.mockRestore();
     });
 
     it("gives a recipient no sticky unlock bar, and the owner one", () => {
@@ -1901,7 +2025,15 @@ describe("ReportPage", () => {
       expect(lastRequest().v4).toBe(true);
     });
 
-    it.each(["", "v2=1", "v3=1"])("does not on %j", (query) => {
+    // Report 3.0 is the default, so a bare URL asks too; only an older report by name does not.
+    it("tells it on a bare URL, the default", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      render(<ReportPage />);
+      expect(lastRequest().v4).toBe(true);
+    });
+
+    it.each(["v4=0", "v2=1", "v3=1"])("does not on %j", (query) => {
       mockSearchParams.mockImplementation(() => new URLSearchParams(query));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
       render(<ReportPage />);
@@ -2095,6 +2227,35 @@ describe("ReportPage", () => {
       expect(current()).toEqual([`#${target}`]);
     });
 
+    // Report 3.0 lands a chapter 144px down, under its floating chrome. At the old 90px
+    // line the next scroll lit the chapter before it, often off screen by then (desktop
+    // sweep, 2026-10-06).
+    it("keeps a chapter lit that sits where a nav jump lands it, 144px down", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = "full_report";
+      mockUseReportData.mockReturnValue(response);
+      render(<ReportPage />);
+
+      const current = () =>
+        screen
+          .getAllByRole("link")
+          .filter((link) => link.getAttribute("aria-current") === "location")
+          .map((link) => link.getAttribute("href"));
+      const listed = REPORT_V4_NAV_IDS.filter(
+        (id) => document.getElementById(id) && document.querySelector(`a[href="#${id}"]`)
+      );
+      const target = listed[Math.floor(listed.length / 2)]!;
+
+      scrollY = REPORT_V4_NAV_IDS.indexOf(target) * 1000 - 144;
+      act(() => {
+        fireEvent.scroll(window);
+        nextFrame();
+      });
+
+      expect(current()).toEqual([`#${target}`]);
+    });
+
     // Mark's 961:333 lists Part 1 · Welcome: at the top of the page the nav names the
     // Introduction, not Core Archetype two chapters further down, and scrolling on
     // lights "What shaped this report" as it passes.
@@ -2150,7 +2311,7 @@ describe("ReportPage", () => {
     });
 
     it("leaves V1, V2 and V3 without one", () => {
-      for (const qs of ["", "v2=1", "v3=1"]) {
+      for (const qs of ["v4=0", "v2=1", "v3=1"]) {
         mockSearchParams.mockImplementation(() => new URLSearchParams(qs));
         mockUseReportData.mockReturnValue(buildSuccessResponse());
 
@@ -2317,6 +2478,41 @@ describe("ReportPage", () => {
       expect(main.style.getPropertyValue("--rv3-name-ink")).toBe("");
       expect(main.style.getPropertyValue("--rv3-accent-ink-rgb")).toBe("");
       expect(main.style.getPropertyValue("--report-accent-rgb")).toBe("52 234 228");
+    });
+
+    it("stays dismissed once closed, even after the scroll teaser's timer lands", async () => {
+      /**
+       * This is the assertion the test above was making by accident.
+       *
+       * The scroll teaser arms a 1.6s timer and, when it fires, opens the modal
+       * if one is not already open. A reader arriving with a ladder discount
+       * has the modal auto-opened on mount, scrolling arms that timer
+       * underneath it, and closing inside the window let the timer throw the
+       * modal straight back — dismissed, then back a second and a half later.
+       *
+       * The test above only caught it when the run was slow enough for the
+       * timer to land inside its `waitFor`, which is why it read as a flake for
+       * days. Waiting PAST the timer makes it deterministic in both directions:
+       * it fails on the unfixed component every time, and it cannot pass by
+       * being quick.
+       */
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      // Real time, not fake: the component owns the timer and the point is that
+      // it never fires. 1.6s is the delay; 2.2s clears it with margin.
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+
+      expect(
+        screen.queryByRole("dialog"),
+        "the pricing modal reopened itself after the reader dismissed it"
+      ).toBeNull();
     });
   });
 });

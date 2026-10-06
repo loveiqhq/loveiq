@@ -24,6 +24,11 @@ beforeEach(async () => {
   // window flag. Without these the assertions below would pass on an early return.
   vi.stubEnv("NODE_ENV", "production");
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+  // A production deployment is one Vercel STAMPED as production, not merely one
+  // with a production-looking URL — `isProductionSite()` requires it since
+  // 2026-09-17, because a CI build bakes that URL too. Without this the guard
+  // short-circuits and every assertion below passes on an early return.
+  vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "production");
   vi.resetModules();
   document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
   client = await import("@features/analytics/client");

@@ -24,10 +24,11 @@
  * Security -> Full Disk Access), because macOS protects the app container.
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+import { readRows } from "@features/brain/server/ingest/sqlite-read";
 
 /** The ONLY conversation this script may read. */
 const GROUP_JID = process.env.WHATSAPP_GROUP_JID ?? "120363422139124113@g.us";
@@ -37,11 +38,20 @@ const CHAT_NAME = process.env.WHATSAPP_GROUP_NAME ?? "LoveIQ";
  * Oldest day worth indexing.
  *
  * A linked desktop keeps back-filling in the background — 53 days of history when
- * first linked, 306 a few hours later — and older chat is not worth the storage or
- * the embedding cost. Anything before this is skipped, and the sweep removes it if
- * an earlier run already indexed it.
+ * first linked, 306 a few hours later. Anything before this is skipped, and the
+ * sweep removes it if an earlier run already indexed it — so this default is what
+ * decides the corpus, and an env override alone would be UNDONE by the next
+ * ordinary run.
+ *
+ * WAS 2026-05-01, on the grounds that older chat was "not worth the storage or the
+ * embedding cost". Measured 2026-09-19 against the desktop database, that was wrong
+ * by orders of magnitude: the cutoff excluded 1,006 of the group's 2,373 messages —
+ * 42%, across 116 days — for 59,586 characters of text, about twenty-five chunks.
+ * The Postgres volume is 8.35 GB with 82% free. What it actually cost was the
+ * company's first six months, which is the period most dense with founding
+ * decisions and the one nobody can reconstruct from memory.
  */
-const SINCE_DAY = process.env.WHATSAPP_SINCE ?? "2026-05-01";
+const SINCE_DAY = process.env.WHATSAPP_SINCE ?? "2025-10-01";
 
 const DB = join(
   homedir(),
@@ -50,23 +60,33 @@ const DB = join(
 /** Core Data counts seconds from 2001-01-01, not from 1970. */
 const CORE_DATA_EPOCH = 978_307_200;
 
+/** Read-only through SQLite's locking, with one fallback: see readRows. */
 function query<T>(sql: string): T[] {
-  const out = execFileSync("sqlite3", ["-readonly", "-json", `file:${DB}?immutable=1`, sql], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return out.trim() ? (JSON.parse(out) as T[]) : [];
+  return readRows<T>(DB, sql);
+}
+
+/**
+ * Why the run failed, if it did. A run records itself as `brain-whatsapp` in cron_run when
+ * it changed something or failed, and otherwise once an hour, so the stall watcher can say
+ * when this laptop job has gone quiet: it pauses whenever the Mac is closed, and the
+ * watcher counts only successful runs.
+ */
+let failure: string | undefined;
+/** Whether this run wrote or removed anything: a run that changed nothing records sparingly. */
+let changed = false;
+function fail(message: string): void {
+  console.error(message);
+  failure ??= message.split("\n")[0];
+  process.exitCode = 1;
 }
 
 async function main(): Promise<void> {
   if (!GROUP_JID.endsWith("@g.us")) {
-    console.error("WHATSAPP_GROUP_JID must be a group jid ending in @g.us — refusing to run.");
-    process.exitCode = 1;
+    fail("WHATSAPP_GROUP_JID must be a group jid ending in @g.us — refusing to run.");
     return;
   }
   if (!existsSync(DB)) {
-    console.error(`No WhatsApp Desktop database at ${DB}\nInstall WhatsApp Desktop and link it.`);
-    process.exitCode = 1;
+    fail(`No WhatsApp Desktop database at ${DB}\nInstall WhatsApp Desktop and link it.`);
     return;
   }
 
@@ -75,8 +95,7 @@ async function main(): Promise<void> {
     `select Z_PK as pk from ZWACHATSESSION where ZCONTACTJID = '${esc}' limit 1;`
   )[0];
   if (!session) {
-    console.error(`That group is not in this database. Is WhatsApp Desktop linked and synced?`);
-    process.exitCode = 1;
+    fail(`That group is not in this database. Is WhatsApp Desktop linked and synced?`);
     return;
   }
 
@@ -124,7 +143,14 @@ async function main(): Promise<void> {
       order by m.ZMESSAGEDATE asc;`
   );
 
-  const { dayRows } = await import("@features/brain/server/ingest/whatsapp");
+  const {
+    dayFingerprint,
+    dayRows,
+    daysToWrite,
+    groupQuietDays,
+    GROUP_QUIET_LIMIT_DAYS,
+    sweepScope,
+  } = await import("@features/brain/server/ingest/whatsapp");
   const messages = rows.map((r) => {
     const at = new Date((r.ts + CORE_DATA_EPOCH) * 1000);
     return {
@@ -136,35 +162,118 @@ async function main(): Promise<void> {
     };
   });
 
+  // A frozen copy syncs "successfully" forever, so a long silence fails the run, and the rest
+  // still syncs. Measured on EVERY kind of message, not only those with text: a reaction or
+  // a photo is the group talking too.
+  const [newest] = query<{ ts: number | null }>(
+    `select max(ZMESSAGEDATE) as ts from ZWAMESSAGE where ZCHATSESSION = ${session.pk};`
+  );
+  const quiet = groupQuietDays(
+    [
+      ...messages.map((m) => m.at),
+      ...(newest?.ts != null ? [(newest.ts + CORE_DATA_EPOCH) * 1000] : []),
+    ],
+    Date.now()
+  );
+  if (quiet > GROUP_QUIET_LIMIT_DAYS) {
+    fail(
+      `No new message in the group for ${Number.isFinite(quiet) ? Math.floor(quiet) : "any"} ` +
+        `days: is WhatsApp Desktop open on this Mac, and still under Linked devices on the phone?`
+    );
+  }
+
+  const { loadPeople, peopleIn } = await import("@features/brain/server/people");
+  const byAlias = await loadPeople();
+  if (!byAlias) {
+    // Without it every fingerprint changes and every day would be rewritten without its
+    // people. The next run, five minutes on, tries again.
+    fail("The people registry could not be read, so nothing was written.");
+    return;
+  }
+
   const stampedAt = new Date().toISOString();
-  const chunks = dayRows({
+  const parts = dayRows({
     source: "whatsapp",
     idBase: `wa:${GROUP_JID}`,
     chat: CHAT_NAME,
     url: null,
     messages,
     stampedAt,
-  });
+  }).map((row) => ({
+    ...row,
+    meta: {
+      ...(row.meta ?? {}),
+      fingerprint: dayFingerprint(row, peopleIn(row.meta ?? {}, byAlias)),
+    },
+  }));
 
-  const { upsertChunks, sweepStale } = await import("@features/brain/server/ingest/upsert");
-  const written = await upsertChunks(chunks);
+  const { readAll } = await import("@features/brain/server/read-all");
+  const stored = await readAll<{ source_id: string; fingerprint: string | null }>(
+    // Ordered, as readAll's paging needs: past 1,000 rows an unordered read can skip some.
+    `/rest/v1/brain_chunk?select=source_id,fingerprint:meta->>fingerprint&source=eq.whatsapp` +
+      `&order=source_id.asc`
+  );
+  // Unreadable: write every day, as every run did before the fingerprints.
+  const toWrite = stored
+    ? daysToWrite(parts, new Map(stored.map((r) => [r.source_id, r.fingerprint])))
+    : parts;
+
+  const { upsertChunks, sweepMissing } = await import("@features/brain/server/ingest/upsert");
+  const written = toWrite.length ? await upsertChunks(toWrite) : 0;
+  if (written !== toWrite.length)
+    fail(`Wrote ${written} of the ${toWrite.length} days that changed.`);
 
   /**
-   * Remove chunks this run did not write.
-   *
-   * Without it, changing how the chat is cut leaves the previous shape behind as
-   * orphans — the day-chunks this replaced would have sat there forever answering
-   * questions with stale, truncated copies of the same conversation. `sweepStale`
-   * has the majority guard, so a bad run cannot wipe the source.
+   * Remove the parts this run no longer produces for a day it READ (a day cut into fewer
+   * parts). By id, not by write time: an unchanged day is not rewritten, so its write time
+   * is old and says nothing. Scoped to the days read (see sweepScope): a freshly linked
+   * WhatsApp Desktop holds only recent weeks, and an unscoped sweep deleted older days.
+   * A moved floor (WHATSAPP_SINCE) is therefore NOT swept on its own; delete those days by
+   * hand. The majority guard stays, so a bad read cannot wipe the source.
    */
-  const swept = await sweepStale("whatsapp", stampedAt, written);
+  const current = new Set(parts.map((r) => r.source_id));
+  const scope = sweepScope(
+    (stored ?? []).map((r) => r.source_id),
+    parts
+  );
+  const swept =
+    stored === null || scope.needed
+      ? await sweepMissing("whatsapp", current, { scopeKey: "day", walkedScopes: scope.days })
+      : 0;
+  changed = written + swept > 0;
 
   const days = new Set(messages.map((m) => m.day));
   console.log(
     `${CHAT_NAME}: ${messages.length} messages since ${SINCE_DAY} across ${days.size} days -> ` +
-      `${written} chunks written, ${swept} stale swept`
+      `${written} of ${parts.length} day parts written, ${swept} removed`
   );
-  console.log(`speakers: ${[...new Set(messages.map((m) => m.sender))].join(", ")}`);
+  if (written) console.log(`speakers: ${[...new Set(messages.map((m) => m.sender))].join(", ")}`);
 }
 
-void main();
+const started = Date.now();
+void main()
+  .catch((err: unknown) => {
+    fail(err instanceof Error ? err.message : String(err));
+  })
+  .finally(async () => {
+    // Every failure and every run that changed something, and otherwise one an hour: a run
+    // every five minutes would otherwise record "nothing new" 288 times a day.
+    if (!failure && !changed && (await succeededWithinTheHour())) return;
+    const { recordCronRun } = await import("@shared/observability/slack-alert-dedup");
+    await recordCronRun("brain-whatsapp", started, failure ? "error" : "success", failure);
+  });
+
+/** Whether a successful run was recorded in the last 55 minutes. False when unsure. */
+async function succeededWithinTheHour(): Promise<boolean> {
+  try {
+    const { supabaseFetch } = await import("@features/admin/server/supabase");
+    const since = new Date(Date.now() - 55 * 60_000).toISOString();
+    const res = await supabaseFetch(
+      `/rest/v1/cron_run?select=id&cron_name=eq.brain-whatsapp&status=eq.success` +
+        `&started_at=gte.${encodeURIComponent(since)}&limit=1`
+    );
+    return res.ok && ((await res.json()) as unknown[]).length > 0;
+  } catch {
+    return false;
+  }
+}

@@ -13,10 +13,56 @@ import {
   CRON_MAX_AGE_MS,
   describeStall,
   findStalledCrons,
+  GITHUB_WORKFLOW,
+  LAPTOP_JOBS,
   UNWATCHED_CRONS,
 } from "@features/cron/server/cron-stall";
+import { CLOCK_WORKFLOWS } from "@features/cron/server/github-jobs";
+
+import { brainDailySchedules } from "./brain-daily-schedule";
 
 const NOW = Date.parse("2026-08-29T12:00:00Z");
+
+/**
+ * Every cron something schedules: vercel.json's, plus the brain jobs GitHub Actions runs
+ * because they need the `claude` binary. Those still write cron_run rows, so they are
+ * watched exactly like the rest.
+ */
+async function scheduledCrons(): Promise<string[]> {
+  const fs = await import("node:fs");
+  const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
+    crons?: Array<{ path: string }>;
+  };
+  return [
+    ...(vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", "")),
+    ...Object.keys(brainDailySchedules()),
+    ...githubRecordedCrons(fs).map(([cron]) => cron),
+    // Scheduled by launchd on a laptop. Counted only while its script still records the
+    // run under that exact name, so a watched name cannot quietly stop being written.
+    ...Object.entries(LAPTOP_JOBS)
+      .filter(([cron, job]) =>
+        fs.readFileSync(job.script, "utf8").includes(`recordCronRun("${cron}"`)
+      )
+      .map(([cron]) => cron),
+  ];
+}
+
+/**
+ * GitHub Actions jobs that record their scheduled runs with scripts/record-cron-run.mjs.
+ * One counts only if its workflow both has a schedule AND records under that exact name,
+ * so a watched name cannot quietly stop being written.
+ */
+function githubRecordedCrons(fs: typeof import("node:fs")): Array<[string, string]> {
+  const found: Array<[string, string]> = [];
+  for (const file of fs.readdirSync(".github/workflows")) {
+    const yml = fs.readFileSync(`.github/workflows/${file}`, "utf8");
+    // Scheduled either by GitHub or by Vercel's clock (start-github-jobs).
+    const clock = (CLOCK_WORKFLOWS as readonly string[]).includes(file);
+    if (!clock && !/^\s*schedule:/m.test(yml)) continue;
+    for (const m of yml.matchAll(/record-cron-run\.mjs ([a-z0-9-]+)/g)) found.push([m[1], file]);
+  }
+  return found;
+}
 const ok = (started_at: string | null) =>
   ({
     ok: true,
@@ -52,6 +98,49 @@ describe("findStalledCrons", () => {
     expect(describeStall(stalled[0])).toMatch(/expected and will clear/);
   });
 
+  it("tells the reader where a quiet GitHub job is started, and to start it by hand", () => {
+    // "Not firing" alone sends the reader to debug the job. Vercel's clock starts every
+    // watched GitHub job, so the clock or its token is the likelier cause.
+    const stall = {
+      cron: "ux-review-verify",
+      lastRunAt: "2026-08-29T05:00:00Z",
+      ageMs: 4 * 3_600_000,
+      maxAgeMs: 3 * 3_600_000,
+    };
+    expect(describeStall(stall)).toMatch(
+      /\(ux-review-verify\.yml, via start-github-jobs\).*GITHUB_DISPATCH_TOKEN.*start it by hand/
+    );
+    expect(describeStall({ ...stall, lastRunAt: null, ageMs: null })).toMatch(/start it by hand/);
+    expect(describeStall({ ...stall, cron: "brain-brief" })).toMatch(
+      /\(brain-daily\.yml, via start-github-jobs\).*start it by hand/
+    );
+    expect(describeStall({ ...stall, cron: "brain-fast" })).not.toMatch(/GitHub/);
+  });
+
+  it("judges a laptop job on its successful runs, and tells the reader to open the Mac", async () => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue(ok("2026-08-29T11:00:00Z"));
+    await findStalledCrons(NOW);
+    const urls = mockFetch.mock.calls.map(([u]) => String(u));
+    expect(urls.find((u) => u.includes("cron_name=eq.brain-whatsapp"))).toContain(
+      "&status=eq.success"
+    );
+    expect(urls.find((u) => u.includes("cron_name=eq.brain-fast"))).not.toContain("status=");
+
+    const quiet = {
+      cron: "brain-whatsapp",
+      lastRunAt: "2026-08-25T12:00:00Z",
+      ageMs: 4 * 24 * 3_600_000,
+      maxAgeMs: CRON_MAX_AGE_MS["brain-whatsapp"]!,
+    };
+    expect(describeStall(quiet)).toMatch(
+      /^\*brain-whatsapp\* last succeeded 96\.0h ago \(limit 72\.0h\)\. .*open the Mac and WhatsApp Desktop.*30 days old\.$/
+    );
+    expect(describeStall({ ...quiet, lastRunAt: null, ageMs: null })).toMatch(
+      /never recorded a successful run.*open the Mac/
+    );
+  });
+
   it("says NOTHING when the database is unreachable", async () => {
     // Reporting an outage as "every cron is dead" would be a worse lie than silence,
     // and would fire an alert per cron every hour during any Supabase blip.
@@ -60,18 +149,14 @@ describe("findStalledCrons", () => {
   });
 });
 
-describe("the watch list must not drift from vercel.json", () => {
+describe("the watch list must not drift from what is scheduled", () => {
   /**
    * A cron added to vercel.json but not here is unwatched, which is precisely the
    * blind spot this module exists to close — and it would be invisible, because an
    * unwatched cron looks identical to a healthy one.
    */
   it("every scheduled cron is either watched or explicitly unwatched", async () => {
-    const fs = await import("node:fs");
-    const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
-      crons?: Array<{ path: string }>;
-    };
-    const scheduled = (vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", ""));
+    const scheduled = await scheduledCrons();
     expect(scheduled.length).toBeGreaterThan(0);
     for (const cron of scheduled) {
       expect(
@@ -81,15 +166,84 @@ describe("the watch list must not drift from vercel.json", () => {
     }
   });
 
-  it("does not watch a cron that is not scheduled at all", async () => {
+  it("gives a job the clock starts room for two missed starts, and no more", () => {
+    // Hourly starts: two missed is two hours, and a limit much looser than that would sit
+    // on a stopped clock for most of a day. The audit starts at 08:41 and 10:41 daily.
+    const hour = 3_600_000;
+    for (const cron of ["start-github-jobs", "ux-review-verify"]) {
+      expect(CRON_MAX_AGE_MS[cron], cron).toBeGreaterThanOrEqual(2 * hour);
+      expect(CRON_MAX_AGE_MS[cron], cron).toBeLessThanOrEqual(6 * hour);
+    }
+    expect(CRON_MAX_AGE_MS["ux-digest-audit"]).toBeGreaterThan(24 * hour);
+    expect(CRON_MAX_AGE_MS["ux-digest-audit"]).toBeLessThanOrEqual(30 * hour);
+  });
+
+  it("names the workflow of every job GitHub starts, and of nothing else", async () => {
     const fs = await import("node:fs");
-    const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
-      crons?: Array<{ path: string }>;
-    };
-    const scheduled = new Set((vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", "")));
+    expect(GITHUB_WORKFLOW).toEqual(
+      Object.fromEntries([
+        ...Object.keys(brainDailySchedules()).map((cron) => [cron, "brain-daily.yml"]),
+        ...githubRecordedCrons(fs),
+      ])
+    );
+    // GitHub's own schedule runs this repo's jobs hours late, sometimes not at all, and the
+    // alert tells the reader the clock started it: start any new one from github-jobs.ts.
+    for (const workflow of new Set(Object.values(GITHUB_WORKFLOW))) {
+      expect(CLOCK_WORKFLOWS, `${workflow} is on GitHub's schedule`).toContain(workflow);
+    }
+  });
+
+  it("does not watch a cron that is not scheduled at all", async () => {
+    const scheduled = new Set(await scheduledCrons());
     for (const cron of Object.keys(CRON_MAX_AGE_MS)) {
       expect(scheduled.has(cron), `"${cron}" is watched but no longer scheduled`).toBe(true);
     }
+  });
+});
+
+describe("features/cron/AGENT_README.md says truly what runs", () => {
+  /**
+   * Its counts said 28 and 22 for weeks after both had moved, and its list named two brain
+   * jobs Vercel no longer runs while missing one it does. A reader checking "is this job
+   * scheduled?" against it would have been told the wrong thing.
+   */
+  it("counts every route, and lists each one under how it runs", async () => {
+    const fs = await import("node:fs");
+    const readme = fs.readFileSync("features/cron/AGENT_README.md", "utf8");
+    const onDisk = fs
+      .readdirSync("app/api/cron")
+      .filter((d) => fs.existsSync(`app/api/cron/${d}/route.ts`));
+    const vercel = new Set(
+      (
+        JSON.parse(fs.readFileSync("vercel.json", "utf8")) as { crons: Array<{ path: string }> }
+      ).crons.map((c) => c.path.replace("/api/cron/", ""))
+    );
+    // The two batteries also record under brain-daily's schedule, but are not routes.
+    const github = new Set(Object.keys(brainDailySchedules()).filter((j) => onDisk.includes(j)));
+    const idle = onDisk.filter((d) => !vercel.has(d) && !github.has(d));
+
+    const counts =
+      /(\d+)\s+routes exist: (\d+) are scheduled in `vercel\.json`, (\d+) run in GitHub\s+Actions, and (\d+) do not run\s+at all/.exec(
+        readme
+      );
+    expect(counts?.slice(1).map(Number)).toEqual([
+      onDisk.length,
+      vercel.size,
+      github.size,
+      idle.length,
+    ]);
+
+    /** The routes a bullet (or paragraph) names, matched whole: ux-review is not ux-review-verify. */
+    const named = (block: RegExp) => {
+      const text = block.exec(readme)?.[0] ?? "";
+      return onDisk.filter((d) => new RegExp(`(?<![\\w-])${d}(?![\\w-])`).test(text)).sort();
+    };
+    const bullet = (label: string) => new RegExp(`^- _${label}_[^\\n]*(?:\\n  [^\\n]*)*`, "m");
+    expect([...named(bullet("Product & ops")), ...named(bullet("Company brain"))].sort()).toEqual(
+      [...vercel].sort()
+    );
+    expect(named(bullet("Company brain, in GitHub Actions"))).toEqual([...github].sort());
+    expect(named(/^\*\*The routes that do not run[\s\S]*?\n\n/m)).toEqual(idle.sort());
   });
 });
 

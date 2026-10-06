@@ -55,6 +55,16 @@ describe("plain English reaches the numbers", () => {
     }
   });
 
+  it("reaches the transcripts that mis-hear a colleague's name", () => {
+    // Gemini writes Fatih as "Fatty"; asking about him by name must still find those notes.
+    expect(expandBusinessVocabulary("what is Fatih working on")).toMatch(/\bFatty\b/);
+    expect(expandBusinessVocabulary("when did we decide to hire fatih?")).toMatch(/\bFatty\b/);
+    // Only the name triggers it.
+    expect(
+      expandBusinessVocabulary("what did the nutrition paper say about fatty acids")
+    ).not.toMatch(/Fatty/);
+  });
+
   it("never adds more than a handful of words", () => {
     // `word_similarity` scores the best contiguous extent of a title, so a query that
     // balloons dilutes every extent and makes the ranking WORSE -- the same mechanism
@@ -98,7 +108,9 @@ describe("terms added 2026-09-11, each from a measured miss", () => {
     for (const q of [
       "the candidate never came back to us about the offer",
       "did Mark follow up with the therapist",
-      "when did Fatih come back from holiday",
+      // A nameless subject: a colleague's name now legitimately expands (see the
+      // transcription test), and this case is about "come back", not about who.
+      "when did the designer come back from holiday",
       "what is the password policy for admin accounts",
       "how do we sort the results by score",
       "which categories of expense are reimbursable",
@@ -137,5 +149,29 @@ describe("a synonym, never the answer", () => {
      */
     expect(expandBusinessVocabulary("what is the test card number")).not.toMatch(/stripe/i);
     expect(expandBusinessVocabulary("what do we use to send email")).not.toMatch(/resend/i);
+  });
+});
+
+describe("terms added 2026-09-26, each from a measured miss", () => {
+  it("reaches the postponed-work list from 'switched off' and 'disabled'", () => {
+    // Both found CLAUDE.md's "Postponed / TODO (deliberately deferred work)" at rank 1 and
+    // still scored under the floor, because that section never says "switched off".
+    for (const q of [
+      "what is deliberately turned off or disabled in production and what would switch it back on",
+      "What is deliberately switched off behind a flag and what would turn it on?",
+      "which features are behind a feature flag",
+    ]) {
+      expect(expandBusinessVocabulary(q), q).toMatch(/\bpostponed deferred$/);
+    }
+  });
+
+  it("leaves a plain 'off' alone", () => {
+    for (const q of [
+      "what did we sign off on",
+      "the day off rota",
+      "is the survey paywall on or off",
+    ]) {
+      expect(expandBusinessVocabulary(q), q).toBe(q);
+    }
   });
 });

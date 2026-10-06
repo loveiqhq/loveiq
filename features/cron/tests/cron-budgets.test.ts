@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { brainDailySchedules } from "./brain-daily-schedule";
 
 /**
  * A cron killed at its Vercel ceiling writes NO `cron_run` row.
@@ -115,4 +116,61 @@ describe("an alert dedup key must name the cron that owns it", () => {
       expect(key).toContain(name.replace(/-/g, "_"));
     }
   );
+});
+
+/**
+ * `brain-mine` must run AFTER the Gemini free-tier quota resets, not before it.
+ *
+ * The free tier allows 20 requests a day per model and resets at midnight PACIFIC —
+ * `features/brain/server/llm.ts` says so in the comment above `isDailyQuota`. The cron
+ * sat at `40 5 * * *` UTC, which is 22:40 Pacific: the last eighty minutes of a Pacific
+ * day, by which point the allowance has had a full day to be spent. It is not spent by
+ * the miner alone — `/api/slack/events` answers questions on demand out of the same
+ * quota, so anyone talking to the brain in Slack draws it down before the miner wakes.
+ *
+ * Measured 2026-09-15: four consecutive runs ended `stopped early: rate_limited`, and the
+ * only one carrying the retry-wait fix was the SHORTEST at 5.2 seconds — a run that gave
+ * up immediately rather than waiting, which is the daily limit's signature and not the
+ * per-minute one. 19 of 123 meeting documents had been mined.
+ *
+ * The invariant is not "08:10" but "after the reset in BOTH DST states", because the
+ * Pacific offset moves and a slot that clears the reset in July can fall behind it in
+ * December. Asserted here rather than in a comment nobody re-reads.
+ *
+ * Moot while the model is the Claude subscription (`BRAIN_LLM_CLI`), whose limits are
+ * rolling windows rather than a Pacific day. Kept because the Gemini lane still exists,
+ * and the schedule, on Vercel's clock since 2026-09-28 (features/cron/server/github-jobs.ts),
+ * still satisfies it.
+ */
+describe("brain-mine runs on a fresh Gemini quota", () => {
+  it("is scheduled after midnight Pacific in both summer and winter", () => {
+    const [minute, hour] = brainDailySchedules()["brain-mine"].split(" ");
+    expect(`${hour}:${minute}`).toMatch(/^\d+:\d+$/);
+
+    // A July date is PDT (UTC-7); a December date is PST (UTC-8). Both must land on the
+    // same Pacific DAY as the run, i.e. after 00:00 and before noon — a slot that lands
+    // in the evening is the previous day's exhausted allowance.
+    for (const [label, month] of [
+      ["PDT", 6],
+      ["PST", 11],
+    ] as const) {
+      const utc = new Date(Date.UTC(2026, month, 15, Number(hour), Number(minute)));
+      // hourCycle h23, NOT hour12:false. With en-US the latter selects the h24
+      // cycle, where midnight formats as "24" rather than "0" — and whether it
+      // does depends on the ICU build: Node 24 answers "00", Node 20 answers
+      // "24". This slot IS 00:10 Pacific, correct by intent, and the assertion
+      // still failed on CI's Node 20 while passing on a Node 24 laptop.
+      const pacificHour = Number(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Los_Angeles",
+          hour: "2-digit",
+          hourCycle: "h23",
+        }).format(utc)
+      );
+      expect(
+        pacificHour,
+        `${label}: ${hour}:${minute} UTC is ${pacificHour}:00 Pacific — the quota resets at 00:00 Pacific, so an evening slot runs on an allowance that has had all day to be spent`
+      ).toBeLessThan(12);
+    }
+  });
 });

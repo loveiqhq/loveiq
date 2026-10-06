@@ -4,6 +4,7 @@ import {
   escapeHtml,
   renderCtaButton,
   wrapEmailShell,
+  renderBrandFooterText,
 } from "@shared/emails/shared";
 import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
 
@@ -143,6 +144,7 @@ export function reportFullEmail({
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

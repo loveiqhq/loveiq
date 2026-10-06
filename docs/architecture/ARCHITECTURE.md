@@ -18,6 +18,17 @@
 - CSRF protection via double-submit cookie pattern
 - Supabase-backed rate limiting on all form endpoints
 
+## Where it runs
+
+- **Server functions:** Vercel region `fra1` (Frankfurt), pinned in `vercel.json` (`"regions": ["fra1"]`).
+- **Database:** Supabase, region `eu-central-2` (Zurich).
+- **Why the region matters for speed:** `/api/report` makes about seven database calls one
+  after another. Until 2026-09-08 `vercel.json` set no region, so functions ran in Vercel's
+  default `iad1` (Washington DC) and every one of those calls crossed the Atlantic. Pinning
+  `fra1` cut the report's time to first byte from about 2.9 s to about 0.9 s.
+- **How to check:** the `x-vercel-id` response header names the edge region, then the
+  function region: `fra1::fra1::…` is right, `fra1::iad1::…` means the pin was lost.
+
 ## Layers
 
 **Pages Layer (App Router):**
@@ -100,7 +111,7 @@
 10. Return success response
 11. Client shows success animation (3s)
 12. Auto-transitions to PreReportWizard (6 slides; the second is the report map)
-13. User completes wizard → opens the report (`/report/<token>`, with `?v4=1` off production)
+13. User completes wizard → opens the report (`/report/<token>`, Report 3.0 by default)
 
 **State Management:**
 

@@ -19,15 +19,16 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
  * Then the belief-map H2 went from the lede (no doc has one): the old views minus that one
  * heading equal the new. 05.10: Fantasy vs. Reality's "Common challenges" comes as free,
  * ramp and rest (Sanjin: open through its first sentence); flattened back into one list,
- * both views hash as before.
+ * both views hash as before. 06.10: Accelerators & Brakes' intro drops the two doubled
+ * spaces it copied from the frame; with them put back, both its views hash as before.
  */
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const PINNED: Record<string, string> = {
   "typicalBeliefs:open": "8b929fff8d5d2860ac4bd4e2a949d835ded191f2a2fe47e65678d4d79374ea96",
   "typicalBeliefs:locked": "82b56e5ab6b95531d26a0e10281d2d19179728c29cea0dbc2ce24813d8463b12",
-  "accelerators:open": "c3c009133b4eb26cd3d11dfe550c8ffb05926fa8f154fef83ba27eee7cf1c130",
-  "accelerators:locked": "7becb3420063f7454d15222cbfb090790ffddb5c689e77a384a3c5c5d57f1c45",
+  "accelerators:open": "a204b934e1b8df98d6d5f0645cc5f2bf5f72bf7f80d03ac603adca56db8ec124",
+  "accelerators:locked": "46a3fde772f869cd8b48a7bcbbee941546bf0bcbc0b4cec5b4073310a4ebf499",
   "partnership:open": "8bfc00eb582555e7d1d3552e159d446a3bc611292c7a1047a1d1899dbd243e3e",
   "partnership:locked": "1bce22c397122f9f5228345b8362341a866a9f404f108293554b7c234e433832",
   "fantasy:open": "905067e47374273b57d651b472432a8c18f74851e3e35dea20b1e8537b7afb6c",

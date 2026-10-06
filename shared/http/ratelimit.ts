@@ -36,10 +36,12 @@ function logMissingKvOnce(): void {
   missingKvLogged = true;
   // Only the real production project (www.loveiq.org) has a store. The staging project has
   // none on purpose: its only Redis would be production's, and sharing it would mix staging's
-  // counters and keys into production's. So in-memory is expected on staging.loveiq.org,
-  // and NODE_ENV=production alone posted this to #brain as an incident on every cold start
-  // there (02:43 nightly with the persona walk, 2026-10-05). The site address tells the real
-  // production apart, as it does for every cron. Ported from main (#466).
+  // counters and keys into production's. In-memory is the expected state on both of that
+  // project's deployments: staging.loveiq.org, a preview, and its build of main, which is a
+  // PRODUCTION deployment because main is that project's production branch (the proof walks
+  // run there). Telling them apart by VERCEL_ENV missed the second, and its cold starts posted
+  // this as an incident eight times on 2026-10-04. The site address tells the real one apart,
+  // as it does for every cron.
   if (process.env.NODE_ENV === "production" && isProdCronHost()) {
     logger.error(
       "[ratelimit] KV_REST_API_URL / KV_REST_API_TOKEN missing in production — using in-memory fallback. Per-instance state will not coordinate across regions or warm containers, so rate limits may be under-enforced."
@@ -188,6 +190,21 @@ export async function checkRateLimit(
  * Uses Redis SET with NX + EX for atomic check-and-set in a single command.
  * If the key exists (SET NX returns null), the cooldown hasn't elapsed.
  */
+/**
+ * Give a cooldown back. For an attempt that failed after claiming it: a reader whose
+ * submit hit a database error was otherwise refused on every Retry for the whole window,
+ * told only that the connection was lost.
+ */
+export async function releaseCooldown(key: string, bucket: string): Promise<void> {
+  const kv = getRedis();
+  if (!kv) return;
+  try {
+    await kv.del(`cd:${bucket}:${key}`);
+  } catch (err) {
+    logger.warn({ err }, "[ratelimit] Redis cooldown release failed");
+  }
+}
+
 export async function checkCooldown(
   key: string,
   bucket: string,

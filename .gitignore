@@ -89,3 +89,9 @@ sbom.json
 # Local-only strategy / audit deliverables (contain revenue, funnel counts, and
 # the prod DB id — kept on the strategy lead's machine, never committed)
 strategy/
+
+# `supabase link` writes this, stamped with whichever project ref was linked
+# last. Committing it would point everyone at one environment — and pointing it
+# at staging would make `db push --linked` silently target the wrong database.
+# Pass --db-url or --project-ref explicitly instead.
+supabase/config.toml

@@ -12,8 +12,13 @@ import {
   person,
   stripQuoted,
   threadToRows,
+  attachmentRefs,
+  MAX_ATTACHMENTS_PER_THREAD,
+  MAX_ATTACHMENT_BYTES,
   isBulkMail,
   excludeSubjects,
+  trustpilotReviewTitle,
+  tidyEmailText,
 } from "@features/brain/server/ingest/gmail";
 
 const b64 = (s: string) =>
@@ -146,6 +151,125 @@ const thread = {
     },
   ],
 };
+
+describe("a Trustpilot review is its own document, and says whose it is", () => {
+  /**
+   * Every notification shares one subject, and search collapses Gmail rows that share a
+   * title — so three of four reviews were unreachable by any question. The team said on
+   * 2026-09-18 that the reviews so far came from friends; those carry the mark.
+   */
+  const review = (day: string, internalDate: string, text: string) => ({
+    id: `tp-${day}`,
+    historyId: "1",
+    messages: [
+      {
+        id: `m-${day}`,
+        internalDate,
+        payload: {
+          headers: [
+            { name: "Subject", value: "You've got a new 5-star review" },
+            { name: "From", value: "Trustpilot <noreply@trustpilot.com>" },
+          ],
+          mimeType: "text/plain",
+          body: {
+            data: b64(
+              `DORIEN VM LEFT A NEW REVIEW\n\nHI EMAN,\n\nDorien VM just left a new 5-star review of loveiq.org:\n\n${text}\n\nSee this review and reply\n[https://example.test/r]`
+            ),
+          },
+        },
+      },
+    ],
+  });
+
+  it("titles each review distinctly, through threadToRows", () => {
+    const a = threadToRows(
+      review("2026-06-10", "1781049600000", "Spot-on results. I know myself better."),
+      "me",
+      "s"
+    )[0]!;
+    const b = threadToRows(
+      review("2026-06-12", "1781222400000", "Questions I would never ask myself."),
+      "me",
+      "s"
+    )[0]!;
+    expect(a.title).toMatch(
+      /^Trustpilot review of LoveIQ, 5 stars, 2026-06-10: "Spot-on results\."/
+    );
+    expect(b.title).not.toBe(a.title);
+  });
+
+  it("marks the early reviews as the team described them, and later ones not at all", () => {
+    const early = trustpilotReviewTitle(
+      "You've got a new 5-star review",
+      "x left a new 5-star review of loveiq.org: Great. See this review",
+      "2026-06-12"
+    );
+    const later = trustpilotReviewTitle(
+      "You've got a new 5-star review",
+      "x left a new 5-star review of loveiq.org: Great. See this review",
+      "2026-10-02"
+    );
+    expect(early).toMatch(/friends, not customers/);
+    expect(later).not.toMatch(/friends/);
+  });
+
+  it("leaves other Trustpilot mail and the reviewer's name out of it", () => {
+    expect(
+      trustpilotReviewTitle(
+        "Your weekly Trustpilot summary",
+        "left a new 5-star review of loveiq.org: x See this review",
+        "2026-06-12"
+      )
+    ).toBeNull();
+    const t = threadToRows(review("2026-06-10", "1781049600000", "Spot-on."), "me", "s")[0]!.title;
+    expect(t).not.toMatch(/Dorien/i);
+  });
+});
+
+describe("tidyEmailText — an HTML email is mostly blank space until tidied", () => {
+  /**
+   * Measured 2026-09-23: 3,007 of 9,194 Gmail chunks were more than half whitespace and
+   * zero-width characters — a Figma notification is 1,358 spaces, 140 non-breaking spaces,
+   * 136 carriage returns and 130 zero-width non-joiners around a one-line comment.
+   */
+  it("removes zero-width padding, collapses spacing, and keeps paragraph breaks", () => {
+    const raw =
+      "96 \r\n \r\n   \u00a0 \u200c \u200c \u200c\r\n\r\n\r\n\r\n  Mark left a comment  \r\n\r\n\r\n@Eman ship the survey design.\u00a0\u00a0";
+    expect(tidyEmailText(raw)).toBe("96\n\nMark left a comment\n\n@Eman ship the survey design.");
+  });
+
+  it("leaves ordinary prose alone", () => {
+    const prose = "Should we go to 39.99?\n\nYes, from Monday.";
+    expect(tidyEmailText(prose)).toBe(prose);
+  });
+
+  it("is what threadToRows stores, so the tidy reaches the corpus", () => {
+    const noisy = {
+      id: "tn",
+      messages: [
+        {
+          id: "mn",
+          internalDate: "1787900000000",
+          payload: {
+            headers: [
+              { name: "Subject", value: "Mark left a comment in LoveIQ" },
+              { name: "From", value: "Mark via Figma <comments@figma.com>" },
+            ],
+            mimeType: "text/plain",
+            body: {
+              data: b64(
+                "\u200c \u200c \u200c\r\n\r\n\r\n\r\n   Can we please ship these changes in the survey design today.   \r\n\r\n\r\n"
+              ),
+            },
+          },
+        },
+      ],
+    };
+    const [row] = threadToRows(noisy, "me", "stamp");
+    expect(row!.body).not.toMatch(/\u200c|\u00a0|\r|\n{3,}| {2,}/);
+    expect(row!.body).toContain("Can we please ship these changes in the survey design today.");
+  });
+});
 
 describe("threadToRows — one chunk per THREAD", () => {
   it("keeps the exchange together, in order, with who said what", () => {
@@ -363,7 +487,9 @@ describe("a stale-version row must never be confirmed", () => {
     const src = await import("node:fs").then((fs) =>
       fs.readFileSync("features/brain/server/ingest/gmail.ts", "utf8")
     );
-    expect(src).toMatch(/return have\.current;/);
+    // `have.current` must stay a conjunct of the keep decision: extra conditions may
+    // narrow it (listed this run, not refused — 2026-09-23), never replace it.
+    expect(src).toMatch(/return have\.current(?:\s*&&[^;]+)?;/);
     // The second assertion here used to grep for the COMMENT above that line, which
     // could only ever detect a rewording — and did, on 2026-09-06. The behaviour it
     // was standing in for is now proven directly, under mutation, by
@@ -552,5 +678,138 @@ describe("excludeSubjects — keeping a sibling project's tickets out", () => {
   it("drops a term carrying Gmail query operators rather than changing the query's meaning", () => {
     process.env.GMAIL_EXCLUDE_SUBJECTS = "SHOWUP,from:x@y.test,in(box),a b";
     expect(excludeSubjects()).toBe(" -subject:SHOWUP");
+  });
+});
+
+describe("attachmentRefs — attachments are content, and none were read", () => {
+  /**
+   * Until 2026-09-19 the walk indexed every message BODY and nothing hanging off it.
+   * A proposal sent as a pdf was invisible while the thread around it read as
+   * complete, which is the shape of gap this whole audit is about.
+   */
+  const part = (over: Record<string, unknown> = {}) => ({
+    mimeType: "application/pdf",
+    filename: "Proposal.pdf",
+    body: { attachmentId: "att1", size: 1000 },
+    ...over,
+  });
+  const withParts = (parts: unknown[]) => ({
+    id: "t1",
+    messages: [{ id: "m1", payload: { parts } }],
+  });
+
+  it("picks a readable attachment", () => {
+    const refs = attachmentRefs(withParts([part()]) as never);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      messageId: "m1",
+      attachmentId: "att1",
+      filename: "Proposal.pdf",
+    });
+  });
+
+  it("finds one nested inside a multipart tree", () => {
+    const nested = withParts([{ mimeType: "multipart/mixed", parts: [part()] }]);
+    expect(attachmentRefs(nested as never)).toHaveLength(1);
+  });
+
+  /**
+   * THE SAME CONTRACT ARRIVES BOTH WAYS.
+   *
+   * Excluding signed instruments from the Drive walk alone left 58 chunks of the
+   * freelance contract and the shareholders agreement readable through the mailbox —
+   * attached to "Applied Psychometrics - Freelance Contract - Welcome to the Team",
+   * to a forward of it, and to a thread called simply "Freelance Contract". Measured
+   * 2026-09-22, after the Drive half had already shipped.
+   *
+   * The COVERING MESSAGE stays, and that distinction is the whole design: "Hey
+   * Brother, Attached is the new contract" is a real thing for the brain to remember.
+   * The instrument hanging off it is not.
+   */
+  it("never reads an attached contract, while keeping the message that carried it", () => {
+    const thread = {
+      id: "t1",
+      messages: [
+        {
+          id: "m1",
+          payload: {
+            parts: [
+              part({ filename: "Freelancer Agreement_Fatih.docx" }),
+              part({ attachmentId: "att2", filename: "Shareholders Agreement.pdf" }),
+              part({
+                attachmentId: "att3",
+                filename: "AppliedPsychometrics_VSOP_Terms_of_Options.pdf",
+              }),
+              // The positive control. Without it a run that read NO attachment at all
+              // would pass this test just as well.
+              part({ attachmentId: "att4", filename: "Q3 roadmap.pdf" }),
+            ],
+          },
+        },
+      ],
+    };
+    const refs = attachmentRefs(thread as never);
+    expect(refs.map((r) => r.filename)).toEqual(["Q3 roadmap.pdf"]);
+  });
+
+  it("never reads a CV attached to an email, with a positive control beside it", () => {
+    // Applicants' CVs arrive as attachments in every mailbox that forwards them —
+    // Drive's rule alone left this door open (2026-09-23).
+    const refs = attachmentRefs(
+      withParts([
+        part({ attachmentId: "a1", filename: "CV_Jane_Doe.pdf" }),
+        part({ attachmentId: "a2", filename: "Lebenslauf.pdf" }),
+        part({ attachmentId: "a3", filename: "Q3 roadmap.pdf" }),
+      ]) as never
+    );
+    expect(refs.map((r) => r.filename)).toEqual(["Q3 roadmap.pdf"]);
+  });
+
+  it("still reads a meeting note that happens to discuss a contract", () => {
+    const note = part({ filename: "Contract Sync - 2026/09/09 - Notes by Gemini.pdf" });
+    expect(attachmentRefs(withParts([note]) as never)).toHaveLength(1);
+  });
+
+  it("ignores a format there is no reader for", () => {
+    const img = part({ mimeType: "image/png", filename: "logo.png" });
+    expect(attachmentRefs(withParts([img]) as never)).toHaveLength(0);
+  });
+
+  it("ignores a file too big to be prose", () => {
+    const huge = part({ body: { attachmentId: "att1", size: MAX_ATTACHMENT_BYTES + 1 } });
+    expect(attachmentRefs(withParts([huge]) as never)).toHaveLength(0);
+  });
+
+  it("ignores an inline part that is not an attachment", () => {
+    // No filename and no attachmentId: that is the message body, already indexed.
+    const inline = part({ filename: "", body: { data: "aGk", size: 2 } });
+    expect(attachmentRefs(withParts([inline]) as never)).toHaveLength(0);
+  });
+
+  it("caps how many one thread may contribute", () => {
+    const many = Array.from({ length: MAX_ATTACHMENTS_PER_THREAD + 4 }, (_, i) =>
+      part({ filename: `f${i}.pdf`, body: { attachmentId: `a${i}`, size: 10 } })
+    );
+    expect(attachmentRefs(withParts(many) as never)).toHaveLength(MAX_ATTACHMENTS_PER_THREAD);
+  });
+
+  it("puts the attachment text in the chunk, under the conversation", () => {
+    const [row] = threadToRows(
+      thread as never,
+      "me",
+      "stamp",
+      null,
+      "## Attachment: Proposal.pdf\nPrice is 39.99"
+    );
+    expect(row.body).toContain("## Attachment: Proposal.pdf");
+    expect(row.body).toContain("Price is 39.99");
+    // The conversation still comes first — an attachment supplements, never replaces.
+    expect(row.body.indexOf("Between:")).toBeLessThan(row.body.indexOf("## Attachment"));
+  });
+
+  it("changes nothing when a thread has no attachments", () => {
+    const [plain] = threadToRows(thread as never, "me", "stamp");
+    const [same] = threadToRows(thread as never, "me", "stamp", null, "");
+    expect(same.body).toBe(plain.body);
   });
 });

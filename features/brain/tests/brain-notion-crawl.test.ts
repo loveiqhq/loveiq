@@ -59,6 +59,8 @@ vi.mock("@features/admin/server/supabase", () => ({
 
 /** Notion HTTP, driven per endpoint. */
 const notionCalls: string[] = [];
+/** What Notion answers for a page's content. Anything but 200 makes pageText throw. */
+let blocksStatus = 200;
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string, init?: RequestInit) => {
     notionCalls.push(url);
@@ -78,6 +80,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     if (url.includes("/databases/db-board/query")) return json({ results: [ROW_BOARD] });
     if (url.includes("/databases/db-lit/query")) return json({ results: [ROW_LIT] });
     if (url.includes("/blocks/")) {
+      if (blocksStatus !== 200) return new Response("boom", { status: blocksStatus });
       return json({
         results: [
           { type: "paragraph", paragraph: { rich_text: [{ plain_text: "page body text" }] } },
@@ -246,6 +249,33 @@ describe("incremental: unchanged pages are touched, not re-downloaded", () => {
     await ingestNotion(STAMP);
     expect(notionCalls.filter((u) => u.includes("/blocks/row-lit-1")).length).toBeGreaterThan(0);
     expect(written().map((r) => r.source_id)).toContain("task:row-lit-1");
+  });
+
+  /**
+   * A PAGE WHOSE CONTENT COULD NOT BE READ IS NOT WRITTEN.
+   *
+   * It used to be written with an empty body, and that row carried the page's current
+   * edit time and builder version, so every later run read it as unchanged and never
+   * fetched the text again: one transient Notion error erased the page's content from
+   * the brain until somebody edited the page.
+   */
+  it("does not overwrite a page with an empty body when its content fetch fails", async () => {
+    existingChunks = [
+      { source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z", v: 1 } as never },
+    ];
+    blocksStatus = 500;
+    try {
+      await ingestNotion(STAMP);
+    } finally {
+      blocksStatus = 200;
+    }
+    expect(notionCalls.filter((u) => u.includes("/blocks/row-lit-1")).length).toBeGreaterThan(0);
+    expect(written().map((r) => r.source_id)).not.toContain("task:row-lit-1");
+    const deletedIds = dbCalls
+      .filter((c) => c.method === "DELETE")
+      .flatMap((c) => decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? [])
+      .map((q) => q.slice(1, -1));
+    expect(deletedIds).not.toContain("task:row-lit-1");
   });
 
   it("treats a row with no version as stale, so pre-versioning rows self-correct", async () => {

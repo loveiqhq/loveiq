@@ -19,7 +19,7 @@ const analytics = vi.hoisted(() => ({
   start: vi.fn(),
   answer: vi.fn(),
   progress: vi.fn(),
-  pause: vi.fn(),
+  guidance: vi.fn(),
   setCtx: vi.fn(),
   setVariant: vi.fn(),
 }));
@@ -28,7 +28,7 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyAnswer: analytics.answer,
   trackSurveyProgress: analytics.progress,
   trackSurveyComplete: analytics.complete,
-  trackSurveyPause: analytics.pause,
+  trackSurveyGuidanceExpanded: analytics.guidance,
   setReportSubmissionContext: analytics.setCtx,
   setSurveyVariant: analytics.setVariant,
 }));
@@ -119,8 +119,8 @@ describe("survey completion fires exactly once", () => {
   });
 
   it("stays at one when Next is pressed again after completing", async () => {
-    // Four triggers reach goNext (button, keyboard, swipe, auto-advance), and a
-    // second one arriving ~50ms later is the shape the production data shows.
+    // Three triggers reach goNext (button, keyboard, swipe), and a second one
+    // arriving ~50ms later is the shape the production data shows.
     const { user, next } = await completeIt();
     await waitFor(() => expect(analytics.complete).toHaveBeenCalled());
     // The completion screen may render no buttons at all; the assertion is
@@ -131,6 +131,21 @@ describe("survey completion fires exactly once", () => {
       await user.click(again);
     }
     expect(analytics.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reopen the last question from the screens after submitting", async () => {
+    // Round-12 audit: ArrowLeft or a right swipe on the wizard also reached the engine and
+    // took the reader back to the email step under the finished session id.
+    const { user } = await completeIt();
+    await waitFor(() => expect(analytics.complete).toHaveBeenCalled());
+    await user.keyboard("{ArrowLeft}");
+    const at = (x: number) => [{ clientX: x, clientY: 200 }] as unknown as TouchList;
+    window.dispatchEvent(new TouchEvent("touchstart", { touches: at(40) }));
+    window.dispatchEvent(new TouchEvent("touchend", { changedTouches: at(240) }));
+    await new Promise((r) => setTimeout(r, 50));
+    // Question screens carry Previous/Next; the screens after submitting do not.
+    expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
+    expect(screen.queryByText("How satisfied are you right now?")).toBeNull();
   });
 
   it("stays at one across a REMOUNT with the finished index restored", async () => {

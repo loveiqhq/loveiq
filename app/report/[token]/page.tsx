@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import ReportPage from "@features/report/ui/ReportPage";
+import { preloadReportFont } from "@/app/report/preloadReportFont";
 
 export const metadata: Metadata = {
   title: "Your Report | LoveIQ",
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default async function Page({ params }: Props) {
+  preloadReportFont();
   const { token } = await params;
   // `?v3=1` selects the mobile-first V3 chrome; ReportPage reads it from the
   // client-side search params, so no branching is needed here.

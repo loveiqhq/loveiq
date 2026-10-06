@@ -11,7 +11,13 @@ const eventSchema = z.object({
   qId: z.string().max(10),
   chapter: z.string().max(100),
   questionIndex: z.number().int().min(0).max(100),
-  timeSpentMs: z.number().int().min(0).max(600_000),
+  // Clamped, never refused: a question left open for over ten minutes used to fail its
+  // whole batch, losing the events sent with it and often the quit or finish event too.
+  // Readers who linger are filtered by the analysis (get_survey_friction), not here.
+  timeSpentMs: z
+    .number()
+    .int()
+    .transform((ms) => Math.min(Math.max(ms, 0), 86_400_000)),
   answered: z.boolean(),
   direction: z.enum(["forward", "back", "abandon", "complete"]),
   timestamp: z.string().datetime(),

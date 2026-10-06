@@ -2,18 +2,19 @@
 
 **Purpose:** Personalized report rendering at `/report` + `/report/[token]`. Section-based reveal gated by purchase plan (`essentials` | `full_report` | `core` | `all_reports`).
 
-**Two report versions ship side by side.** V1 — the pre-2.0 report — is what every
-reader gets. Report 2.0 stays in the tree behind `?v2=1`, because the in-progress
-Report 3.0 work (`ui/v3/`, staging only) is built on its section components. The
-switch is `showReportV2` in `ui/ReportPage.tsx`; the header comment in
-`ui/v1/ReportExperienceV1.tsx` says why the revert happened and what was
-deliberately left behind (the forced paywall and the urgency countdown).
+**Report 3.0 (V4) is what every reader gets** since it launched (2026-10-06): Report 2.0's
+section components with the redesigned ones in `ui/v3/` swapped in. The older versions stay
+reachable by name: V1, the pre-2.0 report and the default until then, at `?v4=0`, and
+Report 2.0 at `?v2=1`. The switches are `isV4` and `showReportV2` in `ui/ReportPage.tsx`;
+the header comment in `ui/v1/ReportExperienceV1.tsx` says why V1 was restored on
+2026-09-12 and what was deliberately left behind (the forced paywall and the urgency
+countdown).
 
 **Entry:**
 
 - `ui/ReportPage.tsx` — the shell: data fetch, modals, checkout, analytics, paywall
   trigger. Shared by both versions, and picks which one renders.
-- `ui/v1/` — the restored pre-2.0 report, and the default: `ReportExperienceV1.tsx`,
+- `ui/v1/` — the restored pre-2.0 report (`?v4=0`): `ReportExperienceV1.tsx`,
   its own sidebar and mobile nav, and `v1/sections/*` for the components whose props
   Report 2.0 rewrote.
 - `ui/ReportSection.tsx`, `ui/sections/*` — Report 2.0 sections, reached at `?v2=1`.

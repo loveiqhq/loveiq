@@ -18,10 +18,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
       - run: npm run lint
@@ -34,18 +34,46 @@ jobs:
       # block the merge. Dependabot PRs skip the gate so a bot-opened PR
       # whose entire purpose is to fix a CVE doesn't get blocked by the
       # very CVE it's fixing — human reviewer still sees the diff.
+      # A VULNERABILITY blocks the merge. An OUTAGE must not.
+      #
+      # `npm audit` calls a registry endpoint, and on 2026-09-19 that endpoint
+      # answered `Bad Request` for the better part of an hour. This step exited
+      # 1, Lint failed, Build skipped because it needs Lint — and both are
+      # required checks, so a third-party API having a bad day meant nothing in
+      # the repository could be merged by anyone.
+      #
+      # That is a self-inflicted outage, and the fix is to tell the two apart:
+      # `--json` gives a parseable report, and a real finding has
+      # `metadata.vulnerabilities`. No parseable report means the service did
+      # not answer, which is a warning about our visibility, not a verdict about
+      # our dependencies.
       - name: npm audit (high severity blocker)
         if: github.actor != 'dependabot[bot]'
-        run: npm audit --audit-level=high --production
+        run: |
+          set +e
+          report=$(npm audit --audit-level=high --omit=dev --json 2>/dev/null)
+          set -e
+          high=$(printf '%s' "$report" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=JSON.parse(s).metadata.vulnerabilities;console.log((v.high||0)+(v.critical||0))}catch{console.log("unknown")}})')
+          if [ "$high" = "unknown" ]; then
+            echo "::warning::npm audit could not be read — the registry endpoint did not answer. NOT treating this as a vulnerability."
+            exit 0
+          fi
+          echo "high+critical advisories: $high"
+          if [ "$high" -gt 0 ]; then
+            npm audit --audit-level=high --omit=dev || true
+            echo "::error::$high high or critical advisory(ies) in production dependencies"
+            exit 1
+          fi
 
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
       - run: npm run test:coverage
@@ -56,7 +84,7 @@ jobs:
         # Dependabot PRs run without access to repo secrets — skip the upload
         # rather than fail the gate. Tests still ran + passed in the prior step.
         if: github.actor != 'dependabot[bot]'
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v5
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/lcov.info
@@ -74,32 +102,50 @@ jobs:
     needs: [lint]
     # Requires a Supabase test-branch URL + service role key. PRs from forks (no
     # access to secrets) and any repo without these secrets set skip this job.
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+    #
+    # AND NOT DEPENDABOT. GitHub withholds repository secrets from Dependabot runs by
+    # design, so this job cannot pass there — measured 2026-09-21, both open dependency
+    # PRs red on this job and on migration-drift, for no reason to do with the bump. A
+    # gate that is red on every dependency PR is worse than no gate: it teaches whoever
+    # reviews them that red is normal, which is exactly how a genuinely broken bump gets
+    # merged. Coverage is not lost, only deferred — both jobs run on the push to main
+    # after the merge, and `Alert on red main` fires if they fail there. Same idiom the
+    # audit, secrets and docs-impact jobs already use.
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push') && github.actor != 'dependabot[bot]' }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
-      - name: Skip if test secrets unset
-        id: gate
+      # This job reported success for months while running nothing, because it
+      # gated on a Supabase TEST BRANCH that was never provisioned.
+      #
+      # There is no branch and there does not need to be one. The suite it was
+      # waiting for (payment-webhook idempotency) asserted two things — that
+      # payment_webhook_event.stripe_event_id is UNIQUE, and that id/payment_id/
+      # processed are queryable. Both are now checked on every push by the
+      # migration-drift job and check-postgrest-columns, against PRODUCTION
+      # rather than a copy, so the test was deleted instead of provisioned.
+      #
+      # What remains is read-only: rls-boundary asserts the anon role cannot read
+      # 15 locked tables. The anon key is public — it ships in the browser bundle
+      # — and nothing is written, so it is safe against production.
+      - name: Check this job can actually test something
         run: |
-          if [ -z "${SUPABASE_TEST_URL}" ] || [ -z "${SUPABASE_TEST_SERVICE_ROLE_KEY}" ]; then
-            echo "Integration test secrets unset — skipping."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::SUPABASE_URL + anon key are not set — this job would test nothing."
+            exit 1
           fi
         env:
-          SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
-          SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       - name: Run integration tests
-        if: steps.gate.outputs.run == 'true'
         run: npm run test:integration
         env:
-          SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
-          SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
   migration-drift:
     name: Migration drift (repo vs live DB)
@@ -117,45 +163,70 @@ jobs:
     #     applying through the Supabase MCP produces if the file is not renamed after.
     # Nine of these had accumulated silently because this only ran when remembered.
     #
-    # Skips itself until SUPABASE_DB_URL is set, exactly like the integration job
-    # above, so adding the secret is the only step needed to switch it on.
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+    # It does NOT skip. It reads the live schema through get_schema_artifacts()
+    # with the service-role key, which is already a repository secret — except on
+    # Dependabot runs, which GitHub gives no secrets at all, so it exits 2 there every
+    # time. Excluded for the same reason as the integration job above.
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push') && github.actor != 'dependabot[bot]' }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
-      - name: Skip if SUPABASE_DB_URL unset
-        id: gate
-        run: |
-          if [ -z "${SUPABASE_DB_URL}" ]; then
-            echo "SUPABASE_DB_URL unset — skipping drift check."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      # No skip. This job gated itself on SUPABASE_DB_URL, which was never set,
+      # and a job whose only step is skipped still reports SUCCESS — so it was
+      # green and blind on every commit since it was written.
+      #
+      # It no longer needs that secret. The five queries it runs are read-only
+      # catalogue reads, and `get_schema_artifacts()` serves them through
+      # PostgREST with the service-role key that is already a repository secret,
+      # so CI never holds a Postgres password. SUPABASE_DB_URL still works and
+      # takes precedence if anyone sets it.
+      #
+      # Exit codes: 0 clean, 1 new drift, 2 could not check. There is no longer
+      # a path where this passes without having read the database.
       - name: Check migration drift
-        if: steps.gate.outputs.run == 'true'
         run: npm run check:migration-drift
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      # Same lane because it needs the same thing: the live schema. PostgREST
+      # answers a `select=` naming an unknown column with 400, and nearly every
+      # caller turns a failed fetch into 0/null/[], so the metric reads "no data"
+      # instead of "broken". Three were live in production on 2026-09-19 —
+      # email_suppression.id (digest reported 0 unsubscribes; real answer 94),
+      # survey_question.question_text (admin scorecard 500'd), and
+      # payment.survey_submission_id (median time-to-purchase always null).
+      # Exit codes: 0 clean, 1 bad column, 2 could not check.
+      # Needs no database: it is a pure ordering check over the files. Lives here
+      # because it guards the same thing — that a replay into an empty database
+      # works. Found on 2026-09-20 that chapter_nudge_flag INSERTed into
+      # system_flags eleven hours before system_flags was created.
+      - name: Check migration order
+        run: npm run check:migration-order
+
+      - name: Check PostgREST columns exist
+        run: npm run check:postgrest-columns
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
   build:
     name: Build
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .next/cache
           key: nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
@@ -165,6 +236,119 @@ jobs:
           NEXT_PUBLIC_SITE_URL: https://www.loveiq.org
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
 
+  e2e:
+    name: E2E ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    needs: [lint]
+    # ONE ENGINE PER RUNNER, and this is a fix for a measured cause rather than a
+    # preference. On a single runner the five projects shared 4 workers across 4 vCPUs,
+    # and the tests that lost that fight were always the same ones: the 59-question
+    # survey walk on Desktop Firefox (failed both attempts twice) and the report pricing
+    # modal on both WebKit engines. Neither is a product defect — the suite carries 28
+    # waits of 5s or less, tuned on a laptop, and a starved engine simply misses them.
+    #
+    # Bumping those 28 numbers was the other option and was rejected: it treats the
+    # symptom, and next week a different 5s wait is the one that loses. Splitting by
+    # project gives each engine a whole runner at 2 workers, removes the contention, and
+    # is FASTER in wall-clock than the 13-16 minutes the single job took, because the
+    # shards run at the same time. Actions minutes are free on a public repo, so the
+    # extra runners cost nothing.
+    #
+    # fail-fast is off deliberately: when an engine breaks you want to know whether the
+    # others broke too, not just which one reported first.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: Desktop Chrome
+            browser: chromium
+          - project: Desktop Firefox
+            browser: firefox
+          - project: Desktop Safari
+            browser: webkit
+          - project: Mobile Chrome
+            browser: chromium
+          - project: Mobile Safari
+            browser: webkit
+    # CLAUDE.md has said "E2E belongs in CI, NOT pre-push" since before this job
+    # existed, and until 2026-09-21 nothing ran it — the suite was green on
+    # 2026-08-31 and nobody would have known if it stopped being.
+    #
+    # Runs on Dependabot PRs too, unlike the integration and drift jobs: those need
+    # secrets, which Dependabot runs never get, and this job uses none (every value
+    # below is a deliberate placeholder). Skipping it there meant a Playwright,
+    # axe-core, Next or React bump could be merged green without one browser opening
+    # the site; it surfaced only afterwards, as a red main. Measured 2026-10-04: the
+    # suite is the same 454 passes with or without that month's dependency bumps.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      #
+      # NO DATABASE CREDENTIALS, DELIBERATELY, and this is the whole reason the job
+      # is safe to run on every push.
+      #
+      # The suite walks the survey, which fires `survey-partial`, `survey-tracking`
+      # and `analytics-event` on the way. Pointed at a server holding real
+      # credentials it writes real rows: measured 2026-09-21, one local run left a
+      # partial save and three behaviour events in PRODUCTION, and an earlier run
+      # is recorded as having written 415 and visibly moved a day's visit count.
+      #
+      # `unset` is not enough — Next reads `.env.local` off disk, which is exactly
+      # how that local run wrote to production while the shell variables were
+      # cleared. An unreachable value OVERRIDES the file. CI has no `.env.local`,
+      # so this is belt and braces, and it states the intent where it can be read.
+      #
+      # STAGING_PASSWORD is also withheld: with it set, `proxy.ts` gates every
+      # route and the a11y check on /survey fails on the login page rather than on
+      # the page under test. That is the one failure the first run of this produced.
+      #
+      # The two NEXT_PUBLIC_SUPABASE_* values are unreachable like the rest, but they
+      # must be SET: `createSupabaseMiddleware` passes them straight to
+      # `createServerClient`, which THROWS on undefined ("Your project's URL and Key
+      # are required"). A throw in proxy.ts is a 500 on every /admin path, so the
+      # admin gate never reaches its `if (!user)` redirect and
+      # `admin.spec.ts` sees /admin instead of /admin/login. Measured 2026-09-21:
+      # undefined throws; an unreachable URL returns `user: null` with no network
+      # call at all, which is the real unauthenticated path the gate is built to take.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
+          SUPABASE_URL: http://127.0.0.1:9
+          SUPABASE_SERVICE_ROLE_KEY: no-database-in-e2e
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: no-database-in-e2e
+      #
+      # Visual regression is EXCLUDED, and not because it is inconvenient: Playwright
+      # names baselines per platform, so this job can only compare `*-linux.png`, and
+      # `visual-regression.yml` is the job that owns generating and committing those.
+      # Running them here compares Linux renders against whatever the last person
+      # committed from their laptop.
+      - run: npx playwright test --project="${{ matrix.project }}" --workers=2 --grep-invert "Visual Regression"
+        env:
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
+          SUPABASE_URL: http://127.0.0.1:9
+          SUPABASE_SERVICE_ROLE_KEY: no-database-in-e2e
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: no-database-in-e2e
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 7
+
   docs-impact:
     name: Documentation Impact Check
     runs-on: ubuntu-latest
@@ -173,7 +357,7 @@ jobs:
     # (toolchain surface). Human reviewers still see the diff before merge.
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       # Pass github.base_ref via env (not inline in the run script) so a
@@ -232,11 +416,13 @@ jobs:
           echo "ERROR: /api/health did not return fresh 200 within ~6 minutes"
           exit 1
 
-  # Branch-protection stand-in (detective). Required status checks / rulesets are
-  # a paid feature on this plan, so a red commit CAN land on main (web merge, or
-  # `git push --no-verify` past the pre-push gate) and auto-deploy via Vercel.
-  # This job pings Slack the instant the gate jobs fail on main so it can be
-  # reverted fast. Preventive layer = .husky/pre-push; see docs/runbooks/SECURITY.md.
+  # Detective layer behind branch protection. Since 2026-09-19 `main` requires a pull
+  # request with green Lint, Test and Build — but admins bypass it by design
+  # (enforce_admins: false, see docs/runbooks/SECURITY.md), and several jobs below are
+  # not required checks, so a red commit CAN still land on main and auto-deploy via
+  # Vercel. This job pings Slack the instant the gate jobs fail on main so it can be
+  # reverted fast. (An earlier version of this comment said protection was a paid
+  # feature on this plan; it is free on a public repository.)
   # Reuses SLACK_COMMITS_WEBHOOK_URL (already configured for slack-commits.yml) so
   # no extra secret is needed — failures post to the commits channel.
   notify-failure:

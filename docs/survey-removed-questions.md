@@ -23,7 +23,7 @@ question rows are marked `status = 'retired'` rather than deleted: nothing refer
 4. Run `npx vitest run features/scoring/tests/label-coverage.test.ts`, which cross-checks
    the survey data against the scoring config and fails if only one side was restored.
 5. Flip the database row back to active — the questions were marked `status = 'retired'`
-   by `20260911200200_retire_survey_questions_03014_16008.sql`:
+   by `20260911193447_retire_survey_questions_03014_16008.sql`:
 
    ```sql
    UPDATE survey_question SET status = 'active', updated_date_time = now()

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import GlossaryTermPage from "@features/glossary/ui/GlossaryTermPage";
 import { getTermBySlug, getAllSlugs, resolveRelatedTerms } from "@/data/glossary-data";
+import { jsonLdString } from "@shared/seo/json-ld";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -83,11 +84,11 @@ export default async function Page({ params }: PageProps) {
       <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(definedTermSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdString(definedTermSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdString(breadcrumbSchema) }}
       />
       <GlossaryTermPage
         term={term}

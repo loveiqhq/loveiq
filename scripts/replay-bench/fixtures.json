@@ -1,0 +1,131 @@
+{
+  "_comment": [
+    "Benchmark fixtures for the Replay Vision scanners. Marcus's requirement on",
+    "2026-09-11 was that the criteria be 'benchmarked against test videos so the",
+    "team does not rely on false confidence'. These are those videos.",
+    "",
+    "SINGLE USE. A scanner can observe a given session only once, ever — re-running",
+    "it after a prompt change is a silent no-op. So each (scanner, session) pair",
+    "below is spent the moment it is scanned. To re-test a changed prompt, duplicate",
+    "the scanner (POST /vision/scanners/:id/duplicate/) and scan the same sessions",
+    "with the copy. Do not re-point these at a tuned scanner and believe the result.",
+    "",
+    "Recordings expire: these were captured 2026-08-29 and expire 2026-09-28.",
+    "When they lapse, PRECISION is already covered without them: score.mjs --ledger",
+    "scores the same scanners against the ux_finding ledger, which the probes write",
+    "themselves and which never expires. RECALL is not — the ledger holds only",
+    "findings a scanner flagged, so a session it wrongly passed can never appear in",
+    "it. RECALL is covered too now, by score.mjs --recall: our own dead_click event",
+    "is mechanical evidence that a control was dead, recorded independently of any",
+    "model and never expiring, so every session a click-cause scanner OBSERVED that",
+    "also dead-clicked is one it should have flagged. Measured 2026-09-17: 5 of 79,",
+    "a recall of 0.06 against a bar of 0.60. Fresh fixtures would still add the",
+    "defect classes dead clicks cannot speak for."
+  ],
+  "known_bad": [
+    {
+      "session_id": "01a04be1-da48-7cd6-abf5-6bfdecb52a9a",
+      "scanner": "LoveIQ survey UX",
+      "expect": "yes",
+      "criterion": "Z1",
+      "bug": "Whole survey rendered magnified. Mark flagged it 2026-08-30: 'Something is off with the mobile version for some users... Look how the quiz renders for them'. Root cause was a 15px input; iOS magnifies at <16px and never zooms back. 175 of 177 zoomed sessions measured a viewport ratio of exactly 16/15.",
+      "fixed_by": "verify-input-zoom.mjs, input-font-size-ios-zoom.test.ts"
+    },
+    {
+      "session_id": "01a04d64-fc8a-77c1-a6f7-a534858845f7",
+      "scanner": "LoveIQ report UX",
+      "expect": "yes",
+      "criterion": "E1",
+      "bug": "User clicked 'Continue to secure checkout' on a EUR 39.99 purchase and got 'Unable to process request' errors, three times. Mark flagged it 2026-08-30 with this recording, around minute 6. The recording carries 2 console errors.",
+      "fixed_by": "the checkout screen this happened on was removed"
+    }
+  ],
+  "known_good_adversarial": [
+    {
+      "session_id": "01a08e2d-2fc6-7ed1-91a7-81626e8ffdb8",
+      "scanner": "LoveIQ report UX",
+      "expect": "no",
+      "why": "A report read end to end (reached scroll_depth_100) with no rage clicks. THE adversarial case: the report is legitimately ~34,700px tall, so a long scroll is correct behaviour. A scanner that calls this 'excessive scrolling' would flag most of our readers."
+    },
+    {
+      "session_id": "01a09e04-dfaa-7a3e-9622-0d7ca5285017",
+      "scanner": "LoveIQ report UX",
+      "expect": "no",
+      "criterion": "L1",
+      "why": "Scanner: \"the user clicked 'Unlock full report', which looped them back to the beginning of the survey\". The session contains NO unlock_click, paywall_initiated, sticky_unlock_clicked or lock_icon_clicked, and no autocapture click at all before the navigation. The /report -> /survey move is real but is a browser back-press: $pageleave and $pageview land in the same millisecond, and the only /survey links on the report sit on its error screens, which cannot render when report_viewed fired. No defect established.",
+      "labelled_from": "events, 2026-09-14"
+    },
+    {
+      "session_id": "01a09fe4-71ba-7ea5-afd7-c5da45a71af7",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "criterion": "L1",
+      "why": "Scanner: \"redirected the user back to the 18+ age verification consent screen\". The 18+ step is a step INSIDE /survey and cannot emit a pageview; the only navigation at that moment is a $pageview of \"/\". The named destination is not where the user went.",
+      "labelled_from": "events, 2026-09-14"
+    },
+    {
+      "session_id": "01a09e25-3e09-78ed-b87e-21712439d172",
+      "scanner": "LoveIQ dead-click cause",
+      "expect": "no",
+      "criterion": "D1",
+      "why": "THE self-refuting case. The scanner described the taps as landing on \"plain paragraphs and non-interactive trust badges\" and answered YES anyway - while that scanner's prompt carries a HARD RULE: paragraph/heading/image/badge/decoration means NO, \"not 'no, but' - NO\". Proof that prompt hardening alone does not hold.",
+      "labelled_from": "the scanner's own reasoning, 2026-09-14"
+    },
+    {
+      "session_id": "01a08680-882b-7465-b59e-014f7afbcc1f",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "why": "RESOLVED 2026-09-14 from the database, which settles it more firmly than the recording could. The scanner claimed the survey \"unexpectedly looped back to the very first introduction screen ... rather than showing results\". But survey_submission 1978 is status=completed at 14:41 UTC and personal_report 1919 was created in the SAME minute — the results existed. So the stated defect did not happen. The user did navigate to /survey again 83 seconds later, which is what the model saw, but that is a navigation after a successful completion, not a loop instead of results. Same failure mode as the other three: a real screen change with an invented cause.",
+      "labelled_from": "survey_submission + personal_report rows, 2026-09-14"
+    }
+  ],
+  "_status_2026_09_14": [
+    "Re-scored 2026-09-14 after adding the three day-one false positives as adversarial fixtures.",
+    "These are the strongest negatives available: the scanner said YES to each, and each claim was",
+    "checked against the session's own events and refuted. They cost nothing to collect and they are",
+    "the exact failure mode the benchmark exists to measure.",
+    "",
+    "Labels are derived from EVENTS, not from watching video, and each fixture says so in",
+    "labelled_from. That is weaker evidence than Mark's eyes for a layout question and stronger for a",
+    "causal claim, because an event either fired or it did not. Where events cannot settle it, the",
+    "fixture goes to `unresolved` and is excluded from the score - a disputed label must never drive",
+    "the headline number.",
+    "",
+    "A scanner observes a session ONCE, EVER. Every id here is spent; re-running returns the stored",
+    "verdict. Iterate prompts with POST /vision/scanners/:id/duplicate/ on fresh sessions."
+  ],
+  "_day_one_reading_2026_09_14": [
+    "Read all 19 observations from the first day. 5 were YES. NONE was an",
+    "actionable new defect, and the failure mode is consistent enough to name:",
+    "THE SCANNERS SEE THAT SOMETHING CHANGED AND INVENT WHY.",
+    "",
+    "  01a09e04 — 'the user clicked Unlock full report, which looped them back to",
+    "  the survey'. The session has NO unlock_click, paywall_initiated,",
+    "  sticky_unlock_clicked or lock_icon_clicked. The navigation to /survey is",
+    "  real (almost certainly the grey footer nav link); the cause is fabricated.",
+    "",
+    "  01a09fe4 — 'redirected back to the 18+ age verification consent screen'.",
+    "  The events show a $pageview to the LANDING PAGE and then the session ends.",
+    "  No consent screen, no redirect.",
+    "",
+    "  01a09e25 — described taps on 'plain paragraphs and non-interactive trust",
+    "  badges', which is verbatim the prompt's own answer-NO case, then answered",
+    "  YES anyway.",
+    "",
+    "  01a08680 — the intro screen after completion is real; the stated cause",
+    "  ('after finishing the processing screens') is not — the user backgrounded",
+    "  the tab and came back to a fresh load.",
+    "",
+    "  01a04d64 — correct, but the bug ('Unable to process request.') was fixed",
+    "  on 2026-08-29 by removing that screen.",
+    "",
+    "All five at 0.9 confidence. Confidence ranged 0.8-1.0 across BOTH verdicts",
+    "over all 19 observations, so it discriminates nothing and the 0.7 bar filters",
+    "nothing. The daily per-scanner cap is the only real control on volume.",
+    "",
+    "ACTIONS TAKEN: prompts bumped to v2 with a rule against naming a control that",
+    "was not seen being pressed, and a hard NO for taps on text/badges; and the",
+    "verifier now refutes a claim whose named action has no matching event, which",
+    "catches 01a09e04 automatically."
+  ]
+}

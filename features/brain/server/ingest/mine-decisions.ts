@@ -32,6 +32,7 @@
  * would break that promise for every consumer. Mined rows carry `meta.origin = "mined"`
  * and render a RECONSTRUCTED line.
  */
+import { decisionTitle } from "@features/brain/server/decisions";
 import { createHash } from "node:crypto";
 import { buildDecisionRow } from "@features/brain/server/decisions";
 import { complete, isLlmConfigured } from "@features/brain/server/llm";
@@ -200,7 +201,70 @@ async function markMined(sourceId: string, found: number): Promise<void> {
   }
 }
 
-export function buildMinedRows(doc: MeetingDoc, mined: MinedDecision[], now: Date): BrainRow[] {
+/**
+ * Keep the decision; keep the figure out of the TITLE.
+ *
+ * Mining changed how findable a buried fact is, and that is a different thing from who
+ * may read it. Corpus access is open by a decision recorded twice, and nothing here
+ * restricts it — the full text stays in the body. But a person writing a decision by hand
+ * CHOOSES what goes in the title, and the miner does not: it lifted "Eman accepted a
+ * starting compensation rate of 650" straight into one, and titles are weighted double,
+ * so the single word "compensation" returned a named colleague's pay as the top hit in
+ * the whole corpus. That salience is an accident of automation, not a decision anybody
+ * made.
+ *
+ * WHAT THIS DOES AND DOES NOT DO, measured 2026-09-23 because an earlier reading of this
+ * comment promised more. It keeps the figure out of TITLE-ONLY surfaces — the recent- and
+ * prior-decision blocks, `browse_context` — where a list of titles would otherwise read as
+ * a pay table. It does not stop a search for "compensation" ranking the record first, and
+ * search prints the body, figure included: the word stays in the title, which is right,
+ * because "what did we decide about Eman's rate" must still find it. Under the open-access
+ * decision that is intended — the body is the record. If the goal ever becomes keeping an
+ * individual's pay out of search, the record has to go, not its title.
+ *
+ * Deterministic, like the verbatim-quote gate beside it: a prompt instruction is a
+ * request, and this needs to hold on every row. Only fires when all three are true — a
+ * roster name, pay or equity language, and an actual figure — so a decision that merely
+ * mentions money ("cap the report at 29") is untouched.
+ */
+const PAY_CONTEXT =
+  /\b(compensat\w*|salar\w*|\bpay\b|\bpaid\b|\brate\b|equity|vesting|stake|shares?)\b/i;
+const FIGURE = /\b\d[\d.,]{1,}\b|\b\d+\s*%/;
+
+export function titleFor(decision: string, roster: string[]): string {
+  /**
+   * FIRST NAMES TOO. The roster holds canonical full names — "Eman Cickusic" — and a
+   * meeting transcript says "Eman". The first version matched only the full name, so it
+   * ran over 22 mined decisions and changed NONE of them, including the one it was
+   * written for. A guard that cannot match the case that motivated it is the quiet kind
+   * of broken: green, silent, and useless.
+   *
+   * Case-sensitive and word-bounded, so the verb "mark" is not the colleague Mark. A
+   * false positive here costs one masked figure in one title, which is the cheap
+   * direction to be wrong in.
+   */
+  const candidates = roster.flatMap((n) => {
+    const first = n.trim().split(/\s+/)[0] ?? "";
+    return first.length >= 3 ? [n, first] : [n];
+  });
+  const names = candidates.filter(
+    (n) => n && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(decision)
+  );
+  if (names.length === 0 || !PAY_CONTEXT.test(decision) || !FIGURE.test(decision)) {
+    return decisionTitle(decision);
+  }
+  // The figure is replaced, not the name and not the subject: "what did we decide about
+  // Eman's rate" must still find this, and the body still holds the number.
+  const masked = decision.replace(FIGURE, "(the figure is in the record)");
+  return decisionTitle(masked);
+}
+
+export function buildMinedRows(
+  doc: MeetingDoc,
+  mined: MinedDecision[],
+  now: Date,
+  roster: string[] = []
+): BrainRow[] {
   return mined.map((m) => {
     const row = buildDecisionRow(
       {
@@ -220,6 +284,7 @@ export function buildMinedRows(doc: MeetingDoc, mined: MinedDecision[], now: Dat
     );
     return {
       ...row,
+      title: titleFor(m.decision, roster),
       // The body says it too, so a reader who sees only the text still knows.
       body: `${row.body}\n\nReconstructed from meeting notes, not written down by a person.\nQuoted from the notes: "${m.quote}"`,
       meta: {
@@ -299,19 +364,65 @@ export interface MineResult {
   skipped: string | null;
 }
 
-export async function mineDecisions(limit: number): Promise<MineResult> {
+/**
+ * Wall-clock one run may spend. The route's `maxDuration` is 300s; this leaves ~60s for
+ * the last meeting's writes and the cron_run record. A parameter rather than a constant
+ * so a test can shrink it to milliseconds and a manual backfill can raise it.
+ */
+export const DEFAULT_MINE_BUDGET_MS = 240_000;
+
+/** Consecutive quota waits before we conclude the window is not going to clear. */
+const MAX_QUOTA_WAITS = 8;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function mineDecisions(
+  limit: number,
+  budgetMs: number = DEFAULT_MINE_BUDGET_MS
+): Promise<MineResult> {
+  const deadline = Date.now() + budgetMs;
   if (!isLlmConfigured()) {
     return { scanned: 0, written: 0, dropped: 0, skipped: "BRAIN_LLM_KEY is not set" };
   }
   const docs = await unminedMeetings(limit);
   if (docs.length === 0) return { scanned: 0, written: 0, dropped: 0, skipped: null };
 
+  /**
+   * The person registry, read once per run. `titleFor` needs it to tell "Eman accepted a
+   * rate of 650" from "cap the report at 29" — without it the guard has no name to match
+   * and silently never fires, which is the quiet kind of broken.
+   */
+  const roster = await supabaseFetch("/rest/v1/brain_person?select=canonical&kind=eq.person")
+    .then(async (r) =>
+      r.ok ? ((await r.json()) as Array<{ canonical: string }>).map((p) => p.canonical) : []
+    )
+    .catch(() => [] as string[]);
+  if (roster.length === 0) {
+    logger.warn(
+      {},
+      "brain: mining with an empty roster — pay figures will not be kept out of titles"
+    );
+  }
+
   const now = new Date();
   let read = 0;
   let written = 0;
   let dropped = 0;
 
-  for (const doc of docs) {
+  // An INDEX loop, not `for...of`, because a quota wait has to re-read the SAME meeting.
+  // With `for...of` the natural `continue` advances the iterator, silently skipping the
+  // one document we paused for -- it would never be read and never be tombstoned either.
+  let index = 0;
+  let waits = 0;
+  while (index < docs.length) {
+    if (Date.now() >= deadline) {
+      // Out of clock, not out of quota. The remaining meetings keep no tombstone and
+      // are simply first in line tomorrow.
+      logger.info({ read, remaining: docs.length - index }, "brain: mining out of time");
+      return { scanned: read, written, dropped, skipped: "out_of_time" };
+    }
+    const doc = docs[index];
+    if (!doc) break; // unreachable: `index < docs.length`. Satisfies noUncheckedIndexedAccess.
     const summary = doc.text.slice(0, 8000);
     const res = await complete(
       [
@@ -324,6 +435,39 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
       60_000
     );
     if (!res.ok) {
+      // A PER-MINUTE limit is not a per-day one. The free tier allows five requests a
+      // minute per model and says exactly that on the 429, with how long to wait:
+      //   quotaId  GenerateRequestsPerMinutePerProjectPerModel-FreeTier   value 5
+      //   retryDelay "32s"
+      // Treating it as terminal is why this cron mined five meetings a night and closed
+      // every single run with "stopped early: rate_limited" -- draining a 121-meeting
+      // backlog in ~35 days rather than ~6. Half a minute of a 300s budget nobody else
+      // is waiting on buys the next five meetings, so wait and re-read this one.
+      /**
+       * `overloaded` waits on the same terms as a quota.
+       *
+       * A 503 from the model is "come back in a moment" and used to be treated as
+       * terminal, which is how two nights running ended with
+       * `stopped early: error:HTTP 503` after reading nothing. The wait budget,
+       * the deadline and the same-`index` retry below are all already correct for
+       * this; it only ever needed to be let through the door.
+       */
+      if (
+        (res.reason === "rate_limited" || res.reason === "overloaded") &&
+        res.retryAfterMs &&
+        waits < MAX_QUOTA_WAITS &&
+        Date.now() + res.retryAfterMs < deadline
+      ) {
+        logger.info(
+          { waitMs: res.retryAfterMs, read, waits: waits + 1, reason: res.reason },
+          res.reason === "overloaded"
+            ? "brain: mining paused while the model is overloaded"
+            : "brain: mining paused for the per-minute quota"
+        );
+        await sleep(res.retryAfterMs);
+        waits += 1;
+        continue; // same `index` — this meeting has not been read yet
+      }
       // A rate limit is not an empty meeting. Stop the run rather than tombstone
       // documents as "nothing found" when nothing was actually read.
       //
@@ -332,9 +476,43 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
       // decisions reported "scanned 2", and a run that stopped on the first call
       // reported 0 whether it had read nothing or found nothing. Two different states
       // rendering as one number is the failure this file spends its comments on.
-      logger.warn({ reason: res.reason, read, doc: doc.sourceId }, "brain: mining stopped");
-      return { scanned: read, written, dropped, skipped: res.reason };
+      /**
+       * Name WHICH limit stopped the run.
+       *
+       * `res.reason` is `rate_limited` for both the per-minute cap and the daily one, so
+       * `cron_run.error_message` read "stopped early: rate_limited" either way -- and the
+       * two want opposite fixes. A per-minute stop means the wait budget ran out and
+       * should be raised; a daily stop means this cron is scheduled in the wrong part of
+       * the Pacific day and no budget will help. Four runs' worth of that message could
+       * not distinguish them, which is why the drain sat at 19 of 123 documents with no
+       * way to tell why from the outside.
+       *
+       * An ABSENT `dailyQuota` stays the bare `rate_limited`. Calling an unknown limit
+       * "per-minute" would be a claim the provider never made -- the same collapse of two
+       * states into one name that this whole change exists to undo.
+       */
+      const stopped =
+        res.reason !== "rate_limited" || res.dailyQuota === undefined
+          ? /**
+             * ...and the same argument for the `error` bucket, which collapses an HTTP
+             * 500, a network failure and an unparseable response into one word. On
+             * 2026-09-17 this run reported the bare "error" and there was no way to tell
+             * which from the outside — the exact complaint above, one bucket over.
+             * `detail` already carries "HTTP 500"; nothing read it.
+             */
+            res.reason === "error" && res.detail
+            ? `error:${res.detail.slice(0, 60)}`
+            : res.reason
+          : res.dailyQuota
+            ? "rate_limited_daily"
+            : "rate_limited_minute";
+      logger.warn({ reason: stopped, read, doc: doc.sourceId }, "brain: mining stopped");
+      return { scanned: read, written, dropped, skipped: stopped };
     }
+    // The window cleared, so the budget of waits starts over. Without this reset a run
+    // long enough to hit the quota eight separate times would stop on the eighth even
+    // though every one of them had cleared.
+    waits = 0;
     read += 1;
     const { kept, dropped: rejected } = parseMined(res.text, summary);
     dropped += rejected.length;
@@ -344,10 +522,11 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
         "brain: mined decision dropped"
       );
     }
-    const rows = buildMinedRows(doc, kept, now);
+    const rows = buildMinedRows(doc, kept, now, roster);
     if (rows.length) await upsertChunks(rows);
     await markMined(doc.sourceId, rows.length);
     written += rows.length;
+    index += 1;
   }
 
   return { scanned: read, written, dropped, skipped: null };

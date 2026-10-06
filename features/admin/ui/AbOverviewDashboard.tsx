@@ -42,6 +42,7 @@ export interface AbOverview {
   dropoffCaveats: string[];
   funnelCaveats: string[];
   experiments: ExperimentReadout[];
+  concludedReadouts: ExperimentReadout[];
   concluded: Array<{ title: string; outcome: string }>;
   totals: {
     submissions: number;
@@ -354,17 +355,39 @@ export function AbOverviewView({
           We show different versions of the site to different people. This is how each version is
           doing. &ldquo;Bought&rdquo; means they paid for a report after finishing the survey.
         </p>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {experiments.map((readout) => (
-            <Experiment key={readout.axis} readout={readout} />
-          ))}
-        </div>
+        {experiments.length > 0 ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {experiments.map((readout) => (
+              <Experiment key={readout.axis} readout={readout} />
+            ))}
+          </div>
+        ) : (
+          // A heading over an empty grid reads as a loading failure. Nothing has
+          // been randomised since the landing test concluded on 19 Sep 2026.
+          <p className="rounded-xl border border-white/10 bg-surface p-5 text-sm text-text-muted">
+            Nothing is being tested right now. Every version we were comparing has been settled —
+            the results are below.
+          </p>
+        )}
 
         <p className="mt-3 text-xs text-text-muted">
           &ldquo;Not attributable&rdquo; means we have no record of which version that person saw —
           mostly people who took the survey before we started recording it in June, plus anyone who
           arrived without the cookie. They are counted here but excluded from the comparison.
         </p>
+
+        {data.concludedReadouts.length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-3 font-serif text-base font-semibold text-text-primary">
+              The numbers these were settled on
+            </h3>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {data.concludedReadouts.map((readout) => (
+                <Experiment key={readout.axis} readout={readout} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {data.concluded.length > 0 && (
           <div className="mt-6 rounded-xl border border-white/10 bg-surface p-5">

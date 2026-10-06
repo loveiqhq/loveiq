@@ -22,7 +22,7 @@ import { surveyQuestions } from "@/data/survey-data";
  * This test covers the narrower case that actually bites: reword a question's options in
  * the CSV and forget the paired migration.
  */
-const MIGRATION = "supabase/migrations/20260911151600_answer_option_16011_paid_for.sql";
+const MIGRATION = "supabase/migrations/20260911193337_answer_option_16011_paid_for.sql";
 
 /** Options that already existed and were deliberately kept with identical wording. */
 const PRE_EXISTING_16011 = ["Therapy, coaching, or counseling", "None of these"];

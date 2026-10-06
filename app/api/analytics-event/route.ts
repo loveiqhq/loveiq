@@ -21,8 +21,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
+import { redactReportTokensDeep } from "@shared/format/redact-report-token";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 
 const ALLOWED_EVENTS = [
@@ -72,6 +75,16 @@ const ALLOWED_EVENTS = [
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
+
+/**
+ * The active-time heartbeats the report page emits at 1, 5 and 10 minutes. They
+ * get their own refresh slot below — see the comment there.
+ */
+const DWELL_MILESTONES = new Set<string>([
+  "report_engagement_1min",
+  "report_engagement_5min",
+  "report_engagement_10min",
+]);
 
 function entityTypeFor(event: AllowedEvent): string {
   switch (event) {
@@ -203,7 +216,12 @@ export async function POST(request: Request) {
       // entity_type:entity_id has consistent meaning across rows.
       entity_id: submission_id,
       survey_submission_id: submission_id,
-      metadata: metadata ?? {},
+      // A report token is the auth on a report, so it must not persist here.
+      // Applied at the INSERT rather than at the parse, because this is the
+      // only point that sees exactly what is about to be written — and the
+      // PostHog event, which we decided to keep intact, has already been sent
+      // from the client by now. See shared/format/redact-report-token.ts.
+      metadata: redactReportTokensDeep(metadata ?? {}),
       ...(typeof duration_ms === "number" ? { duration_ms } : {}),
     }),
   });
@@ -228,6 +246,58 @@ export async function POST(request: Request) {
     );
     // Don't leak details — return 204 so the client doesn't retry endlessly.
     return new NextResponse(null, { status: 204 });
+  }
+
+  /**
+   * Keep the "Report time" line on the Slack journey message moving.
+   *
+   * Report activity moves that line and nothing else — the journey state is
+   * unchanged — so the ordinary advance-gated refresh would skip all of it.
+   *
+   * ANY report-page event counts, not just the three engagement milestones. The
+   * dwell is measured from the event stream now, so the number is only as fresh
+   * as the last edit: gated on milestones alone, a reader who crossed one minute
+   * and then read for eight more was frozen at their first minute, because
+   * nothing after 60s was allowed to re-render the message. A scroll, a chapter
+   * open or a dismissed paywall all prove they were still in there.
+   *
+   * Survey-entity events are excluded: the wizard fires them before the report
+   * exists, so they can only ever produce the same "—".
+   *
+   * After the response, because these arrive from a tab the reader is still
+   * sitting in (and, at the end of a sitting, possibly one they are closing). A
+   * Slack round-trip must not be in front of that.
+   */
+  if (entityTypeFor(event_type) !== "survey") {
+    /**
+     * Two buckets, both keyed on the SUBMISSION and deliberately not on the IP —
+     * the thing worth protecting is the one Slack message.
+     *
+     * A milestone keeps its own hourly slot per event type. That slot is what
+     * makes a quiet reader visible: they produce no scrolls and no clicks, so
+     * their 1/5/10-minute heartbeats are the only evidence that time is passing,
+     * and a shared bucket would let ordinary chatter swallow them.
+     *
+     * Everything else shares one slot every five minutes. That bounds a chatty
+     * page (scroll depth alone fires four times) at twelve edits an hour while
+     * still letting the LAST thing a reader does land in Slack, which is what
+     * makes the final number true. Without a bound, every repeat would rewrite
+     * the message — nothing downstream dedupes, there is no uniqueness on
+     * (submission_id, event_type), the insert above is a bare INSERT, and an
+     * anonymous caller holding only a CSRF cookie (which any request mints)
+     * could drive `chat.update` past its Tier 3 budget against guessed
+     * sequential ids.
+     */
+    const isMilestone = DWELL_MILESTONES.has(event_type);
+    const fresh = await checkRateLimit(
+      isMilestone ? `${submission_id}:${event_type}` : String(submission_id),
+      isMilestone
+        ? { bucket: "journey-dwell-refresh", limit: 1, windowMs: 3_600_000 }
+        : { bucket: "journey-activity-refresh", limit: 1, windowMs: 300_000 }
+    );
+    if (fresh.allowed) {
+      scheduleAfterResponse("journey-dwell-refresh", () => refreshJourneyDetail(submission_id));
+    }
   }
 
   return new NextResponse(null, { status: 204 });

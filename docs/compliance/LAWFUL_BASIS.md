@@ -61,10 +61,10 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A6 — Marketing email (nurture sequence)
 
-- **Data**: same as A5 plus a Stripe promotion code at the `72h_no_unlock` stage (the 30h/54h ladder was retired by pricing 2.0; `78h_no_unlock` carries no code and is paused by default)
+- **Data**: same as A5 plus a Stripe promotion code at the `72h_no_unlock` stage (the 30h/54h ladder was retired by pricing 2.0, and the `78h_no_unlock` call invite was removed with the Calendly integration on 2026-09-14 — one nurture email now goes out per unconverted reader)
 - **Basis**: (a) consent — Q16015 marketing opt-in is required for nurture to fire. RPC stamps `marketing_opt_in_terms_version` (T-11) so we can prove what consent text the user saw.
 - **Retention**: same as A5 (Resend processor) + nurture stage markers in `report_price_quote.metadata.nurtureEmailsSent[]`
-- **Withdraw**: any unsubscribe → suppression list → Resend Audience cleanup (R-05)
+- **Withdraw**: any unsubscribe → suppression list → the Resend contact is marked unsubscribed (R-05), so campaigns sent from Resend skip it on every list
 
 ### A7 — Payment processing
 
@@ -126,8 +126,8 @@ For activities under basis (a):
 | Activity       | Withdraw mechanism                                    | Effect                                                                                                              |
 | -------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | A1 waitlist    | DSAR delete (`/api/admin/data-subject` action=delete) | All waitlist + suppression + invite rows removed                                                                    |
-| A2 survey      | DSAR delete                                           | Full cascade across 12 PII tables                                                                                   |
-| A6 marketing   | One-click unsubscribe in every email                  | Adds to suppression_list + removes from Resend Audience (R-05)                                                      |
+| A2 survey      | DSAR delete                                           | Full cascade across 12 PII tables, plus the Resend marketing contact                                                |
+| A6 marketing   | One-click unsubscribe in every email                  | Adds to suppression_list + marks the Resend contact unsubscribed (R-05)                                             |
 | A8 analytics   | CookieYes preference centre                           | `__liq_vid` cookie not set; `hasCookieYesConsent("analytics")` returns false; persisted analytics_event writes skip |
 | A9 advertising | CookieYes preference centre                           | Vendor tags blocked by category attribute                                                                           |
 

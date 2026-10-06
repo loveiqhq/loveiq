@@ -39,7 +39,7 @@ const NUL_BYTE = String.fromCharCode(0);
 
 /** Matches the ceiling the repo ingester enforces, so every source is chunked
  *  to a comparable size and no single row can dominate a prompt. */
-const MAX_BODY_CHARS = 2400;
+export const MAX_BODY_CHARS = 2400;
 
 /**
  * Credential shapes that must never enter the corpus.
@@ -142,6 +142,20 @@ const SECRET_PARAMS = [
  */
 const SECRET_PARAM_RE = new RegExp(
   `([?&#][a-z0-9_.-]*(?:${[...SECRET_PARAMS].sort((a, b) => b.length - a.length).join("|")})=)` +
+    /**
+     * REFUSE A VALUE THAT IS ALREADY THE MASK, or this rule eats itself.
+     *
+     * The value class below excludes `]` so a URL inside brackets or markdown is not
+     * swallowed whole. That means `&token=abc]` redacts to `&token=[redacted]]` — and on
+     * the NEXT pass the same rule matches `[redacted` (stopping at that first `]`) and
+     * masks it again, producing `[redacted]]]`. Every subsequent run appends one more.
+     *
+     * Not theoretical: found on 2026-09-17 in a calendar chunk holding a Deutsche Bahn
+     * booking link, where four passes added four brackets. Bodies are capped at
+     * MAX_BODY_CHARS, so a chunk that is re-ingested often would have real text pushed
+     * off the end one character at a time, invisibly.
+     */
+    `(?!\\[redacted\\])` +
     `[^\\s&"'<>)\\]]+`,
   "gi"
 );
@@ -175,6 +189,19 @@ const BARE_SECRET_RE = new RegExp(
     "calendly\\.com/cancellations/[A-Za-z0-9-]{8,}",
     "track\\.customer\\.io/(?:\\S*?/)?unsubscribe/[A-Za-z0-9_-]{8,}",
     "pay\\.stripe\\.com/receipts/[A-Za-z0-9_/-]{12,}",
+    /**
+     * Any JSON Web Token, whoever issued it.
+     *
+     * `eyJ` is base64url for `{"`, so this shape is a base64 JSON object followed by at
+     * least one more base64 segment — a token by construction, never prose. That makes it
+     * safe to mask generically, unlike the "long opaque string in a path" rule this file
+     * refuses to write: nobody loses meaning when a JWT becomes `[redacted]`.
+     *
+     * Found by audit 2026-09-17: 60 live, unexpired tokens issued by `pub-0` sat in
+     * newsletter mail the mailbox receives. Those carried no customer identity and were
+     * low severity — but they were live, and the next one might be ours.
+     */
+    "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}(?:\\.[A-Za-z0-9_-]+)?",
   ].join("|"),
   "g"
 );
@@ -189,6 +216,115 @@ export function redactUrlSecrets(text: string): string {
   return text.replace(SECRET_PARAM_RE, "$1[redacted]").replace(BARE_SECRET_RE, "[redacted]");
 }
 
+/**
+ * Gemini names every note "… - Notes by Gemini", which is the only reliable marker on
+ * the file itself. Shared so the classifier below and the row builder cannot drift
+ * apart — the classifier MUST spare a meeting, and it would not if the two diverged.
+ */
+export const MEETING_NOTE_NAME = /notes by gemini/i;
+
+/**
+ * A SIGNED LEGAL INSTRUMENT — the company's contracts and colleagues' own terms.
+ *
+ * Widening the Drive walk on 2026-09-21 made eighteen of these searchable: five named
+ * people's freelance agreements, both copies of the shareholders agreement, the VSOP
+ * option terms, eight per-person confidentiality and data-protection agreements, and
+ * two freelance contract templates. Between them, thirty chunks carry monetary terms —
+ * so anyone who can query the brain could read a named colleague's rate, or the cap
+ * table, by asking in prose.
+ *
+ * Eman's call, 2026-09-22, and consistent with the one made about CVs two days
+ * earlier: somebody's contract is their business, not company knowledge. The audience
+ * is the same team that can already open the shared Drive, so this is about what is
+ * easy to stumble into rather than about a leak — which is why it is a decision and
+ * not an incident.
+ *
+ * WHAT IT DELIBERATELY SPARES, each verified against all 814 Drive documents:
+ *
+ *  - Meeting notes. "Eman <> Mark - Contract Sync" is people TALKING about a contract,
+ *    which is exactly the kind of thing the brain exists to remember.
+ *  - The plural. "Development Agreements.md" is the development team's working norms
+ *    ("one clearly responsible leader … 2-week time-boxed sprints") and is real
+ *    operational knowledge. An instrument is "an Agreement"; a list of norms is
+ *    "Agreements".
+ *  - Analysis about law. The dating-app legal-compliance strategy papers (German and
+ *    English) and the EU/DE compliance summary are papers we want found, and carry
+ *    neither word in their titles, so they were never at risk — checked, not assumed.
+ *
+ * Measured before shipping: 18 of 814 documents, 197 of 12,452 chunks (1.58%), with
+ * every near miss inspected by hand.
+ *
+ * REVERSIBLE, like the CV rule: delete this function and its call and the next walk
+ * puts them back. The rows already indexed go on their own — the filter runs before
+ * `toFetch`/`touch`/`deferred`, so an excluded document looks ABSENT to the sweep
+ * rather than merely unfetched, which is how the vendor invoices left.
+ */
+const LEGAL_INSTRUMENT =
+  /(agreement|contract)([ _.]|$)|confidentiality,? data protection|vsop|terms[ _]of[ _]options|articles of association|gesellschaftsvertrag|gesellschafter/i;
+export function isLegalInstrument(name?: string): boolean {
+  // Percent-decoded first. One data-protection agreement reached the corpus with its
+  // spaces URL-encoded by Drive, which also left the word "Agreement" truncated — so
+  // the rule read the name as an ordinary file and indexed it. Decoding is the fix;
+  // matching on the truncated stem instead would have caught every "Agreed plan" in
+  // the Drive.
+  const n = (name ?? "").replace(/%20/g, " ").trim();
+  // A meeting ABOUT a contract is a record of a discussion, not the instrument.
+  if (MEETING_NOTE_NAME.test(n)) return false;
+  // No `if (!n) return false` guard: it was there and it was dead — neither regex can
+  // match an empty string, so deleting the line changed nothing and no test could tell.
+  // A line that cannot change an outcome is not a guard, it just reads like one.
+  return LEGAL_INSTRUMENT.test(n);
+}
+
+/**
+ * RECRUITING MATERIAL, judged by name: a CV, a list of applicants, interview notes.
+ *
+ * The owner's decision (2026-09-20, widened 2026-09-23): job applicants' personal data
+ * does not belong in a corpus the whole team can search through a tool that answers in
+ * prose. Moved here from drive.ts so every path that reads a named file applies the same
+ * rule — Drive documents, Gmail attachments, Slack uploads, calendar titles — because
+ * excluding a CV from Drive while indexing the same CV as an email attachment is the
+ * "one document, three ingest paths" failure the legal-instrument rule already hit.
+ *
+ * History: fifteen named CVs (23 chunks) were indexed until 2026-09-20, when the CV
+ * clause went in. Measured across every indexed Drive document on 2026-09-23, the two new
+ * clauses select exactly four applicant spreadsheets and three interview notes, and
+ * nothing else. "Interview" is carved out when the name says it is research, so a
+ * user-research session is not mistaken for a hiring one.
+ *
+ * A KNOWN EDGE, recorded in the tests rather than fixed: a document ABOUT screening CVs
+ * that leads with the word ("CV screening process") is dropped too, because a real CV
+ * leads with it identically. An earlier comment claimed the opposite; the test was right.
+ *
+ * REVERSIBLE, and a decision rather than a defect: to let the brain answer who applied
+ * for a role, delete this function and its calls.
+ */
+const JOB_APPLICATION = /(^|[_\s(-])(cv|resume|résumé|lebenslauf)([_\s).\d-]|$)/i;
+const APPLICANTS = /\bapplicants?\b/i;
+const INTERVIEW = /\binterview\b/i;
+const RESEARCH_INTERVIEW = /\b(user|customer|research|participant|podcast|press)\b/i;
+export function isJobApplication(name?: string): boolean {
+  const n = (name ?? "").trim();
+  if (JOB_APPLICATION.test(n) || APPLICANTS.test(n)) return true;
+  return INTERVIEW.test(n) && !RESEARCH_INTERVIEW.test(n);
+}
+
+/**
+ * A RECRUITING CONVERSATION, judged by what the meeting notes say about themselves.
+ *
+ * Needed because the name is not enough: candidate calls are booked through a generic
+ * "30 min with Mark (<name>)" slot that also carries partner and domain conversations.
+ * Gemini's own summary names a hiring call as one — "recruitment discussion", "candidate
+ * fit". Measured 2026-09-23 across every Drive document: these phrases select exactly the
+ * five candidate interviews. "Hiring decision" was tried and rejected: it also selected
+ * two team syncs that merely discussed hiring, and a whole sync must not be refused.
+ */
+const RECRUITING_CONVERSATION =
+  /(recruitment (discussion|interview|conversation|call)|candidate('s)? (qualifications|fit|suitability|background)|evaluation of (the )?candidate|interview(ed)? (for|of) (the|a) (position|role))/i;
+export function isRecruitingConversation(text: string): boolean {
+  return RECRUITING_CONVERSATION.test(text);
+}
+
 /** The credential kind found in this text, or null. */
 export function credentialKind(text: string): string | null {
   for (const [kind, pattern] of CREDENTIAL_PATTERNS) {
@@ -200,9 +336,14 @@ export function credentialKind(text: string): string | null {
 function clean(row: BrainRow): BrainRow {
   return {
     ...row,
-    title: redactUrlSecrets(row.title.split(NUL_BYTE).join("")),
+    // Titles are cut by their builders too (a research question at 300 characters).
+    title: redactUrlSecrets(row.title.split(NUL_BYTE).join("")).toWellFormed(),
     // Redacted BEFORE the length cap, so a masked value cannot push real text out.
-    body: redactUrlSecrets(row.body.split(NUL_BYTE).join("")).slice(0, MAX_BODY_CHARS),
+    // Well-formed after the cut: slicing can split a character stored as two halves (an
+    // emoji, a math letter), and Postgres rejects the lone half, failing the whole batch.
+    body: redactUrlSecrets(row.body.split(NUL_BYTE).join(""))
+      .slice(0, MAX_BODY_CHARS)
+      .toWellFormed(),
     // `url` too. It was the one field of the three left unguarded, and `renderSources`
     // prints it on every search line — 588 chunks carry a query string there. Nothing
     // leaked through it today; a field that is exempt by omission is how the next one does.
@@ -242,17 +383,64 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     // Refused at the shared write path, so every source is covered and no
     // ingester has to remember. Logged with the title and never the value, so
     // someone can go and rotate it.
-    const kind = credentialKind(`${row.title}\n${row.body}`);
+    /**
+     * REDACT BEFORE JUDGING.
+     *
+     * `redactUrlSecrets` already removes a token sitting in a URL query, and
+     * `clean()` applies it on the way out — but the refusal below was reading the
+     * RAW text, so a part was thrown away for a secret that would have been stripped
+     * a few lines later. Measured 2026-09-19: 126 parts across 35 documents were
+     * refused, every one of them a JWT in a Confluence or Jira action link. The
+     * tokens are single-use and the surrounding email was lost for nothing.
+     *
+     * The guard is not weakened: `credentialKind` still runs, just on the text that
+     * would actually be stored. Anything redaction cannot remove is still refused.
+     */
+    const redacted = {
+      ...row,
+      title: redactUrlSecrets(row.title),
+      body: redactUrlSecrets(row.body),
+    };
+    const kind = credentialKind(`${redacted.title}\n${redacted.body}`);
     if (kind) {
       logger.warn(
         { source: row.source, sourceId: row.source_id, kind, url: row.url },
         "brain: refusing to index a chunk containing a credential — rotate it and remove it from the source"
+      );
+      /**
+       * LEAVE A MARKER, NOT A HOLE.
+       *
+       * `continue` alone dropped the row and said so only to a log line that has
+       * rolled off by the time anyone looks. Its SIBLINGS still say "part 2 of 2",
+       * so a reader gets a fragment of a document with nothing to say a piece is
+       * missing or why. Measured 2026-09-19: 26 gmail threads were in exactly that
+       * state — 2FA mails, Jira invites, signup links, all of which legitimately
+       * carry a token in their first part.
+       *
+       * The marker indexes NO secret: the body is fixed text, and the title is kept
+       * only when the title on its own is clean, since `kind` may have come from it.
+       */
+      const titleHoldsIt = credentialKind(redacted.title) !== null;
+      byKey.set(
+        `${row.source} ${row.source_id}`,
+        clean({
+          ...redacted,
+          title: titleHoldsIt ? `${row.source}: withheld` : redacted.title,
+          body:
+            `This part is deliberately not indexed: it contains a ${kind}, which must ` +
+            `not become searchable. Rotate it and remove it from the source. The rest ` +
+            `of this document is indexed normally.`,
+          meta: { ...(row.meta ?? {}), withheld: kind },
+        })
       );
       continue;
     }
     const people = peopleIn(row.meta ?? {}, byAlias);
     byKey.set(
       `${row.source} ${row.source_id}`,
+      // `row`, not `redacted`: `clean()` redacts on the way out regardless, so passing
+      // the pre-redacted copy here changes nothing. Mutation proved it — swapping them
+      // broke no test, because the two produce identical bytes.
       clean(people ? { ...row, meta: { ...(row.meta ?? {}), people } } : row)
     );
   }
@@ -280,7 +468,147 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     }
     written += batch.length;
   }
-  return written;
+  /**
+   * A MARKER IS NOT AN INDEXED CHUNK, and the count callers act on must say so.
+   *
+   * `record_decision` reports success from this number. When the decision it was
+   * asked to record contained a credential, the marker made the row count 1 and the
+   * caller was told the decision had been recorded — while what is actually stored
+   * says the content was withheld. A guard that reports success is worse than the
+   * hole it replaced; the existing test caught this the moment markers were added.
+   *
+   * Counted off the deduped set rather than incremented at the refusal, so a marker
+   * later overwritten by a clean row with the same key is not subtracted twice.
+   */
+  const withheld = unique.filter(
+    (r) => (r.meta as { withheld?: unknown } | undefined)?.withheld
+  ).length;
+  // Only after every batch landed: a write that failed threw above and deletes nothing.
+  await dropLeftoverParts(unique);
+  return written - withheld;
+}
+
+/** `thread:abc#3` -> `thread:abc`. An id with no numeric part suffix is its own base. */
+export function partBase(sourceId: string): string {
+  return sourceId.replace(/#\d+$/, "");
+}
+
+/**
+ * The stored rows of a rewritten document that its new version did not write.
+ *
+ * WHY THIS EXISTS. A document that re-chunks SHORTER leaves its old tail behind, and
+ * until now only the daily sweep removed it, so for up to a day search could return a
+ * part of a version that no longer exists: after the gmail v9 rebuild there were 1,986
+ * such parts. `fetch_document` already hides them (`dropLeftoverParts` in the route);
+ * search, browse and the brief could not.
+ *
+ * The rule is "stored minus written, per document", which holds for every numbering the
+ * sources use: part 1 on the bare id with `#2…#N` after it (gmail, drive, notion), and a
+ * document that grew from one part to several or shrank back. It is safe because every
+ * caller of `upsertChunks` passes all the parts of a document in ONE call (checked for
+ * each of them on 2026-09-24): the parts written here are the complete new version, so
+ * anything else stored under the same base is from an older one. A document this call did
+ * not write is never looked at, so a failed or skipped read deletes nothing, as the sweep's
+ * rules require.
+ */
+export function leftoverParts(stored: Iterable<string>, written: ReadonlySet<string>): string[] {
+  const bases = new Set([...written].map(partBase));
+  return [...stored].filter((id) => !written.has(id) && bases.has(partBase(id)));
+}
+
+/** Documents looked up per request. Pages of 1,000 ids are read until one comes back short. */
+const LEFTOVER_LOOKUP = 25;
+
+const quoted = (id: string) => `"${id.replace(/"/g, '""')}"`;
+
+/**
+ * Does this source hold ANY numbered part? One row read, not a page. An answer that cannot be
+ * read counts as yes, so a failed check falls back to the full lookup rather than skipping it.
+ */
+async function hasNumberedParts(source: string): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=source_id&source=eq.${encodeURIComponent(source)}` +
+      `&source_id=like.*%23*&limit=1`
+  );
+  if (!res.ok) return true;
+  const rows = (await res.json().catch(() => null)) as unknown[] | null;
+  return !Array.isArray(rows) || rows.length > 0;
+}
+
+/** The stored ids of these documents, or null when they could not be read. */
+async function storedPartIds(source: string, bases: string[]): Promise<string[] | null> {
+  // The base itself exactly, and its numbered parts by prefix. The prefix over-selects
+  // (another id that starts the same way, and LIKE's `_` wildcard); `leftoverParts`
+  // filters exactly, so an extra row read is never an extra row deleted.
+  const or = bases
+    .flatMap((b) => [`source_id.eq.${quoted(b)}`, `source_id.like.${quoted(`${b}#*`)}`])
+    .join(",");
+  const out: string[] = [];
+  for (let offset = 0; offset < 100_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id&source=eq.${encodeURIComponent(source)}` +
+        `&or=(${encodeURIComponent(or)})&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!res.ok) return null;
+    const batch = (await res.json().catch(() => null)) as Array<{ source_id?: string }> | null;
+    if (!Array.isArray(batch)) return null;
+    for (const r of batch) if (r?.source_id) out.push(r.source_id);
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+/**
+ * Delete the leftover parts of the documents just written. Never throws: the write
+ * already succeeded, and anything this misses the daily sweep still removes.
+ */
+async function dropLeftoverParts(rows: BrainRow[]): Promise<number> {
+  const writtenBySource = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const ids = writtenBySource.get(r.source) ?? new Set<string>();
+    ids.add(r.source_id);
+    writtenBySource.set(r.source, ids);
+  }
+  let dropped = 0;
+  try {
+    for (const [source, written] of writtenBySource) {
+      // No numbered part stored for this source, this write's included (it has landed by
+      // now): no document of it has ever had a second part, so none can have one left over.
+      // Skips the lookups for analytics, ga4, gsc and the other one-row-per-thing sources,
+      // which were most of brain-fast's writes and added ~6s a run (measured 2026-09-24).
+      if (!(await hasNumberedParts(source))) continue;
+      const bases = [...new Set([...written].map(partBase))];
+      for (let i = 0; i < bases.length; i += LEFTOVER_LOOKUP) {
+        const stored = await storedPartIds(source, bases.slice(i, i + LEFTOVER_LOOKUP));
+        if (!stored) {
+          logger.warn({ source }, "brain: could not look up leftover parts; the sweep will");
+          return dropped;
+        }
+        const leftovers = leftoverParts(stored, written);
+        for (let j = 0; j < leftovers.length; j += 100) {
+          const list = leftovers
+            .slice(j, j + 100)
+            .map(quoted)
+            .join(",");
+          const res = await supabaseFetch(
+            `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}` +
+              `&source_id=in.(${encodeURIComponent(list)})`,
+            { method: "DELETE", headers: { Prefer: "return=minimal" } }
+          );
+          if (!res.ok) {
+            logger.warn({ source, status: res.status }, "brain: leftover-part delete failed");
+            return dropped;
+          }
+          dropped += Math.min(100, leftovers.length - j);
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "brain: leftover-part cleanup stopped; the sweep will finish it");
+  }
+  if (dropped > 0)
+    logger.info({ dropped }, "brain: removed leftover parts of re-chunked documents");
+  return dropped;
 }
 
 /**
@@ -571,7 +899,7 @@ const SCOPE_VANISH_MIN_ROWS = 20;
 export async function sweepMissing(
   source: string,
   seenIds: Set<string>,
-  opts: { scopeKey?: string } = {}
+  opts: { scopeKey?: string; walkedScopes?: ReadonlySet<string> } = {}
 ): Promise<number> {
   const stored: string[] = [];
   /** source_id -> the scope it belongs to, when this source names one. */
@@ -603,7 +931,46 @@ export async function sweepMissing(
   }
   if (stored.length === 0) return 0;
 
-  const orphans = stored.filter((id) => !seenIds.has(id));
+  /**
+   * A row from a scope this run DID NOT WALK is history, not an orphan.
+   *
+   * The vanishing-scope heuristic below is the second line of defence and only
+   * the second: it needs a scope to lose every row it holds AND to clear both a
+   * 20-row floor and a 5% share, which is deliberate (see brain-sweep-scope
+   * tests) and by design lets small scopes through. Gmail therefore carries the
+   * strong rule in its own keep-set, and drive and notion never got it — so
+   * every drive owner under 5% of the source and thirty of notion's
+   * thirty-three databases could be deleted whole the day their access
+   * changed. Measured 2026-09-17: 11 of 15 drive owners (775 rows, including
+   * every external collaborator) and 30 of 33 notion databases sat under that
+   * bar.
+   *
+   * Rows from scopes that WERE walked still sweep, which is what keeps the
+   * stale-version cleanup working.
+   *
+   * A row with NO readable scope keeps today's behaviour and stays sweepable.
+   * Gmail treats unattributable rows as history, but it does that in its own
+   * keep-set and its unscoped set is tiny; here the same rule would make 348 of
+   * notion's 1,484 rows immortal, because a standalone page carries no database
+   * and is walked on every run. So this guard only protects what it can prove is
+   * at risk — a scope that exists and was not walked — and leaves the rest
+   * exactly as it was, which is why it cannot regress any current behaviour.
+   * The residual gap is an unscoped row whose source silently stops listing it.
+   */
+  const missing = stored.filter((id) => !seenIds.has(id));
+  const walked = opts.walkedScopes;
+  const orphans = walked
+    ? missing.filter((id) => {
+        const sc = scopeOf.get(id);
+        return sc === undefined || walked.has(sc);
+      })
+    : missing;
+  if (walked && orphans.length < missing.length) {
+    logger.info(
+      { source, kept: missing.length - orphans.length, scopes: walked.size },
+      "brain sweep: kept rows from scopes this run did not walk"
+    );
+  }
 
   if (opts.scopeKey && orphans.length > 0) {
     const held = new Map<string, number>();
@@ -665,11 +1032,43 @@ export async function sweepMissing(
   return deleted;
 }
 
+/**
+ * Build the PostgREST predicate that confines a sweep to the scopes a run
+ * walked. Verified against the live API: `meta->>channel=in.("hr","payments")`
+ * returns exactly those channels' rows.
+ */
+function scopeFilter(scopeKey: string, walked: ReadonlySet<string>): string {
+  const list = [...walked].map((v) => `"${v.replace(/"/g, '""')}"`).join(",");
+  return `&meta->>${encodeURIComponent(scopeKey)}=in.(${encodeURIComponent(list)})`;
+}
+
 export async function sweepStale(
   source: string,
   stampedAt: string,
-  wroteRows: number
+  wroteRows: number,
+  opts: { scopeKey?: string; walkedScopes?: ReadonlySet<string> } = {}
 ): Promise<number> {
+  /**
+   * Confine the whole sweep — counts AND delete — to the scopes this run
+   * walked.
+   *
+   * `sweepStale` deletes everything older than the run stamp, so a scope that
+   * stops being walked goes stale and is removed. Slack re-touches every row
+   * every run (all 562 carry the same `updated_at`), which means leaving a
+   * channel deletes it: 9 of its 10 channels sit under the majority guard, the
+   * only thing that was protecting them. Same failure as the Gmail mailbox
+   * sweep, reached through a timestamp instead of an id set.
+   *
+   * The counts take the same predicate as the DELETE on purpose. Filtering only
+   * the delete would leave the majority guard comparing a scoped deletion
+   * against an unscoped total, which reads as "a small minority" and waves
+   * through exactly the case it exists to refuse.
+   */
+  const scoped =
+    opts.scopeKey && opts.walkedScopes && opts.walkedScopes.size > 0
+      ? scopeFilter(opts.scopeKey, opts.walkedScopes)
+      : "";
+
   if (wroteRows <= 0) {
     logger.warn(
       { source },
@@ -683,8 +1082,8 @@ export async function sweepStale(
   // A `wroteRows > 0` check closes only the empty case, and the partial case is
   // both likelier and nearly as damaging: a GA4 report truncated to 5 of 90 days
   // writes 5 chunks, clears the zero check, and the sweep removes the other 85.
-  const wouldDelete = await countChunks(source, stampedAt);
-  const total = await countChunks(source, null);
+  const wouldDelete = await countChunks(source, stampedAt, scoped);
+  const total = await countChunks(source, null, scoped);
   if (wouldDelete === null || total === null) {
     logger.warn(
       { source },
@@ -708,7 +1107,7 @@ export async function sweepStale(
 
   try {
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&updated_at=lt.${encodeURIComponent(stampedAt)}`,
+      `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&updated_at=lt.${encodeURIComponent(stampedAt)}${scoped}`,
       { method: "DELETE", headers: { Prefer: "return=representation" } }
     );
     if (!res.ok) {
@@ -734,11 +1133,15 @@ export async function sweepStale(
  * with no warning and a healthy-looking exit 0. A failed DELETE is fatal here; a
  * failed safety check must not be "proceed".
  */
-async function countChunks(source: string, before: string | null): Promise<number | null> {
+async function countChunks(
+  source: string,
+  before: string | null,
+  extra = ""
+): Promise<number | null> {
   const filter = before ? `&updated_at=lt.${encodeURIComponent(before)}` : "";
   try {
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}${filter}`,
+      `/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}${filter}${extra}`,
       { headers: { Prefer: "count=exact", Range: "0-0" } }
     );
     if (!res.ok) return null;

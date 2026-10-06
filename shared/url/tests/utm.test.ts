@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { captureUtmFromUrl, getStoredUtm, GLOBAL_UTM_KEY, LEGACY_UTM_KEY } from "@shared/url/utm";
+import {
+  captureUtmFromUrl,
+  getStoredUtm,
+  GLOBAL_UTM_KEY,
+  LEGACY_UTM_KEY,
+  withoutTrackingParams,
+} from "@shared/url/utm";
 
 describe("lib/utm", () => {
   let store: Record<string, string>;
@@ -224,5 +230,31 @@ describe("lib/utm", () => {
         JSON.stringify({ utm_source: "newsletter", utm_medium: "email" })
       );
     });
+  });
+});
+
+describe("withoutTrackingParams", () => {
+  it("drops every campaign and ad-click parameter a Google Ads landing carries", () => {
+    // The exact shape stored in ux_finding.url_path on 2026-09-20.
+    const landing =
+      "/?utm_source=google&utm_medium=cpc&utm_campaign=price_time_test&utm_term=what%20is%20my%20type" +
+      "&matchtype=p&network=g&gad_source=1&gad_campaignid=24064185005&gbraid=0AAA&gclid=Cj0KCQ";
+    expect(withoutTrackingParams(landing)).toBe("/");
+  });
+
+  it("keeps what changes the page, in order", () => {
+    expect(withoutTrackingParams("/report/x?utm_source=email&v2=1&gclid=a&offer=1")).toBe(
+      "/report/x?v2=1&offer=1"
+    );
+  });
+
+  it("matches the growing families by prefix, and other networks' click ids", () => {
+    expect(
+      withoutTrackingParams("/s?utm_id=1&UTM_Source=x&gad_new=2&fbclid=3&msclkid=4&wbraid=5")
+    ).toBe("/s");
+  });
+
+  it("leaves a path with no query alone", () => {
+    expect(withoutTrackingParams("/survey")).toBe("/survey");
   });
 });

@@ -30,8 +30,21 @@ test.describe("Survey — Intro screen", () => {
       .first()
       .click();
     // Intro transition takes 1200ms — wait for slide 1 heading to appear
+    /**
+     * FIFTEEN SECONDS BECAUSE THIS IS SETUP, NOT THE ASSERTION.
+     *
+     * Getting to slide 1 is the precondition for the two keyboard tests below; the thing
+     * under test is what an arrow key does once we are there. On 2026-09-23 this wait
+     * timed out on Desktop Safari in CI — 75 passed, this one failed, and it failed
+     * HERE rather than on the arrow-key expectation, so nothing about the behaviour was
+     * in question. WebKit is the slowest engine in the matrix and the slide has an
+     * entrance transition.
+     *
+     * Waiting longer asserts exactly the same condition. If the slide genuinely never
+     * renders, this still fails — ten seconds later, with the same message.
+     */
     await expect(page.getByRole("heading", { name: /quality in → magic out/i })).toBeVisible({
-      timeout: 5000,
+      timeout: 15_000,
     });
   });
 });
@@ -158,6 +171,22 @@ test.describe("Survey — Keyboard navigation", () => {
     await expect(page.getByRole("heading", { name: /quality in → magic out/i })).toBeVisible({
       timeout: 5000,
     });
+
+    /**
+     * MOVE FOCUS OFF THE BUTTON WE JUST CLICKED.
+     *
+     * The slide listener is on the document, and after `.click()` the Continue
+     * button still has focus. On WebKit the arrow key is delivered to that
+     * button and never reaches the listener, so both of these tests failed on
+     * Desktop and Mobile Safari while passing everywhere else — intermittently
+     * enough to read as a random flake, and it blocked both open PRs on a gate
+     * that only became required today.
+     *
+     * The ArrowLeft test already clicked `body` for exactly this reason; the
+     * ArrowRight one did not, which is the asymmetry that gave it away. Doing
+     * it once here makes focus deterministic for every test in the block.
+     */
+    await page.locator("body").click({ position: { x: 20, y: 20 } });
   });
 
   test("ArrowRight advances to next slide", async ({ page }) => {
@@ -330,7 +359,10 @@ test.describe("Survey — Full happy path", () => {
     await expect(page.getByRole("heading", { name: /what is your name/i })).toBeVisible({
       timeout: 5000,
     });
-    await expect(page.getByText("0%")).toBeVisible();
+    // The bar starts at 15%, never at 0 (Mark, Figma 2026-09-23), and counts honestly.
+    const bar = page.getByRole("progressbar", { name: "Survey progress" });
+    await expect(bar).toHaveAttribute("aria-valuenow", "15");
+    await expect(bar).toHaveAttribute("aria-valuetext", /^Question 1 of \d+$/);
     await expect(page.getByRole("button", { name: /previous/i })).toBeDisabled();
 
     await page.getByRole("textbox").fill("Test");
@@ -340,6 +372,7 @@ test.describe("Survey — Full happy path", () => {
     await expect(page.getByRole("heading", { name: /satisfied with my sex life/i })).toBeVisible({
       timeout: 5000,
     });
+    await expect(bar).toHaveAttribute("aria-valuetext", /^Question 2 of \d+$/);
 
     // --- Go back and verify persistence ---
     await page.getByRole("button", { name: /previous/i }).click();
@@ -348,11 +381,12 @@ test.describe("Survey — Full happy path", () => {
     });
     await expect(page.getByRole("textbox")).toHaveValue("Test");
 
-    // --- Pause opens the resume dialog (it does not navigate away) ---
-    // `handlePause` saves the draft and opens `SurveyPauseModal`; it has not navigated to
-    // "/" since the modal was introduced. This spec still waited for that navigation.
-    await page.getByRole("button", { name: /pause/i }).click();
-    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole("button", { name: /continue where I left off/i })).toBeVisible();
+    // --- The guidance rows open in place (Figma 11303:174) ---
+    // Pause / Save & exit and Auto-advance left with the 2026-10-04 redesign.
+    const why = page.getByRole("button", { name: "Why we ask this" });
+    await expect(why).toHaveAttribute("aria-expanded", "false");
+    await why.click();
+    await expect(why).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", { name: /pause|save & exit/i })).toHaveCount(0);
   });
 });

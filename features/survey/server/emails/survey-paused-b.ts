@@ -1,4 +1,10 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import {
+  EMAIL_FONT,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+  renderBrandFooterText,
+} from "@shared/emails/shared";
 
 /**
  * Survey-paused reminder — Variant B (Figma node 5086-354).
@@ -88,6 +94,7 @@ export function surveyPausedBEmail({
     "",
     "With kindness,",
     "Your LoveIQ team",
+    ...renderBrandFooterText(unsubscribeUrl),
   ].join("\n");
 
   return { subject, html, text };

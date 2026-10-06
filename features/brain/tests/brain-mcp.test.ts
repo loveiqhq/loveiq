@@ -56,8 +56,63 @@ vi.mock("@features/brain/server/act/slack", async (importOriginal) => ({
 
 const mockRateLimit = vi.fn(async () => ({ allowed: true }));
 const mockFetch = vi.fn();
+const uxReport = vi.hoisted(() => ({ build: vi.fn(), render: vi.fn() }));
+vi.mock("@features/ux-signals/server/report", () => ({
+  buildUxSignalsReport: uxReport.build,
+  renderUxSignals: uxReport.render,
+}));
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
+}));
+
+const mockQueueResearch = vi.fn();
+vi.mock("@features/brain/server/night-shift", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/night-shift")>()),
+  queueResearch: (...a: unknown[]) => mockQueueResearch(...a),
+}));
+const mockOpenConflicts = vi.fn();
+const mockSettle = vi.fn();
+const mockListExperiments = vi.fn();
+const mockRecordExperiment = vi.fn();
+vi.mock("@features/brain/server/experiments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/experiments")>()),
+  listExperiments: (...a: unknown[]) => mockListExperiments(...a),
+  recordExperiment: (...a: unknown[]) => mockRecordExperiment(...a),
+}));
+vi.mock("@features/brain/server/radar", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/radar")>()),
+  openConflicts: (...a: unknown[]) => mockOpenConflicts(...a),
+  settleConflict: (...a: unknown[]) => mockSettle(...a),
+}));
+const mockFileCrm = vi.fn();
+vi.mock("@features/brain/server/crm-calls", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/crm-calls")>()),
+  fileCrmCalls: (...a: unknown[]) => mockFileCrm(...a),
+  liveCrmDeps: () => ({}),
+}));
+const mockSelfReport = vi.fn();
+const mockRenderSelfReport = vi.fn();
+vi.mock("@features/brain/server/self-report", () => ({
+  selfReport: (...a: unknown[]) => mockSelfReport(...a),
+  renderSelfReport: (...a: unknown[]) => mockRenderSelfReport(...a),
+}));
+const mockCommentAsks = vi.fn();
+const mockCommentDeps = vi.fn();
+vi.mock("@features/brain/server/comment-asks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/comment-asks")>()),
+  commentAsks: (...a: unknown[]) => mockCommentAsks(...a),
+  liveDeps: (...a: unknown[]) => mockCommentDeps(...a),
+}));
+const mockWhatsNew = vi.fn();
+vi.mock("@features/brain/server/whats-new", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/whats-new")>()),
+  whatsNew: (...a: unknown[]) => mockWhatsNew(...a),
+}));
+
+const mockLoadCostSheet = vi.fn();
+vi.mock("@features/brain/server/cost-watch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/cost-watch")>()),
+  loadCostSheet: (...a: unknown[]) => mockLoadCostSheet(...a),
 }));
 
 vi.mock("@shared/http/ratelimit", () => ({
@@ -67,13 +122,27 @@ vi.mock("@shared/http/ratelimit", () => ({
 
 import { flushAfterResponse } from "@shared/http/after-response";
 import { recordToolCall } from "@features/brain/server/log";
-import { POST } from "@/app/api/mcp/route";
+import { forgetSignIns } from "@features/brain/server/sign-in";
+import {
+  outrankingHeldBack,
+  POST,
+  RELEVANCE_FLOOR,
+  SOURCES_FOR_TEST,
+  TOOLS,
+} from "@/app/api/mcp/route";
+import { atomsIn } from "@features/brain/server/check-answer";
+import { citesSources } from "@features/brain/server/night-shift";
+import { BOOKS, partHead } from "@/scripts/brain-books";
+import { partHead as paperPartHead } from "@features/brain/server/ingest/papers";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
 import { DRIVE_SECTIONS } from "@features/brain/server/ingest/drive";
 import { SlackTargetError } from "@features/brain/server/act/slack";
 import { NotionTargetError } from "@features/brain/server/act/notion";
 import { EmailRefusal } from "@features/brain/server/act/email";
 import { DelegationNotGranted, GoogleDocRefusal } from "@features/brain/server/act/gdoc";
+import { lastBilledMonth, settleWindow } from "@features/brain/server/cost-watch";
 
 const TOKEN = "test-token-0123456789";
 
@@ -87,9 +156,18 @@ const TOKEN = "test-token-0123456789";
  * rpc-writer refusal below into an assertion that passes for the wrong reason.
  */
 function toolCalls(): unknown[][] {
-  return mockSupabaseFetch.mock.calls.filter(
-    ([path]) => !String(path).startsWith("/rest/v1/brain_query")
-  );
+  return mockSupabaseFetch.mock.calls.filter(([path, init]) => {
+    if (String(path).startsWith("/rest/v1/brain_query")) return false;
+    // The emptiness probe, for the same reason as the log write above: it runs AFTER an
+    // empty query, so `.at(-1)` would be the probe rather than the query under test —
+    // which silently broke three limit/filter assertions when it was added.
+    const headers = (init as { headers?: Record<string, string> } | undefined)?.headers;
+    const isProbe =
+      headers?.Prefer === "count=exact" &&
+      headers?.Range === "0-0" &&
+      String(path).endsWith("?select=*&limit=1");
+    return !isProbe;
+  });
 }
 
 /** The `brain_query` rows written so far, decoded, oldest first. */
@@ -123,9 +201,12 @@ describe("/api/mcp", () => {
   });
 
   describe("auth", () => {
-    it("503s while the token is unset, so it is safe to deploy before it exists", async () => {
+    it("with the shared token unset, still refuses a bearer that is not a sign-in", async () => {
+      // It used to 503 here. People sign in themselves now, so an unset shared token is
+      // not "unconfigured" — but it must never make an empty or arbitrary bearer valid.
       delete process.env.LOVEIQ_MCP_TOKEN;
-      expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }))).status).toBe(503);
+      expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }))).status).toBe(401);
+      expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }, ""))).status).toBe(401);
     });
 
     it("401s with no token, a wrong token, and a wrong-LENGTH token", async () => {
@@ -134,6 +215,154 @@ describe("/api/mcp", () => {
       expect((await POST(rpc({ method: "ping" }, null))).status).toBe(401);
       expect((await POST(rpc({ method: "ping" }, "wrong-but-same-length"))).status).toBe(401);
       expect((await POST(rpc({ method: "ping" }, "short"))).status).toBe(401);
+    });
+
+    it("tells a client with no sign-in where to get one (RFC 9728)", async () => {
+      const res = await POST(rpc({ method: "ping" }, null));
+      expect(res.headers.get("WWW-Authenticate")).toBe(
+        'Bearer resource_metadata="https://www.loveiq.org/.well-known/oauth-protected-resource/api/mcp", scope="email"'
+      );
+    });
+
+    describe("a person who signed in", () => {
+      const BASE = "https://proj.supabase.co";
+      const part = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+      const signIn = `${part({ alg: "HS256" })}.${part({
+        iss: `${BASE}/auth/v1`,
+        client_id: "claude",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      })}.sig`;
+
+      beforeEach(() => {
+        forgetSignIns();
+        process.env.SUPABASE_URL = BASE;
+        process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+        mockFetch.mockImplementation(async (url: string) =>
+          String(url).endsWith("/auth/v1/user")
+            ? { ok: true, json: async () => ({ email: "mo@loveiq.org" }) }
+            : { ok: false, status: 404, json: async () => ({}) }
+        );
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            String(path).startsWith("/rest/v1/brain_person")
+              ? [{ canonical: "Mark Oldenburg" }]
+              : [],
+          text: async () => "",
+        }));
+      });
+      afterEach(() => {
+        delete process.env.SUPABASE_URL;
+        delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      });
+
+      it("limits sign-in checks on their own, so strangers never spend the team's budget", async () => {
+        // claude.ai's calls leave from Anthropic's shared addresses, so a per-address limit
+        // at the door let anyone sending junk tokens lock the team out. The costly step, the
+        // check with Supabase, has its own bucket; the door's is keyed by who is calling.
+        mockRateLimit.mockImplementation(async (...a: unknown[]) => ({
+          allowed: (a[1] as { bucket: string }).bucket !== "mcp-sign-in",
+        }));
+        try {
+          const refused = await POST(rpc({ method: "ping" }, signIn));
+          expect(refused.status).toBe(429);
+          expect(mockFetch.mock.calls.some(([u]) => String(u).includes("/auth/v1/user"))).toBe(
+            false
+          );
+          // The shared token needs no check, so the jobs are never locked out by strangers.
+          expect((await POST(rpc({ method: "ping" }))).status).toBe(200);
+          expect(
+            mockRateLimit.mock.calls.map(
+              ([k, o]) => `${(o as { bucket: string }).bucket}:${String(k).split("|")[0]}`
+            )
+          ).toContain("mcp:shared");
+          // A member whose account verified recently re-checks in their own bucket, so a
+          // flood that spent the address's does not lock them out.
+          mockRateLimit.mockImplementation(async () => ({ allowed: true }));
+          const withSub = (n: string) =>
+            `${part({ alg: "HS256" })}.${part({
+              iss: `${BASE}/auth/v1`,
+              client_id: n,
+              sub: "user-mo",
+              exp: Math.floor(Date.now() / 1000) + 3600,
+            })}.sig`;
+          expect((await POST(rpc({ method: "ping" }, withSub("first")))).status).toBe(200);
+          mockRateLimit.mockImplementation(async (...a: unknown[]) => ({
+            allowed: (a[1] as { bucket: string }).bucket !== "mcp-sign-in",
+          }));
+          expect((await POST(rpc({ method: "ping" }, withSub("refreshed")))).status).toBe(200);
+          expect(
+            mockRateLimit.mock.calls.some(
+              ([k, o]) =>
+                (o as { bucket: string }).bucket === "mcp-sign-in-member" && k === "sub:user-mo"
+            )
+          ).toBe(true);
+          // A token that cannot be a sign-in is refused before any bucket is touched.
+          mockRateLimit.mockClear();
+          expect((await POST(rpc({ method: "ping" }, "not-a-sign-in-token-000"))).status).toBe(401);
+          expect(mockRateLimit).not.toHaveBeenCalled();
+        } finally {
+          mockRateLimit.mockImplementation(async () => ({ allowed: true }));
+        }
+      });
+
+      it("logs every call under their own address, and the shared token as shared", async () => {
+        await POST(
+          rpc(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "list_sources", arguments: {} },
+            },
+            signIn
+          )
+        );
+        await POST(
+          rpc({
+            jsonrpc: "2.0",
+            id: 2,
+            method: "tools/call",
+            params: { name: "list_sources", arguments: {} },
+          })
+        );
+        await flushAfterResponse();
+        expect(writes().map((w) => w.actor)).toEqual(["mo@loveiq.org", "shared"]);
+      });
+
+      it("names them as the recorder of a decision someone else made", async () => {
+        const r = await POST(
+          rpc(
+            {
+              jsonrpc: "2.0",
+              id: 3,
+              method: "tools/call",
+              params: {
+                name: "record_decision",
+                arguments: {
+                  decision: "Move report pricing to flat tiers",
+                  actor: "Marcus Börner",
+                },
+              },
+            },
+            signIn
+          )
+        );
+        expect((await r.json()).result.isError).toBe(false);
+        const row = mockSupabaseFetch.mock.calls
+          .filter(
+            ([path, init]) =>
+              String(path).startsWith("/rest/v1/brain_chunk") &&
+              typeof (init as { body?: unknown } | undefined)?.body === "string"
+          )
+          .map(([, init]) => JSON.parse(String((init as { body: string }).body)) as unknown[])
+          .flat()[0] as { body: string; meta: Record<string, unknown> };
+        expect(row.body).toContain("Decided on");
+        expect(row.body).toContain("by Marcus Börner.\nRecorded by Mark Oldenburg.");
+        expect(row.meta).toMatchObject({ actor: "Marcus Börner", recorded_by: "Mark Oldenburg" });
+      });
     });
 
     it("429s when rate limited, before doing any work", async () => {
@@ -151,7 +380,1242 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
-    it("lists exactly the seventeen tools, each with a schema", async () => {
+    /**
+     * READY-MADE PROMPTS. claude.ai and Claude Code offer these to pick, so nobody has to
+     * know which tool answers "what needs me". Asserted by name, exactly, for the same
+     * reason the tool list is: a prompt that disappears is unreachable and nothing else
+     * would notice.
+     */
+    describe("prompts", () => {
+      const call = async (method: string, params?: unknown) =>
+        (await POST(rpc({ jsonrpc: "2.0", id: 7, method, params }))).json();
+
+      it("advertises prompts at initialize", async () => {
+        const body = await call("initialize");
+        expect(body.result.capabilities.prompts).toBeDefined();
+      });
+
+      it("lists the nine prompts, each with its arguments", async () => {
+        const body = await call("prompts/list");
+        const prompts = body.result.prompts as Array<{
+          name: string;
+          arguments: Array<{ name: string; required: boolean }>;
+        }>;
+        expect(prompts.map((p) => p.name)).toEqual([
+          "catch_me_up",
+          "kpi_check",
+          "review_chapter",
+          "draft_chapter",
+          "what_needs_me",
+          "track_promises",
+          "monthly_review",
+          "onboard",
+          "record_decision",
+        ]);
+        const needs = prompts.find((p) => p.name === "what_needs_me")!;
+        expect(needs.arguments).toEqual([
+          expect.objectContaining({ name: "person", required: true }),
+        ]);
+      });
+
+      it("renders a prompt as one user message with the arguments filled in", async () => {
+        const body = await call("prompts/get", {
+          name: "what_needs_me",
+          arguments: { person: "Mark Oldenburg" },
+        });
+        expect(body.result.messages).toHaveLength(1);
+        expect(body.result.messages[0].role).toBe("user");
+        expect(body.result.messages[0].content.type).toBe("text");
+        expect(body.result.messages[0].content.text).toContain('"people": "Mark Oldenburg"');
+      });
+
+      it("refuses a missing required argument as invalid params, naming it", async () => {
+        const body = await call("prompts/get", { name: "what_needs_me", arguments: {} });
+        expect(body.error.code).toBe(-32602);
+        expect(body.error.message).toMatch(/needs `person`/);
+      });
+
+      it("refuses an unknown prompt and lists the real ones", async () => {
+        const body = await call("prompts/get", { name: "nope" });
+        expect(body.error.code).toBe(-32602);
+        expect(body.error.message).toMatch(/catch_me_up/);
+      });
+
+      /** A prompt that names a renamed tool would send every caller to a dead end. */
+      it("names only tools that exist", async () => {
+        const tools = new Set(
+          ((await call("tools/list")).result.tools as Array<{ name: string }>).map((t) => t.name)
+        );
+        const list = (await call("prompts/list")).result.prompts as Array<{
+          name: string;
+          arguments: Array<{ name: string; required: boolean }>;
+        }>;
+        for (const p of list) {
+          const args = Object.fromEntries(p.arguments.map((a) => [a.name, "x"]));
+          const text = (await call("prompts/get", { name: p.name, arguments: args })).result
+            .messages[0].content.text as string;
+          const named = text.match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? [];
+          // A word that starts the way a real tool does must BE one. The prefixes come from
+          // the live list: a fixed list missed every tool outside it (cost_, user_, what_...),
+          // so a prompt naming a renamed one of those passed.
+          const prefixes = new Set([...tools].map((t) => t.split("_")[0]));
+          const toolish = named.filter((w) => prefixes.has(w.split("_")[0]!));
+          expect(toolish.length).toBeGreaterThan(0);
+          for (const t of toolish) expect(tools.has(t), `${p.name} names ${t}`).toBe(true);
+        }
+      });
+    });
+
+    /**
+     * WHAT SHIPPED, read live from GitHub and never indexed: commits were dropped from the
+     * index on 2026-09-09 for drowning founder questions, and this must not bring them back.
+     */
+    describe("check_copy", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 9,
+                method: "tools/call",
+                params: { name: "check_copy", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      it("checks a draft and quotes the sentence behind each finding", async () => {
+        const r = await call({
+          text: "They always want more — it is truly at the core of who they are.",
+          chapter: "motivation",
+          archetype: "Spark Seeker",
+        });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(/^Copy check, motivation \/ Spark Seeker:/);
+        expect(r.content[0]!.text).toContain("MUST FIX");
+        expect(r.content[0]!.text).toContain("[em-dash]");
+        expect(r.content[0]!.text).toContain('"They always want more — it is truly');
+      });
+
+      it("audits the shipped copy when no text is given", async () => {
+        const r = await call({ chapter: "motivation", archetype: "Spark Seeker" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(/^Copy check, the shipped motivation for Spark Seeker:/);
+      });
+
+      it("names the valid choices instead of guessing a misspelt chapter", async () => {
+        const r = await call({ text: "Some text here.", chapter: "motivations" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("motivation,");
+      });
+
+      it("asks for text, or both chapter and archetype, rather than checking nothing", async () => {
+        const r = await call({ chapter: "motivation" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/Pass `text`/);
+      });
+    });
+
+    describe("get_context_pack", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 10,
+                method: "tools/call",
+                params: { name: "get_context_pack", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      it("builds a pack for a chapter and an archetype, even with research unreachable", async () => {
+        const r = await call({ chapter: "motivation", archetype: "Spark Seeker" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(/^# Context pack: motivation for the Spark Seeker/);
+        expect(r.content[0]!.text).toContain('## Rules for "motivation"');
+        expect(r.content[0]!.text).toContain("## This chapter as shipped for the Spark Seeker");
+      });
+
+      it("refuses a name it does not know and lists the valid ones", async () => {
+        const r = await call({ chapter: "motivation", archetype: "Spark Seekers" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("Spark Seeker,");
+      });
+    });
+
+    describe("meeting_promises", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 11,
+                method: "tools/call",
+                params: { name: "meeting_promises", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      const ok = (body: unknown) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => body,
+      });
+      const down = { ok: false, status: 503, headers: new Headers(), json: async () => ({}) };
+      /** The notes and the board are read in parallel, so answer each by its path. */
+      const serve = (notes: unknown, board: unknown) =>
+        mockSupabaseFetch.mockImplementation(async (path: string) =>
+          path.includes("database=eq.Board") ? board : notes
+        );
+      afterEach(() => mockSupabaseFetch.mockReset());
+
+      const notes = [
+        {
+          source_id: "doc:abc#2",
+          title:
+            "Meeting notes: LoveIQ Sync - 2026/09/24 11:59 CEST - Notes by Gemini (part 2 of 3)",
+          url: "https://docs.google.com/document/d/abc/edit",
+          period_end: "2026-09-24",
+          body:
+            "Summary text.\nNext steps\n* [Mark Oldenburg, Sanjin Kacevac] Finalize Content: Finalize the chapter.\n" +
+            "* [Eman Cickusic] Fix Tagging: Investigate tagging failures in Figma frames.\n\nWant to see more?",
+        },
+      ];
+      const board = [
+        {
+          title: "Notion task: Figma frames tagging failures",
+          url: "https://app.notion.com/p/tagging",
+          meta: { status: "Eman - WIP", state: "open", due: "2026-09-20", database: "Board" },
+        },
+        ...Array.from({ length: 60 }, (_, n) => ({
+          title: `Notion task: filler item ${n}`,
+          url: null,
+          meta: { status: "Backlog", state: "idea" },
+        })),
+      ];
+
+      it("groups each meeting's next steps by owner, with the meeting and a link", async () => {
+        serve(ok(notes), ok(board));
+        const r = await call({ since: "2026-09-20", person: "Mark Oldenburg" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("Mark Oldenburg (1):");
+        expect(r.content[0]!.text).toContain(
+          "- 2026-09-24 LoveIQ Sync: Finalize Content: Finalize the chapter. (https://docs.google.com/document/d/abc/edit) → not on the board"
+        );
+        expect(r.content[0]!.text).not.toContain("Fix Tagging");
+      });
+
+      it("shows the board task an item matches, with its status and whether it is overdue", async () => {
+        serve(ok(notes), ok(board));
+        const text = (await call({ since: "2026-09-20" })).content[0]!.text;
+        expect(text).toContain(
+          '→ board: "Figma frames tagging failures" (Eman - WIP, due 2026-09-20, overdue) https://app.notion.com/p/tagging'
+        );
+        expect(text).toMatch(
+          /On the Notion board: 1 of 2 \(0 done, 1 not done\)\. Not on the board: 1\./
+        );
+        const boardReads = mockSupabaseFetch.mock.calls.filter(([path]) =>
+          String(path).includes("database=eq.Board")
+        );
+        expect(boardReads).toHaveLength(1);
+      });
+
+      it("still lists the promises when the board cannot be read, and says they are unchecked", async () => {
+        serve(ok(notes), down);
+        const r = await call({ since: "2026-09-20" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("The Notion board could not be read (status 503)");
+        expect(r.content[0]!.text).toContain("Not checked against Notion");
+        expect(r.content[0]!.text).not.toContain("→");
+      });
+
+      /** An error whose body happens to be a list must not read as an empty board. */
+      it("treats a failed board read as unread even when its body is a list", async () => {
+        serve(ok(notes), { ok: false, status: 500, headers: new Headers(), json: async () => [] });
+        const text = (await call({ since: "2026-09-20" })).content[0]!.text;
+        expect(text).toContain("The Notion board could not be read (status 500)");
+        expect(text).not.toContain("not on the board");
+      });
+
+      it("still lists the promises when reading the board throws", async () => {
+        mockSupabaseFetch.mockImplementation(async (path: string) => {
+          if (path.includes("database=eq.Board")) throw new Error("network");
+          return ok(notes);
+        });
+        const r = await call({ since: "2026-09-20" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("could not be read");
+      });
+
+      /** Measured 2026-09-24: 17 notes carry the list in two parts, so 4 of 767 items came twice. */
+      it("lists an item once when two parts of the same notes carry it", async () => {
+        const part = (sid: string) => ({
+          source_id: sid,
+          title: "Meeting notes: LoveIQ Sync - 2026/09/24 11:59 CEST - Notes by Gemini",
+          url: null,
+          period_end: "2026-09-24",
+          body: "Next steps\n* [Eman Cickusic] Fix Tagging: Investigate tagging in Figma.",
+        });
+        serve(ok([part("doc:abc"), part("doc:abc#2")]), ok(board));
+        const r = await call({ since: "2026-09-20" });
+        expect(r.content[0]!.text.match(/Fix Tagging/g)).toHaveLength(1);
+      });
+
+      it("reports an unreadable corpus as an outage, not an empty week", async () => {
+        serve(down, ok(board));
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not an empty week/);
+      });
+
+      it("refuses a date that is not a day", async () => {
+        const r = await call({ since: "last week" });
+        expect(r.isError).toBe(true);
+      });
+    });
+
+    describe("decision_conflicts and settle_decision_conflict", () => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 17,
+                method: "tools/call",
+                params: { name, arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockOpenConflicts.mockReset().mockResolvedValue([]);
+        mockSettle.mockReset().mockResolvedValue({ ok: true, text: "Settled." });
+      });
+
+      it("lists the open conflicts, for one topic when asked, and says when it cannot read", async () => {
+        expect((await call("decision_conflicts", {})).content[0]!.text).toBe(
+          "No open conflicts between recorded decisions."
+        );
+        await call("decision_conflicts", { topic: " tooling " });
+        expect(mockOpenConflicts).toHaveBeenLastCalledWith("tooling");
+        mockOpenConflicts.mockResolvedValue(null);
+        expect((await call("decision_conflicts", {})).isError).toBe(true);
+      });
+
+      it("settles only with both ids, a valid keep and who decided, and passes the answer on", async () => {
+        expect(
+          (await call("settle_decision_conflict", { later: "b", keep: "later", settled_by: "E" }))
+            .isError
+        ).toBe(true);
+        expect(
+          (
+            await call("settle_decision_conflict", {
+              earlier: "a",
+              later: "b",
+              keep: "neither",
+              settled_by: "E",
+            })
+          ).isError
+        ).toBe(true);
+        expect(
+          (await call("settle_decision_conflict", { earlier: "a", later: "b", keep: "later" }))
+            .isError
+        ).toBe(true);
+        expect(mockSettle).not.toHaveBeenCalled();
+        const r = await call("settle_decision_conflict", {
+          earlier: " a ",
+          later: "b",
+          keep: "later",
+          settled_by: "Eman Cickusic",
+          note: " Notion it is ",
+        });
+        expect(r.content[0]!.text).toBe("Settled.");
+        expect(mockSettle).toHaveBeenCalledWith({
+          a: "a",
+          b: "b",
+          keep: "later",
+          actor: "Eman Cickusic",
+          note: "Notion it is",
+        });
+        mockSettle.mockResolvedValue({ ok: false, error: "Already settled." });
+        const refused = await call("settle_decision_conflict", {
+          earlier: "a",
+          later: "b",
+          keep: "both",
+          settled_by: "E",
+        });
+        expect(refused).toMatchObject({ isError: true, content: [{ text: "Already settled." }] });
+      });
+    });
+
+    describe("file_call_notes", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 16,
+                method: "tools/call",
+                params: { name: "file_call_notes", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockFileCrm.mockReset().mockResolvedValue({
+          calls: 4,
+          filed: [],
+          skips: [],
+          near: [],
+          gaps: [],
+        });
+      });
+
+      it("only shows what it would file unless told otherwise, over the last fourteen days", async () => {
+        const r = await call({});
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("Recorded calls since");
+        const [since, dryRun] = mockFileCrm.mock.calls[0]!;
+        expect(dryRun).toBe(true);
+        const days = (Date.now() - Date.parse(`${since as string}T00:00:00Z`)) / 86_400_000;
+        expect(days).toBeGreaterThan(13);
+        expect(days).toBeLessThan(15.5);
+        await call({ dry_run: false, since: "2026-09-01" });
+        expect(mockFileCrm).toHaveBeenLastCalledWith("2026-09-01", false, {});
+      });
+
+      it("refuses a day that is not one, and marks a run that could not read or write as an error", async () => {
+        expect((await call({ since: "2026-02-30" })).isError).toBe(true);
+        expect(mockFileCrm).not.toHaveBeenCalled();
+        mockFileCrm.mockResolvedValue({
+          calls: 0,
+          filed: [],
+          skips: [],
+          near: [],
+          gaps: ["The meeting notes could not be read."],
+        });
+        expect((await call({})).isError).toBe(true);
+      });
+    });
+
+    describe("brain_health", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 15,
+                method: "tools/call",
+                params: { name: "brain_health", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockSelfReport.mockReset().mockResolvedValue({ now: { calls: 3 } });
+        mockRenderSelfReport.mockReset().mockReturnValue("the report");
+      });
+
+      it("reports the last seven days by default, questions included, against the floor", async () => {
+        const r = await call({});
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toBe("the report");
+        expect(mockSelfReport).toHaveBeenCalledWith(7, RELEVANCE_FLOOR);
+        expect(mockRenderSelfReport).toHaveBeenCalledWith(expect.anything(), RELEVANCE_FLOOR, {
+          withQuestions: true,
+        });
+        await call({ days: 30 });
+        expect(mockSelfReport).toHaveBeenLastCalledWith(30, RELEVANCE_FLOOR);
+      });
+
+      it("refuses a window that is not a whole number of days from 1 to 30", async () => {
+        for (const days of [0, 31, 2.5, "7", null]) {
+          const r = await call({ days });
+          expect(r.isError, String(days)).toBe(true);
+          expect(r.content[0]!.text).toBe("`days` must be a whole number from 1 to 30.");
+        }
+        expect(mockSelfReport).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("comment_asks", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 14,
+                method: "tools/call",
+                params: { name: "comment_asks", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const ask = {
+        person: "Marcus Börner",
+        asker: "Mark Oldenburg",
+        app: "Figma",
+        kind: "mention",
+        file: "LoveIQ",
+        text: "@Marcus Börner thoughts?",
+        day: "2026-09-10",
+        link: "https://www.figma.com/design/K#1",
+        status: "open",
+      };
+      beforeEach(() => {
+        mockCommentAsks.mockReset().mockResolvedValue({ asks: [ask], gaps: [] });
+        mockCommentDeps.mockReset().mockReturnValue({});
+      });
+
+      it("lists the asks for a person over the last thirty days by default", async () => {
+        const r = await call({ person: "Marcus" });
+        expect(r.isError).toBeFalsy();
+        const since = mockCommentAsks.mock.calls[0]![0] as string;
+        const days = (Date.now() - Date.parse(`${since}T00:00:00Z`)) / 86_400_000;
+        expect(days).toBeGreaterThan(29);
+        expect(days).toBeLessThan(31.5);
+        expect(r.content[0]!.text).toContain("to Marcus.");
+        expect(r.content[0]!.text).toContain("Marcus Börner: 1 open of 1 shown");
+      });
+
+      it("refuses a day that is not one, and a day to come", async () => {
+        expect((await call({ since: "2026-09-31" })).isError).toBe(true);
+        const future = await call({ since: "2999-01-01" });
+        expect(future.isError).toBe(true);
+        expect(future.content[0]!.text).toBe("2999-01-01 has not happened yet.");
+        expect(mockCommentAsks).not.toHaveBeenCalled();
+      });
+
+      it("lists resolved asks only when asked to", async () => {
+        mockCommentAsks.mockResolvedValue({ asks: [{ ...ask, status: "resolved" }], gaps: [] });
+        expect((await call({})).content[0]!.text).toContain("Nothing open");
+        expect((await call({ include_resolved: true })).content[0]!.text).toContain("→ resolved");
+      });
+    });
+
+    describe("queue_research and whats_new", () => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 13,
+                method: "tools/call",
+                params: { name, arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockQueueResearch.mockReset();
+        mockWhatsNew.mockReset();
+      });
+
+      it("queues a question with who asked and why, and says when the answer comes", async () => {
+        mockQueueResearch.mockResolvedValue({
+          ok: true,
+          id: "research:2026-09-25-abc",
+          status: "queued",
+        });
+        const r = await call("queue_research", {
+          question: "What does the research say about attachment and satisfaction?",
+          asked_by: "Mark Oldenburg",
+          why: "Chapter 3",
+        });
+        expect(r.isError).toBeFalsy();
+        expect(mockQueueResearch).toHaveBeenCalledWith({
+          question: "What does the research say about attachment and satisfaction?",
+          askedBy: "Mark Oldenburg",
+          why: "Chapter 3",
+        });
+        expect(r.content[0]!.text).toMatch(
+          /^Queued as research\/research:2026-09-25-abc\. The Night Shift starts at 02:30/
+        );
+      });
+
+      it("refuses a question too short to research", async () => {
+        const r = await call("queue_research", { question: "pricing?" });
+        expect(r.isError).toBe(true);
+        expect(mockQueueResearch).not.toHaveBeenCalled();
+      });
+
+      it("points at the answer that already exists instead of queuing it again", async () => {
+        mockQueueResearch.mockResolvedValue({
+          ok: true,
+          id: "research:2026-09-20-x",
+          status: "done",
+          existing: true,
+        });
+        const r = await call("queue_research", {
+          question: "What do our competitors charge for a report?",
+        });
+        expect(r.content[0]!.text).toBe(
+          "Already answered: research/research:2026-09-20-x. Read it with fetch_document."
+        );
+      });
+
+      it("says the queue is full, and what is in it", async () => {
+        mockQueueResearch.mockResolvedValue({
+          ok: false,
+          full: [
+            {
+              sourceId: "research:2026-09-24-a",
+              question: "First question here?",
+              askedBy: null,
+              askedOn: "2026-09-24",
+              why: null,
+            },
+          ],
+        });
+        const r = await call("queue_research", {
+          question: "What do our competitors charge for a report?",
+        });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain(
+          "- First question here? (research/research:2026-09-24-a)"
+        );
+      });
+
+      it("says nothing was written when queuing fails", async () => {
+        mockQueueResearch.mockRejectedValue(new Error("down"));
+        const r = await call("queue_research", {
+          question: "What do our competitors charge for a report?",
+        });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toBe("Could not queue that question. Nothing was written.");
+      });
+
+      it("lists what is new over the last day by default", async () => {
+        mockWhatsNew.mockResolvedValue({
+          ok: true,
+          waiting: 0,
+          items: [
+            {
+              source: "notice",
+              id: "notice/n1",
+              title: "Unusual numbers on Wednesday",
+              at: "2026-09-25T07:05",
+            },
+          ],
+        });
+        const r = await call("whats_new", {});
+        const since = Date.parse(mockWhatsNew.mock.calls[0]![0] as string);
+        expect(Date.now() - since).toBeGreaterThan(23 * 3_600_000);
+        expect(Date.now() - since).toBeLessThan(25 * 3_600_000);
+        expect(r.content[0]!.text).toContain(
+          "- 2026-09-25 07:05 noticed: Unusual numbers on Wednesday (notice/n1)"
+        );
+      });
+
+      it("takes a day or a time for since, refuses anything else, and reports an outage as one", async () => {
+        mockWhatsNew.mockResolvedValue({ ok: true, waiting: null, items: [] });
+        await call("whats_new", { since: "2026-09-20" });
+        expect(mockWhatsNew.mock.calls[0]![0]).toBe("2026-09-20T00:00:00.000Z");
+        expect((await call("whats_new", { since: "last week" })).isError).toBe(true);
+        expect((await call("whats_new", { since: "2026-09-31" })).isError).toBe(true);
+        mockWhatsNew.mockResolvedValue({ ok: false, status: 503 });
+        const r = await call("whats_new", {});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a quiet day/);
+      });
+    });
+
+    describe("show_chart", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 13,
+                method: "tools/call",
+                params: { name: "show_chart", arguments: args },
+              })
+            )
+          ).json()
+        ).result as {
+          content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
+          isError?: boolean;
+        };
+      const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+      const saved = {
+        site: process.env.NEXT_PUBLIC_SITE_URL,
+        secret: process.env.STRATEGY_DIGEST_SIGNING_SECRET,
+      };
+      const restore = (key: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      };
+
+      beforeEach(() => {
+        process.env.NEXT_PUBLIC_SITE_URL = "https://loveiq.example";
+        process.env.STRATEGY_DIGEST_SIGNING_SECRET = "a-test-secret-of-some-length";
+        mockSupabaseFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        mockRollup.mockResolvedValue(
+          Array.from({ length: 60 }, (_, i) => ({
+            day: new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10),
+            unique_visitors: 200,
+            survey_starts: 28,
+            submissions: 10,
+            report_opens: 12,
+            reports_paid: 1,
+            revenue: "9.90",
+            top_sources: {},
+          }))
+        );
+      });
+      afterEach(() => {
+        restore("NEXT_PUBLIC_SITE_URL", saved.site);
+        restore("STRATEGY_DIGEST_SIGNING_SECRET", saved.secret);
+        mockSupabaseFetch.mockReset();
+        mockFetch.mockReset();
+        mockRollup.mockReset();
+      });
+
+      it("answers with the numbers and the link first, then the picture the link names", async () => {
+        mockFetch.mockResolvedValue({
+          ok: true,
+          headers: new Headers({ "content-type": "image/png" }),
+          arrayBuffer: async () => png.buffer,
+        });
+        const r = await call({ metrics: ["visitors"], days: 7 });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.type).toBe("text");
+        expect(r.content[0]!.text).toContain("Visitors (our own count), 7 days to");
+        expect(r.content[0]!.text).toContain("Over the 7 days: 1,400, 200 a day.");
+        const link = /Picture: (\S+)/.exec(r.content[0]!.text!)?.[1];
+        expect(link).toMatch(
+          /^https:\/\/loveiq\.example\/api\/admin\/digest-image\/metric-trend\?d=/
+        );
+        expect(mockFetch).toHaveBeenCalledWith(link, { timeoutMs: 8_000 });
+        expect(r.content[1]).toEqual({
+          type: "image",
+          mimeType: "image/png",
+          data: Buffer.from(png).toString("base64"),
+        });
+      });
+
+      it("still answers with the numbers and the link when the picture cannot be drawn", async () => {
+        mockFetch.mockResolvedValue({ ok: false, status: 500, headers: new Headers() });
+        const r = await call({ metrics: ["revenue"] });
+        expect(r.isError).toBeFalsy();
+        expect(r.content).toHaveLength(1);
+        expect(r.content[0]!.text).toContain("Revenue in EUR, net of refunds, 30 days to");
+        expect(r.content[0]!.text).toContain(
+          "The picture could not be attached just now; the link above draws it."
+        );
+      });
+
+      it("refuses two numbers of different kinds as an error the caller can fix", async () => {
+        const r = await call({ metrics: ["visitors", "paid_rate"] });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/cannot share one axis/);
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it("calls an unreadable rollup an outage, not a flat line", async () => {
+        mockRollup.mockRejectedValue(new Error("down"));
+        const r = await call({ metrics: ["visitors"] });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a flat line/);
+      });
+    });
+
+    describe("break_even", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 14,
+                method: "tools/call",
+                params: { name: "break_even", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const day = (i: number) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+
+      beforeEach(() => {
+        // 1,000 visitors and 50 finishers a day, one EUR 25 purchase two days ago, EUR 50 a day spent.
+        mockRollup.mockResolvedValue(
+          Array.from({ length: 200 }, (_, i) => ({
+            day: day(i),
+            unique_visitors: 1000,
+            submissions: 50,
+            reports_paid: i === 2 ? 1 : 0,
+            revenue: i === 2 ? "25.00" : 0,
+          }))
+        );
+        mockAdCost = {
+          byDay: new Map(Array.from({ length: 40 }, (_, i) => [day(i), 50] as [string, number])),
+          from: day(39),
+          to: day(1),
+        };
+      });
+      afterEach(() => {
+        mockRollup.mockReset();
+        mockAdCost = { byDay: new Map(), from: null, to: null };
+      });
+
+      it("answers from the live numbers, over the days the ad data covers", async () => {
+        const r = await call({ days: 7 });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("every day covered by the ad data");
+        expect(r.content[0]!.text).toContain("- Spent EUR 350.00 on Google Ads, EUR 50.00 a day.");
+        expect(r.content[0]!.text).toContain("- 7,000 visitors (each person once a day)");
+        expect(r.content[0]!.text).toContain("- 1 paid: 0.29% of finishers.");
+        expect(r.content[0]!.text).toContain("Read with care: 1 purchase is too few to trust");
+      });
+
+      it("takes a what-if as a percentage", async () => {
+        const r = await call({ days: 7, finish_to_paid: 10 });
+        expect(r.content[0]!.text).toContain(
+          "What if 10.0% of finishers pay, with the rest as now:"
+        );
+      });
+
+      it("refuses a share above 100 as an error the caller can fix", async () => {
+        const r = await call({ finish_to_paid: 150 });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/percentage from 0 to 100/);
+      });
+
+      it("calls an unreadable rollup an outage, not a result", async () => {
+        mockRollup.mockRejectedValue(new Error("down"));
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a result/);
+      });
+    });
+
+    describe("check_answer", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 16,
+                method: "tools/call",
+                params: { name: "check_answer", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const doc = {
+        source_id: "monthly:2026-09",
+        title: "LoveIQ numbers — September 2026",
+        body: "13245 visitors, 434 finished the survey.",
+      };
+      beforeEach(() => {
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.analytics") && path.includes("monthly%3A2026-09") ? [doc] : [],
+        }));
+      });
+      afterEach(() => mockSupabaseFetch.mockReset());
+
+      it("reads each cited document and checks the draft's figures against it", async () => {
+        const r = await call({
+          answer: "September had 13,245 visitors and 440 finished the survey.",
+          sources: ["analytics/monthly:2026-09"],
+        });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("Checked 2 figures and 0 quotes against 1 source.");
+        expect(r.content[0]!.text).toMatch(
+          /440 \(nearest there: 434\) is not in analytics\/monthly:2026-09/
+        );
+      });
+
+      it("checks a book against the part cited, without the head every part opens with", async () => {
+        // Joined whole, a book's 300-odd parts held nearly every integer, so a made-up
+        // "73%" was "found" in "Part 73 of 328".
+        const book = BOOKS.find((b) => b.title === "Mating in Captivity")!;
+        const id = `book:${book.id}#73`;
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.book") &&
+            path.includes(`source_id=eq.${encodeURIComponent(id)}`)
+              ? [{ body: `${partHead(book, 73, 328)}\nDesire needs space between self and other.` }]
+              : [],
+        }));
+        const r = await call({
+          answer:
+            `Perel reports that 73% of couples lose desire after a first child (book/${id}). ` +
+            `She writes "desire needs space between self and other" (book/${id}).`,
+          sources: [`book/${id}`],
+        });
+        expect(r.content[0]!.text).toContain(`73% is not in book/${id}`);
+        expect(r.content[0]!.text).toContain(
+          `"desire needs space between self and other" in book/${id}`
+        );
+        // Its digits are an id, not two more figures.
+        expect(r.content[0]!.text).toContain("Checked 1 figure and 1 quote");
+      });
+
+      it("checks a paper against the part cited, without the head every part opens with", async () => {
+        // The head carries the year and "Part 7 of 19": left in, a made-up "19%" would be found.
+        const paper = {
+          pmcid: "PMC8255964",
+          title: "Intimacy and Sexual Desire",
+          firstAuthor: "van Lankveld JJDM",
+          authorCount: 4,
+          journal: null,
+          year: "2021",
+          doi: null,
+          license: "cc by" as const,
+        };
+        const id = "paper:PMC8255964#7";
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.paper") &&
+            path.includes(`source_id=eq.${encodeURIComponent(id)}`)
+              ? [
+                  {
+                    body: `${paperPartHead(paper, 7, 19)}\nIntimacy predicted desire in 312 couples.`,
+                  },
+                ]
+              : [],
+        }));
+        const r = await call({
+          answer: `In 312 couples, 19% lost desire (paper/${id}).`,
+          sources: [`paper/${id}`],
+        });
+        expect(r.content[0]!.text).toContain("Checked 2 figures");
+        // 312 is in the paper's text; 19 is only in the head ("Part 7 of 19"), which is ours.
+        expect(r.content[0]!.text).toContain(`19% is not in paper/${id}`);
+        expect(r.content[0]!.text).not.toMatch(/: 312 (?:\(nearest|is not in)/);
+      });
+
+      it("checks a long document's part alone, not the document it belongs to", async () => {
+        // Round-9 audit: joined whole, 3 of the 9 largest Drive documents "confirmed" all
+        // 90 made-up percentages from 10% to 99%.
+        const id = "doc:1AbC#12";
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.drive") &&
+            path.includes(`source_id=eq.${encodeURIComponent(id)}`)
+              ? [
+                  {
+                    title: "Drive: Growth plan (part 12 of 40)",
+                    body: "Only 18% of readers finished.",
+                  },
+                ]
+              : [{ title: "Drive: Growth plan", body: "73% converted across 40 teams." }],
+        }));
+        const r = await call({
+          answer:
+            `The plan says 18% finished (drive/${id}). ` +
+            `It says 73% converted, across 40 teams (drive/${id}).`,
+          sources: [`drive/${id}`],
+        });
+        expect(r.content[0]!.text).toContain(`18% in drive/${id}`);
+        // Another part's figure, and the "(part 12 of 40)" we add to titles, prove nothing.
+        expect(r.content[0]!.text).toMatch(/73%; 40 are not in drive\/doc:1AbC#12/);
+      });
+
+      it("reads every indexed source's ids as ids, here and in the Night Shift", () => {
+        // `book` reached neither list when it was indexed, so a book id's digits were
+        // figures and a Night Shift answer citing only books "cited no sources".
+        for (const src of SOURCES_FOR_TEST) {
+          expect(atomsIn(`See ${src}/x:13DIy7#46.`), src).toEqual([]);
+          expect(citesSources(`See ${src}/x:13DIy7#46.`), src).toBe(true);
+        }
+      });
+
+      it("says which ids it could not find, and refuses when it can find none", async () => {
+        const some = await call({
+          answer: "September had 13,245 visitors.",
+          sources: ["analytics/monthly:2026-09", "gmail/thread:nope"],
+        });
+        expect(some.content[0]!.text).toContain("Not indexed, so left out: gmail/thread:nope.");
+        const none = await call({
+          answer: "It had 13,245 visitors.",
+          sources: ["gmail/thread:nope"],
+        });
+        expect(none.isError).toBe(true);
+        expect(none.content[0]!.text).toMatch(/None of those ids is indexed/);
+      });
+
+      it("refuses a missing draft or source list, and calls an unreadable corpus an outage", async () => {
+        expect((await call({ answer: "", sources: ["analytics/x"] })).isError).toBe(true);
+        expect((await call({ answer: "Some draft.", sources: [] })).isError).toBe(true);
+        mockSupabaseFetch.mockResolvedValue({
+          ok: false,
+          status: 503,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        const down = await call({
+          answer: "It had 13,245 visitors.",
+          sources: ["analytics/monthly:2026-09"],
+        });
+        expect(down.isError).toBe(true);
+        expect(down.content[0]!.text).toMatch(/outage, not a failed check/);
+      });
+    });
+
+    describe("experiments and record_experiment", () => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 15,
+                method: "tools/call",
+                params: { name, arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      afterEach(() => {
+        mockListExperiments.mockReset();
+        mockRecordExperiment.mockReset();
+      });
+
+      it("lists the registry, and calls an unreadable one an outage, not an empty registry", async () => {
+        mockListExperiments.mockResolvedValue("RUNNING NOW\n- None.");
+        expect((await call("experiments", {})).content[0]!.text).toBe("RUNNING NOW\n- None.");
+        mockListExperiments.mockRejectedValue(new Error("admin_experiment: 500"));
+        const r = await call("experiments", {});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not an empty registry/);
+      });
+
+      it("passes the caller's fields through, and reports a refusal or a failure as an error", async () => {
+        mockRecordExperiment.mockResolvedValue({
+          ok: true,
+          id: 7,
+          text: "Registered experiment #7.",
+        });
+        const args = { name: "x", hypothesis: "y", metric: "z", recorded_by: "Eman Cickusic" };
+        expect((await call("record_experiment", args)).content[0]!.text).toBe(
+          "Registered experiment #7."
+        );
+        expect(mockRecordExperiment).toHaveBeenCalledWith(args);
+        mockRecordExperiment.mockResolvedValue({ ok: false, message: "`hypothesis` is required" });
+        const refused = await call("record_experiment", {
+          name: "x",
+          recorded_by: "Eman Cickusic",
+        });
+        expect(refused.isError).toBe(true);
+        expect(refused.content[0]!.text).toBe("`hypothesis` is required");
+        mockRecordExperiment.mockRejectedValue(new Error("admin_upsert_experiment: 500"));
+        const failed = await call("record_experiment", args);
+        expect(failed.isError).toBe(true);
+        expect(failed.content[0]!.text).toMatch(/nothing was changed/);
+      });
+    });
+
+    describe("explain_change", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 12,
+                method: "tools/call",
+                params: { name: "explain_change", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      /** Sixty days ending today, newest first as the database returns them. */
+      const rollup = (spike: string | null) =>
+        Array.from({ length: 60 }, (_, i) => {
+          const day = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+          return {
+            day,
+            unique_visitors: day === spike ? 900 : 200,
+            survey_starts: 28,
+            submissions: 10,
+            report_opens: 12,
+            reports_paid: 0,
+            top_sources: { direct: day === spike ? 860 : 160, google: 40 },
+          };
+        });
+      const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+      beforeEach(() => {
+        mockSupabaseFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => [] });
+      });
+      afterEach(() => {
+        mockSupabaseFetch.mockReset();
+        mockFetch.mockReset();
+        mockRollup.mockReset();
+      });
+
+      it("finds yesterday's jump by default and says where it came from, and that it is not proof", async () => {
+        mockRollup.mockResolvedValue(rollup(yesterday));
+        const r = await call({});
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(new RegExp(`^\\d+ unusual on ${yesterday}\\.`));
+        expect(r.content[0]!.text).toContain("Visitors (our own count): 900 against a usual 200");
+        expect(r.content[0]!.text).toContain(
+          'Most of it is traffic source "direct": +700 of the +700.'
+        );
+        expect(r.content[0]!.text).toMatch(/None of this proves a cause/);
+      });
+
+      it("says a quiet day was quiet, with where each metric sat", async () => {
+        mockRollup.mockResolvedValue(rollup(null));
+        const text = (await call({ day: yesterday })).content[0]!.text;
+        expect(text).toMatch(/^Nothing on .* was outside its usual range/);
+        expect(text).toContain("- Visitors (our own count): 200 against a usual 200");
+      });
+
+      it("explains one metric on request, saying whether it was unusual", async () => {
+        mockRollup.mockResolvedValue(rollup(null));
+        const text = (await call({ day: yesterday, metric: "visitors" })).content[0]!.text;
+        expect(text).toMatch(/^Within its usual range on /);
+      });
+
+      it("refuses a day that is not one, a day to come, and a metric that does not exist", async () => {
+        expect((await call({ day: "2026-09-31" })).isError).toBe(true);
+        mockRollup.mockResolvedValue(rollup(null));
+        const future = await call({ day: "2999-01-01" });
+        expect(future.isError).toBe(true);
+        expect(future.content[0]!.text).toBe("2999-01-01 has not happened yet.");
+        const r = await call({ metric: "cvr" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("visitor_cvr");
+      });
+
+      it("reports unreadable numbers as an outage, not a quiet day", async () => {
+        mockRollup.mockRejectedValue(new Error("down"));
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a quiet day/);
+      });
+    });
+
+    describe("what_shipped", () => {
+      const commit = (pr: number, line: string, date: string) => ({
+        sha: `c${pr}0000000`,
+        commit: {
+          message: `merge: x (#${pr})\n\nFor Marcus: ${line}`,
+          committer: { date: `${date}T12:00:00Z` },
+        },
+      });
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 8,
+                method: "tools/call",
+                params: { name: "what_shipped", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      it("lists each change's plain-English line with its date and pull request", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => [
+            commit(266, "Docs now match.", "2026-09-23"),
+            commit(265, "Fewer dead ends.", "2026-09-22"),
+          ],
+          text: async () => "",
+        });
+        const r = await call({ since: "2026-09-20" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0].text).toContain("2 changes reached main between 2026-09-20 and today");
+        expect(r.content[0].text).toContain("2026-09-23 · #266 · Docs now match.");
+        expect(r.content[0].text).toMatch(/^UNTRUSTED DATA/);
+        expect(String(mockFetch.mock.calls.at(-1)![0])).toContain(
+          "sha=main&per_page=100&page=1&since=2026-09-20T00:00:00Z"
+        );
+      });
+
+      it("says to ask a week at a time when a long period runs past the ceiling, not to page", async () => {
+        const long = "A change described at the length a real one runs to, ".repeat(10);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () =>
+            Array.from({ length: 100 }, (_, i) => commit(1000 - i, `${long}${i}`, "2026-08-20")),
+          text: async () => "",
+        });
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => [],
+          text: async () => "",
+        });
+        const text = (await call({ since: "2026-08-01", until: "2026-08-31" })).content[0].text;
+        expect(text).toContain("[TRUNCATED");
+        expect(text).toContain("a week at a time");
+        expect(text).not.toContain("page with offset");
+      });
+
+      it("says the list could not be read when GitHub fails, rather than that nothing shipped", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          text: async () => "rate limit",
+          json: async () => ({}),
+        });
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toMatch(
+          /GitHub answered 403.*not the same as nothing having shipped/
+        );
+      });
+
+      it("refuses a date that is not a day, before asking GitHub", async () => {
+        const before = mockFetch.mock.calls.length;
+        const r = await call({ since: "last friday" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toMatch(/must be a day like/);
+        expect(mockFetch.mock.calls.length).toBe(before);
+      });
+    });
+
+    it("lists exactly the twenty-one tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -163,6 +1627,10 @@ describe("/api/mcp", () => {
         "write_to_notion",
         "send_email",
         "write_to_google_doc",
+        "queue_research",
+        "file_call_notes",
+        "settle_decision_conflict",
+        "record_experiment",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -172,9 +1640,42 @@ describe("/api/mcp", () => {
         "related_context",
         "show_design",
         "show_page",
+        "what_shipped",
+        "explain_change",
+        "show_chart",
+        "break_even",
+        "user_totals",
+        "cost_watch",
+        "ux_signals",
+        "check_answer",
+        "experiments",
+        "comment_asks",
+        "decision_conflicts",
+        "brain_health",
+        "whats_new",
+        "check_copy",
+        "get_context_pack",
+        "meeting_promises",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
+    });
+
+    /**
+     * THE NIGHT SHIFT'S AGENT SEES ONLY WHAT READS. Its allow-list and deny-list are written
+     * out by hand in night-shift.ts, so a new tool must land on one of them: every writing
+     * tool denied by name, and every tool it may use one that exists and changes nothing.
+     */
+    it("keeps the Night Shift's researcher to read-only tools, with every writing tool denied", async () => {
+      const { RESEARCH_TOOLS, WRITE_TOOLS } = await import("@features/brain/server/night-shift");
+      // It checks its own draft before replying, so the checker must be on its list.
+      expect(RESEARCH_TOOLS).toContain("check_answer");
+      const byName = new Map(TOOLS.map((t) => [t.name, t]));
+      for (const t of RESEARCH_TOOLS) {
+        expect(byName.get(t)?.annotations?.readOnlyHint, t).toBe(true);
+      }
+      const writes = TOOLS.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
+      expect([...WRITE_TOOLS].sort()).toEqual([...writes].sort());
     });
 
     it("declares exactly the writing tools it means to, and annotates them honestly", async () => {
@@ -201,6 +1702,10 @@ describe("/api/mcp", () => {
         "write_to_notion",
         "send_email",
         "write_to_google_doc",
+        "queue_research",
+        "file_call_notes",
+        "settle_decision_conflict",
+        "record_experiment",
       ]);
       /**
        * EXACTLY ONE TOOL IS DESTRUCTIVE, and it is the one whose effect nobody can undo.
@@ -245,11 +1750,15 @@ describe("/api/mcp", () => {
           .map((t) => t.name)
           .sort()
       ).toEqual([
+        "comment_asks",
+        "explain_change",
+        "file_call_notes",
         "post_to_slack",
         "query_external_service",
         "send_email",
         "show_design",
         "show_page",
+        "what_shipped",
         "write_to_google_doc",
         "write_to_notion",
       ]);
@@ -393,6 +1902,96 @@ describe("/api/mcp", () => {
         })
       );
 
+    /**
+     * A QUESTION WITH NO TOPIC IS A BROWSE. Measured 2026-09-16: "what did we decide
+     * recently" put three decisions in twelve hits and filled the rest with a runbook, a
+     * marketing email and a June Slack day, because the word did all the matching and
+     * "recently" was honoured by nothing. The unit test covers the detector; these cover
+     * the WIRING, which is the half that was missing from the route.
+     */
+    describe("the decision browse", () => {
+      const decisionRows = [
+        { source_id: "d1", title: "Decision: Ship the thing", period_end: "2026-09-15", meta: {} },
+        {
+          source_id: "d2",
+          title: "Decision: Do not ship the other",
+          period_end: "2026-09-14",
+          meta: {},
+        },
+      ];
+      const withDecisions = () =>
+        mockSupabaseFetch.mockImplementation(async (url: string) => ({
+          ok: true,
+          headers: new Headers(),
+          json: async () => (String(url).includes("source=eq.decision") ? decisionRows : []),
+        }));
+
+      it("prepends the recent decisions when the question names no topic", async () => {
+        withDecisions();
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide recently" })).json()).result.content[0]
+            .text
+        );
+        expect(text).toContain("MOST RECENT DECISIONS");
+        expect(text).toContain("Ship the thing");
+        // Dated and ordered, because "recently" is the part ranking could not honour.
+        expect(text).toContain("2026-09-15");
+        // And it must not pass itself off as complete.
+        expect(text).toContain("settled in a thread and never recorded");
+      });
+
+      it("lists only decisions made by `until`, and says the list stops there", async () => {
+        withDecisions();
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide", until: "2026-09-14" })).json()).result
+            .content[0].text
+        );
+        expect(text).toContain("MOST RECENT DECISIONS UP TO 2026-09-14");
+        const listed = mockSupabaseFetch.mock.calls
+          .map(([u]) => String(u))
+          .find((u) => u.includes("source=eq.decision") && u.includes("order=period_end.desc"));
+        expect(listed).toContain("&period_end=lte.2026-09-14");
+      });
+
+      it("leaves a question with a topic to the ranked search", async () => {
+        withDecisions();
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide about pricing" })).json()).result
+            .content[0].text
+        );
+        expect(text).not.toContain("MOST RECENT DECISIONS");
+      });
+
+      it("still answers when there are no decisions on record", async () => {
+        mockSupabaseFetch.mockResolvedValue({
+          ok: true,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide recently" })).json()).result.content[0]
+            .text
+        );
+        // No empty heading over an empty list, and the search result survives.
+        expect(text).not.toContain("MOST RECENT DECISIONS");
+        expect(text).toContain("Board: something");
+      });
+
+      it("never lets the lookup cost the answer", async () => {
+        // Same rule as the prior-decision block: an addition to a result that is already
+        // complete without it. A dead read here must not turn a good search into an error.
+        mockSupabaseFetch.mockRejectedValue(new Error("brain_chunk is down"));
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const body = await (await call({ query: "what did we decide recently" })).json();
+        expect(body.result.isError).toBe(false);
+        expect(String(body.result.content[0].text)).toContain("Board: something");
+      });
+    });
+
     it("renders cited chunks", async () => {
       mockRetrieve.mockResolvedValue([
         {
@@ -435,6 +2034,84 @@ describe("/api/mcp", () => {
       contentScore: (over.score as number | undefined) ?? 3.4,
       periodEnd: "2026-09-01",
       ...over,
+    });
+
+    /**
+     * THE WIRING, not the helper: a notice nothing calls is decoration, and a mutation
+     * removing the call left every helper test green.
+     */
+    it("names a held-back row that outranks the page, in the tool's own output", async () => {
+      mockSupabaseFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: async () => [],
+      });
+      mockRetrieve.mockImplementation(
+        async (_q: unknown, _limit: unknown, _opts: unknown, shaping: Record<string, unknown>) => {
+          shaping.heldBack = new Map([["drive", 1]]);
+          shaping.heldBackBest = new Map([["drive", { sourceId: "doc:113TF", score: 2.52 }]]);
+          return [
+            chunk({ score: 2.66, source: "drive", sourceId: "doc:strategy" }),
+            chunk({ score: 1.73, sourceId: "task:weak" }),
+          ];
+        }
+      );
+      const text = String(
+        (await (await call({ query: "what is the record label strategy for therapists" })).json())
+          .result.content[0].text
+      );
+      expect(text).toContain("HELD BACK BY THE PER-SOURCE CAP");
+      expect(text).toContain("drive/doc:113TF @2.52 — outranks 1 of the 2 shown");
+    });
+
+    it("carries a ranked-in decision's warnings into the decision block", async () => {
+      mockRetrieve.mockResolvedValue([
+        chunk(),
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-05-15-jira",
+          title: "Decision: Require Jira tickets",
+          score: 3.38,
+          periodEnd: "2026-05-15",
+          meta: {
+            superseded_by: "decision:2026-09-20-notion",
+            disputed_by: [
+              { id: "decision:2026-09-03-b", on: "2026-09-03", kind: "unclear", why: "Two tools." },
+            ],
+          },
+        }),
+      ]);
+      const text = (await (await call({ query: "should we switch to Jira tickets" })).json()).result
+        .content[0].text;
+      const block = text.slice(0, text.indexOf("HOW TO READ THESE"));
+      expect(block).toContain("SUPERSEDED by decision/decision:2026-09-20-notion");
+      expect(block).toContain(
+        "MAY CONFLICT with decision/decision:2026-09-03-b (2026-09-03): Two tools."
+      );
+    });
+
+    it("describes decisions as they stood on `until`, and looks up only decisions made by then", async () => {
+      mockSupabaseFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: async () => [],
+      });
+      mockRetrieve.mockResolvedValue([
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-05-18-sub",
+          title: "Decision: Sell a subscription",
+          score: 3.38,
+          periodEnd: "2026-05-18",
+          meta: { superseded_by: "decision:2026-09-26-drop", superseded_on: "2026-09-26" },
+        }),
+      ]);
+      const text = (
+        await (await call({ query: "should we sell a subscription", until: "2026-08-01" })).json()
+      ).result.content[0].text as string;
+      expect(text).toContain("STOOD ON 2026-08-01: replaced later, on 2026-09-26");
+      expect(text).toContain("STOOD ON 2026-08-01: this decision was replaced later");
+      expect(text).not.toContain("SUPERSEDED");
     });
 
     it("lifts a decision out of the results when it ranks with them", async () => {
@@ -544,7 +2221,8 @@ describe("/api/mcp", () => {
         until: "2026-09-01",
         meta: { status: "WIP" },
       });
-      expect(mockRetrieve).toHaveBeenLastCalledWith(
+      // Any call, not the last: a narrowed search that finds little also looks outside it.
+      expect(mockRetrieve).toHaveBeenCalledWith(
         "which tasks are in progress",
         12,
         {
@@ -583,7 +2261,8 @@ describe("/api/mcp", () => {
 
       // A well-formed request still passes through untouched, scalars coerced.
       await call({ query: "anything", sources: ["notion"], meta: { status: "WIP", count: 3 } });
-      expect(mockRetrieve).toHaveBeenLastCalledWith(
+      // Any call, not the last: a narrowed search that finds little also looks outside it.
+      expect(mockRetrieve).toHaveBeenCalledWith(
         "anything",
         12,
         {
@@ -788,6 +2467,103 @@ describe("/api/mcp", () => {
     });
 
     /**
+     * A WEAK MATCH INSIDE A FILTER IS OFTEN A STRONG ONE OUTSIDE IT (measured 2026-09-26:
+     * 25 of the week's 42 weak searches were narrowed, and the same question unfiltered
+     * cleared the floor). The narrowed search is the retrieve() call with a filter; the
+     * look outside is the call with none.
+     */
+    describe("looking outside a narrow filter", () => {
+      const narrowedCall = (opts: unknown) =>
+        Boolean((opts as { sources?: unknown } | undefined)?.sources);
+      const weakInside = [
+        chunk({ sourceId: "day:2026-09-20", source: "slack", score: 2.1, contentScore: 1.6 }),
+      ];
+      const strongOutside = [
+        chunk({ sourceId: "task:better", source: "notion", score: 3.7, contentScore: 3.65 }),
+        chunk({ sourceId: "day:2026-09-20", source: "slack", score: 2.1, contentScore: 1.6 }),
+        chunk({
+          sourceId: "doc:also",
+          source: "drive",
+          score: 2.9,
+          contentScore: 2.4,
+          periodEnd: null,
+        }),
+        chunk({ sourceId: "doc:weak", source: "drive", score: 2.0, contentScore: 1.7 }),
+      ];
+      const textOf = async (args: Record<string, unknown>) =>
+        (await (await call(args)).json()).result.content[0].text as string;
+
+      it("names the better matches by id when a narrowed search is weak, with no decimals", async () => {
+        mockRetrieve.mockImplementation(async (_q: string, _l: number, opts: unknown) =>
+          narrowedCall(opts) ? weakInside : strongOutside
+        );
+        const text = await textOf({ query: "entity model ontology", sources: ["slack"] });
+        expect(text).toMatch(/WEAK MATCH/);
+        expect(text).toContain("OUTSIDE YOUR FILTER (sources=slack)");
+        expect(text).toContain("  • notion/task:better (2026-09-01)");
+        expect(text).toContain("  • drive/doc:also\n");
+        // Under the floor, like everything already on the page: not offered.
+        expect(text).not.toContain("  • slack/day:2026-09-20");
+        expect(text).not.toContain("  • drive/doc:weak");
+        const outside = text.slice(text.indexOf("OUTSIDE YOUR FILTER")).split("\n\n")[0]!;
+        expect(outside).not.toMatch(/\d\.\d/);
+        // The look outside is one unfiltered call.
+        expect(mockRetrieve).toHaveBeenLastCalledWith("entity model ontology", 3, {});
+      });
+
+      it("does not look outside a search that was not narrowed, or one that matched well", async () => {
+        mockRetrieve.mockReset();
+        mockRetrieve.mockResolvedValue(weakInside);
+        expect(await textOf({ query: "entity model ontology" })).not.toContain(
+          "OUTSIDE YOUR FILTER"
+        );
+        expect(mockRetrieve).toHaveBeenCalledTimes(1);
+        mockRetrieve.mockReset();
+        mockRetrieve.mockResolvedValue(strongOutside);
+        expect(await textOf({ query: "entity model", sources: ["notion"] })).not.toContain(
+          "OUTSIDE YOUR FILTER"
+        );
+        expect(mockRetrieve).toHaveBeenCalledTimes(1);
+      });
+
+      it("names the better matches when a narrowed search found nothing at all", async () => {
+        mockRetrieve.mockImplementation(async (_q: string, _l: number, opts: unknown) =>
+          narrowedCall(opts) ? [] : strongOutside
+        );
+        const text = await textOf({
+          query: "fantasy vs reality",
+          sources: ["slack"],
+          since: "2026-09-10",
+        });
+        expect(text).toContain("WITH THE FILTERS YOU SET (sources=slack, since=2026-09-10)");
+        expect(text).toContain("OUTSIDE YOUR FILTER (sources=slack, since=2026-09-10)");
+        expect(text).toContain("  • notion/task:better");
+      });
+
+      it("costs nothing when the look outside fails", async () => {
+        mockRetrieve.mockImplementation(async (_q: string, _l: number, opts: unknown) => {
+          if (narrowedCall(opts)) return weakInside;
+          throw new Error("corpus unreachable");
+        });
+        const text = await textOf({ query: "entity model ontology", sources: ["slack"] });
+        expect(text).toMatch(/WEAK MATCH/);
+        expect(text).not.toContain("OUTSIDE YOUR FILTER");
+        expect(text).toContain("Board: something");
+      });
+    });
+
+    it("refuses a filter on disputed_by and points to decision_conflicts, never an empty result", async () => {
+      mockRetrieve.mockClear();
+      const r = (
+        await (await call({ query: "pricing", meta: { disputed_by: "decision:x" } })).json()
+      ).result;
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("`meta.disputed_by` cannot be filtered on");
+      expect(r.content[0].text).toContain("decision_conflicts");
+      expect(mockRetrieve).not.toHaveBeenCalled();
+    });
+
+    /**
      * THE MOST ASSERTIVE SENTENCE THE TOOL EMITS MUST NOT FIRE ON A WEAK MATCH.
      *
      * `decision` is 4 rows of 22,667 — 0.02% of the corpus — and took rank 1 on 10.9%
@@ -907,6 +2683,152 @@ describe("/api/mcp", () => {
           params: { name: "fetch_document", arguments: args },
         })
       ).then((r) => r.json().then((b) => b.result));
+
+    /**
+     * MEASURED on real calls only (`surface = 'mcp'`; the battery's 7,628 probes
+     * otherwise drown the table): 27 of fetch_document's 92 calls in the 14 days to
+     * 2026-09-18 died on `document_id`. It is a second NAME for `id`, not a second
+     * meaning, which is the only kind of alias that may exist here.
+     */
+    it("accepts document_id as the name it is: a second word for id", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: true,
+          headers: new Headers(),
+          json: async () => [
+            { source: "drive", source_id: "doc:1AbC", title: "T", url: null, body: "hello" },
+          ],
+        };
+      });
+      const r = await call({ document_id: "drive/doc:1AbC" });
+      expect(r.isError).toBeFalsy();
+      expect(JSON.stringify(r)).toContain("hello");
+    });
+
+    /**
+     * A PART OLDER THAN ITS OWN FIRST PART IS LEFT OVER. A document that shrinks on
+     * rewrite keeps its old extra parts until the daily sweep, and reassembling them
+     * spliced stale text onto the current version: on 2026-09-23 a gmail thread whose
+     * current form is one part read back as "parts 1-1 of 32".
+     */
+    it("leaves out parts written before the document's current first part", async () => {
+      const at = (iso: string) => ({ updated_at: iso });
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": "0-2/3" }),
+          json: async () => [
+            {
+              source: "gmail",
+              source_id: "thread:ab",
+              title: "T",
+              url: null,
+              body: "NEW ONE",
+              meta: {},
+              ...at("2026-09-23T20:11:30Z"),
+            },
+            {
+              source: "gmail",
+              source_id: "thread:ab#2",
+              title: "T (part 2 of 2)",
+              url: null,
+              body: "NEW TWO",
+              meta: { part: 2 },
+              ...at("2026-09-23T20:11:31Z"),
+            },
+            {
+              source: "gmail",
+              source_id: "thread:ab#3",
+              title: "T (part 3 of 9)",
+              url: null,
+              body: "STALE THREE",
+              meta: { part: 3 },
+              ...at("2026-09-20T03:00:00Z"),
+            },
+          ],
+        };
+      });
+      const r = await call({ id: "gmail/thread:ab" });
+      const text = JSON.stringify(r);
+      expect(text).toContain("NEW ONE");
+      expect(text).toContain("NEW TWO");
+      expect(text).not.toContain("STALE THREE");
+      expect(text).toContain("of 2");
+    });
+
+    it("keeps every part of a document written in one go, however old", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": "0-1/2" }),
+          json: async () => [
+            {
+              source: "drive",
+              source_id: "doc:x",
+              title: "D",
+              url: null,
+              body: "PART ONE",
+              meta: {},
+              updated_at: "2026-06-01T10:00:00Z",
+            },
+            {
+              source: "drive",
+              source_id: "doc:x#2",
+              title: "D (part 2 of 2)",
+              url: null,
+              body: "PART TWO",
+              meta: { part: 2 },
+              updated_at: "2026-06-01T10:00:02Z",
+            },
+          ],
+        };
+      });
+      const text = JSON.stringify(await call({ id: "drive/doc:x" }));
+      expect(text).toContain("PART ONE");
+      expect(text).toContain("PART TWO");
+    });
+
+    it("still refuses an argument that is a different MEANING, not a different name", async () => {
+      // The control. If this ever passes, the alias has become a hole: a filter
+      // accepted and dropped returns a wider answer that reads like a narrow one.
+      const r = await call({ id: "drive/doc:1AbC", sql: "select 1" });
+      expect(r.isError).toBe(true);
+      expect(JSON.stringify(r)).toContain("no argument named");
+    });
+
+    it("does not leak the alias to other tools", async () => {
+      // The map is keyed by tool ON PURPOSE. `search_company_context` has no `id` at
+      // all, so `document_id` there is a caller confusing two tools, not naming an
+      // argument — and must die exactly as it did before.
+      const r = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 41,
+          method: "tools/call",
+          params: {
+            name: "search_company_context",
+            arguments: { query: "pricing", document_id: "drive/doc:1AbC" },
+          },
+        })
+      ).then((x) => x.json().then((b) => b.result));
+      expect(r.isError).toBe(true);
+      expect(JSON.stringify(r)).toContain("document_id");
+    });
+
+    it("refuses when document_id and id disagree, rather than picking one", async () => {
+      const r = await call({ id: "drive/doc:1AbC", document_id: "drive/doc:9ZZZ" });
+      expect(r.isError).toBe(true);
+      expect(JSON.stringify(r)).toContain("document_id");
+    });
 
     /** Rows a `source_id=like.<base>*` read would return, in the order Postgres gives. */
     function wireParts(rows: Array<Record<string, unknown>>) {
@@ -1066,8 +2988,50 @@ describe("/api/mcp", () => {
       wirePartsWithTotal([part(1, "ONE"), part(2, "TWO")], 900);
       const r = await call({ id: "drive/doc:1AbC" });
       const text = r.content[0].text as string;
-      expect(text).toMatch(/this document has 900 parts and only the first 2 were read/);
-      expect(text).toMatch(/the tail is NOT included/);
+      expect(text).toMatch(/this document has 900 parts and only 2 were read/);
+      expect(text).toMatch(/some parts are NOT included/);
+    });
+
+    it("reads a long document whole and in order, across pages kept in text order", async () => {
+      // The table pages by source_id, which is TEXT order ("#100" before "#2"). A single
+      // read of 400 lost parts 5-9, 46-99 and more from the middle of a 540-part book, and
+      // at 1,200 parts even one page of 1,000 misses every id that starts with 8 or 9.
+      const ids = Array.from({ length: 1200 }, (_, i) => i + 1);
+      const rowOf = (n: number) => ({
+        source: "book",
+        source_id: n === 1 ? "book:B" : `book:B#${n}`,
+        title: `Book: T${n === 1 ? "" : ` (part ${n} of 1200)`}`,
+        url: null,
+        body: `P${n}.`,
+        meta: { kind: "book", part: n },
+        period_end: null,
+      });
+      const inTextOrder = ids.map(rowOf).sort((a, b) => a.source_id.localeCompare(b.source_id));
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        const u = new URL(`http://x${path}`);
+        const offset = Number(u.searchParams.get("offset") ?? 0);
+        const limit = Number(u.searchParams.get("limit") ?? 400);
+        const page = inTextOrder.slice(offset, offset + limit);
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": `${offset}-${offset + page.length - 1}/1200` }),
+          json: async () => page,
+        };
+      });
+      const early = (await call({ id: "book/book:B", from_part: 5, max_chars: 38_000 })).content[0]
+        .text as string;
+      expect(early).toMatch(/parts 5-\d+ of 1200/);
+      expect(early.indexOf("P5.")).toBeLessThan(early.indexOf("P6."));
+      expect(early).toContain("P46.");
+      expect(early).not.toMatch(/NOT included/);
+      // Past the first page of 1,000, in text order.
+      const late = (await call({ id: "book/book:B", from_part: 950, max_chars: 38_000 })).content[0]
+        .text as string;
+      expect(late).toMatch(/parts 950-\d+ of 1200/);
+      expect(late.indexOf("P950.")).toBeLessThan(late.indexOf("P951."));
     });
 
     it("stays quiet when everything matched was returned", async () => {
@@ -1196,6 +3160,29 @@ describe("/api/mcp", () => {
         };
       });
     }
+
+    it("says books are opt-in when a book filter comes back empty", async () => {
+      // Round-8 audit: meta {kind:"book"} without sources matched nothing and was told to
+      // "widen it", which cannot help: books are searched only when named.
+      wire([]);
+      const r = await call({ meta: { kind: "book" } });
+      expect(r.content[0].text).toContain('Books are left out unless `sources` names "book".');
+      wire([]);
+      const other = await call({ meta: { kind: "meeting-notes" } });
+      expect(other.content[0].text).not.toContain("Books are left out");
+    });
+
+    it("says papers are opt-in when a paper filter comes back empty", async () => {
+      wire([]);
+      const r = await call({ meta: { kind: "paper" } });
+      expect(r.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+      wire([]);
+      const byId = await call({ meta: { pmcid: "PMC8255964" } });
+      expect(byId.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+      wire([]);
+      const named = await call({ sources: ["paper"], meta: { kind: "paper" } });
+      expect(named.content[0].text).not.toContain("Papers are left out");
+    });
 
     it("gives a plain total when nothing is grouped", async () => {
       wire([{ bucket: "(all)", n: 91, total: 91 }]);
@@ -1453,6 +3440,46 @@ describe("/api/mcp", () => {
      * 2026-09-09: `newest` and a nonsense value were byte-identical, and neither matched
      * `recently_learned`.
      */
+    it("says books are opt-in when a book filter lists nothing", async () => {
+      wire([], 0);
+      const r = await call({ meta: { kind: "book" } });
+      expect(r.content[0].text).toContain('Books are left out unless `sources` names "book".');
+    });
+
+    it("says papers are opt-in when a paper filter lists nothing", async () => {
+      wire([], 0);
+      const r = await call({ meta: { kind: "paper" } });
+      expect(r.content[0].text).toContain('Papers are left out unless `sources` names "paper".');
+    });
+
+    it("marks a replaced decision on its line, and as it stood on `until`", async () => {
+      wire(
+        [
+          {
+            source: "decision",
+            source_id: "decision:2026-05-18-sub",
+            title: "Decision: Sell a subscription",
+            period_end: "2026-05-18",
+            superseded_by: "decision:2026-09-26-drop",
+            superseded_on: "2026-09-26",
+          },
+        ],
+        1
+      );
+      const now = (await call({ sources: ["decision"] })).content[0].text as string;
+      expect(now).toContain(
+        "Decision: Sell a subscription  (SUPERSEDED by decision/decision:2026-09-26-drop)"
+      );
+      const then = (await call({ sources: ["decision"], until: "2026-08-01" })).content[0]
+        .text as string;
+      expect(then).toContain(
+        "(stood on 2026-08-01; replaced later, on 2026-09-26, by decision/decision:2026-09-26-drop)"
+      );
+      expect(decodeURIComponent(String(toolCalls().at(-1)?.[0]))).toContain(
+        "superseded_by:meta->>superseded_by,superseded_on:meta->>superseded_on"
+      );
+    });
+
     it("refuses an order it does not recognise instead of quietly using newest", async () => {
       wire([{ source: "notion", source_id: "task:a", title: "A", period_end: "2027-01-07" }], 1);
       for (const bad of ["recentlylearned", "alphabetical", "newest ", 5]) {
@@ -1600,6 +3627,69 @@ describe("/api/mcp", () => {
       expect(url).toContain("period_end=gte.2026-08-01");
       expect(url).toContain("period_end=lte.2026-08-31");
       expect(url).toContain('meta=cs.{"status":"WIP"}');
+    });
+
+    it("lists books only when they are named, like search_company_context", async () => {
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.book");
+      wire([row(1)], 1);
+      await call({ sources: ["book"] });
+      expect(urlOf()).not.toContain("neq.book");
+    });
+
+    it("lists papers only when they are named, like books", async () => {
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.paper");
+      wire([row(1)], 1);
+      await call({ sources: ["paper"] });
+      expect(urlOf()).not.toContain("neq.paper");
+      // Naming one opt-in source does not let the other in.
+      expect(urlOf()).toContain("source=neq.book");
+    });
+
+    it("lists the corporate website only when it is named, like the papers", async () => {
+      // Its traffic rows read like LoveIQ's own, so an unnamed browse must never list them.
+      const urlOf = () =>
+        decodeURIComponent(
+          String(
+            mockSupabaseFetch.mock.calls.findLast(([p]) => String(p).includes("brain_chunk"))![0]
+          )
+        );
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(urlOf()).toContain("source=neq.corporate");
+      wire([row(1)], 1);
+      await call({ sources: ["corporate"] });
+      expect(urlOf()).not.toContain("neq.corporate");
+      expect(urlOf()).toContain("source=neq.paper");
+    });
+
+    it("says the corporate website is opt-in when a site filter comes back empty", async () => {
+      wire([]);
+      const r = await call({ meta: { site: "appliedpsychometrics.org" } });
+      expect(r.content[0].text).toContain(
+        'The corporate website is left out unless `sources` names "corporate".'
+      );
+      wire([]);
+      const named = await call({
+        sources: ["corporate"],
+        meta: { site: "appliedpsychometrics.org" },
+      });
+      expect(named.content[0].text).not.toContain("The corporate website is left out");
     });
 
     it("orders by when the brain learned it, and shows that date", async () => {
@@ -2056,6 +4146,297 @@ describe("/api/mcp", () => {
     });
   });
 
+  describe("user_totals", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 70,
+          method: "tools/call",
+          params: { name: "user_totals", arguments: args },
+        })
+      ).then((r) =>
+        r.json().then((b) => b.result as { isError: boolean; content: Array<{ text: string }> })
+      );
+
+    const submissions = (n: number, gender: string) =>
+      Array.from({ length: n }, () => ({
+        created_date_time: "2026-09-10T12:00:00Z",
+        age: [{ answer_option: { option_text: "25–34" } }],
+        app_user: {
+          email: "x@example.com",
+          user_profile: {
+            gender,
+            sexual_orientation: null,
+            relationship_status: null,
+            location_primary: "Canada",
+          },
+        },
+        scoring_result: { v5_primary_archetype: "Spark Seeker", primary_archetype: null },
+        personal_report: null,
+      }));
+
+    it("refuses what it cannot group by, more than two groupings, and a bad date, naming the valid keys", async () => {
+      for (const args of [
+        { group_by: ["email"] },
+        { filter: { name: "Ana" } },
+        { filter: "Woman" },
+        { group_by: ["gender", "age", "country"] },
+        { since: "last week" },
+      ]) {
+        const r = await call(args);
+        expect(r.isError, JSON.stringify(args)).toBe(true);
+      }
+      expect((await call({ group_by: ["email"] })).content[0]!.text).toContain(
+        "gender, age, orientation, relationship, country, archetype, month"
+      );
+      expect(toolCalls()).toHaveLength(0);
+    });
+
+    it("reads the finished submissions in the window and answers with totals only", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          String(path).startsWith("/rest/v1/survey_question")
+            ? [{ id: 41 }]
+            : String(path).startsWith("/rest/v1/survey_submission")
+              ? [
+                  ...submissions(7, "Woman"),
+                  ...submissions(6, "Man"),
+                  ...submissions(3, "Other"),
+                  ...submissions(2, "Nonbinary"),
+                ]
+              : [],
+        text: async () => "",
+      }));
+      const r = await call({ group_by: ["gender"], since: "2026-09-01", until: "2026-09-30" });
+      expect(r.isError).toBe(false);
+      expect(r.content[0]!.text).toContain("- Woman: 7 finished");
+      expect(r.content[0]!.text).toContain("- Man: 6 finished");
+      expect(r.content[0]!.text).not.toMatch(/Other:|Nonbinary/);
+      const [path] = toolCalls().find(([p]) => String(p).includes("survey_submission")) as [string];
+      expect(path).toContain("&age.survey_question_id=eq.41");
+      expect(path).toContain("status=eq.completed");
+      expect(path).toContain("created_date_time=gte.2026-09-01T00:00:00Z");
+      expect(path).toContain("created_date_time=lt.2026-10-01T00:00:00Z");
+    });
+
+    it("counts someone who finished many times as one person", async () => {
+      // 36 users have finished more than once (one tester 31 times); rows are submissions.
+      const rows = [
+        ...submissions(6, "Woman").map((r) => ({ ...r, user_id: "same-person" })),
+        ...submissions(6, "Man").map((r, i) => ({ ...r, user_id: `man-${i}` })),
+      ];
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          String(path).startsWith("/rest/v1/survey_question")
+            ? [{ id: 41 }]
+            : String(path).startsWith("/rest/v1/survey_submission")
+              ? rows
+              : [],
+        text: async () => "",
+      }));
+      const r = await call({});
+      expect(r.content[0]!.text).toContain("- All: 7 finished");
+      const [path] = toolCalls().find(([p]) => String(p).includes("survey_submission")) as [string];
+      expect(path).toContain("select=user_id,");
+    });
+
+    it("checks the measure and the question before reading anything", async () => {
+      for (const args of [
+        { measure: "salaries" },
+        { measure: "answers" },
+        { measure: "answers", question: "3011" },
+        { measure: "answers", question: "03011; drop" },
+      ]) {
+        const r = await call(args);
+        expect(r.isError, JSON.stringify(args)).toBe(true);
+      }
+      expect(toolCalls()).toHaveLength(0);
+    });
+
+    const questionRow = (row: Record<string, unknown> | null, ok = true) =>
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok:
+          String(path).includes("frontend_qid=eq.") && !String(path).includes("15003") ? ok : true,
+        status: ok ? 200 : 503,
+        headers: new Headers(),
+        json: async () =>
+          String(path).includes("frontend_qid=eq.15003")
+            ? [{ id: 41 }]
+            : String(path).startsWith("/rest/v1/survey_question")
+              ? row
+                ? [row]
+                : []
+              : [],
+        text: async () => "",
+      }));
+
+    it("says there is no such question, refuses a written-answer one, and calls a failed read an outage", async () => {
+      questionRow(null);
+      expect((await call({ measure: "answers", question: "09999" })).content[0]!.text).toBe(
+        "There is no survey question 09999."
+      );
+      questionRow({ id: 5, frontend_qid: "00000", type: "open", question: "What is your email?" });
+      const open = await call({ measure: "answers", question: "00000" });
+      expect(open.isError).toBe(true);
+      expect(open.content[0]!.text).toContain("written answers are never read");
+      questionRow(null, false);
+      const down = await call({ measure: "answers", question: "03011" });
+      expect(down.isError).toBe(true);
+      expect(down.content[0]!.text).toMatch(/outage/);
+    });
+
+    it("calls an unreadable database an outage, not an empty answer", async () => {
+      mockSupabaseFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        headers: new Headers(),
+        json: async () => ({}),
+      });
+      const r = await call({});
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toMatch(/outage/);
+    });
+  });
+
+  describe("ux_signals", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 72,
+          method: "tools/call",
+          params: { name: "ux_signals", arguments: args },
+        })
+      ).then((r) =>
+        r.json().then((b) => b.result as { isError: boolean; content: Array<{ text: string }> })
+      );
+    beforeEach(() => {
+      uxReport.build.mockReset().mockResolvedValue({ visits: 10, walks: 3 });
+      uxReport.render.mockReset().mockReturnValue("the report");
+    });
+
+    it("measures seven days unless asked, and returns the report as written", async () => {
+      const r = await call({});
+      expect(uxReport.build).toHaveBeenCalledWith(7);
+      expect(r.isError).toBe(false);
+      expect(r.content[0]!.text).toContain("the report");
+      await call({ days: 28 });
+      expect(uxReport.build).toHaveBeenLastCalledWith(28);
+    });
+
+    it("refuses a period it cannot read whole", async () => {
+      for (const days of [0, 29, 2.5, "a week"]) {
+        const r = await call({ days });
+        expect(r.isError, String(days)).toBe(true);
+        expect(r.content[0]!.text).toContain("from 1 to 28");
+      }
+      expect(uxReport.build).not.toHaveBeenCalled();
+    });
+
+    it("calls it an error only when neither PostHog nor the walks could be read", async () => {
+      uxReport.build.mockResolvedValueOnce({ visits: null, walks: 3 });
+      expect((await call({})).isError).toBe(false);
+      uxReport.build.mockResolvedValueOnce({ visits: null, walks: null });
+      expect((await call({})).isError).toBe(true);
+    });
+  });
+
+  describe("cost_watch", () => {
+    const call = () =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 71,
+          method: "tools/call",
+          params: { name: "cost_watch", arguments: {} },
+        })
+      ).then((r) =>
+        r.json().then((b) => b.result as { isError: boolean; content: Array<{ text: string }> })
+      );
+    // Built around today, since the answer is always about the latest settled month.
+    const billed = lastBilledMonth(new Date());
+    const prev = new Date(Date.parse(`${billed}-01T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 7);
+    const serial = (month: string) =>
+      (Date.parse(`${month}-01T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86_400_000;
+    const sheet = [
+      ["", "", "", serial(prev), serial(billed)],
+      ["Name", "Description", "Category"],
+      ["Slack", "", "Software", -30, -40],
+      ["Adwords", "", "Marketing", -1000, -1000],
+      ["A. Person", "", "Intern - full time", -987.65, -987.65],
+    ];
+    beforeEach(() => {
+      // One successful filing run inside the window, as the 3rd's run would record.
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          String(path).includes("cron_run") ? [{ started_at: "2026-09-03T06:40:05Z" }] : [],
+        text: async () => "",
+      }));
+    });
+    afterEach(() => {
+      mockAdCost = { byDay: new Map(), from: null, to: null };
+    });
+
+    it("answers from the sheet without anyone's pay, and checks Google Ads against GA4", async () => {
+      mockLoadCostSheet.mockResolvedValue(sheet);
+      mockAdCost = {
+        byDay: new Map([[`${billed}-02`, 1100]]),
+        from: `${billed}-01`,
+        to: `${billed}-28`,
+      };
+      const r = await call();
+      expect(r.isError).toBe(false);
+      const text = r.content[0]!.text;
+      expect(text).toContain("EUR 1,040.00, against EUR 1,030.00");
+      expect(text).toContain("- Slack EUR 30.00 → EUR 40.00 (+EUR 10.00)");
+      expect(text).toContain("may never have been entered. GA4 recorded EUR 1,100.00");
+      expect(text).not.toMatch(/Person|987/);
+      expect(mockLoadCostSheet).toHaveBeenCalledTimes(1);
+      // Settled only by a successful filing run inside the window that can settle the month.
+      const w = settleWindow(billed);
+      const asked = mockSupabaseFetch.mock.calls
+        .map(([p]) => String(p))
+        .find((p) => p.includes("cron_run"));
+      expect(asked).toContain("cron_name=eq.file-invoices&status=eq.success");
+      expect(asked).toContain(
+        `started_at=gte.${w.from.toISOString()}&started_at=lte.${w.to.toISOString()}`
+      );
+    });
+
+    it("still answers when the GA4 check fails, only without it", async () => {
+      mockLoadCostSheet.mockResolvedValue(sheet);
+      mockAdCost = { byDay: undefined as never, from: `${billed}-01`, to: `${billed}-28` };
+      const r = await call();
+      expect(r.isError).toBe(false);
+      expect(r.content[0]!.text).toContain("EUR 1,040.00");
+      expect(r.content[0]!.text).not.toContain("GA4");
+    });
+
+    it("calls an unreadable sheet an outage, and a changed layout a change, never a zero", async () => {
+      mockLoadCostSheet.mockRejectedValue(new Error("the cost sheet could not be read (403)"));
+      let r = await call();
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toMatch(/outage/);
+
+      mockLoadCostSheet.mockResolvedValue([[serial(billed)], ["Vendor", "Category"]]);
+      r = await call();
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toMatch(/layout has changed/);
+    });
+  });
+
   describe("record_decision — the one tool that writes", () => {
     const call = (args: Record<string, unknown>) =>
       POST(
@@ -2272,6 +4653,81 @@ describe("/api/mcp", () => {
       expect(typeof rows[0]!.latency_ms).toBe("number");
     });
 
+    it("records the score the WARNING is judged on, not the one ranking sorts by", async () => {
+      /**
+       * The reason this column exists. `top_score` is `chunks[0].score` -- content plus
+       * recency and every other bonus -- so a junk question can sit ABOVE the relevance
+       * floor there while the reader is being warned it is weak. Measured against the real
+       * corpus on 2026-09-16, "zqxjvbn plorkuth quantum widget procurement" stored
+       * top_score 1.92 (above 1.85) with a content score of 1.35.
+       *
+       * Both are recorded, and they must not be the same number here or the row cannot
+       * answer "which questions can the corpus not match".
+       */
+      mockRetrieve.mockResolvedValue([
+        {
+          source: "doc",
+          sourceId: "a",
+          title: "t",
+          url: null,
+          body: "b",
+          meta: {},
+          score: 1.92,
+          contentScore: 1.35,
+        },
+        {
+          source: "doc",
+          sourceId: "b",
+          title: "u",
+          url: null,
+          body: "c",
+          meta: {},
+          score: 1.4,
+          contentScore: 1.1,
+        },
+      ]);
+      const body = await (await call({ query: "zqxjvbn plorkuth quantum widget" })).json();
+      // The reader IS warned...
+      expect(String(body.result.content[0].text)).toContain("WEAK MATCH");
+
+      await flushAfterResponse();
+      const row = writes()[0]!;
+      // ...and the row says why, instead of a bonused 1.92 that reads as a solid answer.
+      expect(row.top_score).toBe(1.92);
+      expect(row.content_score).toBe(1.35);
+    });
+
+    it("records the BEST content score, not the first row's", async () => {
+      // Ranking sorts on the bonused score, so the best CONTENT match is not always at
+      // the top. Taking `chunks[0].contentScore` would under-report exactly the questions
+      // where recency carried a weaker match into first place.
+      mockRetrieve.mockResolvedValue([
+        {
+          source: "doc",
+          sourceId: "a",
+          title: "t",
+          url: null,
+          body: "b",
+          meta: {},
+          score: 3.0,
+          contentScore: 1.2,
+        },
+        {
+          source: "doc",
+          sourceId: "b",
+          title: "u",
+          url: null,
+          body: "c",
+          meta: {},
+          score: 2.4,
+          contentScore: 2.4,
+        },
+      ]);
+      await call({ query: "what is our revenue" });
+      await flushAfterResponse();
+      expect(writes()[0]!.content_score).toBe(2.4);
+    });
+
     it("records a refusal with the refusal text, which is the diagnosis", async () => {
       const body = await (await call({ query: " " })).json();
       expect(body.result.isError).toBe(true);
@@ -2310,6 +4766,32 @@ describe("/api/mcp", () => {
       await expect(
         recordToolCall({ tool: "t", question: "q", latencyMs: 1 })
       ).resolves.toBeUndefined();
+    });
+
+    it("stores a non-finite score as null rather than losing the whole row", async () => {
+      /**
+       * NaN and Infinity are not valid JSON, so PostgREST rejects the entire insert --
+       * the call would vanish from the log completely, which is the one outcome this
+       * table cannot afford. Not hypothetical: the content score is a `Math.max` over
+       * every hit, and one chunk arriving without the field makes the whole reduce NaN.
+       *
+       * Driven directly, because through the route both scores come from retrieval and
+       * a mutation to this guard leaves the suite green -- the same blind spot the
+       * "never throws" test above was written for.
+       */
+      await recordToolCall({
+        tool: "search_company_context",
+        question: "q",
+        topScore: Number.POSITIVE_INFINITY,
+        contentScore: Number.NaN,
+        latencyMs: 1,
+      });
+      const row = writes()[0]!;
+      expect(row.content_score).toBeNull();
+      expect(row.top_score).toBeNull();
+      // The row itself still has to be there; nulling the score must not null the record.
+      expect(row.tool).toBe("search_company_context");
+      expect(JSON.stringify(row)).not.toContain("NaN");
     });
 
     it("redacts email addresses from both the question and the arguments", async () => {
@@ -2513,6 +4995,29 @@ describe("/api/mcp", () => {
       expect(out).toContain("brain-ingest ok at 2026-08-30 04:47");
     });
 
+    it("shows WhatsApp's last sync from the laptop, and says when it failed", async () => {
+      cronRuns = { "brain-whatsapp": { started_at: "2026-08-30T21:15:02Z", status: "success" } };
+      wireCorpus({ whatsapp: 540 });
+      expect(await text()).toContain(
+        "synced every five minutes from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off; last synced 2026-08-30 21:15"
+      );
+      cronRuns = {
+        "brain-whatsapp": {
+          started_at: "2026-08-30T22:15:02Z",
+          status: "error",
+          error_message: "WhatsApp Desktop has not written its database for 30h",
+        },
+      };
+      expect(await text()).toContain(
+        "the last sync FAILED at 2026-08-30 22:15 (WhatsApp Desktop has not written its database for 30h)"
+      );
+      // A timeout is a failure too, not a sync.
+      cronRuns = { "brain-whatsapp": { started_at: "2026-08-30T23:15:02Z", status: "timeout" } };
+      expect(await text()).toContain("the last sync FAILED at 2026-08-30 23:15");
+      cronRuns = {};
+      expect(await text()).toContain("no sync has recorded itself yet");
+    });
+
     it("names a job that genuinely has no record, rather than implying health", async () => {
       cronRuns = {};
       wireCorpus({ gmail: 10 });
@@ -2664,6 +5169,46 @@ describe("/api/mcp", () => {
         ]) {
           expect(text).toContain(col);
         }
+      });
+
+      /**
+       * THE DENYLIST IS SNAKE_CASE. JSONB IS NOT.
+       *
+       * `PRIVATE_COLUMN` needs an underscore before the suffix — `request_ip` matches,
+       * `requestIp` does not, and jsonb keys are camelCase. Measured live 2026-09-23 on
+       * ONE `payment` row: the top-level `ip_address` and `user_agent` were masked and
+       * `metadata.reportToken` was caught by the value rule, while the SAME ROW printed
+       * `metadata.requestIp` as a real address and `requestUserAgent` as the full device
+       * string, in plaintext, under a header telling the reader they were protected.
+       *
+       * Being told the opposite of what happened is worse than no mask at all.
+       */
+      it("masks the camelCase duplicates inside jsonb, not only the snake_case columns", async () => {
+        wire([
+          {
+            id: 1,
+            ip_address: "109.175.96.167",
+            user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)",
+            amount: 14.99,
+            metadata: {
+              requestIp: "109.175.96.167",
+              requestUserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)",
+              customerEmail: "buyer@example.com",
+              pricingSessionId: "ps_keepme",
+            },
+          },
+        ]);
+        const text = (await call({ table: "payment", limit: 1 })).content[0].text;
+        expect(text).not.toContain("109.175.96.167");
+        expect(text).not.toContain("iPhone OS 18_7");
+        expect(text).not.toContain("buyer@example.com");
+        // The same value still tags identically whichever spelling carried it, so
+        // "is this the same person" survives.
+        const tags = [...text.matchAll(/\[private #([0-9a-f]{4})\]/g)].map((m) => m[1]);
+        expect(new Set(tags).size).toBeLessThan(tags.length);
+        // And a business identifier that merely LOOKS camelCase is untouched.
+        expect(text).toContain("ps_keepme");
+        expect(text).toContain("14.99");
       });
 
       it("keeps the business columns, so the answer is still usable", async () => {
@@ -2913,6 +5458,103 @@ describe("/api/mcp", () => {
       const r = await call({ table: "payment", filters: ["nope=eq.1"] });
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toMatch(/Query failed \(400\)/);
+    });
+
+    /**
+     * THE FIX, NOT ONLY THE FAULT. Most real query_product_data failures in
+     * `brain_query` since 2026-09-09 were a guessed column (`payment.plan`,
+     * `personal_report.archetype`, `report_price_quote.created_at`) or a guessed function
+     * argument, and each cost a second round trip to list_product_tables to recover.
+     */
+    /**
+     * AN RPC HAS NO PAGES. Its content-range counts the function's result rows, and a
+     * json-returning function is ONE row however long its array is: get_cohort_analysis
+     * answered `[]` and the tool said "0 rows returned, 1 match. Raise limit or page with
+     * offset", advice this very tool refuses on an rpc.
+     */
+    it("reports no total and no paging advice for an rpc, whose count is not a row count", async () => {
+      mockSupabaseFetch.mockImplementation(
+        async (_path: string, init?: { headers?: Record<string, string> }) => {
+          if (init?.headers?.Accept === "application/openapi+json") {
+            return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+          }
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-range": "0-0/1" }),
+            json: async () => [],
+            text: async () => "[]",
+          };
+        }
+      );
+      const r = await call({
+        table: "rpc/get_conversion_funnel",
+        params: { since_ts: "2026-09-01T00:00:00Z" },
+      });
+      expect(r.content[0].text).toContain("0 rows returned.");
+      expect(r.content[0].text).not.toMatch(/match|Raise limit|offset/);
+    });
+
+    it("tells an rpc caller to narrow the function's own parameters when rows do not fit", async () => {
+      const big = Array.from({ length: 60 }, (_, i) => ({
+        day: `2026-09-${String((i % 28) + 1).padStart(2, "0")}`,
+        note: "x".repeat(2000),
+      }));
+      mockSupabaseFetch.mockImplementation(
+        async (_path: string, init?: { headers?: Record<string, string> }) => {
+          if (init?.headers?.Accept === "application/openapi+json") {
+            return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+          }
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-range": `0-59/60` }),
+            json: async () => big,
+            text: async () => "",
+          };
+        }
+      );
+      const r = await call({
+        table: "rpc/get_conversion_funnel",
+        params: { since_ts: "2026-09-01T00:00:00Z" },
+      });
+      expect(r.content[0].text).toMatch(/did not fit/);
+      expect(r.content[0].text).toMatch(/narrow the function's own parameters/);
+      expect(r.content[0].text).not.toMatch(/page with offset/);
+    });
+
+    it("names the real columns when a query guesses one that does not exist", async () => {
+      wire(
+        { code: "42703", message: "column payment.plan does not exist" },
+        { ok: false, status: 400 }
+      );
+      const r = await call({ table: "payment", select: "id,plan" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain(
+        "payment has these columns: id, amount, created_date_time"
+      );
+    });
+
+    it("names a function's real arguments when it is called with the wrong ones", async () => {
+      wire(
+        { code: "PGRST202", message: "Could not find the function" },
+        { ok: false, status: 404 }
+      );
+      const r = await call({ table: "rpc/get_conversion_funnel", params: { days_back: 4000 } });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain(
+        "rpc/get_conversion_funnel takes since_ts!: timestamp with time zone, utm_filter: text"
+      );
+    });
+
+    it("adds no schema hint to an error that is not about a missing column or argument", async () => {
+      wire(
+        { code: "22P02", message: "invalid input syntax for type bigint" },
+        { ok: false, status: 400 }
+      );
+      const r = await call({ table: "payment", filters: ["id=eq.x"] });
+      expect(r.content[0].text).toMatch(/Query failed \(400\)/);
+      expect(r.content[0].text).not.toMatch(/has these columns|takes /);
     });
 
     it("lists tables with their columns, and narrows on match", async () => {
@@ -3227,18 +5869,47 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toContain("Ask for a child frame");
     });
 
-    it("refuses a frame too long to survive the client's downscale, and offers its children", async () => {
+    it("shows a short wide strip the client never shrinks, whatever its shape", async () => {
+      // The landing's 1115x95 nav and 1115x68 sticky bar are "longer than 3:1" but fit the
+      // client's edge, so nothing shrinks them; refusing them hid four of fifteen sections.
       mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(1115, 95) })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () =>
-            nodeBody(1440, 11800, {
-              children: [
-                { id: "1:3", name: "Top", absoluteBoundingBox: { width: 1440, height: 900 } },
-              ],
-            }),
+          json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
         })
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(PNG) });
+      const r = await call({ node_id: "1:2" });
+      expect(r.content.find((c) => c.type === "image")).toBeDefined();
+      expect(r.content[0].text).not.toContain("longer than");
+    });
+
+    it("refuses a frame too long to survive the client's downscale, and offers its children", async () => {
+      // Answered the way Figma does: `depth=0` carries no children. This fixture used to
+      // hand them over at any depth, so the tool passed here while every real tall frame
+      // said it "has no children to ask for".
+      mockFetch
+        .mockImplementationOnce(async (url: string) => ({
+          ok: true,
+          status: 200,
+          json: async () =>
+            nodeBody(
+              1440,
+              11800,
+              String(url).includes("depth=0")
+                ? {}
+                : {
+                    children: [
+                      {
+                        id: "1:3",
+                        name: "Top",
+                        absoluteBoundingBox: { width: 1440, height: 900 },
+                      },
+                    ],
+                  }
+            ),
+        }))
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -3259,6 +5930,43 @@ describe("/api/mcp", () => {
       expect(r.content.find((c) => c.type === "image")).toBeUndefined();
       expect(r.content[0].text).toContain("longer than");
       expect(r.content[0].text).toContain("1:3");
+    });
+
+    it("marks in the listing exactly the frames the render would refuse, wide ones too", async () => {
+      // The listing flagged only TALL frames while the render refused wide ones, so a
+      // 3554x701 child was listed with no warning and then answered "cannot be shown".
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nodes: { "1:2": { document: { id: "1:2", name: "Page", type: "CANVAS" } } },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nodes: {
+              "1:2": {
+                document: {
+                  name: "Page",
+                  children: [
+                    {
+                      id: "1:3",
+                      name: "Banner",
+                      absoluteBoundingBox: { width: 3554, height: 701 },
+                    },
+                    { id: "1:4", name: "Nav", absoluteBoundingBox: { width: 1115, height: 95 } },
+                  ],
+                },
+              },
+            },
+          }),
+        });
+      const text = (await call({ node_id: "1:2" })).content[0].text as string;
+      expect(text).toMatch(/1:3 {2}3554x701 {2}\(too long to render\) {2}Banner/);
+      expect(text).toMatch(/1:4 {2}1115x95 {2}Nav/);
     });
 
     it("says Figma is still rendering, not that the frame is empty", async () => {
@@ -3311,6 +6019,72 @@ describe("/api/mcp", () => {
       mockFetch.mockResolvedValue({ ok: true, status: 200, text: async () => '{"data":[]}' });
       process.env.STRIPE_SECRET_KEY = "sk_test_secret_value";
       process.env.RESEND_API_KEY = "re_secret_value";
+      delete process.env.POSTHOG_API_KEY;
+    });
+
+    /**
+     * THE VERSION WRITTEN TWICE.
+     *
+     * Stripe's registry base ends `/v1`, so a path copied out of Stripe's own docs —
+     * `/v1/charges` — was sent to `/v1/v1/charges` and came back "Unrecognized request
+     * URL". That 404 reads like a missing resource rather than a malformed path, which
+     * is why it never self-corrected: eight such calls in the thirty days to
+     * 2026-09-20, the most recent that same day, across stripe and figma.
+     */
+    /**
+     * ASSERTED ON THE WHOLE URL, not with `toContain`, and mutation testing is why.
+     *
+     * The first version of these checked `url).toContain(path)`. Stripping "/v1" off
+     * "/v1beta/models" leaves "beta/models" with no leading slash, which concatenated
+     * onto a base ending "/v1" gives ".../v1beta/models" — the substring the assertion
+     * was looking for. It passed while doing exactly the damage it was written to
+     * forbid. An exact URL has no second way to be satisfied.
+     */
+    it("does not send the version twice when the base already carries it", async () => {
+      await call({ service: "stripe", path: "/v1/charges" });
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://api.stripe.com/v1/charges");
+    });
+
+    it("says it did so, rather than silently working for a reason nobody can see", async () => {
+      const r = await call({ service: "stripe", path: "/v1/charges" });
+      expect(r.content[0]!.text).toMatch(/already ends with \/v1/);
+    });
+
+    it("leaves an ordinary path completely alone", async () => {
+      await call({ service: "stripe", path: "/charges" });
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://api.stripe.com/v1/charges");
+    });
+
+    it.each([
+      ["/v1beta/models", "https://api.stripe.com/v1/v1beta/models"],
+      ["/verify/token", "https://api.stripe.com/v1/verify/token"],
+      ["/v2/charges", "https://api.stripe.com/v1/v2/charges"],
+    ])("does not eat %s, which is not the base's own version segment", async (path, expected) => {
+      await call({ service: "stripe", path });
+      expect(mockFetch.mock.calls[0]![0]).toBe(expected);
+    });
+
+    /**
+     * WIDENED ON EVIDENCE, to `/api` and no further.
+     *
+     * This stayed narrow until a logged call made the mistake: on 2026-09-23 a caller
+     * asked PostHog for `/api/projects/244778/`, the base already ends `/api`, and the
+     * doubled path came back as a bare 404 that reads like a missing project. Only the
+     * base's own last segment is removed, and only when it is a version or `api` — a
+     * segment that merely starts the same way is a different endpoint and stays.
+     */
+    it("does not send /api twice when the base already ends with it", async () => {
+      process.env.POSTHOG_API_KEY = "phx_test_value";
+      const r = await call({ service: "posthog", path: "/api/projects/1/events" });
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://eu.posthog.com/api/projects/1/events");
+      expect(r.content[0]!.text).toMatch(/already ends with \/api/);
+      delete process.env.POSTHOG_API_KEY;
+    });
+
+    it("does not strip a segment that only starts like the base's", async () => {
+      process.env.POSTHOG_API_KEY = "phx_test_value";
+      await call({ service: "posthog", path: "/apis/1" });
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://eu.posthog.com/api/apis/1");
       delete process.env.POSTHOG_API_KEY;
     });
 
@@ -3488,6 +6262,51 @@ describe("/api/mcp", () => {
       delete process.env.GITHUB_TOKEN;
     });
 
+    /**
+     * A REPOSITORY FILE COMES BACK AS TEXT. GitHub base64-encodes file contents, and the
+     * corpus indexes only Markdown — so vercel.json and the CI workflows were reachable
+     * in principle and unreadable in practice, and "which crons run" was answered from a
+     * README that named 13 of 22.
+     */
+    it("decodes a file's contents so the config can actually be read", async () => {
+      const body = '{"crons":[{"path":"/api/cron/brain-brief","schedule":"10 6,8 * * *"}]}';
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            type: "file",
+            encoding: "base64",
+            path: "vercel.json",
+            size: body.length,
+            sha: "4a10cf71f8007739e605",
+            content: Buffer.from(body)
+              .toString("base64")
+              .replace(/(.{60})/g, "$1\n"),
+          }),
+      });
+      const r = await call({
+        service: "github",
+        path: "/repos/loveiqhq/loveiq/contents/vercel.json",
+      });
+      expect(r.isError).toBeFalsy();
+      expect(r.content[0]!.text).toContain('"schedule":"10 6,8 * * *"');
+      expect(r.content[0]!.text).toContain("File: vercel.json on main");
+      expect(r.content[0]!.text).toMatch(/UNTRUSTED DATA/);
+    });
+
+    it("leaves a directory listing as the JSON it already is", async () => {
+      const listing = JSON.stringify([
+        { type: "file", name: "ci.yml", path: ".github/workflows/ci.yml" },
+      ]);
+      mockFetch.mockResolvedValue({ ok: true, status: 200, text: async () => listing });
+      const r = await call({
+        service: "github",
+        path: "/repos/loveiqhq/loveiq/contents/.github/workflows",
+      });
+      expect(r.content[0]!.text).toContain('"name":"ci.yml"');
+    });
+
     it("reports an upstream error instead of an empty result", async () => {
       mockFetch.mockResolvedValue({
         ok: false,
@@ -3558,6 +6377,8 @@ describe("/api/mcp", () => {
         // only its own description would contain.
         plan: "what is open on the board",
         notice: "noticed without being asked",
+        // Not the bare id: "book" is inside "booking" and the source enum already.
+        book: "third-party books on love, desire",
       };
       const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
       expect(sources.length).toBeGreaterThan(0);
@@ -3786,6 +6607,18 @@ describe("/api/mcp", () => {
       const r = await call({ days: 30 });
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toMatch(/fault in the query/);
+    });
+
+    /**
+     * `null` IS ABSENT. Some clients send every optional field and fill the unset ones
+     * with null; `{ days: null, since }` was refused as "days OR since, not both".
+     */
+    it("treats `days: null` as absent, so a client that sends every field still gets its range", async () => {
+      const since = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+      const until = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+      const r = await call({ days: null, since, until });
+      expect(r.isError).toBeFalsy();
+      expect(r.content[0].text).toContain(since);
     });
 
     it.each([
@@ -4172,5 +7005,282 @@ describe("the instructions must name every tool the server offers", () => {
     expect(tools.length).toBeGreaterThanOrEqual(7);
     const missing = tools.map((t) => t.name).filter((n) => !instructions.includes(n));
     expect(missing).toEqual([]);
+  });
+});
+
+/**
+ * AN EMPTY RESULT IS TWO DIFFERENT FACTS, AND THEY USED TO RENDER IDENTICALLY.
+ *
+ * "0 rows returned, 0 match." was what a caller saw whether their filter excluded
+ * everything or the table had never held a single row. The second is the dangerous one:
+ * asked for the email bounce rate, a model reads zero rows and answers "no bounces",
+ * which is the opposite of "we have no record of any".
+ *
+ * Measured on production 2026-09-14: `resend_webhook_event` had NEVER held a row — the
+ * Resend webhook was never registered in their dashboard, though our env var had been set
+ * for 129 days and the route answered 401 like a healthy one. This tool's own description
+ * told the model to PREFER that table for bounce and open rates.
+ */
+describe("query_product_data — an empty table says so, instead of reading as a measured zero", () => {
+  const OPENAPI = {
+    definitions: {
+      resend_webhook_event: { properties: { id: {}, type: {} } },
+      payment: { properties: { id: {}, amount: {} } },
+    },
+    paths: {
+      "/resend_webhook_event": {},
+      "/payment": {},
+      "/rpc/get_report_counts": { post: { parameters: [{ in: "body", schema: {} }] } },
+    },
+  };
+
+  /** `rows` for the main query; `tableTotal` for the follow-up unfiltered count. */
+  function wire(rows: unknown[], tableTotal: number) {
+    const counts: string[] = [];
+    mockSupabaseFetch.mockImplementation(
+      async (path: string, init?: { headers?: Record<string, string> }) => {
+        if (init?.headers?.Accept === "application/openapi+json") {
+          return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+        }
+        // The emptiness probe is the only call that asks for a count with Range 0-0.
+        if (init?.headers?.Prefer === "count=exact" && init?.headers?.Range === "0-0") {
+          counts.push(path);
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-range": `0-0/${tableTotal}` }),
+            json: async () => [],
+            text: async () => "[]",
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-range": `0-0/${rows.length}` }),
+          json: async () => rows,
+          text: async () => JSON.stringify(rows),
+        };
+      }
+    );
+    return counts;
+  }
+
+  const ask = async (args: Record<string, unknown>) => {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "query_product_data", arguments: args },
+      })
+    );
+    const body = (await res.json()) as { result: { content: Array<{ text: string }> } };
+    return body.result.content[0]!.text;
+  };
+
+  it("says the table itself is empty, and that this is not a measured zero", async () => {
+    wire([], 0);
+    const text = await ask({ table: "resend_webhook_event", limit: 5 });
+    expect(text).toContain("THE TABLE ITSELF IS EMPTY");
+    expect(text).toContain("resend_webhook_event");
+    // The instruction that stops the wrong answer being written.
+    expect(text).toMatch(/NO DATA|not recorded/i);
+    expect(text).toMatch(/none happened/i);
+  });
+
+  /** The opposite case must NOT be called empty — the filters simply excluded everything. */
+  it("blames the filters, not the table, when the table does hold rows", async () => {
+    wire([], 4210);
+    const text = await ask({ table: "payment", limit: 5, filters: ["amount=gt.999999"] });
+    expect(text).toContain("4210");
+    expect(text).toMatch(/FILTERS that matched nothing/i);
+    expect(text).not.toContain("THE TABLE ITSELF IS EMPTY");
+  });
+
+  it("stays silent when rows came back, and does not spend the extra count", async () => {
+    const counts = wire([{ id: 1, amount: 29 }], 4210);
+    const text = await ask({ table: "payment", limit: 5 });
+    expect(text).not.toContain("THE TABLE ITSELF IS EMPTY");
+    expect(text).not.toMatch(/FILTERS that matched nothing/i);
+    expect(counts).toHaveLength(0);
+  });
+
+  /** An rpc has no table to count, so the probe must not fire on one. */
+  it("does not probe an rpc, which has no table behind it", async () => {
+    const counts = wire([], 0);
+    const text = await ask({ table: "rpc/get_report_counts", params: {} });
+    expect(counts).toHaveLength(0);
+    expect(text).not.toContain("THE TABLE ITSELF IS EMPTY");
+  });
+});
+
+/**
+ * A COUNT WRITTEN INTO PROSE GOES STALE SILENTLY, because nothing recomputes it.
+ *
+ * The runbook said "Fourteen tools, in three groups. Nine read, five write" while the
+ * server exposed seventeen — twelve read, five write. Nobody was lying; three tools were
+ * added and the sentence was not. A teammate reading the runbook to learn what the brain
+ * can do would simply not know about three of them, and this is the second such count in
+ * this codebase to be found wrong after the fact.
+ *
+ * Correcting the number without adding this test would only reset the clock.
+ */
+describe("the runbook's tool count is the real one", () => {
+  const WORDS: Record<number, string> = {
+    1: "One",
+    2: "Two",
+    3: "Three",
+    4: "Four",
+    5: "Five",
+    6: "Six",
+    7: "Seven",
+    8: "Eight",
+    9: "Nine",
+    10: "Ten",
+    11: "Eleven",
+    12: "Twelve",
+    13: "Thirteen",
+    14: "Fourteen",
+    15: "Fifteen",
+    16: "Sixteen",
+    17: "Seventeen",
+    18: "Eighteen",
+    19: "Nineteen",
+    20: "Twenty",
+    21: "Twenty-one",
+    22: "Twenty-two",
+    23: "Twenty-three",
+    24: "Twenty-four",
+    25: "Twenty-five",
+    26: "Twenty-six",
+    27: "Twenty-seven",
+    28: "Twenty-eight",
+    29: "Twenty-nine",
+    30: "Thirty",
+    31: "Thirty-one",
+    32: "Thirty-two",
+    33: "Thirty-three",
+    34: "Thirty-four",
+    35: "Thirty-five",
+    36: "Thirty-six",
+    37: "Thirty-seven",
+    38: "Thirty-eight",
+  };
+
+  it("matches what the server actually exposes", () => {
+    const runbook = readFileSync(join(process.cwd(), "docs/runbooks/COMPANY_BRAIN.md"), "utf8");
+    const readOnly = TOOLS.filter((t) => t.annotations?.readOnlyHint).length;
+    const writes = TOOLS.length - readOnly;
+
+    const total = WORDS[TOOLS.length];
+    const reads = WORDS[readOnly];
+    expect(total, `no word for ${TOOLS.length} tools — extend WORDS`).toBeDefined();
+    expect(reads, `no word for ${readOnly} read tools — extend WORDS`).toBeDefined();
+
+    expect(
+      runbook,
+      `COMPANY_BRAIN.md must say "${total} tools" — there are ${TOOLS.length}`
+    ).toContain(`**${total} tools, in three groups.**`);
+    const writeWord = WORDS[writes]?.toLowerCase() ?? String(writes);
+    expect(runbook, `COMPANY_BRAIN.md must say "${reads} read, ${writeWord} write"`).toContain(
+      `${reads} read, ${writeWord} write`
+    );
+  });
+});
+
+/**
+ * The SECOND alias, added for the same measured reason as `document_id`.
+ *
+ * `record_decision` takes `actor`, and callers in `brain_query` reach for `decided_by`.
+ * It has exactly one possible meaning — the tool has no other field naming a person —
+ * which is the only kind of alias allowed here: a second NAME, never a second meaning.
+ */
+describe("record_decision decided_by alias", () => {
+  const callRecord = (args: Record<string, unknown>) =>
+    POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 77,
+        method: "tools/call",
+        params: { name: "record_decision", arguments: args },
+      })
+    ).then((r) => r.json().then((b) => b.result));
+
+  it("accepts decided_by as another word for actor", async () => {
+    mockSupabaseFetch.mockImplementation(async () => ({
+      ok: true,
+      headers: new Headers(),
+      json: async () => [],
+    }));
+    const r = await callRecord({
+      decision: "We ship the sheets reader",
+      why: "spreadsheets were indexed one tab deep",
+      decided_by: "Eman",
+    });
+    expect(JSON.stringify(r)).not.toContain("no argument named");
+  });
+
+  it("refuses when decided_by and actor disagree, rather than picking one", async () => {
+    const r = await callRecord({
+      decision: "d",
+      why: "w",
+      actor: "Eman",
+      decided_by: "Someone else",
+    });
+    expect(r.isError).toBe(true);
+    expect(JSON.stringify(r)).toContain("no argument named");
+  });
+
+  it("does not leak the alias to other tools", async () => {
+    // Keyed by tool on purpose: `search_company_context` has no actor at all.
+    const r = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 78,
+        method: "tools/call",
+        params: { name: "search_company_context", arguments: { query: "x", decided_by: "Eman" } },
+      })
+    ).then((x) => x.json().then((b) => b.result));
+    expect(r.isError).toBe(true);
+    expect(JSON.stringify(r)).toContain("decided_by");
+  });
+});
+
+describe("outrankingHeldBack — what the cap left out, when it was better", () => {
+  const shaping = {
+    heldBack: new Map([
+      ["drive", 1],
+      ["gmail", 4],
+    ]),
+    heldBackBest: new Map([
+      ["drive", { sourceId: "doc:113TF", score: 2.52 }],
+      ["gmail", { sourceId: "thread:abc", score: 1.5 }],
+    ]),
+  };
+  const shown = [2.66, 2.48, 2.29, 2.23, 2.05, 1.98, 1.93, 1.73].map((score) => ({ score }));
+
+  it("names a held-back row that outranks something shown, by id and score", () => {
+    const text = outrankingHeldBack(shaping, shown);
+    expect(text).toContain("drive/doc:113TF @2.52");
+    expect(text).toMatch(/outranks 7 of the 8 shown/);
+  });
+
+  it("leaves out a held-back row that outranks nothing shown", () => {
+    expect(outrankingHeldBack(shaping, shown)).not.toContain("thread:abc");
+  });
+
+  it("says nothing when no held-back row beats the page", () => {
+    expect(outrankingHeldBack({ heldBackBest: shaping.heldBackBest }, [{ score: 3 }])).toBe("");
+  });
+
+  it("carries no title — this text sits outside the untrusted-data fences", () => {
+    // Only ids and scores: a title can be an email subject written by anyone.
+    const text = outrankingHeldBack(shaping, shown);
+    expect(
+      text
+        .split("\n")
+        .filter((l) => l.startsWith("  •"))
+        .every((l) => /^  • \S+\/\S+ @\d+\.\d{2} — outranks \d+ of the \d+ shown$/.test(l))
+    ).toBe(true);
   });
 });

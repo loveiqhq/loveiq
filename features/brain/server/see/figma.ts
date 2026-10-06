@@ -30,6 +30,18 @@ export const DEFAULT_EDGE_PX = 1600;
 export const MAX_IMAGE_B64 = 1_400_000;
 /** Taller (or wider) than this and no scale keeps the text readable after downscaling. */
 export const MAX_ASPECT = 3;
+/** The longest edge a vision client shows without shrinking the image. */
+export const CLIENT_EDGE_PX = 1568;
+
+/**
+ * Too long to show readably: longer than MAX_ASPECT:1 in either direction AND longer than
+ * the client's edge, so it would be shrunk until its text is gone. One test for both the
+ * listing and the render: the listing used to warn only about TALL frames while the render
+ * refused wide ones too, so a listed frame could answer "cannot be shown" with no warning.
+ */
+export function tooLongToShow(w: number, h: number): boolean {
+  return Math.max(w, h) > Math.min(w, h) * MAX_ASPECT && Math.max(w, h) > CLIENT_EDGE_PX;
+}
 
 export type ShowDesignOutcome =
   | { kind: "image"; text: string; data: string; mimeType: string }
@@ -161,12 +173,12 @@ export async function listDesign(
     kind: "text",
     text:
       `${doc.name ?? pageId} — ${kids.length} frames. The pixel size is why some are worth ` +
-      `asking for and some are not: anything taller than ${MAX_ASPECT}x its width is refused, ` +
-      `because a vision model downscales a long frame until every word in it is gone.\n\n` +
+      `asking for and some are not: anything longer than ${MAX_ASPECT}:1 that a vision model would ` +
+      `also shrink is refused, because it would be downscaled until every word in it is gone.\n\n` +
       kids
         .map(
           (k) =>
-            `  ${k.id}  ${k.w}x${k.h}${k.h > k.w * MAX_ASPECT ? "  (too tall to render)" : ""}  ${k.name}`
+            `  ${k.id}  ${k.w}x${k.h}${tooLongToShow(k.w, k.h) ? "  (too long to render)" : ""}  ${k.name}`
         )
         .join("\n"),
     isError: false,
@@ -181,8 +193,11 @@ export async function renderDesign(
   maxPx: number
 ): Promise<ShowDesignOutcome> {
   // 1. Measure before rendering, so the scale is chosen rather than discovered.
+  // depth=1, not 0: depth=0 returns the node with NO children (checked live 2026-09-27,
+  // the landing frame had 0 at depth 0 and 15 at depth 1), so every frame taller than
+  // 3:1 said it "has no children to ask for" and could not be shown at all.
   const meta = await figmaGet(
-    api(fileKey, `/files/<key>/nodes?ids=${encodeURIComponent(nodeId)}&depth=0`),
+    api(fileKey, `/files/<key>/nodes?ids=${encodeURIComponent(nodeId)}&depth=1`),
     token
   );
   if (!meta.ok)
@@ -220,7 +235,10 @@ export async function renderDesign(
    * after the client's downscale -- the model then answers from an image in which no
    * text survived, which is worse than being told to ask for a child.
    */
-  if (Math.max(w, h) > Math.min(w, h) * MAX_ASPECT) {
+  // Only a frame the client will SHRINK loses its text. A strip that fits (the landing's
+  // 1115x95 nav, its 1115x68 sticky bar) is never shrunk, so its shape does not matter;
+  // refusing it left four of the landing's fifteen sections impossible to look at.
+  if (tooLongToShow(w, h)) {
     const kids = (node.children ?? []) as Array<Record<string, unknown>>;
     const why =
       `\`${name}\` is ${w}x${h}, which is longer than ${MAX_ASPECT}:1. Rendered small enough ` +

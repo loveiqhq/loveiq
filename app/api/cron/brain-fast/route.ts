@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestPeople } from "@features/brain/server/ingest/people";
 import { ingestPlan } from "@features/brain/server/ingest/plan";
+import { ingestReportVoice } from "@features/brain/server/ingest/report-voice";
+import { ingestSkills } from "@features/brain/server/ingest/skills";
+import { ingestDomain } from "@features/brain/server/ingest/domain";
 import { BACKFILL_DAYS, ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
@@ -35,6 +38,13 @@ export const dynamic = "force-dynamic";
  * because billing follows active CPU, not the ceiling.
  */
 export const maxDuration = 120;
+
+/** Shared clock for the eight ingesters. Well inside `maxDuration` — see below. */
+export const FAST_BUDGET_MS = 40_000;
+/** Embedding's own, later deadline. See its call site for why it needs one. */
+export const EMBED_DEADLINE_MS = 60_000;
+/** Worst case for one embed batch: 2 attempts x 15s plus ~1.5s of backoff. */
+export const EMBED_WORST_BATCH_MS = 31_500;
 
 /**
  * GET /api/cron/brain-fast
@@ -75,6 +85,10 @@ const DELIBERATE_SKIPS = new Set([
   "ga4-time-budget",
   "slack-not-configured",
   "slack-nothing-to-index",
+  // A walk that ran out of clock is a backfill in progress, not a fault — the same
+  // judgement as `ga4-time-budget` above. Anything ELSE that stops the slack walk
+  // still reports `slack-walk-incomplete:<why>` and still alerts.
+  "slack-time-budget",
 ]);
 
 export async function GET(request: Request) {
@@ -113,7 +127,7 @@ export async function GET(request: Request) {
   const checkSlow = startCronTimer("brain-fast", maxDuration);
   // Well inside maxDuration: every ingester has a tail (upsert, touch, sweep) that
   // runs after this expires and cannot be interrupted.
-  const isOutOfTime = () => Date.now() - startedAtMs > 40_000;
+  const isOutOfTime = () => Date.now() - startedAtMs > FAST_BUDGET_MS;
 
   /**
    * Once per distinct fault per DAY, not per run. At 96 runs a day a persistent
@@ -124,7 +138,7 @@ export async function GET(request: Request) {
   const alertOnce = async (name: string, text: string) => {
     const key = `brain_fast_failed:${name}`;
     if (!(await tryClaimSlackAlert(key, "day", dayKey))) return;
-    await notifySlack({ channel: "ops", kind: "brain_ingest_failed", text });
+    await notifySlack({ channel: "brain", kind: "brain_ingest_failed", text });
     await markSlackAlertDelivered(key, "day", dayKey);
   };
 
@@ -172,6 +186,15 @@ export async function GET(request: Request) {
     await run("people", () => ingestPeople(stampedAt));
     // Beside the roster and for the same reason: one row, read straight from the board.
     await run("plan", () => ingestPlan(stampedAt));
+    // The shipped report copy — the house voice. Built from files in the repo rather than
+    // fetched, so it costs nothing but a rebuild and lands the moment copy changes.
+    await run("report", () => ingestReportVoice(stampedAt));
+    // How we do the work, written where the team can reach it: `.agents/skills/` is a
+    // Claude Code directory and they work in claude.ai, where it does not exist.
+    await run("skill", () => ingestSkills(stampedAt));
+    // The vocabulary under the voice: what the words mean, what we ask, how a score is
+    // built. Also built from repo files, so it costs a rebuild and nothing else.
+    await run("domain", () => ingestDomain(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 
     /**
@@ -186,11 +209,25 @@ export async function GET(request: Request) {
      * able to reason about anything recent. Exactly the "live, not a snapshot"
      * property this whole job exists for.
      *
-     * Sized against measured growth: ~3 new chunks an hour against roughly 7 this
-     * can embed per run (the edge worker manages ~13 a minute), 96 runs a day.
+     * THE SIZING BELOW IS NO LONGER THE WHOLE STORY, and the old figure was wrong
+     * enough to mislead. It read "~3 new chunks an hour against roughly 7 this can
+     * embed per run", which held while Drive was one account's documents.
      *
-     * ponytail: a builder-version bump that rewrites thousands of chunks drains at
-     * ~670/day, so a full re-index still wants `scripts/brain-embed-backfill.ts`.
+     * On 2026-09-21 the Drive walk was widened to every colleague and wrote ~700
+     * chunks in an afternoon. Measured: 230 sat unembedded across three consecutive
+     * runs — not failing, just arriving faster than ~7-a-run can absorb, which is
+     * about eight hours to drain. During that window the new material is invisible
+     * to the semantic arm and findable only if the question happens to share its
+     * words, which is exactly how the legal pages measured as "0 of 5 unreachable"
+     * twenty minutes after they were indexed.
+     *
+     * SO: a bulk addition — a widened walk, a re-chunk, a builder-version bump — is
+     * drained by `scripts/brain-embed-backfill.ts`, which cleared those 238 in five
+     * minutes against the eight hours this loop would have taken. The brain-embed
+     * GitHub job runs it within the hour, started by /api/cron/start-github-jobs; to
+     * start it now, `gh workflow run brain-embed.yml -R loveiqhq/loveiq`. And do not
+     * measure retrieval until
+     * `select count(*) from brain_chunk where embedding is null` reads zero.
      */
     try {
       // Bounded so ONE embed request cannot outlive this function. Worst case
@@ -199,14 +236,32 @@ export async function GET(request: Request) {
       // patience and killed this cron silently -- see embedMissing's docblock.
       // A batch that times out is simply retried next run; embedMissing is driven
       // by `embedding IS NULL`, so it is restartable by construction.
-      const embed = await embedMissing(isOutOfTime, 3, { attempts: 2, timeoutMs: 15_000 });
+      /**
+       * EMBEDDING GETS A DEADLINE OF ITS OWN, past the one everything else shares.
+       *
+       * It runs last, so on the shared 40s budget it gets whatever the eight
+       * ingesters before it did not use — which is fine until one of them has a
+       * backlog. A builder-version bump does exactly that: on 2026-09-19 slack went
+       * to v9 and every indexed day became stale at once, so the slack walk will eat
+       * the remaining clock every run for hours. Embedding would then never start,
+       * and an unembedded chunk loses up to 2.4 of its score — degrading retrieval
+       * across EVERY source, to keep one source fresher.
+       *
+       * 60s against a 120s ceiling: even a worst-case batch begun at 59.9s (2 x 15s
+       * plus backoff) lands near 92s, with headroom. Stale slack costs an hour;
+       * unembedded chunks cost every question asked meanwhile.
+       */
+      const embedDeadline = () => Date.now() - startedAtMs > EMBED_DEADLINE_MS;
+      const embed = await embedMissing(embedDeadline, 3, { attempts: 2, timeoutMs: 15_000 });
       logger.info({ embed }, "brain-fast: embedded new chunks");
       if (embed.remaining > 2_000) {
         await alertOnce(
           "embed:backlog",
           `:brain: ${embed.remaining} chunks are waiting for embeddings, which is more ` +
             `than the 15-minute job drains. Search still answers, but it cannot match ` +
-            `those by meaning yet. Run \`npx tsx scripts/brain-embed-backfill.ts\` to catch up.`
+            `those by meaning yet. The hourly brain-embed job should catch up; if this ` +
+            `persists, check its runs in GitHub Actions, or start it with ` +
+            `\`gh workflow run brain-embed.yml -R loveiqhq/loveiq\`.`
         );
       }
     } catch (err) {

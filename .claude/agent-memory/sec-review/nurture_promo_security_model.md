@@ -49,18 +49,19 @@ finding L6.
 (reads existing `nurturePromoCodes.post_call.code`, returns it instead of re-minting).
 Coupon id from `STRIPE_COUPON_100`; 14-day expiry. logAdminAction records it.
 
-## Calendly webhook
+## Calendly webhook — REMOVED 2026-09-14
 
-`features/booking/server/calendly.ts` `verifyCalendlySignature`: HMAC-SHA256 over
-`${t}.${rawBody}`, header `t=,v1=`, 180s timestamp tolerance, length-check then
-`timingSafeEqual`, fail-closed (401), 503 when `CALENDLY_WEBHOOK_SECRET` unset.
-Reads rawBody via `request.text()` BEFORE JSON.parse (correct). No CSRF/rate-limit
-by design (same posture as Stripe/Resend webhooks). Idempotency via
-`calendly_webhook_event` UNIQUE(event_key), fails OPEN on Supabase error.
+The receiver (`app/api/calendly/webhook`), `features/booking/server/calendly.ts` and the
+`calendly_webhook_event` table are gone (commit 782c35c5). It never recorded a booking:
+it was registered against the apex `loveiq.org`, which 308-redirects to `www` and drops
+the signature headers. Do not review or reintroduce it from an older copy. What remains
+is `booking_event` (234 historical rows, read and erased by the GDPR paths in
+`features/admin/server/data-subject.ts`) and `insertBookingEvent` in
+`features/booking/server/events.ts`, written only by the admin post-call coupon grant.
 
 ## New tables RLS
 
-`booking_event` + `calendly_webhook_event` both `ENABLE ROW LEVEL SECURITY` +
+`booking_event` (and, until its removal, `calendly_webhook_event`) `ENABLE ROW LEVEL SECURITY` +
 `CREATE POLICY service_role_only USING (false)` — matches resend_webhook_event /
 data_subject_request_log pattern exactly. `booking_event.raw` holds full Calendly
 payload (PII: invitee email/name) — service-role-only at rest; NOT yet in the

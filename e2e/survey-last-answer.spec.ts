@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden } from "../features/survey/questionFlags";
 import { OPT_IN_QID, orderAskedQuestions } from "../features/survey/ui/questionOrder";
+import { instantScroll } from "./fixtures/instant-scroll";
 import { pinSurveySession } from "./surveyArm";
 import { openFirstCategory } from "./surveyGroups";
 
@@ -20,12 +21,12 @@ import { openFirstCategory } from "./surveyGroups";
  * was NULL for exactly those 202. Of the 20 whose draft outlived the submission, all 20
  * held the answer client-side and 11 said "Yes" — consent given, never recorded.
  *
- * The trigger is AUTO-ADVANCE, which is off by default but persists in localStorage once
- * a respondent turns it on. With it on, choosing an option schedules `goNext()` on a
- * 350ms timer — and that scheduled callback is the `goNext` from the render BEFORE the
- * answer existed. On the last question that timer is the submit. With auto-advance off
- * the submit is a Next click, which cannot fire early because the button stays disabled
- * until the answer commits — which is why this only bites the fast path.
+ * The trigger was AUTO-ADVANCE: choosing an option scheduled `goNext()` on a 350ms timer,
+ * and that callback was the `goNext` from the render BEFORE the answer existed. Auto-advance
+ * left with the 2026-10-04 redesign (Figma 11303:174), so the submit is now always a Next
+ * click — which cannot fire early, because the button stays disabled until the answer
+ * commits. This keeps that guarantee pinned: answer the last question, press Next at the
+ * first moment it allows, and the answer must be in the payload.
  *
  * Nothing is written: the submit POST is intercepted and inspected, never forwarded.
  */
@@ -78,9 +79,7 @@ test("the final answer reaches the submit payload even when Next is clicked inst
     });
   });
 
-  await page.addInitScript(() => {
-    window.localStorage.setItem("loveiq-survey-autoadvance", "true");
-  });
+  await instantScroll(page);
 
   await page.goto("/survey");
   await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
@@ -105,13 +104,11 @@ test("the final answer reaches the submit payload even when Next is clicked inst
 
     if (!nextQ) break; // the last question is handled below
 
-    let needsNext = false;
     switch (q.answerType) {
       case "open": {
         const v = q.qId === "00000" ? "last-answer-guard@loveiq.org" : "Guard";
         const boxes = page.getByRole("textbox");
         for (let b = 0, n = await boxes.count(); b < n; b += 1) await boxes.nth(b).fill(v);
-        needsNext = true;
         break;
       }
       case "scale":
@@ -123,7 +120,6 @@ test("the final answer reaches the submit payload even when Next is clicked inst
       case "multiple":
         await openFirstCategory(page, q); // C9's topics sit under closed categories
         await page.getByRole("checkbox").first().click();
-        needsNext = true;
         break;
       case "country":
         await page.getByPlaceholder(/search for a country/i).fill("Germany");
@@ -131,22 +127,17 @@ test("the final answer reaches the submit payload even when Next is clicked inst
         break;
     }
 
-    const next = page.getByRole("heading", { name: nextQ.question, exact: true });
-    if (needsNext) {
-      await page.getByRole("button", { name: /next/i }).click();
-      await next.waitFor({ state: "visible", timeout: 12_000 });
-    } else {
-      try {
-        await next.waitFor({ state: "visible", timeout: 1500 });
-      } catch {
-        await page.getByRole("button", { name: /next/i }).click();
-        await next.waitFor({ state: "visible", timeout: 12_000 });
-      }
-    }
+    // A Next that stays disabled here is an answer that did not register: say so in
+    // seconds, not at the four-minute test timeout.
+    await page.getByRole("button", { name: /next/i }).click({ timeout: 15_000 });
+    await page
+      .getByRole("heading", { name: nextQ.question, exact: true })
+      .waitFor({ state: "visible", timeout: 12_000 });
   }
 
-  // Answer the last question and let auto-advance submit it. No Next click.
+  // Answer the last question and press Next the instant it allows.
   await page.getByRole("radio").first().click();
+  await page.getByRole("button", { name: /next/i }).click();
 
   await expect
     .poll(() => payload !== null, { timeout: 30_000, message: "the survey must submit" })

@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 import { trackSectionNavigated } from "@features/analytics/client";
 import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
+import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
+import { useCloseOnBack } from "./hooks/useCloseOnBack";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
@@ -68,8 +70,6 @@ const ReportMobileNav: FC<Props> = ({
   const pillButtonRef = useRef<HTMLButtonElement>(null);
   const panelPillButtonRef = useRef<HTMLButtonElement>(null);
   const wasDrawerOpenRef = useRef(false);
-  /** The chapter tapped in the drawer, waiting for the drawer to let go of the page. */
-  const pendingSectionRef = useRef<string | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [phase, setPhase] = useState<DrawerPhase>("closed");
@@ -171,6 +171,42 @@ const ReportMobileNav: FC<Props> = ({
     }, DRAWER_CLOSE_DURATION_MS);
   }, []);
 
+  // Back closes the menu instead of leaving the report, as it does the paywall.
+  useCloseOnBack(drawerOpen, closeDrawer);
+
+  /**
+   * A chapter tap jumps AFTER the menu has closed, not during.
+   *
+   * The menu locks the page with `position: fixed` (the shared lock), and a
+   * jump made while it is pinned is undone when the lock lets go and puts the
+   * reader back where they were. That is how the 2.0 menu's chapter links had
+   * been dead on production — the target still ~6,100px away after the tap, on
+   * Chromium and WebKit — while V1's worked only because its menu bypassed the
+   * shared lock, which is what stranded scrolling after "Share report".
+   *
+   * On Safari the menu's own history entry has normally been released by the
+   * time it has closed, so the jump takes its place and back from the chapter
+   * returns to where the reader was, with the next back leaving as it always
+   * did. `afterOverlayEntryGone` still waits if some overlay's entry is on top
+   * at that moment, so the jump never stacks on one.
+   */
+  const pendingJumpRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase !== "closed" || !pendingJumpRef.current) return;
+    const target = pendingJumpRef.current;
+    pendingJumpRef.current = null;
+    afterOverlayEntryGone(() => {
+      window.location.hash = target;
+      // A jump, not a smooth scroll: a smooth scroll fixes its destination as it
+      // starts, and content it passes can still grow (Report V4's Typical Beliefs rows
+      // turn open as they cross the screen), so it stopped short of the chapter. After a
+      // jump, scroll anchoring holds the chapter in place while that settles.
+      document
+        .getElementById(target)
+        ?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
+    });
+  }, [phase]);
+
   // Body-scroll lock active for the full mount lifetime (open + closing) so
   // the page doesn't jump during the exit animation.
   useEffect(() => {
@@ -178,26 +214,6 @@ const ReportMobileNav: FC<Props> = ({
     lockBodyScroll();
     return unlockBodyScroll;
   }, [drawerMounted]);
-
-  // A chapter link's own jump happens while that lock still holds the page
-  // (`position: fixed`), so it lands on nothing, and releasing the lock then puts
-  // the reader back where they opened the drawer. So the drawer goes to the chapter
-  // itself once it has closed. React runs the lock effect's cleanup (the release)
-  // before this effect in the same commit, so the page is free by now.
-  //
-  // A jump, not the page's smooth scroll: a smooth scroll fixes its destination as
-  // it starts, and content it passes can still grow (Report V4's Typical Beliefs
-  // rows turn open as they cross the screen), so it stopped short of the chapter.
-  // After a jump, scroll anchoring holds the chapter in place while that settles.
-  useEffect(() => {
-    if (phase !== "closed") return;
-    const id = pendingSectionRef.current;
-    if (!id) return;
-    pendingSectionRef.current = null;
-    document
-      .getElementById(id)
-      ?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
-  }, [phase]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -379,13 +395,16 @@ const ReportMobileNav: FC<Props> = ({
                           .filter(Boolean)
                           .join(" ")}
                         style={{ animationDelay: `${delayIdx * 24}ms` }}
-                        onClick={() => {
+                        onClick={(event) => {
                           trackSectionNavigated({
                             section_id: item.id,
                             source: "mobile_drawer",
                           });
                           onSectionClick?.(item.id);
-                          pendingSectionRef.current = item.id;
+                          // The jump happens once the menu has let go of the page —
+                          // see pendingJumpRef.
+                          event.preventDefault();
+                          pendingJumpRef.current = item.id;
                           closeDrawer();
                         }}
                       >

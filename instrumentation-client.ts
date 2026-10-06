@@ -1,5 +1,8 @@
 import posthog from "posthog-js";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
+import { POSTHOG_PROXY_PATH, POSTHOG_UI_HOST } from "@shared/analytics/posthog-proxy";
+import { scrollState } from "@shared/ui/body-scroll-lock";
+import { isProbeRequest } from "@shared/http/probe-cookie";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -29,9 +32,30 @@ if (!projectToken || !host) {
       `${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`
     );
   }
+} else if (isProbeRequest(document.cookie)) {
+  // One of our own probes (scripts/probes/staging-cookie.mjs), not a visitor: it stays out
+  // of every PostHog count and replay. track() still runs, and posthog.capture is a no-op.
 } else {
   posthog.init(projectToken, {
-    api_host: host,
+    /**
+     * Our own origin, not PostHog's. `next.config.js` rewrites it straight through.
+     *
+     * Ad blockers match analytics on HOSTNAME, so a request to `eu.i.posthog.com` is
+     * dropped before it leaves the browser for every visitor running one — and they are
+     * invisible in the data precisely because the request never happened. A same-origin
+     * path does not match those lists.
+     *
+     * `host` is still required above and still used, for `ui_host` — an empty
+     * NEXT_PUBLIC_POSTHOG_HOST remains a misconfiguration worth shouting about, because
+     * the server-side purchase send reads the same variable.
+     */
+    api_host: POSTHOG_PROXY_PATH,
+    /**
+     * Without this, posthog-js derives the app URL from `api_host` and every "view in
+     * PostHog" link — in toolbar, in session replay, in the browser extension — would
+     * point at loveiq.org/relay and 404.
+     */
+    ui_host: POSTHOG_UI_HOST,
     defaults: "2026-01-30",
     capture_exceptions: true,
     debug: process.env.NODE_ENV === "development",
@@ -66,5 +90,20 @@ if (!projectToken || !host) {
      * PERSONS by environment is not what this gives you.
      */
     loaded: (ph) => ph.register({ deploy_env: resolveDeployEnv() }),
+    /**
+     * A `$dead_swipe` says a swipe moved nothing, never why; `scrollState()` says
+     * whether we had frozen the page, the reader was zoomed in, or at the end.
+     * Wrapped so a failure to describe the page can never drop the event itself.
+     */
+    before_send: (event) => {
+      if (event?.event === "$dead_swipe") {
+        try {
+          Object.assign(event.properties, scrollState());
+        } catch {
+          // The event without its context is still worth having.
+        }
+      }
+      return event;
+    },
   });
 }

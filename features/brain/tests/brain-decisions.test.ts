@@ -14,11 +14,18 @@ vi.mock("@features/brain/server/ingest/upsert", () => ({
 vi.mock("@shared/observability/slack", () => ({ notifySlack: vi.fn(async () => undefined) }));
 
 import {
+  decisionTitle,
   buildDecisionRow,
+  disputesAsOf,
+  disputesOf,
+  looksLikeDecisionBrowse,
+  markSuperseded,
   priorDecisions,
-  recordDecision,
   proposesSomething,
+  recentDecisions,
+  recordDecision,
   renderPriorDecisions,
+  renderRecentDecisions,
 } from "@features/brain/server/decisions";
 import { peopleIn, type Person } from "@features/brain/server/people";
 
@@ -26,6 +33,19 @@ const NOW = new Date("2026-09-09T14:30:00Z");
 const base = { decision: "Move report pricing to flat tiers", actor: "Eman Cickusic" };
 
 describe("buildDecisionRow", () => {
+  it("names a signed-in recorder, and says so in the text only when it is someone else", () => {
+    const other = buildDecisionRow({ ...base, recordedBy: "Mark Oldenburg" }, NOW);
+    expect(other.meta).toMatchObject({ actor: "Eman Cickusic", recorded_by: "Mark Oldenburg" });
+    expect(other.body).toContain("by Eman Cickusic.\nRecorded by Mark Oldenburg.");
+    const self = buildDecisionRow({ ...base, recordedBy: "Eman Cickusic" }, NOW);
+    expect(self.meta).toMatchObject({ recorded_by: "Eman Cickusic" });
+    expect(self.body).not.toContain("Recorded by");
+    // On the shared token nobody is named, and the id does not change.
+    const shared = buildDecisionRow(base, NOW);
+    expect(shared.meta).not.toHaveProperty("recorded_by");
+    expect(other.source_id).toBe(shared.source_id);
+  });
+
   /**
    * THE ID IS A CONTENT HASH, AND THAT IS THE WHOLE IDEMPOTENCY STORY.
    *
@@ -194,6 +214,79 @@ describe("noticing that something was already decided", () => {
     expect(out).not.toMatch(/this is settled|has been decided already, do not/i);
   });
 
+  /**
+   * THE BANNER ASSERTS SETTLEDNESS, SO IT HAS TO SAY WHAT IT DOES NOT KNOW.
+   *
+   * Measured 2026-09-22: asked whether the survey is free or paid, this block produced
+   * "Split the survey into a short free section and a detailed section after the paywall"
+   * (2026-08-04) as the settled answer. That experiment was removed — the survey is free
+   * and the paywall is on the REPORT, and the live counts say so plainly (2,121
+   * submissions against 395 payments). A reader following the banner would have restated
+   * a dead decision as current policy.
+   *
+   * `superseded_by` already existed and `renderSources` already printed a banner for it,
+   * but of 117 decisions exactly one pair carried it and both were written by hand. The
+   * 91 mined ones never get it.
+   */
+  it("says so when a decision has been explicitly superseded", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-09-19-old",
+        title: "Decision: Survey Started counts drafts past question one",
+        decidedOn: "2026-09-19",
+        supersededBy: "decision:2026-09-19-new",
+      },
+    ]);
+    expect(out).toContain("SUPERSEDED by decision/decision:2026-09-19-new");
+  });
+
+  /**
+   * A FACT, NOT A CLAIM OF SUPERSESSION. A later decision on a topic very often refines
+   * rather than reverses, so asserting reversal would be the same overreach in the other
+   * direction. This states the count and lets the reader judge.
+   */
+  it("warns when later decisions exist on the same topic", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-08-04-abc",
+        title: "Decision: Split the survey at a paywall",
+        decidedOn: "2026-08-04",
+        laterOnTopic: { count: 4, newest: "2026-08-28" },
+      },
+    ]);
+    expect(out).toContain("4 later decisions on this topic, newest 2026-08-28");
+    expect(out).toMatch(/check before treating this as current/);
+    // Never claims the later ones reversed it.
+    expect(out).not.toMatch(/reversed|no longer applies|superseded by/i);
+  });
+
+  it("says nothing extra when a decision is current and alone on its topic", () => {
+    // The control. Without it, a renderer that printed the warning unconditionally
+    // would pass both tests above.
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-09-09-abc",
+        title: "Decision: Keep one shared credential",
+        decidedOn: "2026-09-09",
+      },
+    ]);
+    expect(out).not.toMatch(/later decision/);
+    expect(out).not.toMatch(/SUPERSEDED/);
+  });
+
+  it("uses the singular for exactly one later decision", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-08-04-abc",
+        title: "Decision: Split the survey at a paywall",
+        decidedOn: "2026-08-04",
+        laterOnTopic: { count: 1, newest: "2026-08-28" },
+      },
+    ]);
+    expect(out).toContain("1 later decision on this topic");
+    expect(out).not.toContain("1 later decisions");
+  });
+
   it("strips the stored title prefix, which the heading already says", () => {
     const out = renderPriorDecisions([
       {
@@ -299,6 +392,16 @@ describe("superseding is history a reader can see, not just metadata", () => {
     mockUpsertChunks.mockResolvedValue(1);
   });
 
+  it("tells the caller when the decision it replaces is not on record, rather than only logging it", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
+    const r = await recordDecision({
+      decision: "the new way",
+      actor: "A Person",
+      supersedes: "decision/decision:2026-01-01-missing",
+    });
+    expect(r.supersedeProblem).toMatch(/no decision decision:2026-01-01-missing is on record/);
+  });
+
   it("marks the REPLACED decision, because that is the record a reader lands on", async () => {
     /**
      * `supersedes` was written into the NEW decision's metadata, body and Slack
@@ -350,5 +453,336 @@ describe("superseding is history a reader can see, not just metadata", () => {
     await expect(
       recordDecision({ decision: "still recorded", actor: "A Person", supersedes: "decision:x" })
     ).resolves.toMatchObject({ id: expect.stringContaining("decision:") });
+  });
+});
+
+describe("looksLikeDecisionBrowse", () => {
+  /**
+   * The measurement this exists for: on 2026-09-16 "what did we decide recently" returned
+   * three decisions out of twelve hits -- the rest a runbook, a marketing email, an August
+   * article plan and a June Slack day -- because the question names no topic, so the WORD
+   * "decision" did all the matching. "Recently" was not honoured at all.
+   */
+  it.each([
+    "what did we decide recently",
+    "what have we decided lately",
+    "recent decisions",
+    "what did we agree on this week",
+    "any decisions?",
+    "what did we decide",
+    "what was settled last month",
+    "latest decisions",
+  ])("treats %j as a browse", (q) => {
+    expect(looksLikeDecisionBrowse(q)).toBe(true);
+  });
+
+  /**
+   * The expensive direction. A question WITH a topic must go down the ranked path
+   * untouched -- ranking is the right tool the moment there is something to rank against,
+   * and hijacking it would answer a narrow question with a generic list.
+   */
+  it.each([
+    "what did we decide about pricing",
+    "what did we decide about the landing page",
+    "did we agree to index private slack channels",
+    "decisions about the report paywall",
+    "what did we decide on the chapter sequence",
+  ])("leaves %j to the ranked search", (q) => {
+    expect(looksLikeDecisionBrowse(q)).toBe(false);
+  });
+
+  it.each([
+    "what are our recent numbers",
+    "how many people signed up this month",
+    "what did we ship last week",
+  ])("does not fire on %j, which is not about decisions at all", (q) => {
+    expect(looksLikeDecisionBrowse(q)).toBe(false);
+  });
+});
+
+describe("the decision radar's marks", () => {
+  const mark = {
+    id: "decision:2026-09-03-b",
+    on: "2026-09-03",
+    kind: "unclear",
+    why: "Two tools named.",
+  };
+
+  it("reads well-formed marks off the meta and ignores anything else", () => {
+    expect(disputesOf({ disputed_by: [mark, { id: 1 }, null, "x"] })).toEqual([mark]);
+    expect(disputesOf({ disputed_by: "nope" })).toEqual([]);
+    expect(disputesOf(null)).toEqual([]);
+  });
+
+  it("warns in the decision block, as a question for a person", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-05-15-a",
+        title: "Decision: Require Jira tickets",
+        decidedOn: "2026-05-15",
+        disputedBy: [mark],
+      },
+    ]);
+    expect(out).toContain(
+      "MAY CONFLICT with decision/decision:2026-09-03-b (2026-09-03): Two tools named. Nobody has settled which stands"
+    );
+  });
+
+  it("carries the marks through the prior-decision lookup", async () => {
+    mockSupabaseFetch.mockReset().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          source_id: "decision:2026-05-15-a",
+          title: "Decision: Require Jira tickets",
+          period_end: "2026-05-15",
+          score: 2.4,
+          meta: { disputed_by: [mark] },
+        },
+      ],
+    });
+    const found = await priorDecisions("should we switch to Jira tickets");
+    expect(found[0]!.disputedBy).toEqual([mark]);
+  });
+});
+
+describe("markSuperseded", () => {
+  beforeEach(() => {
+    mockSupabaseFetch.mockReset();
+  });
+
+  it("marks the older record and says how many it marked", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 7, meta: { topic: "tooling" } }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    expect(
+      await markSuperseded("decision/decision:2026-05-15-a", "decision:2026-09-03-b", "2026-09-26")
+    ).toBe(1);
+    const [path, init] = mockSupabaseFetch.mock.calls[1]!;
+    expect(String(path)).toBe("/rest/v1/brain_chunk?id=eq.7");
+    expect(JSON.parse((init as { body: string }).body)).toEqual({
+      meta: {
+        topic: "tooling",
+        superseded_by: "decision:2026-09-03-b",
+        superseded_on: "2026-09-26",
+      },
+    });
+  });
+
+  it("dates the replacement from the later decision, never the day it was marked", async () => {
+    // The replaced rows, then the replacing decision's own day, then the write.
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 7, meta: {}, period_end: "2026-05-15" }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ period_end: "2026-09-03" }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await markSuperseded("decision:2026-05-15-a", "decision:2026-09-03-b");
+    const written = (i: number) =>
+      JSON.parse((mockSupabaseFetch.mock.calls[i]![1] as { body: string }).body).meta;
+    expect(written(2).superseded_on).toBe("2026-09-03");
+    // Keeping the EARLIER one: the later decision never stood, so from its own day.
+    mockSupabaseFetch.mockReset();
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 8, meta: {}, period_end: "2026-09-03" }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ period_end: "2026-05-15" }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await markSuperseded("decision:2026-09-03-b", "decision:2026-05-15-a");
+    expect(written(2).superseded_on).toBe("2026-09-03");
+  });
+
+  it("refuses to guess when the replacing decision has no day, and writes nothing", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 7, meta: {}, period_end: "2026-05-15" }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+    await expect(markSuperseded("decision:a", "decision:b")).rejects.toThrow(/no date/);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("finds the decision by the short id settle prints, and drops its conflict marks", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 7,
+            meta: { topic: "tooling", disputed_by: [{ id: "decision:b", on: "x", why: "y" }] },
+            period_end: "2026-05-15",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    expect(
+      await markSuperseded("decision/2026-05-15-a", "decision:2026-09-03-b", "2026-09-03")
+    ).toBe(1);
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain(
+      "source_id=eq.decision%3A2026-05-15-a"
+    );
+    const meta = JSON.parse((mockSupabaseFetch.mock.calls[1]![1] as { body: string }).body).meta;
+    expect(meta).toMatchObject({ topic: "tooling", superseded_by: "decision:2026-09-03-b" });
+    expect(meta.disputed_by).toBeUndefined();
+  });
+
+  it("refuses to re-mark a decision another one already replaced, writing nothing", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: 7, meta: { superseded_by: "decision:2026-06-01-b" }, period_end: "2026-05-15" },
+      ],
+    });
+    await expect(
+      markSuperseded("decision:2026-05-15-a", "decision:2026-09-03-c", "2026-09-03")
+    ).rejects.toThrow(/already replaced by decision:2026-06-01-b; supersede that one instead/);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when it cannot read or cannot write, so a caller never half-finishes", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
+    await expect(markSuperseded("decision:x", "decision:y", "2026-09-26")).rejects.toThrow(
+      /could not read/
+    );
+    mockSupabaseFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 7, meta: {} }] })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+    await expect(markSuperseded("decision:x", "decision:y", "2026-09-26")).rejects.toThrow(
+      /could not mark/
+    );
+  });
+});
+
+/**
+ * AS OF A DAY. A search or browse with `until` asks what stood on that day, and a decision
+ * replaced after it still stood then. Sending that reader to "read the replacement instead"
+ * sends them to something that did not exist yet.
+ */
+describe("as of a day, a decision reads as it stood then", () => {
+  const sub = {
+    sourceId: "decision:2026-05-18-sub",
+    title: "Decision: Sell premium content as a subscription",
+    decidedOn: "2026-05-18",
+    supersededBy: "decision:2026-09-26-drop",
+    supersededOn: "2026-09-26",
+  };
+
+  it("calls one replaced after the day standing on it, and one replaced by then superseded", () => {
+    const then = renderPriorDecisions([sub], "2026-08-01");
+    expect(then).toContain(
+      "STOOD ON 2026-08-01: replaced later, on 2026-09-26, by decision/decision:2026-09-26-drop."
+    );
+    expect(then).not.toContain("SUPERSEDED");
+    expect(renderPriorDecisions([sub], "2026-09-26")).toContain(
+      "SUPERSEDED by decision/decision:2026-09-26-drop"
+    );
+    expect(renderPriorDecisions([sub])).toContain("SUPERSEDED by");
+    // No recorded day: saying it stood when we cannot tell is the expensive mistake.
+    expect(renderPriorDecisions([{ ...sub, supersededOn: null }], "2026-08-01")).toContain(
+      "SUPERSEDED by"
+    );
+  });
+
+  it("drops a conflict with a decision made after the day", () => {
+    const marks = [
+      { id: "decision:2026-09-03-b", on: "2026-09-03", kind: "unclear" as const, why: "x" },
+    ];
+    expect(disputesAsOf(marks, "2026-08-01")).toEqual([]);
+    expect(disputesAsOf(marks, "2026-09-03")).toHaveLength(1);
+    expect(disputesAsOf(marks)).toHaveLength(1);
+  });
+
+  it("lists the latest decisions up to the day, and marks a replaced one either way", async () => {
+    mockSupabaseFetch.mockReset();
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          source_id: sub.sourceId,
+          title: sub.title,
+          period_end: sub.decidedOn,
+          meta: { superseded_by: sub.supersededBy, superseded_on: sub.supersededOn },
+        },
+      ],
+    });
+    const found = await recentDecisions(8, "2026-08-01");
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain("&period_end=lte.2026-08-01");
+    const then = renderRecentDecisions(found, "2026-08-01");
+    expect(then).toContain("MOST RECENT DECISIONS UP TO 2026-08-01");
+    expect(then).toContain("STOOD ON 2026-08-01");
+    // Without a day it is plainly replaced. This block used to print nothing at all.
+    expect(renderRecentDecisions(found)).toContain(
+      "SUPERSEDED by decision/decision:2026-09-26-drop"
+    );
+  });
+
+  it("asks the search only about decisions made by the day, and counts later ones up to it", async () => {
+    mockSupabaseFetch.mockReset();
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            source_id: "decision:2026-05-18-sub",
+            title: sub.title,
+            period_end: "2026-05-18",
+            score: 2.4,
+            meta: { topic: "pricing" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { period_end: "2026-09-26", meta: { topic: "pricing" } },
+          { period_end: "2026-07-01", meta: { topic: "pricing" } },
+        ],
+      });
+    const found = await priorDecisions("should we sell a subscription", "2026-08-01");
+    const [, init] = mockSupabaseFetch.mock.calls[0]!;
+    expect(JSON.parse((init as { body: string }).body).until).toBe("2026-08-01");
+    // July's counts, September's did not exist yet on the day asked about.
+    expect(found[0]!.laterOnTopic).toEqual({ count: 1, newest: "2026-07-01" });
+  });
+});
+
+describe("a decision's title never says 'decided'", () => {
+  // "decided" stems like "decide", so it matched every "what did we decide about X" question.
+  it("rewords the verb in the title and keeps the body as written", () => {
+    const row = buildDecisionRow(
+      {
+        decision: "Drop the subscription model that was decided on 18 May 2026",
+        actor: "Eman Cickusic",
+      },
+      NOW
+    );
+    expect(row.title).toBe("Decision: Drop the subscription model that was settled on 18 May 2026");
+    expect(row.body).toContain("Drop the subscription model that was decided on 18 May 2026");
+  });
+
+  it("keeps a sentence-initial capital and covers every form of the verb", () => {
+    expect(decisionTitle("Decided to ship the blurred preview first")).toBe(
+      "Decision: Chose to ship the blurred preview first"
+    );
+    expect(decisionTitle("The team decided against a fade effect")).toBe(
+      "Decision: The team ruled out a fade effect"
+    );
+    expect(decisionTitle("We decided that Sanjin owns the components")).toBe(
+      "Decision: We agreed that Sanjin owns the components"
+    );
+    expect(decisionTitle("Marcus decides the price; nobody else is deciding it")).toBe(
+      "Decision: Marcus chooses the price; nobody else is choosing it"
+    );
+    // The noun stems differently and stays.
+    expect(decisionTitle("Record every decision in Notion")).toBe(
+      "Decision: Record every decision in Notion"
+    );
   });
 });

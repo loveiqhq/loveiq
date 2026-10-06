@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   __resetInMemorySessionIdForTests,
+  completedReportToken,
+  forgetCompletedReport,
   getSessionId,
+  rememberCompletedReport,
 } from "@features/survey/ui/hooks/surveySession";
 
 /**
@@ -146,17 +149,54 @@ describe("getSessionId under hostile storage", () => {
     }
   });
 
+  it("remembers a finished run for the page load, and starting again gets a new id", () => {
+    // With storage refused, the finished marker could not be kept at all, so starting
+    // again in the same page load reused the in-memory id and lost the retake.
+    const restore = breakStorage("throws");
+    try {
+      const finished = getSessionId();
+      rememberCompletedReport("rpt_finished");
+      expect(completedReportToken()).toBe("rpt_finished");
+      forgetCompletedReport();
+      expect(completedReportToken()).toBeNull();
+      expect(getSessionId()).not.toBe(finished);
+    } finally {
+      restore();
+    }
+  });
+
   it("still works when crypto.randomUUID is unavailable too", () => {
     const restore = breakStorage("throws");
     const realCrypto = globalThis.crypto;
     try {
       vi.stubGlobal("crypto", {});
       const id = getSessionId();
-      expect(id).toMatch(/^s-[a-z0-9]+-[a-z0-9]+$/i);
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
       expect(id.length).toBeGreaterThan(8);
     } finally {
       vi.stubGlobal("crypto", realCrypto);
       restore();
+    }
+  });
+
+  // The draft's id is also kept in localStorage. A browser that allows sessionStorage but
+  // throws on localStorage must keep its perfectly good sessionStorage id (22f8e5c9).
+  it("keeps the sessionStorage id when localStorage throws", () => {
+    const real = window.localStorage;
+    const boom = () => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => ({ getItem: boom, setItem: boom, removeItem: boom, clear: boom, key: boom }),
+    });
+    try {
+      const a = getSessionId();
+      expect(a).toMatch(UUID_ISH);
+      expect(window.sessionStorage.getItem("loveiq-survey-session")).toBe(a);
+      expect(getSessionId()).toBe(a);
+    } finally {
+      Object.defineProperty(window, "localStorage", { configurable: true, value: real });
     }
   });
 });

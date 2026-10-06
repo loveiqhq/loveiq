@@ -12,8 +12,10 @@ vi.mock("@shared/http/ratelimit", () => ({
 }));
 
 const mockSupabaseFetch = vi.fn();
+const mockFetchAllRows = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
+  fetchAllRows: (...args: unknown[]) => mockFetchAllRows(...args),
 }));
 
 vi.mock("@shared/observability/logger", () => ({
@@ -41,6 +43,9 @@ describe("GET /api/admin/question-effectiveness", () => {
     vi.resetAllMocks();
     mockVerifyAdminSession.mockResolvedValue({ email: "admin@test.com", role: "admin" });
     mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() });
+    // The behaviour-event context is paged; this test asserts skip rate and
+    // regression status, not dwell, so an empty walk is the right default.
+    mockFetchAllRows.mockResolvedValue([]);
   });
 
   it("returns a regression watchlist with real skip-rate data", async () => {
@@ -75,21 +80,17 @@ describe("GET /api/admin/question-effectiveness", () => {
           200
         )
       )
+      // The answer metrics are aggregated in SQL now: the route reads totals
+      // from get_question_answer_metrics rather than counting raw rows. Same
+      // numbers as the three rows this used to return — 1 of 3 skipped, 4
+      // revisions — so the assertions below are unchanged.
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [
-          { was_skipped: true, revision_count: 2, survey_question: { frontend_qid: "01002" } },
-          { was_skipped: false, revision_count: 1, survey_question: { frontend_qid: "01002" } },
-          { was_skipped: false, revision_count: 1, survey_question: { frontend_qid: "01002" } },
-        ],
+        json: async () => [{ frontend_qid: "01002", total: 3, skipped: 1, revision_total: 4 }],
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [
-          { was_skipped: false, revision_count: 0, survey_question: { frontend_qid: "01002" } },
-          { was_skipped: false, revision_count: 0, survey_question: { frontend_qid: "01002" } },
-          { was_skipped: false, revision_count: 1, survey_question: { frontend_qid: "01002" } },
-        ],
+        json: async () => [{ frontend_qid: "01002", total: 3, skipped: 0, revision_total: 1 }],
       });
 
     const res = await GET(makeRequest());

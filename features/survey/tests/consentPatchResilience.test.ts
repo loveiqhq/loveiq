@@ -22,7 +22,7 @@ const ok = (body: unknown = {}) =>
  * record, and it shares one PATCH with `option_order`. PostgREST rejects the WHOLE body
  * when a column is missing from its schema cache, migrations here are applied by hand
  * rather than by CI, and `fetch` does not throw on a 4xx — so a deploy landing before
- * `20260911102618_survey_submission_option_order.sql` would have dropped the consent
+ * `20260911193327_survey_submission_option_order.sql` would have dropped the consent
  * record on every submission with nothing logged.
  */
 describe("consent patch survives a missing option_order column", () => {

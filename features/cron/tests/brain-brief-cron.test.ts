@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { brainDailySchedules } from "./brain-daily-schedule";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -40,6 +41,14 @@ vi.mock("@shared/observability/slack", () => ({
   escapeSlack: (s: string) => s,
 }));
 
+const notices: Array<{ headline: string; detail: string; kind: string }> = [];
+vi.mock("@features/brain/server/notice", () => ({
+  recordNotice: async (n: { headline: string; detail: string; kind: string }) => {
+    notices.push(n);
+    return true;
+  },
+}));
+
 import { GET } from "@/app/api/cron/brain-brief/route";
 
 const req = () => new Request("https://www.loveiq.org/api/cron/brain-brief");
@@ -55,6 +64,7 @@ beforeEach(() => {
     day: "",
   };
   posted.length = 0;
+  notices.length = 0;
   marked.length = 0;
   recorded.length = 0;
 });
@@ -65,6 +75,22 @@ describe("/api/cron/brain-brief", () => {
     expect(res.status).toBe(200);
     expect(posted).toHaveLength(1);
     expect(posted[0]?.text).toContain("39.99");
+  });
+
+  /** Where the team reads: the same brief as a notice Jarvis serves in Claude. */
+  it("writes the brief as a notice beside the post, and none on a quiet day", async () => {
+    const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    await GET(req());
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      headline: `What the brain noticed on ${day}`,
+      kind: "brain-brief",
+    });
+    expect(notices[0]!.detail).toContain("Pricing moved to 39.99");
+    brief = null;
+    notices.length = 0;
+    await GET(req());
+    expect(notices).toHaveLength(0);
   });
 
   /**
@@ -119,13 +145,48 @@ describe("/api/cron/brain-brief", () => {
 
 describe("a day this job failed must be recoverable", () => {
   /**
-   * The schedule only ever asks for YESTERDAY, so a day the job fails is lost forever.
+   * The schedule only ever asks for YESTERDAY, so a day the job fails was lost forever
+   * until the retry firings (below) existed.
    * That happened on the very first run: 2026-08-31 06:11 died on a 45s model timeout
    * and 2026-08-30's brief was never posted, with nothing able to retry it.
    *
    * `?day=` closes that, guarded: same cron bearer as everything else, and no future
    * dates. The per-day claim still applies, so a replay cannot double-post.
    */
+  /**
+   * A FAILED DAY GETS A SECOND CHANCE, AND ONLY A FAILED ONE.
+   *
+   * `claim_slack_alert` is a lease: an UNDELIVERED claim older than 10 minutes can be
+   * taken again, a delivered one never. So a second daily firing retries exactly the
+   * days that failed and no-ops on the rest. Measured 2026-09-23: the 06:10 run hit two
+   * 503s five seconds apart and the 2026-09-22 brief was lost, because nothing came
+   * back. A tidy-up that merges the two hours back into one would silently undo this.
+   */
+  /**
+   * In the morning, and not before it. GitHub started this repo's schedules 4.5 to 5.5 hours
+   * late (measured 2026-09-25), so the brief was scheduled at 01:10 to land by 08:00 UTC.
+   * Since 2026-09-28 Vercel's clock starts it on time, so its own hour is the landing hour:
+   * by 08:00 UTC, and not in the small hours, when its first run would have been 01:10.
+   */
+  it("fires first in the morning, on time now that the clock starts it", () => {
+    const hourField = brainDailySchedules()["brain-brief"].split(" ")[1]!;
+    const first = Math.min(...hourField.split(",").map(Number));
+    expect(first).toBeGreaterThanOrEqual(5);
+    expect(first).toBeLessThan(8);
+  });
+
+  it("fires twice a day, further apart than the claim lease", () => {
+    // GitHub Actions runs it (it needs the `claude` binary), started by Vercel's clock.
+    const [, hourField, dom, month, dow] = brainDailySchedules()["brain-brief"].split(" ");
+    expect([dom, month, dow]).toEqual(["*", "*", "*"]);
+    const hours = hourField.split(",").map(Number);
+    expect(hours.length).toBeGreaterThanOrEqual(2);
+    // Both firings must ask for the SAME "yesterday", so they share one UTC day.
+    expect(hours.every((h) => Number.isInteger(h) && h >= 0 && h <= 23)).toBe(true);
+    const gapsMinutes = hours.slice(1).map((h, i) => (h - hours[i]) * 60);
+    expect(Math.min(...gapsMinutes)).toBeGreaterThan(10);
+  });
+
   const dayReq = (d: string) => new Request(`https://www.loveiq.org/api/cron/brain-brief?day=${d}`);
 
   it("builds the brief for an explicitly requested past day", async () => {

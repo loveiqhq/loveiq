@@ -1,22 +1,31 @@
 # Company Brain — runbook
 
-> Ask a question in Slack, get an answer from LoveIQ's own documentation, git
-> history and business numbers, with a link to every source.
+> Ask in Claude (claude.ai or Claude Code) and get an answer from everything LoveIQ
+> writes down and its live systems, with a link to every source.
 
 ## For everyone: how to use it
 
-Mention `@LoveIQ Brain` in a channel it has been invited to, or send it a direct
-message. It replies in a thread, and every answer lists the sources it used.
+Ask in Claude, with the LoveIQ brain connector: claude.ai, Claude Desktop or Claude
+Code (setup under "Connecting Claude to it" below). Every answer lists the sources it
+used. Slack is no longer a place to ask: since 2026-09-23 a mention of `@LoveIQ Brain` or
+a DM gets a one-line pointer to Claude, while channel messages are still indexed.
 
 **It is good at** (all measured against the real corpus):
 
-| Ask                                                        | Why it works                                                                            |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| "how are we doing this month"                              | The funnel rollup carries visits, signups, revenue and ad spend per day, week and month |
-| "how much did we spend on Google Ads and what did we earn" | Spend and revenue sit in the same chunk, already divided, so nothing has to be computed |
-| "why did we stop the dark landing page test"               | Recorded call notes and the Slack day it was discussed both carry the reasoning         |
-| "why is the data retention purge turned off"               | `CLAUDE.md` records deliberately-deferred work and the reason                           |
-| "what does `STRIPE_COUPON_100` do"                         | The whole environment-variable table is indexed                                         |
+| Ask                                                               | Why it works                                                                             |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| "how are we doing this month"                                     | The funnel rollup carries visits, signups, revenue and ad spend per day, week and month  |
+| "how much did we spend on Google Ads and what did we earn"        | Spend and revenue sit in the same chunk, already divided, so nothing has to be computed  |
+| "why did we stop the dark landing page test"                      | Recorded call notes and the Slack day it was discussed both carry the reasoning          |
+| "why is the data retention purge turned off"                      | `CLAUDE.md` records deliberately-deferred work and the reason                            |
+| "what does `STRIPE_COUPON_100` do"                                | The whole environment-variable table is indexed                                          |
+| "show me visitors this month as a chart"                          | `show_chart` draws the digest's chart and links it, so it pastes into a doc or a deck    |
+| "what would it take to break even on ads"                         | `break_even` works it out from live spend, funnel and orders, and takes what-ifs         |
+| "how many women aged 25 to 34 finished, and how many paid"        | `user_totals` gives totals by group, hiding any group under 5                            |
+| "what do we pay for tools each month, and what went up"           | `cost_watch` reads the cost sheet the invoice filing keeps current, without pay          |
+| "where do people struggle on the site, and is it real"            | `ux_signals` measures Marcus's 22 signals on real visits, shown once proven on the walks |
+| "what had we decided about pricing by 1 August"                   | `until` shows each decision as it stood that day, even one replaced since                |
+| "what A/B tests are running, and what did the last ones conclude" | `experiments` reads the registry and the live arms, in /admin's own words                |
 
 **It is weak at, and will say so rather than guess:**
 
@@ -29,6 +38,57 @@ message. It replies in a thread, and every answer lists the sources it used.
   `query_product_data` for `report_price_quote`, not the written record.
 - **Money outside the product.** No payroll, no bank balance, no runway — those
   live in systems nothing here reads.
+- **Pictures.** Screenshots and photos are named but never read — there is no OCR
+  here. Of the 184 files shared in Slack, 148 are images, so for most of them the
+  file name is all there will ever be.
+
+### Ready-made prompts
+
+In claude.ai and Claude Code the brain offers ready-made prompts to pick, so nobody has
+to know which tool answers what: **Catch me up**, **KPI check**, **Review this chapter**,
+**Draft a chapter**, **What needs me**, **Put meeting promises on the board**,
+**Monthly review**, **Onboard a new teammate** and **Record a decision**. They live in
+`features/brain/server/prompts.ts` and are served over MCP `prompts/list` and
+`prompts/get`. Each one ends with the house rules (short, plain, every fact linked),
+and a test fails if a prompt names a tool that does not exist.
+
+### Skills: the house way of doing a job
+
+Skills teach Claude how LoveIQ does a job, step by step, with Jarvis's tools.
+
+- **In claude.ai** (for everyone): `loveiq-copy-gate`, `loveiq-chapter-writer`,
+  `loveiq-numbers` and `loveiq-research`, in `docs/claude-ai-skills/`. Build the zips with
+  `npm run skills:pack`, then upload each in claude.ai under Organization settings, Plugins &
+  skills, Add, Upload a skill, which installs it for every member. `PROJECT_INSTRUCTIONS.md`
+  beside them is the text of the claude.ai Project LoveIQ, shared with the organization.
+- **In Claude Code** (for engineers, in this repo): `/copy-gate`, `/report-chapter`,
+  `/assessment-factory` and `/jarvis-brief`, in `.claude/skills/`, with the five review
+  agents in `.claude/agents/`.
+
+A test fails when a skill names a Jarvis tool or prompt that does not exist, when a claude.ai
+skill has front matter claude.ai would refuse, or when an agent lacks the front matter
+Claude Code needs to load it. Until 2026-09-30 none of the five agents had it, so none ever
+loaded.
+
+### Attachments and files, and where the edges are
+
+Added 2026-09-19, after a spreadsheet that was indexed, counted and reconciled
+turned out to hold one tab of two. Counting documents cannot see inside them.
+
+| Read                                                    | Not read                                       |
+| ------------------------------------------------------- | ---------------------------------------------- |
+| Every tab of a Google Sheet, each under its own heading | Images and video — no OCR                      |
+| PDF, Word and text attachments on email threads         | Anything over 4 MB — that is data, not prose   |
+| PDF, Word and text files shared in Slack channels       | `.xlsx` and `.pptx` uploads — no parser here   |
+| Google Docs, including documents with several tabs      | Files in channels the bot was never invited to |
+
+Bounded on purpose: at most five attachments per email thread and about ten
+chunks' worth of text per thread, because five 20,000-character attachments is a
+third again of the whole corpus and would drown every other source.
+
+A part of a document that contains a credential is refused and replaced with a
+short note saying so, rather than vanishing — the surrounding parts still say
+"part 2 of 2", and a hole with no explanation reads exactly like a bug.
 
 ### Business metrics we have: revenue, AOV, LTV, CAC, conversion rate, ad spend
 
@@ -105,13 +165,18 @@ a transcript. Filter on `surface` to tell the two apart.
 
 ### What feeds it
 
-| Source                                 | Where from                                                             | When                    |
-| -------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs                              | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| GA4, call notes, funnel numbers, Slack | `/api/cron/brain-fast`                                                 | every 15 min            |
-| Notion (board + pages)                 | `/api/cron/brain-notion`                                               | hourly, at :41          |
-| Gmail (every mailbox on the domain)    | `/api/cron/brain-gmail`                                                | hourly, at :11          |
-| Search Console                         | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Source                                                                                     | Where from                                                             | When                    |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs                                                                                  | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| GA4, call notes, funnel numbers, Slack                                                     | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Notion (board + pages)                                                                     | `/api/cron/brain-notion`                                               | hourly, at :41          |
+| Gmail (every mailbox on the domain)                                                        | `/api/cron/brain-gmail`                                                | hourly, at :11          |
+| Search Console                                                                             | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Shipped report copy, the chapter method, the glossary/survey/scoring vocabulary            | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Books on love, desire and sex (eleven, whole; searched only when asked for)                | `npm run brain:books` → `scripts/brain-books.ts`                       | by hand, once           |
+| Research citation cards, one per construct (`evidence`)                                    | `/api/cron/brain-evidence`                                             | daily, 04:20 UTC        |
+| Open-access papers, whole (`paper`; CC BY and CC0 only; searched only when asked for)      | `/api/cron/brain-papers`                                               | daily, 04:50 UTC        |
+| The corporate website appliedpsychometrics.org (`corporate`; searched only when asked for) | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
 
 Jira is **not** a source. Notion is the system of record for the team's work
 (decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
@@ -124,6 +189,47 @@ with zero rows tells the model to search something that cannot answer.
 Both are idempotent and both sweep rows they did not rewrite, guarded by the
 write count **of their own source** so an empty run can never wipe a source.
 
+Books are a source, and an opt-in one (decision 2026-09-28). Eleven third-party books on
+love, desire and sex that we keep in Drive are loaded whole as `book` by `npm run
+brain:books`, which is safe to re-run. It is run by hand and sweeps nothing: a book
+taken out of `BOOKS` stays until its rows are deleted. `brain_search` returns a `book`
+row only when the caller asks for the source (`sources: ["book"]`), because about 3,200
+pages in the product's own vocabulary would otherwise crowd company answers out of the
+semantic top-120 before any demotion applied. Every part says whose work it is. The
+three other books in that folder (leadership, habits, persuasion) stay out, and the
+Drive walk still skips all fourteen.
+
+Papers are a source, and opt-in for the same reason (decision 2026-09-30). `brain-papers`
+takes the day's slice of constructs (the same thirtieth of the glossary `brain-evidence`
+looks at), asks Europe PMC for their best open-access papers, and stores the full text of
+up to 12 new ones a run as `paper`, one part per 2,400 characters. **Only CC BY and CC0**
+(Eman, 2026-09-30): the search must say so AND the article's own license statement must,
+with no NC, ND or SA anywhere in it, or the paper is skipped. Only the abstract and the
+body are kept; the references, tables, figures and formulas are not, and a citation that
+names its source ("Smith et al., 2019") stays while a bare "[12]" goes. Every part opens by
+naming the paper, its authors and its license and saying it is not LoveIQ's claim, and the
+authors are filed as `meta.first_author`, never `meta.author`, which is matched against
+colleagues. A retracted paper is never stored. The run alerts #brain when every search
+fails or when it crashes, and records what it skipped and why in `cron_run`.
+
+The corporate website is a source too, opt-in for a different reason (Eman, 2026-10-04).
+appliedpsychometrics.org is the website of Applied Psychometrics UG, the company that operates
+LoveIQ, and `brain-ingest` reads its GA4 property (556864746) and Search Console property
+(`sc-domain:appliedpsychometrics.org`) every night into `corporate`: daily, weekly and monthly
+visits with their channels, the most-read pages and clicks out to other sites (loveiq.org above all) each month, and
+the Google searches that find it. Those rows read like LoveIQ's own `ga4` and `gsc` rows, so
+without the opt-in a question about LoveIQ's traffic could be answered with the wrong site's
+numbers. It is its own source rather than more `ga4` and `gsc` rows because each ingester's
+sweep deletes the rows of its source that its run did not write. It re-reads the site's whole
+history every night, which is a few dozen rows; a failed night is re-read by the next. Its GA4
+counts only visitors who accepted the site's cookie banner, and every traffic row says so.
+
+A document that is rewritten SHORTER does not wait for the sweep: `upsertChunks`
+deletes the parts its new version no longer has in the same write (`leftoverParts`,
+since 2026-09-24). Only documents that write produced are looked at, so a read that
+failed or was skipped deletes nothing. WhatsApp numbers its parts differently and
+is still left to the sweep.
+
 Git commits are **not** a source either, since 2026-09-09. They were 1,795 chunks —
 7.5% of the corpus — and the `[skip ci]`/dependabot noise in them consistently
 outranked real answers, while everything a commit explained is also in the
@@ -131,6 +237,34 @@ documentation it changed, the call it came out of, or the Slack day it was discu
 Removing them also took contributor names and git email addresses out of an
 open-access corpus, which is a privacy reduction rather than a cost. `scripts/brain-ingest-repo.mjs`
 still runs on every push; it indexes the markdown and nothing else.
+
+### Reference sources, and why they rank lower
+
+Three sources added 2026-09-15 are **reference** rather than record: `report` (682 chunks
+of the report copy that actually ships), `domain` (341 — every glossary term, the survey
+chapter by chapter, and which question feeds which scoring dimension), and `skill` (how we
+write a chapter). All three are built from files in this repo, so they cost a rebuild and
+no network call, and they land within fifteen minutes of the copy changing.
+
+They are **undated on purpose**. A meeting note describes a day; a definition is current
+until it is edited. But that is also why they needed a ranking penalty: an undated chunk
+contends on every question rather than only the ones it answers. Measured when they landed,
+the battery fell to 220/222 on two word collisions — "show me the stages people go through
+before paying" returned the _Sexual Stage_ chapter above the funnel, and "what did we decide
+about micro assessments" returned the _Micro Quiz_ definition above the decision record.
+"Stage" and "quiz" are genuinely our words now; the definitions were not wrong, they were
+the wrong KIND of answer.
+
+`brain_search` therefore subtracts **0.5** from `report` and `domain`. That number is
+measured, not chosen: 0.35 recovered only one of the two, because the decision gap was
+exactly 0.35 and it tied rather than flipped. At 0.5 the battery is back to 222/222 and
+"what does responsive desire mean" still returns the glossary at rank 1 — the penalty costs
+nothing on the questions these sources exist for.
+
+**Drafts and shipped copy are both in the corpus and must be told apart.** Drive holds
+"Typical Beliefs — Chapter Output" and its siblings, which is what someone is working on.
+`report` is what survived review and went to a paying reader; every one of its titles says
+"as shipped" and every row carries `kind: "shipped"`.
 
 ### What can never enter the corpus
 
@@ -150,12 +284,39 @@ the rule at once and no ingester has to remember it:
   for one hour, so before 2026-09-09 a link mailed at :05 was searchable at :11 with
   most of its life left. 41 already-indexed chunks were redacted in place.
 
+Beyond the write path, some material is kept out **by decision, in every path it can
+arrive by**, because excluding a document from one ingester while another indexes the
+same thing is the failure this corpus has hit more than once:
+
+- **Job applicants** (decided 2026-09-20, widened 2026-09-23) — CVs, applicant lists,
+  interview notes and candidate calls, application mail and CV attachments, the
+  Candidates database and hiring pipeline in Notion, the `#hr` Slack channel, the `hr@`
+  mailbox, and interview events in the calendar. Material _about_ hiring — role
+  descriptions, the hiring guide — stays. One rule, `isJobApplication` in
+  `features/brain/server/ingest/upsert.ts`, is shared by Drive, Gmail attachments,
+  Slack uploads and calendar titles; Gmail also excludes recruiting subjects at the
+  listing so an excluded thread is never fetched at all.
+- **Legal instruments and private legal matters** — contracts, the shareholders'
+  agreement and similar, by name in Drive, as attachments in Gmail and Slack, and as
+  email bodies by subject (the SHA draft thread, freelance-contract and
+  salary-and-contract emails). A meeting _about_ a contract stays: compensation
+  discussion is inside the open-access decision, the instrument is not.
+- **Customer mail** — the `hello@` mailbox customers write to, for the same reason
+  `#email-inbox`, which forwards it, is never read: what a customer writes to us
+  privately is not indexed.
+
+Excluding something removes what was already stored on the next complete sweep; until
+2026-09-23 that was true of Drive but not of Gmail, whose keep-set ignored whether a
+thread was still listed.
+
 The live half has its own gate. `query_product_data` masks 21 private columns —
 emails, names, IP addresses, report and share tokens, `sexual_orientation`,
 `password_hash`, verbatim survey answers — replacing each value with a stable
 `[private #xxxx]` tag. Filtering and counting on those columns still work, and the same
 underlying value always shows the same tag, so rows can be correlated without any
-identity being pasted into a prompt. `*_key` columns (`metric_key`, `week_key`,
+identity being pasted into a prompt. The same names are matched in camelCase inside
+jsonb columns (`metadata.requestIp`, `metadata.requestUserAgent`): until 2026-09-23 only
+the snake_case column was masked while its copy in the metadata printed in full. `*_key` columns (`metric_key`, `week_key`,
 `chart_key` and eleven more) are deliberately NOT masked: they are business
 identifiers, and masking them would break the KPI tables to protect nothing.
 
@@ -199,9 +360,9 @@ PostHog is on the **EU** host. The same key is rejected by the US host with
 `authentication_failed`, which says nothing about the region, so it is an easy
 hour to lose.
 
-`LOVEIQ_MCP_TOKEN` gates the MCP endpoint rather than a source: unset means
-`/api/mcp` returns 503 and no Claude can connect, which is why it is safe to
-deploy before the token exists.
+`LOVEIQ_MCP_TOKEN` gates the MCP endpoint rather than a source. It is the shared
+token the unattended jobs use; people sign in as themselves (see "Connecting Claude
+to it"). Unset, only personal sign-ins work.
 
 **Both Google credentials are now in place** (2026-08-28). Two things were needed
 and neither is obvious:
@@ -239,34 +400,127 @@ This is the primary way to use the brain. `/api/mcp` exposes the corpus as an MC
 server, so Claude — the claude.ai app, Claude Desktop, or Claude Code — can search
 it as a tool and reason across it alongside the live connectors it already has.
 
-Add it as a custom connector with:
+**Everyone signs in as themselves** (decision 2026-09-26,
+`decision:2026-09-26-3b76af89e8`). Add it with just the URL,
+`https://www.loveiq.org/api/mcp`, and no Authorization header:
 
-- **URL** `https://www.loveiq.org/api/mcp`
-- **Authorization** `Bearer <LOVEIQ_MCP_TOKEN>`
+- **claude.ai / Claude Desktop:** the organization connector (Settings → Connectors).
+  Each person clicks **Connect** once, types their `@loveiq.org` address, then the
+  code from their inbox, then **Allow**.
+- **Claude Code:** `claude mcp add --transport http loveiq-brain https://www.loveiq.org/api/mcp`,
+  then `/mcp` → Authenticate. The same page opens in the browser.
+
+The same page, `/jarvis/connect`, handles both. Each call and each write then carries
+the person's own name: `brain_query.actor` holds their address, and a decision
+records them as `recorded_by` next to the `actor` they typed. Every new connection is
+posted to #brain.
+
+**How it works.** Supabase Auth's OAuth 2.1 server (beta, free) does the tokens.
+Claude finds it on its own: a 401 from `/api/mcp` points at
+`/.well-known/oauth-protected-resource/api/mcp`, which names
+`https://pveqkhdpypfzxggwjsnk.supabase.co/auth/v1`, and Claude registers itself there
+(dynamic registration). Supabase then sends the person to our authorization path,
+`/jarvis/connect`. The code is minted by Supabase (`generate_link`) and sent by us
+through Resend, as the admin login does, so nothing relies on Supabase's own mailer.
+`features/brain/server/sign-in.ts` checks each call's token with Supabase
+(`/auth/v1/user`) and trusts the answer for a minute. The auth settings are
+`oauth_server_enabled`, `oauth_server_allow_dynamic_registration`,
+`oauth_server_authorization_path = /jarvis/connect`, and `site_url =
+https://www.loveiq.org`.
+
+**Check it end to end after any change to sign-in:** `node scripts/jarvis-sign-in-e2e.mjs
+<member-email>` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set. It runs the whole
+flow against production the way Claude does. That includes the attack closed on
+2026-09-27: an app allowed once through Claude, then asking with its own return address.
+It removes the apps it registers, signs out only the session it made, and sends that
+member one sign-in code email.
+
+- **Who may sign in is the people registry.** An `@loveiq.org` address on an active
+  person in `brain_person`: not a shared mailbox, not a personal address.
+- **Offboarding** is `update brain_person set active = false where canonical = '…'`.
+  Every client they connected stops working within a minute, because membership is
+  checked on each call, not once at sign-in.
+- **An approval only goes back to Claude:** `claude.ai`, `claude.com`, or
+  `localhost` for Claude Code. Anyone can register a client, so without that check a
+  stranger could register one called "Claude" and ask a member to approve it.
+- **The shared `LOVEIQ_MCP_TOKEN` stays for the unattended jobs:** the Night Shift,
+  the weekly health report, the test batteries and the session hook. Its calls log as
+  `actor = 'shared'`. Once everyone has connected as themselves, rotate it so only
+  those jobs hold it.
+- **Codes are eight digits** here (`mailer_otp_length = 8`). The sign-in accepts 6 to
+  10, whatever Supabase is set to. It assumed six at first, and the first live run
+  refused every real code.
+- **A client that asks for `openid` cannot finish signing in.** Supabase can only
+  mint an OpenID ID token with asymmetric signing keys, and this project still signs
+  with the legacy HS256 secret, so the token step fails with "Error generating ID
+  token". Claude does not ask for it: Claude Code requests the resource's advertised
+  scope (`email`) plus `offline_access`, which was verified live on 2026-09-26. The 401
+  and the metadata document both say `email`. To support `openid`, move the project to
+  asymmetric signing keys (Settings → JWT keys → migrate, then rotate). First make
+  `brain-embed` check its own caller, though: Supabase warns that rotating can break an
+  Edge Function whose "Verify JWT" setting is on, as `brain-embed`'s is.
+- **Checked end to end against production on 2026-09-26** by a script that plays
+  Claude: discovery, registration, the emailed code, consent, a stranger's app refused,
+  the token exchange, calls logged under the person, refresh, and a signed-out session
+  refused after the minute of trust. All 28 checks passed.
 
 **Use `www`, not the apex.** `loveiq.org` 308-redirects to `www`, and a redirect
 drops the `Authorization` header, so the apex presents as a confusing 401 with a
 token that is perfectly valid.
 
-**Fourteen tools, in three groups.** Nine read, five write. The write ones act
+**This applies to EVERY inbound endpoint we hand to a third party, not just this
+one, and it has already cost us four months of data.** The Resend webhook was
+registered against `https://loveiq.org/api/resend/webhook` in May 2026 and worked
+for nobody: Resend posted to the apex, the apex answered 308, and the
+`svix-signature` header did not survive the redirect — so every event failed
+verification and `resend_webhook_event` held zero rows until 2026-09-14, while the
+endpoint answered 401 like a healthy one and `RESEND_WEBHOOK_SECRET` was set and
+correct the whole time. Nothing alerts on a webhook that is never delivered.
+
+When registering any callback — Resend, Stripe, Slack — paste the `www`
+host, then confirm rows actually arrive. An endpoint that returns 401 to an
+unsigned probe proves it is deployed, not that it is reachable by the sender.
+
+**Thirty-seven tools, in three groups.** Twenty-eight read, nine write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
 **History — the indexed corpus:**
 
-| Tool                     | For                                                                                                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_company_context` | Anything written down — a decision, a Notion page or database row, a call note, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:`           |
-| `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part           |
-| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                                        |
-| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                                 |
-| `count_context`          | How many, and broken down by source, month or person. Search ranks and caps at 30, so it can never answer "how many" — this reads the whole corpus                              |
-| `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer |
+| Tool                     | For                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `search_company_context` | Anything written down — a decision, a Notion page or database row, a call note, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `count_context`          | How many, and broken down by source, month or person. Search ranks and caps at 30, so it can never answer "how many" — this reads the whole corpus                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `explain_change`         | Whether a day's numbers were outside their usual range (each against the 28 days before, median and spread) and where each move came from: traffic source or GA4 channel, the two halves of a rate, engagement, GA4 against our own count, ad spend and campaigns, what shipped and what was decided. The likely causes are fixed rules over numbers, never a model's guess. The anomaly watcher writes yesterday's unusual numbers as a notice between 07:00 and 11:00 UTC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `show_chart`             | One or two of the site's daily numbers as a line chart in the digest's style: every metric `explain_change` reads, plus revenue (payment ledger, net of refunds) and Google Ads spend (a gap outside the days the ad data covers, never a zero), 7 to 180 days. Returns the picture, a signed link to it that opens in any browser without a login, and the numbers. Two metrics share one axis, so they must be the same kind                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `break_even`             | What the Google Ads spend buys and what it would take to earn it back, over 7 to 180 days: cost per visitor, the share who finish the survey, the share of finishers who pay, the average order and the net, then the level each alone must reach to break even. Any of the four can be given as a what-if. Counted like the digest's cost per paying customer (every visitor and buyer, only on the days the ad data covers), and says when the purchases are too few to trust                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `user_totals`            | Anonymous totals about our users, by up to two of gender, age band, orientation, relationship, country, archetype and month, narrowed by the same keys. `measure` picks what is counted: `people` (default: how many finished, paid and what they paid), `traits` (the user graph: each group's average on the engine's 21 traits, 0 to 100), `emails` (report reminders recorded, unsubscribes and from which of our emails, bounces, complaints, invites and shares, plus Resend's own totals, which start on 14 Sep 2026) or `answers` (option shares for one survey question; written-in answers are never read, and a question stored as text is not summarized). Never a person: a group under 5 is hidden, and when only one would be, the next-smallest goes with it so subtraction cannot reveal it (decision of 26 Sep 2026); every measure hides the same groups. Inside a group, traits, emails and answers show a count or share only when both it and the rest of the group are 5 or more, and trait averages need 20 people. Grouped, the All line gives only its size, and a share or an average is withheld when the rest would give back a hidden one. Staff left out; paid is a real sale above EUR 0 |
+| `cost_watch`             | What we pay each month for tools and services, read live from the Business Case cost sheet the monthly invoice filing keeps current: the latest closed month against the one before, the biggest lines, what moved, what started or stopped, the trend and the open month. Hand-typed lines that did not move are flagged (Google Ads carried July into August, found 2026-09-27), and Google Ads is set beside GA4's figure. People's pay is left out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `ux_signals`             | Marcus's 22 behaviour signals measured on the last 1 to 28 days of real production visits (PostHog, our own probes excluded). A signal's number is shown only once its measure has been right on at least 80% of the nightly persona walks of the last 28 days, on the walks where the behaviour happened and on those where it did not (`features/ux-signals`). Unproven signals say why, with the first walk they got wrong                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `check_answer`           | Before an answer is sent: every number, date and quoted phrase in the draft is looked up in the documents it cites, and anything not there is listed with the nearest figure the source holds. A sentence that names an id is checked against that record alone: the part cited, never the whole document, since a long document holds nearly every number. Deterministic: it cannot judge wording, and says which sentences it could not check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `experiments`            | The A/B registry (/admin's own `admin_experiment` table): every test with its hypothesis, deciding metric, dates and outcome, a live readout for a running test whose arms are stamped (the code and words of /admin's A/B overview, which never calls a winner the numbers cannot support), and the four tests that ended before the registry existed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `comment_asks`           | Every ask left in a Figma or Google Docs comment: who asked whom, for what, a link, and whether it is still open, checked live. Figma is read from its API for every file whose link was shared somewhere the brain reads; Google from each person's notification emails, checked against Drive as that person. Says what it could not read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `decision_conflicts`     | Recorded decisions that may not both stand: one may replace the other, or they give different answers to the same question. Found daily by the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a person                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `brain_health`           | How the brain itself is doing over 1 to 30 days, against the days before: use by tool, weak and empty searches and the questions it could not answer well, failed calls and error messages, speed, the weekly test batteries with what fails, and every brain job that failed or stopped running                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `whats_new`              | What the brain produced on its own since a time (default the last 24 hours): notices, the Night Shift's research answers and decisions, newest first with ids, plus how many questions still wait for tonight. The door for "what's new", and what the Claude Code session hook shows at startup                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `check_copy`             | Report copy against the house rules, with the sentence behind each finding: em dashes, machine-written phrases, absolute claims, reading level, length, lines that fit every archetype or repeat another chapter, and the chapter's shipped voice. Leave out `text` and name a chapter and archetype to audit what shipped                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `get_context_pack`       | Exactly what drafting one chapter for one archetype needs, inside a fixed size: the chapter's rules, the shipped text, another archetype's version as a model, who the archetype is, research cards and the matching prompt documents. The `draft_chapter` prompt chains it with `check_copy` and a Google Doc that ends with a "How this was made" section (model, date, who asked, prompt document, research used, final check), so the draft carries its own provenance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `meeting_promises`       | Every next step agreed in a recorded meeting, read by code off the notes' "Next steps" list, grouped by owner with the meeting, its day and a link. Each item is looked up on the Notion board (owner first, then rare shared words) and shows the matching task's status, due date and link, or "not on the board"; about nine in ten matches were right on a month of real promises, and the answer says a match can be wrong                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 **You can narrow, and it is usually better than rewording.** `search_company_context`
-takes `sources` and `exclude_sources` (any of doc, decision, analytics, ga4, gsc, notion,
-drive, slack, gmail, calendar, whatsapp), `since` / `until`, and `meta` for indexed
+takes `sources` and `exclude_sources`, `since` / `until`, and `meta` for indexed
 fields — a Notion task's `status` or `assignee`, a Slack `channel`, a Gmail `mailbox`.
+The source names are deliberately NOT written out here. This page listed eleven of them
+and the corpus had grown to seventeen — `report`, `skill`, `domain`, `people`, `clarity`
+and `evidence` were all missing, so anyone trusting the list would have filtered them out
+without ever knowing they existed. `list_sources` computes the set and its freshness, and
+is the only place that cannot go stale.
+
 Two things to know. Matching on `meta` is EXACT, and the values in use change as people
 edit the board, so **ask rather than guess**: `count_context` with `group_by:"status"`
 lists every status with its count. A list written down here was wrong within days — it
@@ -332,7 +586,7 @@ later `date:` is the current decision.
 | Tool                     | For                                                                                                                                                                                                                                                                    |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                              |
-| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, Calendly bookings, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                |
+| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                 |
 | `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
 
 **Read-only by allowlist — the HTTP method was never the guard.** This section
@@ -404,13 +658,17 @@ These are not drafts-for-approval. There is no confirmation step, by design — 
 permission for every write makes the thing useless. Every call is recorded in
 `brain_query` with its full arguments, so anything wrong is visible and reversible.
 
-| Tool                  | What it does                                                                                                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `record_decision`     | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                  |
-| `post_to_slack`       | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                     |
-| `write_to_notion`     | Creates a page or a task                                                                                                                                                            |
-| `write_to_google_doc` | Creates a Doc, or appends to one                                                                                                                                                    |
-| `send_email`          | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word |
+| Tool                       | What it does                                                                                                                                                                                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_decision`          | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                                                                                               |
+| `post_to_slack`            | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                                                                                                  |
+| `write_to_notion`          | Creates a page or a task                                                                                                                                                                                                                                         |
+| `write_to_google_doc`      | Creates a Doc, or appends to one                                                                                                                                                                                                                                 |
+| `queue_research`           | Hand a question to the Night Shift, which answers it overnight with sources, from our own records and the web. Deduplicated (the same question returns the one queued or answered) and capped at five waiting. Writes only a `research` record                   |
+| `file_call_notes`          | File recorded calls with people on 'Therapists & Coaches' into 'Feedback Sessions' and move their 'Last touch'. Exact matches only (invite email or transcript speaker). Previews unless `dry_run: false`; `brain-crm` runs it every two hours                   |
+| `settle_decision_conflict` | Say which of two conflicting decisions stands. The other is marked superseded, as record_decision's `supersedes` would; `both` records that they do not conflict. Ask the person who made the call first                                                         |
+| `record_experiment`        | Registers an A/B test before it starts, through /admin's own upsert, which refuses one without a hypothesis and a deciding metric; with `experiment_id` it changes one, handing back every field it does not change, including readout figures typed into /admin |
+| `send_email`               | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word                                                                              |
 
 **Why `record_decision` matters more than it looks.** Decision records are the thing
 the brain exists for and, measured 2026-09-12 before the miner first ran, the thing it had
@@ -444,6 +702,7 @@ npm run brain:battery                             # adversarial questions, Slack
 npm run brain:battery:retrieval                   # ranking and filters, no key, ~2 min
 npm run brain:battery:mcp                         # drives the real MCP handlers, no key, seconds
 npm run brain:drift                               # is the DEPLOYED brain this repo? see below
+npm run brain:claims                              # are the brain's own descriptions still TRUE? see below
 ```
 
 Each arm prints its own total, which is why none is quoted here — a count written
@@ -454,6 +713,49 @@ The battery reads its expected figures out of the corpus at run time, so it does
 not go stale, and it refuses to run without `BRAIN_LLM_KEY` rather than reporting
 25 misleading failures. It is deliberately **not** part of `npm run check`: it
 makes real model and database calls.
+
+### Tools that answer a question rather than pass or fail
+
+```bash
+npm run brain:gaps                                # which real questions can the corpus NOT match?
+npm run voice:check -- --chapters                 # the house voice, per report chapter
+npm run voice:check -- <chapter> <file>           # does this draft match that chapter's voice?
+```
+
+`brain:gaps` re-scores the questions people have actually asked — read from the query
+log, so it reflects real use rather than imagination — and lists the ones the corpus
+cannot match. Read the list, not the percentage: gibberish and questions about things
+that never happened belong in it, and a low score on those is the relevance floor
+working. It exits 3 without a list if an ingest cron was writing while it ran, because
+a corpus mid-rewrite scores everything low and would otherwise produce a page of
+convincing gaps that are not gaps.
+
+If you probe the brain by hand, send `x-loveiq-mcp-client: battery` on the request.
+Without it your test queries log as somebody's real question and turn up here.
+
+### Do the descriptions still tell the truth?
+
+`brain:drift` compares the deployed brief against this repo, so it cannot catch a claim
+the two agree on that is false about the WORLD — and that is the failure that happened.
+On 2026-09-14 three places told every caller `resend_webhook_event` "has never held a row
+— the webhook was never registered" while the table held 39. Repo and deployment matched
+perfectly. Both were wrong, for 129 days.
+
+`npm run brain:claims` reads the claims out of `TOOLS`, `EXTERNAL_SERVICES` and
+`MCP_INSTRUCTIONS` — what the model is actually served, never the source file, because
+grepping `route.ts` finds hundreds of dated measurements inside code comments, which are
+notes to the next editor and are supposed to be dated. It checks four things: a named
+table asserted to be empty that is not, the `get_*` function count, an identifier the
+schema no longer has, and a measurement older than sixty days.
+
+Exit 1 on a contradicted claim, **3 when a check could not run** — "could not check" is
+not "checked and fine", and it found a live one on its first run: the instructions claimed
+44 analysis functions against a real 46.
+
+The extraction logic is unit-tested in CI with fakes; the live check is run by hand, like
+`brain:drift`, because it needs the database. It is deliberately not a CI lane that skips
+on an unset secret — this repo already has three of those, and a lane that never runs is
+worse than no lane because it looks like coverage.
 
 ### Everything above tests the repo, not the deployment
 
@@ -570,7 +872,8 @@ shapes.
 **How this list was arrived at:** every external hostname the application talks to
 was enumerated from the source and checked against coverage, rather than recalled.
 That sweep is what found Microsoft Clarity — live on the site via
-`public/clarity-init.js` and completely invisible to the brain — and confirmed
+`public/clarity-init.js` and, until `brain-clarity` shipped on 2026-09-17, completely
+invisible to the brain — and confirmed
 Google Ads needs no separate integration, because GA4 exposes `advertiserAdCost`
 once the accounts are linked. Re-run that sweep when a new dependency is added.
 
@@ -699,6 +1002,284 @@ attribute condition rejects; the log names all three. A 403 from
 `roles/iam.serviceAccountTokenCreator` or `workloadIdentityUser` binding. If
 federation fails the code falls back to the refresh token and still impersonates, so
 a stale pool config degrades to the previous path rather than to no access.
+
+### The brief and the miner run in GitHub Actions, on the Team subscription
+
+`brain-brief` (06:41 UTC, retried at 07:41 and 08:41) and `brain-mine` (09:41 UTC) are the two crons that
+need a language model, and since 2026-09-24 the model is the Claude Team plan we already
+pay for rather than an API key. Only the `claude` binary may use a subscription:
+`claude setup-token` mints a one-year `CLAUDE_CODE_OAUTH_TOKEN`, and Anthropic's terms
+allow it only in the unmodified binary, never in our own API calls. Vercel has no
+`claude` binary, so `.github/workflows/brain-daily.yml` runs both jobs:
+`scripts/brain-cron.ts` calls the same route handlers in-process with
+`BRAIN_LLM_CLI=claude`. The day claim, the `cron_run` row, the Slack post and the stall
+watch behave exactly as they did on Vercel.
+
+- **Whose seat.** The teamwork@ seat since 2026-09-26, moved from Eman's own seat at their
+  request. Claude Code on Eman's laptop is signed in as teamwork@ too, so its sessions and
+  these jobs share the seat's five-hour and weekly limits. The jobs take about fifteen short
+  calls a day, plus the persona walkers' two long judge passes at night
+  (`persona-walkers.yml`, docs/runbooks/PERSONA_WALKERS.md), so a limit hit most likely
+  means a heavy day of sessions. A hit is reported
+  as `rate_limited`, the job stops for the day, and the #brain alert pings whoever looks
+  after the seat (repository variable `CLAUDE_TOKEN_OWNER_SLACK_ID`, Eman). The limit resets
+  on its own; run the job again from Actions once it has. On 2026-09-19 `generate-fix`
+  stopped on "You've hit your session limit" for exactly this reason.
+- **Vercel's clock starts them.** GitHub's own schedule starts this repo's workflows 4.5 to
+  5.5 hours late and drops some (measured 2026-09-25: health-monitor due 08:00 ran ~13:20;
+  the Night Shift due 00:30 ran 05:08), and on 2026-09-28 the miner ran 8.5 hours late.
+  Since 2026-09-28 `/api/cron/start-github-jobs` starts every job in `brain-daily.yml`
+  through `workflow_dispatch` with `GITHUB_DISPATCH_TOKEN`, at the hours in
+  `features/cron/server/github-jobs.ts`, and the workflow has no `schedule:`, so GitHub
+  cannot start a late copy. A job that has not run by its hour: check that cron's last
+  `cron_run`, then start the job by hand from Actions.
+- **Replacing the token.** Run `claude setup-token` with the browser signed in to the seat's
+  claude.ai account (it approves on its own when that account has approved Claude Code
+  before, so the account is whichever one the browser holds), then
+  `gh secret set CLAUDE_CODE_OAUTH_TOKEN -R loveiqhq/loveiq`, reading the token from a file
+  rather than pasting it into a terminal that keeps history. `generate-fix` uses the same
+  secret. To check whose a token is without printing it, compare `/usage` in an interactive
+  `claude` started with `CLAUDE_CODE_OAUTH_TOKEN` set against the account's own: one seat
+  shows the same meters. `claude auth status` and `/status` do not name the account for a
+  token passed that way. Then point the ping at whoever should hear about a limit:
+  `gh variable set CLAUDE_TOKEN_OWNER_SLACK_ID -R loveiqhq/loveiq --body <Slack member id>`.
+- **Secrets it needs.** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+  `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`. The run fails when any is missing:
+  without the brain webhook the brief would be marked delivered into nothing. Any failure
+  posts one line to the brain channel with a link to the run.
+  `SLACK_OPS_WEBHOOK_URL` is deliberately absent: it is marked sensitive in Vercel and cannot
+  be read back out, so the logger's own mirror to Slack stays off here and nothing is
+  reported twice.
+- **Previewing a brief.** Run the workflow by hand with `dry_run` ticked, or locally
+  `BRAIN_LLM_CLI=claude npx tsx --env-file=.env.local scripts/brain-cron.ts brain-brief --dry-run "?day=YYYY-MM-DD"`.
+  It prints the brief without claiming the day or posting it.
+- **Replaying a lost day.** Run the workflow with `job: brain-brief` and
+  `query: ?day=YYYY-MM-DD`. The claim still prevents a double post.
+
+### The Night Shift: research queued in the day, answered by morning
+
+`queue_research` (plan item A16) writes a question as a `research` record with status
+`queued`. At 00:41 UTC `brain-daily.yml` runs `brain-night-shift`, which answers up to
+three, oldest first, each through Claude Code on the Team subscription with the brain's
+read-only tools over MCP (`LOVEIQ_MCP_TOKEN`, a repository secret) and the web. Nothing
+that writes is available to it: `RESEARCH_TOOLS` and `WRITE_TOOLS` in
+`features/brain/server/night-shift.ts` are the allow and deny lists, and a test fails if
+a new writing tool is on neither.
+
+- **What comes back.** The answer replaces the question in the same record (the first
+  three to five sentences answer it, then findings with a source beside each, then what
+  could not be found), so it is searchable and `fetch_document research/<id>` reads it. A
+  notice announces it, so Jarvis brings it up with the next question anyone asks, and
+  `whats_new` lists it.
+- **An answer without a source is not kept.** It is marked failed with the reason and the
+  asker is told; ask again to retry. A usage limit puts the question back in the queue for
+  the next night and stops spending the seat.
+- **Model.** The `sonnet` alias. `BRAIN_RESEARCH_MODEL=opus` in the workflow buys deeper
+  research at a higher cost to the seat's allowance.
+- **Running it by hand.** Run the workflow with `job: brain-night-shift`. `cron_run` records
+  `queued=N answered=N failed=N`, and says "error" only when the agent itself failed.
+
+### Mondays: the test batteries, then the brain's report on itself
+
+At 01:41 UTC on Mondays `brain-daily.yml` runs `brain-health` (plan item G9). It needs no
+model; it runs here so the report follows the tests:
+
+1. `scripts/brain-battery.ts --retrieval --record` and `--mcp --record` run the two test
+   batteries (fixed questions with known answers, against the live corpus) and store each
+   result as a `cron_run` row (`brain-battery-retrieval`, `brain-battery-mcp`) whose message
+   is a JSON summary: total, clean, the probes failing and those that passed only on a retry.
+   A battery exits 0 once its result is stored, whatever failed: failures are findings.
+   The tool battery runs with `--live`, against loveiq.org rather than in the runner, so it
+   measures production with production's keys (the runner has no Figma, Google or Notion keys).
+2. `scripts/brain-cron.ts brain-health` writes "How the brain did in the week to <day>" as
+   a notice, so `whats_new` and the session hook show it. The notice leaves out the text of
+   the questions asked, because it sits in the searchable corpus; `brain_health` lists them
+   live.
+
+The stall watcher expects all three every eight days. Run it by hand with
+`job: brain-health`; a re-run the same day replaces the notice.
+
+### Calls into the Notion CRM
+
+Every two hours `brain-crm` (Vercel) files each recorded call with someone on the Notion
+board "Therapists & Coaches" as a row in "Feedback Sessions" (plan item A17), and writes a
+notice for each one. It is `file_call_notes` with `dry_run: false` over the last fourteen
+days, so a skipped run is caught up by the next.
+
+- **Who was on the call** is matched only two ways, both exact: an address on the calendar
+  invite the Gemini notes link to, equal to the row's Email; or the row's full name as a
+  speaker in the transcript. A name that is only talked about in a team sync never files
+  anything. A first name in the invite's title is listed by the tool as a possible match
+  and never filed: the calendar said "Kiu Coates" for the row "Kiu Cortes". Put the
+  person's email on their row and every later call files itself.
+- **What the row holds** is what the notes say: date, format, session type (a discovery
+  interview for a first call, a follow-up after that), the notes link, the next steps and
+  the summary. Outcome, signal strength and the other judgement fields are left empty for
+  whoever ran the call. "Last touch" only ever moves forward.
+- **Nothing is written twice.** A call whose notes link is already on a row, or a person
+  who already has a session row that day, perhaps written by hand, is left alone.
+
+### The decision radar: recorded decisions that may not both stand
+
+185 of the 200 decisions are mined from meeting notes, and nothing used to compare one with
+another, so "Require Jira tickets for all major features" (May) and a September decision
+whose reason is "concerns with using Notion for tracking bug fixes" both read as current.
+`brain-radar` (plan item G13) runs daily in GitHub Actions straight after the miner, in the
+same `brain-mine` job, on the Team subscription:
+
+- **Two model calls per pair, never one.** Per topic, a generous first call proposes up to
+  ten candidate pairs; a strict second call judges each on its own, with both records'
+  reasons and quotes, as "reverses", "unclear" or "none". One call over a topic flagged
+  duplicates and unrelated pairs and found Jira/Notion in one run of two; the two-call form
+  found it every time and cleared the duplicates (measured 2026-09-26).
+- **Only what changed.** A topic is checked again only when its set of current decisions
+  changes (`brain_radar_topic` keeps a hash), so a quiet night costs no model calls.
+- **Shown on the records.** Each open pair is written onto both decisions
+  (`meta.disputed_by`), so search, `fetch_document` and the prior-decision block print
+  "MAY CONFLICT with decision/…"; `decision_conflicts` lists them, and one notice announces
+  each night's new ones. `brain_decision_conflict` is the authority and every run brings the
+  records back in step with it.
+- **A person settles.** `settle_decision_conflict` marks the decision that does not stand as
+  superseded (the same field `record_decision` writes), or records that both stand so the
+  pair is not raised again. A pair whose decision was superseded some other way closes
+  itself on the next run.
+
+Run it alone with `job: brain-radar`. `cron_run` records what it checked, found and could
+not check; a topic that failed (a usage limit, an unreadable answer) is simply tried again
+the next night.
+
+### Brought to you in Claude: the proactive layer
+
+What the brain notices on its own reaches people in Claude, not only in a Slack channel
+(plan item C8):
+
+- **Notices.** The daily brief, yesterday's unusual numbers (`explain_change`, written by
+  the anomaly watcher between 07:00 and 11:00 UTC), reconciliation gaps and the Night
+  Shift's answers are all `notice` records. The newest are prepended to search results for
+  24 hours, so the next person who asks Jarvis anything sees them.
+- **`whats_new`.** One call lists everything produced since a time. The "Catch me up"
+  prompt starts with it.
+- **Claude Code.** `scripts/jarvis-overnight.mjs`, a SessionStart hook in
+  `.claude/settings.json`, shows what is new since yesterday when a session starts. It
+  runs only for someone with `LOVEIQ_MCP_TOKEN` in their environment or `.env.local`, and
+  prints nothing on any error or after five seconds.
+
+### The job that runs on a laptop, not on Vercel
+
+WhatsApp is driven by a launchd agent on Eman's machine, `org.loveiq.whatsapp-sync`,
+every five minutes, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
+`vercel.json`, and it pauses whenever the laptop is off.
+
+**A run records itself** as `brain-whatsapp` in `cron_run` when it changed something or
+failed, and otherwise once an hour. A run is a failure when the group has had no message
+of any kind for 14 days (it has gone quiet for real for 12). That almost always means
+WhatsApp Desktop is closed or unlinked, and the sync would otherwise read a frozen copy
+"successfully". With the stall watcher's 3 days on top, a frozen copy is flagged within
+17 days, inside WhatsApp's 30-day window.
+
+**launchd runs a launcher that has Full Disk Access, not the script.** macOS asks "…
+would like to access data from other apps" when a program reads WhatsApp's folder, and an
+Allow there lasts only while that one process runs. The sync starts a new one every run,
+so it asked on every run, and a run waiting on the question blocks every run after it. So
+launchd starts `~/.loveiq-brain/bin/loveiq-whatsapp-sync`
+(`scripts/whatsapp-sync-launcher.c`), which runs the script as its child. macOS holds the
+program launchd started responsible for everything under it, so that one binary having
+Full Disk Access (System Settings → Privacy & Security → Full Disk Access) means no
+prompt, ever.
+
+- Build it once. Rebuilding changes its ad-hoc signature, and the grant has to be given
+  again.
+- A stuck run: `launchctl kill SIGTERM gui/$(id -u)/org.loveiq.whatsapp-sync`.
+- Never read WhatsApp's folder from node itself. #340 did, and that started the prompts.
+
+The stall watcher counts only successful runs for this job (`LAPTOP_JOBS` in
+`features/cron/server/cron-stall.ts`) and alerts after **three days** without one, with the
+fix in the message: open the Mac and WhatsApp Desktop.
+
+A closed laptop only delays WhatsApp: the servers hold undelivered messages, and keep a
+linked device linked, for 30 days, so three days leaves four weeks of margin.
+`list_sources` shows the last sync next to the WhatsApp source. A free way to run it off
+the laptop was researched on 2026-09-26, and there is none that is official, automatic
+and free. The one safe automated option is a spare Android phone on its own SIM, as a
+member of the group whose nightly encrypted backup is read. It needs hardware, so it was
+not chosen.
+
+The embedding backfill ran the same way (`org.loveiq.reembed`, every fifteen minutes)
+until 2026-09-26. It is now the `brain-embed.yml` GitHub job, which Vercel's clock
+starts every hour (see "Keeping up" under Embeddings), and the launchd agent is retired.
+
+**That checkout silently went 365 commits behind**, which is how it was found on
+2026-09-17: the corpus redaction had shipped a week earlier, and every hour this copy
+wrote unredacted `report_access_token` values back into production. A cleanup was undone
+within the hour, twice, before the cause was located — the code in `~/loveiq` was correct
+the whole time, so nothing in the repo could reveal it.
+
+The runner now fetches and hard-resets to `origin/main` before each run, reinstalls only
+when `package-lock.json` actually moved, and says so loudly if it cannot fetch rather than
+quietly running stale. Verified by rewinding the checkout three commits and watching a run
+recover it. It stays on a detached HEAD because the main worktree holds the `main` branch;
+nothing tracked is ever edited there, so the reset is safe.
+
+**If a credential ever reappears in the corpus, look here first.** `brain-reconcile`
+now scans the whole corpus daily and posts on any non-zero count, which is the alarm this
+would have tripped a week earlier.
+
+### Why gcloud asks you to log in again, roughly daily
+
+The error is `Reauthentication failed … cannot prompt during non-interactive
+execution` — and it is NOT an expired token. The refresh token is fine; Google is
+refusing to mint an access token from it until a human reauthenticates, because
+Workspace applies a **session length to Google Cloud** for `@loveiq.org` accounts.
+It bites both credentials independently: `gcloud auth login` (what impersonation
+uses) and `gcloud auth application-default login` (what client libraries and the
+GA4 MCP use).
+
+Production never sees this, which is why its crons keep working while a laptop's
+stop: prod holds no Google credential at all and federates a Vercel OIDC token
+instead. There is no user session to expire.
+
+To clear it now — both, because they are separate credentials:
+
+```bash
+gcloud auth login                       # gcloud itself, and impersonation acts from this
+gcloud auth application-default login   # client libraries
+```
+
+**Plain ADC is not enough for GA4 or Search Console, and no `--scopes` flag fixes
+it.** gcloud's ADC carries `cloud-platform`, which those APIs reject with
+"Request had insufficient authentication scopes" — verified 2026-09-17 against the
+Data API — and Google refuses gcloud's shared OAuth client the sensitive
+`analytics.readonly` scope outright, so asking for it just fails differently.
+Analytics access has to arrive through `ga4-reader`, either by impersonating it
+from the gcloud credential:
+
+```bash
+gcloud auth print-access-token \
+  --impersonate-service-account=ga4-reader@loveiq-brain.iam.gserviceaccount.com \
+  --scopes=https://www.googleapis.com/auth/analytics.readonly
+```
+
+or, for a client library or MCP server that reads ADC, by baking the impersonation
+into ADC itself:
+
+```bash
+gcloud auth application-default login \
+  --impersonate-service-account=ga4-reader@loveiq-brain.iam.gserviceaccount.com
+```
+
+An MCP server started before any of this keeps the credential it loaded at boot, so
+it will still report a reauth error while the CLI works. Restart it.
+
+**To stop it recurring** — Google Admin console → Security → Access and data
+control → **Google Cloud session control** → set _Never require
+reauthentication_. It is one setting, it needs a Workspace super-admin, and it
+governs only Cloud Console and the gcloud CLI: Gmail, Drive and Calendar session
+security are a separate policy and are unaffected.
+
+The two alternatives both dead-end, which is why the policy is the answer: a
+downloadable service-account key is refused by
+`constraints/iam.disableServiceAccountKeyCreation`, and impersonation still needs
+a live user credential to act from, so it expires with the same policy.
 
 ### Backfilling Google without a working refresh token
 
@@ -1031,16 +1612,18 @@ the 15-minute lane where it could starve the cheap sources of their clock.
 
 #### Reading EVERYONE's mail needs domain-wide delegation
 
-Today this reads one mailbox: whoever the credential belongs to. A user OAuth token
-can only ever reach its own mail, whatever scope it carries — that is a property of
-the token, not a configuration mistake.
+Since 2026-08-30 this reads every mailbox the Workspace directory lists, not only the
+credential's own. A user OAuth token can only ever reach its own mail, whatever scope
+it carries, so the walk uses **domain-wide delegation**: the service account is
+authorised, in the Admin console, to impersonate users in the domain. When the
+directory cannot be read, the walk falls back to the comma-separated
+`GMAIL_MAILBOXES` list rather than treating "no answer" as "nobody works here".
 
-The Workspace mechanism for reading colleagues' mail is **domain-wide delegation**:
-the service account is authorised, in the Admin console, to impersonate users in the
-domain. `GMAIL_MAILBOXES` already accepts a comma-separated list, so switching it on
-is configuration rather than a rewrite.
+Two mailboxes are never walked, whatever the directory says: `hr@` (job applications,
+with CVs attached) and `hello@` (what customers write to us privately; excluded
+2026-09-23). See `NEVER_INDEX_MAILBOXES` in `features/brain/server/ingest/gmail.ts`.
 
-It is worth deciding deliberately. The corpus is undifferentiated, so anything
+It was worth deciding deliberately. The corpus is undifferentiated, so anything
 indexed from anyone's mailbox becomes answerable to anyone who can ask the brain.
 That follows the open-access decision already taken for Notion and Slack, but email
 is the first source whose sharing boundary was drawn by the SENDER rather than by
@@ -1105,6 +1688,13 @@ READ-ONLY. It never speaks to WhatsApp's servers, so the automation clause does 
 apply — it is your own messages, at rest, on your own machine. Needs Full Disk Access
 for whatever runs it, because macOS protects the app container.
 
+It reads through SQLite's own locking (`mode=ro`), not `immutable=1`. WhatsApp keeps its
+newest messages in the `-wal` file until it checkpoints, and `immutable=1` reads the main
+file alone: on 2026-09-28 it was missing a 20-second-old message that a WAL-inclusive read
+had. The one exception is when the `-wal` and `-shm` files are gone, which a read-only open
+cannot recreate: then the main file holds everything and is read alone
+(`features/brain/server/ingest/sqlite-read.ts`).
+
 **The safeguard.** That database holds every chat on the account, including private
 ones. The script is scoped to a single group JID and refuses to run without one — an
 allowlist, not a filter. No query in it can reach another conversation.
@@ -1117,12 +1707,30 @@ Three things the schema will not tell you:
   `ZGROUPMEMBER` to `ZWAPROFILEPUSHNAME` instead.
 - Dates are Core Data seconds from 2001-01-01; add 978307200 for a Unix timestamp.
 
-**It runs hourly on Eman's Mac**, not on Vercel — there is no server that can see a
+**It runs every five minutes on Eman's Mac**, not on Vercel — there is no server that can see a
 WhatsApp Desktop database. `list_sources` says so rather than showing an empty slot
 where a cron should be.
 
+**It writes only the days that changed** (since 2026-09-27; it rewrote all ~540 day parts
+every hour before).
+
+- Each part carries `meta.fingerprint`, covering its text, its details and the people the
+  registry resolves for it. A run writes only new parts and parts whose fingerprint moved,
+  usually just today's.
+- It removes by id the parts it no longer produces, through `sweepMissing` with its
+  majority guard, and only when a stored part is missing.
+- Rewriting every day every five minutes is the pattern that exhausted the database's disk
+  budget on 2026-08-31, because an indexed `updated_at` means no rewrite is cheap.
+- Bump `DAY_ROW_VERSION` in `features/brain/server/ingest/whatsapp.ts` to rewrite every
+  day once after changing how a day is built.
+- A run records itself in `cron_run` when it changed something or failed, and otherwise
+  once an hour.
+- New messages are findable by their words within five minutes, and by meaning once
+  brain-fast embeds them (every fifteen minutes).
+
 ```text
-~/Library/LaunchAgents/org.loveiq.whatsapp-sync.plist   launchd, StartInterval 3600
+~/Library/LaunchAgents/org.loveiq.whatsapp-sync.plist   launchd, StartInterval 300 (5 min)
+~/.loveiq-brain/bin/loveiq-whatsapp-sync                what launchd runs; has Full Disk Access
 ~/.loveiq-brain/run-whatsapp-sync.sh                    the runner
 ~/.loveiq-brain/whatsapp-sync.log                       what it did, per run
 ```
@@ -1145,9 +1753,11 @@ A linked desktop keeps back-filling history in the background, so the range grow
 its own: 614 messages over 53 days when first linked, 1,952 over 306 days a few hours
 later. It syncs when the Mac is awake.
 
-**Bounded at 2026-05-01** (`WHATSAPP_SINCE`), by decision on 2026-08-31 — older chat
-is not worth the storage or the embedding cost. Note that moving that floor FORWARD
-will not clean up on its own: the sweep's majority guard refuses to delete more than
+**The floor is 2025-10-01** (the default of `WHATSAPP_SINCE` in the script), so the
+corpus holds the team's whole history. It was 2026-05-01 until 2026-09-20 (`c7db7b2e`),
+on the grounds that older chat was not worth the storage. Measured, the cut dropped 42% of
+the group's messages, the founding months, for about twenty-five chunks, so it was undone.
+Note that moving the floor FORWARD will not clean up on its own: the sweep's majority guard refuses to delete more than
 half a source, correctly, because it cannot tell a deliberate cut-off from a broken
 collection. Trim by date instead, which is scoped to exactly what you meant:
 
@@ -1184,12 +1794,21 @@ and Gmail lanes, the nightly job, and the push-based Slack route are all picked 
 without any of those knowing embeddings exist. Measured growth is ~3 new chunks an
 hour against roughly 7 a run.
 
-**If the ops channel says chunks are waiting for embeddings**, the 15-minute lane
-has fallen behind — normally because a builder-version bump rewrote thousands of
-chunks at once, which drains at only ~670/day. Run the backfill directly:
+**A backlog drains itself within the hour.** A builder-version bump or a widened
+walk can rewrite thousands of chunks at once, which the 15-minute lane drains at only
+~670/day. So `/api/cron/start-github-jobs` starts `brain-embed.yml` every hour at :41.
+It counts the chunks with no embedding and, when there are any, runs
+`scripts/brain-embed-backfill.ts` on a GitHub runner for up to 100 minutes, a few
+thousand chunks. A bigger backlog carries on in the next hour's run, and an hour with
+nothing to embed ends after the count. A drain that embeds nothing, or errors, posts to
+#brain.
+
+**If the ops channel says chunks are waiting for embeddings**, the backlog has outlived
+that job. Look at its latest runs in GitHub Actions, or start it now:
 
 ```bash
-npx tsx scripts/brain-embed-backfill.ts
+gh workflow run brain-embed.yml -R loveiqhq/loveiq   # on a GitHub runner
+npx tsx scripts/brain-embed-backfill.ts              # or locally, with .env.local
 ````
 
 Nothing is broken while that backlog exists. Those chunks are still found
@@ -1245,10 +1864,11 @@ carried 356 passages of explicit decision language that nobody had promoted to a
 Those are the numbers that motivated this job, not a current count; the current one is
 `count_context` with `sources:["decision"]`.
 
-`/api/cron/brain-mine` reads eight meetings a night and writes what was **settled** in
-them as ordinary decision records. Steady state is about 0.5 meetings a day, so eight is
-roughly 16x headroom and drains a backlog on its own — the initial 121 take about a
-fortnight, because the model runs on a free tier that is rate-limited by request.
+`/api/cron/brain-mine` reads up to twelve meetings a day and writes what was **settled** in
+them as ordinary decision records. Steady state is about 0.5 meetings a day, so that is
+ample headroom and drains a backlog on its own. The cap dates from Gemini's free tier,
+which allowed twenty requests a day; since 2026-09-24 the miner runs on the Team
+subscription in GitHub Actions (see "The brief and the miner run in GitHub Actions").
 
 **Every mined record says it was reconstructed.** The server's instructions promise that a
 decision record is "deliberate rather than reconstructed from a transcript", so mining
@@ -1269,14 +1889,31 @@ forced into a closed set so ordering decisions within a topic cannot silently sp
 been read. The first design used a tombstone row in `brain_chunk` under its own source,
 on the reasoning that a new source is invisible to everything already written. It is not:
 `list_sources` can be taught to ignore one, but `brain_search` searches every source by
-default and returned it — 121 rows titled "Scanned for DECISIONS" surfacing on exactly the
+default (every one but the opt-in `book`, since 2026-09-28) and returned it — 121 rows titled "Scanned for DECISIONS" surfacing on exactly the
 word the decision record exists to answer.
 
-**PRECISION IS GRADED ON n=2, NOT n=20 — finish this before trusting it broadly.** The
-one meeting mined live produced two genuine decisions with valid quotes and dropped
-nothing. That is encouraging and it is not a measurement. Read a night's output and check
-four things per record: is it a decision, is it OURS rather than a vendor's or a
-customer's, is the date right, and is the quote real.
+**GRADED 2026-09-13 ON THE FIRST 15: 15 of 15.** Every one was a real decision, ours, on
+the right date, quoting a line that was genuinely in the notes. That clears the 18-of-20
+bar this section used to set as the gate. Re-grade if `MINER_VERSION` changes or the
+prompt is edited — the check is four things per record: is it a decision, is it OURS
+rather than a vendor's or a customer's, is the date right, and is the quote real.
+
+**What grading found that those four questions do not ask.** Two of the fifteen were about
+pay and equity, and the miner had lifted a figure straight into a title — titles are
+weighted double, so the single word "compensation" returned a named colleague's rate as
+the top hit in the whole corpus. Access was never the issue: the corpus is open by a
+decision recorded twice. SALIENCE was, and it was an accident of automation rather than
+anything anybody chose — a person writing a decision by hand picks what goes in the title.
+`titleFor` now keeps a named individual's pay figure out of the title while leaving the
+decision, the subject and the body intact, so "what did we decide about equity" still
+finds it. It fires only when a roster name, pay language and an actual figure are all
+present, so a price is untouched.
+
+**And the drain is slower than planned.** Both of the first runs stopped early on the free
+tier's rate limit: 3.5 meetings a run against the 8 the cron asks for, so 121 meetings is
+about 35 days rather than a fortnight. Accepted deliberately (2026-09-13) — it mines
+newest-first, so the decisions that are still live land in the first week or two and only
+the tail is slow. Revisit by adding a paid key for one backfill run if that tail matters.
 
 ```bash
 # What the miner has written, newest first, with the span it claims to be quoting.
@@ -1320,9 +1957,26 @@ showed zero runs for exactly that reason on 2026-08-28, and fired normally at
 
 ### Pending: private Slack channels and group DMs
 
-The brain bot holds `channels:*` only, so private channels and group DMs are
-invisible — and their existence cannot even be counted, so the size of the blind
-spot is unknown rather than small. Agreed on 2026-08-29 to do this "in a bit".
+**This section was stale and the thing it warned about happened by default.** As of
+2026-09-14 the bot DOES hold `groups:read` + `groups:history` and `mpim:read` +
+`mpim:history`, it has been invited to two private channels, and both were being
+indexed — `#showup-app` and `#email-inbox`. No decision record was ever written.
+
+`#email-inbox` is now on a hard denylist in `ingest/slack.ts` (`NEVER_INDEX`),
+because it forwards whatever arrives at the company address into Slack and was
+restricted to three people on the grounds that "some messages may be sensitive".
+Two days of it were in the corpus, both benign setup chatter, so nothing leaked —
+but the ingest was live and the next customer email would have been indexed into a
+corpus one shared token reads. That is the line CLAUDE.md says does not move.
+The two chunks were deleted.
+
+`#showup-app` stays indexed: it is an internal project channel and is covered by
+the open-access decision. The original note follows, because its reasoning is still
+the right reasoning for the NEXT private channel somebody invites the bot to.
+
+The brain bot held `channels:*` only, so private channels and group DMs were
+invisible — and their existence could not even be counted, so the size of the blind
+spot was unknown rather than small. Agreed on 2026-08-29 to do this "in a bit".
 
 Turning it on means adding `groups:read` + `groups:history` (and `mpim:read` +
 `mpim:history` for group DMs) to the brain app and reinstalling, then inviting the
@@ -1378,11 +2032,20 @@ boundary was drawn by the people in them rather than by the company.
   10.36 GB with 2.11 GB free, platform-managed, and NOT where the corpus lives, so
   do not read its pressure as a corpus problem.
 
-- **Bulk email outranks conversation on broad questions.** Gmail is the largest
-  source, and a subscribed newsletter can still surface for a vague question. Near
-  duplicates are handled (one row per document, and gmail collapses on subject
-  because one broadcast is indexed once per mailbox), but there is no bulk-vs-human
-  signal: the obvious one, "did anyone reply", was measured and REJECTED — JIRA
-  notification threads accumulate messages and it promoted ticket spam over the
-  real commits. Capturing `List-Unsubscribe` at ingest is the honest fix and needs
-  a Gmail builder-version bump.
+- **~~Bulk email outranks conversation on broad questions.~~ FIXED 2026-09-14.**
+  Two halves of this entry were already stale when it was read: `List-Unsubscribe`
+  IS captured at ingest and is the first clause of `machineSent`, alongside
+  `Auto-Submitted` and `Precedence`. The real defect was finer. A flat -0.25 on all
+  bulk mail treats an OpenAI pricing newsletter and our own `[JIRA] (SCRUM-922)`
+  ticket as the same thing, which is exactly why raising it had been measured and
+  rejected. The penalty now splits on whether the message is about US — 0.25 when
+  it is, 0.55 when it is not — measured over 1,493 bulk chunks that name the
+  company against 1,638 that do not. The discriminator deliberately excludes the
+  ADDRESS form, because every newsletter footer carries `ec@loveiq.org`, and a
+  naive match scored 2 of 4 chunks of that OpenAI newsletter as "about us". The
+  aggregate looked fine either way; only checking the single document showed it.
+
+  Guarded by eight `bulk-not-in-top5-*` probes across ordinary work questions
+  rather than the one query the old probe used. That probe had gone green because
+  nothing competed on it any more — zero bulk in its top 14, measured — not
+  because the penalty worked.

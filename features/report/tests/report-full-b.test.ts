@@ -13,7 +13,11 @@ describe("reportFullBEmail", () => {
     });
     expect(result.subject).toContain("Something specific");
     expect(result.html).toContain("Not because it&rsquo;s unusual");
-    expect(result.html).toContain("Eighteen analysed dimensions");
+    // Deliberately asserts the claim is NOT a specific count: "18"/"Eighteen"
+    // matched nothing in the system (21 scoring dimensions, 33 report sections,
+    // 6 essentials sections), and this test previously pinned that wrong number.
+    expect(result.html).toContain("Every analysed dimension");
+    expect(result.html).not.toMatch(/\b(18|Eighteen)\b/);
     expect(result.html).toContain("All Reports unlocks all 14 archetypes");
     expect(result.html).toContain("six complimentary months");
   });

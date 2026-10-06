@@ -1,8 +1,9 @@
 import "./globals.css";
+import "./fonts.css";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
-import { Lora, Manrope, Plus_Jakarta_Sans } from "next/font/google";
 import { headers } from "next/headers";
+import { preload } from "react-dom";
 import SmoothScroll from "@shared/ui/SmoothScroll";
 import { NonceProvider } from "@shared/ui/NonceProvider";
 import ConsentBannerOffset from "@shared/ui/ConsentBannerOffset";
@@ -19,38 +20,15 @@ import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-  variable: "--font-sans",
-  display: "swap",
-});
-
 /**
- * Report V4 is specced in Plus Jakarta Sans (Figma "Report V4 — MOBILE", 1:165),
- * where the rest of the site is Manrope. Loaded as its own variable rather than
- * swapping --font-sans globally: the two have different metrics, so a site-wide
- * change would reflow every landing and survey page. It is applied by shadowing
- * --font-sans inside the V4 report scope only (see .rv4-doc in reportV3.css).
- *
- * Weights are exactly the six the frames use: 200 ExtraLight (labels, meter
- * steps), 300 Light (the rating line), 400, 600 SemiBold (chapter links),
- * 700 Bold and 800 ExtraBold (summary leads, peeking deck labels).
+ * The latin files of Manrope and Lora, preloaded as `next/font/google` preloaded them.
+ * The fonts themselves are self-hosted: see app/fonts.css for why.
  */
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["200", "300", "400", "600", "700", "800"],
-  variable: "--font-jakarta",
-  display: "swap",
-});
-
-const lora = Lora({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  style: ["normal", "italic"],
-  variable: "--font-serif",
-  display: "swap",
-});
+const PRELOADED_FONTS = [
+  "/fonts/manrope-latin.e310b55a.woff2",
+  "/fonts/lora-normal-latin.6b102ab3.woff2",
+  "/fonts/lora-italic-latin.3d536d49.woff2",
+];
 
 // Stable knowledge-graph id so WebSite/SoftwareApplication (here) and the
 // per-page Person nodes (homepage advisors, /about team) all reconcile to one
@@ -199,6 +177,9 @@ const trustpilotBusinessUnitId =
     : null;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  for (const href of PRELOADED_FONTS) {
+    preload(href, { as: "font", type: "font/woff2", crossOrigin: "" });
+  }
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
 
@@ -214,16 +195,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang="en" className={`${manrope.variable} ${lora.variable} ${plusJakarta.variable}`}>
+    <html lang="en">
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
-        {/* PostHog loads on every environment, so this preconnect is NOT gated with
-            the production-only ones below. PageSpeed named it as the single best
-            remaining preconnect candidate on 2026-08-28 — est. 300 ms off LCP —
-            because posthog-js fetches its remote config, recorder and autocapture
-            bundles from this origin on first paint. Four preconnects is the
-            recommended ceiling and this is the fourth. */}
-        <link rel="preconnect" href="https://eu-assets.i.posthog.com" />
+        {/* The PostHog preconnect that used to sit here is GONE, and its 300 ms is
+            still saved — better than before.
+            PageSpeed named `eu-assets.i.posthog.com` the best remaining preconnect
+            candidate on 2026-08-28, because posthog-js fetched its config, recorder
+            and autocapture bundles from that origin on first paint. Those bundles now
+            come from THIS origin via the /relay rewrite, which the browser has already
+            connected to in order to fetch the page — so there is no handshake left to
+            pre-warm, and preconnecting to a host we no longer talk to would just hold a
+            socket open for nothing. It also put a known-blocked hostname in the HTML of
+            every page, which is a signal some blockers read on its own. */}
         {productionAnalyticsEnabled && (
           <>
             <link rel="preconnect" href="https://www.clarity.ms" />

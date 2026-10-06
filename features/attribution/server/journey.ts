@@ -62,6 +62,21 @@ export interface SubmissionJourney {
     msToPurchase: number | null;
     /** checkoutStartedAt → purchasedAt: how long they hesitated on the Stripe page. */
     msCheckoutHesitation: number | null;
+    /**
+     * Measured time spent reading the report — see {@link measureReportDwellMs}.
+     *
+     * Was a floor off the furthest `report_engagement_*` milestone (1/5/10 min)
+     * until 2026-09-18, which is why every message said "1+ min": 79% of readers
+     * who record any milestone record only that first one. `report_session.ended_at`
+     * is the obvious home for a real duration and is still never written (0 of
+     * 11,230 rows), so this is measured from the event stream instead.
+     *
+     * Consent-gated, like every other `analytics_event` row: null means "not
+     * recorded", never "they left immediately". Callers must render the
+     * difference, because a reader who declined analytics looks identical to one
+     * who bounced.
+     */
+    reportDwellMs: number | null;
   };
   milestones: {
     reportViewedAt: string | null;
@@ -123,12 +138,21 @@ interface AnalyticsRow {
 /** Server-side proof that the report was opened, via report_session. */
 interface ReportSessionRow {
   started_at: string | null;
+  ended_at: string | null;
 }
 
 /** Local copy of the masking rule so the raw address is never returned to callers. */
 function mask(email: string | null | undefined): string | null {
   if (!email?.trim()) return null;
-  return email.trim().replace(/^(.).+(@.+)$/, "$1***$2");
+  // Index-based, not `^(.).+(@.+)$`: that pattern needs TWO characters before
+  // the `@`, so `a@b.com` never matched and `.replace` handed the address back
+  // verbatim — the helper returning exactly what it exists to withhold. 3 of
+  // 1,961 live users have a one-character local part. Anything with no local
+  // part or no `@` is never echoed at all.
+  const trimmed = email.trim();
+  const at = trimmed.indexOf("@");
+  if (at < 1) return "***";
+  return `${trimmed.slice(0, 1)}***${trimmed.slice(at)}`;
 }
 
 function toNumber(value: number | string | null): number | null {
@@ -146,6 +170,163 @@ function msBetween(from: string | null, to: string | null): number | null {
   // A negative interval means clock skew or an out-of-order write; report nothing
   // rather than a nonsense "-3 min".
   return diff >= 0 ? diff : null;
+}
+
+/**
+ * A gap this long ends a sitting. Someone who opens the report at lunch and comes
+ * back in the evening read it twice — summing the two sittings answers "how long
+ * did they spend in there", where a bare last-minus-first would answer "8h".
+ */
+export const REPORT_IDLE_GAP_MS = 30 * 60_000;
+
+/**
+ * Below this, report nothing — but ONLY when no session was properly closed.
+ *
+ * Opening the report fires a burst of events inside a second or two — the
+ * server-side `report_session` row, `locked_card_price_shown`, `report_viewed`.
+ * Submission #2112 is the whole of one real reader's stream: opened at
+ * 15:26:04.6, two events by 15:26:06.2, then silence. Measuring that span gives
+ * "2s", which reads in #incoming-surveys as "bounced instantly" when all it
+ * actually says is "the page loaded".
+ *
+ * One minute because that is where the instrumentation's own first heartbeat is:
+ * anyone who stays a minute leaves a `report_engagement_1min` row, so at or above
+ * a minute there is always purpose-built evidence, and below it there is only the
+ * load burst.
+ *
+ * A CLOSED SESSION IS EXEMPT, since 2026-09-19. The beacon fires when the reader
+ * actually leaves, so a short span stops being an artifact and becomes a fact:
+ * #2130 spent 34 seconds and #2131 spent 18, both with closed sessions, and both
+ * rendered an em dash that hid a real bounce. The floor exists to distrust a
+ * measurement nobody took — not to throw away one we did.
+ */
+export const MIN_MEASURABLE_DWELL_MS = 60_000;
+
+/**
+ * The active time a milestone PROVES, in ms.
+ *
+ * A switch rather than a lookup object: `event_type` arrives from a database
+ * row, and indexing an object with it is exactly the shape the
+ * security/detect-object-injection rule exists to stop.
+ */
+function milestoneDwellMs(eventType: string): number | null {
+  switch (eventType) {
+    case "report_engagement_1min":
+      return 60_000;
+    case "report_engagement_5min":
+      return 300_000;
+    case "report_engagement_10min":
+      return 600_000;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Measured time in the report: the open, plus every later event the reader
+ * produced, split into sittings on {@link REPORT_IDLE_GAP_MS} and summed — or
+ * the furthest engagement milestone they crossed, whichever is larger.
+ *
+ * BOTH, because each sees something the other cannot. The stream sees a reader
+ * who scrolls and clicks; the milestones see one who does neither, and they
+ * carry a duration of their own rather than a timestamp — a `report_engagement_1min`
+ * row asserts sixty seconds of ACTIVE time, which is not the same as sixty
+ * seconds of wall clock. Submission #2108 is why: opened at 10:21:47, two events
+ * by 10:21:49, then the one-minute milestone at 11:10:42, because the tab sat in
+ * the background for 49 minutes and the timer only counts visible seconds. The
+ * span alone calls that a two-second visit; the milestone calls it a minute, and
+ * the milestone is right.
+ *
+ * `report_session.ended_at` is what stops this being a pure lower bound: it is
+ * the moment they actually left, beaconed on the way out, so a reader who spends
+ * four quiet minutes on the final chapter is no longer credited only up to their
+ * last scroll. It still degrades to a lower bound whenever the beacon does not
+ * arrive — a killed tab, a crashed browser, a blocked request — which is why
+ * every other signal stays in the calculation rather than being replaced by it.
+ *
+ * Replaces the milestone floor ALONE, which is what made 79% of live messages
+ * (160 of 202 carrying any milestone) read "1+ min" whatever the reader did.
+ * Taking the larger of the two can never print less than the old line did.
+ *
+ * Anything under {@link MIN_MEASURABLE_DWELL_MS} becomes null, never "0s" or
+ * "2s". One lone timestamp is evidence that they opened it and no evidence at
+ * all about how long they stayed, and these events are consent-gated — so
+ * absence has to keep meaning "not recorded".
+ */
+export function measureReportDwellMs(
+  openedAt: string | null,
+  events: Array<{ event_type: string; event_time: string | null | undefined }>,
+  /**
+   * This report's `report_session` rows. Server-written and NOT consent-gated,
+   * so a CLOSED one is the only thing a reader who declined analytics
+   * contributes at all.
+   *
+   * Only closed ones count, and they count as an INTERVAL rather than as two
+   * loose points. An open session says a page was requested and nothing more:
+   * submission #1921 carries 82 of them from one afternoon of QA, none closed,
+   * chained 0–13 minutes apart, and treating each start as presence billed the
+   * whole two hours as reading. The anchor already carries the first open,
+   * which is the only thing those rows actually prove.
+   */
+  sessions: Array<{ started_at: string | null; ended_at: string | null }> = []
+): number | null {
+  const milestoneFloor = events.reduce<number>((furthest, e) => {
+    const ms = milestoneDwellMs(e.event_type);
+    return ms !== null && ms > furthest ? ms : furthest;
+  }, 0);
+
+  const open = openedAt ? new Date(openedAt).getTime() : Number.NaN;
+  let span = 0;
+  /** True once a session with a real close has contributed to the span. */
+  let measured = false;
+  if (Number.isFinite(open)) {
+    // Anything stamped before the report opened belongs to the survey, not to
+    // reading — including a clock-skewed row, which would otherwise start the
+    // first sitting in the past and inflate every sitting after it.
+    const points: Array<{ at: number; isClose: boolean }> = [{ at: open, isClose: false }];
+    const push = (time: string | null | undefined, isClose: boolean) => {
+      if (!time) return;
+      const ms = new Date(time).getTime();
+      if (Number.isFinite(ms) && ms >= open) points.push({ at: ms, isClose });
+    };
+    for (const event of events) push(event.event_time, false);
+    for (const session of sessions) {
+      if (!session.started_at || !session.ended_at) continue;
+      if (new Date(session.ended_at).getTime() < new Date(session.started_at).getTime()) continue;
+      push(session.started_at, false);
+      push(session.ended_at, true);
+      // Somebody watched this reader leave, so the span below is measured
+      // rather than inferred — see MIN_MEASURABLE_DWELL_MS.
+      measured = true;
+    }
+    // Ties: the close sorts last, so a session that opens and closes in the same
+    // millisecond still ends its own sitting rather than the previous one.
+    points.sort((a, b) => a.at - b.at || Number(a.isClose) - Number(b.isClose));
+
+    let sittingStart = points[0]!.at;
+    let previous = points[0]!;
+    for (const point of points.slice(1)) {
+      /**
+       * A close ends the sitting outright, whatever the gap.
+       *
+       * This is the whole reason `ended_at` is worth writing. Without it the only
+       * evidence of absence was a long silence, so someone who read for two
+       * minutes, left, and came back ten minutes later was billed for all
+       * fourteen — the 30-minute threshold never fired. We now KNOW they left,
+       * so the gap after a close is never reading time.
+       */
+      if (previous.isClose || point.at - previous.at > REPORT_IDLE_GAP_MS) {
+        span += previous.at - sittingStart;
+        sittingStart = point.at;
+      }
+      previous = point;
+    }
+    span += previous.at - sittingStart;
+  }
+
+  const dwell = Math.max(span, milestoneFloor);
+  if (measured) return dwell > 0 ? dwell : null;
+  return dwell >= MIN_MEASURABLE_DWELL_MS ? dwell : null;
 }
 
 async function fetchJson<T>(path: string, what: string): Promise<T[]> {
@@ -174,7 +355,7 @@ export async function buildSubmissionJourney(
 ): Promise<SubmissionJourney | null> {
   // Wave 1: everything keyed directly off the submission id, concurrently. The
   // existing admin timeline route does 13 of these sequentially; don't copy that.
-  const [subs, quotes, events, reportSessions] = await Promise.all([
+  const [subs, quotes, eventsDesc, reportSessions] = await Promise.all([
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
@@ -188,31 +369,68 @@ export async function buildSubmissionJourney(
         `current_price,currency,purchased_at,checkout_started_at&order=created_date_time.asc`,
       "report_price_quote"
     ),
+    /**
+     * Every event this reader produced AFTER the survey, newest first.
+     *
+     * Widened from the five named types it used to fetch, because the dwell is
+     * now MEASURED from this stream rather than read off three milestone rows —
+     * a scroll, a chapter open or a dismissed paywall all prove the reader was
+     * still in there. `entity_type=neq.survey` drops the wizard events, which
+     * fire before the report exists and can only ever sit before the anchor.
+     *
+     * NEWEST FIRST, then reversed below. PostgREST caps a response at 1,000 rows
+     * and a Range header does not lift it, so an ascending order would silently
+     * drop the TAIL on the one submission that carries 1,962 rows — and the tail
+     * is the entire point: it is what says how long they stayed. Descending puts
+     * any truncation on the oldest end, where the worst case is understating a
+     * dwell we already document as a lower bound. 500 is ~44x the average
+     * submission (11.4 non-survey rows) and well inside the cap.
+     */
     fetchJson<AnalyticsRow>(
       `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}` +
-        `&event_type=in.(report_viewed,paywall_initiated)` +
-        `&select=event_type,event_time&order=event_time.asc`,
+        `&entity_type=neq.survey` +
+        `&select=event_type,event_time&order=event_time.desc&limit=500`,
       "analytics_event"
     ),
     /**
-     * The server-side record of the report being opened. `report_viewed` in
-     * `analytics_event` sits behind the consent gate and misses 45% of real
-     * opens (104 of 189 over 2026-08-25 → 09-05), which left `reportViewedAt`
+     * The server-side record of the report being opened AND closed. `report_viewed`
+     * in `analytics_event` sits behind the consent gate and misses 45% of real
+     * opens (96 of 216 over 2026-08-25 → 09-05), which left `reportViewedAt`
      * null — and every timing derived from it blank — for readers who declined
      * analytics. The report route writes this row itself and its own comment
      * already calls it "the server-side truth here"; this is that truth reaching
      * the journey. Embedded filter, so one request rather than a lookup hop.
+     *
+     * ALL the sessions now, not just the first. `ended_at` is written by
+     * /api/report-session-end on the way out, and it is the only record of when
+     * a reader actually LEFT — every other signal is the last thing they
+     * happened to click. Both boundaries feed the dwell below, which is also
+     * what finally gives a consent-declining reader a measured time instead of
+     * an em dash.
+     *
+     * ASCENDING, because [0] is the anchor and the anchor must be the reader's
+     * FIRST open — every timing hangs off it. That puts any truncation on the
+     * newest end, the opposite of the events query above, so the limit has to be
+     * generous rather than tight: 500 leaves 5 of 1,974 reports truncated, and
+     * all five are QA reload storms (the worst carries 2,356 sessions), where
+     * understating a dwell costs nothing.
      */
     fetchJson<ReportSessionRow>(
-      `/rest/v1/report_session?select=started_at,personal_report!inner(survey_submission_id)` +
+      `/rest/v1/report_session?select=started_at,ended_at,personal_report!inner(survey_submission_id)` +
         `&personal_report.survey_submission_id=eq.${submissionId}` +
-        `&order=started_at.asc&limit=1`,
+        `&order=started_at.asc&limit=500`,
       "report_session"
     ),
   ]);
 
   const sub = subs[0];
   if (!sub) return null;
+
+  // Back to ascending. The query asks for newest-first only so that truncation
+  // lands on the oldest end; everything below reads this as a timeline. Sorted
+  // rather than reversed, so `firstOf` cannot be silently re-pointed at the last
+  // row by a change to the query's `order`.
+  const events = [...eventsDesc].sort((a, b) => a.event_time.localeCompare(b.event_time));
 
   const stamped = readStampedArms(sub.utm_tracker);
 
@@ -223,6 +441,7 @@ export async function buildSubmissionJourney(
   const anyQuote = purchased ?? quotes[0] ?? null;
 
   const firstOf = (type: string) => events.find((e) => e.event_type === type)?.event_time ?? null;
+
   // Earliest of the two: whichever actually recorded the open first. The
   // consent-gated event is kept as a fallback rather than dropped, so a row
   // predating report_session still resolves.
@@ -230,6 +449,7 @@ export async function buildSubmissionJourney(
     [reportSessions[0]?.started_at ?? null, firstOf("report_viewed")]
       .filter((v): v is string => Boolean(v))
       .sort()[0] ?? null;
+  const reportDwellMs = measureReportDwellMs(reportViewedAt, events, reportSessions);
   const checkoutStartedAt =
     purchased?.checkout_started_at ??
     quotes.find((q) => q.checkout_started_at)?.checkout_started_at ??
@@ -250,7 +470,20 @@ export async function buildSubmissionJourney(
     },
     traffic: classifyTraffic(sub.utm_tracker),
     device: anyQuote?.device_type ?? null,
-    country: sub.app_user?.user_profile?.location_primary?.trim() || null,
+    /**
+     * Capped for the same reason `classifyTraffic` caps utm values at 100: this
+     * string is interpolated straight into a Slack section, and a section is
+     * clamped from the END at 2,900 characters — so an oversized value here
+     * silently truncates whatever renders after it, which in the compact survey
+     * layout is the progress rail.
+     *
+     * It is not hypothetical. `location_primary` is the visitor's own answer to
+     * Q15001; the column is `text` with no length limit and no check constraint,
+     * and `surveyAnswersSchema` accepts an array of 20 x 500 characters for any
+     * key that has no selection cap — 10,000 characters, which the RPC writes
+     * with a bare `#>> '{}'`. The longest real country name is 56.
+     */
+    country: sub.app_user?.user_profile?.location_primary?.trim().slice(0, 100) || null,
     countryTier: anyQuote?.country_tier ?? null,
     timings: {
       durationMs: toNumber(sub.duration_ms),
@@ -258,6 +491,7 @@ export async function buildSubmissionJourney(
       completedAt: sub.created_date_time,
       msToPurchase: msBetween(sub.created_date_time, purchasedAt),
       msCheckoutHesitation: msBetween(checkoutStartedAt, purchasedAt),
+      reportDwellMs,
     },
     milestones: {
       reportViewedAt,
@@ -331,6 +565,9 @@ export function journeyFromPurchase(input: {
       completedAt: null,
       msToPurchase: null,
       msCheckoutHesitation: null,
+      // This builder never reads the database, so there is no event stream to
+      // measure a dwell from. The purchase message does not render it.
+      reportDwellMs: null,
     },
     milestones: {
       reportViewedAt: null,
