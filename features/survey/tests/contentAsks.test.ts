@@ -16,7 +16,7 @@ import { CONTENT_ASK_QIDS } from "@features/survey/ui/questionOrder";
 /**
  * Marcus's 30.09 wording in the Assessment Questions sheet. Each question's hint sits in
  * two places, as the sheet has it: the grey placeholder inside the box ("Free text - …" in
- * Answer options) and the GuidancePanel's Info and guidance.
+ * Answer options) and the guide line under the question.
  */
 const INSIGHTS_Q =
   "Was there a learning or insight that profoundly changed or improved your sexuality?";
