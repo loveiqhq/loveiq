@@ -117,3 +117,38 @@ describe("hero above-the-fold reveal", () => {
     expect(covering.some((b) => /animation:\s*none/.test(b) && /opacity:\s*1/.test(b))).toBe(true);
   });
 });
+
+/**
+ * Round 3 of the landing test swaps only the hero's right-hand slot (question 1 or
+ * the presenter video), so the rule above becomes: both slots reveal the same way,
+ * and the video's poster — the largest thing above the fold on a desktop — is asked
+ * for at once. An arm that painted later would measure page speed, not the video.
+ */
+describe("hero above-the-fold reveal — the round-3 video slot", () => {
+  const hero = read("features/landing/ui/white/WHero.tsx");
+  const video = read("features/landing/ui/white/WHeroVideo.tsx");
+
+  it("reveals the video slot exactly like the question slot", () => {
+    const slots = [...hero.matchAll(/<div className="([^"]*)">\s*<(WHeroVideo|WQuestionCard)\b/g)];
+    expect(slots.map(([, , el]) => el).sort()).toEqual(["WHeroVideo", "WQuestionCard"]);
+    for (const [, classes, el] of slots) {
+      expect(classes, `${el}'s slot lost its on-load reveal`).toContain(
+        "animate-on-load stagger-2"
+      );
+      expect(classes).not.toContain("animate-on-scroll");
+    }
+  });
+
+  it("never waits on a scroll observer inside the video either", () => {
+    expect(video).not.toContain("animate-on-scroll");
+  });
+
+  it("asks for the poster at once, without the deprecated priority prop", () => {
+    const image = /<Image\b[\s\S]*?\/>/.exec(video)?.[0] ?? "";
+    expect(image).toContain('fetchPriority="high"');
+    expect(image).toContain('loading="eager"');
+    // `priority` is deprecated in Next 16, and `preload` with these two is redundant.
+    expect(image).not.toMatch(/\spriority(\s|=|\/)/);
+    expect(image).not.toContain("preload");
+  });
+});

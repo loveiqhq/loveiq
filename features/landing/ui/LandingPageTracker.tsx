@@ -12,17 +12,20 @@ import {
 } from "@shared/experiments/landingVariant";
 
 /**
- * Fires `landing_page_view` to GA4 once per page load (top-of-funnel signal for
- * the Tracking & Pricing CSV) and registers the white-landing A/B arm:
- *   - `setLandingVariant` → GA4 user property so every event is segmentable.
- *   - `trackExperimentExposure` → canonical `experiment_exposure` event for the
- *     `landing-white-ab` experiment (GA4-only at landing time — no submission yet).
+ * Fires `landing_page_view` once per page load (top-of-funnel signal for the
+ * Tracking & Pricing CSV) and registers the landing A/B arm:
+ *   - `setLandingVariant` → PostHog super-property and GA4 user property, so every
+ *     later event (the hero video's included) is split by arm without saying so.
+ *   - `trackExperimentExposure` → canonical `experiment_exposure` event for
+ *     LANDING_VARIANT_EXPERIMENT (no submission exists yet at landing time).
  *
- * Both the dark (`control`) and white (`white`) orchestrators render this with
- * their variant. The ref guards against React strict-mode double-mount in dev
- * so the counts stay accurate.
+ * Every landing renders this with the arm it was served: `white_card` /
+ * `white_video` in the current test, `white` for crawlers and visitors outside it,
+ * `white_prev` for round 2's V1. Required, so no landing can register a default
+ * arm it was not served. The ref guards against React strict-mode double-mount in
+ * dev so the counts stay accurate.
  */
-const LandingPageTracker = ({ variant = "control" }: { variant?: LandingVariant }) => {
+const LandingPageTracker = ({ variant }: { variant: LandingVariant }) => {
   const fired = useRef(false);
 
   useEffect(() => {
