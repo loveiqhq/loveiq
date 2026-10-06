@@ -1,15 +1,18 @@
 "use client";
 
 import { useSyncExternalStore, type FC } from "react";
-import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
+import WHeroVideo from "./WHeroVideo";
 import WQuestionCard from "./WQuestionCard";
 
-// Arm B only, so arm A's bundle never carries it. Still server-rendered: the poster is
-// in the first HTML, which is what B's largest paint waits on.
-const WHeroVideo = dynamic(() => import("./WHeroVideo"));
+// WHeroVideo is imported statically, so both arms load the same JavaScript (2.8 KB
+// gzipped of it for arm B's video). It was a `next/dynamic` import, which renders no
+// Suspense boundary of its own: arm B's whole page then waited on that chunk to
+// hydrate. Measured on a production build with the chunk held back 4 s: arm B's page
+// hydrated at 4.4 s against 1.3 s, its menu dead until then, its exposure late. That
+// would have measured page speed alongside the video.
 
 /**
  * What the hero's right-hand slot holds, by arm of the landing test: question 1
