@@ -149,14 +149,15 @@ const academicBoardSchema = {
 };
 
 export default async function Page() {
-  // 50/50 A/B between the current white landing and the one before the 2026-08-10
-  // rebuild. The arm is decided in proxy.ts and handed over as a request header
-  // rather than read from cookies() here — on the visit that MINTS the cookie,
-  // cookies() cannot see it yet, so the first render would show the wrong arm and
-  // the second would flip. Both heroes are CSS-only, so neither needs a video
-  // preload, and the JSON-LD below is product/site metadata: identical for both
-  // arms, which is also what keeps `/` a single canonical page for crawlers (bots
-  // are always served the current arm — see resolveLandingVariant).
+  // 50/50 A/B between two heroes on the same page: question 1 ("white_card") or the
+  // presenter video ("white_video"). The arm is decided in proxy.ts and handed over
+  // as a request header rather than read from cookies() here — on the visit that
+  // MINTS the cookie, cookies() cannot see it yet, so the first render would show the
+  // wrong arm and the second would flip. The video arm's poster is the only extra
+  // preload, and next/image emits it for that arm alone. The JSON-LD below is
+  // product/site metadata, identical for both arms, which keeps `/` a single
+  // canonical page for crawlers (they are served arm A's page — see
+  // resolveLandingVariant). "white_prev" still opens round 2's V1 for QA.
   const variant = normalizeLandingVariant((await headers()).get(LANDING_VARIANT_HEADER));
 
   return (
@@ -177,7 +178,7 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdString(academicBoardSchema) }}
       />
-      {variant === "white_prev" ? <LandingPageWhiteV1 /> : <LandingPageWhite />}
+      {variant === "white_prev" ? <LandingPageWhiteV1 /> : <LandingPageWhite variant={variant} />}
     </>
   );
 }
