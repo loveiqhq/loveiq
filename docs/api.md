@@ -195,7 +195,10 @@ misreport its arm. Two rules matter for anyone querying this column:
 
 `question_order_arm` is a convenience for grouping, never the record: it is a pure
 function of `survey_submission.session_id`, so an unstamped respondent's arm is
-recomputed rather than read.
+recomputed rather than read. One exception: a draft begun before C13 launched keeps the
+control order when it is resumed (`resolveDraftQuestionOrderArm`), so its stamp can say
+`variant`. Such a session started before the launch, and C13 readouts count only sessions
+started after it.
 
 **`durationMs` is clamped by the client.** `startedAt` is restored from the browser's
 saved draft, so a respondent who begins the survey, leaves, and returns days later would
