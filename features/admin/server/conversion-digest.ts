@@ -383,7 +383,8 @@ export async function fetchMidwayProgress(
       }),
     });
     if (!res.ok) {
-      logger.warn({ status: res.status }, "conversion-digest: midway RPC non-2xx");
+      // The index says which read failed: the digest reads this RPC at two thresholds.
+      logger.warn({ status: res.status, midwayIndex }, "conversion-digest: midway RPC non-2xx");
       return null;
     }
     const raw = (await res.json()) as {
@@ -424,7 +425,7 @@ export async function fetchMidwayProgress(
       firstArmDay: str(raw.firstArmDay) || null,
     };
   } catch (err) {
-    logger.warn({ err }, "conversion-digest: midway RPC threw");
+    logger.warn({ err, midwayIndex }, "conversion-digest: midway RPC threw");
     return null;
   }
 }
