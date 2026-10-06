@@ -132,6 +132,8 @@ describe("hero video — what the server sends", () => {
     const html = renderToString(<WHeroVideo />);
     // The loop is a per-device decision (reduced motion, Save-Data), so it waits for the browser.
     expect(html).not.toContain(HERO_PREVIEW_SRC);
+    // Not "ready" until hydrated: before then the button has no click handler.
+    expect(html).not.toContain("data-ready");
     // The full video is in the page, but preload="none" fetches nothing until the tap.
     const fullTag = /<video[^>]*data-testid="hero-video-full"[^>]*>/.exec(html)?.[0] ?? "";
     expect(fullTag).toContain(`src="${HERO_VIDEO_SRC}"`);
@@ -147,6 +149,8 @@ describe("hero video — what the server sends", () => {
 describe("hero video — the silent loop", () => {
   it("rolls once a quarter of it is on screen and stops when it leaves", () => {
     render(<WHeroVideo />);
+    // Hydrated in the browser, so tests and walkers can tell the button now works.
+    expect(screen.getByTestId("hero-video").hasAttribute("data-ready")).toBe(true);
     const { preview } = media();
     expect(preview.getAttribute("src")).toBe(HERO_PREVIEW_SRC);
     const [io] = FakeObserver.all;

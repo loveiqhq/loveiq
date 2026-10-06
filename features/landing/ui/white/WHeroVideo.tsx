@@ -67,6 +67,11 @@ const previewAllowed = (): boolean => {
 // The server never renders the loop's src: the decision needs the visitor's device.
 const previewAllowedOnServer = () => false;
 
+// True once this component has hydrated, i.e. once the button has its click handler.
+const subscribeToNothing = () => () => {};
+const hydratedInBrowser = () => true;
+const notHydratedOnServer = () => false;
+
 const exitFullscreen = (video: WebkitVideo) => {
   if (document.fullscreenElement === video) {
     void document.exitFullscreen?.().catch(() => {});
@@ -77,6 +82,7 @@ const exitFullscreen = (video: WebkitVideo) => {
 
 const WHeroVideo: FC = () => {
   const previewOn = useSyncExternalStore(subscribeToMotion, previewAllowed, previewAllowedOnServer);
+  const hydrated = useSyncExternalStore(subscribeToNothing, hydratedInBrowser, notHydratedOnServer);
   const [phase, setPhase] = useState<Phase>("preview");
   const [loopShowing, setLoopShowing] = useState(false);
 
@@ -208,6 +214,9 @@ const WHeroVideo: FC = () => {
     <div
       ref={boxRef}
       data-testid="hero-video"
+      // Present once hydrated: a tap before then reaches a button with no handler yet, and
+      // this chunk loads after the page's own, so the root's data-hydrated is not enough.
+      data-ready={hydrated ? "" : undefined}
       className="relative isolate mx-auto w-[min(472px,90.5%)] overflow-hidden bg-[#efe4d8] lg:mx-0 lg:w-full"
       // Figma's box (472 x 269.896, radius 17.99 at desktop, 12.07 at 316.75 on a phone):
       // one rule at every width, because the radius is a share of the box, not pixels.
