@@ -110,8 +110,8 @@ loveiq-web/
 │   ├── robots.ts               # robots.txt generation
 │   └── sitemap.ts              # sitemap.xml generation
 ├── features/                   # Domain-first feature folders (each: ui/, server/ or logic/, tests/, AGENT_README.md)
-│   ├── landing/ui/white/       # White landing sections (W*) — arm A of the live 50/50 A/B
-│   ├── landing/ui/white-v1/    # The white landing before the 2026-08-10 rebuild — arm B
+│   ├── landing/ui/white/       # White landing sections (W*) — both arms of the live hero A/B
+│   ├── landing/ui/white-v1/    # The white landing before the 2026-08-10 rebuild — retired
 │   ├── landing/ui/             # Shared: FooterSection + ScrollAnimator + NavSection (404) + S06Archetypes (data)
 │   ├── about/ui/               # About page sections (Hero, Team, Publications, etc.)
 │   ├── glossary/ui/            # /glossary index + term page
@@ -566,14 +566,16 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 #### Add a New Landing Section
 
-The landing page is the white design under `features/landing/ui/white/`, currently
-in a 50/50 A/B against the white landing that preceded the 2026-08-10 rebuild
-(`features/landing/ui/white-v1/`). `proxy.ts` assigns the arm and `app/page.tsx`
+The landing page is the white design under `features/landing/ui/white/`. Its hero
+is in a 50/50 A/B (round 3): arm A (`white_card`) shows question 1 in the hero, arm
+B (`white_video`) the presenter video (`white/WHeroVideo.tsx`) in its place, and the
+rest of the page is the same for both. `proxy.ts` assigns the arm and `app/page.tsx`
 renders it; see `shared/experiments/landingVariant.ts`. Force an arm with
-`/?variant=white` or `/?variant=white_prev`.
+`/?variant=white_card` or `/?variant=white_video`.
 
-A new section normally belongs to the CURRENT arm only — `white-v1/` is a frozen
-snapshot and should not gain features.
+A new section goes into both arms: they share every section but the hero's
+right-hand slot. `white-v1/` is round 2's retired arm (still shown for
+`/?variant=white_prev`), a frozen snapshot that should not gain features.
 
 1. Create `features/landing/ui/white/WNewSection.tsx`
 2. Follow existing section patterns (see `white/WArchetypes.tsx` / `white/WReportPreview.tsx`)
