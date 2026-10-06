@@ -55,9 +55,15 @@ const MOBILE = { width: 390, height: 844 };
 const SHOTS = [
   {
     name: "landing-white",
-    path: "/?variant=white",
+    path: "/?variant=white_card",
     viewport: VIEWPORT,
-    what: "the landing page, arm `white`, above the fold",
+    what: "the landing page, arm `white_card` (question 1 in the hero), above the fold",
+  },
+  {
+    name: "landing-white-video",
+    path: "/?variant=white_video",
+    viewport: VIEWPORT,
+    what: "the landing page, arm `white_video` (the presenter video in the hero), above the fold",
   },
   {
     name: "landing-white-prev",
@@ -67,9 +73,15 @@ const SHOTS = [
   },
   {
     name: "landing-white-mobile",
-    path: "/?variant=white",
+    path: "/?variant=white_card",
     viewport: MOBILE,
-    what: "the landing page, arm `white`, on a phone",
+    what: "the landing page, arm `white_card` (question 1 in the hero), on a phone",
+  },
+  {
+    name: "landing-white-video-mobile",
+    path: "/?variant=white_video",
+    viewport: MOBILE,
+    what: "the landing page, arm `white_video` (the presenter video in the hero), on a phone",
   },
   {
     name: "landing-white-prev-mobile",
