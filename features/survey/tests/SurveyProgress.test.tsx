@@ -58,6 +58,29 @@ describe("SurveyProgress", () => {
     expect((bar.firstElementChild as HTMLElement).style.width).toBe("15%");
   });
 
+  // Figma 11303:174 (ready for dev 2026-10-06): the strip sits between Previous and Next
+  // now, the count and time left beside the bar from 640px. On a phone they stack above
+  // it (Marcus, LoveIQ Sync 2026-10-06: "push the 1 out of 59 and 14 minutes above the
+  // bar and you stack it"). The footer row draws the hairline, not the strip.
+  it("puts the count beside the bar from 640px and above it on phones", () => {
+    render(<SurveyProgress index={0} total={57} />);
+    const bar = screen.getByRole("progressbar", { name: "Survey progress" });
+    const strip = bar.parentElement as HTMLElement;
+    expect(strip).toHaveClass(
+      "flex",
+      "flex-col",
+      "sm:flex-row",
+      "sm:items-center",
+      "sm:gap-[13px]"
+    );
+    expect(strip).not.toHaveClass("border-t");
+
+    const label = screen.getByText("1/57").parentElement as HTMLElement;
+    expect(label.parentElement).toBe(strip);
+    expect(label).toHaveClass("sm:h-[22px]", "sm:px-[8.55px]");
+    expect(bar).toHaveClass("sm:flex-1");
+  });
+
   it("moves the bar with the question", () => {
     render(<SurveyProgress index={28} total={57} />);
     const bar = screen.getByRole("progressbar", { name: "Survey progress" });
