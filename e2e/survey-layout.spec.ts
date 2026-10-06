@@ -2,7 +2,8 @@ import { test, expect } from "@playwright/test";
 
 import { surveyQuestions } from "../data/survey-data";
 import { isHidden } from "../features/survey/questionFlags";
-import { orderEmailLast } from "../features/survey/ui/questionOrder";
+import { orderAskedQuestions, orderEmailLast } from "../features/survey/ui/questionOrder";
+import { pinSurveySession } from "./surveyArm";
 
 /**
  * The question screen's layout (Figma 11303:174, 2026-10-04).
@@ -13,6 +14,9 @@ import { orderEmailLast } from "../features/survey/ui/questionOrder";
  *
  *   - picking an answer moves nothing (the placement is held, the card grows down)
  *   - from 640px wide, the buttons follow the last guidance row, no dead gap
+ *
+ * And since the 2026-10-06 update, where the footer row draws its own hairline: on a
+ * phone, a question longer than the screen ends clear of that line.
  *
  * Nothing is written: every survey write is answered locally.
  */
@@ -64,5 +68,65 @@ test.describe("Survey — question layout", () => {
       const next = (await page.getByRole("button", { name: "Next", exact: true }).boundingBox())!;
       expect(next.y - (row.y + row.height), "dead gap above the buttons").toBeLessThan(60);
     }
+  });
+
+  test("on a phone, a long question ends clear of the footer's line", async ({ page }) => {
+    for (const p of ["**/api/survey", "**/api/survey-partial", "**/api/survey-tracking"]) {
+      await page.route(p, (r) =>
+        r.fulfill({ status: 200, contentType: "application/json", body: "{}" })
+      );
+    }
+    // The first multiple-choice question: on an iPhone SE its options run past the
+    // screen, so at the scroll end the question meets the sticky footer row.
+    const asked = orderAskedQuestions(surveyQuestions, "control").filter((q) => !isHidden(q.qId));
+    const index = asked.findIndex((q) => q.answerType === "multiple");
+    await pinSurveySession(page, "control");
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.addInitScript((i) => {
+      const state = {
+        answers: {},
+        currentIndex: i,
+        startedAt: new Date().toISOString(),
+        prefilled: [],
+      };
+      window.localStorage.setItem("loveiq-survey-answers", JSON.stringify(state));
+      window.localStorage.setItem("loveiq-survey-consent", new Date().toISOString());
+      window.sessionStorage.setItem("loveiq-survey-step", "6");
+    }, index);
+    await page.goto("/survey");
+    await expect(
+      page.getByRole("heading", { name: asked[index]!.question, exact: true })
+    ).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() =>
+      document
+        .getAnimations()
+        .every(
+          (a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity
+        )
+    );
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollHeight > window.innerHeight
+    );
+    expect(overflows, "the question must be longer than the screen to test this").toBe(true);
+
+    await page.evaluate(() =>
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" })
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            Math.ceil(window.scrollY + window.innerHeight) >=
+            document.documentElement.scrollHeight - 1
+        )
+      )
+      .toBe(true);
+
+    const why = (await page.getByRole("button", { name: "Why we ask this" }).boundingBox())!;
+    const line = (await page.locator("main nav").boundingBox())!;
+    expect(
+      line.y - (why.y + why.height),
+      "the footer's line runs under the last line of the question"
+    ).toBeGreaterThanOrEqual(8);
   });
 });
