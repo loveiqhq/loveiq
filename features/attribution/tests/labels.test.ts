@@ -1,3 +1,4 @@
+import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -28,16 +29,27 @@ describe("arm labels", () => {
     }
     expect(armLabel("survey", "dark").long).toBe("Survey questions: dark");
     expect(armLabel("survey", "white").long).toBe("Survey questions: white");
-    // Deliberately direction-free: these used to claim A was the lower arm, which
-    // pricing 2.1 inverted on 2026-08-24 without anything failing.
+    // The 2.x arms stay direction-free: their labels once claimed A was the lower arm,
+    // which pricing 2.1 inverted on 2026-08-24 without anything failing.
     expect(armLabel("pricing", "A").long).toBe("Pricing: group A");
     expect(armLabel("pricing", "B").long).toBe("Pricing: group B");
-    expect(armLabel("pricing", "A3").long).toBe("Pricing 3.0: list A");
-    expect(armLabel("pricing", "B3").long).toBe("Pricing 3.0: list B");
-    for (const arm of ["A", "B", "A3", "B3"] as const) {
+    for (const arm of ["A", "B"] as const) {
       for (const field of ["short", "long"] as const) {
         expect(armLabel("pricing", arm)[field]).not.toMatch(/lower|higher/i);
       }
+    }
+    // Pricing 3.0's two lists are named by what the reader pays (founder, 2026-10-06), and
+    // what made the old labels lie is checked instead of banned: each label must agree with
+    // the price lists themselves, for both plans, so swapping the prices fails here.
+    expect(armLabel("pricing", "A3").long).toBe("Pricing 3.0: higher prices");
+    expect(armLabel("pricing", "B3").long).toBe("Pricing 3.0: lower prices");
+    for (const plan of ["full_report", "all_reports"] as const) {
+      const cents = (code: string) =>
+        getPricingBucketsForPlan(plan).find((b) => b.code === code)!.startingCents;
+      const higher = cents("A3") > cents("B3") ? "A3" : "B3";
+      const lower = higher === "A3" ? "B3" : "A3";
+      expect(armLabel("pricing", higher).short, plan).toMatch(/higher/);
+      expect(armLabel("pricing", lower).short, plan).toMatch(/lower/);
     }
     expect(armLabel("paywall", "treatment").long).toBe("Paywall: forced — had to pay to read on");
     expect(armLabel("paywall", "control").long).toBe("Paywall: dismissible — could close it");

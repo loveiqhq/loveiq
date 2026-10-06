@@ -352,13 +352,13 @@ describe("GET /api/admin/ab-overview", () => {
     const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
     expect(pricing.title).toBe("Report pricing");
     expect(pricing.arms.find((x: { arm: string }) => x.arm === "A3")).toMatchObject({
-      label: "Pricing 3.0 A",
+      label: "Pricing 3.0 higher",
       n: 40,
       purchases: 4,
       revenue: 159.96,
     });
     expect(pricing.arms.find((x: { arm: string }) => x.arm === "B3")).toMatchObject({
-      label: "Pricing 3.0 B",
+      label: "Pricing 3.0 lower",
       n: 60,
       purchases: 3,
       revenue: 59.97,

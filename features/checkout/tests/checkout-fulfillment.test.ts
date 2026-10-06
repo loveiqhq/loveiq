@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetSlackDedupForTests } from "@shared/observability/slack";
+import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
 
 const mockFetchWithTimeout = vi.fn();
 
@@ -969,7 +970,8 @@ describe("checkout fulfillment", () => {
       plan: "essentials" | "full_report" | "all_reports",
       archetype?: string,
       paymentIntent: string | null = "pi_test_slack_001",
-      landingVariant?: string
+      landingVariant?: string,
+      session: Record<string, unknown> = {}
     ) {
       return {
         charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_test_slack_001" }) },
@@ -989,6 +991,7 @@ describe("checkout fulfillment", () => {
               payment_intent: paymentIntent,
               payment_status: "paid",
               total_details: { amount_discount: 0 },
+              ...session,
             }),
           },
         },
@@ -1208,6 +1211,61 @@ describe("checkout fulfillment", () => {
       });
 
       expect(slackCalls).toHaveLength(0);
+    });
+
+    /**
+     * #payments announced "EUR 0.00" with no test tag, while the ops lines about
+     * the same payment already said "[internal]". The tag follows the payment's
+     * own `is_test` verdict: the address that paid.
+     */
+    describe("whose money it was", () => {
+      const purchaseBy = async (buyer: string, amountTotal: number) => {
+        process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+        delete process.env.ADMIN_TEST_EMAIL_REGEX;
+        __resetStaffEmailRegexForTests();
+        const slackCalls = setupHappyPathMocks();
+        await processStripeWebhookEvent({
+          event: {
+            id: `evt_slack_whose_${amountTotal}`,
+            type: "checkout.session.completed",
+            data: {
+              object: {
+                id: "cs_test_slack_001",
+                metadata: { plan: "full_report", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+              },
+            },
+          } as never,
+          stripe: buildStripe("full_report", "Spark Seeker", null, undefined, {
+            amount_total: amountTotal,
+            customer_details: { email: buyer },
+            payment_status: amountTotal === 0 ? "no_payment_required" : "paid",
+          }) as never,
+        });
+        delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+        expect(slackCalls).toHaveLength(1);
+        return JSON.parse(slackCalls[0]!.body) as {
+          text: string;
+          blocks: Array<{ type: string; text?: { text?: string } }>;
+        };
+      };
+
+      it("marks a staff €0 purchase as internal, and its Paid as no sale", async () => {
+        const body = await purchaseBy("qa@loveiq.org", 0);
+        expect(body.blocks.find((b) => b.type === "header")?.text?.text).toBe(
+          ":test_tube: [internal] 💳 EUR 0.00 — Only Your Highest Archetype"
+        );
+        expect(body.text).toMatch(
+          /^:test_tube: \[internal\] :credit_card: Purchase #70 — EUR 0\.00/
+        );
+        expect(rendered(JSON.stringify(body))).toContain(":red_circle: Paid €0 (test/comp)");
+      });
+
+      it("leaves a customer's sale untagged and green", async () => {
+        const all = rendered(JSON.stringify(await purchaseBy("buyer@gmail.com", 1999)));
+        expect(all).not.toContain("[internal]");
+        expect(all).not.toContain("€0");
+        expect(all).toContain(":large_green_circle: Paid");
+      });
     });
 
     it("skips the Slack ping on re-delivery (existing payment row)", async () => {

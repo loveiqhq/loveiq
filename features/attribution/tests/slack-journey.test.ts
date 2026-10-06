@@ -24,6 +24,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
     submissionId: 1756,
     firstName: "Kitten",
     emailMasked: "a***@gmail.com",
+    internal: false,
     arms: { landing: "white", survey: "white", pricing: null, paywall: null },
     traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign: null },
     device: "Desktop",
@@ -44,6 +45,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
       purchasedAt: null,
     },
     money: null,
+    noMoneyTaken: false,
     quoteCount: 0,
     recordingSessionId: null,
     ...overrides,
@@ -358,6 +360,20 @@ describe("the compact incoming-survey layout", () => {
     );
   });
 
+  /**
+   * A staff submission looked exactly like a visitor's unless someone read the
+   * masked domain. Same rule as `payment.is_test`, decided in journey.ts.
+   */
+  it("tags a staff submission's title as internal, and nobody else's", () => {
+    const title = (internal: boolean) =>
+      soleSection(
+        buildJourneyMessage(journey({ internal }), { kind: "survey_completed", questionCount: 58 })
+          .blocks
+      ).split("\n")[0];
+    expect(title(true)).toBe(":test_tube: [internal] Survey submission *#1756* `a***@gmail.com`");
+    expect(title(false)).toBe("Survey submission *#1756* `a***@gmail.com`");
+  });
+
   it("closes the code span even if the address carries a backtick", () => {
     const message = buildJourneyMessage(journey({ emailMasked: "`x***@`evil.com" }), {
       kind: "survey_completed",
@@ -556,12 +572,12 @@ describe("pricing arm — the Pricing 3.0 test", () => {
 
   it("names the 3.0 list a buyer was on", () => {
     const text = purchase("A3");
-    expect(text).toContain("*Report pricing*\\nPricing 3.0 A");
+    expect(text).toContain("*Report pricing*\\nPricing 3.0 higher");
     expect(text).not.toContain("retired arm");
     expect(text).not.toContain("dearer");
     expect(text).not.toContain("cheaper");
     expect(text).toContain("EUR 39.99");
-    expect(purchase("B3")).toContain("*Report pricing*\\nPricing 3.0 B");
+    expect(purchase("B3")).toContain("*Report pricing*\\nPricing 3.0 lower");
   });
 
   it("marks a concluded 2.x arm as retired rather than presenting it as live", () => {
@@ -598,6 +614,72 @@ describe("journey rail — the glyphs themselves", () => {
     for (const label of ["Survey done", "Report opened", "Paywall hit", "Checkout", "Paid"]) {
       expect(drawn).toContain(label);
     }
+  });
+});
+
+/**
+ * 9 of the 12 messages ever to reach "Paid" (by 2026-10-06) took no money — a
+ * 100% coupon or one of our own test runs — and each showed the same green "Paid"
+ * as a sale, while #payments announced "EUR 0.00" with no test tag.
+ */
+describe("a purchase that took no money", () => {
+  const free = (over: Partial<SubmissionJourney> = {}) =>
+    journey({
+      noMoneyTaken: true,
+      milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" },
+      ...over,
+    });
+
+  it("keeps Paid red and says why, while still filling every step before it", () => {
+    const message = buildJourneyMessage(free(), { kind: "survey_completed", questionCount: 58 });
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Paid €0 (test/comp)`);
+    expect(filledSteps(message.blocks)).toEqual([
+      "Survey done",
+      "Report opened",
+      "Paywall hit",
+      "Checkout",
+    ]);
+  });
+
+  it("does so when only the server-witnessed floor reaches Paid", () => {
+    // fulfillment's refreshJourneyMessage(…, "paid") arrives as a floor, not as data
+    const message = buildJourneyMessage(journey({ noMoneyTaken: true }), {
+      kind: "survey_completed",
+      questionCount: 58,
+      reachedFloor: "paid",
+    });
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Paid €0 (test/comp)`);
+    expect(rail(message.blocks)).not.toContain(`${REACHED} Paid`);
+  });
+
+  it("marks a staff €0 purchase on #payments, in the header and the notification text", () => {
+    const message = buildJourneyMessage(free({ internal: true }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 0.00",
+    });
+    const header = (message.blocks as Array<{ type: string; text?: { text?: string } }>).find(
+      (b) => b.type === "header"
+    );
+    expect(header?.text?.text).toBe(":test_tube: [internal] 💳 EUR 0.00 — Full report");
+    expect(message.text).toMatch(
+      /^:test_tube: \[internal\] :credit_card: Purchase #1756 — EUR 0\.00/
+    );
+    // the id and amount stay inside the 100-character dedup key
+    expect(message.text.indexOf("EUR 0.00")).toBeLessThan(100);
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Paid €0 (test/comp)`);
+  });
+
+  it("leaves a real sale green and untagged", () => {
+    const message = buildJourneyMessage(
+      journey({ milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" } }),
+      { kind: "purchase", planLabel: "Full report", archetype: null, amountText: "EUR 39.99" }
+    );
+    expect(rail(message.blocks)).toContain(`${REACHED} Paid`);
+    expect(JSON.stringify(message.blocks)).not.toContain("[internal]");
+    expect(JSON.stringify(message.blocks)).not.toContain("€0");
+    expect(message.text).toMatch(/^:credit_card: Purchase #1756/);
   });
 });
 
