@@ -47,6 +47,15 @@ describe("hero video events", () => {
     expect(ph.capture).toHaveBeenCalledWith("hero_video_complete", undefined);
   });
 
+  it("names which video failed and why", () => {
+    client.trackHeroVideoError({ video: "full", reason: "media-error-2" });
+    client.trackHeroVideoError({ video: "preview", reason: "NotSupportedError" });
+    expect(ph.capture.mock.calls).toEqual([
+      ["hero_video_error", { video: "full", reason: "media-error-2" }],
+      ["hero_video_error", { video: "preview", reason: "NotSupportedError" }],
+    ]);
+  });
+
   it("keeps the pause and resume events where they were", () => {
     client.trackHeroVideoPaused({ current_time_sec: 12 });
     client.trackHeroVideoResumed({ current_time_sec: 12 });

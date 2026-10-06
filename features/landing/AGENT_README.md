@@ -4,7 +4,7 @@
 
 **A/B mechanics:** `proxy.ts` `resolveLandingVariant()` sends bots to `white` (arm A's page, but no arm), honours `?variant=`, keeps a returning visitor's live arm from the sticky `__liq_lv` cookie (an earlier round's value is re-rolled), and otherwise flips a coin; `app/page.tsx` reads the `x-landing-variant` request header and renders the page — `white_prev` → `LandingPageWhiteV1`, anything else → `LandingPageWhite`, which gives the hero the video for `white_video`. `shared/experiments/landingVariant.ts` owns the types, the live arms, the experiment id, the launch day the readouts start from and the downstream attribution notes. `white-v1/` pins only the four sections the rebuild redesigned (hero, archetype carousel, FAQ, closing CTA) and imports the other eleven from `white/`.
 
-**Hero video (arm B):** `WHeroVideo` shows a poster, rolls a muted 7.5-second preview while it is on screen, and plays the full video (`public/videos/white/`, 1:10, captions burned in) with sound on a tap. It is loaded with `next/dynamic`, so arm A's bundle does not carry it. Its play, progress and completion events are in `features/analytics/client`.
+**Hero video (arm B):** `WHeroVideo` shows a poster, rolls a muted 7.5-second preview while it is on screen, and plays the full video (`public/videos/white/`, 1:10, captions burned in) with sound on a tap; a start that fails (a rejection, a media error, or no frame within 12 s) brings the button back. It is imported statically, not with `next/dynamic`: that wrapper has no Suspense boundary, so arm B's whole page waited on the video's chunk to hydrate. Its play, progress, completion and error events are in `features/analytics/client`.
 
 **Entry points:**
 
@@ -34,7 +34,7 @@
 **Related:**
 
 - `shared/ui/branding/LoveIQBrand` — imported by `NavSection` and `FooterSection`.
-- `features/analytics/client` — `trackStartSurvey`, `trackLandingPageView`, `trackHeroVideoPlay` / `Progress` / `Complete`.
+- `features/analytics/client` — `trackStartSurvey`, `trackLandingPageView`, `trackHeroVideoPlay` / `Progress` / `Complete` / `Error`.
 
 **Conventions:**
 

@@ -7,6 +7,7 @@ const analytics = vi.hoisted(() => ({
   trackHeroVideoPlay: vi.fn(),
   trackHeroVideoProgress: vi.fn(),
   trackHeroVideoComplete: vi.fn(),
+  trackHeroVideoError: vi.fn(),
   trackHeroVideoPaused: vi.fn(),
   trackHeroVideoResumed: vi.fn(),
 }));
@@ -37,9 +38,16 @@ class FakeObserver {
   }
   /** The element is now `ratio` in view. */
   show(ratio: number) {
+    this.showMany(ratio);
+  }
+  /** One callback carrying several crossings, oldest first, as a browser batches them. */
+  showMany(...ratios: number[]) {
     if (this.disconnected) return;
     this.cb(
-      [{ isIntersecting: ratio > 0, intersectionRatio: ratio, target: this.el } as never],
+      ratios.map(
+        (ratio) =>
+          ({ isIntersecting: ratio > 0, intersectionRatio: ratio, target: this.el }) as never
+      ),
       this as never
     );
   }
@@ -47,7 +55,12 @@ class FakeObserver {
 
 let played: HTMLMediaElement[] = [];
 let paused: HTMLMediaElement[] = [];
-let playResult: () => Promise<void> = () => Promise.resolve();
+/** What play() returns, per element: the loop and the full video can be told apart. */
+let playResult: (el: HTMLMediaElement) => Promise<void> = () => Promise.resolve();
+const rejectWith = (name: string) => () => Promise.reject(Object.assign(new Error(name), { name }));
+/** A play() that never settles: the HTML spec's answer to a network error mid-load. */
+const never = () => new Promise<void>(() => {});
+const isFull = (el: HTMLMediaElement) => el.getAttribute("data-testid") === "hero-video-full";
 const originalMatchMedia = window.matchMedia;
 
 const setReducedMotion = (reduce: boolean) => {
@@ -95,7 +108,7 @@ beforeEach(() => {
     this: HTMLMediaElement
   ) {
     played.push(this);
-    return playResult();
+    return playResult(this);
   });
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (
     this: HTMLMediaElement
@@ -116,6 +129,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   for (const fn of Object.values(analytics)) fn.mockClear();
@@ -199,6 +213,39 @@ describe("hero video — the silent loop", () => {
     render(<WHeroVideo />);
     expect(media().preview.getAttribute("src")).toBe(HERO_PREVIEW_SRC);
   });
+
+  it("goes by the latest crossing when one callback carries several", () => {
+    render(<WHeroVideo />);
+    const { preview } = media();
+    const [io] = FakeObserver.all;
+    // Scrolled in and straight back out between two callbacks: off screen now.
+    act(() => io!.showMany(0.6, 0));
+    expect(played).not.toContain(preview);
+    // And the other way round: on screen now.
+    act(() => io!.showMany(0, 0.6));
+    expect(played).toContain(preview);
+  });
+
+  it("says nothing when autoplay is refused: that is the poster doing its job", async () => {
+    playResult = rejectWith("NotAllowedError");
+    render(<WHeroVideo />);
+    await act(async () => FakeObserver.all[0]!.show(1));
+    expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
+    expect(screen.getByTestId("hero-video-play")).toBeTruthy();
+  });
+
+  it("reports a loop that cannot play at all, once per page", async () => {
+    playResult = rejectWith("NotSupportedError");
+    render(<WHeroVideo />);
+    const [io] = FakeObserver.all;
+    await act(async () => io!.show(1));
+    await act(async () => io!.show(0));
+    await act(async () => io!.show(1));
+    fireEvent(media().preview, new Event("error"));
+    expect(analytics.trackHeroVideoError.mock.calls).toEqual([
+      [{ video: "preview", reason: "NotSupportedError" }],
+    ]);
+  });
 });
 
 describe("hero video — playing it", () => {
@@ -211,32 +258,151 @@ describe("hero video — playing it", () => {
     expect(played).toContain(full);
     expect(full.muted).toBe(false);
     expect(paused).toContain(preview);
-    expect(analytics.trackHeroVideoPlay).toHaveBeenCalledWith({ replay: false });
     // Until frames arrive the button stays, showing that it is loading.
     expect((screen.getByTestId("hero-video-play") as HTMLButtonElement).disabled).toBe(true);
     expect(full.controls).toBe(false);
+    // A tap is not yet a play: that is counted once a frame shows.
+    expect(analytics.trackHeroVideoPlay).not.toHaveBeenCalled();
   });
 
-  it("hands over to the video's own controls once frames arrive", () => {
+  it("hands over to the video's own controls once frames arrive, and counts the play then", () => {
     render(<WHeroVideo />);
     const full = startAndPlay();
     expect(full.controls).toBe(true);
     expect(full.tabIndex).toBe(0);
     expect(screen.queryByTestId("hero-video-play")).toBeNull();
     expect(document.activeElement).toBe(full);
+    expect(analytics.trackHeroVideoPlay.mock.calls).toEqual([[{ replay: false }]]);
   });
+});
 
-  it("goes back to the poster when the browser refuses to play", async () => {
-    playResult = () =>
-      Promise.reject(Object.assign(new Error("denied"), { name: "NotAllowedError" }));
+/**
+ * Every way a start can fail must give the button back. It is disabled while the video
+ * starts, so a start that never ends is a spinner the visitor cannot get past without
+ * reloading — the page's one call to action on arm B, dead.
+ */
+describe("hero video — a start that fails", () => {
+  const button = () => screen.getByTestId("hero-video-play") as HTMLButtonElement;
+  const tap = () => fireEvent.click(button());
+
+  it("goes back to the poster when the browser refuses to play, and says why", async () => {
+    playResult = (el) => (isFull(el) ? rejectWith("NotAllowedError")() : Promise.resolve());
     render(<WHeroVideo />);
-    fireEvent.click(screen.getByTestId("hero-video-play"));
+    tap();
     await act(async () => {});
-    const button = screen.getByTestId("hero-video-play") as HTMLButtonElement;
-    expect(button.disabled).toBe(false);
+    expect(button().disabled).toBe(false);
     expect(media().full.controls).toBe(false);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "NotAllowedError",
+    });
+    // A start that never showed a frame is not a play, so the next tap is a first watch.
+    expect(analytics.trackHeroVideoPlay).not.toHaveBeenCalled();
+    playResult = () => Promise.resolve();
+    tap();
+    act(() => {
+      fireEvent(media().full, new Event("playing"));
+    });
+    expect(analytics.trackHeroVideoPlay).toHaveBeenLastCalledWith({ replay: false });
   });
 
+  it("gives the button back when the browser aborts the start (an app switch on iOS)", async () => {
+    playResult = (el) => (isFull(el) ? rejectWith("AbortError")() : Promise.resolve());
+    render(<WHeroVideo />);
+    tap();
+    await act(async () => {});
+    expect(button().disabled).toBe(false);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "AbortError",
+    });
+  });
+
+  it("gives the button back when the browser pauses it before a frame shows", () => {
+    playResult = (el) => (isFull(el) ? never() : Promise.resolve());
+    render(<WHeroVideo />);
+    tap();
+    act(() => {
+      fireEvent(media().full, new Event("pause"));
+    });
+    expect(button().disabled).toBe(false);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "paused-before-playing",
+    });
+    // Not a viewer's pause: nothing was playing.
+    expect(analytics.trackHeroVideoPaused).not.toHaveBeenCalled();
+  });
+
+  it("gives the button back on a media error, which never settles play()", () => {
+    playResult = (el) => (isFull(el) ? never() : Promise.resolve());
+    render(<WHeroVideo />);
+    tap();
+    const { full } = media();
+    Object.defineProperty(full, "error", { configurable: true, value: { code: 2 } });
+    act(() => {
+      fireEvent(full, new Event("error"));
+    });
+    expect(button().disabled).toBe(false);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "media-error-2",
+    });
+  });
+
+  it("gives up after 12 s without a frame, and pauses it so it cannot start later unseen", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    playResult = (el) => (isFull(el) ? never() : Promise.resolve());
+    render(<WHeroVideo />);
+    tap();
+    const { full } = media();
+    act(() => vi.advanceTimersByTime(11_999));
+    expect(button().disabled).toBe(true);
+    paused = [];
+    act(() => vi.advanceTimersByTime(1));
+    expect(button().disabled).toBe(false);
+    expect(paused).toContain(full);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "timeout",
+    });
+    // Frames arriving after that change nothing: the poster stays, nothing is counted.
+    act(() => {
+      fireEvent(full, new Event("playing"));
+    });
+    expect(full.controls).toBe(false);
+    expect(analytics.trackHeroVideoPlay).not.toHaveBeenCalled();
+  });
+
+  it("never times out a start that played", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    render(<WHeroVideo />);
+    const full = startAndPlay();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(full.controls).toBe(true);
+    expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
+  });
+
+  it("counts one failure once, whichever signals it raises", async () => {
+    playResult = (el) => (isFull(el) ? rejectWith("NotSupportedError")() : Promise.resolve());
+    render(<WHeroVideo />);
+    tap();
+    const { full } = media();
+    Object.defineProperty(full, "error", { configurable: true, value: { code: 4 } });
+    act(() => {
+      fireEvent(full, new Event("error"));
+      fireEvent(full, new Event("pause"));
+    });
+    await act(async () => {});
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledTimes(1);
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "media-error-4",
+    });
+  });
+});
+
+describe("hero video — the button", () => {
   it("names the button with both of its visible words", () => {
     render(<WHeroVideo />);
     const button = screen.getByTestId("hero-video-play");
@@ -296,6 +462,9 @@ describe("hero video — what it records", () => {
     full.currentTime = 70;
     fireEvent.click(button);
     expect(full.currentTime).toBe(0);
+    act(() => {
+      fireEvent(full, new Event("playing"));
+    });
     expect(analytics.trackHeroVideoPlay).toHaveBeenLastCalledWith({ replay: true });
   });
 });
