@@ -20,13 +20,15 @@
  * keeping — it IS still emitted by the RPC, and is dropped purely because
  * CHART_AXES does not list it. Extra rows for an unlisted axis are filtered by
  * `rowsForAxis`, so they cost nothing; do not take the paywall sentence to mean an
- * unlisted axis cannot arrive in the data. Both of those experiments concluded, as
- * `landing` did on 2026-09-19, so a chart would be inventing a test that is not
- * running. `pricing` is back since Pricing 3.0 (A3 vs B3), on its own window.
+ * unlisted axis cannot arrive in the data. Both of those experiments concluded, so a
+ * chart would be inventing a test that is not running. `pricing` is back since
+ * Pricing 3.0 (A3 vs B3), and `landing` since its round 3 (question card vs video),
+ * each on its own window.
  */
 
 import { computeRate } from "@features/admin/server/digest-metrics";
 import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { LANDING_HERO_VIDEO_LAUNCH_DAY } from "@shared/experiments/landingVariant";
 import {
   armLabel,
   AXIS_TITLES,
@@ -48,9 +50,10 @@ import {
  *
  * `landing` concluded on 2026-09-19 in favour of V2 and left this list (the
  * axis-level retirement idiom, not the arm-level one: retiring only `white_prev`
- * would leave a one-armed "test" still being charted and given a verdict).
- * `pricing` is back since Pricing 3.0 (A3 vs B3), cut at its launch day by
- * AXIS_VALID_FROM below.
+ * would have left a one-armed "test" still being charted and given a verdict). It is
+ * back for round 3, V2 against the video version V3, cut at that round's launch day.
+ * `pricing` is back since Pricing 3.0 (A3 vs B3), cut at its launch day too; both
+ * cuts are in AXIS_VALID_FROM below.
  *
  * Nothing else needs changing to bring an axis back: add it here, give its arms
  * labels + colours in labels.ts, and set its AXIS_VALID_FROM below.
@@ -59,7 +62,7 @@ import {
  * empty list is expressible — `[] as const` would make ChartAxis `never` and
  * every signature below unusable.
  */
-export const CHART_AXES: readonly ExperimentAxis[] = ["pricing"];
+export const CHART_AXES: readonly ExperimentAxis[] = ["pricing", "landing"];
 export type ChartAxis = ExperimentAxis;
 
 export interface AxisFunnelRow {
@@ -81,12 +84,13 @@ export interface AxisFunnelRow {
 // than its data does. Entries are kept for concluded axes too — historical
 // per-arm reads still have to cut the same day.
 export const AXIS_VALID_FROM: Partial<Record<ChartAxis, { day: string; why: string } | null>> = {
-  // Round 2 of the landing test: the current white design vs the pre-rebuild
-  // one. Round 1 (dark vs white) reused the same "white" arm name, so days
-  // before this belong to a different experiment.
+  // Round 3 of the landing test: question 1 in the hero (V2) vs the presenter video
+  // (V3). Its arms are new values, so earlier rows cannot pool into them; the cut is
+  // for the chart's own window, which must not count days the test was not running.
+  // Round 2 (V2 vs V1, from 2026-08-21) is read with the `validFrom` option instead.
   landing: {
-    day: "2026-08-21",
-    why: "the current two versions only started running against each other on 21 Aug",
+    day: LANDING_HERO_VIDEO_LAUNCH_DAY,
+    why: "the question card and the hero video only started running against each other on its launch day",
   },
   // Pricing 3.0. A3/B3 are new arm names, but the launch re-priced every reader who
   // had not bought yet, so readers who finished before it carry a 3.0 arm too.
@@ -188,12 +192,16 @@ export function rowsForAxis(
    * record of a two-sided result. It is also the only way to exercise the gates
    * below now that every axis is concluded: with the filter on, no axis has two
    * eligible arms, so every gate test would pass by never reaching a gate.
+   *
+   * `validFrom` replaces an axis's AXIS_VALID_FROM day for this read: a historical
+   * read of an earlier round needs that round's own start, not the current one's.
    */
-  opts?: { includeRetired?: boolean }
+  opts?: { includeRetired?: boolean; validFrom?: Partial<Record<ChartAxis, string>> }
 ): { rows: AxisFunnelRow[]; validFrom: string | null } {
   // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
   const valid = AXIS_VALID_FROM[axis];
-  const validFrom = valid?.day ?? null;
+  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+  const validFrom = opts?.validFrom?.[axis] ?? valid?.day ?? null;
   const scoped = rows.filter(
     (r) =>
       r.axis === axis &&
@@ -331,8 +339,8 @@ export function buildAxisTrends(
    * worse than ten failing ones.
    */
   axes: readonly ExperimentAxis[] = CHART_AXES,
-  /** Passed through to `rowsForAxis` — see the note on `includeRetired` there. */
-  opts?: { includeRetired?: boolean }
+  /** Passed through to `rowsForAxis` — see the notes on `includeRetired` and `validFrom` there. */
+  opts?: { includeRetired?: boolean; validFrom?: Partial<Record<ChartAxis, string>> }
 ): AxisTrends {
   const charted: AxisChart[] = [];
   const counts: AxisCounts[] = [];
@@ -422,13 +430,6 @@ export function buildAxisTrends(
     const aRate = computeRate(a.checkouts, a.completions);
     const bRate = computeRate(b.checkouts, b.completions);
     const paidTotal = a.paid + b.paid;
-
-    // The A/B letters are in the arm labels, but "which is which" still needs
-    // saying once for the landing test, where both arms are white designs.
-    const key =
-      axis === "landing"
-        ? ` A is the design live since ${human(AXIS_VALID_FROM.landing!.day)}; B is the one it replaced.`
-        : "";
 
     charted.push({
       axis,

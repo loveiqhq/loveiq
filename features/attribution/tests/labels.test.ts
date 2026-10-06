@@ -15,15 +15,23 @@ describe("arm labels", () => {
     // Marketing's own convention (2026-08-27), so "V2" in a meeting and
     // "Landing Page V2" in Slack are unambiguously the same arm, and the
     // parenthetical says which is which without the reader knowing dates.
-    expect(armLabel("landing", "white").long).toBe("Landing Page V2: survey in the hero");
+    // Round 3: V2 itself (white_card) against V3, the presenter video in the hero.
+    expect(armLabel("landing", "white_card").long).toBe("Landing Page V2: survey in the hero");
+    expect(armLabel("landing", "white_card").short).toBe("Landing Page V2 (Survey in Hero)");
+    expect(armLabel("landing", "white_video").long).toBe("Landing Page V3: video in the hero");
+    expect(armLabel("landing", "white_video").short).toBe("Landing Page V3 (Video in Hero)");
+    // `white` is V2 before round 3, named apart so it never pools with white_card.
+    expect(armLabel("landing", "white").long).toBe(
+      "Landing Page V2: survey in the hero, before the V3 test"
+    );
+    expect(armLabel("landing", "white").short).toBe("Landing Page V2 (Survey in Hero, before V3)");
     expect(armLabel("landing", "white_prev").long).toBe("Landing Page V1: the first design");
-    expect(armLabel("landing", "white").short).toBe("Landing Page V2 (Survey in Hero)");
     expect(armLabel("landing", "white_prev").short).toBe("Landing Page V1 (First Design)");
     // The retired dark arm must not compete for "the first one" — see labels.ts.
     expect(armLabel("landing", "control").short).not.toMatch(/\bV1\b(?! *\))/);
     expect(armLabel("landing", "control").short.toLowerCase()).not.toContain("first");
     // "homepage" is not the term the team uses; every landing label says so.
-    for (const arm of ["white", "white_prev", "control"]) {
+    for (const arm of ["white_card", "white_video", "white", "white_prev", "control"]) {
       expect(armLabel("landing", arm).short.toLowerCase()).not.toContain("homepage");
       expect(armLabel("landing", arm).long.toLowerCase()).not.toContain("homepage");
     }
@@ -61,6 +69,8 @@ describe("arm labels", () => {
       for (const arm of [
         "white",
         "white_prev",
+        "white_card",
+        "white_video",
         "control",
         "dark",
         "A",
@@ -71,8 +81,10 @@ describe("arm labels", () => {
       ]) {
         const label = armLabel(axis, arm);
         if (label.short === "Unknown") continue;
-        expect(label.long).not.toContain("white_prev");
-        expect(label.short).not.toContain("white_prev");
+        for (const code of ["white_prev", "white_card", "white_video"]) {
+          expect(label.long).not.toContain(code);
+          expect(label.short).not.toContain(code);
+        }
       }
     }
   });
@@ -98,9 +110,11 @@ describe("arm labels", () => {
   });
 
   it("excludes retired arms from the active set used for charts", () => {
-    // V1 retired 2026-09-19 when the landing test concluded in favour of V2, so
-    // V2 is the only design still being served.
-    expect(activeArms("landing")).toEqual(["white"]);
+    // Round 3 assigns white_card and white_video. V1 retired 2026-09-19, and `white`
+    // (V2 before round 3) is no longer assigned to anyone.
+    expect(activeArms("landing")).toEqual(["white_card", "white_video"]);
+    expect(armLabel("landing", "white").retired).toBe(true);
+    expect(isKnownArm("landing", "white")).toBe(true);
     expect(armLabel("landing", "white_prev").retired).toBe(true);
     // …but still KNOWN, so the ~180 stored submissions that carry it keep a
     // plain-English label instead of reading as "Not recorded".
@@ -161,8 +175,8 @@ describe("arm labels", () => {
       }
     }
     // The real arms still resolve, so the guard has not over-reached.
-    expect(armLabel("landing", "white").short).toBe("Landing Page V2 (Survey in Hero)");
-    expect(isKnownArm("landing", "white")).toBe(true);
+    expect(armLabel("landing", "white_card").short).toBe("Landing Page V2 (Survey in Hero)");
+    expect(isKnownArm("landing", "white_card")).toBe(true);
     expect(isKnownArm("pricing", "C")).toBe(true);
   });
 
@@ -183,6 +197,20 @@ describe("arm colours", () => {
     expect(armColor("landing", "white_prev")).toBe("#2563eb"); // V1, first design
     expect(armColor("landing", "white")).toBe("#e0552f"); // V2, survey in hero
     expect(armColor("landing", "white_prev")).not.toBe(armColor("landing", "white"));
+  });
+
+  it("keeps V2 orange in round 3 and gives V3 the live pair's blue", () => {
+    expect(armColor("landing", "white_card")).toBe(armColor("landing", "white")); // V2 stays orange
+    expect(armColor("landing", "white_video")).toBe("#2563eb"); // V3
+    expect(armColor("landing", "white_card")).not.toBe(armColor("landing", "white_video"));
+  });
+
+  it("names every landing arm differently, so no two pool under one name", () => {
+    // The admin explorer groups by display name: two arms sharing one would merge.
+    const names = ["white_card", "white_video", "white", "white_prev", "control"].map(
+      (arm) => armLabel("landing", arm).short
+    );
+    expect(new Set(names).size).toBe(names.length);
   });
 
   it("gives every declared arm a colour, on every axis", () => {
@@ -212,7 +240,7 @@ describe("arm colours", () => {
      * which is trivially true once colour is a property of the arm, and was
      * impossible to guarantee while it was a property of the slot.
      */
-    const pair = ["white_prev", "white"];
+    const pair = ["white_card", "white_video"];
     for (const arm of pair) {
       const inPair = pair.map((a) => armColor("landing", a))[pair.indexOf(arm)];
       const alone = [arm].map((a) => armColor("landing", a))[0];

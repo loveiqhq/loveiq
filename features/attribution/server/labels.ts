@@ -87,13 +87,36 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     // identity and the parenthetical says which is which. Parentheses rather than a
     // dash because these strings are interpolated into whole sentences in the
     // digest, where a second dash reads as a break in the sentence.
+    //
+    // Round 3 (from LANDING_HERO_VIDEO_LAUNCH_DAY) runs V2 itself against a version
+    // with the presenter video in its place. V2's arm there is a NEW value,
+    // `white_card` (the page is identical; see landingVariant.ts for why the cookie
+    // value had to change), so `white` is now the V2 of round 2 and the weeks after
+    // it. Its label says so: the admin explorer groups rows by display name, and the
+    // same name on both would pool round 3's arm A with everything before it. Still
+    // orange, because V2 is orange permanently.
     white: {
+      short: "Landing Page V2 (Survey in Hero, before V3)",
+      long: "Landing Page V2: survey in the hero, before the V3 test",
+      color: SERIES.ORANGE,
+      retired: true,
+    },
+    // Round 3's two live arms. `white_card` is V2 exactly as it was, so it keeps V2's
+    // name and its orange. `white_video` is the new design, V3, and takes the live
+    // pair's blue: V1's blue is retired, and V1 can never share a chart with V3 —
+    // charts draw only live arms, and the round-3 comparison starts at its launch day.
+    white_card: {
       short: "Landing Page V2 (Survey in Hero)",
       long: "Landing Page V2: survey in the hero",
       color: SERIES.ORANGE,
     },
-    // CONCLUDED 2026-09-19 in favour of white (V2). proxy.ts no longer assigns
-    // it and serves "white" even to a returning visitor holding this cookie.
+    white_video: {
+      short: "Landing Page V3 (Video in Hero)",
+      long: "Landing Page V3: video in the hero",
+      color: SERIES.BLUE,
+    },
+    // CONCLUDED 2026-09-19 in favour of white (V2). proxy.ts no longer assigns it;
+    // a returning visitor holding this cookie is re-rolled onto round 3's arms.
     //
     // Keeps SERIES.BLUE rather than taking SERIES.RETIRED. The colour rule Mark
     // asked for is that V1 is blue and V2 is orange PERMANENTLY; repainting V1
