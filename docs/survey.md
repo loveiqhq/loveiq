@@ -147,6 +147,11 @@ the same way it reads a selection cap off "Select up to three options.". So:
 - The boxes carry `data-clarity-mask="true"`, the one exception to the unmasked survey (see
   DPIA §6), because this is where people type free text about their own sexuality.
 
+**The "Answer format guidance" column is shown.** Every question draws it in purple under its
+guide, as the answer instruction (Figma 11303:174), so editing it changes what the respondent
+reads, not only how the question behaves. The 1-7 scales carry "Select how true this statement
+is for you." (10004, the comfort scale: "Select how comfortable you are with this.").
+
 To read the answers, use the admin CSV export, which has one column per qId. The company brain
 masks `answer_text`, per the decision of 2026-09-09.
 
