@@ -17,6 +17,7 @@ import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
+  getPurchaseTitle,
   getReportPurchasePlanTitle,
   isReportPurchasePlanId,
   PRICING_CATALOG,
@@ -957,12 +958,13 @@ async function upsertPaymentRecord({
 
 async function ensurePaymentItem({
   amount,
+  itemName,
   paymentId,
-  plan,
 }: {
   amount: number | null;
+  /** What was bought, as the receipt should read it (see `purchaseTitle`). */
+  itemName: string;
   paymentId: number;
-  plan: ReportPurchasePlanId;
 }) {
   const lookupResponse = await supabaseServiceFetch(
     `/rest/v1/payment_item?payment_id=eq.${paymentId}&select=id&limit=1`
@@ -979,7 +981,7 @@ async function ensurePaymentItem({
 
   const createResponse = await supabaseServiceFetch("/rest/v1/payment_item", {
     body: JSON.stringify({
-      item_name: getReportPurchasePlanTitle(plan),
+      item_name: itemName,
       item_type: "report_plan",
       payment_id: paymentId,
       quantity: 1,
@@ -1232,6 +1234,15 @@ async function syncCheckoutSessionPayment({
       ? rawArchetypeMetadata
       : null;
 
+  // Names the archetype when a single report was bought for another one (getPurchaseTitle).
+  const purchaseTitle = getPurchaseTitle(
+    plan,
+    unlockedArchetype,
+    plan === "full_report" && unlockedArchetype
+      ? await lookupPrimaryArchetypeForSubmission(context.submissionId)
+      : null
+  );
+
   const metadata = {
     archetype: unlockedArchetype,
     checkoutSessionId: settledSession.id,
@@ -1300,7 +1311,7 @@ async function syncCheckoutSessionPayment({
     cardExpYear: chargeDetails.cardExpYear,
     cardLast4: chargeDetails.cardLast4,
     currency: settledSession.currency ?? null,
-    description: `LoveIQ ${getReportPurchasePlanTitle(plan)}`,
+    description: `LoveIQ ${purchaseTitle}`,
     failureCode: chargeDetails.failureCode,
     failureMessage: chargeDetails.failureMessage,
     ipAddress: requestIp,
@@ -1325,7 +1336,7 @@ async function syncCheckoutSessionPayment({
   }
 
   if (effectiveStatus === "succeeded") {
-    await ensurePaymentItem({ amount, paymentId, plan });
+    await ensurePaymentItem({ amount, itemName: purchaseTitle, paymentId });
     if (pricingQuoteId) {
       await markReportPriceQuotePurchased({ paymentId, quoteId: pricingQuoteId });
     }
@@ -1468,7 +1479,7 @@ async function syncCheckoutSessionPayment({
         value: amount ?? 0,
         isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
-        itemName: getReportPurchasePlanTitle(plan),
+        itemName: purchaseTitle,
         params: {
           plan,
           archetype: unlockedArchetype ?? undefined,
@@ -1495,7 +1506,7 @@ async function syncCheckoutSessionPayment({
         isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         plan,
-        itemName: getReportPurchasePlanTitle(plan),
+        itemName: purchaseTitle,
         params: {
           archetype: unlockedArchetype ?? undefined,
           pricing_cluster_id: metadata.pricingClusterId ?? undefined,

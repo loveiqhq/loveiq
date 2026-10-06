@@ -51,6 +51,10 @@ const createCheckoutSessionSchema = z
   .object({
     anchor: z.string().regex(UNLOCK_ANCHOR_REGEX).nullable().optional(),
     archetype: z.enum(KNOWN_ARCHETYPES as unknown as [string, ...string[]]).optional(),
+    // The archetype on screen when checkout started. Differs from `archetype` when a
+    // single report is bought from another archetype's row; Stripe's way back (cancel,
+    // and the all-14 success) returns there rather than to the archetype being bought.
+    viewArchetype: z.enum(KNOWN_ARCHETYPES as unknown as [string, ...string[]]).optional(),
     // GA4 client_id / session_id (from the buyer's `_ga` cookies) + analytics
     // consent, captured client-side so the webhook can replay the purchase via
     // the GA4 Measurement Protocol with correct attribution. All optional — a
@@ -278,6 +282,11 @@ export async function POST(request: Request) {
     const plan = getReportPurchasePlan(parsed.data.plan);
     const archetypeName = parsed.data.archetype ?? null;
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
+    // Backing out of Stripe used to land on the archetype being BOUGHT, which a reader who
+    // does not own it cannot view, so the report fell back to their own: on 2026-10-06 the
+    // founder, reading Minimalist Companion, cancelled Quiet Withdrawer and was moved to his
+    // own report without a word. Older clients do not send it, so keep the old target then.
+    const viewSlug = parsed.data.viewArchetype ? toArchetypeSlug(parsed.data.viewArchetype) : null;
     // Stripe's heading reads "Unlock" and the plan (Figma 1382:2562: "Unlock [Only your
     // highest Archetype]"). The single report is "Only Your Highest Archetype" only
     // when it IS the reader's highest: bought for another archetype from its tile, it
@@ -348,6 +357,8 @@ export async function POST(request: Request) {
           // key whose parameters differ: a reader who backs out and pays again from another
           // spot within the minute would get an error instead of a session.
           parsed.data.anchor ?? "",
+          // In the return URLs too, so it is part of what Stripe compares under one key.
+          parsed.data.viewArchetype ?? "",
           String(Math.floor(Date.now() / 60_000)),
         ].join("|")
       )
@@ -426,14 +437,15 @@ export async function POST(request: Request) {
         payment_intent_data: { receipt_email: customerEmail },
         success_url: buildSuccessUrl({
           anchor: parsed.data.anchor ?? null,
-          archetypeSlug,
+          // A single report returns to the report bought; all 14 to the one being read.
+          archetypeSlug: parsed.data.plan === "all_reports" ? viewSlug : archetypeSlug,
           origin: siteUrl,
           plan: parsed.data.plan,
           reportToken: returnToken,
         }),
         cancel_url: buildCancelUrl({
           anchor: parsed.data.anchor ?? null,
-          archetypeSlug,
+          archetypeSlug: viewSlug ?? archetypeSlug,
           origin: siteUrl,
           reportToken: returnToken,
         }),

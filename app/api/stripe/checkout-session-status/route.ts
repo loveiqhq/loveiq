@@ -13,6 +13,7 @@ import {
 import { processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
 import {
   getReportAccessPlanForSubmission,
+  isCheckoutSessionRecorded,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -186,6 +187,12 @@ export async function GET(request: Request) {
         : null;
     let accessPlan = null;
     let surveySubmissionId: number | null = null;
+    // Whether THIS checkout is fulfilled. "Does the reader hold a plan" was the test
+    // before, and a returning buyer already holds one from an earlier purchase: they
+    // were sent back to the report before this purchase was written (landing on what
+    // they had just bought, still locked) and the fallback below never ran for them.
+    const isRecorded = () => isCheckoutSessionRecorded(session.id).catch(() => false);
+    let sessionRecorded = await isRecorded();
 
     try {
       const context = await resolveSubmissionAccessContext({
@@ -214,7 +221,11 @@ export async function GET(request: Request) {
     // dedupes on stripe_event_id, and the inner payment writer dedupes on
     // stripe_payment_intent_id / stripe_charge_id — so a real webhook arriving
     // later just no-ops.
-    if (!accessPlan && session.payment_status === "paid" && session.status === "complete") {
+    // `no_payment_required` too: a 100%-off checkout is complete without a payment, and the
+    // return page already treats it as paid, so it must be rescued the same way.
+    const settled =
+      session.payment_status === "paid" || session.payment_status === "no_payment_required";
+    if (!sessionRecorded && settled && session.status === "complete") {
       try {
         const syntheticEvent = {
           id: `cs_status_poll_${session.id}`,
@@ -243,8 +254,9 @@ export async function GET(request: Request) {
           accessPlan = access.accessPlan;
         }
 
+        sessionRecorded = await isRecorded();
         logger.info(
-          { sessionId: session.id, accessPlan },
+          { sessionId: session.id, accessPlan, sessionRecorded },
           "Status-poll fallback fulfillment ran (webhook missed delivery)"
         );
       } catch (error) {
@@ -256,7 +268,9 @@ export async function GET(request: Request) {
 
     const successResponse: StripeCheckoutSessionStatusResponse = {
       enabled: true,
-      accessPlan,
+      // Null until THIS purchase is recorded, so the page keeps polling instead of
+      // returning a repeat buyer to a report that does not include it yet.
+      accessPlan: sessionRecorded ? accessPlan : null,
       paymentStatus: session.payment_status ?? null,
       purchaseAnalytics: getPurchaseAnalytics(session),
       sessionStatus: session.status ?? null,

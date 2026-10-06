@@ -41,6 +41,7 @@ import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import { SUMMARY_BLOCK_ID } from "@features/report/server/contentGating";
 import {
   doesAccessPlanCover,
+  ownsFullReportFor,
   isSectionIncludedInEssentials,
   isSectionUnlockedForPlan,
   type ReportAccessPlan,
@@ -169,7 +170,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   // isn't fully unlocked and has at least one premium section. Gates both the
   // shared countdown ticker and the price-exposure analytics event.
   const hasLockedPremiumCards =
-    !doesAccessPlanCover(accessPlan, "full_report") &&
+    !ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) &&
     resolvedSections.some((section) => section.isPremium);
 
   // Fire one "locked chapter card price shown" event per report when the inline
@@ -325,7 +326,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
+      className={`report-page${ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
       style={getReportThemeStyle(theme)}
       /**
        * Copy, right-click and drag are blocked on the LIVE site only. The report

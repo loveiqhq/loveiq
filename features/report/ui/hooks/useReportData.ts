@@ -32,6 +32,12 @@ export interface ReportData {
   /** Numeric survey_submission.id — used to attach analytics_event rows. */
   submissionId?: number | null;
   accessPlan: "essentials" | "full_report" | "core" | "all_reports" | null;
+  /**
+   * The strongest plan across every payment, whichever archetype it was for. `accessPlan`
+   * covers the reader's OWN report only, so a single report bought for another archetype
+   * leaves it null; this is what "has the reader paid at all" reads.
+   */
+  purchasedPlan?: "essentials" | "full_report" | "core" | "all_reports" | null;
   /** When false, the forced/non-dismissible paywall is paused (report freely viewable). */
   userName: string | null;
   userEmail: string | null;

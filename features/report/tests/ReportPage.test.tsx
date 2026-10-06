@@ -5,6 +5,19 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 
 const mockRouterPush = vi.fn();
 const mockStartReportCheckout = vi.fn().mockResolvedValue(null);
+// jsdom measures nothing, so the real anchor is always null here. A test that needs to
+// tell "sends the anchor" from "drops it" sets a value; null falls through to the real one.
+const { mockSerializedAnchor } = vi.hoisted(() => ({
+  mockSerializedAnchor: { value: null as string | null },
+}));
+vi.mock("@features/report/ui/unlockAnchor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/report/ui/unlockAnchor")>();
+  return {
+    ...actual,
+    serializeUnlockAnchor: (anchor: Parameters<typeof actual.serializeUnlockAnchor>[0]) =>
+      mockSerializedAnchor.value ?? actual.serializeUnlockAnchor(anchor),
+  };
+});
 vi.mock("@features/checkout/ui/startReportCheckout", () => ({
   startReportCheckout: (...args: unknown[]) => mockStartReportCheckout(...args),
 }));
@@ -694,6 +707,8 @@ describe("ReportPage", () => {
       const { anchor, ...checkout } = mockStartReportCheckout.mock.calls[0][0];
       expect(checkout).toEqual({
         archetype: "Emotional Voyeur",
+        // The archetype on screen, for Stripe's way back (cancel returns to it).
+        viewArchetype: "Emotional Voyeur",
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
@@ -843,6 +858,20 @@ describe("ReportPage", () => {
     // bought must land on their report, never the payment modal.
     const paid = buildSuccessResponse();
     paid.data.accessPlan = "full_report";
+    mockUseReportData.mockReturnValue(paid);
+    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
+
+    render(<ReportPage />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does NOT open the offer modal for a buyer of ANOTHER archetype's report either", () => {
+    // `accessPlan` covers the reader's own report only, so it is null for someone who
+    // bought just another archetype. "Has paid at all" is `purchasedPlan`.
+    const paid = buildSuccessResponse();
+    paid.data.accessPlan = null;
+    (paid.data as { purchasedPlan?: string }).purchasedPlan = "full_report";
     mockUseReportData.mockReturnValue(paid);
     mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 
@@ -1109,6 +1138,33 @@ describe("ReportPage", () => {
         recommendations.compareDocumentPosition(constellation) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
       expect(constellation.querySelector(".report-constellation__row")).not.toBeNull();
+    });
+
+    it("buying ANOTHER archetype from its row returns to that report's top, not to the list", async () => {
+      // 2026-10-06, production: the return anchor was the list row the pay screen opened
+      // from, so the buyer landed back on the same rows, unchanged, and paid again.
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+      // What the old code would have sent: the list row's own spot.
+      mockSerializedAnchor.value = "constellation~~0~0";
+      const row = screen.getByRole("button", {
+        name: "Unlock Explorer of Edges report",
+        hidden: true,
+      });
+      expect(row).toHaveTextContent(/^Unlock$/);
+      fireEvent.click(row);
+      await user.click(await screen.findByRole("button", { name: /^only unlock this report/i }));
+
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout.mock.calls[0][0]).toMatchObject({
+        plan: "full_report",
+        archetype: "Explorer of Edges",
+        anchor: null,
+      });
+      mockSerializedAnchor.value = null;
     });
 
     it("leaves ?v3=1 with all of them", () => {

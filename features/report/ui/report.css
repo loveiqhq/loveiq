@@ -12197,6 +12197,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   width: 130px;
   height: 38px;
   border: 1px solid rgba(22, 16, 33, 0.12);
