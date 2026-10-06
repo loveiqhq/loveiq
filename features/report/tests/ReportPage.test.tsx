@@ -2227,6 +2227,35 @@ describe("ReportPage", () => {
       expect(current()).toEqual([`#${target}`]);
     });
 
+    // Report 3.0 lands a chapter 144px down, under its floating chrome. At the old 90px
+    // line the next scroll lit the chapter before it, often off screen by then (desktop
+    // sweep, 2026-10-06).
+    it("keeps a chapter lit that sits where a nav jump lands it, 144px down", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = "full_report";
+      mockUseReportData.mockReturnValue(response);
+      render(<ReportPage />);
+
+      const current = () =>
+        screen
+          .getAllByRole("link")
+          .filter((link) => link.getAttribute("aria-current") === "location")
+          .map((link) => link.getAttribute("href"));
+      const listed = REPORT_V4_NAV_IDS.filter(
+        (id) => document.getElementById(id) && document.querySelector(`a[href="#${id}"]`)
+      );
+      const target = listed[Math.floor(listed.length / 2)]!;
+
+      scrollY = REPORT_V4_NAV_IDS.indexOf(target) * 1000 - 144;
+      act(() => {
+        fireEvent.scroll(window);
+        nextFrame();
+      });
+
+      expect(current()).toEqual([`#${target}`]);
+    });
+
     // Mark's 961:333 lists Part 1 · Welcome: at the top of the page the nav names the
     // Introduction, not Core Archetype two chapters further down, and scrolling on
     // lights "What shaped this report" as it passes.

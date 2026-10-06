@@ -666,9 +666,9 @@ const TYPICAL_BELIEFS_GATED: readonly Report3Block[] = [
  * desire", which is block 17 counting from zero — a clean paragraph boundary, so
  * no `paywallCharOffset` is needed.
  *
- * Transcribed verbatim, typos included: "it's meaning" for "its", "The questions
- * is", "way of of it", a double space in "the shape of a  body", and several
- * missing spaces around commas. Listed for Mark rather than silently corrected.
+ * Transcribed from the frame, with its typos corrected for launch (2026-10-06): "its
+ * meaning", "The question is", "in the way of it", a doubled space and five missing
+ * spaces after commas. They were first kept verbatim and listed for Mark.
  */
 const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
   p(
@@ -699,7 +699,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
   h("Two Systems Working at the Same Time"),
   p(
     t(
-      "Your accelerator can respond to obvious erotic cues like touch, the shape of a  body, a fantasy, a particular voice, smell, image, sexual memory, or a type of stimulation. But human sexuality is highly dependent on meaning, so accelerators can also be psychological and relational. Feeling wanted may be perceived as erotic. Feeling emotionally connected may be erotic. Things like novelty, anticipation, privacy, playfulness, a certain power dynamic, being admired, or being free from responsibility can make sexual cues more compelling."
+      "Your accelerator can respond to obvious erotic cues like touch, the shape of a body, a fantasy, a particular voice, smell, image, sexual memory, or a type of stimulation. But human sexuality is highly dependent on meaning, so accelerators can also be psychological and relational. Feeling wanted may be perceived as erotic. Feeling emotionally connected may be erotic. Things like novelty, anticipation, privacy, playfulness, a certain power dynamic, being admired, or being free from responsibility can make sexual cues more compelling."
     )
   ),
   p(
@@ -717,7 +717,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
       "The model therefore does not divide stimuli neatly into “turn-ons” and “turn-offs.” Rather, "
     ),
     b(
-      "your nervous system responds not only to what is happening, but to it’s meaning for you in that particular moment."
+      "your nervous system responds not only to what is happening, but to its meaning for you in that particular moment."
     )
   ),
   p(
@@ -726,7 +726,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
     ),
     b("responsive"),
     t(
-      ". You may begin from a relatively neutral state, willingly enter an affectionate or erotic situation, start experiencing pleasure, and only then notice genuine sexual wanting emerging. Research on sexual response, particularly work originally developed to better describe women's experiences ,helped establish that this pathway is normal. It should not be treated as a female-only pattern, nor does neutrality mean that someone should participate in sex they do not want. It simply means that, for many people, desire sometimes arrives after the accelerator has received enough positive information and the brakes have enough reason to release."
+      ". You may begin from a relatively neutral state, willingly enter an affectionate or erotic situation, start experiencing pleasure, and only then notice genuine sexual wanting emerging. Research on sexual response, particularly work originally developed to better describe women's experiences, helped establish that this pathway is normal. It should not be treated as a female-only pattern, nor does neutrality mean that someone should participate in sex they do not want. It simply means that, for many people, desire sometimes arrives after the accelerator has received enough positive information and the brakes have enough reason to release."
     )
   ),
   h("Where the Model Comes From"),
@@ -773,7 +773,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
     )
   ),
   p(t("And that raises a much more revealing question than "), i("How high is my libido?")),
-  p(b("The questions is: what helps my desire grow, and what gets in the way of of it?")),
+  p(b("The question is: what helps my desire grow, and what gets in the way of it?")),
   h("The Patterns Underneath Desire"),
   p(
     t(
@@ -798,7 +798,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
   p(
     b("Quieter accelerator, sensitive brakes."),
     t(
-      " Sexual interest may arise less frequently, while competing signals register easily. Stress, fatigue, conflict, distraction, uncertainty, pain, or pressure may quickly outweigh erotic cues. Desire may therefore require particularly supportive conditions before it becomes noticeable. For some people this pattern causes distress; for others it simply describes a sexuality in which sex has relatively low motivational importance. Low desire becomes a clinical concern only in appropriate diagnostic contexts involving distress,not because someone's level of sexual interest fails to match a cultural expectation or a partner's libido."
+      " Sexual interest may arise less frequently, while competing signals register easily. Stress, fatigue, conflict, distraction, uncertainty, pain, or pressure may quickly outweigh erotic cues. Desire may therefore require particularly supportive conditions before it becomes noticeable. For some people this pattern causes distress; for others it simply describes a sexuality in which sex has relatively low motivational importance. Low desire becomes a clinical concern only in appropriate diagnostic contexts involving distress, not because someone's level of sexual interest fails to match a cultural expectation or a partner's libido."
     )
   ),
   p(
@@ -912,7 +912,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
   ),
   p(
     t(
-      "Physical health belongs on the same map. Pain, hormonal changes, chronic illness, fatigue, depression and anxiety, and some medications can alter sexual desire, arousal, orgasm, or the conditions under which sexual response emerges. Persistent changes in sexual functioning,especially when accompanied by pain or significant distress,therefore deserve medical attention rather than being interpreted as  psychologically related. Medication should not be changed or stopped without appropriate clinical guidance."
+      "Physical health belongs on the same map. Pain, hormonal changes, chronic illness, fatigue, depression and anxiety, and some medications can alter sexual desire, arousal, orgasm, or the conditions under which sexual response emerges. Persistent changes in sexual functioning, especially when accompanied by pain or significant distress, therefore deserve medical attention rather than being interpreted as psychologically related. Medication should not be changed or stopped without appropriate clinical guidance."
     )
   ),
   p(
@@ -923,7 +923,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
     t(" toward "),
     i("What am I actually feeling?"),
     t(
-      " These experiments do not force desire. They help reveal the conditions under which your own sexual system becomes more,or less,available."
+      " These experiments do not force desire. They help reveal the conditions under which your own sexual system becomes more, or less, available."
     )
   ),
   p(

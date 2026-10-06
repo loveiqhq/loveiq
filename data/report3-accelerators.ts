@@ -118,7 +118,7 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
       ),
       p(
         t(
-          "Both systems respond to much more than obvious sexual stimuli. Physical sensations, energy, fatigue, pain and bodily comfort can matter, but so can psychological and relational cues such as anticipation, confidence, privacy, pressure, trust, feeling desired, conflict or self-consciousness. Even the same situation can activate different systems depending on \u00a0how it is interpreted \u00a0at that moment."
+          "Both systems respond to much more than obvious sexual stimuli. Physical sensations, energy, fatigue, pain and bodily comfort can matter, but so can psychological and relational cues such as anticipation, confidence, privacy, pressure, trust, feeling desired, conflict or self-consciousness. Even the same situation can activate different systems depending on how it is interpreted at that moment."
         )
       ),
       p(

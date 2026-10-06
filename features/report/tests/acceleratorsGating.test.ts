@@ -69,10 +69,11 @@ describe("the authored copy (read off 310:229 / 374:304 / 377:221)", () => {
     expect(SPARK.practiceTitle).toBe("Try This & See What Shifts");
   });
 
-  it("keeps the frame's double space in the intro, where a browser would collapse it", () => {
-    // 310:231 sets "depending on  how it is interpreted  at that moment" with two
-    // spaces either side; a no-break space keeps the second one from collapsing.
-    expect(textOf(SPARK.intro[2]!)).toContain("depending on \u00a0how it is interpreted \u00a0at");
+  it("drops the frame's doubled spaces in the intro, a typo to a reader", () => {
+    // 310:231 sets "depending on  how it is interpreted  at that moment" with two spaces
+    // either side. They were kept with no-break spaces until launch review (2026-10-06).
+    expect(textOf(SPARK.intro[2]!)).toContain("depending on how it is interpreted at that moment.");
+    expect(textOf(SPARK.intro[2]!)).not.toContain("\u00a0");
   });
 
   it("gives the closed practice card its own teaser: the first paragraph, re-broken as 377:221", () => {

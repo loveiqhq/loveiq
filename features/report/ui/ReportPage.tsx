@@ -812,7 +812,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   };
 
   useEffect(() => {
-    const ACTIVATION_LINE = 90;
+    /**
+     * Where a chapter becomes the current one, from the top of the window. Report 3.0
+     * lands a chapter 144px down, under its floating chrome (scroll-margin-top), so at
+     * 90 the first scroll after a nav jump lit the chapter before it again, and on a
+     * desktop a heading sitting 150-200px down still showed the previous chapter, by
+     * then off screen. A quarter of the window, never above 200px, keeps it the chapter
+     * being read. V1 and 2.0 keep their 90.
+     */
+    const activationLine = () => (isV4 ? Math.max(200, window.innerHeight * 0.25) : 90);
 
     // Spy on the NAV's ids, not the section list from `data/report-general.ts`.
     // That list has no row for the Report 2.0 anchors the nav lists (`snapshot`,
@@ -846,7 +854,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       // close, the fonts land — and tops measured at mount ran the highlight ahead of
       // the reader (27.09: at Attachment it lit Love Language). Once a frame at most.
       const sectionTops = buildSectionTops();
-      const threshold = window.scrollY + ACTIVATION_LINE;
+      const threshold = window.scrollY + activationLine();
       let activeId = sectionTops[0]?.id ?? navIds[0] ?? "core_archetype";
       for (const section of sectionTops) {
         if (section.top <= threshold) {
@@ -878,7 +886,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // `navIds` is one of two module constants; `resolvedSections` only matters
     // because the sections have to be in the DOM before the first update measures them.
     // `activeSection` never changes: it is created once.
-  }, [resolvedSections, activeSection, navIds]);
+  }, [resolvedSections, activeSection, navIds, isV4]);
 
   const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
 

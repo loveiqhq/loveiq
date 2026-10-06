@@ -728,11 +728,15 @@
     display: none;
   }
 
+  /* One line, as 963:15 draws it. Firefox sized the heading a hair narrower than the line
+   * (it counts the gradient run's negative margins differently), so `balance` broke it
+   * after "Your" at every desktop width; the 880px+ of dialog here always fits it. */
   .rpg__title {
     max-width: none;
     font-size: 48px;
     line-height: 44px;
     letter-spacing: -0.9px;
+    white-space: nowrap;
   }
 
   .rpg__tiers {
