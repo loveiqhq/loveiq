@@ -370,6 +370,12 @@ describe("ReportPage", () => {
   });
 
   afterEach(() => {
+    // Unmount BEFORE the globals go. A render committed at the very end of a test
+    // leaves passive effects pending, and unmounting flushes them: with the stubs
+    // already removed, useRevealOnView then constructs an IntersectionObserver that
+    // no longer exists. On a busy machine that failed two "free sharing" tests at
+    // random (ReferenceError at useRevealOnView), and blocked the pre-push hook.
+    cleanup();
     vi.unstubAllGlobals();
     mockScrollTo.mockReset();
     document.documentElement.style.overflow = "";
@@ -379,7 +385,6 @@ describe("ReportPage", () => {
     document.body.style.right = "";
     document.body.style.top = "";
     document.body.style.width = "";
-    cleanup();
   });
 
   beforeEach(() => {
