@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FC
 import Image from "next/image";
 import {
   trackHeroVideoComplete,
+  trackHeroVideoError,
   trackHeroVideoPaused,
   trackHeroVideoPlay,
   trackHeroVideoProgress,
@@ -35,9 +36,17 @@ const DURATION_LABEL = "1:10";
 /** For the progress milestones, until the browser has read the real duration. */
 const FALLBACK_DURATION_SEC = 70.4;
 const MILESTONES = [25, 50, 75] as const;
+/**
+ * A tap whose video has shown no frame after this long gives up and brings the button
+ * back. Starting needs the first ~2 s of a 1 Mbps file, a few seconds even on 3G.
+ */
+const START_TIMEOUT_MS = 12_000;
 
 /** preview: poster + loop + button · starting: tapped, waiting for frames · playing: own controls. */
 type Phase = "preview" | "starting" | "playing";
+
+const errorName = (error: unknown): string =>
+  (error as { name?: string } | null)?.name || "play-rejected";
 
 type NetworkInformationLike = { saveData?: boolean; effectiveType?: string };
 type WebkitVideo = HTMLVideoElement & {
@@ -96,10 +105,26 @@ const WHeroVideo: FC = () => {
   const playsRef = useRef(0);
   const milestonesSentRef = useRef(new Set<number>());
   const pausedByViewerRef = useRef(false);
+  const startTimerRef = useRef<number | undefined>(undefined);
+  const previewErrorSentRef = useRef(false);
 
   const moveTo = useCallback((next: Phase) => {
     phaseRef.current = next;
     setPhase(next);
+  }, []);
+
+  const clearStartTimer = useCallback(() => {
+    window.clearTimeout(startTimerRef.current);
+    startTimerRef.current = undefined;
+  }, []);
+
+  useEffect(() => clearStartTimer, [clearStartTimer]);
+
+  /** Once per page: a broken loop file or codec. A blocked autoplay never gets here. */
+  const reportPreviewError = useCallback((reason: string) => {
+    if (previewErrorSentRef.current) return;
+    previewErrorSentRef.current = true;
+    trackHeroVideoError({ video: "preview", reason });
   }, []);
 
   /** Rolls the loop only while it is on screen, in a visible tab, and nothing else plays. */
@@ -115,10 +140,14 @@ const WHeroVideo: FC = () => {
     // React sets `muted` as a property and never writes the attribute; iOS reads both.
     preview.muted = true;
     preview.defaultMuted = true;
-    void preview.play()?.catch(() => {
-      // Low Power Mode or a blocked autoplay: the poster and the button stay, as designed.
+    void preview.play()?.catch((error: unknown) => {
+      const name = errorName(error);
+      // Low Power Mode or a blocked autoplay, or one of our own pause() calls: the
+      // poster and the button stay, as designed. Anything else is a fault worth seeing.
+      if (name === "NotAllowedError" || name === "AbortError") return;
+      reportPreviewError(name);
     });
-  }, []);
+  }, [reportPreviewError]);
 
   useEffect(() => {
     if (!previewOn) return;
@@ -126,7 +155,9 @@ const WHeroVideo: FC = () => {
     const preview = previewRef.current;
     if (!box || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
-      ([entry]) => {
+      (entries) => {
+        // One callback can carry several crossings; the last is where the box is now.
+        const entry = entries[entries.length - 1];
         inViewRef.current = !!entry && entry.intersectionRatio >= 0.25;
         syncPreview();
       },
@@ -141,6 +172,22 @@ const WHeroVideo: FC = () => {
     };
   }, [previewOn, syncPreview]);
 
+  /**
+   * A start that will not play: back to the poster and an enabled button, so a second
+   * tap can try again, and one event saying why. Acts only while starting, so the
+   * several signals one failure can raise (a rejection, `pause`, `error`) count once.
+   */
+  const failStart = (reason: string) => {
+    if (phaseRef.current !== "starting") return;
+    clearStartTimer();
+    // Given up on by the timeout it may still be loading, and must not start later,
+    // with sound, behind the poster. Already paused, this does nothing.
+    fullRef.current?.pause();
+    moveTo("preview");
+    syncPreview();
+    trackHeroVideoError({ video: "full", reason });
+  };
+
   const startFullVideo = () => {
     const full = fullRef.current;
     if (!full || phaseRef.current !== "preview") return;
@@ -152,19 +199,22 @@ const WHeroVideo: FC = () => {
     pausedByViewerRef.current = false;
     const playing = full.play();
     moveTo("starting");
-    trackHeroVideoPlay({ replay: playsRef.current > 0 });
-    playsRef.current += 1;
-    void playing?.catch((error: unknown) => {
-      // A later pause() aborts a pending play(); that is not a failure.
-      if ((error as { name?: string } | null)?.name === "AbortError") return;
-      moveTo("preview");
-      syncPreview();
-    });
+    // Every rejection ends the start, an AbortError too: nothing here pauses the video
+    // while it starts, so an abort came from the browser or the OS (an app switch on
+    // iOS, a headset button), and the visitor needs the button back.
+    void playing?.catch((error: unknown) => failStart(errorName(error)));
+    // A network error after the first bytes fires `error` but never settles play().
+    clearStartTimer();
+    startTimerRef.current = window.setTimeout(() => failStart("timeout"), START_TIMEOUT_MS);
   };
 
   const onFullPlaying = () => {
     if (phaseRef.current !== "starting") return;
+    clearStartTimer();
     moveTo("playing");
+    // Counted when frames start, not at the tap, so a failed start is never a play.
+    trackHeroVideoPlay({ replay: playsRef.current > 0 });
+    playsRef.current += 1;
     // The button that had focus is gone; the video's own controls take it.
     requestAnimationFrame(() => fullRef.current?.focus({ preventScroll: true }));
   };
@@ -172,9 +222,19 @@ const WHeroVideo: FC = () => {
   const onFullPause = () => {
     const full = fullRef.current;
     // Browsers fire `pause` just before `ended`: that is a finish, not a pause.
-    if (!full || full.ended || phaseRef.current !== "playing") return;
+    if (!full || full.ended) return;
+    // Paused before a frame showed (the OS, a headset, another tab's audio): no start.
+    if (phaseRef.current === "starting") return failStart("paused-before-playing");
+    if (phaseRef.current !== "playing") return;
     pausedByViewerRef.current = true;
     trackHeroVideoPaused({ current_time_sec: Math.round(full.currentTime) });
+  };
+
+  const onFullError = () => {
+    const reason = `media-error-${fullRef.current?.error?.code ?? "unknown"}`;
+    if (phaseRef.current === "starting") return failStart(reason);
+    // Mid-film the native controls show the failure; it is still worth counting.
+    if (phaseRef.current === "playing") trackHeroVideoError({ video: "full", reason });
   };
 
   const onFullPlay = () => {
@@ -214,8 +274,8 @@ const WHeroVideo: FC = () => {
     <div
       ref={boxRef}
       data-testid="hero-video"
-      // Present once hydrated: a tap before then reaches a button with no handler yet, and
-      // this chunk loads after the page's own, so the root's data-hydrated is not enough.
+      // Present once hydrated: a tap before then reaches a button with no handler yet.
+      // Tests and probes wait on this rather than on a timer.
       data-ready={hydrated ? "" : undefined}
       className="relative isolate mx-auto w-[min(472px,90.5%)] overflow-hidden bg-[#efe4d8] lg:mx-0 lg:w-full"
       // Figma's box (472 x 269.896, radius 17.99 at desktop, 12.07 at 316.75 on a phone):
@@ -244,6 +304,9 @@ const WHeroVideo: FC = () => {
         disablePictureInPicture
         disableRemotePlayback
         onPlaying={() => setLoopShowing(true)}
+        onError={() =>
+          reportPreviewError(`media-error-${previewRef.current?.error?.code ?? "unknown"}`)
+        }
         className={`absolute inset-0 h-full w-full rounded-[inherit] object-cover transition-opacity duration-500 ${
           loopShowing && !fullShowing ? "opacity-100" : "opacity-0"
         }`}
@@ -262,6 +325,7 @@ const WHeroVideo: FC = () => {
         onPlaying={onFullPlaying}
         onPlay={onFullPlay}
         onPause={onFullPause}
+        onError={onFullError}
         onTimeUpdate={onFullTimeUpdate}
         onEnded={onFullEnded}
         className={`absolute inset-0 h-full w-full rounded-[inherit] object-cover transition-opacity duration-300 ${
