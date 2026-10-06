@@ -955,3 +955,20 @@ describe("the email logo stays outside the middleware", () => {
     expect(runsOn("/apple-touch-icon.png")).toBe(true);
   });
 });
+
+/**
+ * A browser plays a video in many byte-range requests. Run through the middleware, each
+ * one would pay for CSP headers, the CSRF cookie and the staging gate on a static file.
+ */
+describe("the landing hero video stays outside the middleware", () => {
+  const runsOn = (path: string) => new RegExp(`^${config.matcher[0]!.source}$`).test(path);
+
+  it("serves everything under /videos/ without running the middleware", () => {
+    expect(runsOn("/videos/white/emma-intro.96705e65.mp4")).toBe(false);
+    expect(runsOn("/videos/white/emma-preview.a47a3687.mp4")).toBe(false);
+  });
+
+  it("still runs on a video at the site root, so the exclusion is the folder, not the type", () => {
+    expect(runsOn("/couple-hero.mp4")).toBe(true);
+  });
+});
