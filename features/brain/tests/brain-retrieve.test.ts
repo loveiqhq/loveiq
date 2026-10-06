@@ -447,7 +447,7 @@ describe("semantic recall must never break search", () => {
     );
     // An empty string would be cast by Postgres and raise, turning a soft
     // degradation into a hard failure.
-    expect(src).toMatch(/return first \? toVectorLiteral\(first\) : null;/);
+    expect(src).toMatch(/if \(!first\) return null;\n\s+const literal = toVectorLiteral\(first\);/);
   });
 });
 

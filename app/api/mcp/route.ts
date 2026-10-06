@@ -18,6 +18,8 @@ import { listPageShots, renderPageShot } from "@features/brain/server/see/pages"
 import {
   DEFAULT_EDGE_PX,
   MAX_EDGE_PX,
+  figmaFetch,
+  figmaLimitText,
   listDesign,
   renderDesign,
   type ShowDesignOutcome,
@@ -2374,7 +2376,12 @@ export const EXTERNAL_SERVICES: Record<
       "Start with `/files/<key>?depth=1` (about 9 KB, the page list); a whole page at " +
       "`depth=2` exceeds the 40,000-character result cap and comes back truncated. " +
       "`/images/<key>?ids=<node>` returns a URL to a render, which is a LINK and not a " +
-      "picture — use `show_design` when you want to SEE a frame.",
+      "picture — use `show_design` when you want to SEE a frame. " +
+      "RATE LIMIT: file, node and image reads share one small allowance across the whole team " +
+      "(per minute for a full or dev seat, per MONTH for a view or collab seat), so batch: " +
+      "`/files/<key>/nodes?ids=a,b,c` reads many nodes in ONE request, and `/images` takes " +
+      "several ids too. Never loop one id per call; render fewer ids, or at a lower `scale`, " +
+      "when a render times out.",
   },
   trustpilot: {
     base: "https://api.trustpilot.com/v1",
@@ -2859,6 +2866,9 @@ async function documentText(raw: string): Promise<string | null> {
         : body;
   return `${title}\n${own}`;
 }
+
+/** How long a narrowed search may wait for the look outside its filter. */
+export const UNFILTERED_BUDGET_MS = 2_000;
 
 export function outsideTheFilter(
   applied: string[],
@@ -3357,11 +3367,24 @@ async function callTool(
       opts.until ? `until=${opts.until}` : null,
       opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
     ].filter((x): x is string => x !== null);
-    /** The same question with no filter, for a narrowed search that came back weak or empty. */
-    const unfiltered = () =>
-      retrieve(query, 3, {}).catch(
-        () => [] as Array<{ source: string; sourceId: string; contentScore: number }>
-      );
+    /**
+     * The same question with no filter, for a narrowed search that came back weak or empty.
+     *
+     * A HINT, SO IT NEVER COSTS THE ANSWER. It ran in sequence after the narrowed search,
+     * and measured 2026-10-05 that class of search went from 0.87 s to 6.37 s p50; some
+     * reached the 8 s timeouts and answered "unreachable" instead. Past its budget the
+     * answer goes out without the hint.
+     */
+    const unfiltered = () => {
+      const none: Array<{ source: string; sourceId: string; contentScore: number }> = [];
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return Promise.race([
+        retrieve(query, 3, {}).catch(() => none),
+        new Promise<typeof none>((resolve) => {
+          timer = setTimeout(() => resolve(none), UNFILTERED_BUDGET_MS);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    };
     if (chunks.length === 0) {
       /**
        * A NARROW FILTER IS NOT AN EMPTY CORPUS, and the two must never read alike.
@@ -5077,7 +5100,8 @@ async function callTool(
 
     let res: Response;
     try {
-      res = await fetchWithTimeout(url.toString(), {
+      // Figma's allowance is shared by the whole team, so its reads wait out a short 429.
+      res = await (key === "figma" ? figmaFetch : fetchWithTimeout)(url.toString(), {
         method: "GET",
         headers,
         timeoutMs: 20_000,
@@ -5096,6 +5120,12 @@ async function callTool(
     // isError=false. Hand the full body to textResult and let the one capping
     // path decide — a second, quieter truncation is how the first one hid.
     const text = await res.text().catch(() => "");
+    if (key === "figma" && res.status === 429) {
+      return textResult(
+        `figma returned 429. ${figmaLimitText(res.headers, "that request")}\n${text}${pathNote}`,
+        true
+      );
+    }
     if (!res.ok) {
       return textResult(`${key} returned ${res.status}:\n${text}${pathNote}`, true);
     }
