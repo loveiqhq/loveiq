@@ -3,6 +3,8 @@ import AxeBuilder from "@axe-core/playwright";
 
 const criticalRoutes = [
   "/",
+  // Arm B of the landing test (the hero video); "/" is arm A locally (cookie pin).
+  "/?variant=white_video",
   "/about",
   "/glossary",
   "/glossary/abandonment-insecurity",
