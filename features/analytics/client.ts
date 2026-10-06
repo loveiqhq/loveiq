@@ -1125,9 +1125,20 @@ export const trackFaqExpanded = (params: { question_index: number; question_text
 /**
  * The landing hero video (arm `white_video` of the landing A/B). The arm is not a
  * param: it rides on every event as the `landing_variant` super-property, so these
- * say only what the video did. `replay` separates a second watch from a first.
+ * say only what the video did. A play is counted when frames start, not at the tap,
+ * so a start that fails is an error below rather than a play; `replay` separates a
+ * second watch from a first.
  */
 export const trackHeroVideoPlay = (params: { replay: boolean }) => track("hero_video_play", params);
+
+/**
+ * A video that would not play: the full one after a tap (`reason` is the rejected
+ * play()'s error name, `media-error-<code>`, `paused-before-playing` or `timeout`),
+ * or the silent loop failing for a reason other than a blocked autoplay. Without it a
+ * broken file or codec reads in PostHog as visitors not tapping.
+ */
+export const trackHeroVideoError = (params: { video: "full" | "preview"; reason: string }) =>
+  track("hero_video_error", params);
 
 export const trackHeroVideoProgress = (params: { percent: 25 | 50 | 75 }) =>
   track("hero_video_progress", params);
