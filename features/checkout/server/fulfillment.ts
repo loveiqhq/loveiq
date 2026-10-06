@@ -105,6 +105,7 @@ async function notifySlackPurchase({
   email,
   experimentGroup,
   firstName,
+  internal,
   landingVariant,
   paymentId,
   plan,
@@ -120,6 +121,8 @@ async function notifySlackPurchase({
   email: string | null;
   experimentGroup: string | null;
   firstName: string | null;
+  /** `isInternalPayment` — the verdict `is_test` and the ops lines' tag carry. */
+  internal: boolean;
   landingVariant: string | null;
   paymentId: number;
   plan: ReportPurchasePlanId;
@@ -140,6 +143,7 @@ async function notifySlackPurchase({
     submissionId,
     firstName,
     email,
+    internal,
     utmTracker,
     experimentGroup,
     basePriceBucket,
@@ -1443,6 +1447,7 @@ async function syncCheckoutSessionPayment({
         experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
+        internal: isInternalPayment,
         landingVariant: settledSession.metadata?.landingVariant ?? null,
         paymentId,
         plan,

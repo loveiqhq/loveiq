@@ -2943,7 +2943,7 @@ describe("the Pricing 3.0 verdict waits for a window wholly after the launch", (
   it("calls it once every reader in the window finished under 3.0", async () => {
     const text = await digestOn(29);
     expect(text).toContain("Worth acting on");
-    expect(text).toContain("Pricing 3.0 A");
+    expect(text).toContain("Pricing 3.0 higher");
   });
 });
 
