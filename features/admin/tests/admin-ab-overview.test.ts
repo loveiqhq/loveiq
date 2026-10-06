@@ -23,7 +23,10 @@ vi.mock("@features/admin/server/digest-metrics", async () => {
 });
 
 import { __resetAbOverviewCacheForTests, GET } from "@/app/api/admin/ab-overview/route";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import {
+  PRICING_3_LAUNCH_AT,
+  PRICING_3_LAUNCH_DAY,
+} from "@features/checkout/server/reportPurchase";
 
 function req(days = 90) {
   return new Request(`https://x.test/api/admin/ab-overview?days=${days}`);
@@ -53,11 +56,17 @@ const DROPOUT = {
   ],
 };
 
-/** submissions then quotes; each collection returns one short page (< 1000) so paging stops. */
-function routeData(submissions: unknown[], quotes: unknown[], intro = 300) {
+/** submissions, quotes, then payments; each returns one short page (< 1000) so paging stops. */
+function routeData(
+  submissions: unknown[],
+  quotes: unknown[],
+  payments: unknown[] = [],
+  intro = 300
+) {
   mockSupabaseFetch.mockImplementation(async (path: string) => {
     if (path.includes("/survey_submission?")) return page(submissions);
     if (path.includes("/report_price_quote?")) return page(quotes);
+    if (path.includes("/payment?")) return page(payments);
     if (path.includes("/rpc/get_dropout_funnel"))
       return { ok: true, status: 200, json: async () => DROPOUT } as Response;
     if (path.includes("/funnel_event?")) return countReply(intro);
@@ -79,7 +88,8 @@ function submission(
   id: number,
   landing: string | null,
   survey: string | null,
-  createdAt = "2026-08-20T00:00:00.000Z"
+  createdAt = "2026-08-20T00:00:00.000Z",
+  email: string | null = null
 ) {
   const tracker: Record<string, string> = {};
   if (landing) tracker.landing_variant = landing;
@@ -88,7 +98,13 @@ function submission(
     id,
     created_date_time: createdAt,
     utm_tracker: Object.keys(tracker).length ? JSON.stringify(tracker) : null,
+    app_user: email ? { email } : null,
   };
+}
+
+/** A payment as the readout's read returns it: already succeeded, not a test, above EUR 0. */
+function payment(subId: number, amount: number) {
+  return { amount, personal_report: { survey_submission_id: subId } };
 }
 
 function quote(subId: number, group: string, paid: boolean, price = 29) {
@@ -280,6 +296,7 @@ describe("GET /api/admin/ab-overview", () => {
     mockSupabaseFetch.mockImplementation(async (path: string) => {
       if (path.includes("/survey_submission?")) return page([submission(1, "white", null)]);
       if (path.includes("/report_price_quote?")) return page([]);
+      if (path.includes("/payment?")) return page([]);
       if (path.includes("/rpc/get_dropout_funnel"))
         return {
           ok: true,
@@ -313,10 +330,12 @@ describe("GET /api/admin/ab-overview", () => {
     // different numbers for one thing on one page.
     routeData(
       [submission(1, "white", null), submission(2, "white", null)],
-      [quote(1, "A", true), quote(2, "B", false)]
+      [quote(1, "A", true), quote(2, "B", false)],
+      [payment(1, 29)]
     );
     const body = await (await GET(req(44))).json();
     const paidStep = body.funnel.find((f: { step: string }) => f.step === "Paid");
+    expect(paidStep.count).toBe(1);
     expect(paidStep.count).toBe(body.totals.purchases);
   });
 
@@ -331,14 +350,14 @@ describe("GET /api/admin/ab-overview", () => {
     expect(body.funnelCaveats.join(" ")).toContain("our own servers");
   });
 
-  it("reads the Pricing 3.0 test from readers who finished on or after its launch", async () => {
-    const launch = `${PRICING_3_LAUNCH_DAY}T00:00:00.000Z`;
-    const after = new Date(Date.parse(launch) + 86_400_000).toISOString();
-    const before = new Date(Date.parse(launch) - 86_400_000).toISOString();
+  it("reads the Pricing 3.0 test from readers who finished after it went live", async () => {
+    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
+    // The launch day's morning, before 18:18 UTC: these readers saw the 2.x prices and
+    // were re-priced at launch, so a 3.0 stamp, but not the test's.
+    const before = `${PRICING_3_LAUNCH_DAY}T10:00:00.000Z`;
     const subs = [
       ...Array.from({ length: 40 }, (_, i) => submission(i + 1, "white", null, after)),
       ...Array.from({ length: 60 }, (_, i) => submission(i + 41, "white", null, after)),
-      // Finished before the launch and re-priced by it: a 3.0 stamp, but not the test's.
       ...Array.from({ length: 25 }, (_, i) => submission(i + 101, "white", null, before)),
     ];
     const quotes = [
@@ -346,7 +365,12 @@ describe("GET /api/admin/ab-overview", () => {
       ...Array.from({ length: 60 }, (_, i) => quote(i + 41, "B3", i < 3, 19.99)),
       ...Array.from({ length: 25 }, (_, i) => quote(i + 101, "A3", i < 5, 39.99)),
     ];
-    routeData(subs, quotes);
+    const payments = [
+      ...Array.from({ length: 4 }, (_, i) => payment(i + 1, 39.99)),
+      ...Array.from({ length: 3 }, (_, i) => payment(i + 41, 19.99)),
+      ...Array.from({ length: 5 }, (_, i) => payment(i + 101, 39.99)),
+    ];
+    routeData(subs, quotes, payments);
 
     const body = await (await GET(req())).json();
     const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
@@ -364,6 +388,69 @@ describe("GET /api/admin/ab-overview", () => {
       revenue: 59.97,
     });
     expect(pricing.unattributed).toBe(25);
+  });
+
+  it("leaves our own test runs out of every count", async () => {
+    // #2416 on 6 October: a team member's B3 run, paid with EUR 0 test payments, read as
+    // "Pricing 3.0 B 1 of 5 bought". Left out by the owner's address, whatever was paid.
+    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
+    routeData(
+      [
+        submission(1, "white", null, after),
+        submission(2, "white", null, after, "tester@loveiq.org"),
+      ],
+      [quote(1, "B3", false, 19.99), quote(2, "B3", true, 19.99)],
+      [payment(2, 19.99)]
+    );
+    const body = await (await GET(req())).json();
+    const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
+    expect(pricing.arms.find((x: { arm: string }) => x.arm === "B3")).toMatchObject({
+      n: 1,
+      purchases: 0,
+      revenue: 0,
+    });
+    expect(body.totals.submissions).toBe(1);
+    const step = (name: string) => body.funnel.find((f: { step: string }) => f.step === name);
+    expect(step("Finished the survey").count).toBe(1);
+    expect(step("Started checkout").count).toBe(0);
+    expect(step("Paid").count).toBe(0);
+  });
+
+  it("counts a sale only where money settled, at the amount paid", async () => {
+    // purchased_at is also set by a 100%-off unlock, and current_price is the list price:
+    // #2416's EUR 0 test runs read as EUR 34.98 of revenue.
+    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
+    routeData(
+      [submission(1, "white", null, after), submission(2, "white", null, after)],
+      // 1 paid EUR 14.99 against a 29.99 list price; 2 unlocked for nothing.
+      [quote(1, "A3", true, 29.99), quote(2, "A3", true, 29.99)],
+      [payment(1, 14.99)]
+    );
+    const body = await (await GET(req())).json();
+    const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
+    expect(pricing.arms.find((x: { arm: string }) => x.arm === "A3")).toMatchObject({
+      n: 2,
+      purchases: 1,
+      revenue: 14.99,
+    });
+    const paymentRead = mockSupabaseFetch.mock.calls
+      .map(([path]) => String(path))
+      .find((path) => path.includes("personal_report!fk_payment_personal_report"));
+    expect(paymentRead).toContain("status=eq.succeeded&is_test=is.false&amount=gt.0");
+  });
+
+  it("reads the pricing arm from the 3.0 quote, never a retired list-B one beside it", async () => {
+    // A reader re-priced at launch holds essentials and core quotes on list B next to
+    // their A3 ones, and whichever came back first used to decide the arm.
+    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
+    routeData(
+      [submission(1, "white", null, after)],
+      [quote(1, "B", false, 9.99), quote(1, "A3", false, 29.99)]
+    );
+    const body = await (await GET(req())).json();
+    const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
+    expect(pricing.arms.find((x: { arm: string }) => x.arm === "A3")).toMatchObject({ n: 1 });
+    expect(pricing.unattributed).toBe(0);
   });
 
   it("does not claim consent-gated steps are counted server-side", async () => {

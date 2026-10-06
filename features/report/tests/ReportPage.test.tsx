@@ -90,6 +90,7 @@ vi.mock("@features/analytics/client", () => ({
   trackSectionNavigated: vi.fn(),
   trackChapterFeedbackSubmitted: vi.fn(),
   trackLockedCardPriceShown: vi.fn(),
+  trackLockedChaptersShown: vi.fn(),
   trackExperimentExposure: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
@@ -955,6 +956,21 @@ describe("ReportPage", () => {
       // Firing here would persist nothing AND mark the event done for the whole
       // pageview, which is exactly how five weeks of rows were lost.
       expect(vi.mocked(analytics.trackLockedCardPriceShown)).not.toHaveBeenCalled();
+    });
+
+    it("sends no locked-card price on Report 3.0, whose locked cards show none", async () => {
+      // V4PremiumCard has no price on it, yet every locked V4 reader sent one.
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+      try {
+        mockUseReportData.mockReturnValue(withSubmission(1920));
+        render(<ReportPage />);
+        await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalled());
+        expect(vi.mocked(analytics.trackLockedCardPriceShown)).not.toHaveBeenCalled();
+        // Only that it has locked chapters: what "CTA visibility" counts a visit by.
+        expect(vi.mocked(analytics.trackLockedChaptersShown)).toHaveBeenCalledTimes(1);
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
     });
   });
 

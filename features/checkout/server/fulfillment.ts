@@ -1477,6 +1477,13 @@ async function syncCheckoutSessionPayment({
         });
       }
 
+      // The promo behind the price, on both sends below, as the browser's purchase carries it.
+      const promoParams = {
+        promotion_code: promotionSummary?.promotionCode ?? undefined,
+        coupon_percent_off: promotionSummary?.couponPercentOff ?? undefined,
+        discount_amount: promotionSummary?.discountAmount ?? undefined,
+      };
+
       // Server-side GA4 purchase — fires for 100% of paid checkouts, unlike the
       // client event (GTM → GA4) which only catches consented buyers who return
       // to /checkout/return. Same transaction_id (= session id) as the client,
@@ -1502,6 +1509,7 @@ async function syncCheckoutSessionPayment({
           device_type: metadata.deviceType ?? undefined,
           traffic_source: metadata.trafficSource ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
+          ...promoParams,
         },
       });
 
@@ -1529,6 +1537,7 @@ async function syncCheckoutSessionPayment({
           traffic_source: metadata.trafficSource ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
           submission_id: context.submissionId ?? undefined,
+          ...promoParams,
         },
       });
 

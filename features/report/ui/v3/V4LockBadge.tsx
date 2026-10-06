@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import type { FC } from "react";
+import { useRef, type FC } from "react";
+import { useCtaSeen } from "@features/analytics/useCtaSeen";
 
 /**
  * "Unlock Report" — the tile that sits on a locked visual. The team's call (Figma
@@ -34,8 +35,13 @@ interface Props {
 
 const V4LockBadge: FC<Props> = ({ size = "tile" }) => {
   const tile = TILES[size];
+  // An unlock offer on a locked chapter like the card's and the chapter head's, so it counts
+  // for "CTA visibility" too.
+  const ref = useRef<HTMLButtonElement>(null);
+  useCtaSeen(ref, "locked_chapter");
   return (
     <button
+      ref={ref}
       type="button"
       className={`rv4-lockbadge${size === "compact" ? " rv4-lockbadge--compact" : ""}`}
       data-node-id={tile.node}

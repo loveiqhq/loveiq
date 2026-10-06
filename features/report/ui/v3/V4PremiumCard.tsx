@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
-import type { FC } from "react";
+import { useRef, type FC } from "react";
+import { useCtaSeen } from "@features/analytics/useCtaSeen";
 
 /**
  * The paywall card that floats over a gated chapter, practice or article.
@@ -18,7 +21,7 @@ import type { FC } from "react";
  * strike-through, no "SAVE" pill, and its DOM is bound to `.report-premium-overlay__*`
  * in report.css, which the V4 surfaces never load.
  *
- * Purely presentational, and deliberately WITHOUT its own onClick: the gate band
+ * Presentational, and deliberately WITHOUT its own onClick: the gate band
  * around it owns the handler, so a tap anywhere on the blurred block opens the
  * paywall. PremiumOverlay.tsx:214-221 records why both firing is a bug — it opened the
  * pricing modal twice. The click still bubbles, so Enter and Space on this button
@@ -44,6 +47,9 @@ const FEATURES = [
 
 const V4PremiumCard: FC<Props> = ({ variant = "gate", nodeId }) => {
   const body = variant === "body";
+  // Whether a reader ever had an unlock offer in front of them, as PremiumOverlay reports it.
+  const ctaRef = useRef<HTMLButtonElement>(null);
+  useCtaSeen(ctaRef, "locked_chapter");
   return (
     <div
       className={`rv4-premium${body ? " rv4-premium--body" : ""}`}
@@ -97,7 +103,7 @@ const V4PremiumCard: FC<Props> = ({ variant = "gate", nodeId }) => {
 
       {/* 1015:1229 / 1015:1205 — a no-break space: the pill is a flex box, which drops
        * a plain one at the start of the arrow's run. */}
-      <button type="button" className="rv4-premium__cta">
+      <button ref={ctaRef} type="button" className="rv4-premium__cta">
         Unlock Report<span aria-hidden="true">{" →"}</span>
       </button>
     </div>

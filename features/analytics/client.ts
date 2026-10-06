@@ -735,6 +735,15 @@ export const trackBeginCheckout = (
 };
 
 /**
+ * Report 3.0 has locked chapters but shows no price on them, so it says only that: the
+ * marker the "CTA visibility" signal needs to know a visit had something locked to see.
+ * GA4/PostHog only; nothing reads it from analytics_event.
+ */
+export const trackLockedChaptersShown = () => {
+  track("locked_chapters_shown", { surface: "v4" });
+};
+
+/**
  * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
  * price (the `PremiumOverlay` surface — distinct from the
  * pricing modal's `price_shown`). Lets the funnel measure the inline card as
@@ -828,6 +837,12 @@ export interface ReportPurchaseParams {
   behavioral_bucket?: string;
   /** Original price before discounts. */
   initial_price?: number;
+  /** The promo code redeemed at Stripe, and what it took off. */
+  promotion_code?: string;
+  coupon_percent_off?: number;
+  discount_amount?: number;
+  /** A staff payer, by the rule that sets `payment.is_test` (checkout-session-status). */
+  isTest?: boolean;
 }
 
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
@@ -841,10 +856,10 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
    * day with `value: 0` — device-matrix test purchases redeemed with a 100%-off
    * code — telling Ads there were 34 sales worth nothing.
    *
-   * The browser cannot see `payment.is_test`, but every test and comp purchase
-   * is £0/€0 by construction, so value is the discriminator available here. The
-   * server sibling guards on both (`sendGa4PurchaseEvent`).
+   * Two guards, as on the server sibling (`sendGa4PurchaseEvent`): `isTest`
+   * catches a staff purchase at any price, and value catches a comp by anyone.
    */
+  if (params.isTest) return;
   if (!(params.value > 0)) return;
 
   window.dataLayer = window.dataLayer || [];
@@ -870,6 +885,9 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
     engagement_score: params.engagement_score,
     behavioral_bucket: params.behavioral_bucket,
     initial_price: params.initial_price,
+    promotion_code: params.promotion_code,
+    coupon_percent_off: params.coupon_percent_off,
+    discount_amount: params.discount_amount,
   });
 
   trackGoogleAdsPurchaseConversion(params);

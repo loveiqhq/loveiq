@@ -24,6 +24,7 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
 vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
+  markReportPriceQuotePaywallReached: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@features/checkout/server/fulfillment", () => ({
@@ -48,8 +49,10 @@ import {
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
+  markReportPriceQuotePaywallReached,
 } from "@features/pricing/logic/reportPricing";
 import {
+  getReportAccessPlanForSubmission,
   lookupReportTokenBySubmissionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
@@ -113,6 +116,7 @@ describe("POST /api/stripe/checkout-session", () => {
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(false);
     vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
     vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({ ...BASE_QUOTE });
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue(null);
   });
 
   it("returns the disabled placeholder payload while checkout is not enabled", async () => {
@@ -301,6 +305,48 @@ describe("POST /api/stripe/checkout-session", () => {
 
     expect(res.status).toBe(500);
     expect(markReportPriceQuoteCheckoutStarted).not.toHaveBeenCalled();
+    expect(markReportPriceQuotePaywallReached).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The sticky "Unlock Full Report" bar goes straight to Stripe without the pricing
+   * pop-up, and only the pop-up's /api/price call stamped `paywall_reached_at`: 7 of 15
+   * real readers who checked out from 15 September on had no paywall record, so the
+   * funnel's paywall step read lower than the checkout step under it.
+   */
+  it("stamps the paywall as reached when a checkout starts, and a failed stamp costs nothing", async () => {
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: {
+        sessions: {
+          create: vi.fn().mockResolvedValue({
+            id: "cs_test_sticky",
+            url: "https://checkout.stripe.com/c/pay/cs_test_sticky",
+          }),
+        },
+      },
+    } as never);
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 4242,
+      userEmail: "reader@example.com",
+      userId: 7,
+    } as never);
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      archetypeTiers: {},
+    } as never);
+    const body = {
+      archetype: "Spark Seeker",
+      plan: "full_report",
+      reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+    };
+
+    expect((await POST(makeRequest(body))).status).toBe(200);
+    expect(markReportPriceQuotePaywallReached).toHaveBeenCalledWith({ submissionId: 4242 });
+
+    vi.mocked(markReportPriceQuotePaywallReached).mockRejectedValueOnce(new Error("db down"));
+    expect((await POST(makeRequest(body))).status).toBe(200);
+    expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledTimes(2);
   });
 
   it("no longer stamps a forced-paywall arm into session metadata", async () => {
