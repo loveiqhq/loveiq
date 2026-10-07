@@ -267,7 +267,7 @@ detail is in `docs/runbooks/COMPANY_BRAIN.md` ("Connecting Claude to it").
 
 - Security headers are set in `proxy.ts` (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, CSP). The CSP is a host allowlist with `'unsafe-inline'` scripts: a nonce-based policy was tried and blocked React hydration in Safari (see the comment in `proxy.ts`).
 - If you add new third-party scripts/resources, update CSP in `proxy.ts` accordingly.
-- Inline scripts still take the `nonce` prop passed from the layout, so a nonce-based policy can be restored.
+- Inline scripts still take the `nonce` prop passed from the layout, but that alone does not make a nonce-based policy safe again: Next.js's own bootstrap and streaming scripts carry no nonce, which is what broke Safari. Restoring one needs those covered first and a hydration check in Safari.
 - Measurement hosts (GA4, Google Ads) belong in both `img-src` and `connect-src`: a browser may send the same ping as an image or as a request, and Safari sends Google Ads conversions as images. `shared/auth/tests/proxy.test.ts` checks both directives.
 - **SRI (Subresource Integrity):** Google Analytics and reCAPTCHA don't support SRI hashes because their scripts change dynamically. The `script-src` host allowlist limits which origins can serve scripts.
 
