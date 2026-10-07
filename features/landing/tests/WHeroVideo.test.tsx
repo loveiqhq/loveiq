@@ -388,6 +388,53 @@ describe("hero video — a start that fails", () => {
     expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
   });
 
+  /**
+   * Measured in Chrome, Safari and Firefox on a production build: after one failed load a
+   * media element keeps its error, and play() on it rejects at once with
+   * NotSupportedError. So the button came back, and every later tap failed too, until the
+   * page was reloaded. A failed start must leave the element as it was before any tap.
+   */
+  it("lets a second tap load the file afresh after a failed start", async () => {
+    let failNext = true;
+    playResult = (el) => {
+      if (!isFull(el)) return Promise.resolve();
+      if (failNext) {
+        failNext = false;
+        return rejectWith("NotSupportedError")();
+      }
+      return Promise.resolve();
+    };
+    const loads = vi.spyOn(HTMLMediaElement.prototype, "load");
+    render(<WHeroVideo />);
+    const { full } = media();
+    tap();
+    await act(async () => {});
+    expect(button().disabled).toBe(false);
+    // Reset: no source, and load() run to clear the error and stop any download.
+    expect(full.getAttribute("src")).toBeNull();
+    expect(loads.mock.contexts).toContain(full);
+
+    tap();
+    expect(full.getAttribute("src")).toBe(HERO_VIDEO_SRC);
+    act(() => {
+      fireEvent(full, new Event("playing"));
+    });
+    expect(full.controls).toBe(true);
+    expect(analytics.trackHeroVideoPlay.mock.calls).toEqual([[{ replay: false }]]);
+  });
+
+  it("resets after a timeout too, so a stalled download stops and a retry starts clean", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    playResult = (el) => (isFull(el) ? never() : Promise.resolve());
+    render(<WHeroVideo />);
+    const { full } = media();
+    tap();
+    act(() => vi.advanceTimersByTime(12_000));
+    expect(full.getAttribute("src")).toBeNull();
+    tap();
+    expect(full.getAttribute("src")).toBe(HERO_VIDEO_SRC);
+  });
+
   it("counts one failure once, whichever signals it raises", async () => {
     playResult = (el) => (isFull(el) ? rejectWith("NotSupportedError")() : Promise.resolve());
     render(<WHeroVideo />);
@@ -404,6 +451,40 @@ describe("hero video — a start that fails", () => {
       video: "full",
       reason: "media-error-4",
     });
+  });
+});
+
+describe("hero video — a failure mid-film", () => {
+  it("returns to the poster with the button, so a tap can start it again", () => {
+    render(<WHeroVideo />);
+    const full = startAndPlay();
+    expect(screen.queryByTestId("hero-video-play")).toBeNull();
+    Object.defineProperty(full, "error", { configurable: true, value: { code: 2 } });
+    act(() => {
+      fireEvent(full, new Event("error"));
+    });
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "media-error-2",
+    });
+    const button = screen.getByTestId("hero-video-play") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(full.controls).toBe(false);
+    expect(full.getAttribute("src")).toBeNull();
+    // The video had focus while it played; it goes back to the button, not to nowhere.
+    expect(document.activeElement).toBe(button);
+    // The viewer did not pause it.
+    expect(analytics.trackHeroVideoPaused).not.toHaveBeenCalled();
+  });
+});
+
+describe("hero video — screen readers", () => {
+  it("hides the full video until it plays, and exposes it once it does", () => {
+    render(<WHeroVideo />);
+    const { full } = media();
+    expect(full.getAttribute("aria-hidden")).toBe("true");
+    startAndPlay();
+    expect(full.hasAttribute("aria-hidden")).toBe(false);
   });
 });
 
