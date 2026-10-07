@@ -903,9 +903,7 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
     expect(back).toHaveBeenCalledTimes(1); // the history steps back onto this question
   });
 
-  it("refuses a Forward off the email question until the address is confirmed", () => {
-    // Back to the email question clears the confirmation; an edit and the browser's
-    // Forward then submitted an address nobody had confirmed.
+  const emailThenOptIn = () => {
     mockQuestions = [
       makeSurveyQuestion({
         qId: "00000",
@@ -919,7 +917,15 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
     mockGetAnswer.mockImplementation((qId: string) =>
       qId === "00000" ? "reader@example.com" : null
     );
-    window.history.replaceState(q(0, 0), "", "/survey");
+  };
+
+  it("refuses a Forward off the email question until the address is confirmed", () => {
+    // Back to the email question clears the confirmation; an edit and the browser's
+    // Forward then submitted an address nobody had confirmed. Only the control arm of
+    // the email question test has a confirm box, so the arm is pinned: a session id
+    // drawn at random would land in the anonymous arm half the time.
+    emailThenOptIn();
+    window.history.replaceState(q(0, 0), "", "/survey?email=control");
     mockCurrentIndex = 0;
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
@@ -928,6 +934,19 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
 
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
     expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a Forward off the email question through in the anonymous arm, with no box to confirm", () => {
+    emailThenOptIn();
+    window.history.replaceState(q(0, 0), "", "/survey?email=anonymous");
+    mockCurrentIndex = 0;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(1, 0));
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+    expect(back).not.toHaveBeenCalled();
   });
 
   it("refuses a Forward off a multiple choice over its limit", () => {
@@ -1248,6 +1267,11 @@ describe("SurveyEngine — the email question test", () => {
     emailStep();
     preview("anonymous");
     const { rerender } = render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    // Back to the question before, then to the email question again: the second visit
+    // is not a second exposure.
+    mockCurrentIndex = 0;
+    rerender(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    mockCurrentIndex = 1;
     rerender(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(trackExperimentExposure).toHaveBeenCalledTimes(1);
     expect(trackExperimentExposure).toHaveBeenCalledWith({
