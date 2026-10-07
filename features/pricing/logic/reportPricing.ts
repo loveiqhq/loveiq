@@ -235,10 +235,12 @@ export interface ReportPriceQuoteSnapshot {
    */
   chargedPriceCents: number;
   /**
-   * All 14 only: what this reader already paid for reports on this report, taken off
-   * `chargedPriceCents` (`applyUpgradeCredit`). Absent or 0 when nothing is credited.
+   * All 14 only: the credit taken off `chargedPriceCents` (`applyUpgradeCredit`), never
+   * more than the price. Absent or 0 when nothing is credited.
    */
   upgradeCreditCents?: number;
+  /** All 14 only: everything already paid on the report, which the pay screen names. */
+  upgradePaidCents?: number;
   discountMultiplier: number;
   discountStep: number;
   pricingClusterId: string;
@@ -1600,6 +1602,7 @@ export function applyUpgradeCredit(
     ...quote,
     chargedPriceCents: charged,
     upgradeCreditCents: quote.chargedPriceCents - charged,
+    upgradePaidCents: creditCents,
   };
 }
 

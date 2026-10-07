@@ -77,6 +77,8 @@ describe("upgrade credit towards All 14", () => {
     const credited = applyUpgradeCredit(quote("all_reports", 1999), 2998);
     expect(credited.chargedPriceCents).toBe(0);
     expect(credited.upgradeCreditCents).toBe(1999);
+    // The pay screen names everything paid; Stripe takes off only the price.
+    expect(credited.upgradePaidCents).toBe(2998);
   });
 
   it("credits a remainder under Stripe's €0.50 minimum too", () => {

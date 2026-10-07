@@ -198,12 +198,12 @@ function getCardPricing(quote: ReportPriceQuoteSnapshot | null | undefined) {
   // (the single report, both arms) simply draws no strike.
   const currentCents = quote.chargedPriceCents;
   // All 14 after buying single reports: the price before the credit is struck, and the
-  // line says what was already paid instead of a percentage.
+  // line says what was already paid (all of it, even past the price) instead of a percentage.
   const creditCents = quote.upgradeCreditCents ?? 0;
   if (creditCents > 0) {
     return {
       available: true,
-      offLabel: `${formatReportPurchasePrice(creditCents)} already paid`,
+      offLabel: `${formatReportPurchasePrice(quote.upgradePaidCents ?? creditCents)} already paid`,
       priceLabel: formatReportPurchasePrice(currentCents),
       strikeLabel: formatReportPurchasePrice(currentCents + creditCents),
     } as const;
