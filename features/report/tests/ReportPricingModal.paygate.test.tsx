@@ -92,6 +92,24 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
     }
   );
 
+  // All 14 credits what the reader already paid on the report (getUpgradeCreditCents).
+  it.each([
+    { credit: 1499, charged: 500, all: "€5.00", was: "€19.99 - €14.99 already paid" },
+    { credit: 1999, charged: 0, all: "€0.00", was: "€19.99 - €19.99 already paid" },
+  ])("credits the singles already bought on All 14 ($all)", ({ credit, charged, all, was }) => {
+    const withCredit = quotes("B3");
+    withCredit.all_reports = {
+      ...withCredit.all_reports!,
+      chargedPriceCents: charged,
+      upgradeCreditCents: credit,
+    };
+    render(<ReportPricingModal {...base} quotes={withCredit} />);
+    expect(within(card("all_reports")).getByText(all)).toHaveClass("rpg-card__amount");
+    expect(card("all_reports").querySelector(".rpg-card__was")?.textContent).toBe(was);
+    // The single report keeps its own price.
+    expect(within(card("full_report")).getByText("€14.99")).toHaveClass("rpg-card__amount");
+  });
+
   it("hands checkout the plan and, for the single report, the reader's own archetype", async () => {
     const user = userEvent.setup();
     render(<ReportPricingModal {...base} quotes={quotes("A3")} />);

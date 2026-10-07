@@ -312,6 +312,107 @@ describe("reportPricing", () => {
     );
   });
 
+  it("credits the singles already paid on the report against the All 14 quote", async () => {
+    const allQuote = {
+      id: 78,
+      personal_report_id: 9,
+      survey_submission_id: 42,
+      user_id: 7,
+      plan: "all_reports",
+      currency: "EUR",
+      experiment_group: "B3",
+      forced_paywall_arm: null,
+      base_price_bucket: "B3",
+      base_price: 29.99,
+      msrp: 29.99,
+      starting_price: 19.99,
+      current_price: 19.99,
+      initial_price: 19.99,
+      discount_step: 0,
+      discount_multiplier: 1,
+      pricing_cluster_id: "B3-all_reports-B3-tier_2-desktop-google-serious-engaged-d0",
+      country_tier: "tier_2",
+      country_multiplier: 1,
+      device_type: "Desktop",
+      device_multiplier: 1,
+      traffic_source: "google",
+      traffic_multiplier: 1,
+      behavioral_bucket: "serious",
+      behavioral_multiplier: 1,
+      engagement_score: 40,
+      engagement_multiplier: 1,
+      report_preview_views: 1,
+      fantasy_signal_count: 1,
+      survey_duration_ms: 600000,
+      initial_price_timestamp: "2026-10-06T19:00:00.000Z",
+      expires_at: "2026-11-06T19:00:00.000Z",
+      checkout_started_at: null,
+      purchased_at: null,
+      metadata: null,
+      view_count: 1,
+    };
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) {
+          return createJsonResponse([
+            {
+              amount: 14.99,
+              refund_amount: null,
+              currency: "EUR",
+              metadata: { plan: "full_report" },
+            },
+          ]);
+        }
+        if (url.includes("select=metadata")) return createJsonResponse([]);
+        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+          return createJsonResponse([
+            {
+              id: 42,
+              user_id: 7,
+              utm_tracker: "utm_source=google",
+              duration_ms: 600000,
+              app_user: { id: 7, email: "user@example.com", utm_tracker: null, user_profile: null },
+            },
+          ]);
+        }
+        if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
+          return createJsonResponse([]);
+        }
+        if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
+          return createJsonResponse([{ id: 1 }]);
+        }
+        if (
+          url.includes("/rest/v1/report_price_quote?personal_report_id=eq.9&plan=eq.all_reports")
+        ) {
+          return createJsonResponse([allQuote]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/report_price_quote?id=eq.78")) {
+          const patch = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
+          return createJsonResponse([{ ...allQuote, ...patch }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const quote = await getReportPriceQuoteForContext({
+      now: new Date("2026-10-07T10:00:00.000Z"),
+      plan: "all_reports",
+      reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+    });
+
+    // €19.99 less the €14.99 single bought on this report.
+    expect(quote).toEqual(
+      expect.objectContaining({ chargedPriceCents: 500, upgradeCreditCents: 1499 })
+    );
+    // The stored quote keeps the list price: the credit is never written back.
+    const patches = mockFetchWithTimeout.mock.calls.filter(
+      ([, options]) => (options as { method?: string } | undefined)?.method === "PATCH"
+    );
+    for (const [, options] of patches) {
+      expect(JSON.parse((options as { body: string }).body).current_price ?? 19.99).toBe(19.99);
+    }
+  });
+
   it("reuses the original same-session quote during checkout validation even after the ladder has stepped down", async () => {
     const pricingSessionId = "550e8400-e29b-41d4-a716-446655440010";
     const storedQuote = {

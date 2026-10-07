@@ -1332,6 +1332,9 @@ async function syncCheckoutSessionPayment({
     // to NULL, keeping GROUP BY promoCode clean.
     promoCode: settledSession.metadata?.promoCode || null,
     promoStage: settledSession.metadata?.promoStage || null,
+    // What All 14 credited for reports bought earlier on this report (EUR), taken off as
+    // Stripe's discount; the coupon fields above carry the same amount.
+    upgradeCredit: settledSession.metadata?.upgradeCredit || null,
     promoPercentOff:
       settledSession.metadata?.promoPercentOff &&
       Number.isFinite(Number(settledSession.metadata.promoPercentOff))

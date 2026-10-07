@@ -234,6 +234,11 @@ export interface ReportPriceQuoteSnapshot {
    * no change in behaviour.
    */
   chargedPriceCents: number;
+  /**
+   * All 14 only: what this reader already paid for reports on this report, taken off
+   * `chargedPriceCents` (`applyUpgradeCredit`). Absent or 0 when nothing is credited.
+   */
+  upgradeCreditCents?: number;
   discountMultiplier: number;
   discountStep: number;
   pricingClusterId: string;
@@ -1488,16 +1493,19 @@ export async function getReportPriceQuoteForContext({
     });
 
     if (validatedQuote) {
-      return validatedQuote;
+      return withUpgradeCredit(validatedQuote, context.personalReportId);
     }
   }
 
-  return resolveQuote({
-    context,
-    now,
-    plan,
-    pricingSessionId,
-  });
+  return withUpgradeCredit(
+    await resolveQuote({
+      context,
+      now,
+      plan,
+      pricingSessionId,
+    }),
+    context.personalReportId
+  );
 }
 
 export async function getReportPriceQuotesForContext({
@@ -1537,11 +1545,72 @@ export async function getReportPriceQuotesForContext({
         plan,
         pricingSessionId,
       });
-      return [plan, quote] as const;
+      return [plan, await withUpgradeCredit(quote, context.personalReportId)] as const;
     })
   );
 
   return Object.fromEntries(results) as ReportPriceQuotes;
+}
+
+/** Stripe takes no card payment under €0.50, so a smaller remainder is credited too. */
+const STRIPE_MIN_CHARGE_CENTS = 50;
+
+/**
+ * What a reader already paid for reports on this personal report: every succeeded payment
+ * except All 14 itself, less refunds. All 14 credits it, so singles never add up to more
+ * than All 14 costs. Before this, two singles on the lower list (€29.98) cost more than
+ * All 14 (€19.99), and report 165 bought three in one night. €0 comps and test purchases
+ * add nothing.
+ */
+export async function getUpgradeCreditCents(personalReportId: number): Promise<number> {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&select=amount,refund_amount,currency,metadata&limit=100`
+  );
+  if (!response.ok) {
+    throw new Error("upgrade_credit_lookup_failed");
+  }
+  const rows = (await response.json()) as Array<{
+    amount: number | string | null;
+    refund_amount: number | string | null;
+    currency: string | null;
+    metadata: Record<string, unknown> | null;
+  }>;
+  return rows.reduce((total, row) => {
+    if (row.metadata?.plan === "all_reports") return total;
+    if ((row.currency ?? "EUR").toUpperCase() !== "EUR") return total;
+    const paid =
+      fromEuroAmount(Number(row.amount)) - fromEuroAmount(Number(row.refund_amount ?? 0));
+    return total + Math.max(0, paid);
+  }, 0);
+}
+
+/** Take the credit off an All 14 quote; every other plan comes back as it is. */
+export function applyUpgradeCredit(
+  quote: ReportPriceQuoteSnapshot,
+  creditCents: number
+): ReportPriceQuoteSnapshot {
+  if (quote.plan !== "all_reports" || creditCents <= 0) return quote;
+  let charged = Math.max(0, quote.chargedPriceCents - creditCents);
+  if (charged < STRIPE_MIN_CHARGE_CENTS) charged = 0;
+  return {
+    ...quote,
+    chargedPriceCents: charged,
+    upgradeCreditCents: quote.chargedPriceCents - charged,
+  };
+}
+
+async function withUpgradeCredit(
+  quote: ReportPriceQuoteSnapshot | null,
+  personalReportId: number
+): Promise<ReportPriceQuoteSnapshot | null> {
+  if (!quote || quote.plan !== "all_reports") return quote;
+  try {
+    return applyUpgradeCredit(quote, await getUpgradeCreditCents(personalReportId));
+  } catch (err) {
+    // The full price, as before the credit existed: never a broken pay screen.
+    logger.warn({ err, personalReportId }, "pricing: upgrade credit lookup failed");
+    return quote;
+  }
 }
 
 /**
