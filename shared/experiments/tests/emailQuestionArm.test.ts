@@ -22,7 +22,7 @@ describe("assignEmailQuestionArm", () => {
   });
 
   it("shows the current question when there is no session id", () => {
-    // Storage blocked: nothing could be stamped or recomputed for the respondent.
+    // Only outside a browser: getSessionId() makes an id even where storage is blocked.
     for (const empty of [null, undefined, "", "   "]) {
       expect(assignEmailQuestionArm(empty)).toBe("control");
     }
@@ -93,6 +93,16 @@ describe("resolveEmailQuestionOverride", () => {
 describe("names", () => {
   it("names the experiment and the stamp key the readout will group by", () => {
     expect(EMAIL_QUESTION_EXPERIMENT).toBe("survey-email-anonymous");
-    expect(EMAIL_QUESTION_ARM_KEY).toBe("email_question_arm");
+    expect(EMAIL_QUESTION_ARM_KEY).toBe("contact_question_arm");
+  });
+
+  /**
+   * The admin's UTM filter is a substring match on the whole tracker
+   * (`utm_tracker ILIKE '%' || filter || '%'`), and "email" is a source our own links
+   * carry (`utm_source=email`). A stamp key with "email" in it would match that filter
+   * on every stamped row.
+   */
+  it("keeps the word email out of the stamp key", () => {
+    expect(EMAIL_QUESTION_ARM_KEY).not.toMatch(/email/i);
   });
 });
