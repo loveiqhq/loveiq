@@ -1135,9 +1135,11 @@ describe("checkout fulfillment", () => {
       // and still shown in /admin's concluded section.
       expect(all).not.toContain("Forced paywall");
       expect(all).not.toContain("Paywall style");
-      // And not the landing arm either, now that nothing is randomised — see the
-      // note on the first Slack test above.
-      expect(all).not.toContain("Landing Page V2 (Survey in Hero)");
+      // The landing row is the survey's own stamp. This survey carried none, so the
+      // Stripe session's "white" (what checkout writes without a cookie) is not shown
+      // as the version the buyer saw.
+      expect(all).toContain("*Landing page design*\nNot recorded");
+      expect(all).not.toContain("Landing Page V2");
       // utm_content (base64 referrer email) must never reach Slack — in the
       // fallback text OR in any block.
       expect(all).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");

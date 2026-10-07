@@ -461,8 +461,8 @@ interface DigestInput {
   /**
    * Treat these axes as live, retired arms included.
    *
-   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing` alone, since
-   * `landing` concluded on 2026-09-19.
+   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing`, and `landing`
+   * for its round 3 (round 2 concluded on 2026-09-19).
    *
    * ONE field, not an axis list plus a retired-arms flag, because those two can
    * disagree and a message has to have a single answer to "what is running". An

@@ -21,8 +21,9 @@ beforeEach(async () => {
 
 /**
  * The landing hero video's events. They carry no arm on purpose: the arm reaches
- * PostHog as the `landing_variant` super-property, registered by LandingPageTracker,
- * so every one of these is already split by arm without repeating it.
+ * PostHog as the `landing_variant` super-property, registered from the arm cookie when
+ * PostHog loads (instrumentation-client.ts) and again by LandingPageTracker, so every
+ * one of these is already split by arm without repeating it.
  */
 describe("hero video events", () => {
   it("names a first watch and a replay apart", () => {

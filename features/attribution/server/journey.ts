@@ -558,12 +558,12 @@ export async function buildSubmissionJourney(
 /**
  * Build a journey for the PURCHASE notification without touching the database.
  *
- * The Stripe webhook already holds every arm as a frozen snapshot of what the
+ * The Stripe webhook already holds the pricing arm as a frozen snapshot of what the
  * buyer actually experienced (stamped onto the session at checkout creation), so
  * querying again here would add latency to the webhook path and tell us nothing
- * new. `utm_tracker` remains the source of truth for the landing arm — the Stripe
- * copy defaults to "white" when the cookie was absent, which would report an arm
- * the visitor may never have been in.
+ * new. The landing arm comes from `utm_tracker` alone: the session's copy defaults
+ * to "white" when the cookie was absent, which would report an arm the visitor may
+ * never have been in.
  */
 export function journeyFromPurchase(input: {
   submissionId: number;
