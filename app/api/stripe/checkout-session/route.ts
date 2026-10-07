@@ -15,6 +15,7 @@ import { lookupPrimaryArchetypeForSubmission } from "@features/checkout/server/f
 import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  ensureUpgradeCreditCoupon,
   getStripeCheckoutCustomerEmail,
   getStripeServerClient,
   isStripeCheckoutEnabled,
@@ -219,6 +220,7 @@ export async function POST(request: Request) {
       quoteId: parsed.data.quoteId ?? undefined,
       reportSessionId: parsed.data.reportSessionId ?? null,
       reportToken: parsed.data.reportToken ?? null,
+      strictUpgradeCredit: true,
       userAgent: request.headers.get("user-agent"),
     });
 
@@ -340,6 +342,21 @@ export async function POST(request: Request) {
       }
     }
 
+    // All 14 credits what the reader already paid on this report (`getUpgradeCreditCents`):
+    // the line keeps the regular price and the credit is Stripe's discount, so both the page
+    // and the receipt say what was taken off. Stripe takes one discount per session, so a
+    // nurture promo worth more than the credit wins instead.
+    const creditCents = quote.upgradeCreditCents ?? 0;
+    const regularCents = quote.chargedPriceCents + creditCents;
+    const promoOffCents = nurturePromoMatch
+      ? Math.round((regularCents * nurturePromoMatch.percentOff) / 100)
+      : 0;
+    const creditCouponId =
+      creditCents > 0 && creditCents >= promoOffCents
+        ? await ensureUpgradeCreditCoupon(stripe, creditCents)
+        : null;
+    const appliedPromo = creditCouponId ? null : nurturePromoMatch;
+
     const params: Stripe.Checkout.SessionCreateParams = {
       // Manual promo entry on Stripe's hosted page is intentionally ON (product
       // decision 2026-06-10) so staff can hand-redeem test codes (e.g. a 100%-off
@@ -348,9 +365,11 @@ export async function POST(request: Request) {
       // mutually exclusive, so the pre-applied branch leaves allow_promotion_codes
       // unset. (Reverts the [Audit L6] field-off control — residual risk accepted:
       // a forwarded single-use LIQ code could be hand-typed by the wrong person.)
-      ...(nurturePromoMatch
-        ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
-        : { allow_promotion_codes: true }),
+      ...(creditCouponId
+        ? { discounts: [{ coupon: creditCouponId }] }
+        : appliedPromo
+          ? { discounts: [{ promotion_code: appliedPromo.stripePromotionCodeId }] }
+          : { allow_promotion_codes: true }),
       billing_address_collection: "auto",
       customer_email: customerEmail,
       line_items: [
@@ -363,8 +382,9 @@ export async function POST(request: Request) {
             },
             // `chargedPriceCents`, never `currentPriceCents`: it is the same number
             // every price surface renders, so
-            // the screen and the invoice cannot disagree.
-            unit_amount: quote.chargedPriceCents,
+            // the screen and the invoice cannot disagree. An upgrade credit is added
+            // back here and taken off again as the discount above.
+            unit_amount: regularCents,
           },
           quantity: 1,
         },
@@ -395,11 +415,12 @@ export async function POST(request: Request) {
         pricingCatalog: PRICING_CATALOG,
         pricingClusterId: quote.pricingClusterId,
         pricingQuoteId: String(quote.id),
-        ...(nurturePromoMatch && {
+        ...(appliedPromo && {
           promoCode: parsed.data.promo ?? "",
-          promoStage: nurturePromoMatch.stage,
-          promoPercentOff: String(nurturePromoMatch.percentOff),
+          promoStage: appliedPromo.stage,
+          promoPercentOff: String(appliedPromo.percentOff),
         }),
+        ...(creditCouponId && { upgradeCredit: String((creditCents / 100).toFixed(2)) }),
         requestIp: toStripeMetadataValue(ip),
         requestUserAgent: toStripeMetadataValue(userAgent),
         reportSessionId: parsed.data.reportSessionId ?? "",

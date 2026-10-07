@@ -212,6 +212,40 @@ export function getStripeServerClient() {
   return stripeClient;
 }
 
+/** How the credit reads on Stripe's page and the receipt. */
+export const UPGRADE_CREDIT_COUPON_NAME = "Reports you already bought";
+
+/**
+ * The coupon that takes a reader's upgrade credit off All 14 (`getUpgradeCreditCents`).
+ * One per amount, made on first use and then shared: a coupon is not a promotion code,
+ * so nobody can type it, and a stable id keeps a double click on one idempotent session.
+ */
+export async function ensureUpgradeCreditCoupon(
+  stripe: Stripe,
+  amountOffCents: number
+): Promise<string> {
+  const id = `upgrade_credit_eur_${amountOffCents}`;
+  try {
+    await stripe.coupons.retrieve(id);
+    return id;
+  } catch (err) {
+    if ((err as { code?: string }).code !== "resource_missing") throw err;
+  }
+  try {
+    await stripe.coupons.create({
+      id,
+      amount_off: amountOffCents,
+      currency: "eur",
+      duration: "once",
+      name: UPGRADE_CREDIT_COUPON_NAME,
+    });
+  } catch (err) {
+    // Another checkout made it first.
+    if ((err as { code?: string }).code !== "resource_already_exists") throw err;
+  }
+  return id;
+}
+
 export async function getStripeCheckoutCustomerEmail({
   reportSessionId,
   reportToken,

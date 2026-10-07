@@ -197,6 +197,17 @@ function getCardPricing(quote: ReportPriceQuoteSnapshot | null | undefined) {
   // and the "N% off" both compare against it, so a bucket priced at its own anchor
   // (the single report, both arms) simply draws no strike.
   const currentCents = quote.chargedPriceCents;
+  // All 14 after buying single reports: the price before the credit is struck, and the
+  // line says what was already paid (all of it, even past the price) instead of a percentage.
+  const creditCents = quote.upgradeCreditCents ?? 0;
+  if (creditCents > 0) {
+    return {
+      available: true,
+      offLabel: `${formatReportPurchasePrice(quote.upgradePaidCents ?? creditCents)} already paid`,
+      priceLabel: formatReportPurchasePrice(currentCents),
+      strikeLabel: formatReportPurchasePrice(currentCents + creditCents),
+    } as const;
+  }
   const strikeLabel = getReportPurchaseStrikePrice(quote.msrpCents, currentCents);
   const badge = strikeLabel
     ? getReportPurchaseBadgeFromPrice({ strikeCents: quote.msrpCents, currentCents })
@@ -324,6 +335,7 @@ const ReportPricingModal: FC<Props> = ({
         experiment_group: quote.experimentGroup,
         msrp: quote.msrpCents / 100,
         initial_price: quote.initialPriceCents / 100,
+        ...(quote.upgradeCreditCents ? { upgrade_credit: quote.upgradeCreditCents / 100 } : {}),
       });
     }
   }, [open, quotes, priceShownFiredRef]);

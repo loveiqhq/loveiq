@@ -679,6 +679,12 @@ export interface PriceShownParams {
   msrp?: number;
   /** Initial price before ladder discount. */
   initial_price?: number;
+  /**
+   * All 14 only: what the reader already paid for single reports, taken off `price`
+   * (`applyUpgradeCredit`). Absent when nothing was credited, so per-arm price analysis
+   * can leave credited prices out.
+   */
+  upgrade_credit?: number;
 }
 
 /**

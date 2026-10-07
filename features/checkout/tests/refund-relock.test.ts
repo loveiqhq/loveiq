@@ -52,10 +52,13 @@ function db({
   paid,
   others = [],
   tiers,
+  credited = [],
 }: {
   paid: Meta;
   others?: Meta[];
   tiers: Record<string, string>;
+  /** Later All 14 payments on the report that credited earlier ones. */
+  credited?: Array<{ id: number; amount: number; metadata: Meta }>;
 }) {
   const patches: Array<{ url: string; body: Record<string, unknown> }> = [];
   mockFetchWithTimeout.mockImplementation(
@@ -73,6 +76,8 @@ function db({
       if (url.includes("/payment?id=eq.41&select=metadata")) return json([{ metadata: paid }]);
       if (url.includes("/personal_report?id=eq.5&select=survey_submission_id"))
         return json([{ survey_submission_id: 70, archetype_tiers: tiers }]);
+      if (url.includes("/payment?personal_report_id=eq.5&id=gt.41&status=eq.succeeded"))
+        return json(credited);
       if (url.includes("/payment?personal_report_id=eq.5&status=eq.succeeded&id=neq.41"))
         return json(others.map((metadata) => ({ metadata })));
       if (url.includes("/scoring_result?survey_submission_id=eq.70"))
@@ -213,5 +218,51 @@ describe("a chargeback", () => {
     await processStripeWebhookEvent({ event: dispute("charge.dispute.closed", "lost"), stripe });
     expect(mockUpsertTier).not.toHaveBeenCalled();
     expect(mockUnlockAll).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * All 14 credits the singles bought before it, so refunding or charging back one of them
+ * afterwards leaves All 14 for the difference: ops decides what to do.
+ */
+describe("a refunded payment that All 14 credited", () => {
+  const credited = [
+    { id: 52, amount: 5, metadata: { plan: "all_reports", upgradeCredit: "14.99" } },
+  ];
+  const alerted = () =>
+    mockNotifySlack.mock.calls.filter(
+      ([arg]) => (arg as { kind?: string }).kind === "credited_payment_refunded"
+    );
+
+  it("refund: ops is told what the reader keeps and for how much", async () => {
+    db({
+      paid: { plan: "full_report", archetype: "Spark Seeker" },
+      tiers: { "Spark Seeker": "full_report" },
+      credited,
+    });
+    await processStripeWebhookEvent({ event: refund(), stripe });
+    expect(alerted()).toHaveLength(1);
+    expect((alerted()[0]![0] as { text: string }).text).toContain(
+      "took €14.99 off for the reports bought before it, so the reader keeps All 14 for €5"
+    );
+  });
+
+  it("chargeback opened: the same", async () => {
+    db({
+      paid: { plan: "full_report", archetype: "Spark Seeker" },
+      tiers: { "Spark Seeker": "full_report" },
+      credited,
+    });
+    await processStripeWebhookEvent({ event: dispute("charge.dispute.created"), stripe });
+    expect(alerted()).toHaveLength(1);
+  });
+
+  it("nothing credited it: no alert", async () => {
+    db({
+      paid: { plan: "full_report", archetype: "Spark Seeker" },
+      tiers: { "Spark Seeker": "full_report" },
+    });
+    await processStripeWebhookEvent({ event: refund(), stripe });
+    expect(alerted()).toHaveLength(0);
   });
 });

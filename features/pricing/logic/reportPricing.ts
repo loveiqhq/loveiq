@@ -234,6 +234,13 @@ export interface ReportPriceQuoteSnapshot {
    * no change in behaviour.
    */
   chargedPriceCents: number;
+  /**
+   * All 14 only: the credit taken off `chargedPriceCents` (`applyUpgradeCredit`), never
+   * more than the price. Absent or 0 when nothing is credited.
+   */
+  upgradeCreditCents?: number;
+  /** All 14 only: everything already paid on the report, which the pay screen names. */
+  upgradePaidCents?: number;
   discountMultiplier: number;
   discountStep: number;
   pricingClusterId: string;
@@ -1455,6 +1462,7 @@ export async function getReportPriceQuoteForContext({
   quoteId,
   reportSessionId,
   reportToken,
+  strictUpgradeCredit = false,
   submissionId,
   userAgent,
 }: {
@@ -1464,6 +1472,8 @@ export async function getReportPriceQuoteForContext({
   quoteId?: number;
   reportSessionId?: string | null;
   reportToken?: string | null;
+  /** Checkout: throw when the All 14 credit cannot be read, never charge without it. */
+  strictUpgradeCredit?: boolean;
   submissionId?: number | null;
   userAgent?: string | null;
 }) {
@@ -1488,16 +1498,20 @@ export async function getReportPriceQuoteForContext({
     });
 
     if (validatedQuote) {
-      return validatedQuote;
+      return withUpgradeCredit(validatedQuote, context.personalReportId, strictUpgradeCredit);
     }
   }
 
-  return resolveQuote({
-    context,
-    now,
-    plan,
-    pricingSessionId,
-  });
+  return withUpgradeCredit(
+    await resolveQuote({
+      context,
+      now,
+      plan,
+      pricingSessionId,
+    }),
+    context.personalReportId,
+    strictUpgradeCredit
+  );
 }
 
 export async function getReportPriceQuotesForContext({
@@ -1537,11 +1551,79 @@ export async function getReportPriceQuotesForContext({
         plan,
         pricingSessionId,
       });
-      return [plan, quote] as const;
+      return [plan, await withUpgradeCredit(quote, context.personalReportId)] as const;
     })
   );
 
   return Object.fromEntries(results) as ReportPriceQuotes;
+}
+
+/** Stripe takes no card payment under €0.50, so a smaller remainder is credited too. */
+const STRIPE_MIN_CHARGE_CENTS = 50;
+
+/**
+ * What a reader already paid for reports on this personal report: every succeeded payment
+ * except All 14 itself, less refunds. All 14 credits it, so singles never add up to more
+ * than All 14 costs. Before this, two singles on the lower list (€29.98) cost more than
+ * All 14 (€19.99), and report 165 bought three in one night. €0 comps add nothing, and
+ * staff test purchases are left out like everywhere money is counted.
+ */
+export async function getUpgradeCreditCents(personalReportId: number): Promise<number> {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&is_test=is.false&select=amount,refund_amount,currency,metadata&limit=100`
+  );
+  if (!response.ok) {
+    throw new Error("upgrade_credit_lookup_failed");
+  }
+  const rows = (await response.json()) as Array<{
+    amount: number | string | null;
+    refund_amount: number | string | null;
+    currency: string | null;
+    metadata: Record<string, unknown> | null;
+  }>;
+  return rows.reduce((total, row) => {
+    if (row.metadata?.plan === "all_reports") return total;
+    if ((row.currency ?? "EUR").toUpperCase() !== "EUR") return total;
+    const paid =
+      fromEuroAmount(Number(row.amount)) - fromEuroAmount(Number(row.refund_amount ?? 0));
+    return total + Math.max(0, paid);
+  }, 0);
+}
+
+/** Take the credit off an All 14 quote; every other plan comes back as it is. */
+export function applyUpgradeCredit(
+  quote: ReportPriceQuoteSnapshot,
+  creditCents: number
+): ReportPriceQuoteSnapshot {
+  if (quote.plan !== "all_reports" || creditCents <= 0) return quote;
+  let charged = Math.max(0, quote.chargedPriceCents - creditCents);
+  if (charged < STRIPE_MIN_CHARGE_CENTS) charged = 0;
+  return {
+    ...quote,
+    chargedPriceCents: charged,
+    upgradeCreditCents: quote.chargedPriceCents - charged,
+    upgradePaidCents: creditCents,
+  };
+}
+
+/**
+ * A failed lookup shows the full price, as before the credit existed: never a broken pay
+ * screen. Checkout passes `strict`: charging the full price after the screen showed the
+ * credited one is worse than an error the reader can retry.
+ */
+async function withUpgradeCredit(
+  quote: ReportPriceQuoteSnapshot | null,
+  personalReportId: number,
+  strict = false
+): Promise<ReportPriceQuoteSnapshot | null> {
+  if (!quote || quote.plan !== "all_reports") return quote;
+  try {
+    return applyUpgradeCredit(quote, await getUpgradeCreditCents(personalReportId));
+  } catch (err) {
+    if (strict) throw err;
+    logger.warn({ err, personalReportId }, "pricing: upgrade credit lookup failed");
+    return quote;
+  }
 }
 
 /**

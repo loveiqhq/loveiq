@@ -342,6 +342,8 @@ The paywall on `/report` is always enforced — clicking a locked premium sectio
 - `full_report` plan → essentials + full-report sections
 - `all_reports` plan → all sections across every archetype
 
+All 14 credits what the reader already paid on that report (single reports, legacy plans; less refunds): the pay screen shows the reduced price, and Stripe keeps the regular line price with the credit as a discount (`getUpgradeCreditCents`, `ensureUpgradeCreditCoupon`). A credit covering the whole price makes a €0 checkout.
+
 Sandbox and live mode both run the real fulfillment path. To test in sandbox use Stripe test card `4242 4242 4242 4242` (any future date, any CVC). After a successful test purchase, the webhook fulfills the access plan onto the report.
 
 Required Vercel env vars (test or production):
