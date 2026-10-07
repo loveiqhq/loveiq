@@ -251,6 +251,14 @@ describe("CheckoutReturnPage", () => {
       await waitFor(() => expect(getReportNurturePromo({ token })).toBeNull());
     });
 
+    it("is forgotten under a report session id too, which the return page never sees", async () => {
+      const sessionId = "02d88f31-eceb-4402-940d-c8cd98d01848";
+      setReportNurturePromo({ promoCode: "LIQ-50-Zz9Y8xW7", sessionId });
+      returnWith("paid", "complete");
+      await waitFor(() => expect(paidLine()).toBeInTheDocument());
+      await waitFor(() => expect(getReportNurturePromo({ sessionId })).toBeNull());
+    });
+
     it("is kept while the payment has not gone through", async () => {
       returnWith("unpaid", "open");
       await waitFor(() => expect(screen.getByText(/payment status/i)).toBeInTheDocument());

@@ -332,19 +332,18 @@ export function getReportNurturePromo({
   }
 }
 
-/** Forget the stashed code once a purchase has used it: each code redeems once. */
-export function clearReportNurturePromo({
-  sessionId,
-  token,
-}: {
-  sessionId?: string | null;
-  token?: string | null;
-}): void {
+/**
+ * Forget every stashed code in this tab once a purchase completes: each code redeems once.
+ * All of them, not one key: a report opened by its session id stashed the code under that
+ * id, and the return page from Stripe knows only the token.
+ */
+export function clearReportNurturePromos(): void {
   if (!canUseStorage()) return;
-  const storageKey = getNurturePromoStorageKey({ sessionId, token });
-  if (!storageKey) return;
   try {
-    sessionStorage.removeItem(storageKey);
+    const keys = Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i));
+    for (const key of keys) {
+      if (key?.startsWith(`${REPORT_NURTURE_PROMO_PREFIX}:`)) sessionStorage.removeItem(key);
+    }
   } catch {
     /* storage unavailable */
   }
