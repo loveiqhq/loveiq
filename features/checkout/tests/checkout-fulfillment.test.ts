@@ -27,6 +27,13 @@ vi.mock("@features/report/server/personalReport", () => ({
 vi.mock("@features/analytics/server/ga4", () => ({ sendGa4PurchaseEvent: vi.fn() }));
 vi.mock("@features/analytics/server/posthog", () => ({ sendPosthogPurchaseEvent: vi.fn() }));
 
+const mockResendSend = vi.fn();
+vi.mock("resend", () => ({
+  Resend: class {
+    emails = { send: (...args: unknown[]) => mockResendSend(...args) };
+  },
+}));
+
 // Spread the real module rather than listing exports: the purchase notification
 // reads the live price catalogue (getPricingBucketsForPlan) to say which SIDE of
 // the price test the buyer was on, and a hand-listed mock silently breaks the
@@ -1302,6 +1309,42 @@ describe("checkout fulfillment", () => {
       expect(slackCalls).toHaveLength(0);
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    /**
+     * The return page's fallback and the Stripe webhook both fulfil a checkout the
+     * webhook has not reached yet, and Stripe re-delivers. Slack, GA4 and PostHog went
+     * out once; the buyer's email went out on every pass.
+     */
+    it("sends the buyer's confirmation email once when the same purchase is processed twice", async () => {
+      process.env.RESEND_API_KEY = "re_test_not_real";
+      mockResendSend.mockResolvedValue({ data: { id: "email_test_1" }, error: null });
+      const processSession = (eventId: string) =>
+        processStripeWebhookEvent({
+          event: {
+            id: eventId,
+            type: "checkout.session.completed",
+            data: {
+              object: {
+                id: "cs_test_slack_001",
+                metadata: { plan: "full_report", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+              },
+            },
+          } as never,
+          stripe: buildStripe("full_report", "Spark Seeker") as never,
+        });
+
+      setupHappyPathMocks();
+      await processSession("cs_status_poll_cs_test_slack_001");
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+      expect(mockResendSend.mock.calls[0]![0]).toMatchObject({ to: "eman@loveiq.org" });
+
+      // The webhook arrives after the fallback wrote the payment row.
+      setupHappyPathMocks({ existingPayment: true });
+      await processSession("evt_email_after_fallback");
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+
+      delete process.env.RESEND_API_KEY;
     });
   });
 });

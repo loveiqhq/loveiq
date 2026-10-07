@@ -1232,10 +1232,14 @@ async function syncCheckoutSessionPayment({
     stripeChargeId: charge?.id ?? null,
     stripePaymentIntentId: paymentIntentId,
   });
-  // Cross-source dedupe for Slack: webhook + status-poll fallback + cron sweep
-  // can all reach this function. We only want one Slack ping per unique
-  // purchase, so gate the notification on whether THIS run is the first
-  // write — i.e. there was no payment row before we got here.
+  // Cross-source dedupe for the purchase email and pings: webhook + status-poll
+  // fallback + cron sweep can all reach this function. We only want one of each
+  // per unique purchase, so gate them on whether THIS run is the first write —
+  // i.e. there was no payment row before we got here.
+  // ponytail: the row is found by PaymentIntent or charge id. A €0 checkout has
+  // neither, and two runs at the same instant both find none, so either can still
+  // send twice; a run that fails after writing the row sends nothing on its retry.
+  // Upgrade: a per-checkout-session claim, released when the sends fail.
   const isFirstFulfillment = !existingPayment;
 
   const rawArchetypeMetadata = settledSession.metadata?.archetype ?? null;
@@ -1427,21 +1431,22 @@ async function syncCheckoutSessionPayment({
   }
 
   if (effectiveStatus === "succeeded") {
-    await sendPurchaseEmail({
-      plan,
-      reportTokenOverride:
-        typeof settledSession.metadata?.reportToken === "string"
-          ? settledSession.metadata.reportToken
-          : null,
-      submissionId: context.submissionId,
-      unlockedArchetype,
-    });
-
-    // Slack ping — fires once per unique purchase. isFirstFulfillment is
-    // false on Stripe re-deliveries, on the cs_status_poll_* synthetic
-    // event from the success-page fallback, and on any future code path
-    // that reaches this function with a payment row already in place.
+    // The buyer's email, Slack, GA4 and PostHog — each once per unique purchase.
+    // isFirstFulfillment is false on Stripe re-deliveries, on the cs_status_poll_*
+    // synthetic event from the success-page fallback, and on any future code path
+    // that reaches this function with a payment row already in place. The email sat
+    // outside this guard, so a buyer whose purchase was processed twice got two.
     if (isFirstFulfillment) {
+      await sendPurchaseEmail({
+        plan,
+        reportTokenOverride:
+          typeof settledSession.metadata?.reportToken === "string"
+            ? settledSession.metadata.reportToken
+            : null,
+        submissionId: context.submissionId,
+        unlockedArchetype,
+      });
+
       const recipient = await lookupRecipientForSubmission(context.submissionId);
       await notifySlackPurchase({
         amount,
