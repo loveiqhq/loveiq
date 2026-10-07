@@ -31,6 +31,10 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyGuidanceExpanded: analytics.guidance,
   setReportSubmissionContext: analytics.setCtx,
   setSurveyVariant: analytics.setVariant,
+  // The email question test reports its arm when the email step shows. The walk below
+  // fills every input, so it completes in either arm.
+  setEmailQuestionArm: vi.fn(),
+  trackExperimentExposure: vi.fn(),
 }));
 
 const submitSpy = vi.hoisted(() => vi.fn());

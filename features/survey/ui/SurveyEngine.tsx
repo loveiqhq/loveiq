@@ -21,14 +21,23 @@ import {
   trackSurveyFormError,
   setReportSubmissionContext,
   setSurveyVariant,
+  setEmailQuestionArm,
+  trackExperimentExposure,
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { orderAskedQuestions } from "./questionOrder";
+import { EMAIL_QID, orderAskedQuestions } from "./questionOrder";
 import {
   assignQuestionOrderArm,
   resolveQuestionOrderOverride,
   type QuestionOrderArm,
 } from "@shared/experiments/questionOrderArm";
+import {
+  assignEmailQuestionArm,
+  EMAIL_QUESTION_EXPERIMENT,
+  resolveEmailQuestionOverride,
+  type EmailQuestionArm,
+} from "@shared/experiments/emailQuestionArm";
+import { applyEmailQuestionArm } from "@features/survey/anonymousEmail";
 import { getSessionId } from "./hooks/surveySession";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
@@ -159,6 +168,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
         : new URLSearchParams(window.location.search).get("order");
     return resolveQuestionOrderOverride(devParam) ?? assignQuestionOrderArm(getSessionId());
   });
+  // The email question test: today's question against Marcus's anonymous redesign
+  // (Figma 11600:15119). Drawn once from the session id like C13, with its own salt, so
+  // the two splits are independent. `?email=control|anonymous` previews either arm on
+  // dev and staging, never on production. The arm's copy goes on the question here,
+  // so the heading, the screen-reader line and the jump menu all read the same words.
+  const [emailArm] = useState<EmailQuestionArm>(() => {
+    const devParam =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("email");
+    return resolveEmailQuestionOverride(devParam) ?? assignEmailQuestionArm(getSessionId());
+  });
 
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
@@ -166,8 +187,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     () =>
       orderAskedQuestions(surveyQuestions, orderArm)
         .filter((q) => !isHidden(q.qId))
-        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
-    [prefilledKey, orderArm]
+        .filter((q) => !prefilledKey.split(",").includes(q.qId))
+        .map((q) => applyEmailQuestionArm(q, emailArm)),
+    [prefilledKey, orderArm, emailArm]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
@@ -192,6 +214,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
      */
     setSurveyVariant(surveyVariant);
   }, [surveyVariant]);
+
+  // The email test's exposure, the per-arm denominator: once, the first time the email
+  // question is on screen, which is also when the arm goes onto PostHog and GA4.
+  const emailExposureFired = useRef(false);
+  const onEmailQuestion = question?.qId === EMAIL_QID;
+  useEffect(() => {
+    if (!onEmailQuestion || emailExposureFired.current) return;
+    emailExposureFired.current = true;
+    setEmailQuestionArm(emailArm);
+    trackExperimentExposure({
+      experiment: EMAIL_QUESTION_EXPERIMENT,
+      variant: emailArm,
+      surface: "survey_email_question",
+    });
+  }, [onEmailQuestion, emailArm]);
 
   // Post-survey completion phase management
   // Mounting onto a finished run: a pending submission shows its retry screen. With none,
@@ -288,12 +325,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // The server's own rule (features/survey/email.ts): an address this let through and the
     // server refused stranded the reader at the final submit.
     if (!isValidSurveyEmail(currentAnswer)) return false;
+    // The email test's anonymous arm draws no confirm box.
+    if (emailArm === "anonymous") return true;
     return (
       emailConfirmValue.trim().length > 0 &&
       tidySurveyEmail(emailConfirmValue).toLowerCase() ===
         tidySurveyEmail(currentAnswer).toLowerCase()
     );
-  }, [question, currentAnswer, emailConfirmValue]);
+  }, [question, currentAnswer, emailConfirmValue, emailArm]);
 
   const isSelectionCountValid = useMemo(() => {
     if (question?.answerType !== "multiple") return true;
@@ -811,6 +850,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                   forceValidation={attemptedNext}
                   confirmValue={emailConfirmValue}
                   onConfirmChange={setEmailConfirmValue}
+                  emailArm={emailArm}
                 />
               )}
               {question.answerType === "scale" && (
