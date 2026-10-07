@@ -305,13 +305,15 @@ describe("OpenResponseQuestion: the anonymous email arm", () => {
     renderAnonymous("");
     const box = screen.getByRole("textbox");
     // 523.5 x 48 from 640px (the full column on a phone), a 1.454px line at
-    // rgba(59,59,59,.264), Manrope Light 17.45/23.84 placeholder at 54%.
+    // rgba(59,59,59,.264), Manrope Light 17.45/23.84 placeholder at 54%. The line is an
+    // inset shadow, because browsers draw a 1.454px border 1px thick; under forced
+    // colours, which drop shadows, a border takes its place.
     for (const cls of [
       "w-full",
       "sm:w-[523.5px]",
       "h-[48px]",
-      "border-b-[1.454px]",
-      "border-[rgba(59,59,59,0.264)]",
+      "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)]",
+      "forced-colors:border-b-[1.454px]",
       "font-light",
       "text-[17.45px]",
       "leading-[23.84px]",
@@ -330,7 +332,9 @@ describe("OpenResponseQuestion: the anonymous email arm", () => {
   it("still says when the address is not one the server would take", () => {
     renderAnonymous("na..me@gmail.com", true);
     expect(screen.getByText(/doesn.t look like a valid email/i)).toBeInTheDocument();
-    expect(screen.getByRole("textbox").className).toContain("border-[#ef4444]");
+    expect(screen.getByRole("textbox").className).toContain(
+      "shadow-[inset_0_-1.454px_0_0_#ef4444]"
+    );
   });
 
   it("keeps today's two boxes in the control arm", () => {

@@ -136,7 +136,9 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
            draws only the empty field: typed text takes the placeholder's size in the
            title's ink, and focus and error keep today's orange and red lines. Nothing sits
            under the field until there is an error, so the Why row stays 20px under the line,
-           as drawn. */
+           as drawn. The line is an inset shadow, not a border: Chrome draws a 1.454px border
+           1px thick at every pixel density (a third lighter than the frame), while the
+           shadow keeps the fraction. Forced colours drop shadows, so a border stands in. */
         <div className="flex flex-col">
           <input
             type="email"
@@ -149,10 +151,10 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             placeholder={question.placeholder || "Type your answer…"}
             autoComplete="email"
             spellCheck={false}
-            className={`h-[48px] w-full border-b-[1.454px] bg-transparent font-sans text-[17.45px] font-light leading-[23.84px] text-[#161021] placeholder:text-[rgba(52,52,52,0.54)] focus:outline-none sm:w-[523.5px] ${
+            className={`h-[48px] w-full bg-transparent font-sans text-[17.45px] font-light leading-[23.84px] text-[#161021] placeholder:text-[rgba(52,52,52,0.54)] focus:outline-none forced-colors:border-b-[1.454px] sm:w-[523.5px] ${
               error
-                ? "border-[#ef4444]"
-                : "border-[rgba(59,59,59,0.264)] focus:border-[rgba(254,104,57,0.4)]"
+                ? "shadow-[inset_0_-1.454px_0_0_#ef4444]"
+                : "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)] focus:shadow-[inset_0_-1.454px_0_0_rgba(254,104,57,0.4)]"
             }`}
           />
           <div className={`flex items-center gap-1.5${error ? " mt-2" : ""}`} aria-live="polite">
