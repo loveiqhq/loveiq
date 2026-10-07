@@ -36,6 +36,8 @@ export interface StartReportCheckoutFailure {
   /** `disabled` = checkout is switched off for this environment, not an error. */
   status: "disabled" | "error";
   message: string;
+  /** A 409: the reader already owns this plan, so the page should reload what they own. */
+  alreadyOwned?: boolean;
 }
 
 export async function startReportCheckout({
@@ -127,6 +129,7 @@ export async function startReportCheckout({
         status: "error",
         message:
           serverMessage ?? "We couldn't prepare secure checkout right now. Please try again.",
+        ...(response.status === 409 ? { alreadyOwned: true } : {}),
       };
     }
 

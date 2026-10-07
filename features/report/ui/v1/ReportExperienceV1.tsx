@@ -23,7 +23,7 @@
  *     still quote report copy off staging (c03b8eea).
  */
 
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC, type MutableRefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   setReportSubmissionContext,
@@ -90,6 +90,8 @@ export interface ReportExperienceV1Props {
   ownerFirstName: string | null;
   ownerToken: string | null;
   percentages: Record<string, number>;
+  /** The visit's sent `price_shown` keys, for the pay screen (see ReportPricingModal). */
+  priceShownFiredRef: MutableRefObject<Set<string>>;
   pricingTargetArchetype: string | null;
   pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
@@ -143,6 +145,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   percentages,
   placeholderValues,
   primaryArchetype,
+  priceShownFiredRef,
   pricingQuotes,
   archetypeContent,
   practiceTendencies,
@@ -686,6 +689,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
         open={isPricingModalOpen}
         onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
+        priceShownFiredRef={priceShownFiredRef}
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}

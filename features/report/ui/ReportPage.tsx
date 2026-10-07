@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore,
   type FC,
+  type MutableRefObject,
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -218,6 +219,24 @@ const REPORT_PART_DIVIDER_BY_SECTION: Record<string, ReportPartDividerProps> = {
 /** The element just tapped, if the tap was recent enough to be what opened the paywall. */
 function recentTapTarget(tap: { at: number; el: Element | null }): Element | null {
   return Date.now() - tap.at < 1_500 ? tap.el : null;
+}
+
+/**
+ * Claims the plans pop-up's one offer for this submission in this tab's session; false
+ * when it was already made. Backing out of Stripe reloads the report and `?anchor` puts
+ * the reader past the pop-up point, so a per-page-load flag offered it again ~2s after
+ * they had declined it, and logged a second pop-up-test exposure.
+ */
+function claimPlansOffer(submissionId: number | null | undefined): boolean {
+  if (!submissionId) return true;
+  const key = `loveiq-report-plans-offered:${submissionId}`;
+  try {
+    if (sessionStorage.getItem(key)) return false;
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // Storage refused (private mode): once per page load, as before.
+  }
+  return true;
 }
 
 function getScalarOverlay(diagnostics: Record<string, unknown> | null, key: string) {
@@ -433,6 +452,8 @@ interface ReportExperienceProps {
   ownerFirstName: string | null;
   ownerToken: string | null;
   percentages: Record<string, number>;
+  /** The visit's sent `price_shown` keys, for the pay screen (see ReportPricingModal). */
+  priceShownFiredRef: MutableRefObject<Set<string>>;
   pricingTargetArchetype: string | null;
   pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
@@ -575,6 +596,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   submissionId,
   primaryArchetype,
   contentArchetype,
+  priceShownFiredRef,
   pricingQuotes,
   archetypeContent,
   practiceTendencies,
@@ -2498,6 +2520,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         open={isPricingModalOpen}
         onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
+        priceShownFiredRef={priceShownFiredRef}
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
@@ -2695,6 +2718,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const [checkoutHandoff, setCheckoutHandoff] = useState<{
     status: "redirecting" | "disabled" | "error";
     message: string | null;
+    /** The plan is already theirs (a 409): going back reloads what they own. */
+    alreadyOwned?: boolean;
   } | null>(null);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
   const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "recipient">(
@@ -2707,10 +2732,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // plans pop-up is offered ONCE per report session. Without it, any re-run of
   // that effect (a data refetch, a view switch) re-arms the trigger, and the
   // reader is below the chapter by then — so the "already passed it" check would
-  // re-offer a pop-up they had already dismissed.
+  // re-offer a pop-up they had already dismissed. A reload (back from Stripe) is
+  // held to the same one offer by `claimPlansOffer`.
   const plansOfferedRef = useRef(false);
   const scrollTeaserTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPricingModalOpenRef = useRef(false);
+  // The pay screen's sent `price_shown` keys, held here because the pay screen is rebuilt
+  // whenever the report reloads its data (every archetype switch), and this page is not.
+  const priceShownFiredRef = useRef(new Set<string>());
 
   // Offer variant (Figma 6297-1431) is gated to the 24h+ ladder step. Before
   // step 1 every manual open shows the default pricing modal (Figma 6755-1035).
@@ -2781,6 +2810,33 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     });
   }, [isSharedView, resolvedReportToken, sessionId]);
 
+  const apiUnlocked = data?.unlockedArchetypes;
+  const primaryArchetypeFromData = data?.primaryArchetype;
+  const unlockedArchetypes = useMemo(() => {
+    const set = new Set<string>();
+    if (apiUnlocked) {
+      for (const name of apiUnlocked) set.add(name);
+    }
+    if (primaryArchetypeFromData) set.add(primaryArchetypeFromData);
+    return set;
+  }, [apiUnlocked, primaryArchetypeFromData]);
+
+  const archetypeSlugParam = searchParams.get("archetype");
+  const requestedArchetype = fromArchetypeSlug(archetypeSlugParam);
+  const viewArchetype =
+    requestedArchetype && unlockedArchetypes.has(requestedArchetype)
+      ? requestedArchetype
+      : (primaryArchetypeFromData ?? "");
+
+  // The report on screen, which these events describe: its archetype, and the plan behind
+  // it. `accessPlan` covers the reader's own report (and all_reports every report); another
+  // archetype's report they bought is covered by its own tier. Read as `accessPlan` and
+  // their own archetype, its buyer was counted "locked" on their own report while reading it.
+  const viewedReportPlan =
+    viewArchetype === primaryArchetypeFromData || accessPlan === "all_reports"
+      ? accessPlan
+      : (data?.archetypeTiers?.[viewArchetype] ?? null);
+
   const reportViewedFiredRef = useRef(false);
   useEffect(() => {
     if (reportViewedFiredRef.current) return;
@@ -2789,12 +2845,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Persisted events need a submission to count against. A recipient's visit is not the
     // owner's, so it publishes none and theirs stay out of the owner's numbers.
     setReportSubmissionContext(data.viewMode === "shared" ? null : (data.submissionId ?? null));
-    trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
-  }, [data, accessPlan]);
+    trackReportViewed(viewedReportPlan ?? "locked", viewArchetype || null);
+  }, [data, viewedReportPlan, viewArchetype]);
 
   useReportEngagementTimers({
-    reportType: data ? (accessPlan ?? "locked") : null,
-    archetype: data?.primaryArchetype ?? null,
+    reportType: data ? (viewedReportPlan ?? "locked") : null,
+    archetype: viewArchetype || null,
   });
 
   useEffect(() => {
@@ -2894,6 +2950,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!data) return;
     if (hasPurchased) return;
     if (viewMode === "shared") return;
+    const submissionId = data.submissionId;
 
     // Open the plans pop-up once the reader REACHES "Attachment Style" (MO,
     // 2026-08-21). The trigger has moved three times: the first scroll event of any
@@ -2923,6 +2980,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       ) {
         return;
       }
+      // Once per submission per tab session, in both arms alike: the exposure as well.
+      if (!claimPlansOffer(submissionId)) return;
       // Both arms of the pop-up test mark this moment, so readers who got this far
       // are compared like for like; `no_popup` then stops before the pop-up.
       if (popupArm) {
@@ -3087,24 +3146,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!isPricingModalOpen) return;
     notifyPaywallReached();
   }, [isPricingModalOpen, notifyPaywallReached]);
-
-  const apiUnlocked = data?.unlockedArchetypes;
-  const primaryArchetypeFromData = data?.primaryArchetype;
-  const unlockedArchetypes = useMemo(() => {
-    const set = new Set<string>();
-    if (apiUnlocked) {
-      for (const name of apiUnlocked) set.add(name);
-    }
-    if (primaryArchetypeFromData) set.add(primaryArchetypeFromData);
-    return set;
-  }, [apiUnlocked, primaryArchetypeFromData]);
-
-  const archetypeSlugParam = searchParams.get("archetype");
-  const requestedArchetype = fromArchetypeSlug(archetypeSlugParam);
-  const viewArchetype =
-    requestedArchetype && unlockedArchetypes.has(requestedArchetype)
-      ? requestedArchetype
-      : (primaryArchetypeFromData ?? "");
 
   const returnToPrimaryHref = useMemo(() => {
     const params = new URLSearchParams();
@@ -3499,6 +3540,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             percentages={percentages}
             placeholderValues={placeholderValues}
             primaryArchetype={primaryArchetype}
+            priceShownFiredRef={priceShownFiredRef}
             pricingQuotes={pricingQuotes}
             archetypeContent={data.archetypeContent ?? {}}
             practiceTendencies={data.practiceTendencies ?? {}}
@@ -3588,6 +3630,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           percentages={percentages}
           placeholderValues={placeholderValues}
           primaryArchetype={primaryArchetype}
+          priceShownFiredRef={priceShownFiredRef}
           pricingQuotes={pricingQuotes}
           archetypeContent={data.archetypeContent ?? {}}
           practiceTendencies={data.practiceTendencies ?? {}}
@@ -3622,7 +3665,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
                 <button
                   type="button"
                   className="report-status-card__action"
-                  onClick={() => setCheckoutHandoff(null)}
+                  onClick={() => {
+                    // "You already own this plan": bought in another tab, say, after this
+                    // page loaded. Reload the report, or it goes on offering the plan.
+                    if (checkoutHandoff.alreadyOwned) retry();
+                    setCheckoutHandoff(null);
+                  }}
                 >
                   Back to your report
                 </button>
