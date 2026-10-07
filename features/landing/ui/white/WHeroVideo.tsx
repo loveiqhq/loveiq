@@ -208,6 +208,12 @@ const WHeroVideo: FC = () => {
     if (phaseRef.current !== "starting") return;
     clearStartTimer();
     resetFull();
+    // The button is disabled while it starts, and a focused control that is disabled
+    // loses focus to the page (measured: Chrome, Safari and Firefox), so a keyboard
+    // user who pressed Watch was left at the top of the page. Back on the button,
+    // unless they have moved on to something else meanwhile.
+    const active = document.activeElement;
+    refocusButtonRef.current = !active || active === document.body || active === buttonRef.current;
     moveTo("preview");
     syncPreview();
     trackHeroVideoError({ video: "full", reason });

@@ -423,6 +423,37 @@ describe("hero video — a start that fails", () => {
     expect(analytics.trackHeroVideoPlay.mock.calls).toEqual([[{ replay: false }]]);
   });
 
+  /**
+   * The button is disabled while the video starts, and browsers move focus off a focused
+   * control that becomes disabled (to the page body, in Chrome, Safari and Firefox). jsdom
+   * does neither that nor blur() on a disabled button, so focus is parked on an element that
+   * is then removed, which leaves it on the body as the browsers do. A keyboard user whose
+   * start failed was left at the top of the page.
+   */
+  it("hands focus back to the button after a failed start, unless the visitor moved on", async () => {
+    playResult = (el) => (isFull(el) ? rejectWith("NotSupportedError")() : Promise.resolve());
+    render(<WHeroVideo />);
+    button().focus();
+    tap();
+    const sink = document.createElement("input");
+    document.body.appendChild(sink);
+    sink.focus();
+    sink.remove();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => {});
+    expect(document.activeElement).toBe(button());
+
+    // Moved on to another control while it was starting: left there.
+    const elsewhere = document.createElement("a");
+    elsewhere.href = "#elsewhere";
+    document.body.appendChild(elsewhere);
+    tap();
+    elsewhere.focus();
+    await act(async () => {});
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
+  });
+
   it("resets after a timeout too, so a stalled download stops and a retry starts clean", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     playResult = (el) => (isFull(el) ? never() : Promise.resolve());
