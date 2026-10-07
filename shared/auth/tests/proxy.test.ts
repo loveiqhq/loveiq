@@ -361,6 +361,28 @@ describe("proxy middleware", () => {
     }
   });
 
+  // Per directive, not anywhere in the policy: the hosts above sat in connect-src only,
+  // and Safari sends the Ads conversion pings as images, so img-src refused them.
+  it("CSP lets the Google Ads conversion hosts load as images and as requests", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    const sources = (name: string) =>
+      csp
+        .split(";")
+        .map((d) => d.trim().split(/\s+/))
+        .find(([directive]) => directive === name)
+        ?.slice(1) ?? [];
+    for (const host of [
+      "https://googleads.g.doubleclick.net",
+      "https://stats.g.doubleclick.net",
+      "https://ad.doubleclick.net",
+      "https://pagead2.googlesyndication.com",
+    ]) {
+      expect(sources("img-src")).toContain(host);
+      expect(sources("connect-src")).toContain(host);
+    }
+  });
+
   it("CSP includes the configured PostHog host and a blob: worker source", () => {
     process.env.NEXT_PUBLIC_POSTHOG_HOST = "https://eu.i.posthog.com";
     proxy(makeNextRequest());
