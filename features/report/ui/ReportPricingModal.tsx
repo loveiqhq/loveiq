@@ -66,6 +66,11 @@ interface Props {
    * modal is opened without `targetArchetype` (i.e. scoped to primary).
    */
   primaryArchetype?: string | null;
+  /**
+   * The `price_shown` keys already sent this report visit, held by the page, which
+   * outlives this modal. Without it (a standalone preview), the modal's own lifetime.
+   */
+  priceShownFiredRef?: MutableRefObject<Set<string>>;
   quotes: ReportPriceQuotes | null;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
@@ -221,6 +226,7 @@ const ReportPricingModal: FC<Props> = ({
   onClose,
   onUnlock,
   primaryArchetype = null,
+  priceShownFiredRef,
   quotes,
   returnFocusRef,
   targetArchetype = null,
@@ -253,9 +259,11 @@ const ReportPricingModal: FC<Props> = ({
   // archetype_unlock, offer_link) should count toward intent. Those fire
   // trackPaywallInitiated from ReportPage at the click handler.
   const openedAtRef = useRef(0);
-  // The variant it opened as: ReportPage resets it to "default" in the same render that
-  // closes the modal, so by the time this effect sees the close it would read "default".
+  // The variant and archetype it opened as: ReportPage resets both (to "default", and the
+  // target to none) in the same render that closes the modal, so by the time this effect
+  // sees the close they would read "default" and the reader's own archetype.
   const openedVariantRef = useRef(variant);
+  const openedScopeRef = useRef(scopeArchetype);
   const dismissReasonRef = useRef<PaywallDismissSource | null>(null);
   const checkoutInitiatedRef = useRef(false);
   useEffect(() => {
@@ -266,7 +274,7 @@ const ReportPricingModal: FC<Props> = ({
           trackPaywallDismissed({
             source: dismissReasonRef.current ?? "browser_back",
             view_duration_ms: performance.now() - openedAtRef.current,
-            archetype: scopeArchetype ?? null,
+            archetype: openedScopeRef.current ?? null,
           });
         }
         openedAtRef.current = 0;
@@ -280,29 +288,32 @@ const ReportPricingModal: FC<Props> = ({
     if (openedAtRef.current === 0) {
       openedAtRef.current = performance.now();
       openedVariantRef.current = variant;
+      openedScopeRef.current = scopeArchetype;
     }
-    // scopeArchetype changes infrequently and would otherwise re-trigger this
-    // effect on every prop change; reading via a ref keeps deps minimal.
+    // Only an open or a close matters here; what it opened as is kept in the refs above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Per-plan `price_shown` emit. Deduped by (plan, pricingClusterId, discountStep)
-  // for as long as the modal is mounted, which is the whole report visit: the
-  // ladder advancing emits a new event, but re-opening the modal does NOT (the
-  // set is never cleared). Powers the "Price Shown" funnel column + per-cluster
-  // CVR analysis (bucket_performance counts these events), so emitting on every
+  // for the whole report visit: the ladder advancing emits a new event, but
+  // re-opening the modal does NOT (the set is never cleared). The page holds the
+  // set (`priceShownFiredRef`), because this modal is rebuilt whenever the report
+  // reloads its data, on every archetype switch; a set of its own re-sent every
+  // price each time. Powers the "Price Shown" funnel column + per-cluster CVR
+  // analysis (bucket_performance counts these events), so emitting on every
   // opening would change those rates; the UX checker's CTA hesitation allows for
   // it (features/ux-signals/logic/signals.ts).
-  const priceShownFiredRef = useRef<Set<string>>(new Set());
+  const ownPriceShownFiredRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!open) return;
     if (!quotes) return;
+    const fired = (priceShownFiredRef ?? ownPriceShownFiredRef).current;
     for (const card of REPORT_PURCHASE_PLANS) {
       const quote = quotes[card.plan];
       if (!quote) continue;
       const dedupeKey = `${card.plan}:${quote.pricingClusterId}:${quote.discountStep}`;
-      if (priceShownFiredRef.current.has(dedupeKey)) continue;
-      priceShownFiredRef.current.add(dedupeKey);
+      if (fired.has(dedupeKey)) continue;
+      fired.add(dedupeKey);
       trackPriceShown({
         plan: card.plan,
         price: quote.chargedPriceCents / 100,
@@ -315,7 +326,7 @@ const ReportPricingModal: FC<Props> = ({
         initial_price: quote.initialPriceCents / 100,
       });
     }
-  }, [open, quotes]);
+  }, [open, quotes, priceShownFiredRef]);
 
   useEffect(() => {
     if (open) {

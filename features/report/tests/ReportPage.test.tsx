@@ -95,6 +95,21 @@ vi.mock("@features/analytics/client", () => ({
   hasCookieYesConsent: () => true,
 }));
 
+// The real engagement timers, with what they are told to label recorded. Transparent otherwise.
+const engagementTimers = vi.hoisted(() => ({ calls: [] as unknown[] }));
+vi.mock("@features/report/ui/hooks/useReportEngagementTimers", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@features/report/ui/hooks/useReportEngagementTimers")>();
+  return {
+    useReportEngagementTimers: (
+      args: Parameters<typeof actual.useReportEngagementTimers>[0]
+    ): void => {
+      engagementTimers.calls.push(args);
+      actual.useReportEngagementTimers(args);
+    },
+  };
+});
+
 // The real V3Chapter, counted: the scroll-spy test below checks that moving the nav's
 // highlight renders no chapter again. Transparent to every other test.
 const v3ChapterRenders = vi.hoisted(() => ({ count: 0 }));
@@ -549,6 +564,36 @@ describe("ReportPage", () => {
     expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur");
   });
 
+  // `accessPlan` covers the reader's own report only (2026-10-06), so a reader who bought
+  // only another archetype's report was counted "locked" while reading it, under their own
+  // archetype: the admin timeline read "locked · Emotional Voyeur" for a bought report.
+  it.each([
+    ["the report they bought", "archetype=explorer-of-edges", "full_report", "Explorer of Edges"],
+    ["their own, still locked", "", "locked", "Emotional Voyeur"],
+  ])(
+    "labels report_viewed and the engagement timers by %s: its plan and its archetype",
+    async (_label, query, reportType, archetype) => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+      try {
+        const response = buildSuccessResponse();
+        response.data.unlockedArchetypes = ["Emotional Voyeur", "Explorer of Edges"];
+        mockUseReportData.mockReturnValue({
+          ...response,
+          data: { ...response.data, archetypeTiers: { "Explorer of Edges": "full_report" } },
+        });
+        engagementTimers.calls.length = 0;
+
+        render(<ReportPage />);
+
+        await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
+        expect(mockTrackReportViewed).toHaveBeenCalledWith(reportType, archetype);
+        expect(engagementTimers.calls.at(-1)).toEqual({ reportType, archetype });
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    }
+  );
+
   it(
     "surfaces pricing as unavailable when backend quotes are missing",
     () => {
@@ -719,6 +764,74 @@ describe("ReportPage", () => {
       // back (Figma 1382:2010). Nothing to measure in jsdom, but never a malformed one.
       expect(anchor === null || UNLOCK_ANCHOR_REGEX.test(anchor)).toBe(true);
       expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  // "You already own this plan" (409): bought in another tab, say. "Back to your report"
+  // only closed the card, so the page went on offering the plan it already sold.
+  it.each([
+    [
+      "reloads the report on the way back when the plan is already theirs (409)",
+      { message: "You already own this plan.", alreadyOwned: true },
+      1,
+    ],
+    ["does not reload it after any other refused checkout", { message: "Please try again." }, 0],
+  ])(
+    "%s",
+    async (_label, failure, reloads) => {
+      const user = userEvent.setup();
+      const retry = vi.fn();
+      mockUseReportData.mockReturnValue({ ...buildSuccessResponse(), retry });
+      mockStartReportCheckout.mockResolvedValue({ status: "error", ...failure });
+
+      render(<ReportPage />);
+      await user.click(
+        screen.getByRole("button", { name: /^only unlock my highest scoring report$/i })
+      );
+      await user.click(await screen.findByRole("button", { name: "Back to your report" }));
+
+      expect(retry).toHaveBeenCalledTimes(reloads);
+      expect(screen.queryByText(failure.message)).not.toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "sends each plan's price once per visit, though the pay screen is rebuilt on an archetype switch",
+    async () => {
+      // The fixture's ladder step opens the pay screen on load. An archetype switch
+      // reloads the report: the loading screen, then the report, pay screen and all, again.
+      // Report 3.0 (the default) and V1 (`?v4=0`) each hold their own pay screen.
+      for (const query of ["", "v4=0"]) {
+        mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+        try {
+          mockTrackPriceShown.mockClear();
+          const response = buildSuccessResponse();
+          mockUseReportData.mockReturnValue(response);
+          const view = render(<ReportPage />);
+          await waitFor(() => expect(mockTrackPriceShown).toHaveBeenCalled());
+          const sent = mockTrackPriceShown.mock.calls.length;
+
+          mockUseReportData.mockReturnValue({ data: null, status: "loading", error: null });
+          view.rerender(<ReportPage />);
+          expect(screen.queryByRole("dialog"), query).not.toBeInTheDocument();
+          mockUseReportData.mockReturnValue(response);
+          view.rerender(<ReportPage />);
+          await screen.findByRole("dialog");
+          expect(mockTrackPriceShown, query).toHaveBeenCalledTimes(sent);
+
+          // A new ladder step is a new price, and still counts.
+          const nextStep = buildSuccessResponse();
+          for (const quote of Object.values(nextStep.data.pricingQuotes!)) quote.discountStep = 2;
+          mockUseReportData.mockReturnValue(nextStep);
+          view.rerender(<ReportPage />);
+          await waitFor(() => expect(mockTrackPriceShown, query).toHaveBeenCalledTimes(2 * sent));
+          view.unmount();
+        } finally {
+          mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+        }
+      }
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
@@ -1181,6 +1294,29 @@ describe("ReportPage", () => {
         anchor: null,
       });
       mockSerializedAnchor.value = null;
+    });
+
+    it("names the archetype a row's pay screen was for when it is closed", async () => {
+      // The page resets the screen's archetype in the same render that closes it, and the
+      // dismissal used to read it from that render: the reader's own archetype instead.
+      const user = userEvent.setup();
+      // Nothing opens on its own: no ladder step, and the pop-up test's no_popup arm.
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1&popup=off"));
+      const response = buildSuccessResponse();
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue(response);
+
+      render(<ReportPage />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Unlock Explorer of Edges report", hidden: true })
+      );
+      await user.click(await screen.findByRole("button", { name: "Close pricing modal" }));
+
+      expect(vi.mocked(analytics.trackPaywallDismissed)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(analytics.trackPaywallDismissed)).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "close_button", archetype: "Explorer of Edges" })
+      );
     });
 
     it("leaves ?v3=1 with all of them", () => {
@@ -2443,6 +2579,46 @@ describe("ReportPage", () => {
       act(() => vi.advanceTimersByTime(1700));
 
       expect(exposure()).toHaveBeenCalledWith(expect.objectContaining({ variant: "popup" }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    // Backing out of Stripe reloads the report, and `?anchor` puts the reader back past
+    // the pop-up point: it opened again ~2s after they had declined it, and logged a
+    // second exposure. Both arms are held to one per submission per tab session alike.
+    it.each([
+      ["popup", "&popup=on"],
+      ["no_popup", "&popup=off"],
+    ])("offers the %s arm once per tab session, not again after a reload", (_arm, query) => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      lockedV4(query);
+
+      const first = render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(1700));
+      expect(exposure()).toHaveBeenCalledTimes(1);
+      first.unmount();
+
+      // The reload: a new page in the same tab.
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(3000));
+
+      expect(exposure()).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("still makes its one offer where the browser refuses storage (private mode)", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      const refuse = () => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      };
+      vi.stubGlobal("sessionStorage", { getItem: refuse, setItem: refuse });
+      lockedV4("&popup=on");
+
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(1700));
+
+      expect(exposure()).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
