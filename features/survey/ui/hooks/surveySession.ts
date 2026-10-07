@@ -332,6 +332,24 @@ export function getReportNurturePromo({
   }
 }
 
+/** Forget the stashed code once a purchase has used it: each code redeems once. */
+export function clearReportNurturePromo({
+  sessionId,
+  token,
+}: {
+  sessionId?: string | null;
+  token?: string | null;
+}): void {
+  if (!canUseStorage()) return;
+  const storageKey = getNurturePromoStorageKey({ sessionId, token });
+  if (!storageKey) return;
+  try {
+    sessionStorage.removeItem(storageKey);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 /** Remember that this tab finished the survey, and which report it produced. */
 export function rememberCompletedReport(token: string): void {
   if (!canUseStorage() || !token) return;
