@@ -97,3 +97,40 @@ export async function stampLandingArm(
   const merged = JSON.stringify({ ...rest, landing_variant: cookieArm });
   return merged.length <= 1000 ? merged : stripped;
 }
+
+/**
+ * Join a SESSION-DERIVED arm (C13's opening order, the email question test) to a
+ * `utm_tracker` blob, server-side. Pure: the caller derives the arm from the session id.
+ *
+ * The arm is a pure function of the stored session id, so the stamp is a convenience for
+ * grouping, never the record, and these rules prefer losing it to distorting anything:
+ *  - NEVER CREATES A TRACKER. `utm_tracker IS NOT NULL` means "has attribution data" to
+ *    get_dropout_funnel and three other analytics queries; a tracker made only to hold
+ *    an arm would count its visitor as 'direct' (36.3% of submissions have none).
+ *  - The browser's claim is always stripped, with or without an arm to put in its place:
+ *    the arm is derived, never claimed.
+ *  - Commits only within the 1000-char budget; over it, the arm is given up and the
+ *    tracker kept (minus any claim).
+ *  - A tracker that is not a JSON object is left exactly as it was, and one with
+ *    nothing to change is returned byte-identical.
+ */
+export function mergeTrackerArm(
+  tracker: string | null,
+  key: string,
+  arm: string | null
+): string | null {
+  if (!tracker) return tracker;
+  let base: unknown;
+  try {
+    base = JSON.parse(tracker);
+  } catch {
+    return tracker; // wasn't JSON: leave it exactly as it was
+  }
+  if (!base || typeof base !== "object" || Array.isArray(base)) return tracker;
+
+  const { [key]: claimed, ...rest } = base as Record<string, unknown>;
+  if (!arm) return claimed === undefined ? tracker : JSON.stringify(rest);
+  const merged = JSON.stringify({ ...rest, [key]: arm });
+  if (merged.length <= 1000) return merged;
+  return claimed === undefined ? tracker : JSON.stringify(rest);
+}

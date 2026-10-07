@@ -815,6 +815,79 @@ describe("POST /api/survey", () => {
     });
   });
 
+  describe("email question arm stamping on utm_tracker", () => {
+    /**
+     * Literal arms, as C13's fixtures above: a change to the hash or the salt must fail
+     * here, because it would re-split everyone in the middle of the test.
+     */
+    const EMAIL_ARM_FIXTURES = [
+      { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
+      { sessionId: "00000000-0000-4000-8000-000000000000", arm: "anonymous" },
+    ] as const;
+
+    const rpcTracker = () => {
+      const call = mockFetchWithTimeout.mock.calls.find((c) =>
+        String(c[0]).includes("/rpc/submit_survey")
+      );
+      if (!call) throw new Error("submit_survey RPC was never called");
+      return JSON.parse(call[1].body).p_utm_tracker;
+    };
+
+    beforeEach(() => {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+    });
+
+    it.each(EMAIL_ARM_FIXTURES)(
+      "stamps the email question the respondent saw ($arm)",
+      async ({ sessionId, arm }) => {
+        await POST(
+          makeRequest({
+            ...validBody(),
+            sessionId,
+            utmTracker: JSON.stringify({ utm_source: "google" }),
+          })
+        );
+        expect(JSON.parse(rpcTracker()).email_question_arm).toBe(arm);
+      }
+    );
+
+    it("replaces an email arm the browser claims with the derived one", async () => {
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: "00000000-0000-4000-8000-000000000007",
+          utmTracker: JSON.stringify({ utm_source: "google", email_question_arm: "anonymous" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker()).email_question_arm).toBe("control");
+    });
+
+    it("never creates a tracker just to hold it", async () => {
+      await POST(
+        makeRequest({ ...validBody(), sessionId: "00000000-0000-4000-8000-000000000000" })
+      );
+      expect(rpcTracker()).toBeNull();
+    });
+
+    it("gives it up before C13's arm when the 1000-char budget is tight", async () => {
+      // 969 characters: C13's 31 fit exactly, the email arm's do not.
+      const snug = JSON.stringify({ utm_campaign: "x".repeat(950) });
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: "00000000-0000-4000-8000-000000000007",
+          utmTracker: snug,
+        })
+      );
+      const out = JSON.parse(rpcTracker());
+      expect(out.question_order_arm).toBe("control");
+      expect(out.email_question_arm).toBeUndefined();
+    });
+  });
+
   const optInYes = () =>
     makeRequest({
       ...validBody(),
