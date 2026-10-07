@@ -413,6 +413,54 @@ describe("reportPricing", () => {
     }
   });
 
+  it("checkout refuses rather than charge All 14 without its credit", async () => {
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) {
+        return { ok: false, status: 503, json: async () => ({}) } as Response;
+      }
+      if (url.includes("/rest/v1/report_price_quote?id=eq.78")) {
+        return createJsonResponse([
+          {
+            id: 78,
+            personal_report_id: 9,
+            plan: "all_reports",
+            experiment_group: "B3",
+            base_price_bucket: "B3",
+            base_price: 29.99,
+            msrp: 29.99,
+            starting_price: 19.99,
+            current_price: 19.99,
+            initial_price: 19.99,
+            discount_step: 0,
+            discount_multiplier: 1,
+            metadata: null,
+          },
+        ]);
+      }
+      if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+        return createJsonResponse([
+          { id: 42, user_id: 7, utm_tracker: null, duration_ms: 1, app_user: { id: 7 } },
+        ]);
+      }
+      return createJsonResponse([]);
+    });
+    const args = {
+      now: new Date("2026-10-07T10:00:00.000Z"),
+      plan: "all_reports" as const,
+      quoteId: 78,
+      reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+    };
+
+    // The pay screen falls back to the full price...
+    await expect(getReportPriceQuoteForContext(args)).resolves.toEqual(
+      expect.objectContaining({ chargedPriceCents: 1999 })
+    );
+    // ...but checkout must not charge it after the screen may have shown the credit.
+    await expect(
+      getReportPriceQuoteForContext({ ...args, strictUpgradeCredit: true })
+    ).rejects.toThrow("upgrade_credit_lookup_failed");
+  });
+
   it("reuses the original same-session quote during checkout validation even after the ladder has stepped down", async () => {
     const pricingSessionId = "550e8400-e29b-41d4-a716-446655440010";
     const storedQuote = {

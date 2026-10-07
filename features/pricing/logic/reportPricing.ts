@@ -1460,6 +1460,7 @@ export async function getReportPriceQuoteForContext({
   quoteId,
   reportSessionId,
   reportToken,
+  strictUpgradeCredit = false,
   submissionId,
   userAgent,
 }: {
@@ -1469,6 +1470,8 @@ export async function getReportPriceQuoteForContext({
   quoteId?: number;
   reportSessionId?: string | null;
   reportToken?: string | null;
+  /** Checkout: throw when the All 14 credit cannot be read, never charge without it. */
+  strictUpgradeCredit?: boolean;
   submissionId?: number | null;
   userAgent?: string | null;
 }) {
@@ -1493,7 +1496,7 @@ export async function getReportPriceQuoteForContext({
     });
 
     if (validatedQuote) {
-      return withUpgradeCredit(validatedQuote, context.personalReportId);
+      return withUpgradeCredit(validatedQuote, context.personalReportId, strictUpgradeCredit);
     }
   }
 
@@ -1504,7 +1507,8 @@ export async function getReportPriceQuoteForContext({
       plan,
       pricingSessionId,
     }),
-    context.personalReportId
+    context.personalReportId,
+    strictUpgradeCredit
   );
 }
 
@@ -1559,12 +1563,12 @@ const STRIPE_MIN_CHARGE_CENTS = 50;
  * What a reader already paid for reports on this personal report: every succeeded payment
  * except All 14 itself, less refunds. All 14 credits it, so singles never add up to more
  * than All 14 costs. Before this, two singles on the lower list (€29.98) cost more than
- * All 14 (€19.99), and report 165 bought three in one night. €0 comps and test purchases
- * add nothing.
+ * All 14 (€19.99), and report 165 bought three in one night. €0 comps add nothing, and
+ * staff test purchases are left out like everywhere money is counted.
  */
 export async function getUpgradeCreditCents(personalReportId: number): Promise<number> {
   const response = await supabaseServiceFetch(
-    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&select=amount,refund_amount,currency,metadata&limit=100`
+    `/rest/v1/payment?personal_report_id=eq.${personalReportId}&status=eq.succeeded&is_test=is.false&select=amount,refund_amount,currency,metadata&limit=100`
   );
   if (!response.ok) {
     throw new Error("upgrade_credit_lookup_failed");
@@ -1599,15 +1603,21 @@ export function applyUpgradeCredit(
   };
 }
 
+/**
+ * A failed lookup shows the full price, as before the credit existed: never a broken pay
+ * screen. Checkout passes `strict`: charging the full price after the screen showed the
+ * credited one is worse than an error the reader can retry.
+ */
 async function withUpgradeCredit(
   quote: ReportPriceQuoteSnapshot | null,
-  personalReportId: number
+  personalReportId: number,
+  strict = false
 ): Promise<ReportPriceQuoteSnapshot | null> {
   if (!quote || quote.plan !== "all_reports") return quote;
   try {
     return applyUpgradeCredit(quote, await getUpgradeCreditCents(personalReportId));
   } catch (err) {
-    // The full price, as before the credit existed: never a broken pay screen.
+    if (strict) throw err;
     logger.warn({ err, personalReportId }, "pricing: upgrade credit lookup failed");
     return quote;
   }

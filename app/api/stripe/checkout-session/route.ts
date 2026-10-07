@@ -220,6 +220,7 @@ export async function POST(request: Request) {
       quoteId: parsed.data.quoteId ?? undefined,
       reportSessionId: parsed.data.reportSessionId ?? null,
       reportToken: parsed.data.reportToken ?? null,
+      strictUpgradeCredit: true,
       userAgent: request.headers.get("user-agent"),
     });
 

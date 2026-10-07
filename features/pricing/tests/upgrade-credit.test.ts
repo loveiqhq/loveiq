@@ -64,6 +64,7 @@ describe("upgrade credit towards All 14", () => {
     const url = String(mockFetchWithTimeout.mock.calls[0]![0]);
     expect(url).toContain("personal_report_id=eq.165");
     expect(url).toContain("status=eq.succeeded");
+    expect(url).toContain("is_test=is.false");
   });
 
   it("takes a single off All 14: €19.99 after a €14.99 single is €5.00", () => {
