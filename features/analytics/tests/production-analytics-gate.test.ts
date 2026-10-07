@@ -118,7 +118,7 @@ describe("production analytics gate", () => {
     // Registered inside `loaded`, which runs BEFORE posthog-js captures the
     // session's first $pageview. After init() instead, that one event per session
     // would ship with no environment on it.
-    expect(client).toMatch(/loaded:\s*\(ph\)\s*=>\s*ph\.register\(\{\s*deploy_env/);
+    expect(client).toMatch(/loaded:\s*\(ph\)\s*=>\s*\{\s*ph\.register\(\{\s*deploy_env/);
   });
 
   /**

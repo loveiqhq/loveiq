@@ -574,7 +574,6 @@ export function journeyFromPurchase(input: {
   utmTracker: string | null;
   experimentGroup: string | null;
   basePriceBucket: string | null;
-  landingVariant: string | null;
   deviceType: string | null;
   countryTier: string | null;
   amount: number | null;
@@ -591,8 +590,11 @@ export function journeyFromPurchase(input: {
     emailMasked: mask(input.email),
     internal: input.internal,
     arms: {
-      // utm_tracker first; the Stripe metadata copy is the fallback.
-      landing: stamped.landing ?? input.landingVariant,
+      // utm_tracker only. The Stripe session's copy is no fallback: checkout-session
+      // writes "white" when the buyer had no landing cookie, which is not an arm, and
+      // with round 3 of the landing test live this row is on every purchase message.
+      // No stamp reads "Not recorded", as on the survey message.
+      landing: stamped.landing,
       survey: stamped.survey,
       pricing: input.experimentGroup ?? input.basePriceBucket,
       // The forced-paywall axis was removed on 2026-08-31 and nothing stamps it
