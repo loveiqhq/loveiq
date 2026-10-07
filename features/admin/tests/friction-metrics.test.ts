@@ -379,9 +379,12 @@ describe("sessionEnds", () => {
   });
 
   it("numbers questions as the survey asks them today, and drops retired ones", () => {
-    // The email question is asked second to last, just before the opt-in.
-    expect(qn("00000")).toBe(`Q${ASKED.length - 1}`);
-    expect(qn("16015")).toBe(`Q${ASKED.length}`);
+    // As asked today (62 questions since the 5 Oct additions): the email question,
+    // then the opt-in straight after it, then the optional questions that close the
+    // survey. Numbers follow the survey's own order, not survey-data.ts's.
+    expect(qn("16015")).toBe(`Q${ASKED.indexOf("00000") + 2}`);
+    expect(ASKED.indexOf("00000")).toBeLessThan(ASKED.length - 1);
+    expect(qn("16020")).toBe(`Q${ASKED.length}`);
     // 03014 was retired on 2026-09-11. People who left on it then are real, but
     // there is no question left to fix, so it is not drawn.
     const ends = sessionEnds(

@@ -246,7 +246,13 @@ interface FunnelStepsPayload {
   kind: "funnel-steps";
   windowLabel?: string;
   title?: string;
-  steps: Array<{ label: string; count: number; pct: number | null; pctVisits?: number | null }>;
+  steps: Array<{
+    label: string;
+    count: number;
+    pct: number | null;
+    pctVisits?: number | null;
+    pctStarts?: number | null;
+  }>;
   worst?: number;
 }
 
@@ -1751,10 +1757,11 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
 
 const FUNNEL_ROW_H = 40;
 const FUNNEL_ROW_GAP = 6;
-const FUNNEL_LABEL_W = 230;
-const FUNNEL_COUNT_W = 86;
+const FUNNEL_LABEL_W = 200;
+const FUNNEL_COUNT_W = 76;
 const FUNNEL_PCT_W = 100;
-const FUNNEL_VISITS_W = 84;
+const FUNNEL_VISITS_W = 76;
+const FUNNEL_STARTS_W = 76;
 const FUNNEL_BAR_H = 18;
 const FUNNEL_GAP = 14;
 const FUNNEL_HEAD_H = 22;
@@ -1794,6 +1801,10 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
         s.pctVisits == null || !Number.isFinite(Number(s.pctVisits))
           ? null
           : Math.max(0, Number(s.pctVisits)),
+      pctStarts:
+        s.pctStarts == null || !Number.isFinite(Number(s.pctStarts))
+          ? null
+          : Math.max(0, Number(s.pctStarts)),
     }));
   if (steps.length === 0) {
     return {
@@ -1808,7 +1819,7 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
     };
   }
   const worst = typeof p.worst === "number" ? p.worst : -1;
-  // 28 = chartShell's padding, both sides; four gaps between the five columns.
+  // 28 = chartShell's padding, both sides; five gaps between the six columns.
   const trackW =
     WIDTH -
     2 * 28 -
@@ -1816,10 +1827,11 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
     FUNNEL_COUNT_W -
     FUNNEL_PCT_W -
     FUNNEL_VISITS_W -
-    4 * FUNNEL_GAP;
+    FUNNEL_STARTS_W -
+    5 * FUNNEL_GAP;
   const height =
     BODY_OVERHEAD + FUNNEL_HEAD_H + steps.length * (FUNNEL_ROW_H + FUNNEL_ROW_GAP) + FUNNEL_FOOT_H;
-  /** The two percentage columns' names, over them, so neither is read as the other. */
+  /** The percentage columns' names, over them, so none is read as another. */
   const colHead = (text: string, width: number) => (
     <div
       style={{
@@ -1848,6 +1860,7 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
         />
         {colHead("of step above", FUNNEL_PCT_W)}
         {colHead("of visits", FUNNEL_VISITS_W)}
+        {colHead("of starts", FUNNEL_STARTS_W)}
       </div>
       {steps.map((s, i) => {
         const isWorst = i === worst && s.pct !== null;
@@ -1925,6 +1938,17 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
               }}
             >
               {s.pctVisits === null ? "" : funnelPct(s.pctVisits)}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: FUNNEL_STARTS_W,
+                justifyContent: "flex-end",
+                fontSize: 17,
+                color: COLORS.textMuted,
+              }}
+            >
+              {s.pctStarts === null ? "" : funnelPct(s.pctStarts)}
             </div>
           </div>
         );

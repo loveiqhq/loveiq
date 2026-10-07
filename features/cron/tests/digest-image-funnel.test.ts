@@ -115,14 +115,23 @@ describe("digest-image: the funnel picture", () => {
     // Marcus, 2026-10-05: every rate as % of the step before AND % of visits. The
     // second one was dropped on 2026-09-19 for being misread, so both are named.
     const visits = [null, 8.23, 3.48, 0.25, 0.015];
+    const starts = [null, null, 42.33, 3.01, 0.19];
     const { element } = renderFunnelSteps(
       payload({
-        steps: payload().steps.map((s, i) => ({ ...s, pctVisits: visits[i] })),
+        steps: payload().steps.map((s, i) => ({
+          ...s,
+          pctVisits: visits[i],
+          pctStarts: starts[i],
+        })),
       })
     );
     const texts = walk(element).map(textOf);
     expect(texts).toContain("of step above");
     expect(texts).toContain("of visits");
+    expect(texts).toContain("of starts");
+    // The share of starts, from the row after the start: 42.3%, 3%, 0.2%.
+    for (const t of ["3%", "0.2%"]) expect(texts, t).toContain(t);
+    expect(texts.filter((t) => t === "42.3%")).toHaveLength(2);
     // Row by row: the step share and the visit share, both printed.
     for (const t of ["8.2%", "42.3%", "7.1%", "6.3%", "3.5%", "0.3%", "<0.1%"]) {
       expect(texts, t).toContain(t);

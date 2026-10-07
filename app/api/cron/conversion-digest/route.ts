@@ -819,12 +819,13 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const count = (n: number) => n.toLocaleString("en-US");
 
     /**
-     * Two percentages on every step: of the step above (where people are lost) and
-     * of all visits (what share of the people who came got this far). Marcus,
-     * 2026-10-05: "conversion rates need to always be expressed in % of previous
-     * step but also in percent of visits". The second one was taken out on
-     * 2026-09-19 because two unnamed percentages beside each other were misread,
-     * so both now carry their name in the picture, the alt text and the table.
+     * Three shares on every step: of the step above (where people are lost), of all
+     * visits, and of survey starts (the two stable baselines). Marcus, 2026-10-05:
+     * "conversion rates need to always be expressed in % of previous step but also in
+     * percent of visits", and on the call, of the baselines: "visits or survey
+     * started, both of them are interesting". Unnamed shares side by side were misread
+     * once (taken out 2026-09-19), so each carries its name in the picture, the alt
+     * text and the table. The share of starts begins below the survey-start row.
      *
      * Sent unrounded and uncapped: over 100 is real (see `share`) and the renderer
      * prints it as it is. A zero denominator is null, a blank, never a "0%".
@@ -833,6 +834,10 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
       i === 0 ? null : of > 0 ? (steps[i]!.count / of) * 100 : null;
     const visits = steps[0]?.count ?? 0;
+    const startsAt = steps.findIndex((s) => s.key === "started");
+    const starts = startsAt >= 0 ? steps[startsAt]!.count : 0;
+    const pctOfStarts = (i: number): number | null =>
+      startsAt >= 0 && i > startsAt ? pctOf(i, starts) : null;
     const funnelTitle = `The funnel, last ${WINDOW_DAYS} days`;
     const chartUrl = await signedChartUrl(
       {
@@ -843,13 +848,15 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           count: s.count,
           pct: pctOf(i, i > 0 ? steps[i - 1]!.count : 0),
           pctVisits: pctOf(i, visits),
+          pctStarts: pctOfStarts(i),
         })),
         worst: worstIndex,
       },
       "funnel-steps"
     );
-    const both = (i: number) =>
-      `${share(steps[i]!.count, steps[i - 1]!.count)} of the step above, ${share(steps[i]!.count, visits)} of visits`;
+    const shares = (i: number) =>
+      `${share(steps[i]!.count, steps[i - 1]!.count)} of the step above, ${share(steps[i]!.count, visits)} of visits` +
+      (startsAt >= 0 && i > startsAt ? `, ${share(steps[i]!.count, starts)} of survey starts` : "");
     if (chartUrl) {
       /**
        * The picture alone: no heading, no "Biggest drop" sentence, no caveat. Mark,
@@ -862,7 +869,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // Every step with its count, so a failed image load or a screen reader
         // still gets the whole funnel.
         alt_text: `${funnelTitle}: ${steps
-          .map((s, i) => `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${both(i)})`}`)
+          .map((s, i) => `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${shares(i)})`}`)
           .join("; ")}.`,
       });
     } else {
@@ -873,14 +880,15 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const rows = steps.map((s, i) => {
         const stepShare = i === 0 ? "—" : share(s.count, steps[i - 1]!.count);
         const visitShare = i === 0 ? "—" : share(s.count, visits);
-        return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}  ${visitShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
+        const startShare = startsAt >= 0 && i > startsAt ? share(s.count, starts) : "—";
+        return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}  ${visitShare.padStart(6)}  ${startShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
       });
       blocks.push(
         section(
           [
             `*${funnelTitle}*`,
             rows.join("\n"),
-            "_people  ·  % of the step above  ·  % of visits_",
+            "_people  ·  % of the step above  ·  % of visits  ·  % of survey starts_",
           ].join("\n")
         )
       );

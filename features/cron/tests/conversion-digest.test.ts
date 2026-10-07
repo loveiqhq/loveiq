@@ -232,7 +232,13 @@ interface FunnelChartPayload {
   kind: string;
   title: string;
   windowLabel: string;
-  steps: Array<{ label: string; count: number; pct: number | null; pctVisits?: number | null }>;
+  steps: Array<{
+    label: string;
+    count: number;
+    pct: number | null;
+    pctVisits?: number | null;
+    pctStarts?: number | null;
+  }>;
   worst: number;
 }
 
@@ -776,9 +782,11 @@ describe("conversion-digest handler", () => {
     const rows = caption.split("\n").filter((l) => l.startsWith("`"));
     expect(rows.length).toBeGreaterThan(3);
     expect(rows[0]).toContain("Visits");
-    // Three numbers a row (people, % of the step above, % of visits), named once.
-    expect(rows[1]).toMatch(/^`\s*[\d,]+\s+[\d.<%—]+\s+[\d.<%—]+`/);
-    expect(caption).toContain("_people  ·  % of the step above  ·  % of visits_");
+    // Four numbers a row (people and three shares), named once.
+    expect(rows[2]).toMatch(/^`\s*[\d,]+\s+[\d.<%—]+\s+[\d.<%—]+\s+[\d.<%—]+`/);
+    expect(caption).toContain(
+      "_people  ·  % of the step above  ·  % of visits  ·  % of survey starts_"
+    );
   });
 
   it("prints a quiet day's zero with no dash beside it", async () => {
@@ -1480,14 +1488,24 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).not.toContain("Break-even");
   });
 
-  it("carries TWO percentages per funnel row, each with its name", async () => {
+  it("carries THREE shares per funnel row, each with its name", async () => {
     /**
      * Marcus, 2026-10-05: "conversion rates need to always be expressed in % of
      * previous step but also in percent of visits". The second one was taken out
      * on 2026-09-19 because two unnamed percentages beside each other were
-     * misread, so both carry their name everywhere: the picture's column heads,
-     * the alt text and the fallback table's legend.
+     * misread, so each carries its name everywhere: the picture's column heads,
+     * the alt text and the fallback table's legend. On the call he named the two
+     * stable baselines, "visits or survey started, both of them are interesting",
+     * so the share of survey starts sits beside them from the row after the start.
      */
+    // Survey starts come from the sparkline read: without it there is no start row.
+    mockFetchFunnelCvrSparklines.mockResolvedValue({
+      days: Array.from({ length: 10 }, (_, k) => ({
+        day: new Date(Date.UTC(2026, 7, 10) + k * 86_400_000).toISOString().slice(0, 10),
+        visitors: 400,
+        starts: 90,
+      })),
+    });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const chart = funnelChart(arg.blocks);
@@ -1496,22 +1514,32 @@ describe("conversion-digest handler", () => {
     // The top step is the visits: nothing above it, and no share of itself.
     expect(chart!.steps[0]!.pct).toBeNull();
     expect(chart!.steps[0]!.pctVisits).toBeNull();
+    expect(chart!.steps[0]!.pctStarts).toBeNull();
     const visits = chart!.steps[0]!.count;
+    const startsAt = chart!.steps.findIndex((s) => s.label === "Survey started");
+    expect(startsAt, "the survey-start row").toBe(1);
+    const starts = chart!.steps[startsAt]!.count;
     for (const [i, step] of chart!.steps.entries()) {
       if (i === 0) continue;
-      expect(Object.keys(step).sort(), `two percentages on: ${step.label}`).toEqual([
+      expect(Object.keys(step).sort(), `three shares on: ${step.label}`).toEqual([
         "count",
         "label",
         "pct",
+        "pctStarts",
         "pctVisits",
       ]);
       expect(step.pctVisits).toBeCloseTo((step.count / visits) * 100, 6);
       expect(step.pct).toBeCloseTo((step.count / chart!.steps[i - 1]!.count) * 100, 6);
+      if (i <= startsAt) expect(step.pctStarts, `${step.label}: no share of itself`).toBeNull();
+      else expect(step.pctStarts).toBeCloseTo((step.count / starts) * 100, 6);
     }
-    // And the words name both, once per step.
+    // And the words name each one, once per step that has it.
     const alt = funnelAlt(arg.blocks);
     expect((alt.match(/of the step above/g) ?? []).length).toBe(chart!.steps.length - 1);
     expect((alt.match(/% of visits/g) ?? []).length).toBe(chart!.steps.length - 1);
+    expect((alt.match(/% of survey starts/g) ?? []).length).toBe(
+      chart!.steps.length - 1 - startsAt
+    );
   });
 
   it("draws the site-wide survey-reach trend through the AUDITED renderer", async () => {
