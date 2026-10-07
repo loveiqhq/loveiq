@@ -21,9 +21,19 @@ import {
   trackSurveyFormError,
   setReportSubmissionContext,
   setSurveyVariant,
+  setEmailQuestionArm,
+  trackExperimentExposure,
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { orderAskedQuestions } from "./questionOrder";
+import { EMAIL_QID, orderAskedQuestions } from "./questionOrder";
+import {
+  assignEmailQuestionArm,
+  EMAIL_QUESTION_EXPERIMENT,
+  resolveEmailQuestionOverride,
+  type EmailQuestionArm,
+} from "@shared/experiments/emailQuestionArm";
+import { applyEmailQuestionArm } from "@features/survey/anonymousEmail";
+import { getSessionId } from "./hooks/surveySession";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -134,6 +144,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const footerRef = useRef<HTMLDivElement | null>(null);
   const [footerFloating, setFooterFloating] = useState(false);
 
+  // The email question test: today's question against Marcus's anonymous redesign
+  // (Figma 11600:15119). Drawn from the session id with its own salt, so the split is
+  // independent of C13's. Unlike C13's arm it is not kept in the draft: it moves no
+  // question, so a resumed run skips nothing whichever arm it draws, and a run begun
+  // before the test launched is outside every readout by its start date.
+  // `?email=control|anonymous` previews either arm on dev and staging, never on
+  // production.
+  const [emailArm] = useState<EmailQuestionArm>(() => {
+    const devParam =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("email");
+    return resolveEmailQuestionOverride(devParam) ?? assignEmailQuestionArm(getSessionId());
+  });
+
   // Questions answered before the survey opened (the landing-page card) are
   // dropped from the flow so nobody is asked twice. Their answers stay in
   // `answers` and submit + score exactly like the rest, so the total is
@@ -147,14 +172,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // would otherwise skip the questions the variant moves forward). A fresh run is
   // bucketed by its session id; no session id (storage blocked) means control.
   // `?order=control|variant` previews either arm on dev and staging, never on production.
+  // The email test's copy goes onto the question in the same pass, so the heading, the
+  // screen-reader line and the jump menu all read the same words.
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
     () =>
       orderAskedQuestions(surveyQuestions, orderArm)
         .filter((q) => !isHidden(q.qId))
-        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
-    [prefilledKey, orderArm]
+        .filter((q) => !prefilledKey.split(",").includes(q.qId))
+        .map((q) => applyEmailQuestionArm(q, emailArm)),
+    [prefilledKey, orderArm, emailArm]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
@@ -179,6 +207,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
      */
     setSurveyVariant(surveyVariant);
   }, [surveyVariant]);
+
+  // The email test's exposure, the per-arm denominator: once, the first time the email
+  // question is on screen, which is also when the arm goes onto PostHog and GA4.
+  const emailExposureFired = useRef(false);
+  const onEmailQuestion = question?.qId === EMAIL_QID;
+  useEffect(() => {
+    if (!onEmailQuestion || emailExposureFired.current) return;
+    emailExposureFired.current = true;
+    setEmailQuestionArm(emailArm);
+    trackExperimentExposure({
+      experiment: EMAIL_QUESTION_EXPERIMENT,
+      variant: emailArm,
+      surface: "survey_email_question",
+    });
+  }, [onEmailQuestion, emailArm]);
 
   // Post-survey completion phase management
   // Mounting onto a finished run: a pending submission shows its retry screen. With none,
@@ -275,12 +318,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // The server's own rule (features/survey/email.ts): an address this let through and the
     // server refused stranded the reader at the final submit.
     if (!isValidSurveyEmail(currentAnswer)) return false;
+    // The email test's anonymous arm draws no confirm box.
+    if (emailArm === "anonymous") return true;
     return (
       emailConfirmValue.trim().length > 0 &&
       tidySurveyEmail(emailConfirmValue).toLowerCase() ===
         tidySurveyEmail(currentAnswer).toLowerCase()
     );
-  }, [question, currentAnswer, emailConfirmValue]);
+  }, [question, currentAnswer, emailConfirmValue, emailArm]);
 
   const isSelectionCountValid = useMemo(() => {
     if (question?.answerType !== "multiple") return true;
@@ -798,6 +843,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                   forceValidation={attemptedNext}
                   confirmValue={emailConfirmValue}
                   onConfirmChange={setEmailConfirmValue}
+                  emailArm={emailArm}
                 />
               )}
               {question.answerType === "scale" && (

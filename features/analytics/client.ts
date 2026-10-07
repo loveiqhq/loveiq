@@ -7,6 +7,10 @@ import {
   isLandingVariant,
   type LandingVariant,
 } from "@shared/experiments/landingVariant";
+import {
+  EMAIL_QUESTION_ARM_KEY,
+  type EmailQuestionArm,
+} from "@shared/experiments/emailQuestionArm";
 
 type GTag = {
   (command: "event", eventName: string, params?: Record<string, unknown>): void;
@@ -389,6 +393,21 @@ export const setLandingVariant = (variant: LandingVariant | null) => {
   if (variant) posthog.register({ landing_variant: variant });
   if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
     gtagSend("set", "user_properties", { landing_variant: variant });
+  }
+};
+
+/**
+ * The email question test's arm (`survey-email-anonymous`), set the first time the
+ * email question shows. PostHog carries it on every later event and GA4 takes it as a
+ * user property (consent-gated like all GA4 traffic; register a user-scoped custom
+ * dimension `email_question_arm` to see it in GA4 reports). Same key as the server's
+ * utm_tracker stamp, so every source groups by one name.
+ */
+export const setEmailQuestionArm = (arm: EmailQuestionArm) => {
+  if (typeof window === "undefined") return;
+  posthog.register({ [EMAIL_QUESTION_ARM_KEY]: arm });
+  if (isProductionSite() && hasCookieYesConsent("analytics")) {
+    gtagSend("set", "user_properties", { [EMAIL_QUESTION_ARM_KEY]: arm });
   }
 };
 
