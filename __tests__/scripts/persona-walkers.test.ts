@@ -302,6 +302,16 @@ describe("a walk", () => {
     if (curly) expect(findQuestion([curly.question.replace(/'/g, "’")])?.qId).toBe(curly.qId);
   });
 
+  it("recognises the email question in the email test's anonymous arm, and answers it with the address", () => {
+    const anonymous = findQuestion(["What’s your email? Feel free to use an anonymous one."]);
+    expect(anonymous?.qId).toBe("00000");
+    // Labelled with the arm's own words, so the walker finds the one field by them.
+    expect(anonymous?.question).toBe("What’s your email? Feel free to use an anonymous one.");
+    expect(answerFor(anonymous!, {}, "walk@resend.dev", "Walker")).toBe("walk@resend.dev");
+    // Today's question is still found as itself.
+    expect(findQuestion(["What is your email?"])?.question).toBe("What is your email?");
+  });
+
   it("gives the persona's answer, and its own name, email and country", () => {
     const persona = personasFile.personas[0]!;
     const email = "delivered+walker-test@resend.dev";

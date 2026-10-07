@@ -31,6 +31,7 @@ import { chromium, devices, webkit, type Locator, type Page } from "playwright";
 
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
+import { applyEmailQuestionArm } from "@features/survey/anonymousEmail";
 
 import { stagingCookies } from "../probes/staging-cookie.mjs";
 import personasFile from "./personas.json";
@@ -159,7 +160,21 @@ export interface Walk {
 
 const norm = (s: string) =>
   s.replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().toLowerCase();
-const BY_TEXT = new Map(surveyQuestions.map((q) => [norm(q.question), q]));
+/**
+ * Each question by its heading, plus the email question as the email test's anonymous arm
+ * asks it (features/survey/anonymousEmail.ts). Half of all walks draw that arm; unknown, its
+ * heading fell through to `answerGenerically`, which typed "Walker" into the email field, and
+ * the walk stopped there. Keyed to the arm's own copy, so the walker answers it as the email
+ * question and finds the field by the words the field is labelled with.
+ */
+const BY_TEXT = new Map(
+  surveyQuestions.flatMap((q) => {
+    const anonymous = applyEmailQuestionArm(q, "anonymous");
+    return anonymous === q
+      ? [[norm(q.question), q] as const]
+      : [[norm(q.question), q] as const, [norm(anonymous.question), anonymous] as const];
+  })
+);
 
 /**
  * Staging, or this machine when asked for explicitly. Never loveiq.org: a walk submits a
