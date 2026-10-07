@@ -148,10 +148,12 @@ describe("hero video — what the server sends", () => {
     expect(html).not.toContain(HERO_PREVIEW_SRC);
     // Not "ready" until hydrated: before then the button has no click handler.
     expect(html).not.toContain("data-ready");
-    // The full video is in the page, but preload="none" fetches nothing until the tap.
+    // The full video is in the page with NO src, so there is nothing to fetch until the tap
+    // names it. preload="none" alone was not enough: WebKit on Linux still requested it.
     const fullTag = /<video[^>]*data-testid="hero-video-full"[^>]*>/.exec(html)?.[0] ?? "";
-    expect(fullTag).toContain(`src="${HERO_VIDEO_SRC}"`);
+    expect(fullTag).not.toContain("src=");
     expect(fullTag).toContain('preload="none"');
+    expect(html).not.toContain(HERO_VIDEO_SRC);
     // The poster: eager and high priority, because on a desktop it is the largest thing above the fold.
     const img = /<img[^>]*>/.exec(html)?.[0] ?? "";
     expect(img).toContain(encodeURIComponent(HERO_POSTER_SRC));
@@ -252,9 +254,12 @@ describe("hero video — playing it", () => {
   it("starts the full video with sound inside the tap itself", () => {
     render(<WHeroVideo />);
     const { preview, full } = media();
+    expect(full.getAttribute("src")).toBeNull();
     fireEvent.click(screen.getByTestId("hero-video-play"));
 
     // Synchronously, inside the click: iOS plays with sound only from within a gesture.
+    // The tap names the file first, then plays it.
+    expect(full.getAttribute("src")).toBe(HERO_VIDEO_SRC);
     expect(played).toContain(full);
     expect(full.muted).toBe(false);
     expect(paused).toContain(preview);

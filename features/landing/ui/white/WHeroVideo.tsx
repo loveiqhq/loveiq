@@ -21,8 +21,9 @@ import {
  *   2. a 7.5 s silent loop of the opening ("the animated GIF that already rolls" asked
  *      for at the 2026-10-06 sync), which only rolls on screen, in a visible tab, and
  *      never under reduced motion, Save-Data or a 2G/3G link;
- *   3. the full video with sound, mounted from the start with `preload="none"` so a tap
- *      can call `play()` inside the gesture — iOS plays with sound only from one.
+ *   3. the full video with sound, mounted from the start but with no src: the tap names
+ *      the file and calls `play()` inside the gesture (iOS plays with sound only from
+ *      one), so no engine fetches a byte of it before the tap.
  *
  * Files: encoded from Marcus's VEED export (see public/AGENT_README.md). The captions are
  * burned in, so the silent loop stays readable and no caption track is needed.
@@ -193,6 +194,10 @@ const WHeroVideo: FC = () => {
     if (!full || phaseRef.current !== "preview") return;
     // Everything up to play() happens inside the tap, before any state update.
     previewRef.current?.pause();
+    // The file is named only now. With the src in the page and `preload="none"`, WebKit
+    // on Linux still opened a request for the 5 MB file on load (CI, 2026-10-07); with
+    // no src there is nothing any engine can fetch before the tap.
+    if (!full.getAttribute("src")) full.src = HERO_VIDEO_SRC;
     full.muted = false;
     full.currentTime = 0;
     milestonesSentRef.current = new Set();
@@ -314,7 +319,6 @@ const WHeroVideo: FC = () => {
       <video
         ref={fullRef}
         data-testid="hero-video-full"
-        src={HERO_VIDEO_SRC}
         preload="none"
         playsInline
         controls={fullShowing}
