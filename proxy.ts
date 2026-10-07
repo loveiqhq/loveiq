@@ -728,9 +728,16 @@ export async function proxy(request: NextRequest) {
   // replay (Mark, 2026-10-07), while visitors, on our origin, saw them fine. Public
   // icons, fonts and videos hold nothing to protect; pages and API responses keep
   // `same-origin`. The same header broke the email logo in Outlook (2026-10-04).
+  // The extension alone does not make a path public: `/api/admin/submissions/2373.png`
+  // is a submission (its route parseInt()s the id), so /api and /admin never relax.
+  const corpPath = request.nextUrl.pathname;
   response.headers.set(
     "Cross-Origin-Resource-Policy",
-    STATIC_MEDIA_RE.test(request.nextUrl.pathname) ? "cross-origin" : "same-origin"
+    STATIC_MEDIA_RE.test(corpPath) &&
+      !corpPath.startsWith("/api/") &&
+      !corpPath.startsWith("/admin")
+      ? "cross-origin"
+      : "same-origin"
   );
 
   // Set CSRF cookie if not present
