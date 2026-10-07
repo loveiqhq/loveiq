@@ -22,12 +22,6 @@ import {
   isSectionIncludedInEssentials,
   type ReportAccessPlan,
 } from "@features/report/server/access";
-import {
-  fromArchetypeSlug,
-  isArchetypeName,
-  toArchetypeSlug,
-  type ArchetypeName,
-} from "@features/report/server/archetypeSlug";
 
 export interface ChapterNudgeEntry {
   sectionId: string;
@@ -109,17 +103,8 @@ const CHAPTER_TEASE_TARGET_WORDS = 100;
 // words, so this only ever excludes degenerate / near-empty content.
 const MIN_CHAPTER_WORDS = 40;
 
-/**
- * Normalize a stored archetype string to a current (V9) archetype name so it
- * matches the keys in `archetypeContent`. Handles legacy renames (e.g.
- * "Approval Seeker" → "Tender Devotee"). Returns null for anything unknown.
- */
-export function normalizeArchetypeName(raw: string | null | undefined): ArchetypeName | null {
-  if (!raw) return null;
-  if (isArchetypeName(raw)) return raw;
-  const slug = toArchetypeSlug(raw);
-  return slug ? fromArchetypeSlug(slug) : null;
-}
+// Lives with the other archetype-name helpers now; re-exported for existing callers.
+export { normalizeArchetypeName } from "@features/report/server/archetypeSlug";
 
 /**
  * Read the `chapterNudgesSent` section-id list out of a quote's metadata blob.

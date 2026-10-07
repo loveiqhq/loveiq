@@ -1,12 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import {
   useState,
   useEffect,
   useRef,
-  type CSSProperties,
   type FC,
   type MutableRefObject,
+  type ReactNode,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import {
@@ -17,11 +18,12 @@ import {
   type ReportPurchasePlan,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import type {
+  ReportPriceQuotes,
+  ReportPriceQuoteSnapshot,
+} from "@features/pricing/logic/reportPricing";
 import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
-import PaywallTestimonials from "./PaywallTestimonials";
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
-import { ARCHETYPES_COMPARED, QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
   trackPaywallDismissed,
@@ -29,6 +31,27 @@ import {
   type PaywallDismissSource,
 } from "@features/analytics/client";
 import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
+import "./paygate.css";
+
+/**
+ * The paygate — Pricing 3.0's two plans, as Marcus and Mark finalised them at the
+ * 1 Oct sync: paygate-mobile (Figma 842:584) below 960px, paygate-desktop (963:6)
+ * from there, with the "Most popular" pill (987:624) on All 14 in both.
+ *
+ * Kept from the frames on purpose, and why:
+ *   - "14-day money-back guarantee." on BOTH cards. The single report's frames say
+ *     7-day; Fatih, 29.09, kept the 14 days the Terms, the landing page and every
+ *     other surface promise (V4PremiumCard, the sticky footer), flagged to Mark.
+ *   - Prices in the site's own format, "€39.99", as Stripe, the emails and the
+ *     report show them — not the frames' "€39,99".
+ *   - The frames' slips put right: a duplicated "Your complete archetype report" row,
+ *     "report s", desktop card 01's "Money-back guarantee." twice, the first review's
+ *     missing opening quote. Where the two frames word a card differently the phone
+ *     takes the phone's copy (paygate-mobile is the more complete) — except the single
+ *     report's title and line, which each frame gives its own (`stackedTitle`).
+ *   - No page footer: 963:6's "© 2026 Archetype Reports" bar is page chrome, and this
+ *     is a dialog over the report. The close button stays for the same reason.
+ */
 
 interface Props {
   accessPlan?: ReportAccessPlan;
@@ -43,144 +66,157 @@ interface Props {
    * modal is opened without `targetArchetype` (i.e. scoped to primary).
    */
   primaryArchetype?: string | null;
-  quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  /**
+   * The `price_shown` keys already sent this report visit, held by the page, which
+   * outlives this modal. Without it (a standalone preview), the modal's own lifetime.
+   */
+  priceShownFiredRef?: MutableRefObject<Set<string>>;
+  quotes: ReportPriceQuotes | null;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
   /**
    * "default" — original behaviour.
-   * "offer" — discount email deep-link (?offer=1): orange-accent headline +
-   *   "Extra N% OFF" pill on the Full card when ladder has progressed past 50%.
-   * "share" — opened when a free-plan user taps the share button: header copy
-   *   pivots to the sharing pitch (Figma node 6389-106).
+   * "offer" — discount email deep-link (?offer=1). Draws the same screen; the code is
+   *   applied on Stripe's page.
+   * "recipient" — someone reading a report that was shared with them. Only its owner can
+   *   unlock it, so no prices: the way forward is a report of their own.
    */
-  variant?: "default" | "offer" | "share";
+  variant?: "default" | "offer" | "recipient";
 }
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-// Orange→purple gradient used for the italic emphasis in the "Why unlock
-// Reports?" cards (Figma 8442-16168).
-const gradientTextStyle: CSSProperties = {
-  background: "linear-gradient(90deg, #fe6839 0%, #a855f7 100%)",
-  WebkitBackgroundClip: "text",
-  backgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  color: "transparent",
-};
-
-// "Why unlock Reports?" 2×2 cards (Figma 8442-16168). Card 04 is price-prefixed
-// at render (filled from the cheapest live quote).
-const WHY_CARDS = [
+/**
+ * "Why unlock your Report?" — 842:658 / 963:86. `lead`, then `emph` in the brand gradient.
+ * Every heading here is in the report's 02.10 heading case (features/report/logic/titleCase.ts);
+ * the frames still carry the sentence case they were drawn in.
+ */
+const WHY_CARDS: ReadonlyArray<{
+  body: string;
+  emph: string;
+  /** 842:660 sets "Money-back guarantee." in the guarantee's green, bold. */
+  green?: string;
+  lead?: string;
+  tail?: string;
+}> = [
   {
-    num: "01",
-    tag: "Risk free",
-    lead: "14-day money-back guarantee.",
-    emph: "Zero risk.",
-    body: "Read the full report. If it doesn’t land, every cent back, no questions.",
-    priceLed: false,
+    green: "Money-Back Guarantee.",
+    emph: "Zero Risk.",
+    body: "Read the full report. If it doesn’t land, every cent back, no questions asked.",
   },
   {
-    num: "02",
-    tag: "Deep clarity",
-    lead: "Understand one of life’s most important areas:",
-    emph: "sexuality, desire, love, and intimacy.",
+    emph: "Insights From Hundreds of Research Papers and Books.",
+    body: "Your report is based on insights from hundreds of scientific papers and leading books on sexuality.",
+  },
+  {
+    // 963:94's "50+"; 842:663 has "+ 50", with a stray space.
+    emph: "50+ Pages",
+    tail: " That Can Change Your Life",
     body: "Most of us were never taught any of this. Your report finally puts language to it.",
-    priceLed: false,
   },
   {
-    num: "03",
-    tag: "Break patterns",
-    lead: "Stop repeating old patterns",
-    emph: "and finally understand what drives them.",
-    body: "The same dynamics show up across relationships for a reason. See yours, named.",
-    priceLed: false,
+    lead: "Become ",
+    emph: "an Expert Around Your Sexuality",
+    body: "Learn the essential concepts and language to better understand and improve your sexuality grounded in the latest science and practical wisdom.",
+  },
+];
+
+/**
+ * "Real people love & appreciate our insights." — 842:684 / 987:757. The quote is set
+ * in Lora Italic with its key phrase upright (Lora Regular), the frames' own emphasis.
+ */
+const REVIEWS: ReadonlyArray<{
+  avatar: string;
+  emph: string;
+  name: string;
+  post: string;
+  pre: string;
+  role: string;
+}> = [
+  {
+    avatar: "/report/paygate/avatar-dorian.png",
+    name: "Dorian, 34",
+    role: "File manager",
+    pre: "“The ",
+    emph: "results are extensive and spot-on",
+    post: ", without the test being too long. I got to know myself better, and it will help my partner understand me better as well.”",
   },
   {
-    num: "04",
-    tag: "Lifetime value",
-    lead: "For the price of a cocktail or a movie ticket,",
-    emph: "get insights that change how you connect and desire.",
-    body: "one time. Yours forever — re-read it, share it, return to it.",
-    priceLed: true,
+    avatar: "/report/paygate/avatar-richard.png",
+    name: "Richard Petrich, 34",
+    role: "Entrepreneur",
+    pre: "“The results were ",
+    emph: "more insightful than I expected",
+    post: ". It connected dots between emotional triggers and communication styles I hadn’t noticed before. Solid UX, too.”",
   },
+  {
+    avatar: "/report/paygate/avatar-philipp.png",
+    name: "Philipp Leonhard, 42",
+    role: "Product Owner IT",
+    pre: "“I’d never really explored my sexuality or the patterns behind it before. I already learned a lot just from taking the test, but the ",
+    emph: "insights in the full report were truly eye-opening. Absolutely worth it.",
+    post: "”",
+  },
+  {
+    avatar: "/report/paygate/avatar-marija.png",
+    name: "Marija Mustapić, 41",
+    role: "IT Infrastructure",
+    pre: "“Unlocking my report was ",
+    emph: "one of the best investments made for my sexuality",
+    post: ". It is shockingly precise.”",
+  },
+];
+
+/**
+ * 842:591's row: Apple Pay, Visa, Google Pay, Klarna, American Express, Mastercard.
+ * The marks are the frame's own artwork (public/report/paygate/mark-*.svg), except
+ * Apple Pay's: 842:591 sets "Pay" after U+F8FF, a glyph only Apple's fonts have, so
+ * that one is cut from the repo's Apple Pay mark (public/payment-logos). PayPal is not
+ * in the row: Checkout cannot take PayPal (#451 on main).
+ */
+const PAYMENT_MARKS = [
+  { logo: "apple-pay", label: "Apple Pay" },
+  { logo: "visa", label: "Visa" },
+  { logo: "google-pay", label: "Google Pay" },
+  { logo: "klarna", label: "Klarna" },
+  { logo: "amex", label: "American Express" },
+  { logo: "mastercard", label: "Mastercard" },
 ] as const;
 
-function PricingMethodMark({
-  logo,
-  label,
-}: {
-  label: string;
-  logo: "apple-pay" | "google-pay" | "klarna" | "mastercard" | "visa" | "amex";
-}) {
-  return (
-    <span
-      className="report-pricing-modal__payment-method report-pricing-modal__payment-method--logo"
-      role="img"
-      aria-label={label}
-    >
-      <span
-        className={`report-pricing-modal__payment-logo report-pricing-modal__payment-logo--${logo}`}
-        aria-hidden="true"
-      />
-    </span>
-  );
-}
+/** The brand gradient over a run of text (842:597's "Sexual Self"). */
+const Gradient: FC<{ children: ReactNode }> = ({ children }) => (
+  <em className="rpg-gradient">{children}</em>
+);
 
-// Whole euros without a ".00" tail (Figma renders "Save €5"); fractional amounts
-// keep 2 decimals ("Save €4.50").
-function formatSaveAmount(cents: number): string {
-  const euros = cents / 100;
-  return `€${Number.isInteger(euros) ? euros.toFixed(0) : euros.toFixed(2)}`;
-}
-
-function getCardPricing(
-  _card: ReportPurchasePlan,
-  quote: ReportPriceQuoteSnapshot | null | undefined
-) {
+function getCardPricing(quote: ReportPriceQuoteSnapshot | null | undefined) {
   if (!quote) {
-    return {
-      available: false,
-      badge: null,
-      priceLabel: "Pricing unavailable",
-      strikePriceLabel: null,
-      startingStrikePriceLabel: null,
-      saveLabel: null,
-    };
+    return { available: false, offLabel: null, priceLabel: null, strikeLabel: null } as const;
   }
-
-  // The charged price, which every surface and the Stripe line item read. A bucket
-  // run out. `strikeEligible` and the badge below both compare against it, so a bucket
-  // whose MSRP the surcharge overtakes simply loses its anchor instead of advertising a
-  // cheaper past.
+  // The charged price, which every surface and the Stripe line item read. The strike
+  // and the "N% off" both compare against it, so a bucket priced at its own anchor
+  // (the single report, both arms) simply draws no strike.
   const currentCents = quote.chargedPriceCents;
-  const strikeCents = quote.msrpCents;
-  const startingCents = quote.startingPriceCents;
-  // Hide strike when the MSRP and current price are equal (e.g. legacy
-  // pre-migration rows where `msrpCents` backfilled to the same value) so the
-  // modal doesn't render a pointless line-through over an identical number.
-  const strikeEligible = typeof strikeCents === "number" && strikeCents > currentCents;
-  // Secondary strike = the regular sale price (between MSRP and current). Only
-  // shown in offer mode when the discount ladder has dropped current below
-  // starting AND starting is itself below MSRP.
-  const startingEligible =
-    typeof startingCents === "number" &&
-    startingCents > currentCents &&
-    (!strikeEligible || (typeof strikeCents === "number" && startingCents < strikeCents));
+  const strikeLabel = getReportPurchaseStrikePrice(quote.msrpCents, currentCents);
+  const badge = strikeLabel
+    ? getReportPurchaseBadgeFromPrice({ strikeCents: quote.msrpCents, currentCents })
+    : null;
   return {
     available: true,
-    badge: getReportPurchaseBadgeFromPrice({ strikeCents, currentCents }),
+    // "20% OFF" → the frames' "20% off".
+    offLabel: badge ? badge.toLowerCase() : null,
     priceLabel: formatReportPurchasePrice(currentCents),
-    strikePriceLabel: strikeEligible ? getReportPurchaseStrikePrice(strikeCents) : null,
-    startingStrikePriceLabel: startingEligible ? getReportPurchaseStrikePrice(startingCents) : null,
-    // Inline "Save €X" pill (Figma 8442-16168) — the euro amount off the strike,
-    // whole euros shown without ".00" (Figma renders "Save €5", not "Save €5.00").
-    saveLabel:
-      strikeEligible && typeof strikeCents === "number"
-        ? formatSaveAmount(strikeCents - currentCents)
-        : null,
-  };
+    strikeLabel,
+  } as const;
 }
+
+/** A card's title: its lead in the card's emphasis, the rest in Lora Regular. */
+const CardTitle: FC<{ lead: string; text: string }> = ({ lead, text }) => (
+  <>
+    <span className="rpg-card__lead">{lead}</span>
+    {text.startsWith(lead) ? text.slice(lead.length) : ` ${text}`}
+  </>
+);
 
 const ReportPricingModal: FC<Props> = ({
   accessPlan = null,
@@ -190,6 +226,7 @@ const ReportPricingModal: FC<Props> = ({
   onClose,
   onUnlock,
   primaryArchetype = null,
+  priceShownFiredRef,
   quotes,
   returnFocusRef,
   targetArchetype = null,
@@ -208,36 +245,7 @@ const ReportPricingModal: FC<Props> = ({
   const touchStartYRef = useRef<number | null>(null);
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
 
-  const isOffer = variant === "offer";
-  const isShare = variant === "share";
-  const subtitle = isShare
-    ? "Your current plan does not include report sharing. Upgrade to learn more about yourself, share your insights, and spark honest, meaningful conversations."
-    : targetArchetype
-      ? `Unlock the complete ${targetArchetype} report \u2014 full attachment, desire drivers, practices, and growth paths for this archetype.`
-      : isOffer
-        ? "Unlock your complete archetype report \u2014 comprehensive coverage of your archetype probabilities, sexual stage, attachment style, desire drivers, and growth paths."
-        : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
-  const planCards = REPORT_PURCHASE_PLANS;
-
-  // Cheapest live price — prefixes the "Lifetime value" why-card ("<price>, one
-  // time…"). Read from the quote, never a literal, so it follows the catalogue.
-  const cheapestPriceLabel = quotes?.full_report
-    ? formatReportPurchasePrice(quotes.full_report.chargedPriceCents)
-    : null;
-
-  // "Extra N% OFF" pill on Full card — communicates the ladder depth relative
-  // to the starting-sale price (NOT MSRP), so it reads as bonus savings on top
-  // of the baseline Full Report discount. Fires from step 2 (72h) onward.
-  const fullQuote = quotes?.full_report ?? null;
-  const extraDiscountPct =
-    fullQuote && fullQuote.startingPriceCents > 0
-      ? Math.max(
-          0,
-          Math.round((1 - fullQuote.chargedPriceCents / fullQuote.startingPriceCents) * 100)
-        )
-      : 0;
-  const showExtraDiscountPill =
-    isOffer && !!fullQuote && fullQuote.discountStep >= 2 && extraDiscountPct > 0;
+  const isRecipient = variant === "recipient";
 
   // Dismiss tracking — openedAtRef captures when the modal became visible;
   // dismissReasonRef is set by the 3 dismiss code paths (escape / backdrop /
@@ -251,16 +259,22 @@ const ReportPricingModal: FC<Props> = ({
   // archetype_unlock, offer_link) should count toward intent. Those fire
   // trackPaywallInitiated from ReportPage at the click handler.
   const openedAtRef = useRef(0);
+  // The variant and archetype it opened as: ReportPage resets both (to "default", and the
+  // target to none) in the same render that closes the modal, so by the time this effect
+  // sees the close they would read "default" and the reader's own archetype.
+  const openedVariantRef = useRef(variant);
+  const openedScopeRef = useRef(scopeArchetype);
   const dismissReasonRef = useRef<PaywallDismissSource | null>(null);
   const checkoutInitiatedRef = useRef(false);
   useEffect(() => {
     if (!open) {
       if (openedAtRef.current > 0) {
-        if (!checkoutInitiatedRef.current) {
+        // A recipient was never offered a price, so closing is not a paywall dismissal.
+        if (!checkoutInitiatedRef.current && openedVariantRef.current !== "recipient") {
           trackPaywallDismissed({
             source: dismissReasonRef.current ?? "browser_back",
             view_duration_ms: performance.now() - openedAtRef.current,
-            archetype: scopeArchetype ?? null,
+            archetype: openedScopeRef.current ?? null,
           });
         }
         openedAtRef.current = 0;
@@ -273,29 +287,33 @@ const ReportPricingModal: FC<Props> = ({
     // no-ops because openedAtRef stays non-zero until the next close.
     if (openedAtRef.current === 0) {
       openedAtRef.current = performance.now();
+      openedVariantRef.current = variant;
+      openedScopeRef.current = scopeArchetype;
     }
-    // scopeArchetype changes infrequently and would otherwise re-trigger this
-    // effect on every prop change; reading via a ref keeps deps minimal.
+    // Only an open or a close matters here; what it opened as is kept in the refs above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Per-plan `price_shown` emit. Deduped by (plan, pricingClusterId, discountStep)
-  // for as long as the modal is mounted, which is the whole report visit: the
-  // ladder advancing emits a new event, but re-opening the modal does NOT (the
-  // set is never cleared). Powers the "Price Shown" funnel column + per-cluster
-  // CVR analysis (bucket_performance counts these events), so emitting on every
+  // for the whole report visit: the ladder advancing emits a new event, but
+  // re-opening the modal does NOT (the set is never cleared). The page holds the
+  // set (`priceShownFiredRef`), because this modal is rebuilt whenever the report
+  // reloads its data, on every archetype switch; a set of its own re-sent every
+  // price each time. Powers the "Price Shown" funnel column + per-cluster CVR
+  // analysis (bucket_performance counts these events), so emitting on every
   // opening would change those rates; the UX checker's CTA hesitation allows for
   // it (features/ux-signals/logic/signals.ts).
-  const priceShownFiredRef = useRef<Set<string>>(new Set());
+  const ownPriceShownFiredRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!open) return;
     if (!quotes) return;
+    const fired = (priceShownFiredRef ?? ownPriceShownFiredRef).current;
     for (const card of REPORT_PURCHASE_PLANS) {
       const quote = quotes[card.plan];
       if (!quote) continue;
       const dedupeKey = `${card.plan}:${quote.pricingClusterId}:${quote.discountStep}`;
-      if (priceShownFiredRef.current.has(dedupeKey)) continue;
-      priceShownFiredRef.current.add(dedupeKey);
+      if (fired.has(dedupeKey)) continue;
+      fired.add(dedupeKey);
       trackPriceShown({
         plan: card.plan,
         price: quote.chargedPriceCents / 100,
@@ -308,7 +326,7 @@ const ReportPricingModal: FC<Props> = ({
         initial_price: quote.initialPriceCents / 100,
       });
     }
-  }, [open, quotes]);
+  }, [open, quotes, priceShownFiredRef]);
 
   useEffect(() => {
     if (open) {
@@ -322,11 +340,14 @@ const ReportPricingModal: FC<Props> = ({
     }
 
     if (didOpenRef.current) {
+      // Without scrolling to it: the modal often opens by itself as the reader scrolls,
+      // so what had focus is what they last clicked, often far above, and focusing it
+      // scrolled the page up to it (Mark, desktop review 30.09: "it scrolls up weirdly").
       const restoreTarget = restoreFocusRef.current;
       if (restoreTarget && restoreTarget.isConnected) {
-        restoreTarget.focus();
+        restoreTarget.focus({ preventScroll: true });
       } else {
-        returnFocusRef?.current?.focus();
+        returnFocusRef?.current?.focus({ preventScroll: true });
       }
       didOpenRef.current = false;
     }
@@ -411,7 +432,7 @@ const ReportPricingModal: FC<Props> = ({
 
   return (
     <div
-      className={`report-pricing-modal report-pricing-modal--white ${open ? "is-visible" : "is-hidden"}`}
+      className={`report-pricing-modal report-pricing-modal--white report-pricing-modal--paygate ${open ? "is-visible" : "is-hidden"}`}
       data-state={open ? "open" : "closed"}
       data-focus-mode={focusMode}
       data-variant={variant}
@@ -445,7 +466,7 @@ const ReportPricingModal: FC<Props> = ({
           role={open ? "dialog" : undefined}
           aria-modal={open ? "true" : undefined}
           aria-labelledby={open ? "report-pricing-modal-title" : undefined}
-          aria-describedby={open ? "report-pricing-modal-copy" : undefined}
+          aria-describedby={open && isRecipient ? "report-pricing-modal-copy" : undefined}
           className="report-pricing-modal__dialog"
           tabIndex={-1}
           onPointerDown={() => setFocusMode("pointer")}
@@ -473,309 +494,153 @@ const ReportPricingModal: FC<Props> = ({
             onTouchMove={handleScrollTouchMove}
             onTouchStart={handleScrollTouchStart}
           >
-            <div className="report-pricing-modal__inner">
-              <div className="report-pricing-modal__header">
-                <span className="report-pricing-modal__eyebrow">
-                  {isShare
-                    ? "Ready to share your report insights?"
-                    : "Don\u2019t miss out on truly understanding your sexuality"}
-                </span>
-                <h2 id="report-pricing-modal-title" className="report-pricing-modal__title">
-                  {isShare ? "Upgrade your plan to share your results" : "Unlock your reports."}
-                </h2>
-                <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
-                  {isShare
-                    ? subtitle
-                    : "Go deeper into the full picture of who you are, and how you fit with someone else."}
-                </p>
-                {!isShare ? (
-                  <div className="report-pricing-modal__stats" aria-hidden="true">
-                    <span className="report-pricing-modal__stat">
-                      <strong>{QUESTIONS_ASKED}</strong> questions answered
-                    </span>
-                    <span className="report-pricing-modal__stat-dot" />
-                    <span className="report-pricing-modal__stat">
-                      <strong>{ARCHETYPES_COMPARED}</strong> archetypes
-                    </span>
-                    <span className="report-pricing-modal__stat-dot" />
-                    <span className="report-pricing-modal__stat">
-                      <strong>30+</strong> personalised chapters
-                    </span>
-                  </div>
-                ) : null}
-                {!quotes ? (
-                  <p className="report-pricing-modal__copy" role="alert">
-                    Live pricing couldn&apos;t be loaded right now. Reload the page and try again.
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="report-pricing-modal__plans" role="list" aria-label="Pricing options">
-                {planCards.map((card) => {
-                  const pricing = getCardPricing(card, quotes?.[card.plan]);
-                  const cardTitle =
-                    targetArchetype && card.plan === "full_report"
-                      ? `${targetArchetype} report`
-                      : card.title;
-                  const isOwned = isPlanOwnedForArchetype({
-                    accessPlan,
-                    targetPlan: card.plan,
-                    unlockedTier,
-                  });
-
-                  return (
-                    <article
-                      key={card.title}
-                      role="listitem"
-                      className={[
-                        "report-pricing-card",
-                        `report-pricing-card--${card.plan}`,
-                        card.tone === "highlight"
-                          ? "report-pricing-card--hero"
-                          : "report-pricing-card--side",
-                        card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
-                        card.tone === "highlight" ? "report-pricing-card--highlight" : "",
-                        card.plan === "essentials" ? "report-pricing-card--essentials" : "",
-                        isOwned ? "report-pricing-card--owned" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      {card.featuredLabel || card.badge ? (
-                        <div className="report-pricing-card__badges">
-                          <span
-                            className={[
-                              "report-pricing-card__badge",
-                              card.featuredLabel
-                                ? "report-pricing-card__badge--featured"
-                                : "report-pricing-card__badge--outline",
-                            ].join(" ")}
-                          >
-                            {card.featuredLabel ?? card.badge}
-                          </span>
-                        </div>
-                      ) : null}
-
-                      <div className="report-pricing-card__heading">
-                        <h3 className="report-pricing-card__title">{cardTitle}</h3>
-                        <p className="report-pricing-card__description">{card.description}</p>
-                      </div>
-
-                      <div className="report-pricing-card__price-row">
-                        {pricing.strikePriceLabel ? (
-                          <span className="report-pricing-card__strike">
-                            {pricing.strikePriceLabel}
-                          </span>
-                        ) : null}
-                        <span className="report-pricing-card__amount">{pricing.priceLabel}</span>
-                        {pricing.available ? (
-                          <span className="report-pricing-card__suffix">
-                            {card.priceSuffix === "one-time" ? "one-off" : card.priceSuffix}
-                          </span>
-                        ) : null}
-                        <span className="report-pricing-card__price-flex" aria-hidden="true" />
-                        {pricing.saveLabel ? (
-                          <span className="report-pricing-card__save">
-                            Save {pricing.saveLabel}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {card.subtitle ? (
-                        <p className="report-pricing-card__subtitle">{card.subtitle}</p>
-                      ) : null}
-
-                      <button
-                        type="button"
-                        className={[
-                          "report-pricing-card__cta",
-                          // Every LIVE unlock CTA is the branded orange button and
-                          // stacks the shared .rpm-cta wash-reveal (orange → white
-                          // with dark text on hover, same as the sticky "Unlock full
-                          // report" CTA). The highlight tier is set apart by its card
-                          // border + "Most popular" badge, not a unique button colour.
-                          // A disabled (owned / pricing-unavailable) button skips the
-                          // orange + animation so it doesn't read as clickable.
-                          !isOwned && pricing.available
-                            ? "report-pricing-card__cta--primary rpm-cta"
-                            : "",
-                          isOwned ? "report-pricing-card__cta--owned" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        disabled={isOwned || !pricing.available}
-                        aria-disabled={isOwned || !pricing.available}
-                        onClick={
-                          isOwned
-                            ? undefined
-                            : () => {
-                                // Mark conversion intent so the open→close
-                                // effect doesn't double-count this as a
-                                // dismissal.
-                                checkoutInitiatedRef.current = true;
-                                // begin_checkout is counted by
-                                // ReportPage.beginCheckout, which onUnlock reaches.
-                                // It used to fire here behind `if (quote)` while
-                                // onUnlock ran regardless, so a click on a plan
-                                // missing from this map went to Stripe untracked —
-                                // which is what collapsed the metric when pricing 2.0
-                                // turned one plan into three.
-                                onUnlock(
-                                  card.plan,
-                                  // Essentials + Full Report are per-archetype; if the modal
-                                  // wasn't opened scoped to a specific tile, the buyer is
-                                  // upgrading their primary archetype. all_reports is global
-                                  // and the parent strips archetype anyway.
-                                  card.plan === "all_reports"
-                                    ? null
-                                    : (targetArchetype ?? primaryArchetype ?? archetype)
-                                );
-                              }
-                        }
-                      >
-                        {isOwned ? (
-                          "Your current plan"
-                        ) : !pricing.available ? (
-                          "Pricing unavailable"
-                        ) : (
-                          <>
-                            <span className="rpm-cta__wash" aria-hidden="true" />
-                            <span className="rpm-cta__reveal" aria-hidden="true" />
-                            <span className="rpm-cta__label">{card.ctaLabel}</span>
-                          </>
-                        )}
-                      </button>
-
-                      <p className="report-pricing-card__guarantee">
-                        <span className="report-pricing-card__guarantee-icon" aria-hidden="true">
-                          <svg
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.4"
-                          >
-                            <path
-                              d="M8 1.5 2.9 3.5v3.8c0 3.1 2.2 5.1 5.1 6.1 2.9-1 5.1-3 5.1-6.1V3.5L8 1.5Z"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="m5.9 7.9 1.5 1.5 2.9-3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </span>
-                        14-day money-back guarantee
+            <div className="rpg">
+              <div className="rpg__top">
+                {/* 842:597 / 963:15 */}
+                <header className="rpg__hero">
+                  {isRecipient ? (
+                    <>
+                      <h2 id="report-pricing-modal-title" className="rpg__title">
+                        Discover Your <br className="rpg__title-break" />
+                        <Gradient>Sexual Self</Gradient>
+                      </h2>
+                      <p id="report-pricing-modal-copy" className="rpg__copy">
+                        Only the person who shared this report can unlock it. Take the free test to
+                        get a report of your own.
                       </p>
+                    </>
+                  ) : (
+                    <h2 id="report-pricing-modal-title" className="rpg__title">
+                      {/* 842:597 sets "Sexual Self" on a line of its own; 963:15 runs it on. */}
+                      Discover Your Full <br className="rpg__title-break" />
+                      <Gradient>Sexual Self</Gradient>
+                    </h2>
+                  )}
+                  {!quotes && !isRecipient ? (
+                    <p className="rpg__copy rpg__copy--alert" role="alert">
+                      Live pricing couldn&apos;t be loaded right now. Reload the page and try again.
+                    </p>
+                  ) : null}
+                </header>
 
-                      <ul className="report-pricing-card__features">
-                        {card.features.map((feature) => (
-                          <li
-                            key={feature.label}
-                            className={[
-                              "report-pricing-card__feature",
-                              feature.icon === "none"
-                                ? "report-pricing-card__feature--subitem"
-                                : "",
-                              feature.icon === "lock" ? "report-pricing-card__feature--locked" : "",
-                              feature.tone === "emphasis"
-                                ? "report-pricing-card__feature--emphasis"
-                                : "",
-                              feature.tone === "muted" ? "report-pricing-card__feature--muted" : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                          >
-                            {feature.icon === "lock" ? (
-                              <span
-                                className="report-pricing-card__feature-icon report-pricing-card__feature-icon--locked"
-                                aria-hidden="true"
-                              >
-                                <svg
-                                  viewBox="0 0 16 16"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.4"
-                                >
-                                  <rect x="3.6" y="7" width="8.8" height="6.4" rx="1.3" />
-                                  <path d="M5.5 7V5.1a2.5 2.5 0 0 1 5 0V7" strokeLinecap="round" />
-                                </svg>
-                              </span>
-                            ) : feature.icon !== "none" ? (
-                              <span
-                                className="report-pricing-card__feature-icon"
-                                aria-hidden="true"
-                              >
-                                <svg
-                                  viewBox="0 0 16 16"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                >
-                                  <path d="m4.1 8 2.2 2.25L11.9 4.9" strokeLinecap="round" />
-                                </svg>
-                              </span>
-                            ) : null}
-                            <span>{feature.label}</span>
-                          </li>
+                {/* A grid, so the payment marks can sit between the cards on the phone
+                    (842:672) and under both from 960px (963:76) in one DOM order. */}
+                {isRecipient ? (
+                  <a
+                    className="rpg-card__cta rpg-card__cta--filled rpg__recipient-cta"
+                    href="/survey"
+                  >
+                    Take the Free Test<span aria-hidden="true">{"\u00a0→"}</span>
+                  </a>
+                ) : (
+                  <div className="rpg__tiers" role="group" aria-label="Pricing options">
+                    {REPORT_PURCHASE_PLANS.map((card) => (
+                      <PlanCard
+                        key={card.plan}
+                        card={card}
+                        isOwned={isPlanOwnedForArchetype({
+                          accessPlan,
+                          targetPlan: card.plan,
+                          unlockedTier,
+                        })}
+                        pricing={getCardPricing(quotes?.[card.plan])}
+                        targetArchetype={targetArchetype}
+                        onBuy={() => {
+                          // Mark conversion intent so the open→close effect doesn't
+                          // double-count this as a dismissal. begin_checkout is counted by
+                          // ReportPage.beginCheckout, which onUnlock reaches.
+                          checkoutInitiatedRef.current = true;
+                          onUnlock(
+                            card.plan,
+                            // The single report is per-archetype: if the modal wasn't opened
+                            // scoped to a specific tile, the buyer is unlocking their primary
+                            // archetype. all_reports is global and the parent strips it anyway.
+                            card.plan === "all_reports"
+                              ? null
+                              : (targetArchetype ?? primaryArchetype ?? archetype)
+                          );
+                        }}
+                      />
+                    ))}
+
+                    {/* 842:672 / 963:76 — under All 14 on the phone, under both from 960px. */}
+                    <div className="rpg__payments">
+                      <p className="rpg__payments-label">Guaranteed Safe &amp; Secure Checkout</p>
+                      <div className="rpg__payments-row" aria-label="Accepted payment methods">
+                        {PAYMENT_MARKS.map(({ logo, label }) => (
+                          <span
+                            key={logo}
+                            className={`rpg__mark rpg__mark--${logo}`}
+                            role="img"
+                            aria-label={label}
+                          />
                         ))}
-                      </ul>
-
-                      {card.footnote ? (
-                        <p className="report-pricing-card__footnote">
-                          {(() => {
-                            const q = card.footnote.indexOf("? ");
-                            return q === -1 ? (
-                              card.footnote
-                            ) : (
-                              <>
-                                <strong className="report-pricing-card__footnote-lead">
-                                  {card.footnote.slice(0, q + 1)}
-                                </strong>
-                                {card.footnote.slice(q + 1)}
-                              </>
-                            );
-                          })()}
-                        </p>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-
-              <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
-                <PricingMethodMark logo="apple-pay" label="Apple Pay" />
-                <PricingMethodMark logo="google-pay" label="Google Pay" />
-                <PricingMethodMark logo="klarna" label="Klarna" />
-                <PricingMethodMark logo="mastercard" label="Mastercard" />
-                <PricingMethodMark logo="visa" label="Visa" />
-                <PricingMethodMark logo="amex" label="American Express" />
-              </div>
-
-              <PaywallTestimonials open={open} />
-
-              <section className="rpm-why report-pricing-modal__why">
-                <h3 className="rpm-section-h">
-                  Why unlock <em style={gradientTextStyle}>Reports</em>?
-                </h3>
-                <div className="rpm-why-grid rpm-why-grid--static">
-                  {WHY_CARDS.map(({ num, tag, lead, emph, body, priceLed }) => (
-                    <article key={num} className="rpm-why-card">
-                      <div className="rpm-why-card__head">
-                        <span className="rpm-why-card__num">{num}</span>
-                        <span className="rpm-why-card__tag">{tag}</span>
                       </div>
-                      <div className="rpm-why-card__body">
-                        <h4 className="rpm-why-card__title">
-                          {lead} <em style={gradientTextStyle}>{emph}</em>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 842:656 / 963:84 — why to pay, so not for a recipient, who cannot. */}
+              {isRecipient ? null : (
+                <section className="rpg__why" aria-labelledby="rpg-why-title">
+                  <h3 id="rpg-why-title" className="rpg__section-title">
+                    Why Unlock Your <Gradient>Report</Gradient>?
+                  </h3>
+                  <div className="rpg__why-grid">
+                    {WHY_CARDS.map(({ green, lead, emph, tail, body }) => (
+                      <article key={emph} className="rpg-why">
+                        <h4 className="rpg-why__title">
+                          {green ? <span className="rpg-why__green">{green} </span> : null}
+                          {lead}
+                          <Gradient>{emph}</Gradient>
+                          {tail}
                         </h4>
-                        <p className="rpm-why-card__text">
-                          {priceLed && cheapestPriceLabel ? `${cheapestPriceLabel}, ${body}` : body}
-                        </p>
+                        <p className="rpg-why__body">{body}</p>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* 842:682 / 963:99 */}
+              <section className="rpg__reviews" aria-labelledby="rpg-reviews-title">
+                <h3 id="rpg-reviews-title" className="rpg__section-title">
+                  Real <Gradient>People</Gradient> Love &amp; Appreciate Our{" "}
+                  <Gradient>Insights.</Gradient>
+                </h3>
+                <ul className="rpg__reviews-grid">
+                  {REVIEWS.map((review) => (
+                    <li key={review.name} className="rpg-review">
+                      <div className="rpg-review__head">
+                        <Image
+                          className="rpg-review__avatar"
+                          src={review.avatar}
+                          alt=""
+                          width={40}
+                          height={40}
+                        />
+                        <span className="rpg-review__who">
+                          <span className="rpg-review__name">{review.name}</span>
+                          <span className="rpg-review__role">{review.role}</span>
+                        </span>
+                        <Image
+                          className="rpg-review__stars"
+                          src="/report/paygate/stars.svg"
+                          alt="5 out of 5 stars"
+                          width={58}
+                          height={10}
+                          unoptimized
+                        />
                       </div>
-                    </article>
+                      <blockquote className="rpg-review__quote">
+                        {review.pre}
+                        <span className="rpg-review__emph">{review.emph}</span>
+                        {review.post}
+                      </blockquote>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </section>
 
               {isTrustpilotEnabled() && <TrustpilotReviews variant="carousel" />}
@@ -786,5 +651,147 @@ const ReportPricingModal: FC<Props> = ({
     </div>
   );
 };
+
+/** One plan (844:1229 / 844:1265, 963:18 / 963:48). */
+const PlanCard: FC<{
+  card: ReportPurchasePlan;
+  isOwned: boolean;
+  onBuy: () => void;
+  pricing: ReturnType<typeof getCardPricing>;
+  targetArchetype: string | null;
+}> = ({ card, isOwned, onBuy, pricing, targetArchetype }) => {
+  const isHero = card.tone === "highlight";
+  // Opened from another archetype's tile, the single report unlocks THAT archetype,
+  // so it says so rather than "your highest".
+  const scoped = Boolean(targetArchetype) && card.plan === "full_report";
+  const title = scoped ? `${card.titleLead} the ${targetArchetype} Report` : card.title;
+  const stackedTitle = scoped ? title : (card.stackedTitle ?? card.title);
+  const description = scoped ? `Your full ${targetArchetype} report` : card.description;
+  const stackedDescription = scoped ? description : (card.stackedDescription ?? card.description);
+  const ctaLabel = scoped ? "Only Unlock This Report" : card.ctaLabel;
+  const disabled = isOwned || !pricing.available;
+
+  return (
+    <article
+      className={`rpg-card rpg-card--${card.plan}${isHero ? " rpg-card--hero" : ""}${
+        isOwned ? " is-owned" : ""
+      }`}
+    >
+      {card.featuredLabel ? <span className="rpg-card__badge">{card.featuredLabel}</span> : null}
+
+      <div className="rpg-card__head">
+        <h3 className="rpg-card__title">
+          {/* Each layout's own wording (see `stackedTitle`); only one is ever displayed. */}
+          <span className="rpg-card__wide">
+            <CardTitle lead={card.titleLead} text={title} />
+          </span>
+          <span className="rpg-card__stacked">
+            <CardTitle lead={card.titleLead} text={stackedTitle} />
+          </span>
+        </h3>
+        <p className="rpg-card__desc">
+          <span className="rpg-card__wide">{renderDescription(description)}</span>
+          <span className="rpg-card__stacked">{renderDescription(stackedDescription)}</span>
+        </p>
+      </div>
+
+      <div className={`rpg-card__pricing${pricing.strikeLabel ? "" : " has-no-strike"}`}>
+        {pricing.strikeLabel ? (
+          <p className="rpg-card__was">
+            <s>{pricing.strikeLabel}</s>
+            {pricing.offLabel ? (
+              <>
+                {" - "}
+                <span className="rpg-card__off">{pricing.offLabel}</span>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+        <p className="rpg-card__price">
+          {pricing.available ? (
+            <>
+              <span className="rpg-card__amount">{pricing.priceLabel}</span>{" "}
+              <span className="rpg-card__suffix">{card.priceSuffix}</span>
+            </>
+          ) : (
+            <span className="rpg-card__unavailable">Pricing unavailable</span>
+          )}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        className={`rpg-card__cta ${isHero ? "rpg-card__cta--filled" : "rpg-card__cta--outline"}`}
+        disabled={disabled}
+        aria-disabled={disabled}
+        onClick={disabled ? undefined : onBuy}
+      >
+        {isOwned ? (
+          "Your current plan"
+        ) : (
+          // One run of text, so a label too long for a narrow phone wraps as a line of
+          // text does and takes the arrow with it; the no-break space keeps the arrow on
+          // the last word.
+          <span>
+            {ctaLabel}
+            <span aria-hidden="true">{"\u00a0→"}</span>
+          </span>
+        )}
+      </button>
+
+      <div className="rpg-card__details">
+        <p className="rpg-card__guarantee">
+          <Image
+            src="/report/paygate/shield.svg"
+            alt=""
+            width={15}
+            height={15}
+            unoptimized
+            aria-hidden="true"
+          />
+          14-day money-back guarantee.
+        </p>
+        <ul className="rpg-card__features">
+          {card.features.map((feature) => (
+            <li
+              key={feature.label}
+              className={`rpg-card__feature${feature.included ? "" : " is-excluded"}`}
+            >
+              <Image
+                src={
+                  feature.included ? "/report/paygate/check.svg" : "/report/paygate/check-muted.svg"
+                }
+                alt=""
+                width={16}
+                height={16}
+                unoptimized
+                aria-hidden="true"
+              />
+              <span>
+                {feature.label}
+                {feature.included ? null : <span className="rpg-sr-only"> (not included)</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </article>
+  );
+};
+
+/**
+ * 844:1234 / 963:23 set what follows the "+" in Bold ("Your full archetype report +
+ * Access to all 14 archetype reports"); a description without one is plain.
+ */
+function renderDescription(text: string): ReactNode {
+  const plus = text.indexOf(" + ");
+  if (plus < 0) return text;
+  return (
+    <>
+      {text.slice(0, plus + 3)}
+      <strong>{text.slice(plus + 3)}</strong>
+    </>
+  );
+}
 
 export default ReportPricingModal;

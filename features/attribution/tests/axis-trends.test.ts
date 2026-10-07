@@ -8,6 +8,7 @@ import {
   rowsForAxis,
   type AxisFunnelRow,
 } from "@features/attribution/server/axis-trends";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 
 /** Days of rows for one axis+arm, ending on `lastDay`. */
 function rows(
@@ -27,15 +28,14 @@ function rows(
 }
 
 describe("axis trend charts — which experiments may be drawn", () => {
-  it("charts no experiment at all, because none is running", () => {
+  it("charts Pricing 3.0 and nothing else, because nothing else is running", () => {
     /**
-     * CHART_AXES is EMPTY as of 2026-09-19: `landing` was the last live axis and
-     * it concluded in favour of V2. This is the live-list assertion, and it is
-     * the one thing in this file that must track production rather than a
-     * fixture — an axis quietly re-added here without being randomised is a
-     * chart of a test nobody is running.
+     * This is the live-list assertion, and it is the one thing in this file that
+     * must track production rather than a fixture — an axis quietly re-added here
+     * without being randomised is a chart of a test nobody is running. `landing`
+     * concluded on 2026-09-19 in favour of V2; Pricing 3.0 (A3 vs B3) is live.
      */
-    expect([...CHART_AXES]).toEqual([]);
+    expect([...CHART_AXES]).toEqual(["pricing"]);
     const trends = buildAxisTrends(
       [
         ...rows("landing", "white", {
@@ -53,26 +53,25 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30"
     );
+    // The concluded landing test's rows reach nothing; pricing, with no rows, says so.
     expect(trends.charted).toHaveLength(0);
     expect(trends.counts).toHaveLength(0);
-    expect(trends.skipped).toHaveLength(0);
+    expect(trends.skipped.map((s) => s.axis)).toEqual(["pricing"]);
   });
 
   it("drops rows for an axis that is not in the list it was given", () => {
     /**
      * The gate is the AXIS LIST, not the data. The way this bug actually happens
      * is a developer writing `Object.keys(AXIS_TITLES)`, which contains the
-     * concluded paywall, survey-theme and pricing axes — and the RPC still emits
-     * `pricing` and `survey` rows today, so this is a live guard.
+     * concluded paywall, survey-theme and landing axes — and the RPC still emits
+     * `survey` rows today, so this is a live guard.
      *
-     * Asserted against a NON-empty list on purpose. Against the empty production
-     * list every one of these would pass by iterating nothing, which is a guard
-     * that cannot fail.
+     * Asserted against a list without the axis on purpose, so every one of these
+     * has something to iterate and can fail.
      */
     for (const [axis, a, b] of [
       ["paywall", "treatment", "control"],
       ["survey", "white", "dark"],
-      ["pricing", "A", "B"],
     ] as const) {
       const trends = buildAxisTrends(
         [
@@ -87,6 +86,45 @@ describe("axis trend charts — which experiments may be drawn", () => {
       expect(trends.counts.map((c) => c.axis)).not.toContain(axis);
       expect(trends.skipped.map((s) => s.axis)).not.toContain(axis);
     }
+  });
+
+  it("reads the price test from Pricing 3.0's own arms and launch day only", () => {
+    expect(AXIS_VALID_FROM.pricing?.day).toBe(PRICING_3_LAUNCH_DAY);
+    const launch = PRICING_3_LAUNCH_DAY;
+    const input = [
+      // The concluded 2.x arms, still in the data for everyone who bought under them.
+      ...rows("pricing", "A", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
+      ...rows("pricing", "B", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
+      // 3.0 arms on days BEFORE the launch: readers re-priced by the launch re-sync.
+      ...rows("pricing", "A3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
+      ...rows("pricing", "B3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 2 }),
+    ];
+    const { rows: scoped, validFrom } = rowsForAxis(input, "pricing");
+    expect(validFrom).toBe(launch);
+    expect(new Set(scoped.map((r) => r.arm))).toEqual(new Set(["A3", "B3"]));
+    expect(scoped.every((r) => r.day >= launch)).toBe(true);
+    expect(scoped.length).toBeGreaterThan(0);
+
+    // Every day from the launch to 20 Oct, 20 finished a day per arm: a chart, labelled
+    // as the 3.0 lists, off the post-launch days alone. Counted from the launch day, so
+    // moving the launch moves the totals instead of breaking this.
+    const days = (Date.parse("2026-10-20") - Date.parse(launch)) / 86_400_000 + 1;
+    const trends = buildAxisTrends(input, "2026-10-20");
+    const chart = trends.charted.find((c) => c.axis === "pricing");
+    expect(chart?.legendFirst).toBe("Pricing 3.0 higher");
+    expect(chart?.legendLast).toBe("Pricing 3.0 lower");
+    expect(chart?.headline).toContain(`${4 * days}/${20 * days}`);
+    expect(chart?.headline).toContain(`${2 * days}/${20 * days}`);
+
+    // Only the 2.x arms: a live axis with nothing to compare says so; it is never
+    // drawn from the concluded test's rows.
+    const legacy = buildAxisTrends(
+      input.filter((r) => r.arm === "A" || r.arm === "B"),
+      "2026-10-20"
+    );
+    expect(legacy.charted.map((c) => c.axis)).not.toContain("pricing");
+    expect(legacy.counts.map((c) => c.axis)).not.toContain("pricing");
+    expect(legacy.skipped.find((s) => s.axis === "pricing")?.caption).toContain("no arm has data");
   });
 
   it("charts an axis with enough history and computes the rate from the rows", () => {

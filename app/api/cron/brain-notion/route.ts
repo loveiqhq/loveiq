@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestNotion } from "@features/brain/server/ingest/notion";
-import { ingestNote } from "@features/brain/server/ingest/upsert";
+import { ingestNote, sweptAt } from "@features/brain/server/ingest/upsert";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
 import {
@@ -50,6 +50,9 @@ export const maxDuration = 120;
 /** Skips that mean "not set up yet", which must never alert. */
 const DELIBERATE_SKIPS = new Set(["notion-not-configured"]);
 
+/** The sweep is due every 20 hours (upsert.ts); six hours of grace before it counts as stopped. */
+const SWEEP_STALE_MS = 26 * 3_600_000;
+
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -63,7 +66,15 @@ export async function GET(request: Request) {
   const checkSlow = startCronTimer("brain-notion", maxDuration);
   // Notion's tail (upsert of up to 1,400 rows, touch batches, sweep) runs after
   // this expires and cannot be interrupted, so leave it room.
-  const isOutOfTime = () => Date.now() - startedAtMs > 40_000;
+  //
+  // 65 s, up from 40. The crawl alone now takes most of 40 s (39 databases plus a full page
+  // listing, ~63 requests in sequence), so seven runs in the fortnight to 2026-10-05 stopped
+  // DURING the crawl at 40.4-40.9 s, and the rest left the fetch only a few seconds: runs
+  // wrote 1-18 pages each, and a database created that morning was still unindexed three
+  // runs later. The clock is checked between requests, so one that starts just inside the
+  // budget can still cost 35 s (a slow 15 s answer, the capped 5 s wait, a 15 s retry), and
+  // the tail after it measured at most ~18 s: 65 + 35 + 18 = 118 s, under the 120 s ceiling.
+  const isOutOfTime = () => Date.now() - startedAtMs > 65_000;
 
   const dayKey = new Date().toISOString().slice(0, 10);
   const alertOnce = async (name: string, text: string) => {
@@ -84,7 +95,33 @@ export async function GET(request: Request) {
     // What the run saw, recorded whatever the status. Overwritten below if it failed.
     errorMessage = ingestNote(result);
 
-    if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
+    /**
+     * A PARTIAL CRAWL IS NOT A FAULT; A SWEEP THAT STOPPED IS. A crawl the clock cut short
+     * leaves the sweep for the next complete one, and every partial crawl in the fortnight to
+     * 2026-10-05 was followed by a complete one within the hour, with the sweep still running
+     * daily. Reporting each as an error, with an alert saying Notion was frozen, was a false
+     * alarm. What matters is whether deletions are still being noticed, so a partial crawl
+     * counts as success with a note while the sweep ran recently, and as an error once it
+     * has not run for SWEEP_STALE_MS (it is due every 20 hours) or its state cannot be read.
+     */
+    if (result.skipped === "notion-crawl-incomplete") {
+      const last = await sweptAt("notion");
+      const fresh = typeof last === "number" && Date.now() - last <= SWEEP_STALE_MS;
+      errorMessage =
+        `partial crawl, sweep deferred to the next complete one ` +
+        `(last sweep ${typeof last === "number" ? new Date(last).toISOString() : "unknown"}) — ` +
+        ingestNote(result);
+      if (!fresh) {
+        status = "error";
+        await alertOnce(
+          "sweep-stale",
+          `:brain: Notion's deletion sweep has not run for over ` +
+            `${SWEEP_STALE_MS / 3_600_000} hours, and this crawl stopped before it had listed ` +
+            `everything (${escapeSlack(errorMessage)}). Pages edited in Notion still arrive, ` +
+            `but pages deleted there are staying in the corpus.`
+        );
+      }
+    } else if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
       status = "error";
       errorMessage = `notion skipped: ${result.skipped} — ${ingestNote(result)}`;
       await alertOnce(

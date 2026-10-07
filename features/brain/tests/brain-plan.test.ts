@@ -5,7 +5,9 @@ import {
   briefLine,
   dueDate,
   healthChunkBody,
+  type PlanItem,
 } from "@features/brain/server/plan";
+import { MAX_BODY_CHARS } from "@features/brain/server/ingest/upsert";
 
 const NOW = Date.parse("2026-09-12T00:00:00Z");
 const TODAY = "2026-09-12";
@@ -157,5 +159,50 @@ describe("healthChunkBody", () => {
     const body = healthChunkBody({ openCount: 0, stale: [], overdue: [], unavailable: "a 500" });
     expect(body).toContain("could not be read");
     expect(body).not.toContain("0 tasks are open");
+  });
+
+  // Titles as long as `assess` lets them be (110), so the lists are as wide as they get.
+  const task = (i: number, extra: Partial<PlanItem>): PlanItem => ({
+    title: `Task ${i} `.padEnd(110, "x"),
+    assignee: "Marcus Hartmann, Mark Oldenburg",
+    sourceId: `notion/t${i}`,
+    ...extra,
+  });
+  const listed = (body: string, prefix: string) =>
+    body.split("\n").filter((l) => l.startsWith(prefix)).length;
+  const more = (body: string) => [...body.matchAll(/…and (\d+) more/g)].map((m) => Number(m[1]));
+
+  it("fits under the write path's cut and keeps the definition when the board is long", () => {
+    // 2026-10-05: 21 overdue tasks made a 2,529-character body, and the cut at 2,400
+    // removed the definition of "overdue" while the heading still claimed all 21.
+    expect(MAX_BODY_CHARS).toBe(2400);
+    const overdue = Array.from({ length: 30 }, (_, i) => task(i, { due: "2026-09-01" }));
+    const body = healthChunkBody({ openCount: 40, stale: [], overdue });
+    expect(body.length).toBeLessThanOrEqual(2400);
+    expect(body).toContain("open AND past its date");
+    expect(body).toContain("Past their due date and still open (30):");
+    const shown = listed(body, "  due ");
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(30);
+    expect(more(body)).toEqual([30 - shown]);
+  });
+
+  it("shares the room between the two lists and counts what each left out", () => {
+    const stale = Array.from({ length: 25 }, (_, i) => task(i, { idleDays: 30 + i }));
+    const overdue = Array.from({ length: 25 }, (_, i) => task(100 + i, { due: "2026-09-01" }));
+    const body = healthChunkBody({ openCount: 50, stale, overdue });
+    expect(body.length).toBeLessThanOrEqual(2400);
+    const s = listed(body, "  ") - listed(body, "  due ") - listed(body, "  …and");
+    const o = listed(body, "  due ");
+    expect(s).toBeGreaterThan(0);
+    expect(o).toBeGreaterThan(0);
+    expect(more(body)).toEqual([25 - s, 25 - o]);
+  });
+
+  it("lists everything, with no 'more' line, when the board is short", () => {
+    const overdue = [task(1, { due: "2026-09-01" }), task(2, { due: "2026-09-02" })];
+    const body = healthChunkBody({ openCount: 5, stale: [], overdue });
+    expect(listed(body, "  due ")).toBe(2);
+    expect(more(body)).toEqual([]);
   });
 });

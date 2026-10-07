@@ -19,9 +19,15 @@ import { mockReport } from "./fixtures/report";
  *    request, so it is kept out of this one: the key reaches only the browser.
  *    page.goBack() here would be a history jump the real back button does not
  *    make — Chrome skips entries a page added before any interaction, which is
- *    exactly the scroll-opened case.
- *  - WebKit has no CloseWatcher. Back there is a history traversal, which
- *    page.goBack() performs faithfully — both Safari projects run that path.
+ *    exactly the scroll-opened case. That is pressBack().
+ *  - A desktop's Back (the toolbar button, Alt+Left, ChromeOS's back key) is a
+ *    history traversal on every engine, which no CloseWatcher hears. That is
+ *    page.goBack(), and "the toolbar's Back" below runs it everywhere.
+ *  - Playwright's WebKit 26.6 has CloseWatcher too (26.5 did not), so both
+ *    Safari projects take pressBack()'s close request as well. An iPhone's back
+ *    swipe is a history traversal, which is "the toolbar's Back" below; on main
+ *    it failed on both Safari projects too, until the entry was held on every
+ *    engine.
  */
 
 const REPORT = "/report/test-token-back";
@@ -88,6 +94,16 @@ async function expectDismissedAs(page: Page, source: string) {
 
 const modal = (page: Page) => page.locator(".report-pricing-modal");
 
+/**
+ * Our own history.back() takes the entry off a moment after a close request; a
+ * reader's next press comes later than that, and so must the test's.
+ */
+async function expectEntryGone(page: Page) {
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.history.state?.__loveiqOverlay)))
+    .toBe(false);
+}
+
 async function pressBack(page: Page) {
   const closeRequest = await page.evaluate(
     () => typeof (window as unknown as { CloseWatcher?: unknown }).CloseWatcher === "function"
@@ -109,7 +125,9 @@ async function pressBack(page: Page) {
 }
 
 async function openFromLockedSection(page: Page) {
-  const cta = page.locator(".report-section .report-premium-overlay__cta").first();
+  // Report 3.0, the default since its launch, locks a chapter outright; its head is the
+  // button that opens the paywall.
+  const cta = page.locator(".rv4-chapter.is-locked .rv4-chapter__button").first();
   await cta.scrollIntoViewIfNeeded();
   const scrollY = await page.evaluate(() => window.scrollY);
   await cta.click();
@@ -147,6 +165,32 @@ test.describe("Back closes the paywall", () => {
     await openFromLockedSection(page);
     await pressBack(page);
     await expect(modal(page)).toHaveAttribute("data-state", "closed");
+    await expectEntryGone(page);
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/about$/);
+  });
+
+  /**
+   * #493: on 2026-10-04 a ChromeOS reader pressed Back with the paywall open and
+   * left the report, because a CloseWatcher never hears a desktop's Back. This
+   * cannot show Chrome skipping an entry added before any interaction (see the
+   * top of this file); the reader here has clicked, and a click or key press is
+   * all it takes for the entry to count.
+   */
+  test("the toolbar's Back closes it too, and the next one leaves", async ({ page }) => {
+    await openReport(page);
+    const scrollY = await openFromLockedSection(page);
+
+    await page.goBack();
+
+    await expect(modal(page)).toHaveAttribute("data-state", "closed");
+    await expectStillOnTheReport(page);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThanOrEqual(scrollY - 4);
+    expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(scrollY + 4);
+    await expectDismissedAs(page, "browser_back");
 
     await page.goBack();
     await expect(page).toHaveURL(/\/about$/);
@@ -181,14 +225,23 @@ test.describe("Back closes the paywall", () => {
     await expectDismissedAs(page, "escape");
   });
 
-  test("the modal that opens by itself on scroll closes on back too", async ({ page }) => {
-    await openReport(page);
+  test("the modal that opens by itself on scroll closes on back too", async ({
+    page,
+    isMobile,
+  }) => {
+    // Report 3.0 opens it by itself only on a phone (Mark, desktop review 01.10), at
+    // Challenges in Partnership, and only in the pop-up test's "popup" arm. This build is
+    // production to the code, so `?popup=on` is ignored; submission 2 hashes to "popup"
+    // (shared/experiments/popupArm.ts), where the fixture's 1 hashes to "no_popup".
+    test.skip(!isMobile, "Report 3.0 has no scroll pop-up from 700px wide.");
+    await openReport(page, { overrides: { submissionId: 2 } });
     // Programmatic scroll: no tap, no key, no user activation — the case
     // Chrome's back button would skip a history entry for.
     // Wait for the chapter itself: scrolling before the report has rendered it
     // is a no-op, and the modal then never opens (1 run in 6 on Mobile Safari).
-    await page.locator("#attachment_style").waitFor({ state: "attached" });
-    await page.evaluate(() => document.getElementById("attachment_style")?.scrollIntoView());
+    const trigger = page.locator("#challenges_in_partnership");
+    await trigger.waitFor({ state: "attached" });
+    await trigger.evaluate((el) => el.scrollIntoView());
     await expect(modal(page)).toHaveAttribute("data-state", "open", { timeout: 10_000 });
 
     await pressBack(page);
@@ -247,7 +300,7 @@ test.describe("Back closes the paywall", () => {
     );
     await openFromLockedSection(page);
 
-    await page.locator(".report-pricing-card__cta", { hasText: "Unlock my report" }).click();
+    await page.locator(".rpg-card--full_report .rpg-card__cta").click();
     await expect(page).toHaveURL(stripe);
 
     // Coming back from Stripe lands on the report again...
@@ -264,13 +317,14 @@ test.describe("Back closes the paywall", () => {
 /**
  * The chapter menu on phones gets the same treatment, and is the harder case:
  * it hands off inside a single tap. A chapter link closes it and jumps; "Share
- * report" closes it and opens the share modal. On Safari one history entry
- * serves whichever overlay is open (shared/ui/overlay-history.ts), and these
+ * report" closes it and opens the share modal. One history entry serves
+ * whichever overlay is open (shared/ui/overlay-history.ts), and these
  * pin that neither hand-off costs the reader a back press or undoes a jump.
  */
 for (const [arm, query] of [
-  ["V1", ""],
+  ["3.0", ""],
   ["2.0", "?v2=1"],
+  ["V1", "?v4=0"],
 ] as const) {
   test.describe(`Back closes the chapter menu (${arm})`, () => {
     test.skip(
@@ -352,6 +406,7 @@ for (const [arm, query] of [
 
       await expect(share).toHaveAttribute("data-state", "closed");
       await expectStillOnTheReport(page);
+      await expectEntryGone(page);
       await page.goBack();
       await expect(page).toHaveURL(/\/about$/);
     });

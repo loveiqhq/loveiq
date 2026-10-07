@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act, within } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 const mockSetAnswer = vi.fn();
@@ -15,6 +15,13 @@ let mockSubmitStatus = "idle";
 let mockPrefilled: string[] = [];
 // A test's own questions; null keeps the four defaults.
 let mockQuestions: ReturnType<typeof makeSurveyQuestion>[] | null = null;
+
+// Staging, previews and dev (true) or the live site (false): the jump menu's gate.
+let mockNonProd = true;
+vi.mock("@shared/env/is-non-prod-deploy", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/env/is-non-prod-deploy")>()),
+  isNonProdDeploy: () => mockNonProd,
+}));
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
   useSurveyState: () => ({
@@ -127,8 +134,13 @@ vi.mock("@features/survey/ui/SurveyProgress", () => ({
 }));
 
 vi.mock("@features/survey/ui/SurveyNav", () => ({
-  default: (props: { canGoNext: boolean; onNext: () => void; onPrevious: () => void }) => (
-    <div data-testid="survey-nav">
+  default: (props: {
+    canGoNext: boolean;
+    hasAnswer: boolean;
+    onNext: () => void;
+    onPrevious: () => void;
+  }) => (
+    <div data-testid="survey-nav" data-ready={String(props.hasAnswer)}>
       <button data-testid="survey-nav-prev" onClick={props.onPrevious}>
         Previous
       </button>
@@ -169,6 +181,7 @@ beforeEach(() => {
   mockProgress = 0;
   mockSubmitStatus = "idle";
   mockPrefilled = [];
+  mockNonProd = true;
   mockQuestions = null;
   mockSetAnswer.mockClear();
   mockGetAnswer.mockClear().mockReturnValue(null);
@@ -268,6 +281,27 @@ describe("SurveyEngine", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("open-response")).toBeInTheDocument();
     expect(screen.getByText("Q3?")).toBeInTheDocument();
+  });
+
+  it("lets an optional open question go Next with nothing typed", () => {
+    // Mark's content asks (16019, 16020) are optional: an empty box must never block the
+    // survey. q3 is the fixture's optional open question.
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav-next")).not.toBeDisabled();
+  });
+
+  it("draws Next as ready on an empty optional question, not in its greyed 'answer first' style", () => {
+    // SurveyNav fades Next until the question has an answer. On an optional question that
+    // fade tells the respondent they are blocked when they are not.
+    mockCurrentIndex = 2;
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav")).toHaveAttribute("data-ready", "true");
+  });
+
+  it("still fades Next on an empty required question", () => {
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav")).toHaveAttribute("data-ready", "false");
   });
 
   it("renders multiple choice question component for answerType multiple", () => {
@@ -433,6 +467,153 @@ describe("SurveyEngine completion phases", () => {
 
     expect(screen.getByText("Submission Interrupted")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+  });
+
+  describe("swipes", () => {
+    const swipeRight = (start: EventTarget) => {
+      fireEvent.touchStart(start, { touches: [{ clientX: 40, clientY: 300 }] });
+      fireEvent.touchEnd(window, { changedTouches: [{ clientX: 240, clientY: 305 }] });
+    };
+
+    // A drag across the 1-7 scale (it looks like a slider), or along a text box to move
+    // the caret, went to the previous or next question.
+    it.each([
+      [
+        "the scale",
+        () => {
+          const scale = document.createElement("div");
+          scale.setAttribute("data-no-swipe", "");
+          return scale;
+        },
+      ],
+      ["a text box", () => document.createElement("input")],
+      ["a text area", () => document.createElement("textarea")],
+    ])("a drag that starts on %s does not change the question", (_label, make) => {
+      mockCurrentIndex = 1;
+      const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      mockSetCurrentIndex.mockClear();
+      const el = make();
+      document.body.appendChild(el);
+      try {
+        swipeRight(el);
+        expect(back).not.toHaveBeenCalled();
+        expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+      } finally {
+        el.remove();
+        back.mockRestore();
+      }
+    });
+
+    it("a swipe anywhere else still goes back a question", () => {
+      mockCurrentIndex = 1;
+      const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      mockSetCurrentIndex.mockClear();
+      try {
+        swipeRight(document.body);
+        // Back pops an entry, or with none above the base, moves on its own.
+        expect(back.mock.calls.length + mockSetCurrentIndex.mock.calls.length).toBe(1);
+      } finally {
+        back.mockRestore();
+      }
+    });
+
+    // Pinch-zoom is on, and the finger a horizontal pinch lifts first was measured from
+    // the other finger's start, so spreading two fingers went back a question.
+    const a = { clientX: 40, clientY: 300 };
+    const b = { clientX: 60, clientY: 300 };
+    it.each([
+      [
+        "a pinch, one finger lifting first",
+        () => {
+          fireEvent.touchStart(document.body, { touches: [a] });
+          fireEvent.touchStart(document.body, { touches: [a, b] });
+          fireEvent.touchEnd(window, {
+            touches: [a],
+            changedTouches: [{ clientX: 240, clientY: 305 }],
+          });
+          fireEvent.touchEnd(window, { touches: [], changedTouches: [a] });
+        },
+      ],
+      [
+        "a pinch, both fingers lifting together",
+        () => {
+          fireEvent.touchStart(document.body, { touches: [a] });
+          fireEvent.touchStart(document.body, { touches: [a, b] });
+          fireEvent.touchEnd(window, {
+            touches: [],
+            changedTouches: [{ clientX: 240, clientY: 305 }, b],
+          });
+        },
+      ],
+      [
+        "a finger lifting while another is down, its touch start unheard",
+        () => {
+          fireEvent.touchStart(document.body, { touches: [a] });
+          fireEvent.touchEnd(window, {
+            touches: [a],
+            changedTouches: [{ clientX: 240, clientY: 305 }],
+          });
+        },
+      ],
+      [
+        "a drag across a zoomed-in page",
+        () => {
+          Object.defineProperty(window, "visualViewport", {
+            configurable: true,
+            value: { scale: 2 },
+          });
+          try {
+            swipeRight(document.body);
+          } finally {
+            delete (window as { visualViewport?: unknown }).visualViewport;
+          }
+        },
+      ],
+    ])("%s does not change the question", (_label, gesture) => {
+      mockCurrentIndex = 1;
+      const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+      render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      mockSetCurrentIndex.mockClear();
+      try {
+        gesture();
+        expect(back).not.toHaveBeenCalled();
+        expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+      } finally {
+        back.mockRestore();
+      }
+    });
+  });
+
+  // Focus stays on Next, so a screen reader said nothing when the question changed.
+  it("announces each new question to screen readers", () => {
+    mockQuestions = [
+      makeSurveyQuestion({ qId: "q1", question: "First question?" }),
+      makeSurveyQuestion({ qId: "q2", question: "Second question?" }),
+    ];
+    try {
+      mockCurrentIndex = 0;
+      const { rerender, container } = render(
+        <SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />
+      );
+      const live = () => container.querySelector('[aria-live="polite"]')?.textContent;
+      expect(live()).toBe("Question 1 of 2: First question?");
+      mockCurrentIndex = 1;
+      rerender(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+      expect(live()).toBe("Question 2 of 2: Second question?");
+    } finally {
+      mockQuestions = null;
+    }
+  });
+
+  // pan-y alone turned pinch-zoom off for the whole survey.
+  it("lets the reader pinch to zoom", () => {
+    mockCurrentIndex = 0;
+    const { container } = render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect((container.querySelector("main") as HTMLElement).style.touchAction).toContain(
+      "pinch-zoom"
+    );
   });
 
   it("never re-runs a finished run from the keyboard or a swipe", () => {
@@ -880,5 +1061,79 @@ describe("SurveyEngine — arrow keys in a text field", () => {
     fireEvent.keyDown(window, { key: "ArrowLeft" });
 
     expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+  });
+});
+
+// Mark, 30.09: "Is there a way that I can jump to specific questions rather than having
+// to go through the entire survey?" Staging only (SurveyJumpMenu.test.tsx has the menu).
+describe("SurveyEngine — the staging jump menu", () => {
+  it("offers every asked question off production, and moves the engine to the one picked", () => {
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    const menu = screen.getByRole("combobox", { name: "Jump to question" });
+    expect(
+      within(menu)
+        .getAllByRole("option")
+        .map((o) => o.textContent)
+    ).toEqual(["1. q1 · Q1?", "2. q2 · Q2?", "3. q3 · Q3?", "4. q4 · Q4?"]);
+    fireEvent.change(menu, { target: { value: "2" } });
+    expect(mockSetCurrentIndex).toHaveBeenLastCalledWith(2);
+  });
+
+  it("leaves the live site's survey without it", () => {
+    mockNonProd = false;
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    expect(screen.queryByRole("combobox", { name: "Jump to question" })).toBeNull();
+    expect(screen.queryByText(/Jump to question/)).toBeNull();
+  });
+});
+
+// Final review, 30.09: the engine's window-level keys and swipe stayed live once the last
+// question was answered. Under the wizard ArrowRight and Enter were swallowed (a
+// preventDefault and a goNext with nothing to go to), and ArrowLeft or a back swipe went
+// back to the last question, whose Next does nothing once the survey is submitted: the
+// reader was stranded on it.
+describe("SurveyEngine once the survey is over", () => {
+  const atWizard = () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockSubmitStatus = "success";
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+    mockSetCurrentIndex.mockClear();
+  };
+
+  it("leaves the arrow keys and Enter to the wizard", () => {
+    atWizard();
+    for (const key of ["ArrowRight", "Enter", "ArrowLeft"]) {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented, key).toBe(false);
+    }
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+  });
+
+  it("does not take a back swipe to the last question", () => {
+    atWizard();
+    fireEvent.touchStart(window, { touches: [{ clientX: 40, clientY: 300 }] });
+    fireEvent.touchEnd(window, { changedTouches: [{ clientX: 260, clientY: 304 }] });
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+  });
+
+  it("does not go back from the processing screen either", () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    // A submit in flight: mounting onto a finished run with nothing in flight goes
+    // straight to the wizard (main's "the end of the survey never strands the reader").
+    mockSubmitStatus = "submitting";
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
+    mockSetCurrentIndex.mockClear();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })
+    );
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
   });
 });

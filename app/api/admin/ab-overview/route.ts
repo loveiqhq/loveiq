@@ -262,7 +262,8 @@ export async function GET(request: Request) {
       { step: "Intro screen 3", count: intro3 },
       { step: "Intro screen 4", count: intro4 },
       { step: "Answered question 1", count: firstQuestionReach },
-      { step: "Finished the survey", count: stages?.completions ?? 0 },
+      // The headline's own count, staff left out, as the two steps after it are.
+      { step: "Finished the survey", count: outcomes.submissions.length },
       { step: "Opened their report", count: reportOpens },
       /*
        * Was "Reached the paywall", taken from analytics_event's paywall_initiated.

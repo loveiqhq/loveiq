@@ -31,6 +31,19 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+const mockRefreshJourneyDetail = vi.fn().mockResolvedValue(undefined);
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
+}));
+
+// Run the scheduled work inline so the test observes it, which is what
+// `scheduleAfterResponse` does anyway when there is no request scope.
+vi.mock("@shared/http/after-response", () => ({
+  scheduleAfterResponse: (_label: string, run: () => unknown) => {
+    void run();
+  },
+}));
+
 import { POST } from "@/app/api/report-session-end/route";
 
 function makeRequest(body: unknown, headers: Record<string, string> = {}) {
@@ -155,5 +168,82 @@ describe("POST /api/report-session-end", () => {
     mockSupabaseFetch.mockRejectedValue(new Error("supabase down"));
     const res = await POST(makeRequest({ submission_id: 2113 }));
     expect(res.status).toBe(204);
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A visit under a minute is measured ONLY by its close, and nothing re-drew the
+   * Slack journey message after one — the shared slot in /api/analytics-event is
+   * spent by the burst of events on open. #2417 read "—" for a 4-second visit and
+   * #2418 "1 min" for 98 seconds.
+   */
+  describe("re-drawing the Slack journey message", () => {
+    beforeEach(async () => {
+      const { checkRateLimit } = await import("@shared/http/ratelimit");
+      vi.mocked(checkRateLimit).mockResolvedValue({
+        allowed: true,
+        remaining: 29,
+        resetAt: new Date(),
+      });
+    });
+
+    it("re-draws it once the close is on record", async () => {
+      mockSession("11111111-2222-3333-4444-555555555555");
+      await POST(makeRequest({ submission_id: 2113 }));
+
+      expect(mockRefreshJourneyDetail).toHaveBeenCalledTimes(1);
+      expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(2113);
+      // After the PATCH, so the rebuild measures the close it was called for.
+      const patchAt = mockSupabaseFetch.mock.calls.findIndex(
+        (c) => (c[1] as { method?: string } | undefined)?.method === "PATCH"
+      );
+      expect(mockRefreshJourneyDetail.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mockSupabaseFetch.mock.invocationCallOrder[patchAt]!
+      );
+    });
+
+    it("takes its own slot, about once a minute per submission, never the IP", async () => {
+      const { checkRateLimit } = await import("@shared/http/ratelimit");
+      mockSession("11111111-2222-3333-4444-555555555555");
+      await POST(makeRequest({ submission_id: 2113 }));
+      expect(checkRateLimit).toHaveBeenCalledWith("2113", {
+        bucket: "journey-close-refresh",
+        limit: 1,
+        windowMs: 60_000,
+      });
+    });
+
+    it("still stamps the close but skips the re-draw while that slot is spent", async () => {
+      const { checkRateLimit } = await import("@shared/http/ratelimit");
+      vi.mocked(checkRateLimit).mockImplementation(async (_key, opts) => ({
+        allowed: opts?.bucket !== "journey-close-refresh",
+        remaining: 0,
+        resetAt: new Date(),
+      }));
+      mockSession("11111111-2222-3333-4444-555555555555");
+      const res = await POST(makeRequest({ submission_id: 2113 }));
+      expect(res.status).toBe(204);
+      expect(patchCalls()).toHaveLength(1);
+      expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+    });
+
+    it("does not re-draw when the close was not written", async () => {
+      mockSupabaseFetch.mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes("select=")
+            ? { ok: true, json: () => Promise.resolve([{ id: "s-1" }]) }
+            : { ok: false, status: 500 }
+        )
+      );
+      const res = await POST(makeRequest({ submission_id: 2113 }));
+      expect(res.status).toBe(204);
+      expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+    });
+
+    it("does not re-draw for a report nobody opened", async () => {
+      mockSession(null);
+      await POST(makeRequest({ submission_id: 999_999 }));
+      expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+    });
   });
 });

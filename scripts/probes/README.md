@@ -104,6 +104,8 @@ of a defect either.
 | `verify-cta-visibility.mjs`           | The primary CTA is in the first viewport, reachable by a real tap, and at least 44px (V1).                                                                                                                                                                     |
 | `verify-survey-loop.mjs`              | Finishing the survey and pressing Back lands the reader on the intro screen with progress reset (L1). The first defect this pipeline ever reproduced.                                                                                                          |
 | `verify-start-over-new-session.mjs`   | Starting again after finishing ("Start a new one", Back to consent and "I agree", Back and Forward, or a landing-page answer) drops the finished run's session id, so a retake is stored (#375). Aborts every non-GET `/api/` call; runs daily in probe-guard. |
+| `verify-no-sideways.mjs`              | Sideways pan on a phone: boxes wider than the screen (page clips off, as an iPhone pans past them) and text boxes under 16px.                                                                                                                                  |
+| `verify-paywall-close-holds.mjs`      | Closing the paywall on desktop scrolled the reader away: focus went back to a chapter head far above, and Lenis glided a quick wheel tick to the top.                                                                                                          |
 
 ## Replaying a route, and the two traps in it
 

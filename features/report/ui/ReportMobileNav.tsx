@@ -9,6 +9,8 @@ import { useCloseOnBack } from "./hooks/useCloseOnBack";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
+import { useIsV3, useIsV4 } from "./v3/V3Chapter";
+import { REPORT_V3_NAV_PARTS, REPORT_V4_NAV_PARTS } from "./v3/reportV3Nav";
 
 interface Props {
   activeSectionId: string;
@@ -26,6 +28,15 @@ interface Props {
 const NAV_LABEL_BY_ID = new Map<string, string>(
   REPORT_NAV_PARTS.flatMap((part) => part.items.map((item) => [item.id, item.label] as const))
 );
+
+// V4 names some chapters its own way ("Challenges in Partnerships", Fatih 2026-09-24),
+// so its pill reads V4's drawer first and V1's for every id that drawer doesn't list.
+const NAV_LABEL_BY_ID_V4 = new Map<string, string>([
+  ...NAV_LABEL_BY_ID,
+  ...REPORT_V4_NAV_PARTS.flatMap((part) =>
+    part.items.map((item) => [item.id, item.label] as const)
+  ),
+]);
 
 const PILL_SCROLL_THRESHOLD = 15;
 const PILL_HIDE_BREAKPOINT = 1280;
@@ -53,6 +64,9 @@ const ReportMobileNav: FC<Props> = ({
   onShareClick,
   onDrawerOpened,
 }) => {
+  const isV3 = useIsV3();
+  const isV4 = useIsV4();
+  const navParts = isV4 ? REPORT_V4_NAV_PARTS : isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
   const pillButtonRef = useRef<HTMLButtonElement>(null);
   const panelPillButtonRef = useRef<HTMLButtonElement>(null);
   const wasDrawerOpenRef = useRef(false);
@@ -66,8 +80,17 @@ const ReportMobileNav: FC<Props> = ({
   const drawerClosing = phase === "closing";
 
   const activeChapter = useMemo(
-    () => NAV_LABEL_BY_ID.get(activeSectionId) ?? "Overview",
-    [activeSectionId]
+    () => (isV4 ? NAV_LABEL_BY_ID_V4 : NAV_LABEL_BY_ID).get(activeSectionId) ?? "Overview",
+    [activeSectionId, isV4]
+  );
+  // Both pills. Mark's 961:333 (29.09): "Selected Chapter font changed to Bold and took
+  // out the "Chapter:"" — V4's names the chapter alone. The floating one still tells a
+  // screen reader what it is for, in its label.
+  const pillLabel = (
+    <span className="report-chapter-pill__label">
+      {isV4 ? null : "Chapter:"}
+      <span className="report-chapter-pill__chapter">{activeChapter}</span>
+    </span>
   );
 
   // Pill scroll-hide. Intentionally no `drawerOpen` dep — guards the same
@@ -174,6 +197,13 @@ const ReportMobileNav: FC<Props> = ({
     pendingJumpRef.current = null;
     afterOverlayEntryGone(() => {
       window.location.hash = target;
+      // A jump, not a smooth scroll: a smooth scroll fixes its destination as it
+      // starts, and content it passes can still grow (Report V4's Typical Beliefs rows
+      // turn open as they cross the screen), so it stopped short of the chapter. After a
+      // jump, scroll anchoring holds the chapter in place while that settles.
+      document
+        .getElementById(target)
+        ?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
     });
   }, [phase]);
 
@@ -232,7 +262,7 @@ const ReportMobileNav: FC<Props> = ({
             width={27}
             unoptimized
           />
-          <span className="report-mobile-topbar__wordmark" aria-label="LoveIQ Report">
+          <span className="report-mobile-topbar__wordmark" role="img" aria-label="LoveIQ Report">
             <span aria-hidden="true" className="report-mobile-topbar__love">
               Love
             </span>
@@ -263,14 +293,13 @@ const ReportMobileNav: FC<Props> = ({
           ref={pillButtonRef}
           type="button"
           className="report-chapter-pill__btn"
+          aria-label={isV4 ? `Chapter: ${activeChapter}` : undefined}
           aria-haspopup="dialog"
           aria-expanded={drawerOpen}
           aria-controls="report-chapter-drawer"
           onClick={openDrawer}
         >
-          <span className="report-chapter-pill__label">
-            Chapter:<span className="report-chapter-pill__chapter">{activeChapter}</span>
-          </span>
+          {pillLabel}
           <span className="report-chapter-pill__chevron">
             <ChevronDownIcon />
           </span>
@@ -299,9 +328,7 @@ const ReportMobileNav: FC<Props> = ({
                 aria-label="Close chapter menu"
                 onClick={closeDrawer}
               >
-                <span className="report-chapter-pill__label">
-                  Chapter:<span className="report-chapter-pill__chapter">{activeChapter}</span>
-                </span>
+                {pillLabel}
                 <span className="report-chapter-pill__chevron report-chapter-pill__chevron--up">
                   <ChevronDownIcon />
                 </span>
@@ -342,13 +369,14 @@ const ReportMobileNav: FC<Props> = ({
               className="report-chapter-panel__nav"
               data-lenis-prevent
             >
-              {REPORT_NAV_PARTS.map((part) => (
+              {navParts.map((part) => (
                 <div key={part.part} className="report-chapter-panel__part-group">
                   <p className="report-chapter-panel__part">
                     {part.part} · {part.label}
                   </p>
                   {part.items.map((item, idx) => {
                     const isActive = activeSectionId === item.id;
+                    const access = accessById?.get(item.id) ?? "free";
                     // Cap stagger so the last items don't lag on a long list.
                     const delayIdx = Math.min(idx, 8);
                     return (
@@ -356,6 +384,8 @@ const ReportMobileNav: FC<Props> = ({
                         key={item.id}
                         href={`#${item.id}`}
                         aria-current={isActive ? "location" : undefined}
+                        // V4 sets the row's weight by its tier (961:333).
+                        data-access={isV4 ? access : undefined}
                         title={item.label}
                         className={[
                           "report-mobile-nav__link",
@@ -379,7 +409,7 @@ const ReportMobileNav: FC<Props> = ({
                         }}
                       >
                         <span className="report-mobile-nav__label">{item.label}</span>
-                        <ReportNavBadge access={accessById?.get(item.id) ?? "free"} />
+                        <ReportNavBadge access={access} />
                       </a>
                     );
                   })}

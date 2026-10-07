@@ -97,13 +97,19 @@ describe("surveyAnswersSchema — tidies what a real browser can have stored", (
   // A pending submit from before the Other box's 500-character limit can hold any length.
   // Refused at 20,000, Retry resent it and only Start Over (losing every answer) got out.
   it("cuts any length of text, never refusing it", () => {
-    const parsed = surveyAnswersSchema.safeParse({ "15010_other": "x".repeat(25_000) });
+    const parsed = surveyAnswersSchema.safeParse({
+      "15010": "Other",
+      "15010_other": "x".repeat(25_000),
+    });
     expect(parsed.success).toBe(true);
     expect(parsed.data?.["15010_other"]).toHaveLength(1000);
   });
 
   it("cuts text to 1000 characters (the Other box had no limit)", () => {
-    const parsed = surveyAnswersSchema.safeParse({ "15010_other": "x".repeat(5000) });
+    const parsed = surveyAnswersSchema.safeParse({
+      "15010": "Other",
+      "15010_other": "x".repeat(5000),
+    });
     expect(parsed.success).toBe(true);
     expect(parsed.data?.["15010_other"]).toHaveLength(1000);
   });
@@ -118,5 +124,42 @@ describe("surveyAnswersSchema — tidies what a real browser can have stored", (
     const parsed = surveyAnswersSchema.safeParse({ [scale]: "Somewhat", q1: "c" });
     expect(parsed.success).toBe(true);
     expect(parsed.data).toEqual({ q1: "c" });
+  });
+
+  describe("the Other box's text", () => {
+    /**
+     * Typing under "Other" and then picking another answer kept the text in the answers,
+     * so it was stored for a reader who had changed their mind.
+     */
+    it("is dropped once the answer is no longer Other", () => {
+      const parsed = surveyAnswersSchema.safeParse({
+        "15010": "Woman",
+        "15010_other": "typed then changed",
+      });
+      expect(parsed.data).toEqual({ "15010": "Woman" });
+    });
+
+    it("is kept while Other is the answer, single or among several picks", () => {
+      const parsed = surveyAnswersSchema.safeParse({
+        "15010": "Other",
+        "15010_other": "my words",
+        "03003": ["Something else", "Other"],
+        "03003_other": "also mine",
+      });
+      expect(parsed.data?.["15010_other"]).toBe("my words");
+      expect(parsed.data?.["03003_other"]).toBe("also mine");
+    });
+
+    it("is dropped when its question has no answer at all", () => {
+      expect(surveyAnswersSchema.safeParse({ "15010_other": "orphan" }).data).toEqual({});
+    });
+
+    it("is dropped when Other was cut from an over-cap pick list", () => {
+      const parsed = surveyAnswersSchema.safeParse({
+        "16001": ["a", "b", "Other"],
+        "16001_other": "beyond the cap",
+      });
+      expect(parsed.data).toEqual({ "16001": ["a", "b"] });
+    });
   });
 });

@@ -8,29 +8,20 @@ import {
 
 export type { ReportAccessPlan } from "@features/report/server/access";
 
-export const SHARE_SEAT_LIMIT_BY_PLAN: Record<NonNullable<ReportAccessPlan>, number> = {
-  essentials: 1,
-  full_report: 2,
-  core: 2,
-  all_reports: 2,
-};
+/**
+ * Every reader may share their report with two people, paid or not (Marcus, LoveIQ
+ * WhatsApp group, 2026-10-05: "people can share the report to up to 2 people for free in
+ * the state the report has"). A recipient sees it as its owner does — locked where the
+ * owner has not paid — because /api/report gives a shared viewer the owner's own plan.
+ * Until then only buyers could share, essentials with one seat.
+ */
+export const SHARE_SEAT_LIMIT = 2;
 
-export function getShareSeatLimit(plan: ReportAccessPlan): number {
-  switch (plan) {
-    case "full_report":
-    case "core":
-    case "all_reports":
-      return 2;
-    case "essentials":
-      return 1;
-    case null:
-    default:
-      return 0;
-  }
-}
-
-export function canSharePlan(plan: ReportAccessPlan): boolean {
-  return getShareSeatLimit(plan) > 0;
+/** What report_share.plan_at_share records: the owner's plan then, or 'free'. */
+export function sharePlanLabel(
+  plan: ReportAccessPlan
+): "free" | "essentials" | "full_report" | "core" | "all_reports" {
+  return plan ?? "free";
 }
 
 const SUPABASE_TIMEOUT_MS = 8_000;

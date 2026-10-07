@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo, type FC } from "react";
+import { useState, useRef, useEffect, useCallback, useId, useMemo, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
-import { COUNTRIES, getCountryFlagUrl } from "@/data/countries";
+import { getCountryFlagUrl } from "@/data/countries";
+import { exactCountry, searchCountries } from "./countrySearch";
 import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
 
@@ -22,31 +23,18 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+  // selectCountry blurs the box, and the blur runs handleBlur at once, with this render's
+  // state: the text typed before the choice. Typed "Niger" then clicked "Nigeria" stored
+  // "Niger". Set while a choice is being made.
+  const choosingRef = useRef(false);
 
   // Display: when editing show search text, otherwise show selected value
   const displayValue = isEditing ? search : (value ?? "");
 
   // Filter uses search text when editing, otherwise shows all
   const filterText = isEditing ? search : "";
-  const filtered = useMemo(
-    () =>
-      filterText
-        ? COUNTRIES.filter((c) => c.toLowerCase().includes(filterText.toLowerCase()))
-        : COUNTRIES,
-    [filterText]
-  );
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setIsEditing(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const filtered = useMemo(() => searchCountries(filterText), [filterText]);
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -60,15 +48,35 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
 
   const selectCountry = useCallback(
     (country: string) => {
+      choosingRef.current = true;
       onChange(country);
       setSearch("");
       setIsOpen(false);
       setIsEditing(false);
       setHighlightIndex(-1);
       inputRef.current?.blur();
+      choosingRef.current = false;
     },
     [onChange]
   );
+
+  // A tap outside closes the list. The typed text stays (it was wiped, so a reader who
+  // tapped away mid-word lost it), and a whole name typed is chosen: here as well as on
+  // blur, because WebKit keeps the box focused when the tap lands on something that
+  // cannot take focus, so on an iPhone the blur never came. pointerdown, not mousedown:
+  // WebKit sends no mouse events for a tap on something not clickable (a heading, the
+  // page), so on an iPhone a mousedown listener never heard those taps.
+  useEffect(() => {
+    const handleClickOutside = (e: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        const exact = isEditing ? exactCountry(search) : null;
+        if (exact) selectCountry(exact);
+        else setIsOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
+  }, [isEditing, search, selectCountry]);
 
   const clearSelection = useCallback(() => {
     onChange("" as string);
@@ -84,8 +92,18 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
     setSearch(text);
     setIsEditing(true);
     setIsOpen(true);
-    setHighlightIndex(-1);
+    // An exact name or alias is highlighted, so Enter picks what the list shows on top.
+    const exact = exactCountry(text);
+    setHighlightIndex(exact && searchCountries(text)[0] === exact ? 0 : -1);
     if (value) onChange("" as string);
+  };
+
+  // Leaving the box with a whole name typed ("germany", "UK") chooses it: Next stayed
+  // disabled until the reader also tapped the name in the list.
+  const handleBlur = () => {
+    if (choosingRef.current || !isEditing) return;
+    const exact = exactCountry(search);
+    if (exact) selectCountry(exact);
   };
 
   const handleFocus = () => {
@@ -176,10 +194,19 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
             value={displayValue}
             onChange={handleInputChange}
             onFocus={handleFocus}
+            onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             placeholder="Search for a country..."
             autoComplete="off"
-            className={`w-full rounded-xl border py-3 font-sans text-[16px] sm:text-[15px] focus:outline-none ${
+            role="combobox"
+            aria-label={question.question}
+            aria-autocomplete="list"
+            aria-expanded={isOpen && filtered.length > 0}
+            aria-controls={listId}
+            aria-activedescendant={
+              isOpen && highlightIndex >= 0 ? `${listId}-${highlightIndex}` : undefined
+            }
+            className={`w-full rounded-xl border py-3 font-sans text-[16px] focus:outline-none ${
               white
                 ? "border-black/[0.08] bg-[#f5f6f8] text-[#161021] placeholder:text-black/30 focus:border-[#8b6fbf]"
                 : "border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-[#a78bfa]"
@@ -223,10 +250,12 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
                 : "border-white/10 bg-[#1a1225]"
             }`}
             role="listbox"
+            id={listId}
           >
             {filtered.map((country, i) => (
               <li
                 key={country}
+                id={`${listId}-${i}`}
                 role="option"
                 aria-selected={country === value}
                 className={`cursor-pointer px-4 py-2.5 font-sans text-[15px] transition-colors ${
@@ -258,9 +287,16 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
           </ul>
         )}
 
+        {/* Read out when nothing matches: the list just disappears, which a screen reader
+            does not announce. Always rendered, so the change is heard. */}
+        <p className="sr-only" role="status">
+          {isOpen && isEditing && search && filtered.length === 0 ? "No countries found" : ""}
+        </p>
+
         {/* No results */}
         {isOpen && isEditing && search && filtered.length === 0 && (
           <div
+            aria-hidden="true"
             className={`absolute z-50 mt-2 w-full rounded-xl border px-4 py-3 font-sans text-[14px] ${
               white
                 ? "border-black/[0.08] bg-white text-[#6b6678] shadow-[0_16px_40px_rgba(0,0,0,0.12)]"

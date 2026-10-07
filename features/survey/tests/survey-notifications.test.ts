@@ -141,8 +141,8 @@ describe("POST /api/survey notifications", () => {
           json: async () => [
             {
               plan: "full_report",
-              experiment_group: "B",
-              base_price_bucket: "B",
+              experiment_group: "A3",
+              base_price_bucket: "A3",
               forced_paywall_arm: "treatment",
               device_type: "iOS",
               country_tier: "tier_2",
@@ -229,24 +229,24 @@ describe("POST /api/survey notifications", () => {
     // the LIVE arm, in plain English — never the raw code. The arm NAME is bolded
     // and its parenthetical is not, so this is asserted as the rendered string.
     expect(flat).toContain("Landing page design: *Landing Page V1* (First Design)");
-    // Concluded experiments are not listed as ones they were in — the paywall,
-    // the survey theme since 2026-08-25, and pricing since 2026-08-31. The
-    // fixture still carries all three arms, so this proves the axis list excludes
-    // them rather than the values being absent; they are still in the structured
-    // log line asserted below.
+    // …and so is the price test, Pricing 3.0, once a quote has stamped its list.
+    expect(flat).toContain("Report pricing");
+    expect(flat).toContain("Pricing 3.0 higher");
+    // Concluded experiments are not listed as ones they were in — the paywall and
+    // the survey theme since 2026-08-25. The fixture still carries both arms, so this
+    // proves the axis list excludes them rather than the values being absent; they are
+    // still in the structured log line asserted below.
     expect(flat).not.toContain("Dark survey");
     expect(flat).not.toContain("Survey design");
     expect(flat).not.toContain("Forced paywall");
     expect(flat).not.toContain("Paywall style");
-    expect(flat).not.toContain("Pricing B");
-    expect(flat).not.toContain("Report pricing");
     expect(flat).not.toContain("white_prev");
 
     expect(mockLogger.info).toHaveBeenCalledWith(
       expect.objectContaining({
         submissionId: 123,
         sessionId: "550e8400-e29b-41d4-a716-446655440000",
-        arms: { landing: "white_prev", survey: "dark", pricing: "B", paywall: "treatment" },
+        arms: { landing: "white_prev", survey: "dark", pricing: "A3", paywall: "treatment" },
       }),
       "Sending Slack survey notification"
     );

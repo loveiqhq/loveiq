@@ -34,7 +34,9 @@ describe("plans pop-up trigger", () => {
     // the pop-up sat on the FIRST paywalled chapter that could not happen: no card was
     // ever on screen before it fired. Now that it waits for Attachment, the two
     // half-shown chapters come first, so the first card arms the clock instead.
-    expect(SOURCE).toContain('document.querySelector(".report-premium-overlay")');
+    // V4's in-flow "Premium content" card (.rv4-premium, the Typical Beliefs gate)
+    // counts as that first offer too — whichever comes first in the page.
+    expect(SOURCE).toContain('document.querySelector(".report-premium-overlay, .rv4-premium")');
     const block = SOURCE.slice(SOURCE.indexOf("const firstOfferCard"));
     expect(block.slice(0, 900)).toMatch(/notifyPaywallReached\(\)/);
     // ...and it is torn down with the rest of the effect.
@@ -48,6 +50,29 @@ describe("plans pop-up trigger", () => {
     expect(SOURCE).toMatch(/rootMargin:\s*"0px 0px -25% 0px"/);
   });
 
+  it("opens nothing at Challenges in Partnerships on a V4 desktop, but still reports the paywall", () => {
+    // Desktop review 01.10 (Fatih: desktop only, from 700px). The arrival is still
+    // reported first, so the Slack journey's "Paywall hit" stays; then a V4 desktop
+    // stops before the experiment exposure and the modal timer.
+    const fn = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
+    const body = fn.slice(0, fn.indexOf("\n    }\n"));
+    const notify = body.indexOf("notifyPaywallReached();");
+    const desktop = body.indexOf('matchMedia("(min-width: 700px)")');
+    const exposure = body.indexOf("trackExperimentExposure(");
+    expect(notify).toBeGreaterThan(-1);
+    expect(desktop).toBeGreaterThan(notify);
+    expect(exposure).toBeGreaterThan(desktop);
+    expect(body.slice(desktop - 120, desktop + 80)).toMatch(/isV4/);
+  });
+
+  it("waits for Part V's new first chapter under V4", () => {
+    // V4 opens Part V with Challenges in Partnership, one chapter above Attachment
+    // Style (review 24.09), so the pop-up still arrives where that part begins.
+    expect(SOURCE).toMatch(
+      /\(isV4 \? document\.getElementById\("challenges_in_partnership"\) : null\) \?\?\s*document\.getElementById\("attachment_style"\)/
+    );
+  });
+
   it("still shows the pop-up if that chapter is ever absent", () => {
     // Losing the offer entirely would be worse than firing it early, so the chain
     // degrades to the chapter this trigger used to sit on, then to the snapshot, then
@@ -57,6 +82,14 @@ describe("plans pop-up trigger", () => {
     );
     const fallback = SOURCE.slice(SOURCE.indexOf("if (!trigger)"));
     expect(fallback).toMatch(/addEventListener\("scroll"/);
+  });
+
+  it("falls back, on V4, to the Summary that preceded the Snapshot (30.09)", () => {
+    // V4 has no Snapshot now; the Summary (or V2's "What this means for you") sits where
+    // it began, so the pop-up keeps its place in the page.
+    expect(SOURCE).toMatch(
+      /getElementById\("snapshot"\) \?\?[\s\S]{0,200}?getElementById\("summary"\) \?\?\s*document\.getElementById\("means_for_you"\)/
+    );
   });
 
   it("waits a beat after arrival instead of firing on the same frame", () => {
@@ -110,6 +143,29 @@ describe("plans pop-up trigger", () => {
     const timerIdx = openPlans.indexOf("scrollTeaserTimerRef.current = setTimeout");
     expect(notifyIdx, "openPlans no longer reports the paywall").toBeGreaterThan(-1);
     expect(notifyIdx).toBeLessThan(timerIdx);
+  });
+
+  it("runs the pop-up test on V4 only", () => {
+    // Marcus's 50/50 (2026-09-29). V1 and V2 readers are never bucketed.
+    expect(SOURCE).toMatch(
+      /const popupArm = isV4\s*\?\s*\(resolvePopupArmOverride\(searchParams\.get\("popup"\)\) \?\? assignPopupArm\(data\?\.submissionId\)\)\s*:\s*null;/
+    );
+  });
+
+  it("marks the pop-up point in both arms, then stops before the pop-up in no_popup", () => {
+    // The exposure is the like-for-like denominator: in `no_popup` it is where the
+    // pop-up would have opened. It must fire before the early return, and the
+    // return must come before the timer, or `no_popup` still gets the pop-up.
+    const openPlans = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
+    const exposureIdx = openPlans.indexOf("trackExperimentExposure(");
+    const returnIdx = openPlans.indexOf('if (popupArm === "no_popup") return;');
+    const timerIdx = openPlans.indexOf("scrollTeaserTimerRef.current = setTimeout");
+    expect(exposureIdx, "openPlans no longer marks the pop-up point").toBeGreaterThan(-1);
+    expect(returnIdx, "no_popup no longer skips the pop-up").toBeGreaterThan(exposureIdx);
+    expect(timerIdx).toBeGreaterThan(returnIdx);
+    // The reach ping still goes out for both arms: the no-pop-up reader reached
+    // the paywall's cards all the same.
+    expect(openPlans.indexOf("notifyPaywallReached()")).toBeLessThan(returnIdx);
   });
 
   it("also reports it for every other route to the paywall", () => {

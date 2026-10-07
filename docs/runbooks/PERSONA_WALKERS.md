@@ -46,15 +46,21 @@ Mark asked for this on 2026-09-05: "a systematic way to thoroughly test" the pro
   (Chrome) make 28 walks. Four a night covers them all in a week.
   - **Which report.** A night reads one report: the default one loveiq.org shows, and
     Fatih's V4 (`?v4=1`) on the next night. The rotation repeats every seven days, so each
-    persona on each device reads both, a week apart.
-  - **Which plan.** Each walk buys one of the three plans, and the plan moves on by one each
-    week, so every persona buys all three over three weeks.
-  - "Just a snapshot" (`full_report`) is bought the way most people reach it: the sticky
-    "Unlock full report" bar, or, on the default report, the "Unlock the full report" button
-    under the archetype list. Both go straight to Stripe for that plan.
-  - The other two are bought from the plan picker, opened from an archetype row's "Unlock
-    report" ("Unlock Spark Seeker report" on a phone), a padlock on a locked chart (V4
-    only), or a chapter's "Unlock your report".
+    persona on each device reads both, a week apart. Since Report 3.0 launched
+    (2026-10-06) the default IS V4, so both nights read it; the `v4` night only names it.
+  - **Which plan.** Each walk buys one of the two plans staging sells since Pricing 3.0
+    (2026-10-05), and the plan moves on by one each week, so every persona buys both over two
+    weeks. `core` is no longer sold there, so the rotation leaves it out (`ROTATION_PLANS`); a
+    walk asked for it by hand (`--plan core`) still tries it where it is sold.
+  - The single report (`full_report`: "Only Your Highest Archetype" on staging, "Just a
+    snapshot" on main) is bought the way most people reach it: the sticky "Unlock full
+    report" bar, or, on the default report, the "Unlock the full report" button under the
+    archetype list. Both go straight to Stripe for that plan.
+  - All 14 (`all_reports`: "All 14 Archetype Reports" on staging, "For you & your partner" on
+    main) is bought from the plan picker, opened from an archetype row's "Unlock report"
+    ("Unlock Spark Seeker report" on a phone), a padlock on a locked chart (V4 only), or a
+    chapter's "Unlock your report". The walk knows both catalogues' names and buttons
+    (`PLAN_TITLE`, `PLAN_CTA` in `walk.ts`).
   - The report also opens the picker by itself while a person reads. When it does, the walk
     buys from it, and `walk.json` says "the report, by itself".
 - **What a walk proves on its own** (`checks.ts`, posted whatever the judge says):
@@ -90,6 +96,15 @@ Mark asked for this on 2026-09-05: "a systematic way to thoroughly test" the pro
     by its title in code, not by the model.
 - **Time limits.** Each walk has 20 minutes and records why it stopped. A survey that keeps
   asking stops after the survey's length plus ten.
+- **Buying a second report.** One more walk a night, on production's code (the `proof` job),
+  buys another archetype's report from "Other Archetypes" before its own
+  (`walk.ts --sequence other-first`). Three faults in exactly that reached production on
+  2026-10-06 (#524), because every walk bought once. It checks the list's "Unlock" and
+  "View report" labels, the pay screen's "Only the X Report", the return page's "Your X
+  report is unlocked", that X opens at its top, that the reader's own report stays locked,
+  and that neither report keeps a lock once both are bought. The first failed check stops
+  the walk, fails the run and posts the reason to #brain. Each check is in `walk.json`'s
+  `sequence`, judged by `checks.ts`.
 
 ## Staging only, and why that is safe
 
@@ -125,8 +140,10 @@ npx tsx scripts/walkers/walk.ts --persona "Spark Seeker" --device "Desktop Chrom
 - A laptop that sleeps mid-walk freezes it: a walk on 2026-09-29 lost 17 minutes and
   logged 48 "offline" errors. Keep the lid open, or use Actions.
 - From Actions: run "Persona walks on staging", optionally with a JSON list of walks. Turn
-  `judge` off to walk without posting. Then a walk that stops fails the run, because
-  nothing is posted to say so.
+  `judge` off to walk without posting.
+- A walk that stops fails the run, judged or not. From 2 to 5 October every walk stopped on
+  the last pre-report slide, the night's message said "0 of 4 reached the end", and the run
+  stayed green, so nobody looked.
 
 ## What it costs
 

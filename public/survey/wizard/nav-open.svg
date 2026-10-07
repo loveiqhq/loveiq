@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="6.86709" height="6.86709" viewBox="0 0 6.86709 6.86709" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="badge/unlocked" clip-path="url(#clip0_0_149)">
+<path id="lock-open" d="M2.25638 3.04116V2.1092C2.29767 1.85488 2.42125 1.62113 2.60817 1.44381C2.79509 1.26648 3.03503 1.15538 3.29117 1.12754C3.54731 1.0997 3.80551 1.15666 4.02616 1.28968C4.24682 1.4227 4.41774 1.62444 4.51271 1.86395M2.10913 3.04112H4.75786C5.13712 3.04112 5.44457 3.34857 5.44457 3.72782V5.05219C5.44457 5.43145 5.13712 5.7389 4.75786 5.7389H2.10913C1.72987 5.7389 1.42242 5.43145 1.42242 5.05219V3.72782C1.42242 3.34857 1.72987 3.04112 2.10913 3.04112Z" stroke="url(#paint0_linear_0_149)" stroke-width="0.637658" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_149" x1="2.01144" y1="1.79696" x2="5.24613" y2="4.61413" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FB683E"/>
+<stop offset="0.52" stop-color="#E88C8C"/>
+<stop offset="1" stop-color="#AC88ED"/>
+</linearGradient>
+<clipPath id="clip0_0_149">
+<rect width="6.86709" height="6.86709" fill="white"/>
+</clipPath>
+</defs>
+</svg>

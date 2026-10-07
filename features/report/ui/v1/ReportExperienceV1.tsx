@@ -23,7 +23,7 @@
  *     still quote report copy off staging (c03b8eea).
  */
 
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC, type MutableRefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   setReportSubmissionContext,
@@ -37,10 +37,11 @@ import {
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import { SUMMARY_BLOCK_ID } from "@features/report/server/contentGating";
 import {
   doesAccessPlanCover,
+  ownsFullReportFor,
   isSectionIncludedInEssentials,
   isSectionUnlockedForPlan,
   type ReportAccessPlan,
@@ -89,8 +90,10 @@ export interface ReportExperienceV1Props {
   ownerFirstName: string | null;
   ownerToken: string | null;
   percentages: Record<string, number>;
+  /** The visit's sent `price_shown` keys, for the pay screen (see ReportPricingModal). */
+  priceShownFiredRef: MutableRefObject<Set<string>>;
   pricingTargetArchetype: string | null;
-  pricingVariant: "default" | "offer" | "share";
+  pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -100,14 +103,17 @@ export interface ReportExperienceV1Props {
     userName: string;
   };
   primaryArchetype: string;
-  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  pricingQuotes: ReportPriceQuotes | null;
   archetypeContent: Record<string, Record<string, string>>;
   practiceTendencies: Record<string, ReportPracticeTendencyContentForUser>;
   ranking: string[];
   reportDate: string;
   resolvedSections: ReturnType<typeof resolveReportSections>;
   snapshot: SnapshotContent;
-  submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
+  /** The thumb: stores the rating alone (review 01.10). Resolves to whether it was stored. */
+  rateSection: (sectionId: string, feedback: "up" | "down") => Promise<boolean>;
+  /** Send: the rating with its optional message. Resolves to whether it was stored. */
+  submitFeedback: (sectionId: string, payload: FeedbackPayload) => Promise<boolean>;
   submitted: Record<string, boolean>;
   theme: ReportTheme;
   unlockedArchetypes: Set<string>;
@@ -139,6 +145,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   percentages,
   placeholderValues,
   primaryArchetype,
+  priceShownFiredRef,
   pricingQuotes,
   archetypeContent,
   practiceTendencies,
@@ -147,6 +154,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   ranking,
   resolvedSections,
   snapshot,
+  rateSection,
   submitFeedback,
   submitted,
   theme,
@@ -165,7 +173,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
   // isn't fully unlocked and has at least one premium section. Gates both the
   // shared countdown ticker and the price-exposure analytics event.
   const hasLockedPremiumCards =
-    !doesAccessPlanCover(accessPlan, "full_report") &&
+    !ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) &&
     resolvedSections.some((section) => section.isPremium);
 
   // Fire one "locked chapter card price shown" event per report when the inline
@@ -234,6 +242,11 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
       section.accessTier === "essentials" || section.accessTier === "full_report"
         ? section.accessTier
         : "full_report";
+    // A recipient's click is nobody's intent to pay: only the owner can.
+    if (viewMode === "shared") {
+      onOpenPricingModal(null);
+      return;
+    }
     trackLockIconClicked({
       section_id: section.id,
       archetype: viewArchetype || null,
@@ -316,7 +329,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
+      className={`report-page${ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
       style={getReportThemeStyle(theme)}
       /**
        * Copy, right-click and drag are blocked on the LIVE site only. The report
@@ -379,7 +392,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
           }}
           onSectionClick={handleSectionClick}
           onShareClick={
-            viewMode === "owner" && ownerToken
+            viewMode === "owner"
               ? () => {
                   trackReportShareOpened({ source: "drawer" });
                   onOpenShareModal();
@@ -405,7 +418,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
               }}
               onSectionClick={handleSectionClick}
               onShareClick={
-                viewMode === "owner" && ownerToken
+                viewMode === "owner"
                   ? () => {
                       trackReportShareOpened({ source: "sidebar" });
                       onOpenShareModal();
@@ -430,6 +443,7 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
                     sectionTitle={title}
                     value={feedbacks[section.id] ?? null}
                     isSent={submitted[section.id] ?? false}
+                    onRate={(feedback) => rateSection(section.id, feedback)}
                     onFeedback={(payload) => submitFeedback(section.id, payload)}
                   />
                 ) : null;
@@ -675,19 +689,20 @@ const ReportExperienceV1: FC<ReportExperienceV1Props> = ({
         open={isPricingModalOpen}
         onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
+        priceShownFiredRef={priceShownFiredRef}
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
         primaryArchetype={primaryArchetype}
         variant={pricingVariant}
       />
-      {viewMode === "owner" && ownerToken ? (
+      {/* The owner's even with no token, which a ?preview=1 page never has: sharing then
+       * says on Send that nothing went, where the sidebar used to show a dead button. */}
+      {viewMode === "owner" ? (
         <ShareReportModal
           open={isShareModalOpen}
           onClose={onCloseShareModal}
           ownerToken={ownerToken}
-          initialPlan={accessPlan}
-          onUpgrade={onOpenPricingModal}
           returnFocusRef={mainContentRef}
         />
       ) : null}

@@ -1,3 +1,4 @@
+import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -28,14 +29,27 @@ describe("arm labels", () => {
     }
     expect(armLabel("survey", "dark").long).toBe("Survey questions: dark");
     expect(armLabel("survey", "white").long).toBe("Survey questions: white");
-    // Deliberately direction-free: these used to claim A was the lower arm, which
-    // pricing 2.1 inverted on 2026-08-24 without anything failing.
+    // The 2.x arms stay direction-free: their labels once claimed A was the lower arm,
+    // which pricing 2.1 inverted on 2026-08-24 without anything failing.
     expect(armLabel("pricing", "A").long).toBe("Pricing: group A");
     expect(armLabel("pricing", "B").long).toBe("Pricing: group B");
     for (const arm of ["A", "B"] as const) {
       for (const field of ["short", "long"] as const) {
         expect(armLabel("pricing", arm)[field]).not.toMatch(/lower|higher/i);
       }
+    }
+    // Pricing 3.0's two lists are named by what the reader pays (founder, 2026-10-06), and
+    // what made the old labels lie is checked instead of banned: each label must agree with
+    // the price lists themselves, for both plans, so swapping the prices fails here.
+    expect(armLabel("pricing", "A3").long).toBe("Pricing 3.0: higher prices");
+    expect(armLabel("pricing", "B3").long).toBe("Pricing 3.0: lower prices");
+    for (const plan of ["full_report", "all_reports"] as const) {
+      const cents = (code: string) =>
+        getPricingBucketsForPlan(plan).find((b) => b.code === code)!.startingCents;
+      const higher = cents("A3") > cents("B3") ? "A3" : "B3";
+      const lower = higher === "A3" ? "B3" : "A3";
+      expect(armLabel("pricing", higher).short, plan).toMatch(/higher/);
+      expect(armLabel("pricing", lower).short, plan).toMatch(/lower/);
     }
     expect(armLabel("paywall", "treatment").long).toBe("Paywall: forced — had to pay to read on");
     expect(armLabel("paywall", "control").long).toBe("Paywall: dismissible — could close it");
@@ -44,7 +58,17 @@ describe("arm labels", () => {
   it("never uses the raw arm code in a label", () => {
     // The whole point: a non-technical reader must not meet "white_prev".
     for (const axis of ["landing", "survey", "pricing", "paywall"] as ExperimentAxis[]) {
-      for (const arm of ["white", "white_prev", "control", "dark", "A", "B", "treatment"]) {
+      for (const arm of [
+        "white",
+        "white_prev",
+        "control",
+        "dark",
+        "A",
+        "B",
+        "A3",
+        "B3",
+        "treatment",
+      ]) {
         const label = armLabel(axis, arm);
         if (label.short === "Unknown") continue;
         expect(label.long).not.toContain("white_prev");
@@ -82,11 +106,13 @@ describe("arm labels", () => {
     // plain-English label instead of reading as "Not recorded".
     expect(isKnownArm("landing", "white_prev")).toBe(true);
     expect(armLabel("landing", "white_prev").short).toBe("Landing Page V1 (First Design)");
-    // Arm A retired 2026-08-31 when the higher-priced arm was dropped, so B is
-    // the only group still stamped on a new quote.
-    expect(activeArms("pricing")).toEqual(["B"]);
-    expect(armLabel("pricing", "A").retired).toBe(true);
-    expect(isKnownArm("pricing", "A")).toBe(true);
+    // Pricing 3.0 stamps every new quote A3 or B3. A (dropped 2026-08-31) and B (the
+    // 2.x list 3.0 replaced) are retired but still KNOWN, for the rows bought under them.
+    expect(activeArms("pricing")).toEqual(["A3", "B3"]);
+    for (const arm of ["A", "B"]) {
+      expect(armLabel("pricing", arm).retired).toBe(true);
+      expect(isKnownArm("pricing", arm)).toBe(true);
+    }
     // Dark is retired (the theme test concluded 2026-08-25 in favour of white), so
     // it must not read as an arm we still assign.
     expect(activeArms("survey")).toEqual(["white"]);
@@ -192,6 +218,11 @@ describe("arm colours", () => {
       const alone = [arm].map((a) => armColor("landing", a))[0];
       expect(alone).toBe(inPair);
     }
+  });
+
+  it("gives Pricing 3.0's two lists the live pair, never the same colour", () => {
+    expect(armColor("pricing", "A3")).toBe("#2563eb");
+    expect(armColor("pricing", "B3")).toBe("#e0552f");
   });
 
   it("draws a retired arm in the low-chroma step, not in a live arm's colour", () => {

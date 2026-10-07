@@ -37,12 +37,15 @@ export function reportFullEmail({
     ? `Thank you for unlocking the ${trimmedArchetype} full report.`
     : "Thank you for trusting us. Your Full Report is inside.";
 
+  // Figma 1382:2556 (Pricing 3.0). It names no archetype: on the main path the reader
+  // buys their own, and fulfillment then passes none. One bought from another
+  // archetype's tile still says which.
   const heroHeading = trimmedArchetype
     ? `You&rsquo;ve unlocked the ${safeArchetype} full report.`
-    : "You went deeper. Here&rsquo;s what you unlocked.";
+    : "You&rsquo;ve unlocked your full report.";
   const insideLine = trimmedArchetype
-    ? `<strong style="font-weight:700;">Your ${safeArchetype} Full Report is inside.</strong>`
-    : `<strong style="font-weight:700;">Your Full Report is inside.</strong>`;
+    ? `<strong style="font-weight:700;">Your ${safeArchetype} Full Report is unlocked.</strong>`
+    : `<strong style="font-weight:700;">Your Full Report is unlocked.</strong>`;
   const ctaLabel = trimmedArchetype
     ? `View your ${trimmedArchetype} full report`
     : "View your full report";
@@ -119,8 +122,8 @@ export function reportFullEmail({
     "Thank you for trusting us with something this personal. That means a lot to us.",
     "",
     trimmedArchetype
-      ? `Your ${trimmedArchetype} Full Report is inside.`
-      : "Your Full Report is inside.",
+      ? `Your ${trimmedArchetype} Full Report is unlocked.`
+      : "Your Full Report is unlocked.",
     "",
     "It reflects the patterns in your responses across every dimension we analyse — your archetype probabilities, core motivation, relational stage, desire drivers, attachment style, and more. Most people are surprised by at least one of them.",
     "",

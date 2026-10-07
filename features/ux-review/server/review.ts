@@ -677,6 +677,12 @@ export async function fetchPaywallDeadTaps(days = 30): Promise<PaywallDeadTaps |
    * Matched on the BEM block, not on a loose substring. `unlock` alone would
    * also catch the unlock button itself, which is a real control that works,
    * and counting it here would inflate the number with successes.
+   *
+   * Report 3.0 draws the same surfaces under new blocks: the paygate is `rpg` (its
+   * cards `rpg-card`, inside the old modal shell), and a locked chapter is the
+   * `rv4-premium` card, a lock badge, a chapter's own lock and teaser, and the
+   * blurred `__gated` text under each chapter's gate. Without them this read zero
+   * for every Report 3.0 reader, an improvement that never happened.
    */
   /**
    * A locked surface marked with `data-paywall-locked` counts too, grouped under
@@ -704,6 +710,12 @@ export async function fetchPaywallDeadTaps(days = 30): Promise<PaywallDeadTaps |
         OR position(toString(properties.target_selector), 'report-premium-overlay') > 0
         OR position(toString(properties.target_selector), 'report-locked-preview') > 0
         OR position(toString(properties.target_selector), 'report-sticky-unlock') > 0
+        OR position(toString(properties.target_selector), 'rpg') > 0
+        OR position(toString(properties.target_selector), 'rv4-premium') > 0
+        OR position(toString(properties.target_selector), 'rv4-lockbadge') > 0
+        OR position(toString(properties.target_selector), 'rv4-chapter__lock') > 0
+        OR position(toString(properties.target_selector), 'rv4-chapter__teaser') > 0
+        OR position(toString(properties.target_selector), '__gated') > 0
       )
     GROUP BY sel
     ORDER BY taps DESC

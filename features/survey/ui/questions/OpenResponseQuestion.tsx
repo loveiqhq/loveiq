@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type FC, type KeyboardEvent } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
+import { isMultiline } from "@features/survey/questionFlags";
 import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
@@ -33,6 +34,10 @@ const AlertCircleIcon: FC = () => (
 );
 
 const MAX_LENGTH = 500;
+// Multi-line boxes (`isMultiline`) take a list or a few sentences. 1,000 is the most a
+// string answer may hold at the API (`surveyAnswersSchema`), so the box never lets someone
+// type an answer the server would then reject.
+const MULTILINE_MAX_LENGTH = 1000;
 // Qs that render without a character counter (email + name).
 const UNLIMITED_QIDS = new Set(["00000", "00001"]);
 // The server keeps 80 characters of a name. Typing past that used to be refused at the
@@ -43,15 +48,24 @@ const NAME_MAX_LENGTH = 80;
 function getValidationError(
   value: string,
   inputType: string | undefined,
-  limited: boolean
+  limit: number | null
 ): string | null {
   if (!value) return null;
   if (inputType === "email") {
     if (!isValidSurveyEmail(value))
       return "Hmm, that doesn\u2019t look like a valid email. Make sure it follows the format: name@example.com";
   }
-  if (limited && value.length > MAX_LENGTH) return `Maximum ${MAX_LENGTH} characters allowed`;
+  if (limit !== null && value.length > limit) return `Maximum ${limit} characters allowed`;
   return null;
+}
+
+/**
+ * SurveyEngine listens on `window`: Enter and \u2192 move on, \u2190 goes back. In a multi-line box
+ * those are editing keys (a new line, moving the caret), so they stop here, the same
+ * containment CountryQuestion applies to its search box.
+ */
+function containEditingKeys(e: KeyboardEvent<HTMLTextAreaElement>) {
+  if (e.key === "Enter" || e.key === "ArrowLeft" || e.key === "ArrowRight") e.stopPropagation();
 }
 
 const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
@@ -66,8 +80,14 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
   const [confirmTouched, setConfirmTouched] = useState(false);
   const currentValue = value ?? "";
   const showError = touched || forceValidation;
-  const limited = !UNLIMITED_QIDS.has(question.qId);
-  const error = showError ? getValidationError(currentValue, question.inputType, limited) : null;
+  const multiline = isMultiline(question.qId);
+  const limit = UNLIMITED_QIDS.has(question.qId)
+    ? null
+    : multiline
+      ? MULTILINE_MAX_LENGTH
+      : MAX_LENGTH;
+  const limited = limit !== null;
+  const error = showError ? getValidationError(currentValue, question.inputType, limit) : null;
 
   const isEmailField = question.inputType === "email";
   const confirmCurrent = confirmValue ?? "";
@@ -106,32 +126,63 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
 
       {/* Input */}
       <div className="flex flex-col gap-2">
-        <input
-          type={question.inputType === "email" ? "email" : "text"}
-          name={question.qId}
-          aria-label={question.question}
-          value={currentValue}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={() => setTouched(true)}
-          placeholder={question.placeholder || "Type your answer…"}
-          autoComplete={question.inputType === "email" ? "email" : "off"}
-          spellCheck={question.inputType === "email" ? false : undefined}
-          maxLength={limited ? MAX_LENGTH : question.qId === NAME_QID ? NAME_MAX_LENGTH : undefined}
-          className={`${inputBase} ${
-            error
-              ? "border-[#ef4444]"
-              : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
-          }`}
-          style={
-            white
-              ? undefined
-              : {
-                  ["--autofill-bg" as string]: "#0a0510",
-                  ["--autofill-font-size" as string]: "22px",
-                  ["--autofill-font-size-sm" as string]: "24px",
-                }
-          }
-        />
+        {multiline ? (
+          /* A list or a few sentences (Mark's content asks). data-clarity-mask keeps the
+             words out of session replay: the survey root is unmasked by owner decision
+             (10.08), and this is the one place people type free text about their own
+             sexuality. Fatih, 29.09. */
+          <textarea
+            name={question.qId}
+            aria-label={question.question}
+            value={currentValue}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={() => setTouched(true)}
+            onKeyDown={containEditingKeys}
+            placeholder={question.placeholder || "Type your answer…"}
+            autoComplete="off"
+            rows={5}
+            maxLength={MULTILINE_MAX_LENGTH}
+            data-clarity-mask="true"
+            className={`min-h-[152px] w-full resize-y rounded-[16px] border px-[18px] py-[14px] font-sans text-[17px] leading-[26px] transition-[border-color] duration-200 focus:outline-none ${
+              white
+                ? "bg-[#f5f6f8] text-[#161021] placeholder:text-black/35"
+                : "bg-white/[0.05] text-white placeholder:text-white/30"
+            } ${
+              error
+                ? "border-[#ef4444]"
+                : white
+                  ? "border-black/[0.08] focus:border-[rgba(254,104,57,0.45)]"
+                  : "border-white/10 focus:border-[rgba(254,104,57,0.45)]"
+            }`}
+          />
+        ) : (
+          <input
+            type={question.inputType === "email" ? "email" : "text"}
+            name={question.qId}
+            aria-label={question.question}
+            value={currentValue}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={() => setTouched(true)}
+            placeholder={question.placeholder || "Type your answer…"}
+            autoComplete={question.inputType === "email" ? "email" : "off"}
+            spellCheck={question.inputType === "email" ? false : undefined}
+            maxLength={limit ?? (question.qId === NAME_QID ? NAME_MAX_LENGTH : undefined)}
+            className={`${inputBase} ${
+              error
+                ? "border-[#ef4444]"
+                : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
+            }`}
+            style={
+              white
+                ? undefined
+                : {
+                    ["--autofill-bg" as string]: "#0a0510",
+                    ["--autofill-font-size" as string]: "22px",
+                    ["--autofill-font-size-sm" as string]: "24px",
+                  }
+            }
+          />
+        )}
 
         {/* Below input: error message left, char count right */}
         <div className="flex items-start justify-between gap-4">
@@ -152,7 +203,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             <span
               className={`font-sans text-[12px] font-medium ${white ? "text-black/40" : "text-white/30"}`}
             >
-              {currentValue.length} / {MAX_LENGTH}
+              {currentValue.length} / {limit}
             </span>
           )}
         </div>

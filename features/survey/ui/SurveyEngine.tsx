@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, typ
 import { surveyQuestions } from "@/data/survey-data";
 import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
+import SurveyJumpMenu from "./SurveyJumpMenu";
 import SurveyNav from "./SurveyNav";
 import SurveyProgress from "./SurveyProgress";
 import GuidancePanel from "./GuidancePanel";
@@ -22,7 +23,7 @@ import {
   setSurveyVariant,
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { orderEmailLast } from "./questionOrder";
+import { orderAskedQuestions } from "./questionOrder";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -32,6 +33,7 @@ import { BASE_STATE_KEY, QUESTION_STATE_KEY } from "./hooks/surveyStorage";
 import { completedReportToken } from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { readCookie } from "@shared/observability/cookie";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
@@ -70,12 +72,16 @@ function entriesAboveBase(currentIndex: number): number {
   return Math.max(0, q - base);
 }
 
+/** Where a touch never starts a swipe between questions. */
+const NO_SWIPE = "input, textarea, select, [contenteditable], [data-no-swipe]";
+
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }) => {
   const {
     answers,
     currentIndex,
     startedAt,
     prefilled,
+    orderArm,
     setAnswer,
     getAnswer,
     getLatestAnswers,
@@ -92,11 +98,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     errorKind: submitErrorKind,
   } = useSubmitSurvey();
 
-  // PreReportWizard fires wizard_slide_advanced via persistAnalyticsEvent, which
-  // requires window.__loveiqReportSubmissionId to write durable rows. Set it as
-  // soon as the submission lands so the wizard's first slide-advance ping
-  // already has context. /report's own setReportSubmissionContext call will
-  // re-set the same value once the user lands there.
+  // PreReportWizard fires wizard_slide_advanced (and its map's wizard_map_step) via
+  // persistAnalyticsEvent, which requires window.__loveiqReportSubmissionId to write
+  // durable rows. Set it as soon as the submission lands so the wizard's first
+  // slide-advance ping already has context. /report's own setReportSubmissionContext
+  // call will re-set the same value once the user lands there.
   useEffect(() => {
     if (submissionId != null) {
       setReportSubmissionContext(submissionId);
@@ -135,14 +141,20 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // `orderEmailLast` moves the email question from its generated index 0 to just
   // before the marketing opt-in, for everyone (the email-position A/B that used
   // to pick this per visitor was retired 2026-08-16 in favour of "last").
+  // C13 — the opening-order experiment. Resolved once per run by useSurveyState and kept
+  // in the draft: the order must not change under a respondent who reloads, goes back or
+  // resumes, so a draft begun before C13 keeps the control order (its saved position
+  // would otherwise skip the questions the variant moves forward). A fresh run is
+  // bucketed by its session id; no session id (storage blocked) means control.
+  // `?order=control|variant` previews either arm on dev and staging, never on production.
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
     () =>
-      orderEmailLast(surveyQuestions)
+      orderAskedQuestions(surveyQuestions, orderArm)
         .filter((q) => !isHidden(q.qId))
         .filter((q) => !prefilledKey.split(",").includes(q.qId)),
-    [prefilledKey]
+    [prefilledKey, orderArm]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
@@ -510,8 +522,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     [question, setAnswer]
   );
 
+  // Once the last question is answered there is nothing to navigate: the processing
+  // screen, the pre-report wizard and the confirmation own the keys and the swipes. Left
+  // live, these handlers swallowed the wizard's ArrowRight and Enter and took ArrowLeft
+  // or a back swipe to the last question, whose Next does nothing once the survey is
+  // submitted (final review, 30.09).
+  const surveyOver = currentIndex >= totalQuestions;
+
   // Keyboard navigation
   useEffect(() => {
+    if (surveyOver) return;
     const handleKey = (e: KeyboardEvent) => {
       // Enter on a focused control is that control's own press: a scale point, an
       // option, Previous/Next, a guidance row. Taking it here moved the survey on AND
@@ -535,21 +555,42 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [hasAnswer, question, goNext, goPrev]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver]);
 
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
+    if (surveyOver) return;
+    const clearSwipe = () => {
+      touchStartX.current = null;
+      touchStartY.current = null;
+    };
     const handleTouchStart = (e: TouchEvent) => {
-      // TouchEvent always fires with at least one touch point.
+      // A drag that starts on the scale (it looks like a slider) or in a text box (moving
+      // the caret, selecting text) is not a swipe between questions; it changed the
+      // question under the reader. Nor is a pinch (the finger it lifts first was measured
+      // from the other finger's start), or a drag across a zoomed-in page, which is a
+      // reader moving around the question to read it.
+      if (
+        e.touches.length !== 1 ||
+        (window.visualViewport?.scale ?? 1) > 1.01 ||
+        (e.target as Element | null)?.closest?.(NO_SWIPE)
+      ) {
+        clearSwipe();
+        return;
+      }
       touchStartX.current = e.touches[0]!.clientX;
       touchStartY.current = e.touches[0]!.clientY;
     };
     const handleTouchEnd = (e: TouchEvent) => {
+      // A finger still down: the end of one finger of a pinch.
+      if (e.touches.length > 0) {
+        clearSwipe();
+        return;
+      }
       if (touchStartX.current === null || touchStartY.current === null) return;
       const diffX = e.changedTouches[0]!.clientX - touchStartX.current;
       const diffY = e.changedTouches[0]!.clientY - touchStartY.current;
-      touchStartX.current = null;
-      touchStartY.current = null;
+      clearSwipe();
       if (Math.abs(diffX) < 50) return;
       // Ignore if gesture is more vertical than horizontal (prevents false triggers on scroll)
       if (Math.abs(diffY) >= Math.abs(diffX)) return;
@@ -562,7 +603,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [hasAnswer, question, goNext, goPrev]);
+  }, [hasAnswer, question, goNext, goPrev, surveyOver]);
 
   // The country search opens a list under its box, which a phone keyboard would cover
   // if the question sat lower: that one stays at the top on a phone.
@@ -704,7 +745,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       <main
         id="main-content"
         className="relative flex min-h-dvh flex-col bg-white"
-        style={{ touchAction: "pan-y" }}
+        // pinch-zoom too: pan-y alone turned off zooming on the whole survey.
+        style={{ touchAction: "pan-y pinch-zoom" }}
         data-survey-theme={surveyVariant}
       >
         {/* Background gradient blurs */}
@@ -725,6 +767,22 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
             aria-label={`Question ${currentIndex + 1} of ${totalQuestions}`}
             className="relative flex flex-1 flex-col bg-white sm:rounded-[22px] sm:border sm:border-[rgba(22,16,33,0.09)]"
           >
+            {/* Read out each new question: focus stays on Next, so a screen reader said
+                nothing when the question changed. */}
+            <p className="sr-only" aria-live="polite">
+              {`Question ${currentIndex + 1} of ${totalQuestions}: ${question.question}`}
+            </p>
+            {/* Staging, previews and dev only (Mark, 30.09): jump straight to any question.
+                Inside the card, so placing the card counts it. */}
+            {isNonProdDeploy() ? (
+              <div className="px-[18.4px] pt-3 sm:px-[35px]">
+                <SurveyJumpMenu
+                  questions={orderedQuestions}
+                  currentIndex={currentIndex}
+                  onJump={goTo}
+                />
+              </div>
+            ) : null}
             {/* Fill `backwards`, not `both`: a transform left in place after the
                 entrance would trap the country dropdown under the sticky footer. */}
             <div
@@ -786,6 +844,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 question and the page scrolls to them. */}
             <div
               ref={footerRef}
+              data-survey-footer
               className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
                 footerFloating
                   ? "shadow-[0_-1px_0_rgba(22,16,33,0.09),0_-12px_24px_-16px_rgba(22,16,33,0.2)]"
@@ -795,7 +854,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
               <SurveyNav
                 canGoBack={currentIndex > 0}
                 canGoNext={canGoNext}
-                hasAnswer={hasAnswer}
+                // Drawn "ready" on an optional question even when it is empty: the faded
+                // Next would tell the respondent they are blocked when they are not.
+                hasAnswer={hasAnswer || !question.required}
                 onPrevious={goPrev}
                 onNext={goNext}
               />

@@ -36,16 +36,24 @@ export interface StartReportCheckoutFailure {
   /** `disabled` = checkout is switched off for this environment, not an error. */
   status: "disabled" | "error";
   message: string;
+  /** A 409: the reader already owns this plan, so the page should reload what they own. */
+  alreadyOwned?: boolean;
 }
 
 export async function startReportCheckout({
+  anchor,
   archetype,
+  viewArchetype,
   plan,
   quote,
   reportSessionId,
   token,
 }: {
+  /** Where on the report the reader was (unlockAnchor.ts), so Stripe returns them there. */
+  anchor?: string | null;
   archetype?: string | null;
+  /** The archetype on screen, for Stripe's way back when it differs from `archetype`. */
+  viewArchetype?: string | null;
   plan: ReportPurchasePlanId;
   /** The quote the reader was actually shown. */
   quote: ReportPriceQuoteSnapshot | null;
@@ -79,7 +87,9 @@ export async function startReportCheckout({
       method: "POST",
       headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() },
       body: JSON.stringify({
+        anchor: anchor ?? undefined,
         archetype: archetype ?? undefined,
+        viewArchetype: viewArchetype || undefined,
         gaClientId: ga.clientId ?? undefined,
         gaConsent: ga.consent,
         gaSessionId: ga.sessionId ?? undefined,
@@ -119,6 +129,7 @@ export async function startReportCheckout({
         status: "error",
         message:
           serverMessage ?? "We couldn't prepare secure checkout right now. Please try again.",
+        ...(response.status === 409 ? { alreadyOwned: true } : {}),
       };
     }
 
@@ -143,14 +154,14 @@ export async function startReportCheckout({
     /**
      * Replace, not push, when the entry on top is the pricing modal's own.
      *
-     * On Safari the open modal sits on a duplicate, same-URL entry so the back
-     * button can close it (useCloseOnBack), and the report is served no-store,
-     * so it never survives in the back-forward cache. Pushing Stripe on top left
-     * that duplicate behind: back from an abandoned checkout reloaded the report
-     * onto it, and the next back reloaded the report again instead of leaving —
+     * The open modal sits on a duplicate, same-URL entry so the back button can
+     * close it (useCloseOnBack), and the report is served no-store, so it never
+     * survives in the back-forward cache. Pushing Stripe on top left that
+     * duplicate behind: back from an abandoned checkout reloaded the report onto
+     * it, and the next back reloaded the report again instead of leaving —
      * measured on WebKit. Replacing it leaves history as it was before the modal
-     * opened. Everywhere else there is no such entry, and this is the assign()
-     * it has always been.
+     * opened. With no such entry on top, this is the assign() it has always
+     * been.
      */
     if (isOnOverlayEntry()) window.location.replace(json.url);
     else window.location.assign(json.url);

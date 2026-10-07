@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
 /**
  * The landing arm reaching the SUBMISSION, exercised through the route.
@@ -112,6 +113,9 @@ const validBody = () => ({
   sessionId: "550e8400-e29b-41d4-a716-446655440000",
 });
 
+/** The C13 arm the route also stamps on any tracker it sends (derived from the session id). */
+const C13 = { question_order_arm: assignQuestionOrderArm(validBody().sessionId) };
+
 /** The utm_tracker as it reached submitSurveyOnce, parsed. */
 function trackerOnPayload(): Record<string, unknown> | null {
   const payload = mockSubmitSurveyOnce.mock.calls[0]?.[0] as
@@ -153,6 +157,7 @@ describe("POST /api/survey — the landing arm on the submission", () => {
     expect(trackerOnPayload()).toEqual({
       utm_source: "google",
       landing_variant: "white_prev",
+      ...C13,
     });
   });
 
@@ -160,7 +165,7 @@ describe("POST /api/survey — the landing arm on the submission", () => {
     mockCookieGet.mockReturnValue({ value: "white" });
     const res = await POST(makeRequest(validBody()));
     expect(res.status).toBe(200);
-    expect(trackerOnPayload()).toEqual({ landing_variant: "white" });
+    expect(trackerOnPayload()).toEqual({ landing_variant: "white", ...C13 });
   });
 
   it("does not record an arm the body claims without a cookie", async () => {
@@ -174,7 +179,7 @@ describe("POST /api/survey — the landing arm on the submission", () => {
       })
     );
     expect(res.status).toBe(200);
-    expect(trackerOnPayload()).toEqual({ utm_source: "google" });
+    expect(trackerOnPayload()).toEqual({ utm_source: "google", ...C13 });
   });
 
   it("leaves no arm at all when there is no cookie and nothing claimed", async () => {

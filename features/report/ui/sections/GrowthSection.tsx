@@ -9,6 +9,7 @@ import {
   type FC,
   type SetStateAction,
 } from "react";
+import { useChapterOpen } from "../hooks/useChapterOpen";
 import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
@@ -296,14 +297,16 @@ const GrowthSection: FC<Props> = ({
    * So: observe the chart itself, and shrink the viewport by 30% at the bottom
    * (`rootMargin`) so it must be properly in view, not just peeking in. Starts
    * "already animated" where IntersectionObserver is unavailable, so content is
-   * never left hidden.
+   * never left hidden. Inside a V4 chapter it waits for the chapter to be open and drawn
+   * (useChapterOpen), as useRevealOnView does.
    */
   const chartRef = useRef<SVGSVGElement>(null);
   const [isAnimated, setIsAnimated] = useState(() => typeof IntersectionObserver === "undefined");
+  const drawn = useChapterOpen();
 
   useEffect(() => {
     const el = chartRef.current;
-    if (!el || isAnimated) return;
+    if (!el || isAnimated || !drawn) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
@@ -315,7 +318,7 @@ const GrowthSection: FC<Props> = ({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [isAnimated]);
+  }, [drawn, isAnimated]);
 
   /* Which step of the climb the reader is pointing at — the graph and the ladder share
      it, so hovering either half lights both (MO, 2026-08-22, asking for the arousal

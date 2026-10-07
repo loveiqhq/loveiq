@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type FC } from "react";
+import { Fragment, useState, type CSSProperties, type FC } from "react";
 import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
@@ -45,10 +45,10 @@ export interface RewardCopy {
 /**
  * Reward-meter config from `getReport2Config(name)` — normalized server-side and
  * only sent when unlocked (null otherwise). `order` is the four neurochemicals
- * in the reader's rank order; `meters` the fill % per rank (0–100). Only
- * Spiritual Lover carries full meters today (`[88,56,30,12]`); Spark Seeker /
- * Sensual Connector carry `order` but null meters, and the other 11 carry no
- * order — in those cases the bars are omitted rather than fabricated.
+ * in the reader's rank order; `meters` the fill % per rank (0–100). The server
+ * completes every archetype's config by the designer's model (roles by rank, the
+ * meter ladder `[88,56,30,12]`, `data/report2-reward.ts`), so all 14 draw their
+ * bars; a row without a meter still renders an empty one rather than a guess.
  */
 export interface RewardConfig {
   /** e.g. ["oxytocin","endorphins","dopamine","adrenaline"]. */
@@ -68,6 +68,11 @@ interface Props {
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
   tier?: PremiumOverlayTier;
+  /**
+   * V4 only: Report 2.0's phone intro (Figma 8632:1455), a line apiece, opening the
+   * unlocked card. Report 2.0 itself (`?v2=1`) passes none.
+   */
+  intro?: readonly string[];
 }
 
 const BookIcon: FC = () => (
@@ -304,6 +309,7 @@ const RewardSection: FC<Props> = ({
   quote = null,
   sectionTitle,
   tier = "full_report",
+  intro,
 }) => {
   const [statRef, statRevealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
   const [expanded, setExpanded] = useState(false);
@@ -378,6 +384,16 @@ const RewardSection: FC<Props> = ({
           </>
         ) : (
           <>
+            {intro && intro.length > 0 ? (
+              <p className="report-reward__intro">
+                {intro.map((line, i) => (
+                  <Fragment key={line}>
+                    {i > 0 ? <br /> : null}
+                    {line}
+                  </Fragment>
+                ))}
+              </p>
+            ) : null}
             {rows.length > 0 ? <RewardRankedList rows={rows} /> : null}
 
             {hasStat ? (

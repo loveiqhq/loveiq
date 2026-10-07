@@ -87,6 +87,27 @@ describe("cta_seen", () => {
     expect(seenEvents()).toHaveLength(2);
   });
 
+  it("is reported by Report 3.0's locked card, locked chapter and visual tiles too", async () => {
+    // Only the V1 PremiumOverlay reported it, so every V4 visit read "not seen".
+    const { default: V4PremiumCard } = await import("@features/report/ui/v3/V4PremiumCard");
+    const { V4ChapterLockDisc } = await import("@features/report/ui/v3/V4ChapterHead");
+    const { default: V4LockBadge } = await import("@features/report/ui/v3/V4LockBadge");
+    render(
+      <>
+        <V4PremiumCard />
+        <V4ChapterLockDisc />
+        <V4LockBadge />
+      </>
+    );
+    expect(FakeObserver.all.map((io) => io.el?.className)).toEqual([
+      "rv4-premium__cta",
+      "rv4-chapter__lock",
+      "rv4-lockbadge",
+    ]);
+    FakeObserver.all[1]!.show(0.6);
+    expect(seenEvents()).toEqual([["cta_seen", { cta: "locked_chapter" }]]);
+  });
+
   it("stops watching when the card goes, and does nothing without the browser's observer", () => {
     const { unmount } = render(<Card />);
     unmount();

@@ -1,0 +1,301 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type FC,
+  type ReactNode,
+} from "react";
+import { REPORT_V4_UNSUFFIXED_CHAPTER_IDS } from "@/data/report3-archetype-page";
+import { ChapterOpenContext } from "../hooks/useChapterOpen";
+import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
+import {
+  REPORT_V3_CHAPTER_BY_ID,
+  REPORT_V4_CHAPTER_BY_ID,
+  type ReportV3Chapter,
+} from "./reportV3Nav";
+import V4ChapterCards, { useV4ChapterCards } from "./V4ChapterCards";
+import { V4ChapterChevron, V4ChapterLockDisc, V4ChapterTitle } from "./V4ChapterHead";
+import { useV4ChapterLock } from "./V4ChapterLock";
+import { useOnV4OpenChapter } from "./v4OpenChapter";
+
+/**
+ * V3 chapter chrome — Figma 10439:181 (eyebrow) + 10439:190 (title button).
+ *
+ * `ReportSection` is the single wrapper every one of the report's 28 render
+ * branches goes through, so switching the chrome there gives all 21 chapters the
+ * V3 treatment without duplicating any of ReportPage's prop derivation. This
+ * context is how it learns it is in V3 mode — a prop would have to be threaded
+ * through all 28 call sites.
+ */
+const V3ModeContext = createContext(false);
+
+export const V3ModeProvider: FC<{ children: ReactNode }> = ({ children }) => (
+  <V3ModeContext.Provider value={true}>{children}</V3ModeContext.Provider>
+);
+
+export function useIsV3(): boolean {
+  return useContext(V3ModeContext);
+}
+
+/**
+ * Report V4 rides on V3 mode (`?v4=1` implies V3), so it is announced on top of
+ * it rather than instead of it. It exists for the few places whose ORDER differs —
+ * the chapter nav and the numbers in the V3 eyebrows — see REPORT_V4_CHAPTERS.
+ */
+const V4ModeContext = createContext(false);
+
+export const V4ModeProvider: FC<{ children: ReactNode }> = ({ children }) => (
+  <V4ModeContext.Provider value={true}>{children}</V4ModeContext.Provider>
+);
+
+export function useIsV4(): boolean {
+  return useContext(V4ModeContext);
+}
+
+/**
+ * The chapter meta for a section id, or null if it is not a numbered chapter.
+ * `v4` reads V4's numbering, where Typical Beliefs opens its part and Accelerator
+ * & Brakes opens the next (REPORT_V4_CHAPTERS).
+ */
+export function getV3Chapter(sectionId: string, v4 = false): ReportV3Chapter | null {
+  return (v4 ? REPORT_V4_CHAPTER_BY_ID : REPORT_V3_CHAPTER_BY_ID).get(sectionId) ?? null;
+}
+
+/** Lucide `book-open`, stroke #795FC8. Figma draws it at 0.9917 stroke inside a
+ * 14px box, which is a 24-viewBox glyph at stroke-width 1.7 (0.9917 * 24/14). */
+const BookOpenIcon: FC = () => (
+  <svg
+    className="rv3-chapter__icon"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M12 7v14" />
+    <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+  </svg>
+);
+
+/** Lucide `chevron-down` — Figma 10439:194, verbatim path at 15px. */
+const ChapterChevron: FC = () => (
+  <svg className="rv3-chapter__chev" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+    <path
+      d="M3.28125 5.625L7.5 9.84375L11.7188 5.625"
+      stroke="currentColor"
+      strokeWidth="1.59375"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+interface Props {
+  chapter: ReportV3Chapter;
+  sectionId: string;
+  children: ReactNode;
+  feedbackWidget?: ReactNode;
+  /** The archetype on screen. V4 sets each title's "- of the <Archetype>" run from it. */
+  archetype?: string;
+}
+
+/**
+ * How long an opening body may take before its reveals go ahead without a
+ * `transitionend`: the body's own 320ms (reportV3.css 604), and a little over, for a
+ * browser that runs no transition there.
+ */
+const BODY_SETTLE_MS = 400;
+
+/** The V4 chapters that open by default: Other Archetypes (Marcus 04.10, Sanjin 05.10). */
+const V4_OPEN_BY_DEFAULT: ReadonlySet<string> = new Set(["constellation"]);
+
+const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, archetype }) => {
+  const isV4 = useIsV4();
+  // The delivered V3 frame is "UNTOGGLED (all chapters open)", so open is its
+  // resting state and the chevron points up until the reader collapses it. V4 closes
+  // them (review 24.09): a chapter opens when the reader asks for it, and only then
+  // shows its "Does this resonate?". Other Archetypes is the exception.
+  const [isOpen, setIsOpen] = useState(!isV4 || V4_OPEN_BY_DEFAULT.has(sectionId));
+  const bodyId = `rv3-chapter-body-${sectionId}`;
+  // A chapter the reader has no access to is locked outright under V4 (review 26.09);
+  // no provider exists outside V4. Called before the branch so hook order is stable.
+  const lock = useV4ChapterLock(sectionId);
+  // V4's Try this / Go deeper cards in place of the 2.0 section's own panels (review
+  // 27.09). Only V4 provides them.
+  const cards = useV4ChapterCards(sectionId);
+  // Part II's nudges open a chapter by its section id — V4 only; V3 has no nudges
+  // and its chapters start open. A locked chapter does not open for one.
+  useOnV4OpenChapter(
+    sectionId,
+    useCallback(() => setIsOpen(true), []),
+    isV4 && !lock
+  );
+  // Desktop review 01.10: "Bring back the animations of the V2 report". The 2.0 sections
+  // inside reveal once the chapter is DRAWN, open and done expanding (useChapterOpen):
+  // closed, their reveals fired unseen inside the freeze below and opened finished;
+  // while the body still grows, a chart near its top would play half clipped. Set from
+  // the body's `transitionend` (or the fallback), and reset a frame after it closes.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!isV4) return;
+    if (!isOpen) {
+      const frame = requestAnimationFrame(() => setSettled(false));
+      return () => cancelAnimationFrame(frame);
+    }
+    const body = bodyRef.current;
+    const settle = () => setSettled(true);
+    // The body's own transition only: its contents' transitions bubble up to it.
+    const onEnd = (event: Event) => {
+      if (event.target === body) settle();
+    };
+    body?.addEventListener("transitionend", onEnd);
+    const timer = window.setTimeout(settle, BODY_SETTLE_MS);
+    return () => {
+      body?.removeEventListener("transitionend", onEnd);
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, isV4]);
+
+  if (isV4 && lock) {
+    // Mark's "fully locked" mock (26.09): the head and the teaser as a closed chapter
+    // draws them, the gradient lock where the chevron was — with "Unlock Report" under
+    // it since 29.09, which names the button's purpose as the hidden "Locked — unlock
+    // to read" did. A plain button, not a disclosure: a tap opens the paywall, and
+    // there is no body to open.
+    const teaser = REPORT_V4_CHAPTER_TEASERS[sectionId];
+    return (
+      <section
+        id={sectionId}
+        data-report-section="true"
+        className={`rv4-chapter is-locked${teaser ? " has-teaser" : ""}`}
+        data-node-id="1:862"
+        data-name="Chapter H1 + Copy"
+      >
+        <button type="button" className="rv4-chapter__button" onClick={lock.unlock}>
+          <V4ChapterTitle
+            title={chapter.title}
+            archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
+          />{" "}
+          <V4ChapterLockDisc />
+        </button>
+        {teaser ? (
+          <div className="rv4-chapter__tease">
+            <div>
+              <p className="rv4-chapter__teaser">{teaser}</p>
+            </div>
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  if (isV4) {
+    // Typical Beliefs' head (V4ChapterHead), not V3's: no book icon, chapter number
+    // or rule. `.rv4-chapter` takes V4Chapter's type, discs and the closed row's
+    // divider. The root carries no `.rv3-chapter` (review 27.09: "show the report 2.0
+    // version in the other chapters"): Report 3.0's frozen catch-alls key on it and
+    // flattened the Report 2.0 section inside, so without it the section draws as
+    // ?v2=1 draws it. The body keeps V3's collapse classes; V4's CSS opens it.
+    // The body stays mounted while closed — clipped by V3's own collapse, and inert —
+    // so the cards in it keep their state and the paywall observers their targets.
+    // Closed, the chapter shows its teaser (1:862): free copy, the same for everyone.
+    const teaser = REPORT_V4_CHAPTER_TEASERS[sectionId];
+    return (
+      <section
+        id={sectionId}
+        data-report-section="true"
+        className={`rv4-chapter${isOpen ? " is-open" : ""}${teaser ? " has-teaser" : ""}`}
+        data-node-id={isOpen ? "1:175" : "1:862"}
+        data-name="Chapter H1 + Copy"
+      >
+        <button
+          type="button"
+          className="rv4-chapter__button"
+          aria-expanded={isOpen}
+          aria-controls={bodyId}
+          onClick={() => setIsOpen((v) => !v)}
+        >
+          <V4ChapterTitle
+            title={chapter.title}
+            archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
+          />
+          <V4ChapterChevron />
+        </button>
+
+        {/* 1:869 — outside the button (not part of the heading's name) and outside the
+         * V2 body (the frozen `[class$="__body"] p` rule would restyle it). It folds away
+         * on the body's own clock as the chapter opens. */}
+        {teaser ? (
+          <div className="rv4-chapter__tease" aria-hidden={isOpen} inert={isOpen}>
+            <div>
+              <p className="rv4-chapter__teaser">{teaser}</p>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rv3-chapter__body" id={bodyId} inert={!isOpen} ref={bodyRef}>
+          <div>
+            <div className="rv3-chapter__body-inner">
+              <ChapterOpenContext.Provider value={isOpen && settled}>
+                {children}
+                {cards ? <V4ChapterCards cards={cards} /> : null}
+              </ChapterOpenContext.Provider>
+              {feedbackWidget ? (
+                <div className="rv4-rating">
+                  <div className="rv4-rating__live">{feedbackWidget}</div>
+                  <div className="rv4-rating__tail" aria-hidden="true" />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      id={sectionId}
+      data-report-section="true"
+      className={`rv3-chapter ${isOpen ? "is-open" : ""}`}
+      data-node-id="10439:180"
+    >
+      <p className="rv3-chapter__eyebrow" data-node-id="10439:181">
+        <BookOpenIcon />
+        <span className="rv3-chapter__number">Chapter {chapter.number}</span>
+        <span className="rv3-chapter__rule" aria-hidden="true" />
+      </p>
+
+      <button
+        type="button"
+        className="rv3-chapter__button"
+        aria-expanded={isOpen}
+        aria-controls={bodyId}
+        onClick={() => setIsOpen((v) => !v)}
+        data-node-id="10439:190"
+      >
+        <span className="rv3-chapter__title">{chapter.title}</span>
+        <ChapterChevron />
+      </button>
+
+      <div className="rv3-chapter__body" id={bodyId}>
+        <div>
+          <div className="rv3-chapter__body-inner">
+            {children}
+            {feedbackWidget ? <div className="rv3-chapter__feedback">{feedbackWidget}</div> : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default V3Chapter;

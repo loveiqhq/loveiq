@@ -378,11 +378,11 @@ export const SIGNALS: readonly SignalDef[] = [
     kind: "category",
     measures:
       "On a report with locked chapters, whether a locked chapter's unlock offer ever came into view: seen or not seen.",
-    // locked_card_price_shown says the report HAS locked cards (it fires on load, wherever
-    // they sit); cta_seen says one was on screen.
-    from: ["locked_card_price_shown", "cta_seen"],
+    // locked_card_price_shown (before Report 3.0) or locked_chapters_shown (Report 3.0, which
+    // shows no price) says the report HAS locked cards; cta_seen says one was on screen.
+    from: ["locked_card_price_shown", "locked_chapters_shown", "cta_seen"],
     measure: (v) => {
-      if (!v.some(is("locked_card_price_shown"))) return null;
+      if (!v.some(is("locked_card_price_shown", "locked_chapters_shown"))) return null;
       return v.some((e) => e.event === "cta_seen" && e.props.cta === "locked_chapter")
         ? "seen"
         : "not seen";

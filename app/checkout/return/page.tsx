@@ -4,6 +4,7 @@ import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
   isReportAccessToken,
   isReportPurchasePlanId,
+  UNLOCK_ANCHOR_REGEX,
 } from "@features/checkout/server/reportPurchase";
 import { fromArchetypeSlug } from "@features/report/server/archetypeSlug";
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 
 interface Props {
   searchParams: Promise<{
+    anchor?: string;
     archetype?: string;
     plan?: string;
     session_id?: string;
@@ -29,9 +31,14 @@ export default async function Page({ searchParams }: Props) {
     : DEFAULT_REPORT_PURCHASE_PLAN_ID;
   const token = isReportAccessToken(params.token) ? params.token : null;
   const archetype = planId === "full_report" ? fromArchetypeSlug(params.archetype) : null;
+  const anchor =
+    typeof params.anchor === "string" && UNLOCK_ANCHOR_REGEX.test(params.anchor)
+      ? params.anchor
+      : null;
 
   return (
     <CheckoutReturnPage
+      anchor={anchor}
       archetype={archetype}
       planId={planId}
       sessionId={params.session_id ?? null}

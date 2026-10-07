@@ -3,6 +3,7 @@
 import { type CSSProperties, type FC } from "react";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import { PadlockIcon } from "../ReportNavBadge";
 
 /**
  * Report 2.0 "Other Archetypes" / Constellation section — the LAST free Part I
@@ -17,8 +18,12 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  * hero + existing breakdown list use, matching the Figma palette). No gating.
  *
  * The Figma frame does NOT visually highlight the viewer's own row — it's simply
- * first because it's the top match — so we render every row identically, in the
- * `ranking` order handed down.
+ * first because it's the top match — so we render the rows in the `ranking` order
+ * handed down. The pill is the one thing that differs: an archetype the reader cannot
+ * open yet reads "Unlock" with a padlock. Every pill used to read "View report", so a
+ * tap could open the pay screen with no warning, and after buying an archetype here
+ * its row looked exactly as before — a buyer could not see that it had worked
+ * (founder's purchase on production, 2026-10-06).
  */
 interface Props {
   /** Archetype names, already sorted by match % descending (all 14). */
@@ -31,6 +36,8 @@ interface Props {
   viewArchetype: string;
   /** Open a given archetype (navigate if unlocked, else the pricing modal). */
   onViewArchetype: (archetypeName: string) => void;
+  /** Archetypes a tap opens directly; any other row opens the pay screen. */
+  unlockedArchetypes: ReadonlySet<string>;
 }
 
 type CssVarStyle = CSSProperties & Record<`--${string}`, string | number>;
@@ -71,6 +78,7 @@ const ConstellationSection: FC<Props> = ({
   mottos,
   viewArchetype,
   onViewArchetype,
+  unlockedArchetypes,
 }) => {
   // Before the early return — a hook may not be conditional.
   const [listRef, revealed] = useRevealOnView<HTMLOListElement>();
@@ -88,9 +96,9 @@ const ConstellationSection: FC<Props> = ({
           2026-08-21 feedback, and the gradient on `constellation,` is back per Eman —
           the italic is not, that belonged to the type that was being matched away. */}
       <h3 className="report-constellation__heading">
-        You&apos;re a <span className="report-constellation__heading-accent">constellation,</span>
+        You&apos;re a <span className="report-constellation__heading-accent">Constellation,</span>
         <br />
-        not a type
+        Not a Type
       </h3>
 
       <section className="report-constellation" aria-label="Other archetypes">
@@ -114,6 +122,7 @@ const ConstellationSection: FC<Props> = ({
             const pct = percentages[name] ?? 0;
             const motto = mottos[name] ?? null;
             const isYou = name === viewArchetype;
+            const isLocked = !unlockedArchetypes.has(name);
             const fillFraction = Math.max(0, Math.min(1, pct / 100));
             const rowStyle: CssVarStyle = {
               "--accent": theme.accent,
@@ -155,10 +164,23 @@ const ConstellationSection: FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => onViewArchetype(name)}
-                  aria-label={isYou ? `View your ${name} report` : `View ${name} report`}
-                  className="report-constellation__view"
+                  aria-label={
+                    isLocked
+                      ? `Unlock ${name} report`
+                      : isYou
+                        ? `View your ${name} report`
+                        : `View ${name} report`
+                  }
+                  className={`report-constellation__view${isLocked ? " report-constellation__view--locked" : ""}`}
                 >
-                  View report
+                  {isLocked ? (
+                    <>
+                      <PadlockIcon open={false} />
+                      Unlock
+                    </>
+                  ) : (
+                    "View report"
+                  )}
                 </button>
               </li>
             );

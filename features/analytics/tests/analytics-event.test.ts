@@ -230,6 +230,31 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
   );
 });
 
+describe("POST /api/analytics-event — the wizard's report map (30.09)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(42);
+  });
+
+  it("persists wizard_map_step against the survey, beside wizard_slide_advanced", async () => {
+    const res = await POST(
+      makeRequest({
+        event_type: "wizard_map_step",
+        submission_id: 42,
+        metadata: { from_step: 0, to_step: 1, control: "continue" },
+      })
+    );
+    expect(res.status).toBe(204);
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    const body = JSON.parse(String(insert?.[1]?.body));
+    expect(body).toMatchObject({
+      event_type: "wizard_map_step",
+      entity_type: "survey",
+      metadata: { from_step: 0, to_step: 1, control: "continue" },
+    });
+  });
+});
+
 /**
  * The wiring between a dwell milestone and the Slack "Report time" line.
  *
@@ -270,7 +295,7 @@ describe("journey dwell refresh", () => {
 
   // The wizard fires these before the report exists, so they can only ever
   // produce the same em dash — not worth a Supabase read and a Slack call.
-  it.each(["wizard_slide_advanced", "survey_confirmation_cta_clicked"])(
+  it.each(["wizard_slide_advanced", "wizard_map_step", "survey_confirmation_cta_clicked"])(
     "does not refresh on %s",
     async (event_type) => {
       await POST(makeRequest({ event_type, submission_id: 2013 }));

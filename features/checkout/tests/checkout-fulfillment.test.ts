@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetSlackDedupForTests } from "@shared/observability/slack";
+import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
 
 const mockFetchWithTimeout = vi.fn();
 
@@ -23,6 +24,9 @@ vi.mock("@features/report/server/personalReport", () => ({
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
+vi.mock("@features/analytics/server/ga4", () => ({ sendGa4PurchaseEvent: vi.fn() }));
+vi.mock("@features/analytics/server/posthog", () => ({ sendPosthogPurchaseEvent: vi.fn() }));
+
 // Spread the real module rather than listing exports: the purchase notification
 // reads the live price catalogue (getPricingBucketsForPlan) to say which SIDE of
 // the price test the buyer was on, and a hand-listed mock silently breaks the
@@ -40,6 +44,8 @@ import {
   upsertArchetypeTierForPersonalReport,
 } from "@features/report/server/personalReport";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
+import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
+import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {
@@ -240,7 +246,7 @@ describe("checkout fulfillment", () => {
     );
     expect(paymentItemPayload).toEqual(
       expect.objectContaining({
-        item_name: "Just a snapshot",
+        item_name: "Only Your Highest Archetype",
         quantity: 1,
         total_price: 0,
         unit_price: 0,
@@ -256,6 +262,10 @@ describe("checkout fulfillment", () => {
     );
     expect(markReportPriceQuotePurchased).toHaveBeenCalledWith({ paymentId: 41, quoteId: 8 });
     expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
+    // The server's purchase sends carry the promo, as the browser's does.
+    const promo = { promotion_code: "LOVEIQ100", coupon_percent_off: 100, discount_amount: 24.49 };
+    expect(vi.mocked(sendGa4PurchaseEvent).mock.calls[0]?.[0].params).toMatchObject(promo);
+    expect(vi.mocked(sendPosthogPurchaseEvent).mock.calls[0]?.[0].params).toMatchObject(promo);
   });
 
   it("appends unlocked archetype when full_report checkout includes metadata.archetype", async () => {
@@ -536,6 +546,94 @@ describe("checkout fulfillment", () => {
     expect(quoteLookupUrl).not.toBeNull();
     expect(quoteLookupUrl).toContain("survey_submission_id=eq.");
     expect(quoteLookupUrl).not.toContain("plan=eq.full_report");
+  });
+
+  it("a Pricing 3.0 all_reports sale mints no partner code — that perk was the old tier's", async () => {
+    // all_reports was "For you & your partner" before Pricing 3.0, and its buyers got a
+    // free partner code. "All 14 Archetype Reports" does not offer one, so a session the
+    // 3.0 paygate opened (metadata.pricingCatalog "3.0") must not mint it. The test
+    // above, with no catalogue stamp, is the pre-3.0 session that still keeps its
+    // promise. Same wiring, so only the stamp differs.
+    process.env.STRIPE_COUPON_100 = "nurture_100";
+    let quoteLookupUrl: string | null = null;
+
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (
+          url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          return createJsonResponse([{ id: 99 }]);
+        }
+        if (url.includes("/rest/v1/payment_item?payment_id=eq.99")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+          return createJsonResponse([{ id: 9 }]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          return createJsonResponse([{ id: 100 }]);
+        }
+        // The partner-code carrier lookup inside mintAndEmailPartnerCode.
+        if (url.includes("/rest/v1/report_price_quote?survey_submission_id=eq.")) {
+          quoteLookupUrl = url;
+          return createJsonResponse([{ id: 55, metadata: {} }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_all_reports_30",
+            amount_total: 4900,
+            currency: "eur",
+            customer: null,
+            metadata: {
+              plan: "all_reports",
+              pricingCatalog: "3.0",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              requestIp: "127.0.0.1",
+              requestUserAgent: "Mozilla/5.0 (Vitest)",
+            },
+            payment_intent: null,
+            payment_status: "paid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_all_reports_30",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_all_reports_30",
+            metadata: { plan: "all_reports", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    // The partner-code carrier lookup never ran: no code was minted or emailed.
+    expect(quoteLookupUrl).toBeNull();
+    expect(unlockAllArchetypesForPersonalReport).toHaveBeenCalledWith(5);
   });
 
   it("does not append unlocked archetype when metadata.archetype is unknown", async () => {
@@ -881,7 +979,8 @@ describe("checkout fulfillment", () => {
       plan: "essentials" | "full_report" | "all_reports",
       archetype?: string,
       paymentIntent: string | null = "pi_test_slack_001",
-      landingVariant?: string
+      landingVariant?: string,
+      session: Record<string, unknown> = {}
     ) {
       return {
         charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_test_slack_001" }) },
@@ -901,6 +1000,7 @@ describe("checkout fulfillment", () => {
               payment_intent: paymentIntent,
               payment_status: "paid",
               total_details: { amount_discount: 0 },
+              ...session,
             }),
           },
         },
@@ -948,7 +1048,7 @@ describe("checkout fulfillment", () => {
       // so the masked output is also lowercase. It is rendered as a code span so
       // Slack does not treat the mask's asterisks as bold markers.
       expect(all).toContain("`e***@loveiq.org`");
-      expect(all).toContain("Just a snapshot");
+      expect(all).toContain("Only Your Highest Archetype");
       expect(all).toContain("Relational Nurturer");
       expect(all).toContain("EUR 19.99");
       // The fallback text must stand alone: it is all that gets dead-lettered on a
@@ -1090,7 +1190,7 @@ describe("checkout fulfillment", () => {
 
       expect(slackCalls).toHaveLength(1);
       const all = rendered(slackCalls[0]!.body);
-      expect(all).toContain("For you & your partner");
+      expect(all).toContain("All 14 Archetype Reports");
       // all_reports unlocks every archetype, so naming one would mislead.
       expect(all).not.toContain("Relational Nurturer");
 
@@ -1120,6 +1220,61 @@ describe("checkout fulfillment", () => {
       });
 
       expect(slackCalls).toHaveLength(0);
+    });
+
+    /**
+     * #payments announced "EUR 0.00" with no test tag, while the ops lines about
+     * the same payment already said "[internal]". The tag follows the payment's
+     * own `is_test` verdict: the address that paid.
+     */
+    describe("whose money it was", () => {
+      const purchaseBy = async (buyer: string, amountTotal: number) => {
+        process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+        delete process.env.ADMIN_TEST_EMAIL_REGEX;
+        __resetStaffEmailRegexForTests();
+        const slackCalls = setupHappyPathMocks();
+        await processStripeWebhookEvent({
+          event: {
+            id: `evt_slack_whose_${amountTotal}`,
+            type: "checkout.session.completed",
+            data: {
+              object: {
+                id: "cs_test_slack_001",
+                metadata: { plan: "full_report", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+              },
+            },
+          } as never,
+          stripe: buildStripe("full_report", "Spark Seeker", null, undefined, {
+            amount_total: amountTotal,
+            customer_details: { email: buyer },
+            payment_status: amountTotal === 0 ? "no_payment_required" : "paid",
+          }) as never,
+        });
+        delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+        expect(slackCalls).toHaveLength(1);
+        return JSON.parse(slackCalls[0]!.body) as {
+          text: string;
+          blocks: Array<{ type: string; text?: { text?: string } }>;
+        };
+      };
+
+      it("marks a staff €0 purchase as internal, and its Paid as no sale", async () => {
+        const body = await purchaseBy("qa@loveiq.org", 0);
+        expect(body.blocks.find((b) => b.type === "header")?.text?.text).toBe(
+          ":test_tube: [internal] 💳 EUR 0.00 — Only Your Highest Archetype"
+        );
+        expect(body.text).toMatch(
+          /^:test_tube: \[internal\] :credit_card: Purchase #70 — EUR 0\.00/
+        );
+        expect(rendered(JSON.stringify(body))).toContain(":red_circle: Paid €0 (test/comp)");
+      });
+
+      it("leaves a customer's sale untagged and green", async () => {
+        const all = rendered(JSON.stringify(await purchaseBy("buyer@gmail.com", 1999)));
+        expect(all).not.toContain("[internal]");
+        expect(all).not.toContain("€0");
+        expect(all).toContain(":large_green_circle: Paid");
+      });
     });
 
     it("skips the Slack ping on re-delivery (existing payment row)", async () => {

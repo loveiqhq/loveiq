@@ -184,6 +184,24 @@ const ArousalWave: FC<{ family: ArousalFamily }> = ({ family }) => {
  * a fixed 7 dots, so a "1 in 8" reader still saw 7 and the graphic contradicted
  * the number next to it. Clamped to a sane row length.
  */
+/**
+ * Rail for a stat whose denominator can exceed the strip, e.g. "8 of 20".
+ * Figma 10392:19301 draws that as TEN dots with four on — the ratio at half
+ * scale — so the rail caps at 10 and scales the fill. Kept separate from
+ * `dotsFromStat` so V1's rows keep their exact current behaviour.
+ */
+export function scaledRailFromStat(
+  stat: string | undefined
+): { filled: number; total: number } | null {
+  const m = /(\d+)\s*(?:in|of|\/)\s*(\d+)/i.exec(stat?.trim() ?? "");
+  if (!m) return null;
+  const num = Number(m[1]);
+  const den = Number(m[2]);
+  if (!den || num > den) return null;
+  const total = den <= 10 ? den : 10;
+  return { total, filled: Math.round((num / den) * total) };
+}
+
 function dotsFromStat(stat: string | undefined): { filled: number; total: number } {
   const raw = stat?.trim() ?? "";
   // "N in M" — the general form. Only "1 in N" parsed before, so any other
@@ -352,7 +370,12 @@ export const SnapshotCards: FC<Props> = ({ archetype, copy, stageResult = null }
  * the findings list ("Five things this report found"), which is the order Eman
  * asked for: snapshot heading -> five findings -> this box.
  */
-export const SnapshotCompare: FC<{ copy: SnapshotCopy | null }> = ({ copy }) => {
+export const SnapshotCompare: FC<{
+  copy: SnapshotCopy | null;
+  /** V3 draws the third row as a dot rail (Figma 10392:19301) where V1 uses a
+   * bar. Defaults to the bar so V1 is untouched. */
+  thirdRowViz?: "bar" | "dots";
+}> = ({ copy, thirdRowViz = "bar" }) => {
   // Its own reveal root, like the three mini-stat boxes. This box rides
   // `.report-section.is-visible` as a fallback, and that fires when the SECTION's
   // top crosses the fold — which for a box further down the section means the dots
@@ -362,7 +385,7 @@ export const SnapshotCompare: FC<{ copy: SnapshotCopy | null }> = ({ copy }) => 
     {
       stat: copy?.["compare1.stat"],
       caption: copy?.["compare1.caption"],
-      viz: "dots" as const,
+      viz: "dots" as "bar" | "dots",
       // Both count derived from the stat. `filled` used to be hardcoded to 1
       // and the total only understood "1 in N", so a stat like "87%" drew a
       // 7-dot row with one filled — a graphic claiming ~14% under a label
@@ -372,15 +395,21 @@ export const SnapshotCompare: FC<{ copy: SnapshotCopy | null }> = ({ copy }) => 
     {
       stat: copy?.["compare2.stat"],
       caption: copy?.["compare2.caption"],
-      viz: "dots" as const,
+      viz: "dots" as "bar" | "dots",
       ...dotsFromStat(copy?.["compare2.stat"]),
     },
     {
       stat: copy?.["compare3.stat"],
       caption: copy?.["compare3.caption"],
-      viz: "bar" as const,
-      filled: 0,
-      total: 0,
+      // V3 wants a rail here, but only a ratio can be drawn as one — a "%"
+      // stat has no denominator, so it keeps V1's bar rather than rendering an
+      // empty strip.
+      ...(() => {
+        const rail = thirdRowViz === "dots" ? scaledRailFromStat(copy?.["compare3.stat"]) : null;
+        return rail
+          ? { viz: "dots" as "bar" | "dots", ...rail }
+          : { viz: "bar" as "bar" | "dots", filled: 0, total: 0 };
+      })(),
     },
   ].filter((c) => c.stat || c.caption);
 

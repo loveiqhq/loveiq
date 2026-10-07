@@ -20,13 +20,24 @@ test.describe("Pricing modal — offer variant gated to 24h+", () => {
       timeout: 5000,
     });
 
-    const lockedCta = page.locator(".report-section .report-premium-overlay__cta").first();
+    // Report 3.0 locks a chapter outright; its head opens the paywall.
+    const lockedCta = page.locator(".rv4-chapter.is-locked .rv4-chapter__button").first();
     await expect(lockedCta).toBeVisible();
     await lockedCta.click();
 
     await expect(page.locator(".report-pricing-modal")).toHaveAttribute("data-state", "open");
     await expect(page.locator(".report-pricing-modal")).toHaveAttribute("data-variant", "default");
-    await expect(page.locator(".report-pricing-card__extra-pill")).toHaveCount(0);
+    // The paygate (Figma 842:584 / 963:6): both plans, each at its quoted price.
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("heading", { name: /discover your full sexual self/i })
+    ).toBeVisible();
+    await expect(dialog.locator(".rpg-card--all_reports .rpg-card__amount")).toHaveText("€39.99");
+    await expect(dialog.locator(".rpg-card--all_reports .rpg-card__was")).toHaveText(
+      "€49.99 - 20% off"
+    );
+    await expect(dialog.locator(".rpg-card--full_report .rpg-card__amount")).toHaveText("€29.99");
+    await expect(dialog.locator(".rpg-card--full_report .rpg-card__was")).toHaveCount(0);
   });
 
   test("step 1 (24h+): modal auto-opens in offer variant", async ({ page }) => {

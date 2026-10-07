@@ -153,7 +153,14 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
       color: SERIES.RETIRED,
       retired: true,
     },
-    B: { short: "Pricing B", long: "Pricing: group B", color: SERIES.BLUE },
+    // The surviving 2.x list from 2026-08-31 until Pricing 3.0 replaced it. Grey like A
+    // and C: it is never drawn beside A3 and B3, which take the live pair below.
+    B: {
+      short: "Pricing B",
+      long: "Pricing: group B",
+      color: SERIES.RETIRED,
+      retired: true,
+    },
     // Retired 2026-06 in the 3-bucket → 2-bucket cut. Legacy quotes still read back as C.
     C: {
       short: "Pricing C",
@@ -161,6 +168,14 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
       color: SERIES.RETIRED,
       retired: true,
     },
+    // Pricing 3.0: "All 14" and the single report on two price lists, 50/50. New
+    // letters rather than A and B again, so the concluded 2.x test's rows can never
+    // pool into this one (reportPricing.ts, PLAN_BUCKETS). The validated live pair,
+    // list A blue and list B orange, for good. Named by what the reader pays, not by
+    // letter (founder, 2026-10-06): A3 is the higher list (€39.99 all 14, €29.99
+    // single), B3 the lower one (€19.99, €14.99).
+    A3: { short: "Pricing 3.0 higher", long: "Pricing 3.0: higher prices", color: SERIES.BLUE },
+    B3: { short: "Pricing 3.0 lower", long: "Pricing 3.0: lower prices", color: SERIES.ORANGE },
   },
   // Whole axis concluded, and the forced wall itself was removed on 2026-08-31,
   // so NEITHER arm is assigned any more — both carry `retired` for the same

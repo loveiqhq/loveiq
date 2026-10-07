@@ -78,6 +78,28 @@ export function checkWalk(w: Walk): Check[] {
       what: `Reached Stripe for ${w.plan} but the payment did not complete.`,
     });
   }
+  // Another archetype's report bought first (walk.ts --sequence): every failed check is a
+  // defect, and only a walk that got through all of them, to the end, passes.
+  if (w.sequence) {
+    const bought = w.sequence.other ?? "another archetype";
+    const failed = w.sequence.checks.filter((c) => !c.ok);
+    for (const c of failed) {
+      checks.push({
+        ok: false,
+        what: `Buying ${bought} first: expected ${c.what}; saw ${c.observed}.`,
+      });
+    }
+    if (!failed.length && w.finished) {
+      checks.push(
+        w.sequence.checks.length
+          ? {
+              ok: true,
+              what: `Bought ${bought} from Other Archetypes, then the own report: all ${w.sequence.checks.length} sequence checks held.`,
+            }
+          : { ok: false, what: "The purchase sequence recorded no checks." }
+      );
+    }
+  }
   const errors = w.consoleErrors.filter((e) => !STAGING_NOISE.some((re) => re.test(e)));
   if (errors.length) {
     checks.push({

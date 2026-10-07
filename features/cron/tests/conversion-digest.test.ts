@@ -116,6 +116,7 @@ import {
   buildUnitEconomicsLines,
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
+import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
 
 /** Two arms, 30 days, shaped like the real RPC response. */
 function makeFunnel(overrides: Partial<{ visitorArms: Record<string, number> }> = {}) {
@@ -2914,6 +2915,43 @@ describe("conversion-digest chart series", () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+describe("the Pricing 3.0 verdict waits for a window wholly after the launch", () => {
+  // A decisive split, so the only thing that can hold the verdict back is the window.
+  const cohorts = [
+    { axis: "pricing", arm: "A3", n: 500, conversions: 80 },
+    { axis: "pricing", arm: "B3", n: 500, conversions: 20 },
+  ];
+  const digestOn = async (daysAfterLaunch: number) => {
+    const day = new Date(
+      Date.parse(`${PRICING_3_LAUNCH_DAY}T00:00:00Z`) + daysAfterLaunch * 86_400_000
+    )
+      .toISOString()
+      .slice(0, 10);
+    const { blocks } = await buildConversionDigest({
+      dayKey: day,
+      funnel: null,
+      cohorts,
+      midway: null,
+      paywall: null,
+      unitEconomics: null,
+      emailExperiments: null,
+      now: new Date(`${day}T09:05:00Z`),
+    });
+    return blockText(blocks);
+  };
+
+  it("stays silent while the 30-day cohorts still hold readers from before 3.0", async () => {
+    // Day 28 after the launch: the window starts the day before it.
+    expect(await digestOn(28)).not.toContain("Worth acting on");
+  });
+
+  it("calls it once every reader in the window finished under 3.0", async () => {
+    const text = await digestOn(29);
+    expect(text).toContain("Worth acting on");
+    expect(text).toContain("Pricing 3.0 higher");
+  });
 });
 
 /**

@@ -217,12 +217,39 @@ export function blocksToText(blocks: NotionBlock[], depth = 0): string {
   return lines.join("\n");
 }
 
+/**
+ * ONE RETRY ON A 429 OR A 5xx. On 2026-10-01 at 11:41 Notion answered a crawl request with a
+ * 500 ("Cross-cell memcached access is not allowed") that nothing caught, and the whole run
+ * failed for one transient answer. A 429 says how long to wait; a 5xx says nothing, so it
+ * gets a short pause.
+ *
+ * The wait is CAPPED rather than checked against the run's clock, because the clock is
+ * checked between requests, never during one: a capped wait plus one request is what the
+ * cron's tail room after its budget has to absorb. Longer than the cap, the error stands.
+ * ponytail: pass isOutOfTime down if a retry ever needs to wait longer than the cap.
+ */
+export const NOTION_RETRY_MAX_S = 5;
+
+async function notionFetch(
+  url: string,
+  init: Parameters<typeof fetchWithTimeout>[1]
+): Promise<Response> {
+  const res = await fetchWithTimeout(url, init);
+  if (res.ok || (res.status !== 429 && res.status < 500)) return res;
+  const raw = res.headers?.get("retry-after")?.trim() ?? "";
+  const wait = /^\d+$/.test(raw) ? Number(raw) : res.status === 429 ? 1 : 0.5;
+  if (wait > NOTION_RETRY_MAX_S) return res;
+  await res.body?.cancel().catch(() => undefined);
+  await new Promise((r) => setTimeout(r, wait * 1000));
+  return fetchWithTimeout(url, init);
+}
+
 async function notionPost(
   token: string,
   path: string,
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetchWithTimeout(`${API}${path}`, {
+  const res = await notionFetch(`${API}${path}`, {
     method: "POST",
     headers: headers(token),
     body: JSON.stringify(body),
@@ -236,7 +263,7 @@ async function notionPost(
 }
 
 async function notionGet(token: string, path: string): Promise<Record<string, unknown>> {
-  const res = await fetchWithTimeout(`${API}${path}`, {
+  const res = await notionFetch(`${API}${path}`, {
     headers: headers(token),
     timeoutMs: TIMEOUT_MS,
   });

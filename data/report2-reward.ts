@@ -121,3 +121,25 @@ export function getRewardProfile(slug: string | null | undefined): RewardProfile
     ? (REWARD_BY_SLUG[slug] ?? null)
     : null;
 }
+
+/** The meter fill per rank: the designer's fixed ladder (see METERS above). */
+export const REWARD_METER_LADDER: readonly number[] = [88, 56, 30, 12];
+
+/**
+ * The role word per rank, as the designer fixed them (see ROLE WORDS above): lead,
+ * support, amplifier, and for the fourth "disruptor" when adrenaline sits there, otherwise
+ * "settler".
+ */
+export function rewardRolesFor(order: readonly string[]): string[] {
+  return order.map((chemical, rank) =>
+    rank === 0
+      ? "lead"
+      : rank === 1
+        ? "support"
+        : rank === 2
+          ? "amplifier"
+          : chemical === "adrenaline"
+            ? "disruptor"
+            : "settler"
+  );
+}

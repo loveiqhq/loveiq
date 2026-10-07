@@ -1,4 +1,5 @@
 import posthog from "posthog-js";
+import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import {
@@ -67,6 +68,8 @@ const PERSISTED_EVENTS = new Set([
   "chapter_feedback_submitted",
   // Survey + wizard funnel slot (Phase B.2)
   "wizard_slide_advanced",
+  // The wizard's report map stepping through its deep dives (30.09)
+  "wizard_map_step",
   "survey_confirmation_cta_clicked",
   // Invite (Phase B.4)
   "invite_modal_dismissed",
@@ -667,8 +670,11 @@ export interface PriceShownParams {
   pricing_cluster_id: string;
   /** Discount ladder step: 0 = initial, 1–4 = ladder. */
   discount_step: number;
-  /** A/B experiment group: "A" (baseline) or "B" (full dynamic). */
-  experiment_group?: "A" | "B";
+  /**
+   * The quote's pricing arm: "A3" | "B3" since Pricing 3.0; "A" | "B" on a quote from
+   * the concluded 2.x test (see PricingExperimentGroup).
+   */
+  experiment_group?: PricingExperimentGroup;
   /** MSRP anchor (struck-out reference price). */
   msrp?: number;
   /** Initial price before ladder discount. */
@@ -729,6 +735,15 @@ export const trackBeginCheckout = (
 };
 
 /**
+ * Report 3.0 has locked chapters but shows no price on them, so it says only that: the
+ * marker the "CTA visibility" signal needs to know a visit had something locked to see.
+ * GA4/PostHog only; nothing reads it from analytics_event.
+ */
+export const trackLockedChaptersShown = () => {
+  track("locked_chapters_shown", { surface: "v4" });
+};
+
+/**
  * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
  * price (the `PremiumOverlay` surface — distinct from the
  * pricing modal's `price_shown`). Lets the funnel measure the inline card as
@@ -742,16 +757,6 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
   } as unknown as Record<string, unknown>;
   track("locked_card_price_shown", payload);
   persistAnalyticsEvent("locked_card_price_shown", payload);
-};
-
-/**
- * Testimonial carousel engagement in the pricing modal (pause/resume, arrow
- * nudge, drag). GA4-only — low-signal interaction, intentionally NOT persisted
- * to `analytics_event` (same row-volume policy as section navigation).
- */
-export type TestimonialAction = "pause" | "resume" | "prev" | "next" | "drag";
-export const trackTestimonialInteraction = (action: TestimonialAction) => {
-  track("testimonial_interaction", { action });
 };
 
 /**
@@ -832,6 +837,12 @@ export interface ReportPurchaseParams {
   behavioral_bucket?: string;
   /** Original price before discounts. */
   initial_price?: number;
+  /** The promo code redeemed at Stripe, and what it took off. */
+  promotion_code?: string;
+  coupon_percent_off?: number;
+  discount_amount?: number;
+  /** A staff payer, by the rule that sets `payment.is_test` (checkout-session-status). */
+  isTest?: boolean;
 }
 
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
@@ -845,10 +856,10 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
    * day with `value: 0` — device-matrix test purchases redeemed with a 100%-off
    * code — telling Ads there were 34 sales worth nothing.
    *
-   * The browser cannot see `payment.is_test`, but every test and comp purchase
-   * is £0/€0 by construction, so value is the discriminator available here. The
-   * server sibling guards on both (`sendGa4PurchaseEvent`).
+   * Two guards, as on the server sibling (`sendGa4PurchaseEvent`): `isTest`
+   * catches a staff purchase at any price, and value catches a comp by anyone.
    */
+  if (params.isTest) return;
   if (!(params.value > 0)) return;
 
   window.dataLayer = window.dataLayer || [];
@@ -874,6 +885,9 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
     engagement_score: params.engagement_score,
     behavioral_bucket: params.behavioral_bucket,
     initial_price: params.initial_price,
+    promotion_code: params.promotion_code,
+    coupon_percent_off: params.coupon_percent_off,
+    discount_amount: params.discount_amount,
   });
 
   trackGoogleAdsPurchaseConversion(params);
@@ -1038,12 +1052,18 @@ export const trackChapterFeedbackSubmitted = (params: {
   feedback: "up" | "down";
   issue?: string;
   has_comment: boolean;
+  /**
+   * Since 01.10 the thumb stores the rating on its own ("rating"); Send adds the
+   * optional message to the same row ("message").
+   */
+  step?: "rating" | "message";
 }) => {
   const payload = {
     section_id: params.section_id,
     feedback: params.feedback,
     has_comment: params.has_comment,
     ...(params.issue ? { issue: params.issue } : {}),
+    ...(params.step ? { step: params.step } : {}),
   };
   track("chapter_feedback_submitted", payload);
   persistAnalyticsEvent("chapter_feedback_submitted", payload);
@@ -1072,6 +1092,20 @@ export const trackWizardSlideAdvanced = (params: {
 }) => {
   track("wizard_slide_advanced", params);
   persistAnalyticsEvent("wizard_slide_advanced", params);
+};
+
+/**
+ * The wizard's report map (slide 2) moving between its overview (step 0) and its four
+ * deep-dive tiles (steps 1-4). Its own event so wizard_slide_advanced keeps meaning
+ * "the wizard moved to another slide", 0-5, as the digests read it.
+ */
+export const trackWizardMapStep = (params: {
+  from_step: number;
+  to_step: number;
+  control: "next" | "previous" | "continue" | "back";
+}) => {
+  track("wizard_map_step", params);
+  persistAnalyticsEvent("wizard_map_step", params);
 };
 
 export const trackSurveyConfirmationCtaClicked = (params: {

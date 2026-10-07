@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 import ArchetypeBreakdownListSection, {
   countDrivingDimensions,
 } from "@features/report/ui/sections/ArchetypeBreakdownListSection";
@@ -424,7 +425,7 @@ describe("the methodology box", () => {
   it("states only numbers that are true of this reader's answers", () => {
     renderWith({ uDimensions: { a: 0.9, b: 0.1, c: 0.52, d: 0.5 } });
     const box = within(screen.getByRole("complementary", { name: "Methodology" }));
-    expect(box.getByText("57")).toBeInTheDocument();
+    expect(box.getByText(String(QUESTIONS_ASKED))).toBeInTheDocument();
     expect(box.getByText("14")).toBeInTheDocument();
     expect(box.getByText("2 of 4")).toBeInTheDocument();
   });

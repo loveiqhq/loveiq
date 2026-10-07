@@ -1,0 +1,197 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import type { Report3TriggerRow } from "@/data/report3-accelerators";
+import useV4Reveal from "./useV4Reveal";
+import V4LockBadge from "./V4LockBadge";
+import { guardedUnlock } from "./v4Unlock";
+
+/**
+ * One of Accelerator & Brakes' two trigger cards — "WHAT BRAKES YOU" (Figma
+ * 713:6132, paywalled 386:416) and "WHAT ACCELERATES YOU" (713:6181 / 386:444). The
+ * brakes card is coral and comes first, the accelerators card green.
+ *
+ * Each row is a label and one line of explanation. The scales that ran under them
+ * are gone, and 2.0's fill animation with them (Mark, 25.09: "We swapped out these
+ * visual elements. On the Paywalled version, we are just deleting the scales").
+ *
+ * OPEN, the card shows two rows and the third under a fade, with "Show all" on it.
+ * The pill lists every row and goes; Figma draws no way back, as in the fantasy
+ * table, whose pill this is. The pill unmounts under the keyboard's focus, so focus
+ * moves to the first row it revealed.
+ *
+ * PAYWALLED, the cards keep their first `lockedFrom` rows sharp; the next ramps into
+ * the blur and the rest sit under it, with the gradient lock badge floating over the
+ * blur. The blurred rows arrive as the server decides (lockedBlurCopy.ts: the real
+ * rows since review 26.09); they are `aria-hidden` and `inert`, and the group around
+ * them owns the click, so a tap anywhere on the blur opens the paywall once (the badge
+ * has no handler of its own and bubbles to it — the same seam as V4ShadowBeliefs).
+ *
+ * THE HEADLINE (review 27.09). Mark: "let's have the headlines fade in, ie 'what
+ * brakes you' 'what accelerates you'". The head holds its badge and label back
+ * (`is-pending`) until it is in view, then they rise into place, the label a beat
+ * after the badge. Heads are never blurred, so a locked reader sees it too.
+ *
+ * The chrome text lives here, never in the paid module.
+ */
+
+type Tone = "brake" | "accel";
+
+const LABEL: Record<Tone, string> = {
+  brake: "WHAT BRAKES YOU",
+  accel: "WHAT ACCELERATES YOU",
+};
+
+/** 713:6179 — what the pill reads. Mark, 28.09 (1944177596, "Updated CTAs"): "Show
+ * all", set in title case by the stylesheet (it read "SHOW ALL BRAKES" before). */
+const SHOW_ALL_LABEL = "Show all";
+
+/** The pill's accessible name: the page has several "Show All"s, so each says what it
+ * opens. */
+const SHOW_ALL: Record<Tone, string> = {
+  brake: "Show all brakes",
+  accel: "Show all accelerators",
+};
+
+/** 386:222 / 386:320, downloaded from the frame unchanged. */
+const ICON: Record<Tone, string> = {
+  brake: "/report/v3/accelerators/icon-minus.svg",
+  accel: "/report/v3/accelerators/icon-plus.svg",
+};
+
+const NODE: Record<Tone, { open: string; locked: string }> = {
+  brake: { open: "713:6132", locked: "386:416" },
+  accel: { open: "713:6181", locked: "386:444" },
+};
+
+/** The rows an open card shows before its pill; the next one peeks under the fade. */
+const CLEAR_ROWS = 2;
+
+interface Props {
+  tone: Tone;
+  rows: readonly Report3TriggerRow[];
+  /** Index of the first blurred row, or null/absent when the chapter is open. */
+  lockedFrom?: number | null;
+  /** Opens the paywall from the blurred rows. */
+  onUnlock?: () => void;
+}
+
+/**
+ * A locked row either ramps into the blur (452:261: sharp at its top, the full blur 64%
+ * down it) or sits under the blur whole (452:264, 452:267).
+ */
+type LockedAs = "ramp" | "blurred";
+
+const Row: FC<{
+  row: Report3TriggerRow;
+  locked?: LockedAs;
+  last: boolean;
+  focusable?: boolean;
+  /** Its turn in the rows' entrance (review 28.09). */
+  index: number;
+}> = ({ row, locked, last, focusable = false, index }) => (
+  <li
+    className={`rv4-trig__row${locked ? ` is-locked is-${locked}` : ""}${last ? " is-last" : ""}`}
+    tabIndex={focusable ? -1 : undefined}
+    style={{ "--rv4-trig-i": index } as CSSProperties}
+  >
+    <p className="rv4-trig__title">{row.label}</p>
+    <p className="rv4-trig__sub">{row.subtext}</p>
+    {locked === "ramp" ? (
+      <span className="rv4-pblur rv4-trig__ramp" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+    ) : null}
+  </li>
+);
+
+const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) => {
+  const locked = lockedFrom !== null && lockedFrom < rows.length;
+  const [showAll, setShowAll] = useState(false);
+  const listRef = useRef<HTMLUListElement>(null);
+  /** Set by the pill: once the rows are in, focus goes to the first one it revealed. */
+  const revealed = useRef(false);
+  const collapsed = !locked && !showAll && rows.length > CLEAR_ROWS;
+  const clear = locked ? rows.slice(0, lockedFrom) : collapsed ? rows.slice(0, CLEAR_ROWS) : rows;
+  const peek = collapsed ? rows[CLEAR_ROWS] : undefined;
+  const blurred = locked ? rows.slice(lockedFrom) : [];
+  const [headRef, headInView] = useV4Reveal<HTMLDivElement>();
+  // Mark, 28.09: "also animate the headlines and texts". The clear rows rise in one by
+  // one once they reach the screen, after the headline; rows under the blur stay still.
+  const [rowsRef, rowsInView] = useV4Reveal<HTMLDivElement>();
+
+  useEffect(() => {
+    if (!showAll || !revealed.current) return;
+    revealed.current = false;
+    listRef.current?.querySelectorAll<HTMLElement>(".rv4-trig__row")[CLEAR_ROWS]?.focus();
+  }, [showAll]);
+
+  // Rows are keyed by position: in decoy mode their text is not stable.
+  return (
+    <section
+      className={`rv4-trig rv4-trig--${tone}`}
+      data-node-id={locked ? NODE[tone].locked : NODE[tone].open}
+      data-name={tone === "brake" ? "Card · What shuts you down" : "Card · What opens you"}
+    >
+      <div ref={headRef} className={`rv4-trig__head${headInView ? "" : " is-pending"}`}>
+        <span className="rv4-trig__badge" aria-hidden="true">
+          <Image src={ICON[tone]} alt="" width={16} height={16} unoptimized />
+        </span>
+        <h4 className="rv4-trig__label">{LABEL[tone]}</h4>
+      </div>
+      <div ref={rowsRef} className={`rv4-trig__rows${rowsInView ? "" : " is-pending"}`}>
+        <ul className="rv4-trig__list" ref={listRef}>
+          {clear.map((row, index) => (
+            <Row
+              key={index}
+              row={row}
+              last={!locked && !collapsed && index === rows.length - 1}
+              focusable={showAll && index === CLEAR_ROWS}
+              index={index}
+            />
+          ))}
+        </ul>
+        {peek ? (
+          <div className="rv4-trig__peek">
+            <ul className="rv4-trig__list" aria-hidden="true" inert>
+              <Row row={peek} last index={CLEAR_ROWS} />
+            </ul>
+            <span className="rv4-trig__fade" aria-hidden="true" />
+            <button
+              type="button"
+              className="rv4-trig__pill"
+              aria-label={SHOW_ALL[tone]}
+              onClick={() => {
+                revealed.current = true;
+                setShowAll(true);
+              }}
+            >
+              <span className="rv4-trig__pill-label">{SHOW_ALL_LABEL}</span>
+            </button>
+          </div>
+        ) : null}
+        {locked ? (
+          <div className="rv4-tb-lock rv4-trig__lock" onClick={guardedUnlock(onUnlock)}>
+            <ul className="rv4-trig__list is-locked" aria-hidden="true" inert>
+              {blurred.map((row, index) => (
+                <Row
+                  key={index}
+                  row={row}
+                  locked={index === 0 ? "ramp" : "blurred"}
+                  last={index === blurred.length - 1}
+                  index={clear.length + index}
+                />
+              ))}
+            </ul>
+            <V4LockBadge />
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+};
+
+export default V4TriggerCard;

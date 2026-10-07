@@ -2,7 +2,7 @@
  * The persona walkers (scripts/walkers/): the answers each persona gives, which walks run
  * tonight, what a walk proves on its own, and what the judge may do and post.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -29,16 +29,23 @@ import {
   allWalks,
   DEVICES,
   PLANS,
+  ROTATION_PLANS,
   WALKS_PER_NIGHT,
   walksFor,
 } from "../../scripts/walkers/rotation";
 import {
   answerFor,
+  ARCHETYPE_ROW_UNLOCK,
+  PLAN_CTA,
+  PLAN_TITLE,
   findQuestion,
   redact,
   MAIN_ON_STAGING,
   PROOF_PAGE_SCRIPT,
+  stoppedAtOf,
   walkableOrigin,
+  WIZARD_FORWARD,
+  WIZARD_LAST,
   type Walk,
 } from "../../scripts/walkers/walk";
 
@@ -90,10 +97,16 @@ describe("tonight's walks", () => {
     expect(new Set(week.map(key)).size).toBe(names.length * DEVICES.length);
   });
 
-  it("buy every plan several times a week", () => {
-    for (const plan of PLANS) {
+  it("buy every plan on sale several times a week, and never the retired core", () => {
+    for (const plan of ROTATION_PLANS) {
       expect(allWalks(names).filter((w) => w.plan === plan).length, plan).toBeGreaterThanOrEqual(8);
     }
+    expect(ROTATION_PLANS).not.toContain("core");
+    for (const week of [0, 1, 2]) {
+      expect(allWalks(names, week).some((w) => w.plan === "core")).toBe(false);
+    }
+    // Still a plan a walk can be asked for by hand, where it is sold.
+    expect(PLANS).toContain("core");
   });
 
   it("has each persona buy a different plan on the phone and on the desktop", () => {
@@ -120,7 +133,7 @@ describe("tonight's walks", () => {
     }
   });
 
-  it("move each persona's plan on every week, so all three get bought", () => {
+  it("move each persona's plan on every week, so every plan on sale gets bought", () => {
     const plansOf = (name: string) =>
       new Set(
         [0, 1, 2].flatMap((week) =>
@@ -129,7 +142,7 @@ describe("tonight's walks", () => {
             .map((w) => w.plan)
         )
       );
-    for (const name of names) expect(plansOf(name).size, name).toBe(PLANS.length);
+    for (const name of names) expect(plansOf(name).size, name).toBe(ROTATION_PLANS.length);
   });
 
   it("are the same four when a night is run again", () => {
@@ -165,6 +178,119 @@ describe("a walk", () => {
     // The PRODUCTION project's build of main has production's settings: never.
     expect(walkableOrigin("https://loveiq-web-git-main-loveiq.vercel.app", false)).toBe(false);
     expect(walkableOrigin("http://loveiq-staging-git-main-loveiq.vercel.app", false)).toBe(false);
+  });
+
+  it("gets through the pre-report slides by every name their button has", () => {
+    // Main's own names, read from the wizard, so renaming them there fails here first.
+    const wizard = readFileSync(
+      join(process.cwd(), "features/survey/ui/PreReportWizard.tsx"),
+      "utf8"
+    );
+    // The wizard names its forward button for a screen reader: the last slide's, then the rest.
+    const label = /aria-label=\{isLast \? "([^"]+)" : "([^"]+)"\}/.exec(wizard);
+    expect(label, "the wizard's forward button names its last slide").not.toBeNull();
+    const [, last, next] = label!;
+    expect(WIZARD_FORWARD.test(next!)).toBe(true);
+    expect(WIZARD_FORWARD.test(last!)).toBe(true);
+    expect(WIZARD_LAST.test(last!)).toBe(true);
+    expect(WIZARD_LAST.test(next!)).toBe(false);
+    // The staging branch's last slide since 2026-10-01, which stopped every walk there.
+    expect(WIZARD_FORWARD.test("Continue to your report")).toBe(true);
+    expect(WIZARD_LAST.test("Continue to your report")).toBe(true);
+  });
+
+  it("says what it was waiting for when it stops", () => {
+    const err = new Error(
+      "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /view your report/i }).first()\n"
+    );
+    expect(stoppedAtOf(err)).toBe(
+      "locator.click: Timeout 30000ms exceeded. (waiting for getByRole('button', { name: /view your report/i }).first())"
+    );
+    expect(stoppedAtOf(new Error('stuck on "What is your name?"'))).toBe(
+      'stuck on "What is your name?"'
+    );
+    // What reaches the public log is redacted, waiting-for part included.
+    expect(
+      stoppedAtOf(new Error("timeout\n  - waiting for navigation to /report/rpt_ABC-123"))
+    ).toBe("timeout (waiting for navigation to /report/<token>)");
+    // Playwright colours its messages; the log gets only the words.
+    expect(stoppedAtOf(new Error("\u001b[2mlocator.click: Timeout\u001b[22m"))).toBe(
+      "locator.click: Timeout"
+    );
+  });
+
+  it("opens the price picker from an archetype row, never with a button inside it", () => {
+    // The plans' buttons, read from where they are defined, so a renamed one is checked here.
+    const plans = readFileSync(
+      join(process.cwd(), "features/checkout/server/reportPurchase.ts"),
+      "utf8"
+    );
+    const labels = [...plans.matchAll(/ctaLabel: "([^"]+)"/g)].map((m) => m[1]!);
+    // Pricing 3.0's two plans (features/checkout/server/reportPurchase.ts).
+    expect(labels).toEqual(["Continue", "Only Unlock My Highest Scoring Report"]);
+    for (const label of labels) expect(ARCHETYPE_ROW_UNLOCK.test(label), label).toBe(false);
+    // A row reads "Unlock report", or names its archetype to a screen reader.
+    expect(ARCHETYPE_ROW_UNLOCK.test("Unlock report")).toBe(true);
+    for (const archetype of new Set(personasFile.personas.map((p) => p.archetype))) {
+      expect(ARCHETYPE_ROW_UNLOCK.test(`Unlock ${archetype} report`), archetype).toBe(true);
+    }
+    for (const other of ["Unlock your report", "Unlock the full report", "Unlock full report"]) {
+      expect(ARCHETYPE_ROW_UNLOCK.test(other), other).toBe(false);
+    }
+  });
+
+  it("knows each plan on both catalogues: main's, and Pricing 3.0's on staging", () => {
+    // Main's names are read from its catalogue; staging's 3.0 names are its
+    // features/checkout/server/reportPurchase.ts as of 2026-10-05, which main cannot read.
+    const plans = readFileSync(
+      join(process.cwd(), "features/checkout/server/reportPurchase.ts"),
+      "utf8"
+    );
+    const mainTitle = (plan: string) =>
+      new RegExp(`plan: "${plan}"[\\s\\S]*?title: "([^"]+)"`).exec(plans)?.[1] ?? "";
+    expect(PLAN_TITLE.full_report.test(mainTitle("full_report"))).toBe(true);
+    expect(PLAN_TITLE.all_reports.test(mainTitle("all_reports"))).toBe(true);
+    expect(PLAN_TITLE.full_report.test("Only Your Highest Archetype")).toBe(true);
+    expect(PLAN_TITLE.all_reports.test("All 14 Archetype Reports")).toBe(true);
+    // A receipt names one plan, and is read as that one.
+    expect(PLANS.find((p) => PLAN_TITLE[p].test("All 14 Archetype Reports"))).toBe("all_reports");
+    expect(PLANS.find((p) => PLAN_TITLE[p].test("Only Your Highest Archetype"))).toBe(
+      "full_report"
+    );
+    for (const name of [
+      "Unlock my report",
+      "Only Unlock My Highest Scoring Report",
+      "Only Unlock This Report",
+    ]) {
+      expect(PLAN_CTA.full_report.test(name), name).toBe(true);
+    }
+    for (const name of ["Unlock us", "Continue"]) {
+      expect(PLAN_CTA.all_reports.test(name), name).toBe(true);
+    }
+    // Never another plan's button, an archetype row's, or the wizard's "Continue to…".
+    expect(PLAN_CTA.all_reports.test("Continue to your report")).toBe(false);
+    expect(PLAN_CTA.full_report.test("Continue")).toBe(false);
+    expect(ARCHETYPE_ROW_UNLOCK.test("Only Unlock This Report")).toBe(false);
+  });
+
+  it("finds the purchase sequence's list, pay screen and return words by main's own names", () => {
+    // What walk.ts --sequence looks for, read from where main renders it, so a rename fails
+    // here first instead of stopping the nightly walk.
+    const read = (f: string) => readFileSync(join(process.cwd(), f), "utf8");
+    const list = read("features/report/ui/sections/ConstellationSection.tsx");
+    for (const name of ["__row", "__name", "__view"]) {
+      expect(list).toContain(`report-constellation${name}`);
+    }
+    expect(list).toMatch(/<PadlockIcon open=\{false\} \/>\s*Unlock\s*</);
+    expect(list).toContain('"View report"');
+    expect(list).toContain("`View your ${name} report`");
+    const paywall = read("features/report/ui/ReportPricingModal.tsx");
+    expect(paywall).toContain("`${card.titleLead} the ${targetArchetype} Report`");
+    expect(paywall).toContain('"Only Unlock This Report"');
+    expect(paywall).toContain("rpg-card--${card.plan}");
+    const back = read("features/checkout/ui/CheckoutReturnPage.tsx");
+    expect(back).toContain("`Your ${archetype} report is`");
+    expect(back).toMatch(/checkout-return__copy">\s*<strong[^>]*>Payment complete\./);
   });
 
   it("recognises every question by the words of its heading", () => {
@@ -312,6 +438,70 @@ describe("what a walk proves on its own", () => {
     expect(
       checkWalk(walk({ consoleErrors: [toolbar, "TypeError: x is undefined"] })).some((c) => !c.ok)
     ).toBe(true);
+  });
+
+  const held = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      what: `check ${i + 1}`,
+      ok: true,
+      observed: "as it should",
+    }));
+
+  it("passes a purchase sequence only when every check held and the walk reached the end", () => {
+    const passed = checkWalk(
+      walk({ sequence: { mode: "other-first", other: "Minimalist Companion", checks: held(9) } })
+    );
+    expect(passed.every((c) => c.ok)).toBe(true);
+    expect(passed.map((c) => c.what)).toContain(
+      "Bought Minimalist Companion from Other Archetypes, then the own report: all 9 sequence checks held."
+    );
+    // Stopped part-way with every check so far holding (Stripe never came back): the stop is
+    // the finding, and nothing says the sequence held.
+    const cut = checkWalk(
+      walk({
+        finished: false,
+        stoppedAt: "page.waitForURL: Timeout 120000ms exceeded.",
+        sequence: { mode: "other-first", other: "Minimalist Companion", checks: held(2) },
+      })
+    );
+    expect(cut.some((c) => !c.ok && c.what.includes("page.waitForURL"))).toBe(true);
+    expect(cut.some((c) => c.what.includes("sequence checks held"))).toBe(false);
+    // A sequence that checked nothing never passes.
+    expect(
+      checkWalk(walk({ sequence: { mode: "other-first", checks: [] } })).some(
+        (c) => !c.ok && c.what === "The purchase sequence recorded no checks."
+      )
+    ).toBe(true);
+  });
+
+  it("fails the walk on any failed sequence check, with what was expected and what was seen", () => {
+    const leak = {
+      what: 'the reader\'s own report (Spark Seeker) still locked, with the "Unlock full report" bar',
+      ok: false,
+      observed: "0 locks, the bar not shown",
+    };
+    const stopped = checkWalk(
+      walk({
+        finished: false,
+        stoppedAt: `purchase sequence: expected ${leak.what}; saw ${leak.observed}`,
+        sequence: {
+          mode: "other-first",
+          other: "Minimalist Companion",
+          checks: [...held(6), leak],
+        },
+      })
+    );
+    expect(stopped.filter((c) => !c.ok).map((c) => c.what)).toContain(
+      'Buying Minimalist Companion first: expected the reader\'s own report (Spark Seeker) still locked, with the "Unlock full report" bar; saw 0 locks, the bar not shown.'
+    );
+    // A failed check fails the walk even in a record that says it reached the end.
+    const finished = checkWalk(
+      walk({ sequence: { mode: "other-first", other: "Minimalist Companion", checks: [leak] } })
+    );
+    expect(finished.some((c) => !c.ok && c.what.startsWith("Buying Minimalist Companion"))).toBe(
+      true
+    );
+    expect(finished.some((c) => c.what.includes("sequence checks held"))).toBe(false);
   });
 
   it("reports a stopped walk, a locked scroll and a sideways page", () => {

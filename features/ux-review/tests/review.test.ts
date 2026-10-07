@@ -1362,6 +1362,10 @@ describe("the scanner scorecard", () => {
     // And it must ask only about the paywall's own surfaces.
     expect(sent).toContain("report-pricing-card");
     expect(sent).toContain("report-premium-overlay");
+    // Report 3.0's paygate and locked chapters, or its readers' dead taps vanish.
+    expect(sent).toContain("'rpg'");
+    expect(sent).toContain("rv4-premium");
+    expect(sent).toContain("__gated");
     expect(sent).toContain("dead_click");
     // Marked locked surfaces count too — and COALESCED: HogQL makes
     // `x != ''` true for a missing property, which matched every dead tap on

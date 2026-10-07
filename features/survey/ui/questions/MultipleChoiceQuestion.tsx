@@ -3,10 +3,15 @@
 import { useState, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import ChoiceCard from "./ChoiceCard";
+import GroupedChoiceList from "./GroupedChoiceList";
 import QuestionHeading from "./QuestionHeading";
 import { getOptionExplanation } from "./getOptionExplanation";
+import { useOrderedOptionGroups } from "./useOrderedOptionGroups";
 import { useOrderedOptions } from "./useOrderedOptions";
 import { useSurveyTheme } from "../SurveyThemeContext";
+
+/** An answer that means "none of the above". */
+export const isExclusive = (option: string) => /^none of these\b/i.test(option);
 
 interface MultipleChoiceQuestionProps {
   question: SurveyQuestion;
@@ -42,17 +47,28 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
       return;
     }
 
-    if (typeof maxSelections === "number" && selected.length >= maxSelections) {
+    // "None of these" and any other pick exclude each other: both together was a
+    // contradiction the survey stored.
+    if (isExclusive(option)) {
+      setAttemptedOverLimit(false);
+      onChange([option]);
+      return;
+    }
+    const others = selected.filter((v) => !isExclusive(v));
+
+    if (typeof maxSelections === "number" && others.length >= maxSelections) {
       setAttemptedOverLimit(true);
       return;
     }
 
     setAttemptedOverLimit(false);
-    onChange([...selected, option]);
+    onChange([...others, option]);
   };
 
   const white = useSurveyTheme() === "white";
   const options = useOrderedOptions(question);
+  // Categories for a grouped question (C9), in the same order `orderedOptions` records.
+  const groups = useOrderedOptionGroups(question);
 
   return (
     <div className="flex flex-col gap-5">
@@ -64,27 +80,38 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
           aria-live="polite"
           className="font-sans text-[13px] font-medium text-[#ef4444]"
         >
-          You can select up to {maxSelections} options. Deselect one to choose another.
+          You can select up to {maxSelections} {maxSelections === 1 ? "option" : "options"}.
+          Deselect one to choose another.
         </p>
       )}
 
-      <div className="flex flex-col gap-3">
-        {options.map((option) => {
-          const isSelected = selected.includes(option);
+      {groups ? (
+        <GroupedChoiceList
+          question={question}
+          groups={groups}
+          selected={selected}
+          atLimit={atLimit}
+          onToggle={toggle}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {options.map((option) => {
+            const isSelected = selected.includes(option);
 
-          return (
-            <ChoiceCard
-              key={option}
-              label={option}
-              description={isSelected ? getOptionExplanation(question, option) : undefined}
-              selected={isSelected}
-              onClick={() => toggle(option)}
-              multi
-              dimmed={atLimit && !isSelected}
-            />
-          );
-        })}
-      </div>
+            return (
+              <ChoiceCard
+                key={option}
+                label={option}
+                description={isSelected ? getOptionExplanation(question, option) : undefined}
+                selected={isSelected}
+                onClick={() => toggle(option)}
+                multi
+                dimmed={atLimit && !isSelected}
+              />
+            );
+          })}
+        </div>
+      )}
 
       {selected.some((s) => /^other\b/i.test(s)) && (
         <input

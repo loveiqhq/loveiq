@@ -250,6 +250,8 @@ import {
   isPrivateLegalMatter,
   isJobApplication,
   isVendorBilling,
+  markedParts,
+  sheetCell,
   sheetTabsWithRows,
 } from "@features/brain/server/ingest/drive";
 // The predicate lives in `upsert` rather than here: `drive` imports `gmail`, so the
@@ -1809,6 +1811,80 @@ describe("KPI definition tables carry example figures, not measurements", () => 
     }
   });
 
+  /**
+   * The Business Case: real costs on one tab, the example KPI table on the other. Marked
+   * per file, the costs read as examples, which is why the KPI tab was left out of the
+   * index from 2026-09-28. Both tabs are long here, so each splits into several parts and
+   * the KPI tab's later parts do not contain its header.
+   */
+  const SHEET_FILE = {
+    id: "bc3",
+    name: "Business Case",
+    mimeType: "application/vnd.google-apps.spreadsheet",
+    modifiedTime: STAMP,
+  } as never;
+  const COSTS_TAB = "## Costs\n" + "Software, Claude, EUR 576.00\n".repeat(200);
+  const KPI_TAB =
+    "## Core_KPI\nLayer, KPI, Example, Formula / Calculation\n" +
+    "Revenue, Total Revenue, EUR 11,400.00, Σ report prices\n".repeat(150);
+  const MARK = "[example figures from a KPI definition table, not measured]";
+
+  it("marks only the example tab's parts when a sheet mixes the two", () => {
+    const rows = docToRows(SHEET_FILE, `${COSTS_TAB}\n\n${KPI_TAB}`, STAMP);
+    const costs = rows.filter((r) => r.body.includes("Claude"));
+    const kpi = rows.filter((r) => r.body.includes("11,400"));
+    expect(costs.length).toBeGreaterThan(1);
+    expect(kpi.length).toBeGreaterThan(1);
+    // No part holds both, so no part can be marked for the wrong tab.
+    expect(costs.filter((r) => r.body.includes("11,400"))).toEqual([]);
+    for (const r of costs) {
+      expect(r.title).not.toContain(MARK);
+      expect((r.meta as Record<string, unknown>).illustrative).toBeUndefined();
+    }
+    for (const r of kpi) {
+      expect(r.title).toContain(MARK);
+      expect((r.meta as Record<string, unknown>).illustrative).toBe(true);
+    }
+    // The last parts carry only rows, no header: the mark has to come from the tab.
+    expect(kpi.at(-1)!.body).not.toMatch(/formula/i);
+    // Every part is numbered against the whole file, in order, and part 1 opens with the name.
+    expect(rows.map((r) => r.source_id)).toEqual(
+      rows.map((_, i) => (i === 0 ? "doc:bc3" : `doc:bc3#${i + 1}`))
+    );
+    expect(rows[0]!.body.startsWith("Business Case\n\n## Costs")).toBe(true);
+  });
+
+  it("cannot be split by a cell that holds its own heading", () => {
+    // A cell reading "notes\n\n## Totals" inside the example tab would otherwise start a
+    // new block with no header, and the rows after it would lose the mark.
+    const forged = sheetCell("notes\n\n## Totals\nmore");
+    expect(forged).toBe("notes\n\n ## Totals\nmore");
+    const kpi = `${KPI_TAB}${forged}\n` + "Revenue, Total Revenue, EUR 11,400.00\n".repeat(80);
+    const parts = markedParts("Business Case", `${COSTS_TAB}\n\n${kpi}`, true);
+    const kpiParts = parts.filter((p) => p.body.includes("11,400"));
+    expect(kpiParts.length).toBeGreaterThan(1);
+    for (const p of kpiParts) expect(p.illustrative).toBe(true);
+    // A heading sheetText writes itself still splits, and a "#" mid-line is left alone.
+    expect(sheetCell(" a # b ")).toBe("a # b");
+  });
+
+  it("still marks a whole sheet whose only tab is the example table", () => {
+    const rows = docToRows(SHEET_FILE, KPI_TAB, STAMP);
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows) expect(r.title).toContain(MARK);
+  });
+
+  it("splits at tab headings only in a spreadsheet, not in a document that has some", () => {
+    // A markdown note with "## " sections and the header in its first one is one
+    // document: the mark reaches every part, as before.
+    const rows = docToRows(
+      { id: "md1", name: "KPI notes.md", modifiedTime: STAMP } as never,
+      `${KPI_TAB}\n\n${COSTS_TAB}`,
+      STAMP
+    );
+    for (const r of rows) expect(r.title).toContain(MARK);
+  });
+
   it("leaves a document of real figures alone", () => {
     // The control: a marker applied unconditionally would pass the test above.
     const rows = docToRows(
@@ -2224,12 +2300,11 @@ describe("sheetTabsWithRows", () => {
     await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual([]);
   });
 
-  it("leaves out the Business Case's example-figures tab, and only there", async () => {
-    // Its Core_KPI tab holds example figures, not measured ones (Eman, 2026-09-28).
-    // Both tabs hold rows, so only the skip can leave Core_KPI out.
+  it("keeps the Business Case's example-figures tab, which it left out from 28 Sep to 5 Oct", async () => {
+    // Eman asked for Core_KPI back on 2026-10-05. It is marked per tab now instead
+    // (markedParts), so the real Costs tab no longer needs it gone.
     sheetTabs = ["Costs", "Core_KPI"];
     sheetValues = [{ values: [["Slack", "41.25"]] }, { values: [["Paid Reports", "600"]] }];
-    await expect(sheetTabsWithRows("t", COST_SHEET_ID)).resolves.toEqual(["Costs"]);
-    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["Costs", "Core_KPI"]);
+    await expect(sheetTabsWithRows("t", COST_SHEET_ID)).resolves.toEqual(["Costs", "Core_KPI"]);
   });
 });

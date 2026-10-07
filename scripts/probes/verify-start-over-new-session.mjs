@@ -160,6 +160,9 @@ async function landingAgain(page) {
     ([token, old]) => {
       localStorage.removeItem("loveiq-survey-index");
       localStorage.removeItem("loveiq-survey-pending-completion");
+      // A submit clears the run's consent (clearPersistedSurveyState), so a reader who
+      // finished meets the consent screen again. B's "I agree" saved one on this page.
+      localStorage.removeItem("loveiq-survey-consent");
       sessionStorage.removeItem("loveiq-survey-step");
       // The shape saveLandingPrefill writes.
       localStorage.setItem(
@@ -177,6 +180,15 @@ async function landingAgain(page) {
   );
   await page.reload({ waitUntil: "domcontentloaded", timeout: 120_000 });
   await page.waitForTimeout(3_000);
+  // Since #495 a draft from the card opens the consent screen first, so this door is the
+  // card, then "I agree", as a reader who finished would meet it.
+  const boxes = page.getByRole("checkbox");
+  if ((await sessionAfter(page)).step === "5" && (await boxes.count()) >= 2) {
+    await boxes.nth(0).click({ timeout: 15_000 });
+    await boxes.nth(1).click({ timeout: 15_000 });
+    await page.getByRole("button", { name: /i agree/i }).click({ timeout: 15_000 });
+    await page.waitForTimeout(2_000);
+  }
   const state = await sessionAfter(page);
   if (state.step !== "6")
     return ["inconclusive", `the saved answer did not open the survey (step ${state.step})`];

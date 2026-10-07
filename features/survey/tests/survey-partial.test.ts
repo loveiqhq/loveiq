@@ -154,7 +154,10 @@ describe("POST /api/survey-partial", () => {
   it("saves a draft with a long Other text, cut, instead of refusing it", async () => {
     // Refusing it lost the reader's only server-side copy of their answers.
     const res = await POST(
-      makeRequest({ ...validBody(), answers: { "15010_other": "x".repeat(5000) } })
+      makeRequest({
+        ...validBody(),
+        answers: { "15010": "Other", "15010_other": "x".repeat(5000) },
+      })
     );
     expect(res.status).toBe(200);
     const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);

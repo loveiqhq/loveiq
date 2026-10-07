@@ -83,7 +83,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     // Open the pricing modal, then pick a plan.
     const opened = await page.evaluate(() => {
       const cta = document.querySelector(
-        ".report-premium-overlay__cta, .report-sticky-unlock__button, [data-unlock]"
+        ".report-premium-overlay__cta, .rv4-premium__cta, .report-sticky-unlock__button, [data-unlock]"
       );
       if (!cta) return false;
       cta.scrollIntoView({ block: "center" });
@@ -96,7 +96,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     } else {
       await page.waitForTimeout(1500);
       const chose = await page.evaluate(() => {
-        const cta = document.querySelector(".report-pricing-card__cta");
+        const cta = document.querySelector(".report-pricing-card__cta, .rpg-card__cta");
         if (!cta) return false;
         cta.click();
         return true;
