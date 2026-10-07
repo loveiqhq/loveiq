@@ -262,6 +262,33 @@ describe("buildFunnelDigestBlocks", () => {
       (b) => b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
     );
     expect(footer?.text?.text).toContain("WoW:");
+    // Mark bans the em dash in copy; the revenue line used to carry two.
+    expect(footer?.text?.text, "an em dash in the weekly message").not.toContain("—");
+  });
+
+  it("says plainly when nothing sold, with no dashes standing in for numbers", async () => {
+    const none = {
+      count: 0,
+      byCurrency: {},
+      planMix: { essentials: 0, full_report: 0, all_reports: 0 },
+      promoRedemptions: 0,
+    };
+    const { blocks } = await buildFunnelDigestBlocks({
+      title: "Weekly",
+      windowLabel: "30d",
+      cvr: null,
+      bucket: null,
+      dropout: null,
+      nurture: null,
+      curr: mkDaily({ revenue: none }),
+      prev: mkDaily({ revenue: none }),
+      cadence: "WoW",
+    });
+    const footer = (blocks as Array<{ type: string; text?: { text?: string } }>).find(
+      (b) => b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
+    );
+    expect(footer?.text?.text).toContain("• Purchases: 0 · no revenue (WoW: no change)");
+    expect(footer?.text?.text).not.toContain("—");
   });
 });
 

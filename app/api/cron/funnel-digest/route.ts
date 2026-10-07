@@ -87,7 +87,7 @@ const SLACK_TEXT_SOFT_CAP = 2800;
  */
 export function clampToSlackLimit(text: string): string {
   if (text.length <= SLACK_TEXT_SOFT_CAP) return text;
-  const tail = "\n…_(see /admin for full details — digest truncated)_";
+  const tail = "\n…_(digest truncated, see /admin for full details)_";
   const cut = SLACK_TEXT_SOFT_CAP - tail.length;
   return text.slice(0, cut) + tail;
 }
@@ -162,9 +162,9 @@ const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
   "cvr-start-completion":
     "Of everyone who answers the first question, the share who reach the last one. A 7-day running average.",
   "cvr-completion-paygate":
-    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average. The line starts in September because that is when we began recording this properly — earlier days are left blank rather than shown as a low number.",
+    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average. The line starts in September because that is when we began recording this properly. Earlier days are left blank rather than shown as a low number.",
   "cvr-paygate-purchase":
-    "Of everyone who reaches that point, the share who pay. A 7-day running average — on a single day one sale out of one visitor is 100%, which is noise rather than news. Starts in September for the same reason as the chart above.",
+    "Of everyone who reaches that point, the share who pay. A 7-day running average: on a single day, one sale out of one visitor is 100%, which is noise rather than news. Starts in September for the same reason as the chart above.",
   "bucket-performance":
     "Each line is one price we showed. The share of people who bought at that price, as a 7-day running average. Both lines share one scale, so their heights compare.",
   "dropout-funnel":
@@ -575,7 +575,7 @@ const PLAN_ORDER: Array<keyof DailyMetrics["revenue"]["planMix"]> = [
 
 function formatCurrency(byCurrency: Record<string, number>): string {
   const entries = Object.entries(byCurrency);
-  if (entries.length === 0) return "—";
+  if (entries.length === 0) return "no revenue";
   return entries.map(([cur, amount]) => `${cur} ${amount.toFixed(2)}`).join(" + ");
 }
 
@@ -593,9 +593,10 @@ export function formatRevenueLines(
   cadence: "DoD" | "WoW"
 ): string[] {
   const r = curr.revenue;
+  const change = delta(r.count, prev.revenue.count);
   return [
     "*Revenue*",
-    `• Purchases: ${r.count} — ${formatCurrency(r.byCurrency)} (${cadence}: ${delta(r.count, prev.revenue.count)})`,
+    `• Purchases: ${r.count} · ${formatCurrency(r.byCurrency)} (${cadence}: ${change === "—" ? "no change" : change})`,
     `• Plan mix: ${formatPlanMix(r.planMix)}`,
     `• Refunds: ${curr.refunds} (${curr.refundAmount.toFixed(2)}) | Failed: ${curr.failedPayments} | Disputes: ${curr.disputes} | Promo: ${r.promoRedemptions}`,
   ];
@@ -670,7 +671,7 @@ export async function buildFunnelDigestBlocks(opts: {
   }
 
   // Notification-preview fallback text.
-  const text = `${opts.title} — Purchases ${opts.curr.revenue.count}, ${formatCurrency(opts.curr.revenue.byCurrency)}`;
+  const text = `${opts.title} · Purchases ${opts.curr.revenue.count}, ${formatCurrency(opts.curr.revenue.byCurrency)}`;
   return { blocks, text };
 }
 
@@ -759,7 +760,7 @@ export async function GET(request: Request) {
         fetchChartSnapshots(dayStart.toISOString()),
       ]);
       const digest = await buildFunnelDigestBlocks({
-        title: `📊 Funnel — ${dayKey} UTC`,
+        title: `📊 Funnel · ${dayKey} UTC`,
         windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
         cvr: snaps.cvr,
         bucket: snaps.bucket,
@@ -797,7 +798,7 @@ export async function GET(request: Request) {
           fetchChartSnapshots(dayStart.toISOString()),
         ]);
         const digest = await buildFunnelDigestBlocks({
-          title: `📈 Weekly funnel — ${weekKey}`,
+          title: `📈 Weekly funnel · ${weekKey}`,
           windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
           cvr: snaps.cvr,
           bucket: snaps.bucket,
