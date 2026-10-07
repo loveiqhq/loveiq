@@ -117,4 +117,17 @@ test.describe("Survey — the email question test", () => {
     );
     expect(overflows, "the page scrolls sideways").toBe(false);
   });
+
+  test("just past 640px, the field keeps inside its column", async ({ page }) => {
+    // At 641px the column is about 521px wide, under the frame's 523.5.
+    await page.setViewportSize({ width: 641, height: 900 });
+    await openEmailQuestion(page, "anonymous");
+    const field = page.getByRole("textbox");
+    await expect(field).toBeVisible({ timeout: 15_000 });
+    const box = (await field.boundingBox())!;
+    const column = (await field.locator("..").boundingBox())!;
+    expect(box.x + box.width, "the field's right edge").toBeLessThanOrEqual(
+      column.x + column.width + 0.5
+    );
+  });
 });
