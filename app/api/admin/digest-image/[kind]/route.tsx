@@ -151,9 +151,9 @@ interface StageConversionPayload {
 
 /**
  * Drop-out-by-question histogram: one bar per survey question, height = the
- * drop-off RATE at that question (% of people who saw it and did NOT advance).
- * Tall bar = a question where users quit. `worstLabels` flags the steepest few
- * for red highlight + annotation.
+ * share of the people who reached it who left there and never finished
+ * (`sessionEnds`). Tall bar = a question where users quit. The steepest few are
+ * red and annotated.
  */
 interface DropoutPayload {
   kind: "dropout-funnel";
@@ -162,6 +162,8 @@ interface DropoutPayload {
   // (label + drop-off %) ride in the signed URL to stay under Slack's
   // ~3000-char image_url cap. `reached` is intentionally omitted.
   bars: Array<{ label: string; dropPct: number }>;
+  /** How many questions the survey asks today, printed under the plot. */
+  questions?: number;
 }
 
 /**
@@ -235,16 +237,22 @@ interface DropoutByArmPayload {
 
 /**
  * The daily conversion funnel, one row per step in Mark's order and wording
- * (2026-09-16 sync). `pct` is the share of the step ABOVE that got this far, the
- * one percentage the funnel carries; null on the first row, which has nothing
- * above it. `worst` is the row the message names as the biggest drop, so the red
- * bar and the caption cannot disagree.
+ * (2026-09-16 sync). `pct` is the share of the step ABOVE that got this far and
+ * `pctVisits` the share of all visits (Marcus, 2026-10-05: both, always); each is
+ * null on the first row, which has nothing above it. `worst` is the row drawn red,
+ * the biggest drop after the first step.
  */
 interface FunnelStepsPayload {
   kind: "funnel-steps";
   windowLabel?: string;
   title?: string;
-  steps: Array<{ label: string; count: number; pct: number | null }>;
+  steps: Array<{
+    label: string;
+    count: number;
+    pct: number | null;
+    pctVisits?: number | null;
+    pctStarts?: number | null;
+  }>;
   worst?: number;
 }
 
@@ -771,7 +779,7 @@ export function renderLongitudinal(p: LongitudinalPayload): {
           shares it. */}
       <div style={{ display: "flex", marginTop: 6, fontSize: 12, color: COLORS.textMuted }}>
         {isRate
-          ? `left: % ${liveRows.length > 1 ? "— one scale for every row, so the rows compare" : "of the group named on the left"}${hasXAxis ? " · bottom: date" : ""}`
+          ? `left: % ${liveRows.length > 1 ? "(one scale for every row, so the rows compare)" : "of the group named on the left"}${hasXAxis ? " · bottom: date" : ""}`
           : `left: people${hasXAxis ? " · bottom: date" : ""}`}
       </div>
     </div>,
@@ -928,8 +936,14 @@ export function renderDropoutBars(p: DropoutPayload): {
    * root fix; positioning tricks were treating the symptom.
    */
   const { max: peak, intervals } = niceAxis(rawPeak * 1.18);
-  // 28 = chartShell's padding, both sides.
-  const plotW = WIDTH - 2 * 28 - DROPOUT_AXIS_W;
+  /**
+   * 28 = chartShell's padding, both sides. Less half a label on the right, so the
+   * LAST question's label can sit centred under its own bar. Without the room it
+   * was pushed back inside the plot, under the bar before it: "Q57" stood under
+   * Q56's red bar, and Q57's own near-zero bar read as a 58th question.
+   */
+  const labelRoom = DROPOUT_LABEL_W / 2;
+  const plotW = WIDTH - 2 * 28 - DROPOUT_AXIS_W - labelRoom;
   const yFor = (v: number) => DROPOUT_PLOT_H - (v / peak) * DROPOUT_PLOT_H;
   const slot = plotW / bars.length;
 
@@ -940,10 +954,20 @@ export function renderDropoutBars(p: DropoutPayload): {
    * are now absolutely positioned with room to breathe, and only as many as fit
    * at DROPOUT_LABEL_W apart.
    */
-  const labelEvery = Math.max(1, Math.ceil(DROPOUT_LABEL_W / Math.max(slot, 1)));
+  /**
+   * Which bar is which question: a tick under EVERY bar, and a number at Q1,
+   * every fifth question and the last. Round numbers to count from, never more
+   * than two bars away: the old rule labelled every third bar, so locating Q23
+   * meant counting in threes from Q22.
+   */
+  const everyBar = slot >= DROPOUT_LABEL_W;
+  const questionNumber = (label: string) => Number(/^Q(\d+)$/.exec(label)?.[1]);
   const xTicks = bars
     .map((b, i) => ({ i, label: b.label }))
-    .filter(({ i }) => i === 0 || i === bars.length - 1 || i % labelEvery === 0)
+    .filter(
+      ({ i, label }) =>
+        everyBar || i === 0 || i === bars.length - 1 || questionNumber(label) % 5 === 0
+    )
     // Drop any tick that would collide with its neighbour OR with the final
     // tick, which is always kept. Without the second test Q55 and Q58 landed
     // on top of each other at the right edge.
@@ -968,8 +992,8 @@ export function renderDropoutBars(p: DropoutPayload): {
           style={{
             display: "flex",
             position: "relative",
-            width: DROPOUT_AXIS_W + plotW,
-            height: DROPOUT_PLOT_H + 24,
+            width: DROPOUT_AXIS_W + plotW + labelRoom,
+            height: DROPOUT_PLOT_H + 26,
           }}
         >
           {/* y-axis labels, each centred on its own gridline */}
@@ -1026,16 +1050,12 @@ export function renderDropoutBars(p: DropoutPayload): {
                   top: DROPOUT_PLOT_H - h,
                   width: Math.max(2, slot - 1),
                   height: h,
-                  background: isWorst ? COLORS.danger : COLORS.accentOrange,
                   /**
-                   * 0.9, not 0.5. The de-emphasis was tuned against the old dark
-                   * surface, where half-strength orange still read as orange. Over
-                   * white the same 0.5 composites to #f0aa97 — 1.93:1, a hard
-                   * contrast failure for a DATA mark, and the bars came out pale
-                   * pink. 0.9 is the first step that passes (3.36:1) and the red
-                   * still carries the highlight on its own.
+                   * Slate, not orange: orange MEANS Landing Page V2 on every chart
+                   * now, and a question is not an arm. Same pair as the funnel
+                   * chart, so red means "look here" across the whole message.
                    */
-                  opacity: isWorst ? 1 : 0.9,
+                  background: isWorst ? COLORS.danger : COLORS.neutral,
                   borderRadius: 1,
                 }}
               />
@@ -1045,6 +1065,26 @@ export function renderDropoutBars(p: DropoutPayload): {
           {/* the number on the bars that matter, so the eye never has to
               estimate the ones being pointed at */}
           {[...worstIdx]
+            .sort((a, b) => a - b)
+            /**
+             * Touching red bars with the same rounded share get ONE label naming
+             * both ("Q1, Q2" over "6%"). Labelled one by one they collide, and one
+             * was dropped: on 2026-10-04 Q2 was a red bar with no number on it.
+             */
+            .reduce<number[][]>((groups, i) => {
+              const group = groups[groups.length - 1];
+              const prev = group?.[group.length - 1];
+              if (
+                group &&
+                prev === i - 1 &&
+                Math.round(bars[prev]!.dropPct) === Math.round(bars[i]!.dropPct)
+              ) {
+                group.push(i);
+              } else {
+                groups.push([i]);
+              }
+              return groups;
+            }, [])
             /**
              * Two adjacent worst bars (Q57 and Q58 are neighbours, both 15%) put two
              * 36px labels on two ~11px slots, which overlapped into an unreadable
@@ -1060,15 +1100,30 @@ export function renderDropoutBars(p: DropoutPayload): {
              *
              * Steepest first, then greedily keep whatever still fits.
              */
-            .sort((a, b) => bars[b]!.dropPct - bars[a]!.dropPct)
-            .reduce<number[]>((keep, i) => {
-              if (keep.every((k) => Math.abs(i - k) * slot >= DROPOUT_VALUE_W + 2)) keep.push(i);
+            .sort(
+              (a, b) =>
+                Math.max(...b.map((i) => bars[i]!.dropPct)) -
+                Math.max(...a.map((i) => bars[i]!.dropPct))
+            )
+            .reduce<number[][]>((keep, g) => {
+              const mid = (g[0]! + g[g.length - 1]!) / 2;
+              if (
+                keep.every(
+                  (k) =>
+                    Math.abs(mid - (k[0]! + k[k.length - 1]!) / 2) * slot >= DROPOUT_VALUE_W + 2
+                )
+              ) {
+                keep.push(g);
+              }
               return keep;
             }, [])
-            .sort((a, b) => a - b)
-            .map((i) => {
-              const b = bars[i]!;
-              const h = Math.max(2, Math.round((b.dropPct / peak) * DROPOUT_PLOT_H));
+            .sort((a, b) => a[0]! - b[0]!)
+            .map((g) => {
+              const first = bars[g[0]!]!;
+              const last = bars[g[g.length - 1]!]!;
+              const mid = (g[0]! + g[g.length - 1]!) / 2;
+              const tallest = Math.max(...g.map((i) => bars[i]!.dropPct));
+              const h = Math.max(2, Math.round((tallest / peak) * DROPOUT_PLOT_H));
               // A bar at the axis ceiling leaves no room above it, and a label
               // placed there is clipped by the plot edge — which is what happened
               // to the two 15% bars on the first render.
@@ -1083,22 +1138,51 @@ export function renderDropoutBars(p: DropoutPayload): {
               // that claims to handle a case is worse than no branch: it reads as
               // cover the code does not have.
               const above = DROPOUT_PLOT_H - h - 19;
-              return (
+              // Clamp on the SAME width the box actually is. It was clamped to -36
+              // while the text needed more, so the last bar's "15%" rendered as
+              // "5%" with the 1 cut off.
+              // Down to the end of the y-axis numbers (they stop 8px short of the
+              // plot), not the plot's edge: held at the edge, "Q1, Q2" sat 11px to
+              // the right of its two bars, over Q2 and Q3.
+              const left = Math.max(
+                DROPOUT_AXIS_W - 8,
+                Math.min(
+                  DROPOUT_AXIS_W + mid * slot + slot / 2 - DROPOUT_VALUE_W / 2,
+                  DROPOUT_AXIS_W + plotW + labelRoom - DROPOUT_VALUE_W
+                )
+              );
+              const name =
+                g.length === 1
+                  ? first.label
+                  : g.length === 2
+                    ? `${first.label}, ${last.label}`
+                    : `${first.label} to ${last.label}`;
+              return [
+                // Which question, on the bar itself: the bars that matter never
+                // need counting along the axis.
                 <div
-                  key={`val-${i}`}
+                  key={`q-${g[0]}`}
                   style={{
                     display: "flex",
                     position: "absolute",
-                    // Clamp on the SAME width the box actually is. It was
-                    // clamped to -36 while the text needed more, so the last
-                    // bar's "15%" rendered as "5%" with the 1 cut off.
-                    left: Math.max(
-                      DROPOUT_AXIS_W,
-                      Math.min(
-                        DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_VALUE_W / 2,
-                        DROPOUT_AXIS_W + plotW - DROPOUT_VALUE_W
-                      )
-                    ),
+                    left,
+                    top: above - 15,
+                    width: DROPOUT_VALUE_W,
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: COLORS.danger,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {name}
+                </div>,
+                <div
+                  key={`val-${g[0]}`}
+                  style={{
+                    display: "flex",
+                    position: "absolute",
+                    left,
                     top: above,
                     width: DROPOUT_VALUE_W,
                     justifyContent: "center",
@@ -1107,10 +1191,36 @@ export function renderDropoutBars(p: DropoutPayload): {
                     color: COLORS.danger,
                   }}
                 >
-                  {`${Math.round(b.dropPct)}%`}
-                </div>
-              );
+                  {`${Math.round(tallest)}%`}
+                </div>,
+              ];
             })}
+
+          {/* a tick under every bar, longer where a number is printed */}
+          <div
+            style={{
+              display: "flex",
+              position: "absolute",
+              left: DROPOUT_AXIS_W,
+              top: DROPOUT_PLOT_H,
+            }}
+          >
+            <svg width={plotW} height={6}>
+              {bars.map((b, i) => {
+                const x = i * slot + (slot - 1) / 2;
+                const long = xTicks.some((t) => t.i === i);
+                return (
+                  <polyline
+                    key={`tick-${b.label}-${i}`}
+                    points={`${x},0 ${x},${long ? 6 : 3}`}
+                    fill="none"
+                    stroke={COLORS.textMuted}
+                    strokeWidth="1"
+                  />
+                );
+              })}
+            </svg>
+          </div>
 
           {/* x-axis labels, absolutely positioned and centred on their bar */}
           {xTicks.map(({ i, label }) => (
@@ -1121,9 +1231,9 @@ export function renderDropoutBars(p: DropoutPayload): {
                 position: "absolute",
                 left: Math.min(
                   Math.max(DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_LABEL_W / 2, 0),
-                  DROPOUT_AXIS_W + plotW - DROPOUT_LABEL_W
+                  DROPOUT_AXIS_W + plotW + labelRoom - DROPOUT_LABEL_W
                 ),
-                top: DROPOUT_PLOT_H + 6,
+                top: DROPOUT_PLOT_H + 8,
                 width: DROPOUT_LABEL_W,
                 justifyContent: "center",
                 fontSize: 12,
@@ -1138,7 +1248,11 @@ export function renderDropoutBars(p: DropoutPayload): {
         {/* What the axes MEAN, in words. A reader who has never seen this chart
             should not have to infer either one. */}
         <div style={{ display: "flex", marginTop: 4, fontSize: 12, color: COLORS.textMuted }}>
-          left: % of people who reach a question and do not continue · bottom: question order
+          {`left: % of people who reach a question and leave there without finishing · bottom: ${
+            typeof p.questions === "number" && p.questions > 0
+              ? `all ${p.questions} questions, in the order asked today`
+              : "question order"
+          }`}
         </div>
 
         <div
@@ -1247,7 +1361,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
     typeof v === "string" && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v) ? v : fallback;
   const colFirst = asHex(p.colorFirst, COLORS.accentBlue);
   const colLast = asHex(p.colorLast, COLORS.accentOrange);
-  const title = p.title ?? "Where users quit by arm — email first vs last";
+  const title = p.title ?? "Where users quit by arm: email first vs last";
   const unit = p.unit === "" ? "" : "%";
   const withUnit = (v: number) => `${fmtAxis(v)}${unit}`;
   const n = Math.max(first.length, last.length);
@@ -1264,7 +1378,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
         title,
         p.windowLabel ?? "",
         <div style={{ display: "flex", color: COLORS.textMuted, fontSize: 18, padding: 24 }}>
-          {p.emptyLabel ?? "Awaiting data — not enough per-arm traffic in this window yet."}
+          {p.emptyLabel ?? "Awaiting data: not enough traffic per arm in this window yet."}
         </div>
       ),
       height: HEIGHT,
@@ -1490,7 +1604,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
   const carried: string[] = [];
   if (hasFirst && !showFirstLabel) carried.push(`${shortFirst} ${withUnit(endFirst)}`);
   if (hasLast && !showLastLabel) carried.push(`${shortLast} ${withUnit(endLast)}`);
-  const footnote = carried.length > 0 ? `${carried.join(" · ")} — ${footnoteBase}` : footnoteBase;
+  const footnote = carried.length > 0 ? `${carried.join(" · ")} · ${footnoteBase}` : footnoteBase;
 
   const element = chartShell(
     title,
@@ -1503,8 +1617,8 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
         {/* A single series is named by the title, so it gets no legend at all —
             two swatches for one line is the "(unused) — no data yet" row this
             renderer produced the first time it was handed one series. */}
-        {!solo && swatch(colFirst, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
-        {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast} — no data yet`)}
+        {!solo && swatch(colFirst, hasFirst ? legendFirst : `${legendFirst}: no data yet`)}
+        {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast}: no data yet`)}
       </div>
 
       {/* ONE coordinate system for the whole plot: axis labels, gridlines, lines,
@@ -1621,12 +1735,12 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
       >
         {p.headline ??
           (solo
-            ? `Latest — ${withUnit(endFirst)}`
+            ? `Latest: ${withUnit(endFirst)}`
             : hasFirst && hasLast
-              ? `Latest — ${withUnit(endFirst)} vs ${withUnit(endLast)}`
+              ? `Latest: ${withUnit(endFirst)} vs ${withUnit(endLast)}`
               : hasFirst
-                ? `Latest — ${withUnit(endFirst)} (${shortLast}: no data yet)`
-                : `Latest — ${withUnit(endLast)} (${shortFirst}: no data yet)`)}
+                ? `Latest: ${withUnit(endFirst)} (${shortLast}: no data yet)`
+                : `Latest: ${withUnit(endLast)} (${shortFirst}: no data yet)`)}
       </div>
       <div style={{ display: "flex", marginTop: 5, fontSize: 12, color: COLORS.textMuted }}>
         {footnote}
@@ -1643,11 +1757,14 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
 
 const FUNNEL_ROW_H = 40;
 const FUNNEL_ROW_GAP = 6;
-const FUNNEL_LABEL_W = 230;
-const FUNNEL_COUNT_W = 86;
-const FUNNEL_PCT_W = 70;
+const FUNNEL_LABEL_W = 200;
+const FUNNEL_COUNT_W = 76;
+const FUNNEL_PCT_W = 100;
+const FUNNEL_VISITS_W = 76;
+const FUNNEL_STARTS_W = 76;
 const FUNNEL_BAR_H = 18;
 const FUNNEL_GAP = 14;
+const FUNNEL_HEAD_H = 22;
 const FUNNEL_FOOT_H = 44;
 
 /** "8.2%", "<0.1%" for a real but tiny share, never a bare "0%" beside a count. */
@@ -1680,6 +1797,14 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
       label: s.label,
       count: Math.max(0, Number(s.count) || 0),
       pct: s.pct == null || !Number.isFinite(Number(s.pct)) ? null : Math.max(0, Number(s.pct)),
+      pctVisits:
+        s.pctVisits == null || !Number.isFinite(Number(s.pctVisits))
+          ? null
+          : Math.max(0, Number(s.pctVisits)),
+      pctStarts:
+        s.pctStarts == null || !Number.isFinite(Number(s.pctStarts))
+          ? null
+          : Math.max(0, Number(s.pctStarts)),
     }));
   if (steps.length === 0) {
     return {
@@ -1694,14 +1819,49 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
     };
   }
   const worst = typeof p.worst === "number" ? p.worst : -1;
-  // 28 = chartShell's padding, both sides; three gaps between the four columns.
-  const trackW = WIDTH - 2 * 28 - FUNNEL_LABEL_W - FUNNEL_COUNT_W - FUNNEL_PCT_W - 3 * FUNNEL_GAP;
-  const height = BODY_OVERHEAD + steps.length * (FUNNEL_ROW_H + FUNNEL_ROW_GAP) + FUNNEL_FOOT_H;
+  // 28 = chartShell's padding, both sides; five gaps between the six columns.
+  const trackW =
+    WIDTH -
+    2 * 28 -
+    FUNNEL_LABEL_W -
+    FUNNEL_COUNT_W -
+    FUNNEL_PCT_W -
+    FUNNEL_VISITS_W -
+    FUNNEL_STARTS_W -
+    5 * FUNNEL_GAP;
+  const height =
+    BODY_OVERHEAD + FUNNEL_HEAD_H + steps.length * (FUNNEL_ROW_H + FUNNEL_ROW_GAP) + FUNNEL_FOOT_H;
+  /** The percentage columns' names, over them, so none is read as another. */
+  const colHead = (text: string, width: number) => (
+    <div
+      style={{
+        display: "flex",
+        width,
+        justifyContent: "flex-end",
+        fontSize: 13,
+        color: COLORS.textMuted,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {text}
+    </div>
+  );
 
   const element = chartShell(
     title,
     p.windowLabel ?? "",
     <div style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", height: FUNNEL_HEAD_H, gap: FUNNEL_GAP }}>
+        <div
+          style={{
+            display: "flex",
+            width: FUNNEL_LABEL_W + FUNNEL_COUNT_W + trackW + 2 * FUNNEL_GAP,
+          }}
+        />
+        {colHead("of step above", FUNNEL_PCT_W)}
+        {colHead("of visits", FUNNEL_VISITS_W)}
+        {colHead("of starts", FUNNEL_STARTS_W)}
+      </div>
       {steps.map((s, i) => {
         const isWorst = i === worst && s.pct !== null;
         // A share over 100% is real here (a promo unlock needs no checkout), so
@@ -1767,6 +1927,28 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
               }}
             >
               {s.pct === null ? "" : funnelPct(s.pct)}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: FUNNEL_VISITS_W,
+                justifyContent: "flex-end",
+                fontSize: 17,
+                color: COLORS.textMuted,
+              }}
+            >
+              {s.pctVisits === null ? "" : funnelPct(s.pctVisits)}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: FUNNEL_STARTS_W,
+                justifyContent: "flex-end",
+                fontSize: 17,
+                color: COLORS.textMuted,
+              }}
+            >
+              {s.pctStarts === null ? "" : funnelPct(s.pctStarts)}
             </div>
           </div>
         );

@@ -40,7 +40,6 @@ import {
   type WeeklyMetrics,
   type FunnelCvrSnapshot,
   type BucketPerfSnapshot,
-  type DropoutFunnelSnapshot,
   computeRate,
   delta,
   isoWeekString,
@@ -48,8 +47,13 @@ import {
   fetchWeeklyMetrics,
   fetchFunnelCvrSparklines,
   fetchBucketPerformance,
-  fetchDropoutFunnel,
+  PAYGATE_MEASURED_FROM,
 } from "@features/admin/server/digest-metrics";
+import {
+  ASKED_QUESTION_COUNT,
+  fetchSessionEnds,
+  type SessionEnd,
+} from "@features/admin/server/friction-metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,7 +87,7 @@ const SLACK_TEXT_SOFT_CAP = 2800;
  */
 export function clampToSlackLimit(text: string): string {
   if (text.length <= SLACK_TEXT_SOFT_CAP) return text;
-  const tail = "\n…_(see /admin for full details — digest truncated)_";
+  const tail = "\n…_(digest truncated, see /admin for full details)_";
   const cut = SLACK_TEXT_SOFT_CAP - tail.length;
   return text.slice(0, cut) + tail;
 }
@@ -158,13 +162,13 @@ const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
   "cvr-start-completion":
     "Of everyone who answers the first question, the share who reach the last one. A 7-day running average.",
   "cvr-completion-paygate":
-    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average. The line starts in September because that is when we began recording this properly — earlier days are left blank rather than shown as a low number.",
+    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average. The line starts in September because that is when we began recording this properly. Earlier days are left blank rather than shown as a low number.",
   "cvr-paygate-purchase":
-    "Of everyone who reaches that point, the share who pay. A 7-day running average — on a single day one sale out of one visitor is 100%, which is noise rather than news. Starts in September for the same reason as the chart above.",
+    "Of everyone who reaches that point, the share who pay. A 7-day running average: on a single day, one sale out of one visitor is 100%, which is noise rather than news. Starts in September for the same reason as the chart above.",
   "bucket-performance":
     "Each line is one price we showed. The share of people who bought at that price, as a 7-day running average. Both lines share one scale, so their heights compare.",
   "dropout-funnel":
-    "Where people quit the survey. Taller means more people left at that point. The last two positions are not questions — they are the contact-details screen and the final opt-in. The chart names the steepest drops under the title; they move week to week, so read them there rather than assuming where they are.",
+    "Where people quit the survey: of everyone who reaches a question, the share who leave there and never finish. People who finish are never counted. The steepest three are red and named under the title; they move week to week, so read them there rather than assuming where they are.",
   "reactivation-email":
     "The follow-up emails we send to people who never opened or never bought. How each one performed.",
 };
@@ -444,8 +448,7 @@ async function buildBucketChartBlock(
 const TRAILING_DAYS = 7;
 /**
  * Fewer than this many people in the whole 7-day window and there is no rate to
- * report. Matches DROPOUT_REACH_FLOOR, which draws the same line for the same
- * reason.
+ * report.
  *
  * Without it a week in which ONE person was shown a price and bought it reads
  * as 100% — a true statement about one person, drawn at full height, which then
@@ -467,26 +470,6 @@ function trailingRate(nums: number[], dens: number[]): Array<number | null> {
 }
 
 /**
- * The day the paywall stage began being measured the way it is measured now.
- *
- * `paygate` in get_funnel_cvr_sparklines is a UNION of a client-posted
- * `paywall_initiated` analytics event (consent-gated, so lossy) and
- * `report_price_quote.paywall_reached_at` (server truth). The server column
- * shipped 2026-09-05 19:15 UTC and has no rows before it, so the union counts a
- * strictly larger population from that day on.
- *
- * Drawn unmasked, the completion→paygate line steps from ~5% to ~60% on 5 Sep
- * and paygate→purchase collapses from ~9% to ~1.6% on the same day — a 12x
- * "improvement" and a 6x "collapse" that are one measurement change, not two
- * product events. That is the single most misreadable thing this digest could
- * publish, so the unmeasured stretch is a GAP rather than a low number.
- *
- * 09-06 rather than 09-05: the 5th holds 4 rows from 21:15 Berlin onward, a
- * partial day that would read as a near-zero rate.
- */
-const PAYGATE_MEASURED_FROM = "2026-09-06";
-
-/**
  * Null every slot whose trailing window reaches back before `measuredFrom`.
  *
  * Masking only the days BEFORE the boundary is not enough: a 7-day average on
@@ -505,51 +488,24 @@ function maskBeforeMeasured(
   });
 }
 
-const DROPOUT_REACH_FLOOR = 5;
-
-export interface DropoutBar {
-  label: string;
-  dropPct: number;
-  reached: number;
-}
-
 /**
- * Per-question drop-off bars from an ordered reach array. dropPct at question i
- * = (reached_i - reached_{i+1}) / reached_i. The last question has no successor
- * so it produces no bar. Questions reached by fewer than `floor` distinct
- * sessions are skipped (tiny-sample noise). Exported for unit testing.
+ * Chart 7: where people quit the survey, from the same numbers as the daily
+ * message's "end there" sentence and chart (`sessionEnds`).
+ *
+ * It used to draw the share who reached a question and never reached the next.
+ * On the last screen there is no next one, so everyone who FINISHED there counted
+ * as quitting: on the 30 days to 2026-10-03 its tallest bar was Q57 at 76%, where
+ * 1 person of 396 actually left.
  */
-export function computeDropoutBars(
-  questions: Array<{ question_index: number; sessions: number }>,
-  floor = DROPOUT_REACH_FLOOR
-): DropoutBar[] {
-  const bars: DropoutBar[] = [];
-  for (let i = 0; i < questions.length - 1; i += 1) {
-    const reached = questions[i]!.sessions;
-    const next = questions[i + 1]!.sessions;
-    if (reached < floor) continue;
-    const dropped = Math.max(0, reached - next);
-    bars.push({
-      label: `Q${questions[i]!.question_index + 1}`,
-      dropPct: computeRate(dropped, reached),
-      reached,
-    });
-  }
-  return bars;
-}
-
 async function buildDropoutChartBlock(
-  snap: DropoutFunnelSnapshot | null,
+  ends: SessionEnd[] | null,
   windowLabel: string
 ): Promise<SlackBlock | null> {
-  if (!snap || snap.questions.length < 2) return null;
-  const bars = computeDropoutBars(snap.questions);
-  if (bars.length === 0) return null;
+  if (!ends || ends.length < 2) return null;
   /**
    * Compact payload so ~59 bars stay under Slack's ~3000-char image_url cap.
-   * `reached` is dropped (the renderer does not use it).
    *
-   * ONE DECIMAL, not an integer. The renderer ranks the "Steepest drop-offs"
+   * ONE DECIMAL, as computeRate returns it, not an integer. The renderer ranks the "Steepest drop-offs"
    * summary and the red highlight off these numbers, so rounding here decides
    * the ranking there. On the 30 days to 2026-09-18, Q56 (5.1%), Q3 (4.9%) and
    * Q4 (4.8%) all became 5 and a stable sort kept the lowest index — so the
@@ -560,16 +516,18 @@ async function buildDropoutChartBlock(
    * unchanged: both the summary and the bar labels already print
    * Math.round(dropPct).
    */
-  const compact = bars.map((b) => ({
-    label: b.label,
-    dropPct: Math.round(b.dropPct * 10) / 10,
-  }));
-  const url = await buildSignedImageUrl("dropout-funnel", { windowLabel, bars: compact });
+  const compact = ends.map((e) => ({ label: e.label, dropPct: e.pct }));
+  const url = await buildSignedImageUrl("dropout-funnel", {
+    windowLabel,
+    bars: compact,
+    questions: ASKED_QUESTION_COUNT,
+  });
   if (!url) return null;
   return {
     type: "image",
     image_url: url,
-    alt_text: "Where people quit the survey — the share who left on each question",
+    alt_text:
+      "Where people quit the survey: the share who left on each question and never finished",
   };
 }
 
@@ -617,7 +575,7 @@ const PLAN_ORDER: Array<keyof DailyMetrics["revenue"]["planMix"]> = [
 
 function formatCurrency(byCurrency: Record<string, number>): string {
   const entries = Object.entries(byCurrency);
-  if (entries.length === 0) return "—";
+  if (entries.length === 0) return "no revenue";
   return entries.map(([cur, amount]) => `${cur} ${amount.toFixed(2)}`).join(" + ");
 }
 
@@ -635,9 +593,10 @@ export function formatRevenueLines(
   cadence: "DoD" | "WoW"
 ): string[] {
   const r = curr.revenue;
+  const change = delta(r.count, prev.revenue.count);
   return [
     "*Revenue*",
-    `• Purchases: ${r.count} — ${formatCurrency(r.byCurrency)} (${cadence}: ${delta(r.count, prev.revenue.count)})`,
+    `• Purchases: ${r.count} · ${formatCurrency(r.byCurrency)} (${cadence}: ${change === "—" ? "no change" : change})`,
     `• Plan mix: ${formatPlanMix(r.planMix)}`,
     `• Refunds: ${curr.refunds} (${curr.refundAmount.toFixed(2)}) | Failed: ${curr.failedPayments} | Disputes: ${curr.disputes} | Promo: ${r.promoRedemptions}`,
   ];
@@ -683,7 +642,7 @@ export async function buildFunnelDigestBlocks(opts: {
   windowLabel: string;
   cvr: FunnelCvrSnapshot | null;
   bucket: BucketPerfSnapshot | null;
-  dropout: DropoutFunnelSnapshot | null;
+  dropout: SessionEnd[] | null;
   curr: DailyMetrics;
   prev: DailyMetrics;
   cadence: "DoD" | "WoW";
@@ -712,7 +671,7 @@ export async function buildFunnelDigestBlocks(opts: {
   }
 
   // Notification-preview fallback text.
-  const text = `${opts.title} — Purchases ${opts.curr.revenue.count}, ${formatCurrency(opts.curr.revenue.byCurrency)}`;
+  const text = `${opts.title} · Purchases ${opts.curr.revenue.count}, ${formatCurrency(opts.curr.revenue.byCurrency)}`;
   return { blocks, text };
 }
 
@@ -731,7 +690,7 @@ async function fetchChartSnapshots(untilIso: string) {
   const [cvr, bucket, dropout] = await Promise.all([
     fetchFunnelCvrSparklines(sinceIso, untilIso),
     fetchBucketPerformance(sinceIso, untilIso),
-    fetchDropoutFunnel(sinceIso, untilIso),
+    fetchSessionEnds(sinceIso, untilIso),
   ]);
   return { cvr, bucket, dropout };
 }
@@ -801,7 +760,7 @@ export async function GET(request: Request) {
         fetchChartSnapshots(dayStart.toISOString()),
       ]);
       const digest = await buildFunnelDigestBlocks({
-        title: `📊 Funnel — ${dayKey} UTC`,
+        title: `📊 Funnel · ${dayKey} UTC`,
         windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
         cvr: snaps.cvr,
         bucket: snaps.bucket,
@@ -839,7 +798,7 @@ export async function GET(request: Request) {
           fetchChartSnapshots(dayStart.toISOString()),
         ]);
         const digest = await buildFunnelDigestBlocks({
-          title: `📈 Weekly funnel — ${weekKey}`,
+          title: `📈 Weekly funnel · ${weekKey}`,
           windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
           cvr: snaps.cvr,
           bucket: snaps.bucket,

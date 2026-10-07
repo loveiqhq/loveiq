@@ -9,10 +9,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { computeRate, type DailyMetrics } from "@features/admin/server/digest-metrics";
+import { ASKED_QUESTION_COUNT } from "@features/admin/server/friction-metrics";
 import {
   buildFunnelDigestBlocks,
   shortDate,
-  computeDropoutBars,
   formatAlertLines,
 } from "@/app/api/cron/funnel-digest/route";
 
@@ -29,43 +29,6 @@ describe("shortDate", () => {
   });
   it("returns the input unchanged when it is not a YYYY-MM-DD string", () => {
     expect(shortDate("not-a-date")).toBe("not-a-date");
-  });
-});
-
-describe("computeDropoutBars", () => {
-  it("computes per-question drop-off rate from consecutive reach", () => {
-    // 100 -> 80 = 20% quit at Q1; 80 -> 60 = 25% quit at Q2. Last question
-    // (index 2) has no successor → no bar.
-    const bars = computeDropoutBars([
-      { question_index: 0, sessions: 100 },
-      { question_index: 1, sessions: 80 },
-      { question_index: 2, sessions: 60 },
-    ]);
-    expect(bars).toHaveLength(2);
-    expect(bars[0]).toEqual({ label: "Q1", dropPct: 20, reached: 100 });
-    expect(bars[1]).toEqual({ label: "Q2", dropPct: 25, reached: 80 });
-  });
-  it("skips questions below the reach floor (tiny-sample noise)", () => {
-    // Q3 reached by only 3 (< floor 5) → no bar for it, even though 3 -> 0.
-    const bars = computeDropoutBars(
-      [
-        { question_index: 0, sessions: 50 },
-        { question_index: 1, sessions: 3 },
-        { question_index: 2, sessions: 0 },
-      ],
-      5
-    );
-    expect(bars.map((b) => b.label)).toEqual(["Q1"]); // only index-0 (reach 50) qualifies
-  });
-  it("clamps negative drops to 0 (reach can't legitimately grow)", () => {
-    const bars = computeDropoutBars([
-      { question_index: 0, sessions: 50 },
-      { question_index: 1, sessions: 60 },
-    ]);
-    expect(bars[0]!.dropPct).toBe(0);
-  });
-  it("returns [] for fewer than 2 questions", () => {
-    expect(computeDropoutBars([{ question_index: 0, sessions: 100 }])).toEqual([]);
   });
 });
 
@@ -152,12 +115,10 @@ function bucketDays() {
 const fullSnaps = {
   cvr: { days: cvrDays() },
   bucket: { days: bucketDays() },
-  dropout: {
-    questions: [
-      { question_index: 0, q_id: "00000", sessions: 100 },
-      { question_index: 1, q_id: "00001", sessions: 70 },
-    ],
-  },
+  dropout: [
+    { label: "Q1", pct: 30 },
+    { label: "Q2", pct: 4 },
+  ],
   nurture: { stages: [{ stage: "6h_no_view", sent: 50, purchased: 2 }] },
 };
 
@@ -301,6 +262,33 @@ describe("buildFunnelDigestBlocks", () => {
       (b) => b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
     );
     expect(footer?.text?.text).toContain("WoW:");
+    // Mark bans the em dash in copy; the revenue line used to carry two.
+    expect(footer?.text?.text, "an em dash in the weekly message").not.toContain("—");
+  });
+
+  it("says plainly when nothing sold, with no dashes standing in for numbers", async () => {
+    const none = {
+      count: 0,
+      byCurrency: {},
+      planMix: { essentials: 0, full_report: 0, all_reports: 0 },
+      promoRedemptions: 0,
+    };
+    const { blocks } = await buildFunnelDigestBlocks({
+      title: "Weekly",
+      windowLabel: "30d",
+      cvr: null,
+      bucket: null,
+      dropout: null,
+      nurture: null,
+      curr: mkDaily({ revenue: none }),
+      prev: mkDaily({ revenue: none }),
+      cadence: "WoW",
+    });
+    const footer = (blocks as Array<{ type: string; text?: { text?: string } }>).find(
+      (b) => b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
+    );
+    expect(footer?.text?.text).toContain("• Purchases: 0 · no revenue (WoW: no change)");
+    expect(footer?.text?.text).not.toContain("—");
   });
 });
 
@@ -403,19 +391,17 @@ describe("the paywall instrumentation boundary", () => {
 describe("Slack's image_url cap", () => {
   it("drops an over-long chart AND its caption, keeping the rest of the message", async () => {
     const curr = mkDaily();
-    // Far past the cap; sessions stay above DROPOUT_REACH_FLOOR so every
-    // question produces a bar rather than being skipped as tiny-sample noise.
+    // Far past the cap: 200 bars.
     const manyQuestions = Array.from({ length: 200 }, (_, i) => ({
-      question_index: i,
-      q_id: String(10000 + i),
-      sessions: 500 - i,
+      label: `Q${i + 1}`,
+      pct: 10.5 + (i % 50),
     }));
     const { blocks } = await buildFunnelDigestBlocks({
       title: "Test",
       windowLabel: "30d",
       cvr: { days: cvrDays() },
       bucket: null,
-      dropout: { questions: manyQuestions },
+      dropout: manyQuestions,
       nurture: null,
       curr,
       prev: curr,
@@ -449,13 +435,7 @@ describe("Slack's image_url cap", () => {
       windowLabel: "30d",
       cvr: { days: cvrDays() },
       bucket: null,
-      dropout: {
-        questions: Array.from({ length: 59 }, (_, i) => ({
-          question_index: i,
-          q_id: String(16000 + i),
-          sessions: 500 - i * 5,
-        })),
-      },
+      dropout: Array.from({ length: 59 }, (_, i) => ({ label: `Q${i + 1}`, pct: 1.5 + (i % 9) })),
       nurture: null,
       curr,
       prev: curr,
@@ -480,20 +460,18 @@ describe("Slack's image_url cap", () => {
 describe("drop-off payload precision", () => {
   it("sends one decimal so equal-looking bars can still be ranked", async () => {
     const curr = mkDaily();
-    // 1000 -> 949 is 5.1%; 949 -> 902 is 4.95%. Both print as "5%" and must not
-    // arrive as the same number.
-    const questions = [
-      { question_index: 0, q_id: "a", sessions: 1000 },
-      { question_index: 1, q_id: "b", sessions: 949 },
-      { question_index: 2, q_id: "c", sessions: 902 },
-      { question_index: 3, q_id: "d", sessions: 500 },
+    // 5.1% and 4.9% both print as "5%" and must not arrive as the same number.
+    const ends = [
+      { label: "Q1", pct: 5.1 },
+      { label: "Q2", pct: 4.9 },
+      { label: "Q3", pct: 44.6 },
     ];
     const { blocks } = await buildFunnelDigestBlocks({
       title: "Test",
       windowLabel: "30d",
       cvr: null,
       bucket: null,
-      dropout: { questions },
+      dropout: ends,
       nurture: null,
       curr,
       prev: curr,
@@ -506,7 +484,10 @@ describe("drop-off payload precision", () => {
     const d = new URL(img!.image_url!).searchParams.get("d")!;
     const payload = JSON.parse(Buffer.from(d, "base64url").toString("utf8")) as {
       bars: Array<{ label: string; dropPct: number }>;
+      questions: number;
     };
+    // The same count as the daily chart: the questions asked today.
+    expect(payload.questions).toBe(ASKED_QUESTION_COUNT);
 
     const pcts = payload.bars.map((b) => b.dropPct);
     // At least one value carries a fraction — an all-integer payload is the bug.

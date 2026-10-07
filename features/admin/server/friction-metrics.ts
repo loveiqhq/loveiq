@@ -26,6 +26,8 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { computeRate } from "@features/admin/server/digest-metrics";
 import logger from "@shared/observability/logger";
 import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
+import { orderEmailLast } from "@features/survey/ui/questionOrder";
 
 /**
  * q_id -> a short human question, so a line can say "Q58 (What is your email?)"
@@ -81,6 +83,12 @@ export interface FrictionQuestion {
    *  label is what most people saw, not what everyone saw. */
   q_id_variants?: number;
   visits: number;
+  /**
+   * 'abandon' EVENTS. The survey sends one every time the page is hidden, so this
+   * counts app and tab switches by people who came back and finished (292 of 924
+   * over the 30 days to 2026-10-03). Not a count of people who quit: see
+   * `QuestionReach.quits`.
+   */
   abandons: number;
   backs: number;
   skipped: number;
@@ -88,8 +96,31 @@ export interface FrictionQuestion {
   timed: number;
 }
 
+/**
+ * One question's reach and quits, by q_id. Per QUESTION, not per position: a
+ * position held different questions for different people (landing-page answers
+ * drop questions from the flow, and the survey lost two on 2026-09-11), so the
+ * email question was at position 56 for some and 58 for others.
+ */
+export interface QuestionReach {
+  q_id: string;
+  /** Sessions that reached this question. */
+  sessions: number;
+  /**
+   * Sessions whose last event is on this question and that never finished: the
+   * people who left the survey here for good. Finishing is never counted.
+   */
+  quits: number;
+  /** Sessions that went back a step from this question. */
+  went_back: number;
+  /** Median time on this question, over the `timed` rows that had one. */
+  median_ms: number;
+  timed: number;
+}
+
 export interface FrictionSnapshot {
   questions: FrictionQuestion[];
+  by_question?: QuestionReach[];
   total_rows: number;
   total_timed: number;
   median_ms: number;
@@ -127,7 +158,7 @@ async function fetchFrictionSnapshot(
 /** Human question label. `question_index` is 0-based; readers count from 1. */
 function qLabel(index: number, qId: string, names: Map<string, string>): string {
   const name = names.get(qId);
-  return name ? `Q${index + 1} — ${name}` : `Q${index + 1}`;
+  return name ? `Q${index + 1}: ${name}` : `Q${index + 1}`;
 }
 
 /** The same question for a sentence: "Q58 (What is your email?)". */
@@ -140,6 +171,103 @@ function qPlain(index: number, qId: string, names: Map<string, string>): string 
 function secs(ms: number): string {
   const s = ms / 1000;
   return s >= 60 ? `${Math.round(s)}s` : `${s.toFixed(1)}s`;
+}
+
+/** Only rank questions with enough traffic for a rate to mean anything. */
+const FLOOR = 20;
+
+/** Each question's place in the survey as it is asked today, from 0. */
+const ASKED_POSITION = new Map(
+  orderEmailLast(surveyQuestions)
+    .filter((q) => !isHidden(q.qId))
+    .map((q, i) => [q.qId, i])
+);
+
+/**
+ * How many questions the survey asks today: 62 on 2026-10-07. Not the length
+ * of survey-data.ts, which still holds the question that stopped being asked.
+ * Printed on the drop-off chart, so nobody has to count bars to know it.
+ */
+export const ASKED_QUESTION_COUNT = ASKED_POSITION.size;
+
+/** A question as asked today: its reads and its place in the survey. */
+interface AskedQuestion extends QuestionReach {
+  position: number;
+}
+
+/**
+ * Today's questions, in survey order. Questions no longer asked are left out:
+ * there is nothing to fix on them, and their old numbers would point at a
+ * different question now.
+ */
+function askedQuestions(snap: FrictionSnapshot): AskedQuestion[] {
+  const asked: AskedQuestion[] = [];
+  for (const q of snap.by_question ?? []) {
+    const position = ASKED_POSITION.get(q.q_id);
+    if (position !== undefined) asked.push({ ...q, position });
+  }
+  return asked.sort((a, b) => a.position - b.position);
+}
+
+/** A question's quitting: of the people who reached it, the share who left there. */
+interface QuestionEnd extends AskedQuestion {
+  pct: number;
+}
+
+/** The questions with enough people for a rate to mean anything, in survey order. */
+function questionEnds(snap: FrictionSnapshot): QuestionEnd[] {
+  return askedQuestions(snap)
+    .filter((q) => q.sessions >= FLOOR)
+    .map((q) => ({ ...q, pct: computeRate(q.quits, q.sessions) }));
+}
+
+export interface SessionEnd {
+  label: string;
+  pct: number;
+  /** The question as worded today, shortened, so the worst bars can be named under the chart. */
+  question?: string;
+}
+
+/**
+ * Where people quit the survey, one bar per question, in survey order, numbered
+ * as the survey asks them today.
+ *
+ * The same floor and the same rate as the "end there" sentence, so the chart's
+ * tallest bar is always the question that sentence names. Both the daily and the
+ * weekly message draw it from here.
+ *
+ * People, not events, and never a finisher. The weekly chart used to count those
+ * who reached a question and not the next one, which on the last screen is
+ * everyone who finished: it drew ~300 finishers as a 76% drop-off.
+ */
+export function sessionEnds(snap: FrictionSnapshot): SessionEnd[] {
+  const names = surveyQuestionNames();
+  return questionEnds(snap).map((e) => ({
+    label: `Q${e.position + 1}`,
+    pct: e.pct,
+    question: names.get(e.q_id),
+  }));
+}
+
+/**
+ * The bars the drop-off chart draws red, worst first. The renderer's own rule
+ * (`renderDropoutBars`: top 3 by share, ties in survey order, never a zero), so the
+ * questions named under the chart are always its red bars.
+ */
+export function worstEnds(ends: SessionEnd[], n = 3): SessionEnd[] {
+  return [...ends]
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, n)
+    .filter((e) => e.pct > 0);
+}
+
+/** `sessionEnds` for a window, or null when the read fails. */
+export async function fetchSessionEnds(
+  sinceIso: string,
+  untilIso: string
+): Promise<SessionEnd[] | null> {
+  const snap = await fetchFrictionSnapshot(sinceIso, untilIso);
+  return snap ? sessionEnds(snap) : null;
 }
 
 /**
@@ -157,45 +285,40 @@ export function buildSurveySignals(
   const qs = snap.questions ?? [];
   if (qs.length === 0 || snap.total_rows === 0) return signals;
 
-  /** Only rank questions with enough traffic for a rate to mean anything. */
-  const FLOOR = 20;
-  const ranked = qs.filter((q) => q.visits >= FLOOR);
-  const label = (q: FrictionQuestion) => qLabel(q.question_index, q.q_id, questionNames);
-  const plain = (q: FrictionQuestion) => qPlain(q.question_index, q.q_id, questionNames);
+  /**
+   * Every survey sentence names a question as it is asked today: per q_id, not
+   * per screen position, which held different questions for different people.
+   */
+  const asked = askedQuestions(snap);
+  const label = (q: AskedQuestion) => qLabel(q.position, q.q_id, questionNames);
+  const plain = (q: AskedQuestion) => qPlain(q.position, q.q_id, questionNames);
 
   // --- Drop-off / exit point -------------------------------------------------
-  const worstDrop = ranked
-    .map((q) => ({ q, pct: computeRate(q.abandons, q.visits) }))
-    .sort((a, b) => b.pct - a.pct)[0];
+  // Survey order, then a stable sort: a tie names the earlier question, as the
+  // chart's red bars do.
+  const worstDrop = questionEnds(snap).sort((a, b) => b.pct - a.pct)[0];
   if (worstDrop) {
     signals.push({
       /**
-       * "Where sessions end", not "Drop-off point".
-       *
-       * This counts sessions whose LAST event is this question. The weekly
-       * funnel chart also says "drop-off" but measures something else — the
-       * share who reach a question and never reach the NEXT one. Someone who
-       * reaches Q58, goes back, and abandons at Q30 is in one and not the other,
-       * so the two legitimately disagree: on the 30 days to 2026-09-18 this read
-       * 22% at Q58 while the chart read 16% at Q58 and 25% at Q57.
-       *
-       * Both are right. Publishing both into #ops under the same word is what
-       * was wrong, so this one now names its own definition.
+       * "Where sessions end": the people whose last step was this question
+       * and who never finished. Both drop-off charts now draw the same
+       * measure (see `sessionEnds`), so the sentence and the bars agree.
        */
       label: "Where sessions end",
       group: "Survey",
       value: `${Math.round(worstDrop.pct)}%`,
-      where: label(worstDrop.q),
-      n: worstDrop.q.visits,
+      where: label(worstDrop),
+      n: worstDrop.sessions,
       status: worstDrop.pct >= 10 ? "watch" : "quiet",
-      // Of the sessions that REACH it: the rate divides by visits to this question.
-      sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${plain(worstDrop.q)} end there.`,
+      // Of the sessions that REACH it: the rate divides by the people who got there.
+      sentence: `${Math.round(worstDrop.pct)}% of sessions that reach ${plain(worstDrop)} end there.`,
     });
   }
 
   // --- Backtracking ----------------------------------------------------------
-  const worstBack = ranked
-    .map((q) => ({ q, pct: computeRate(q.backs, q.visits) }))
+  const worstBack = asked
+    .filter((q) => q.sessions >= FLOOR)
+    .map((q) => ({ q, pct: computeRate(q.went_back, q.sessions) }))
     .sort((a, b) => b.pct - a.pct)[0];
   if (worstBack) {
     signals.push({
@@ -203,7 +326,7 @@ export function buildSurveySignals(
       group: "Survey",
       value: `${Math.round(worstBack.pct)}%`,
       where: label(worstBack.q),
-      n: worstBack.q.visits,
+      n: worstBack.q.sessions,
       status: worstBack.pct >= 10 ? "watch" : "quiet",
       sentence: `${Math.round(worstBack.pct)}% of sessions that reach ${plain(worstBack.q)} go back a step there.`,
     });
@@ -211,7 +334,7 @@ export function buildSurveySignals(
 
   // --- Answer hesitation / step completion time ------------------------------
   const typical = snap.median_ms;
-  const slowest = ranked
+  const slowest = asked
     .filter((q) => q.timed >= FLOOR)
     .sort((a, b) => b.median_ms - a.median_ms)[0];
   if (slowest && typical > 0) {
@@ -237,7 +360,7 @@ export function buildSurveySignals(
   }
 
   // --- Time to first action --------------------------------------------------
-  const first = qs.find((q) => q.question_index === 0);
+  const first = asked.find((q) => q.position === 0);
   if (first && first.timed >= FLOOR) {
     signals.push({
       label: "Time to first action",
@@ -449,6 +572,8 @@ export interface FrictionReport {
   /** How many raw rows the aggregate actually saw. Printed so a truncation
    *  like the PostgREST one can never hide again. */
   rowsRead: number;
+  /** Where people quit, per question. See `sessionEnds`. */
+  ends?: SessionEnd[];
 }
 
 export async function buildFrictionReport(
@@ -467,6 +592,7 @@ export async function buildFrictionReport(
       ...(report ? buildReportSignals(report) : []),
     ],
     rowsRead: snap.total_rows + (report?.total_rows ?? 0),
+    ends: sessionEnds(snap),
   };
 }
 

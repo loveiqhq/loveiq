@@ -92,7 +92,20 @@ import {
   buildArmSeries,
   buildSiteStartSeries,
   buildStartSeries,
+  buildTrailingSeries,
 } from "@/app/api/cron/conversion-digest/route";
+import { computeRate } from "@features/admin/server/digest-metrics";
+import {
+  buildSurveySignals,
+  sessionEnds,
+  surveyQuestionNames,
+  type FrictionQuestion,
+  type FrictionReport,
+} from "@features/admin/server/friction-metrics";
+import { escapeSlack } from "@shared/observability/slack";
+import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
+import { orderEmailLast } from "@features/survey/ui/questionOrder";
 import {
   buildAlerts,
   buildArmVerdict,
@@ -219,7 +232,13 @@ interface FunnelChartPayload {
   kind: string;
   title: string;
   windowLabel: string;
-  steps: Array<{ label: string; count: number; pct: number | null }>;
+  steps: Array<{
+    label: string;
+    count: number;
+    pct: number | null;
+    pctVisits?: number | null;
+    pctStarts?: number | null;
+  }>;
   worst: number;
 }
 
@@ -656,7 +675,7 @@ describe("conversion-digest handler", () => {
     expect(checkout.pct!).toBeLessThan(0.05);
     // And the words beside it say the same.
     const alt = funnelAlt(arg.blocks);
-    expect(alt).toContain("Checkout started 5 (<0.1% of the step above)");
+    expect(alt).toContain("Checkout started 5 (<0.1% of the step above,");
     expect(alt, "a bare 0% beside a real count").not.toMatch(/ [1-9][\d,]* \(0% /);
   });
 
@@ -690,13 +709,21 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
 
-    expect(funnelCaption(arg.blocks)).toContain("Biggest drop: of ");
+    expect(funnelChart(arg.blocks), "the funnel").toBeDefined();
+    expect(flat).not.toContain("Biggest drop");
     expect(flat).toContain("*Visits that reach the survey*");
     expect(flat).toContain("Break-even");
     expect(flat).toContain("Landing page test concluded");
     // The friction table's footnote is guarded in friction-metrics.test.ts: that
     // section needs a database this suite does not mock, so it is absent here.
-    for (const jargon of ["visitor-days", "visit-days", "no end date", "trailing", "per-arm"]) {
+    for (const jargon of [
+      "visitor-days",
+      "visit-days",
+      "no end date",
+      "trailing",
+      "per-arm",
+      " — ",
+    ]) {
       expect(flat, `"${jargon}" is back in the daily message`).not.toContain(jargon);
     }
   });
@@ -730,25 +757,20 @@ describe("conversion-digest handler", () => {
       "Report unlocked",
     ]);
 
-    // The red bar is the step the headline names, both counts in the sentence.
-    const worst = chart!.steps[chart!.worst]!;
-    const above = chart!.steps[chart!.worst - 1]!;
-    const caption = funnelCaption(arg.blocks)!;
-    expect(caption).toContain(`Biggest drop: of ${above.count.toLocaleString("en-US")} who`);
-    expect(caption).toContain(` ${worst.count.toLocaleString("en-US")} `);
-    // The first step is never the named drop: it is the largest by construction.
+    // The first step is never the red bar: it is the largest drop by construction.
     expect(chart!.worst).toBeGreaterThan(1);
-    // And it IS the biggest drop after that, worked out here from the counts, so a
-    // chart and headline that agreed with each other on the wrong step still fail.
+    // And it IS the biggest drop after that, worked out here from the counts.
     const shares = chart!.steps.map((s, i) =>
       i < 2 ? Number.POSITIVE_INFINITY : s.count / chart!.steps[i - 1]!.count
     );
     expect(chart!.worst).toBe(shares.indexOf(Math.min(...shares)));
 
-    // Caption above the picture, and no table left in it.
-    const at = arg.blocks.findIndex((b) => JSON.stringify(b).includes("*The funnel, last"));
-    expect(isFunnelChart(arg.blocks[at + 1]!)).toBe(true);
-    expect(caption).not.toContain("`");
+    // The picture alone. Mark, 2026-10-05, on the heading, the "Biggest drop"
+    // sentence and the caveat above it: "Not needed. More noise than anything".
+    expect(funnelCaption(arg.blocks)).toBeUndefined();
+    const at = arg.blocks.findIndex(isFunnelChart);
+    expect((arg.blocks[at - 1] as { type?: string }).type).toBe("divider");
+    expect(blockText(arg.blocks)).not.toContain("Biggest drop");
   });
 
   it("falls back to the table when the picture cannot be made", async () => {
@@ -763,10 +785,15 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     expect(funnelChart(arg.blocks)).toBeUndefined();
     const caption = funnelCaption(arg.blocks)!;
-    expect(caption).toContain("Biggest drop:");
+    expect(caption).not.toContain("Biggest drop");
     const rows = caption.split("\n").filter((l) => l.startsWith("`"));
     expect(rows.length).toBeGreaterThan(3);
     expect(rows[0]).toContain("Visits");
+    // Four numbers a row (people and three shares), named once.
+    expect(rows[2]).toMatch(/^`\s*[\d,]+\s+[\d.<%—]+\s+[\d.<%—]+\s+[\d.<%—]+`/);
+    expect(caption).toContain(
+      "_people  ·  % of the step above  ·  % of visits  ·  % of survey starts_"
+    );
   });
 
   it("prints a quiet day's zero with no dash beside it", async () => {
@@ -1212,7 +1239,7 @@ describe("conversion-digest handler", () => {
     const unlocked = funnelChart(arg.blocks)!.steps.find((s) => s.label === "Report unlocked")!;
     // Sent uncapped, so the picture can say 120%; the renderer only stops the bar.
     expect(unlocked.pct).toBeCloseTo(120, 5);
-    expect(funnelAlt(arg.blocks)).toContain("Report unlocked 6 (120% of the step above)");
+    expect(funnelAlt(arg.blocks)).toContain("Report unlocked 6 (120% of the step above,");
   });
 
   it("prints an em dash, not <0.1%, when the step before is zero", async () => {
@@ -1233,7 +1260,7 @@ describe("conversion-digest handler", () => {
     const unlocked = funnelChart(arg.blocks)!.steps.find((s) => s.label === "Report unlocked")!;
     // No share of nothing: a blank in the picture, a dash in the words.
     expect(unlocked.pct).toBeNull();
-    expect(funnelAlt(arg.blocks)).toContain("Report unlocked 1 (— of the step above)");
+    expect(funnelAlt(arg.blocks)).toContain("Report unlocked 1 (— of the step above,");
     expect(funnelAlt(arg.blocks)).not.toContain("Report unlocked 1 (<0.1%");
   });
 
@@ -1313,7 +1340,7 @@ describe("conversion-digest handler", () => {
    *
    * What IS coverable here is the caller's half, which was asserted nowhere.
    */
-  it("says how much of the window the paywall row covers, and stops once it covers all of it", async () => {
+  it("prints no caveat about how much of the window the paywall row covers", async () => {
     vi.setSystemTime(new Date("2026-09-14T09:05:00.000Z"));
     const noteFrom = async (firstRowDay: string | null) => {
       mockNotifySlack.mockClear();
@@ -1323,22 +1350,14 @@ describe("conversion-digest handler", () => {
       return arg.blocks.map((b) => (b as { text?: { text?: string } }).text?.text ?? "").join("\n");
     };
 
-    // Window is 30 Berlin days ending 2026-09-14, so a signal that started on
-    // the 5th covers 9 of them.
-    const fired = await noteFrom("2026-09-05");
-    expect(fired).toContain("The paywall step covers 9 days, not 30");
-    expect(fired).toContain("we only started counting it on 2026-09-05");
-
-    // Self-expiring: once the instrument predates the window there is nothing to
-    // caveat, and the line must disappear rather than become furniture. This is
-    // the value the RPC used to return, so before the fix EVERY day looked
-    // like this one.
-    const silent = await noteFrom("2026-05-24");
-    expect(silent).not.toContain("The paywall row covers");
-
-    // And it is absent, not blank, when the instrument has never written.
-    const never = await noteFrom(null);
-    expect(never).not.toContain("The paywall row covers");
+    // It used to print "The paywall step covers 9 days, not 30" while the counter
+    // was younger than the window. Mark, 2026-10-05, on that line: "Not needed.
+    // More noise than anything". The counter is older than the window now anyway.
+    for (const firstRowDay of ["2026-09-05", "2026-05-24", null]) {
+      const text = await noteFrom(firstRowDay);
+      expect(text, String(firstRowDay)).not.toContain("paywall step covers");
+      expect(text, String(firstRowDay)).not.toContain("started counting");
+    }
   });
 
   it("puts Paywall Hits between the report and checkout, as Mark named it", async () => {
@@ -1399,7 +1418,7 @@ describe("conversion-digest handler", () => {
     expect(paywallStep.count).toBe(106);
     // And its step share is a real fraction, not a clamped 100%.
     expect(paywallStep.pct).toBeCloseTo((106 / 412) * 100, 5);
-    expect(funnelAlt(arg.blocks)).toContain("Paywall reached 106 (25.7% of the step above)");
+    expect(funnelAlt(arg.blocks)).toContain("Paywall reached 106 (25.7% of the step above,");
   });
 
   it("omits the paywall row when it exceeds report opens, rather than clamping it", async () => {
@@ -1458,12 +1477,14 @@ describe("conversion-digest handler", () => {
     /**
      * Directly under the funnel that produces it: it is the number a decision
      * gets made on, so it precedes the friction detail that explains the shape.
-     * Anchored on the funnel rather than on the friction block, which is absent
-     * from this fixture — an indexOf of -1 would have made the comparison pass
-     * or fail for the wrong reason.
+     * Anchored on the funnel picture rather than on the friction block, which is
+     * absent from this fixture — an indexOf of -1 would have made the comparison
+     * pass or fail for the wrong reason.
      */
-    expect(flat.indexOf("*The funnel, last")).toBeGreaterThan(-1);
-    expect(flat.indexOf("*The funnel, last")).toBeLessThan(flat.indexOf("Break-even"));
+    const funnelAt = arg.blocks.findIndex(isFunnelChart);
+    const breakEvenAt = arg.blocks.findIndex((b) => JSON.stringify(b).includes("Break-even"));
+    expect(funnelAt).toBeGreaterThan(-1);
+    expect(funnelAt).toBeLessThan(breakEvenAt);
   });
 
   it("omits the section entirely when the figures are unavailable", async () => {
@@ -1474,36 +1495,57 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).not.toContain("Break-even");
   });
 
-  it("carries ONE percentage per funnel row, and names it", async () => {
+  it("carries THREE shares per funnel row, each with its name", async () => {
     /**
-     * It used to carry two — % of the step before AND % of all visits — because
-     * the KPI doc asked for both to be stated and named. In practice two
-     * percentage columns on one row is what people kept reading wrong, which is
-     * the same complaint that produced the unsourceable "96.5%" in the first
-     * place. The survivor is % OF THE STEP BEFORE, because it answers the
-     * question the table is read for: where are we losing people.
+     * Marcus, 2026-10-05: "conversion rates need to always be expressed in % of
+     * previous step but also in percent of visits". The second one was taken out
+     * on 2026-09-19 because two unnamed percentages beside each other were
+     * misread, so each carries its name everywhere: the picture's column heads,
+     * the alt text and the fallback table's legend. On the call he named the two
+     * stable baselines, "visits or survey started, both of them are interesting",
+     * so the share of survey starts sits beside them from the row after the start.
      */
+    // Survey starts come from the sparkline read: without it there is no start row.
+    mockFetchFunnelCvrSparklines.mockResolvedValue({
+      days: Array.from({ length: 10 }, (_, k) => ({
+        day: new Date(Date.UTC(2026, 7, 10) + k * 86_400_000).toISOString().slice(0, 10),
+        visitors: 400,
+        starts: 90,
+      })),
+    });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const chart = funnelChart(arg.blocks);
     expect(chart, "the funnel chart").toBeDefined();
     expect(chart!.steps.length, "the funnel steps").toBeGreaterThan(2);
-    // Every step carries ONE share, of the step above; the top step has nothing
-    // above it, so none rather than a 100%.
+    // The top step is the visits: nothing above it, and no share of itself.
     expect(chart!.steps[0]!.pct).toBeNull();
-    for (const step of chart!.steps.slice(1)) {
-      expect(Object.keys(step).sort(), `one percentage on: ${step.label}`).toEqual([
+    expect(chart!.steps[0]!.pctVisits).toBeNull();
+    expect(chart!.steps[0]!.pctStarts).toBeNull();
+    const visits = chart!.steps[0]!.count;
+    const startsAt = chart!.steps.findIndex((s) => s.label === "Survey started");
+    expect(startsAt, "the survey-start row").toBe(1);
+    const starts = chart!.steps[startsAt]!.count;
+    for (const [i, step] of chart!.steps.entries()) {
+      if (i === 0) continue;
+      expect(Object.keys(step).sort(), `three shares on: ${step.label}`).toEqual([
         "count",
         "label",
         "pct",
+        "pctStarts",
+        "pctVisits",
       ]);
+      expect(step.pctVisits).toBeCloseTo((step.count / visits) * 100, 6);
+      expect(step.pct).toBeCloseTo((step.count / chart!.steps[i - 1]!.count) * 100, 6);
+      if (i <= startsAt) expect(step.pctStarts, `${step.label}: no share of itself`).toBeNull();
+      else expect(step.pctStarts).toBeCloseTo((step.count / starts) * 100, 6);
     }
-    // And the words name it, once per step, with the second convention gone.
+    // And the words name each one, once per step that has it.
     const alt = funnelAlt(arg.blocks);
     expect((alt.match(/of the step above/g) ?? []).length).toBe(chart!.steps.length - 1);
-    expect(alt, "the second convention is gone").not.toContain("of all visits");
-    expect(funnelCaption(arg.blocks), "the second convention is gone").not.toContain(
-      "of all visits"
+    expect((alt.match(/% of visits/g) ?? []).length).toBe(chart!.steps.length - 1);
+    expect((alt.match(/% of survey starts/g) ?? []).length).toBe(
+      chart!.steps.length - 1 - startsAt
     );
   });
 
@@ -1583,7 +1625,7 @@ describe("conversion-digest handler", () => {
     ) as { text: { text: string } } | undefined;
     expect(block).toBeDefined();
     expect(block!.text.text.split("\n")).toHaveLength(1);
-    expect(block!.text.text).toContain("no per-arm data in this window yet");
+    expect(block!.text.text).toContain("no data per landing page in this window yet");
     expect(block!.text.text).not.toContain("no visits recorded yet");
   });
 
@@ -1604,11 +1646,11 @@ describe("conversion-digest handler", () => {
     });
     const blocks = await landingLiveBlocks();
     const text = blockText(blocks);
-    expect(text).toContain("*Landing page → survey* — one day of per-arm data");
+    expect(text).toContain("*Landing page → survey*: one day of data per landing page");
     // first day + 7, not +6: 20 Aug -> 27 Aug.
     expect(text).toContain("chart from 27 Aug");
-    expect(text).toContain("80 visit-days → 13 started the survey");
-    expect(text).toContain("64 visit-days → 10 started the survey");
+    expect(text).toContain("80 visits → 13 started the survey");
+    expect(text).toContain("64 visits → 10 started the survey");
     expect(text).toContain("Not a like-for-like comparison");
     // No trend image while it cannot honestly draw one.
     expect(trendImages(blocks)).toHaveLength(0);
@@ -1636,6 +1678,8 @@ describe("conversion-digest handler", () => {
     expect(text).toContain("21 finished → 3 checkout → 0 paid");
     expect(text).toContain("18 finished → 6 checkout → 0 paid");
     expect(text).toMatch(/chart (from|once)/);
+    // Mark bans the em dash in copy; these were the lines that still carried one.
+    expect(text, "an em dash in the message").not.toContain("—");
     // And no image was emitted for it — the whole point of the counts path.
     const imgs = blocks.filter((b) =>
       (b as { alt_text?: string }).alt_text?.startsWith("Landing page")
@@ -1832,7 +1876,7 @@ describe("conversion-digest handler", () => {
 
     // No per-arm headline, no per-arm chart, no verdict.
     expect(json).not.toContain("Landing page → survey");
-    expect(json).not.toContain("visit-days →");
+    expect(json).not.toContain("visits → ");
     expect(json).not.toContain("genuinely ahead");
     expect(json).not.toContain("no clear winner yet");
     const landingCharts = landingChartPayloads(arg.blocks);
@@ -3051,5 +3095,243 @@ describe("conversion-digest — the daily line carries what the day cost", () =>
     await run();
 
     expect(postedText()).toContain("EUR 0.00 spent");
+  });
+});
+
+/**
+ * The two pictures asked for on 2026-10-04 ("lets do 1 and 5"): where sessions
+ * end, question by question, and paywall to payment as a trend.
+ */
+describe("conversion-digest: where sessions end, and paywall to payment", () => {
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "test-digest-signing-secret-value";
+  });
+
+  /** 4 Sep to 3 Oct: the 30 days the 4 Oct message covers. */
+  const DAYS = Array.from({ length: 30 }, (_, i) =>
+    new Date(Date.UTC(2026, 8, 4) + i * 86_400_000).toISOString().slice(0, 10)
+  );
+
+  const build = (over: Partial<Parameters<typeof buildConversionDigest>[0]>) =>
+    buildConversionDigest({
+      dayKey: "2026-10-03",
+      funnel: null,
+      cohorts: [],
+      midway: null,
+      paywall: null,
+      unitEconomics: null,
+      emailExperiments: null,
+      now: new Date("2026-10-04T09:00:00Z"),
+      ...over,
+    });
+
+  const texts = (blocks: SlackBlock[]) =>
+    blocks.map((b) => (b as { text?: { text?: string } }).text?.text ?? "");
+
+  const imageOf = (blocks: SlackBlock[], kind: string) =>
+    blocks.find((b) =>
+      String((b as { image_url?: string }).image_url ?? "").includes(`/digest-image/${kind}`)
+    ) as { image_url: string; alt_text: string } | undefined;
+
+  const payloadOf = (img: { image_url: string }) =>
+    JSON.parse(
+      Buffer.from(new URL(img.image_url).searchParams.get("d")!, "base64").toString("utf8")
+    ) as Record<string, unknown>;
+
+  /** The survey as asked today, by q_id. */
+  const ASKED = orderEmailLast(surveyQuestions)
+    .filter((x) => !isHidden(x.qId))
+    .map((x) => x.qId);
+  const qn = (qId: string) => `Q${ASKED.indexOf(qId) + 1}`;
+
+  /**
+   * A survey's worth of questions, built by the REAL producers, so the sentence
+   * and the bars come from one snapshot exactly as they do in production. The
+   * email question is the worst; the 41st question is too thin to carry a rate.
+   */
+  function frictionReport(): FrictionReport {
+    const questions: FrictionQuestion[] = ASKED.map((q_id, i) => ({
+      question_index: i,
+      q_id,
+      visits: 1000 - i * 10,
+      abandons: 10,
+      backs: 5,
+      skipped: 0,
+      median_ms: 9000,
+      timed: 900,
+    }));
+    const by_question = ASKED.map((q_id, i) => ({
+      q_id,
+      sessions: 1000 - i * 10,
+      quits: q_id === "00000" ? 76 : i === 53 ? 40 : i === 2 ? 59 : 10,
+    }));
+    // 4 of 5 leaving is 80%, and would top the chart if the floor were missing.
+    by_question[40] = { ...by_question[40]!, sessions: 5, quits: 4 };
+    const snap = {
+      questions,
+      by_question,
+      total_rows: 30_000,
+      total_timed: 27_000,
+      median_ms: 9000,
+    };
+    return {
+      signals: buildSurveySignals(snap, new Map([["00000", "What is your email?"]])),
+      rowsRead: 30_000,
+      ends: sessionEnds(snap),
+    };
+  }
+
+  it("draws where sessions end right under the stuck list, from the sentence's own numbers", async () => {
+    const { blocks } = await build({ friction: frictionReport() });
+    const at = texts(blocks).findIndex((t) => t.startsWith("*Where people get stuck*"));
+    expect(at).toBeGreaterThan(-1);
+    const img = blocks[at + 1] as { type: string; image_url: string; alt_text: string };
+    expect(img.type).toBe("image");
+    expect(img.image_url).toContain("/digest-image/dropout-funnel");
+
+    const p = payloadOf(img) as {
+      bars: Array<{ label: string; dropPct: number }>;
+      windowLabel: string;
+      questions: number;
+    };
+    // The chart says how many questions there are: today's 57, not the file's 58.
+    expect(p.questions).toBe(ASKED.length);
+    // Every question that clears the floor, in survey order. The thin one is out.
+    expect(p.bars).toHaveLength(ASKED.length - 1);
+    expect(p.bars[0]!.label).toBe("Q1");
+    expect(p.bars.map((b) => b.label)).not.toContain("Q41");
+    // The tallest bar is the question the sentence names, at the number it prints.
+    const top = [...p.bars].sort((a, b) => b.dropPct - a.dropPct)[0]!;
+    expect(top.label).toBe(qn("00000"));
+    expect(texts(blocks)[at]).toContain(
+      `${Math.round(top.dropPct)}% of sessions that reach ${qn("00000")} (What is your email?) end there.`
+    );
+    expect(p.windowLabel).toBe("30 days to 3 Oct");
+    expect(img.alt_text).toBe(
+      `Where sessions end, by question. Highest: ${qn("00000")} 17%, Q54 9%, Q3 6%.`
+    );
+    // The red bars' questions, in words, right under the chart (agreed on the
+    // 2026-10-05 sync), worst first: the same three the alt text names.
+    const names = surveyQuestionNames();
+    const legend = blocks[at + 2] as { type: string; elements: Array<{ text: string }> };
+    expect(legend.type).toBe("context");
+    expect(legend.elements[0]!.text.split("\n")).toEqual([
+      `*${qn("00000")}*  17%  ${escapeSlack(names.get("00000")!)}`,
+      `*Q54*  9%  ${escapeSlack(names.get(ASKED[53]!)!)}`,
+      `*Q3*  6%  ${escapeSlack(names.get(ASKED[2]!)!)}`,
+    ]);
+  });
+
+  it("draws no bars when fewer than two questions carry a rate", async () => {
+    const report = frictionReport();
+    const { blocks } = await build({ friction: { ...report, ends: report.ends!.slice(0, 1) } });
+    expect(texts(blocks).some((t) => t.startsWith("*Where people get stuck*"))).toBe(true);
+    expect(imageOf(blocks, "dropout-funnel")).toBeUndefined();
+  });
+
+  it("fits a whole survey of bars inside Slack's image link limit", async () => {
+    // Over the limit the chart is dropped with only a log line, so this is the
+    // test that notices. 62 questions, every rate with a decimal, worst case.
+    const ends = Array.from({ length: 62 }, (_, i) => ({ label: `Q${i + 1}`, pct: 10.5 + i }));
+    const { blocks } = await build({ friction: { ...frictionReport(), ends } });
+    expect(imageOf(blocks, "dropout-funnel")).toBeDefined();
+  });
+
+  /**
+   * Ten people a day at the paywall from 6 Sep, a sale every third day, and one
+   * more on the last day, so the latest week (3 of 70) differs from the first
+   * whole one (2 of 70) and a caption reading the wrong week cannot pass.
+   */
+  function paywallDays() {
+    return DAYS.map((day, i) => ({
+      day,
+      visitors: 400,
+      starts: 40,
+      // Not counted before 6 Sep, while sales still happened.
+      paygate: day < "2026-09-06" ? 0 : 10,
+      purchased: i % 3 === 0 || i === 29 ? 1 : 0,
+    }));
+  }
+  const PAYWALL = { hits: 280, firstRowDay: "2026-09-06" };
+
+  const paywallChart = (blocks: SlackBlock[]) =>
+    blocks.find(
+      (b) =>
+        (b as { type?: string }).type === "image" &&
+        payloadOf(b as { image_url: string }).title === "People at the paywall who pay"
+    ) as { image_url: string; alt_text: string } | undefined;
+
+  it("draws paywall to payment as a trend, with the counts behind the latest rate", async () => {
+    const cvrDays = paywallDays();
+    const { blocks } = await build({ cvrDays, paywall: PAYWALL });
+    const t = texts(blocks);
+    const at = t.findIndex((x) => x.startsWith("*People at the paywall who pay*"));
+    expect(at).toBeGreaterThan(-1);
+    // Paired with the other trend line, directly under it.
+    expect(String((blocks[at - 1] as { alt_text?: string }).alt_text)).toMatch(
+      /^Site-wide share of visits/
+    );
+    const img = blocks[at + 1] as { image_url: string };
+    expect(img).toBe(paywallChart(blocks));
+
+    const p = payloadOf(img) as {
+      first: Array<number | null>;
+      last?: unknown;
+      headline: string;
+      colorFirst: string;
+    };
+    // Not an arm: slate, and one series.
+    expect(p.last).toBeUndefined();
+    expect(p.colorFirst).toBe("#334155");
+    // The last point is the 7 days to 3 Oct, and the caption shows what it is made of.
+    const last7 = cvrDays.slice(-7);
+    const sales = last7.reduce((n, d) => n + d.purchased, 0);
+    const people = last7.reduce((n, d) => n + d.paygate, 0);
+    const rate = computeRate(sales, people);
+    expect(p.first.at(-1)).toBe(rate);
+    expect(t[at]).toContain(`${rate}% over the last 7 days (${sales} of ${people})`);
+    expect(p.headline).toContain(`${rate}% of people at the paywall paid`);
+  });
+
+  it("leaves a gap wherever the week reaches back before the paywall was counted", async () => {
+    const { blocks } = await build({ cvrDays: paywallDays(), paywall: PAYWALL });
+    const p = payloadOf(paywallChart(blocks)!) as { first: Array<number | null> };
+    // 10 and 11 Sep have a full week behind them, but it starts on 4 or 5 Sep: sales
+    // set against days with no paywall count. Drawn, the first would be the peak (6%).
+    expect(p.first.slice(0, 8)).toEqual(Array(8).fill(null));
+    // 12 Sep is the first week that starts on 6 Sep.
+    expect(p.first[8]).toBe(computeRate(2, 70));
+  });
+
+  it("keeps the gap when the paywall read fails", async () => {
+    // The paywall count and this line come from two different reads. With only
+    // this one answering, the early weeks must still be gaps: before 6 Sep the
+    // paywall was counted by a lossy client event alone, and drawn, the switch
+    // reads as a collapse from ~9% to ~1.6% that never happened.
+    const { blocks } = await build({ cvrDays: paywallDays(), paywall: null });
+    const p = payloadOf(paywallChart(blocks)!) as { first: Array<number | null> };
+    expect(p.first.slice(0, 8)).toEqual(Array(8).fill(null));
+    expect(p.first[8]).toBe(computeRate(2, 70));
+  });
+
+  it("draws no paywall line when nobody reached the paywall", async () => {
+    const cvrDays = paywallDays().map((d) => ({ ...d, paygate: 0 }));
+    const { blocks } = await build({ cvrDays, paywall: PAYWALL });
+    expect(texts(blocks).some((t) => t.includes("People at the paywall who pay"))).toBe(false);
+    // The survey-reach line is unaffected.
+    expect(texts(blocks).some((t) => t.startsWith("*Visits that reach the survey*"))).toBe(true);
+  });
+
+  it("treats a week with nobody in it as a gap, and a week where nobody bought as 0%", () => {
+    const days = DAYS.slice(0, 14).map((day, i) => ({ day, n: 0, d: i < 7 ? 0 : 5 }));
+    const s = buildTrailingSeries(
+      days,
+      (x) => x.n,
+      (x) => x.d
+    );
+    expect(s.values[6]).toBeNull();
+    expect(s.values[13]).toBe(0);
+    expect(s.counts[13]).toEqual({ num: 0, den: 35 });
   });
 });

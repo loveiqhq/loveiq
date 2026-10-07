@@ -233,8 +233,9 @@ function DailyTrend({ title, points }: { title: string; points: DailyPoint[] }) 
   );
 }
 
-// Reach floor mirrors the Slack digest's computeDropoutBars — drop tiny-sample
-// late questions whose drop-off % would be noise.
+// Drop tiny-sample late questions whose drop-off % would be noise. Reach-based,
+// so on the last screen the people who FINISHED read as drop-off; the Slack
+// charts count people who left instead (`sessionEnds` in friction-metrics).
 const DROPOUT_REACH_FLOOR = 5;
 
 /**

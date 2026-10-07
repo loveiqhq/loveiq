@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ReactElement } from "react";
 
 import { renderDropoutBars } from "@/app/api/admin/digest-image/[kind]/route";
+import { worstEnds } from "@features/admin/server/friction-metrics";
 
 /**
  * Which drop-out bars get a number printed on them.
@@ -198,5 +199,205 @@ describe("digest-image: which drop-offs the summary names", () => {
       }).element
     );
     expect(summary).toContain("Q2 5%");
+  });
+});
+
+/** Every string drawn anywhere in the chart. */
+function stringsIn(node: unknown, out: string[] = []): string[] {
+  if (typeof node === "string") {
+    out.push(node);
+    return out;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) stringsIn(child, out);
+    return out;
+  }
+  if (!node || typeof node !== "object") return out;
+  const props = ((node as ReactElement<Record<string, unknown>>).props ?? {}) as Record<
+    string,
+    unknown
+  >;
+  if (props.children !== undefined) stringsIn(props.children, out);
+  return out;
+}
+
+describe("renderDropoutBars: what the bars measure", () => {
+  it("says the bars are people who left and never finished", () => {
+    // Finishers are never counted, so the last screen is never a drop-off. The
+    // footnote has to say so, or the old reading ("did not continue") comes back.
+    const all = stringsIn(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars: [
+          { label: "Q1", dropPct: 5 },
+          { label: "Q2", dropPct: 9 },
+        ],
+      }).element
+    );
+    expect(all.join(" ")).toContain(
+      "left: % of people who reach a question and leave there without finishing · bottom: question order"
+    );
+    expect(all.join(" ")).not.toContain("do not continue");
+  });
+
+  it("says how many questions the survey asks, when told", () => {
+    const all = stringsIn(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars: [
+          { label: "Q1", dropPct: 5 },
+          { label: "Q2", dropPct: 9 },
+        ],
+        questions: 57,
+      }).element
+    );
+    expect(all.join(" ")).toContain("bottom: all 57 questions, in the order asked today");
+  });
+});
+
+/** Every absolutely placed box in the chart: where it starts, how wide, what it says. */
+function boxesIn(
+  node: unknown,
+  out: Array<{ key: string; left: number; width: number; text?: string }> = []
+): Array<{ key: string; left: number; width: number; text?: string }> {
+  if (Array.isArray(node)) {
+    for (const child of node) boxesIn(child, out);
+    return out;
+  }
+  if (!node || typeof node !== "object") return out;
+  const el = node as ReactElement<Record<string, unknown>> & { key?: string | null };
+  const props = (el.props ?? {}) as Record<string, unknown>;
+  const style = (props.style ?? {}) as Record<string, unknown>;
+  if (style.position === "absolute" && typeof style.left === "number") {
+    out.push({
+      key: String(el.key ?? ""),
+      left: style.left,
+      width: Number(style.width),
+      text: typeof props.children === "string" ? props.children : undefined,
+    });
+  }
+  if (props.children) boxesIn(props.children, out);
+  return out;
+}
+
+describe("renderDropoutBars: each label sits under its own bar", () => {
+  it("puts the last question's label under the last bar, not the one before it", () => {
+    // The 2026-10-04 render: 57 questions, the tallest (red) bar second to last,
+    // the last one near zero. "Q57" stood under the red bar, so the near-zero
+    // bar after it read as a 58th question.
+    const bars = Array.from({ length: 57 }, (_, i) => ({
+      label: `Q${i + 1}`,
+      dropPct: i === 55 ? 11 : i === 56 ? 0 : 1 + (i % 5),
+    }));
+    const boxes = boxesIn(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
+    const centre = (b: { left: number; width: number }) => b.left + b.width / 2;
+    const label = boxes.find((b) => b.text === "Q57" && b.key.startsWith("x-"))!;
+    const last = boxes.find((b) => b.key === "bar-Q57-56")!;
+    const beforeIt = boxes.find((b) => b.key === "bar-Q56-55")!;
+    expect(label).toBeDefined();
+    const slot = centre(last) - centre(beforeIt);
+    expect(Math.abs(centre(label) - centre(last))).toBeLessThan(slot / 2);
+    // And the first label sits under the first bar.
+    const first = boxes.find((b) => b.text === "Q1" && b.key.startsWith("x-"))!;
+    const firstBar = boxes.find((b) => b.key === "bar-Q1-0")!;
+    expect(Math.abs(centre(first) - centre(firstBar))).toBeLessThan(slot / 2);
+  });
+});
+
+describe("renderDropoutBars: which bar is which question", () => {
+  // The real shape on 2026-10-04: 57 questions, Q1 and Q2 both 6%, Q56 the
+  // steepest at 11%, Q57 near zero.
+  const bars = Array.from({ length: 57 }, (_, i) => ({
+    label: `Q${i + 1}`,
+    dropPct: i === 55 ? 11 : i <= 1 ? 6 : i === 56 ? 0.1 : 1 + (i % 4),
+  }));
+  const boxes = () => boxesIn(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
+  const centre = (b: { left: number; width: number }) => b.left + b.width / 2;
+
+  it("numbers Q1, every fifth question and the last", () => {
+    const labels = boxes()
+      .filter((b) => b.key.startsWith("x-"))
+      .map((b) => b.text);
+    // Q55 gives way to Q57: two bars apart, the two would touch.
+    expect(labels).toEqual([
+      "Q1",
+      ...Array.from({ length: 10 }, (_, k) => `Q${(k + 1) * 5}`),
+      "Q57",
+    ]);
+  });
+
+  it("draws a tick under every bar", () => {
+    const ticks: string[] = [];
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const el = node as ReactElement<Record<string, unknown>> & { key?: string | null };
+      if (String(el.key ?? "").startsWith("tick-")) ticks.push(String(el.key));
+      const props = (el.props ?? {}) as Record<string, unknown>;
+      if (props.children) walk(props.children);
+    };
+    walk(renderDropoutBars({ kind: "dropout-funnel", bars }).element);
+    expect(ticks).toHaveLength(57);
+  });
+
+  it("names each red bar's question on the bar, touching equal ones together", () => {
+    const all = boxes();
+    const names = all.filter((b) => b.key.startsWith("q-"));
+    expect(names.map((b) => b.text)).toEqual(["Q1, Q2", "Q56"]);
+    // Each name sits over its own bar(s): nearer them than any other bar.
+    const bar = (i: number) => all.find((b) => b.key === `bar-Q${i + 1}-${i}`)!;
+    const slot = centre(bar(1)) - centre(bar(0));
+    const q56 = names.find((b) => b.text === "Q56")!;
+    expect(Math.abs(centre(q56) - centre(bar(55)))).toBeLessThan(slot / 2);
+    const pair = names.find((b) => b.text === "Q1, Q2")!;
+    expect(Math.abs(centre(pair) - (centre(bar(0)) + centre(bar(1))) / 2)).toBeLessThan(slot / 2);
+  });
+
+  it("keeps separate names for touching red bars that differ", () => {
+    // A cliff: Q4 at 11%, Q5 at 24%. One shared "11-24%" would hide the
+    // steepest number, so these stay separate and the steepest keeps its name.
+    const cliff = Array.from({ length: 20 }, (_, i) => ({
+      label: `Q${i + 1}`,
+      dropPct: i === 3 ? 11 : i === 4 ? 24 : 2,
+    }));
+    const names = boxesIn(renderDropoutBars({ kind: "dropout-funnel", bars: cliff }).element)
+      .filter((b) => b.key.startsWith("q-"))
+      .map((b) => b.text);
+    expect(names).toContain("Q5");
+    expect(names).not.toContain("Q4, Q5");
+  });
+});
+
+describe("the questions named under the chart are its red bars", () => {
+  it("names exactly the bars drawn red, ties and zeros included", () => {
+    // Ties at the cut (two 9s for the last place) and a zero: the digest's list
+    // (worstEnds) and the picture's red bars (renderDropoutBars) must agree.
+    const pcts = [9, 4, 12, 9, 0, 9, 3];
+    const ends = pcts.map((pct, i) => ({ label: `Q${i + 1}`, pct }));
+    const red: string[] = [];
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const el = node as ReactElement<Record<string, unknown>> & { key?: string | null };
+      const props = (el.props ?? {}) as Record<string, unknown>;
+      const style = (props.style ?? {}) as Record<string, unknown>;
+      const key = String(el.key ?? "");
+      if (key.startsWith("bar-") && String(style.background).toLowerCase() === DANGER) {
+        red.push(key.split("-")[1]!);
+      }
+      if (props.children) walk(props.children);
+    };
+    walk(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars: ends.map((e) => ({ label: e.label, dropPct: e.pct })),
+      }).element
+    );
+    expect(red.length).toBe(3);
+    expect(
+      worstEnds(ends)
+        .map((e) => e.label)
+        .sort()
+    ).toEqual([...red].sort());
   });
 });

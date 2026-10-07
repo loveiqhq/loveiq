@@ -51,12 +51,18 @@ import {
   tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
-import { computeRate, fetchFunnelCvrSparklines } from "@features/admin/server/digest-metrics";
+import {
+  computeRate,
+  fetchFunnelCvrSparklines,
+  PAYGATE_MEASURED_FROM,
+} from "@features/admin/server/digest-metrics";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
+  ASKED_QUESTION_COUNT,
   buildFrictionReport,
   buildFrictionWatchList,
   surveyQuestionNames,
+  worstEnds,
   type FrictionReport,
 } from "@features/admin/server/friction-metrics";
 import {
@@ -202,7 +208,7 @@ function deployStamp(): string {
  */
 async function signedChartUrl(
   payload: Record<string, unknown>,
-  kind: "conversion-by-arm" | "funnel-steps" = "conversion-by-arm"
+  kind: "conversion-by-arm" | "funnel-steps" | "dropout-funnel" = "conversion-by-arm"
 ): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL;
   if (!base) {
@@ -324,26 +330,128 @@ export function buildArmSeries<T extends { arm: string; day: string; completions
  */
 export function buildSiteStartSeries(
   days: Array<{ day: string; visitors: number; starts: number }>
+): ReturnType<typeof buildTrailingSeries> {
+  return buildTrailingSeries(
+    days,
+    (d) => d.starts,
+    (d) => d.visitors
+  );
+}
+
+/**
+ * A rate for each day over the 7 days to it, from per-day counts. The one
+ * trailing window behind both trend lines.
+ *
+ * A point is a gap (null), never a zero, when:
+ *   * it is one of the first six days. Same warm-up rule as the other trailing
+ *     series: a window without seven days behind it is not the rate the
+ *     footnote promises.
+ *   * its window has an empty denominator.
+ *   * its window reaches back before `from`, the first day the step was
+ *     counted. Such a window sets a week of sales against a few days of paywall
+ *     hits and draws a spike that never happened.
+ */
+export function buildTrailingSeries<T extends { day: string }>(
+  days: T[],
+  numerator: (d: T) => number,
+  denominator: (d: T) => number,
+  from?: string | null
 ): {
   labels: string[];
   values: Array<number | null>;
+  /** Each point's two counts, so a caption can show what a rate is made of. */
+  counts: Array<{ num: number; den: number } | null>;
 } {
   const sorted = [...days].sort((a, b) => a.day.localeCompare(b.day));
+  const counts = sorted.map((_, idx) => {
+    if (idx < 6) return null;
+    const week = sorted.slice(idx - 6, idx + 1);
+    if (from && week[0]!.day < from) return null;
+    const num = week.reduce((t, d) => t + numerator(d), 0);
+    const den = week.reduce((t, d) => t + denominator(d), 0);
+    return den > 0 ? { num, den } : null;
+  });
   return {
     labels: sorted.map((d) => shortDay(d.day)),
-    values: sorted.map((_, idx) => {
-      // Same warm-up rule as the other trailing series: a window without seven
-      // days behind it is not the rate the footnote promises.
-      if (idx < 6) return null;
-      let visitors = 0;
-      let starts = 0;
-      for (let i = idx - 6; i <= idx; i += 1) {
-        visitors += sorted[i]!.visitors;
-        starts += sorted[i]!.starts;
-      }
-      return visitors > 0 ? computeRate(starts, visitors) : null;
-    }),
+    values: counts.map((c) => (c ? computeRate(c.num, c.den) : null)),
+    counts,
   };
+}
+
+/**
+ * A single-series trend: its caption, then its picture. Nothing when the series
+ * has no point or the chart cannot be signed.
+ *
+ * Drawn by the ARM renderer in single-series mode, not by the sparkline one the
+ * first trend started on. That renderer pinned its y-scale to the series' own
+ * max with no axis labels, which was measured: re-rendering the same shape at a
+ * tenth of the magnitude produced a byte-identical plot, so a 6% rate and a
+ * 0.6% rate drew the same picture. Three earlier commits fixed gridlines, tick
+ * alignment, the clipped peak and the rounding in the arm renderer and never
+ * touched the other one.
+ *
+ * Nulls are passed straight through: the arm renderer draws them as gaps, so
+ * the warm-up days need no slicing and an interior null stays a gap instead of
+ * being flattened to a plotted 0%.
+ *
+ * "Over the last 7 days", not "7-day trailing" or "7-day average": each point
+ * pools seven days of the numerator over seven days of the denominator, which
+ * is not an average of seven daily rates.
+ */
+async function trendBlocks(t: {
+  windowLabel: string;
+  title: string;
+  series: ReturnType<typeof buildTrailingSeries>;
+  /**
+   * Print the latest point's two counts beside its rate, "0% (0 of 87)". For a
+   * line that sits near zero, where the rate alone cannot say whether nobody
+   * bought out of three people or out of three hundred.
+   */
+  showCounts?: boolean;
+  /** The image's own headline, from the latest point. */
+  headline: (latest: number) => string;
+  footnote: string;
+  alt: (latest: number, peak: number) => string;
+}): Promise<SlackBlock[]> {
+  const real = t.series.values.filter((v): v is number => v != null);
+  if (real.length === 0) return [];
+  const latest = real[real.length - 1]!;
+  const latestCounts = t.series.counts.filter((c) => c !== null).at(-1);
+  const counts =
+    t.showCounts && latestCounts
+      ? ` (${latestCounts.num.toLocaleString("en-US")} of ${latestCounts.den.toLocaleString("en-US")})`
+      : "";
+  const peak = Math.max(...real);
+  const direction =
+    peak - latest >= 1
+      ? `, down from ${peak}% at its peak`
+      : latest - Math.min(...real) >= 1
+        ? `, up from ${Math.min(...real)}%`
+        : "";
+  const url = await signedChartUrl({
+    windowLabel: t.windowLabel,
+    labels: t.series.labels,
+    first: t.series.values,
+    // No `last` key at all: single-series mode. An all-null `last` would be a
+    // second arm with no data, which is a different statement.
+    title: t.title,
+    legendFirst: t.title,
+    /**
+     * Slate, not the categorical blue. Neither line is an arm, and blue means
+     * Landing Page V1 on the charts below — the same "follow the coloured line
+     * across two charts and you are following two different things" problem
+     * the per-arm colours were bound to fix. 10.35:1 on white.
+     */
+    colorFirst: "#334155",
+    headline: `${t.headline(latest)}${direction}`,
+    footnote: t.footnote,
+    emptyLabel: "Awaiting data: nothing recorded in this window yet.",
+  });
+  if (!url) return [];
+  return [
+    section(`*${t.title}*  ·  ${latest}% over the last 7 days${counts}${direction}.`),
+    { type: "image", image_url: url, alt_text: t.alt(latest, peak) },
+  ];
 }
 
 /**
@@ -479,8 +587,17 @@ interface DigestInput {
   emailExperiments: EmailExperimentRow[] | null;
   /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
   axisRows?: AxisFunnelRow[];
-  /** Site-wide visitors + starts per day, for the landing→survey trend line. */
-  cvrDays?: Array<{ day: string; visitors: number; starts: number }> | null;
+  /**
+   * Site-wide counts per day: visitors + starts for the survey-reach line,
+   * paywall hits + sales for the paywall line.
+   */
+  cvrDays?: Array<{
+    day: string;
+    visitors: number;
+    starts: number;
+    paygate?: number;
+    purchased?: number;
+  }> | null;
   /**
    * What was spent on ads on `dayKey`, or NULL when GA4 does not cover that day.
    *
@@ -516,6 +633,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // An overridden axis is being declared live, so its arms are live too.
   const includeRetired = input.liveAxesOverride !== undefined;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
+  /**
+   * The label in a chart's top corner. Short, because the long `windowLabel`
+   * wraps onto a second line there.
+   */
+  const chartWindow = `${WINDOW_DAYS} days to ${shortDay(dayKey)}`;
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
@@ -559,7 +681,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   if (cohorts === null) {
     blocks.push(
-      section("*Could not read the experiment data* — a measurement failure, not a result.")
+      section("*Could not read the experiment data.* A measurement failure, not a result.")
     );
   }
 
@@ -664,10 +786,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       midway ? { reached: midway.overall.reached, index: midway.midwayIndex } : null,
       paywall?.hits ?? null
     );
-    // Skip the visits -> started step when naming the biggest drop. It is the
-    // largest drop by construction (most visitors never start a survey) and would
-    // be the headline every single day, which is how a digest becomes wallpaper.
-    // The chart still draws it; only the HEADLINE moves to a step someone can act on.
+    // Skip the visits -> started step when choosing the red bar. It is the largest
+    // drop by construction (most visitors never start a survey) and would be red
+    // every single day, which is how a chart becomes wallpaper.
     const leak = biggestLeak(steps.slice(1));
     // `leak.index` counts within the slice; +1 puts it back on `steps`.
     const worstIndex = leak ? leak.index + 1 : -1;
@@ -695,87 +816,60 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       if (raw > 0 && raw < 0.05) return "<0.1%";
       return `${Math.round(raw * 10) / 10}%`;
     };
-    /**
-     * Says so when the paywall step covers less of the window than the steps
-     * above it. Only when it actually does: once the instrument is older than the
-     * window this line disappears on its own rather than becoming furniture.
-     */
-    const paywallNote = (() => {
-      if (!paywall?.firstRowDay || !steps.some((x) => x.key === "paywall")) {
-        return null;
-      }
-      // The digest's own reporting day, not wall-clock: the same boundary the
-      // window is cut on, so the two cannot disagree across a DST change.
-      const windowEnd = reportingDayStart(reportingDay(now)).getTime();
-      const first = new Date(`${paywall.firstRowDay}T00:00:00Z`).getTime();
-      if (!Number.isFinite(first) || first <= windowEnd - WINDOW_DAYS * 86_400_000) return null;
-      const days = Math.max(1, Math.round((windowEnd - first) / 86_400_000));
-      return `_The paywall step covers ${days} days, not ${WINDOW_DAYS}: we only started counting it on ${escapeSlack(paywall.firstRowDay)}._`;
-    })();
-
-    /**
-     * The biggest drop as one sentence with both counts: "of 32 who started
-     * checkout, 2 unlocked the report (6.3%)". A percentage on its own is how an
-     * unsourceable 96.5% reached a meeting; two counts and the share between
-     * them cannot be misread.
-     */
     const count = (n: number) => n.toLocaleString("en-US");
-    const headline = (() => {
-      if (worstIndex < 1) return null;
-      // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
-      const to = steps[worstIndex]!;
-      const from = steps[worstIndex - 1]!;
-      return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${share(to.count, from.count)}).`;
-    })();
 
     /**
-     * The funnel as a picture. Asked for on the 2026-09-16 sync: Mark's step
-     * names, a white background, and one percentage that means the same thing on
-     * every row. That percentage is % OF THE STEP ABOVE, because it answers the
-     * question the funnel is read for (where are we losing people), and the
-     * chart's red bar is the step the headline names.
+     * Three shares on every step: of the step above (where people are lost), of all
+     * visits, and of survey starts (the two stable baselines). Marcus, 2026-10-05:
+     * "conversion rates need to always be expressed in % of previous step but also in
+     * percent of visits", and on the call, of the baselines: "visits or survey
+     * started, both of them are interesting". Unnamed shares side by side were misread
+     * once (taken out 2026-09-19), so each carries its name in the picture, the alt
+     * text and the table. The share of starts begins below the survey-start row.
      *
-     * The share is sent unrounded and uncapped: over 100 is real (see `share`)
-     * and the renderer prints it as it is. A zero denominator is null, a blank,
-     * never a "0%".
+     * Sent unrounded and uncapped: over 100 is real (see `share`) and the renderer
+     * prints it as it is. A zero denominator is null, a blank, never a "0%".
      */
-    const stepPct = (i: number): number | null => {
-      if (i === 0) return null;
-      const of = steps[i - 1]!.count;
+    const pctOf = (i: number, of: number): number | null =>
       // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
-      return of > 0 ? (steps[i]!.count / of) * 100 : null;
-    };
+      i === 0 ? null : of > 0 ? (steps[i]!.count / of) * 100 : null;
+    const visits = steps[0]?.count ?? 0;
+    const startsAt = steps.findIndex((s) => s.key === "started");
+    const starts = startsAt >= 0 ? steps[startsAt]!.count : 0;
+    const pctOfStarts = (i: number): number | null =>
+      startsAt >= 0 && i > startsAt ? pctOf(i, starts) : null;
     const funnelTitle = `The funnel, last ${WINDOW_DAYS} days`;
     const chartUrl = await signedChartUrl(
       {
-        windowLabel: `${WINDOW_DAYS} days to ${shortDay(dayKey)}`,
+        windowLabel: chartWindow,
         title: "The funnel",
-        steps: steps.map((s, i) => ({ label: s.step, count: s.count, pct: stepPct(i) })),
+        steps: steps.map((s, i) => ({
+          label: s.step,
+          count: s.count,
+          pct: pctOf(i, i > 0 ? steps[i - 1]!.count : 0),
+          pctVisits: pctOf(i, visits),
+          pctStarts: pctOfStarts(i),
+        })),
         worst: worstIndex,
       },
       "funnel-steps"
     );
-    // Heading, headline and caveat in ONE block, above the picture. Split across
-    // two, Slack puts a paragraph gap between a title and what it titles; and
-    // fitBlocks drops from the tail, so a cut can lose the picture but never the
-    // numbers in the headline.
-    const caption = [
-      `*${funnelTitle}*`,
-      ...(headline ? [headline] : []),
-      ...(paywallNote ? [paywallNote] : []),
-    ];
+    const shares = (i: number) =>
+      `${share(steps[i]!.count, steps[i - 1]!.count)} of the step above, ${share(steps[i]!.count, visits)} of visits` +
+      (startsAt >= 0 && i > startsAt ? `, ${share(steps[i]!.count, starts)} of survey starts` : "");
     if (chartUrl) {
-      blocks.push(section(caption.join("\n")));
+      /**
+       * The picture alone: no heading, no "Biggest drop" sentence, no caveat. Mark,
+       * 2026-10-05, on exactly those lines: "Not needed. More noise than anything".
+       * The chart carries its own title and window, and its red bar is the drop.
+       */
       blocks.push({
         type: "image",
         image_url: chartUrl,
         // Every step with its count, so a failed image load or a screen reader
         // still gets the whole funnel.
         alt_text: `${funnelTitle}: ${steps
-          .map(
-            (s, i) =>
-              `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${share(s.count, steps[i - 1]!.count)} of the step above)`}`
-          )
+          .map((s, i) => `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${shares(i)})`}`)
           .join("; ")}.`,
       });
     } else {
@@ -785,10 +879,18 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        */
       const rows = steps.map((s, i) => {
         const stepShare = i === 0 ? "—" : share(s.count, steps[i - 1]!.count);
-        return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
+        const visitShare = i === 0 ? "—" : share(s.count, visits);
+        const startShare = startsAt >= 0 && i > startsAt ? share(s.count, starts) : "—";
+        return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}  ${visitShare.padStart(6)}  ${startShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
       });
       blocks.push(
-        section([...caption, rows.join("\n"), "_people  ·  % of the step above them_"].join("\n"))
+        section(
+          [
+            `*${funnelTitle}*`,
+            rows.join("\n"),
+            "_people  ·  % of the step above  ·  % of visits  ·  % of survey starts_",
+          ].join("\n")
+        )
       );
     }
   }
@@ -820,6 +922,53 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   if (input.friction && input.friction.signals.length > 0) {
     blocks.push(section(buildFrictionWatchList(input.friction, WINDOW_DAYS)));
+    /**
+     * Every question's "end there" share as a bar, so the worst ones are seen
+     * against the rest. Same numbers as the sentence above (`sessionEnds`), so
+     * the tallest red bar is always the question the sentence names. People who
+     * finish are never counted, so the last screen is never a drop-off.
+     */
+    const ends = input.friction.ends ?? [];
+    const endsUrl =
+      ends.length > 1
+        ? await signedChartUrl(
+            {
+              windowLabel: chartWindow,
+              bars: ends.map((e) => ({ label: e.label, dropPct: e.pct })),
+              questions: ASKED_QUESTION_COUNT,
+            },
+            "dropout-funnel"
+          )
+        : null;
+    if (endsUrl) {
+      const worst = worstEnds(ends);
+      blocks.push({
+        type: "image",
+        image_url: endsUrl,
+        alt_text: `Where sessions end, by question. Highest: ${worst
+          .map((e) => `${e.label} ${Math.round(e.pct)}%`)
+          .join(", ")}.`,
+      });
+      /**
+       * The red bars' questions, in words, under the chart (agreed on the
+       * 2026-10-05 sync). Marcus could not tell which question a bar was; printing
+       * all 57 on the chart is clutter, so the chart numbers them and this names
+       * the ones that need a look, worst first.
+       */
+      if (worst.length > 0) {
+        blocks.push({
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: worst
+                .map((e) => `*${e.label}*  ${Math.round(e.pct)}%  ${escapeSlack(e.question ?? "")}`)
+                .join("\n"),
+            },
+          ],
+        });
+      }
+    }
   }
 
   /**
@@ -835,71 +984,50 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    * has seen this line.
    */
   if (cvrDays && cvrDays.length > 0) {
-    const site = buildSiteStartSeries(cvrDays);
-    const real = site.values.filter((v): v is number => v != null);
-    if (real.length > 0) {
-      /**
-       * Drawn by the ARM renderer in single-series mode, not by the sparkline
-       * one it started on. That renderer pinned its y-scale to the series' own
-       * max with no axis labels, which was measured: re-rendering the same shape
-       * at a tenth of the magnitude produced a byte-identical plot — a 6% rate
-       * and a 0.6% rate drew the same picture, and the only thing that moved was
-       * a 98x10px text readout. Three earlier commits fixed gridlines, tick
-       * alignment, the clipped peak and the rounding in the arm renderer and
-       * never touched the other one, so this metric was promoted onto the
-       * pre-audit code path.
-       *
-       * Nulls are passed straight through now: the arm renderer draws them as
-       * gaps, so the six warm-up days need no slicing and — the part that
-       * actually mattered — an interior null from a day with no visitors stays a
-       * gap instead of being flattened to a plotted 0%.
-       */
-      const latest = real[real.length - 1]!;
-      const peak = Math.max(...real);
-      const direction =
-        peak - latest >= 1
-          ? `, down from ${peak}% at its peak`
-          : latest - Math.min(...real) >= 1
-            ? `, up from ${Math.min(...real)}%`
-            : "";
-      const url = await signedChartUrl({
-        windowLabel,
-        labels: site.labels,
-        first: site.values,
-        // No `last` key at all: single-series mode. An all-null `last` would be a
-        // second arm with no data, which is a different statement.
+    blocks.push(
+      ...(await trendBlocks({
+        windowLabel: chartWindow,
         title: "Visits that reach the survey",
-        legendFirst: "Visits that reach the survey",
-        /**
-         * Slate, not the categorical blue. This is the site TOTAL, not an arm, and
-         * it sits two blocks above a chart where blue means Landing Page V1 — the
-         * same "follow the coloured line across two charts and you are following
-         * two different things" problem the per-arm colours were bound to fix.
-         * 10.35:1 on white.
-         */
-        colorFirst: "#334155",
-        headline: `${latest}% of visits reach the survey${direction}`,
+        series: buildSiteStartSeries(cvrDays),
+        headline: (latest) => `${latest}% of visits reach the survey`,
         footnote:
           "survey starts ÷ visits, over the 7 days to each point · a gap is a day with no visits",
-        emptyLabel: "Awaiting data — no visits recorded in this window yet.",
-      });
-      if (url) {
-        /**
-         * "Visits", as the funnel's top row says, not "visit-days": the line that
-         * defined that word is gone. And "over the last 7 days", not "7-day
-         * trailing" or "7-day average": each point pools seven days of starts
-         * over seven days of visits, which is not an average of seven daily rates.
-         */
-        blocks.push(
-          section(`*Visits that reach the survey*  ·  ${latest}% over the last 7 days${direction}.`)
-        );
-        blocks.push({
-          type: "image",
-          image_url: url,
-          alt_text: `Site-wide share of visits that reach the survey, over the 7 days to each point. Currently ${latest}%, peak ${peak}%.`,
-        });
-      }
-    }
+        alt: (latest, peak) =>
+          `Site-wide share of visits that reach the survey, over the 7 days to each point. Currently ${latest}%, peak ${peak}%.`,
+      }))
+    );
+
+    /**
+     * Paywall → payment, the step Marcus is working on, as a trend: is the share
+     * of people at the paywall who pay moving? The funnel above says how many
+     * over 30 days; this says which way it is going.
+     *
+     * SALES, not unlocks: money moved, our own tests excluded, counted per
+     * person. The same definition as break-even, so the two never disagree about
+     * what a sale is. Event days on both sides, so a sale two days after its
+     * paywall hit lands in a later week than the hit; over seven days that is
+     * noise, not bias.
+     */
+    blocks.push(
+      ...(await trendBlocks({
+        windowLabel: chartWindow,
+        title: "People at the paywall who pay",
+        series: buildTrailingSeries(
+          cvrDays,
+          (d) => d.purchased ?? 0,
+          (d) => d.paygate ?? 0,
+          // A fixed date, not the paywall read's first day: that read can fail
+          // while this one succeeds, and its first day is a partial one.
+          PAYGATE_MEASURED_FROM
+        ),
+        showCounts: true,
+        headline: (latest) => `${latest}% of people at the paywall paid`,
+        footnote:
+          "sales ÷ people who reached the paywall, over the 7 days to each point · a gap is a week with no paywall data",
+        alt: (latest, peak) =>
+          `Share of people at the paywall who paid, over the 7 days to each point. Currently ${latest}%, peak ${peak}%.`,
+      }))
+    );
   }
 
   /**
@@ -977,7 +1105,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const line = named
         .map((arm) => {
           const t = armTotal(arm)!;
-          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
+          return `• *${armLabel("landing", arm).short}*: ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
         })
         .join("\n");
       /**
@@ -993,7 +1121,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const unknown = armTotal("unknown");
       const unattributed =
         unknown && unknown.sessions > 0
-          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
+          ? `\n• _no landing page recorded_: ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
           : "";
       midwayBlocks.push(section(`*Midway progress, by landing page*\n${line}${unattributed}`));
 
@@ -1031,7 +1159,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       // "no one gets halfway".
       midwayBlocks.push(
         context(
-          `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)} — before that, drafts did not record which landing page the visitor came from.`
+          `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)}. Before that, drafts did not record which landing page the visitor came from.`
         )
       );
     }
@@ -1060,8 +1188,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const armLine = (arm: string) => {
       const label = armLabel("landing", arm).short;
       const row = totalFor(arm);
-      if (!row || row.visits === 0) return `• *${label}* — no visits recorded yet`;
-      return `• *${label}* — ${row.visits} visit-days → ${row.starts} started the survey`;
+      if (!row || row.visits === 0) return `• *${label}*: no visits recorded yet`;
+      return `• *${label}*: ${row.visits} visits → ${row.starts} started the survey`;
     };
     /**
      * Both directions, in one line. The step mismatch flatters V2; the all-page
@@ -1075,7 +1203,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * marketing's naming convention exists to retire.
      */
     const caveat =
-      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
+      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views. The two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
 
     if (landingIsLive && hasAny && series.labels.length > 1) {
@@ -1110,14 +1238,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         };
         landingStartBlocks.push(
           section(
-            `*Landing page → survey* — ${armLabel("landing", liveArms[0]).short} ${countOf(liveArms[0])} started · ${armLabel("landing", liveArms[1]).short} ${countOf(liveArms[1])}. ${caveat}`
+            `*Landing page → survey*: ${armLabel("landing", liveArms[0]).short} ${countOf(liveArms[0])} started · ${armLabel("landing", liveArms[1]).short} ${countOf(liveArms[1])}. ${caveat}`
           )
         );
         landingStartBlocks.push({
           type: "image",
           image_url: url,
           alt_text:
-            "Started-the-survey rate per landing page arm over the reporting window. A trend, not a verdict — the two arms measure different funnel steps.",
+            "Started-the-survey rate per landing page arm over the reporting window. A trend, not a verdict: the two arms measure different funnel steps.",
         });
       }
     } else if (!landingIsLive) {
@@ -1151,7 +1279,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        * "10 days of per-arm data" above two empty bullets.
        */
       landingStartBlocks.push(
-        section("*Landing page → survey* — no per-arm data in this window yet.")
+        section("*Landing page → survey*: no data per landing page in this window yet.")
       );
     } else {
       /**
@@ -1187,7 +1315,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       landingStartBlocks.push(
         section(
           [
-            `*Landing page → survey* — ${days === 1 ? "one day" : `${days} days`} of per-arm data${readyClause}`,
+            `*Landing page → survey*: ${days === 1 ? "one day" : `${days} days`} of data per landing page${readyClause}`,
             armLine(liveArms[0]),
             armLine(liveArms[1]),
             `• ${caveat}`,
@@ -1197,9 +1325,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     }
   } else {
     landingStartBlocks.push(
-      context(
-        "_Landing page → survey is not available right now — its data source did not answer._"
-      )
+      context("_Landing page → survey is not available right now: its data source did not answer._")
     );
   }
 
@@ -1296,7 +1422,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       // the emails got no clicks.
       blocks.push(
         context(
-          "Email A/B results start accumulating from this deploy — before it, the arm an email was sent with was never recorded anywhere."
+          "Email A/B results start accumulating from this deploy. Before it, the arm an email was sent with was never recorded anywhere."
         )
       );
     }

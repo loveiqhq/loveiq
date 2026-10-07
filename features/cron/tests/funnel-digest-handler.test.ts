@@ -14,9 +14,9 @@ import type {
   WeeklyMetrics,
   FunnelCvrSnapshot,
   BucketPerfSnapshot,
-  DropoutFunnelSnapshot,
   NurturePerfSnapshot,
 } from "@features/admin/server/digest-metrics";
+import type { SessionEnd } from "@features/admin/server/friction-metrics";
 
 const mockNotifySlack = vi.fn();
 const mockTryClaimSlackAlert = vi.fn();
@@ -61,9 +61,15 @@ vi.mock("@features/admin/server/digest-metrics", async () => {
     fetchWeeklyMetrics: (...args: unknown[]) => mockFetchWeeklyMetrics(...args),
     fetchFunnelCvrSparklines: (...args: unknown[]) => mockFetchCvr(...args),
     fetchBucketPerformance: (...args: unknown[]) => mockFetchBucket(...args),
-    fetchDropoutFunnel: (...args: unknown[]) => mockFetchDropout(...args),
     fetchNurturePerformance: (...args: unknown[]) => mockFetchNurture(...args),
   };
+});
+
+vi.mock("@features/admin/server/friction-metrics", async () => {
+  const actual = await vi.importActual<typeof import("@features/admin/server/friction-metrics")>(
+    "@features/admin/server/friction-metrics"
+  );
+  return { ...actual, fetchSessionEnds: (...args: unknown[]) => mockFetchDropout(...args) };
 });
 
 // Imported AFTER all vi.mock calls
@@ -195,13 +201,11 @@ const bucketSnap: BucketPerfSnapshot = {
     buckets: { a: { shown: 10, purchases: 2, revenue: 60 } },
   })),
 };
-const dropoutSnap: DropoutFunnelSnapshot = {
-  questions: [
-    { question_index: 0, q_id: "00000", sessions: 100 },
-    { question_index: 1, q_id: "00001", sessions: 80 },
-    { question_index: 2, q_id: "01002", sessions: 60 },
-  ],
-};
+const dropoutSnap: SessionEnd[] = [
+  { label: "Q1", pct: 20 },
+  { label: "Q2", pct: 25 },
+  { label: "Q3", pct: 3 },
+];
 const nurtureSnap: NurturePerfSnapshot = {
   stages: [{ stage: "6h_no_view", sent: 50, purchased: 3 }],
 };

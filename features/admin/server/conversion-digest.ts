@@ -510,7 +510,7 @@ export function buildArmVerdict(
       axis,
       axisTitle,
       state: "single-arm",
-      sentence: `${axisTitle}: only ${only.label} is running (${only.n} finished surveys, ${only.rate}% of them paid) — nothing to compare it against.`,
+      sentence: `${axisTitle}: only ${only.label} is running (${only.n} finished surveys, ${only.rate}% of them paid), so there is nothing to compare it against.`,
       arms,
     };
   }
@@ -551,7 +551,7 @@ export function buildArmVerdict(
       axis,
       axisTitle,
       state: "insufficient-data",
-      sentence: `${axisTitle}: not enough data yet — ${leader.n + runnerUp.n} finished surveys so far${needed > 0 ? `, about ${needed} more needed${where}` : ""}.`,
+      sentence: `${axisTitle}: not enough data yet, ${leader.n + runnerUp.n} finished surveys so far${needed > 0 ? `, about ${needed} more needed${where}` : ""}.`,
       arms,
     };
   }
@@ -561,7 +561,7 @@ export function buildArmVerdict(
       axis,
       axisTitle,
       state: "too-early",
-      sentence: `${axisTitle}: too early to compare — ${smallest.label} has only ${smallest.n} finished ${smallest.n === 1 ? "survey" : "surveys"} so far (needs ${TINY_ARM}). Far more people SAW it; this counts the ones who finished.`,
+      sentence: `${axisTitle}: too early to compare. ${smallest.label} has only ${smallest.n} finished ${smallest.n === 1 ? "survey" : "surveys"} so far (needs ${TINY_ARM}). Far more people SAW it; this counts the ones who finished.`,
       arms,
     };
   }
@@ -575,7 +575,7 @@ export function buildArmVerdict(
       axis,
       axisTitle,
       state: "insufficient-data",
-      sentence: `${axisTitle}: not enough purchases yet to compare — only ${totalConversions} across ${leader.n + runnerUp.n} finished surveys. Each side needs at least ${MIN_CELL_COUNT} before a comparison means anything.`,
+      sentence: `${axisTitle}: not enough purchases yet to compare: only ${totalConversions} across ${leader.n + runnerUp.n} finished surveys. Each side needs at least ${MIN_CELL_COUNT} before a comparison means anything.`,
       arms,
     };
   }
@@ -585,7 +585,7 @@ export function buildArmVerdict(
       axis,
       axisTitle,
       state: "no-winner",
-      sentence: `${axisTitle}: no clear winner yet — ${leader.label} is ahead (${leader.rate}% vs ${runnerUp.rate}%) but the gap could still be chance.`,
+      sentence: `${axisTitle}: no clear winner yet. ${leader.label} is ahead (${leader.rate}% vs ${runnerUp.rate}%), but the gap could still be chance.`,
       arms,
     };
   }
@@ -601,7 +601,7 @@ export function buildArmVerdict(
     axis,
     axisTitle,
     state: "winner",
-    sentence: `${axisTitle}: ${leader.label} is genuinely ahead — ${leader.rate}% vs ${runnerUp.rate}% (${formatSignalSummary(signal)}).`,
+    sentence: `${axisTitle}: ${leader.label} is genuinely ahead, ${leader.rate}% vs ${runnerUp.rate}% (${formatSignalSummary(signal)}).`,
     arms,
   };
 }

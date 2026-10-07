@@ -223,7 +223,7 @@ function verdictSentence(
 ): string {
   const signal = twoProportionSignal(bN, bConv, aN, aConv);
   if (signal.significance === "insufficient-data") {
-    return `Not enough to compare yet — each side needs at least ${MIN_CELL_COUNT} people reaching checkout.`;
+    return `Not enough to compare yet: each side needs at least ${MIN_CELL_COUNT} people reaching checkout.`;
   }
   /**
    * State the gap from the LEADER's side, whoever that is.
@@ -249,7 +249,7 @@ function verdictSentence(
         ciHigh: signal.ciLow == null ? null : -signal.ciLow,
       };
   if (signal.significance === "inconclusive") {
-    return `No clear winner yet — ${leader} is ahead but the gap could still be chance (${formatSignalSummary(oriented)}).`;
+    return `No clear winner yet: ${leader} is ahead, but the gap could still be chance (${formatSignalSummary(oriented)}).`;
   }
   return `${leader} is genuinely ahead (${formatSignalSummary(oriented)}).`;
 }
@@ -259,7 +259,7 @@ function verdictShort(aN: number, aConv: number, bN: number, bConv: number): str
   const signal = twoProportionSignal(bN, bConv, aN, aConv);
   if (signal.significance === "insufficient-data") return "too early to call";
   if (signal.significance === "inconclusive") return "no clear winner yet";
-  return "a real difference — see /admin";
+  return "a real difference, see /admin";
 }
 
 type ArmTotals = { arm: string; completions: number; checkouts: number; paid: number };
@@ -278,7 +278,7 @@ function countsFor(
 ): AxisCounts {
   const since = validFrom ? `since ${human(validFrom)} · ` : "";
   const armLine = (t: ArmTotals) =>
-    `• *${armLabel(axis, t.arm).short}* — ${t.completions} finished → ${t.checkouts} checkout → ${t.paid} paid`;
+    `• *${armLabel(axis, t.arm).short}*: ${t.completions} finished → ${t.checkouts} checkout → ${t.paid} paid`;
   return {
     axis,
     axisTitle,
@@ -287,7 +287,7 @@ function countsFor(
     // sentence, why the window starts where it does, what a trailing rate needs —
     // was explanation of an absence rather than information.
     text: [
-      `*${axisTitle}* — ${since}${verdictShort(a.completions, a.checkouts, b.completions, b.checkouts)} · ${reason}`,
+      `*${axisTitle}* · ${since}${verdictShort(a.completions, a.checkouts, b.completions, b.checkouts)} · ${reason}`,
       armLine(a),
       armLine(b),
     ].join("\n"),
@@ -372,7 +372,7 @@ export function buildAxisTrends(
         axisTitle,
         // "only" belongs INSIDE the one-arm branch. Hoisted out it produced
         // "no chart yet: only no arms have data" on the zero-arm path.
-        caption: `*${axisTitle}* — no chart yet: ${
+        caption: `*${axisTitle}*: no chart yet, ${
           arms.length === 1
             ? `only ${armLabel(axis, arms[0]!.arm).short} has data`
             : "no arm has data"
@@ -436,11 +436,11 @@ export function buildAxisTrends(
       arms: [a.arm, b.arm],
       legendFirst: aLabel,
       legendLast: bLabel,
-      title: `${axisTitle} — reached checkout per finished survey`,
+      title: `${axisTitle}: reached checkout per finished survey`,
       labels: [],
       headline: `${aLabel} ${a.checkouts}/${a.completions} = ${aRate}%  ·  ${bLabel} ${b.checkouts}/${b.completions} = ${bRate}%`,
       footnote: `7-day trailing rate · a gap means no finished surveys that day${validFrom ? ` · from ${human(validFrom)}` : ""}`,
-      caption: `*${axisTitle}* — ${aLabel} ${aRate}% (${a.checkouts}/${a.completions}) to checkout, ${a.paid} paid · ${bLabel} ${bRate}% (${b.checkouts}/${b.completions}), ${b.paid} paid. ${verdictSentence(aLabel, a.completions, a.checkouts, bLabel, b.completions, b.checkouts)}`,
+      caption: `*${axisTitle}*: ${aLabel} ${aRate}% (${a.checkouts}/${a.completions}) to checkout, ${a.paid} paid · ${bLabel} ${bRate}% (${b.checkouts}/${b.completions}), ${b.paid} paid. ${verdictSentence(aLabel, a.completions, a.checkouts, bLabel, b.completions, b.checkouts)}`,
     });
   }
 
