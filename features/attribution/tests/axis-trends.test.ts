@@ -222,7 +222,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
     expect(trends.skipped.map((s) => s.axis)).not.toContain("landing");
     const young = trends.counts.find((c) => c.axis === "landing")!;
     // Glance line, then both arms' raw counts, never a rate.
-    expect(young.text).toContain("*Landing page design* — since 21 Aug");
+    expect(young.text).toContain("*Landing page design* · since 21 Aug");
     expect(young.text).toContain("90 finished → 15 checkout → 0 paid");
     // It must say how much data there is, why the window starts where it does,
     // and when the chart will appear — not just "not enough data".

@@ -716,7 +716,14 @@ describe("conversion-digest handler", () => {
     expect(flat).toContain("Landing page test concluded");
     // The friction table's footnote is guarded in friction-metrics.test.ts: that
     // section needs a database this suite does not mock, so it is absent here.
-    for (const jargon of ["visitor-days", "visit-days", "no end date", "trailing", "per-arm"]) {
+    for (const jargon of [
+      "visitor-days",
+      "visit-days",
+      "no end date",
+      "trailing",
+      "per-arm",
+      " — ",
+    ]) {
       expect(flat, `"${jargon}" is back in the daily message`).not.toContain(jargon);
     }
   });
@@ -1618,7 +1625,7 @@ describe("conversion-digest handler", () => {
     ) as { text: { text: string } } | undefined;
     expect(block).toBeDefined();
     expect(block!.text.text.split("\n")).toHaveLength(1);
-    expect(block!.text.text).toContain("no per-arm data in this window yet");
+    expect(block!.text.text).toContain("no data per landing page in this window yet");
     expect(block!.text.text).not.toContain("no visits recorded yet");
   });
 
@@ -1639,11 +1646,11 @@ describe("conversion-digest handler", () => {
     });
     const blocks = await landingLiveBlocks();
     const text = blockText(blocks);
-    expect(text).toContain("*Landing page → survey* — one day of per-arm data");
+    expect(text).toContain("*Landing page → survey*: one day of data per landing page");
     // first day + 7, not +6: 20 Aug -> 27 Aug.
     expect(text).toContain("chart from 27 Aug");
-    expect(text).toContain("80 visit-days → 13 started the survey");
-    expect(text).toContain("64 visit-days → 10 started the survey");
+    expect(text).toContain("80 visits → 13 started the survey");
+    expect(text).toContain("64 visits → 10 started the survey");
     expect(text).toContain("Not a like-for-like comparison");
     // No trend image while it cannot honestly draw one.
     expect(trendImages(blocks)).toHaveLength(0);
@@ -1671,6 +1678,8 @@ describe("conversion-digest handler", () => {
     expect(text).toContain("21 finished → 3 checkout → 0 paid");
     expect(text).toContain("18 finished → 6 checkout → 0 paid");
     expect(text).toMatch(/chart (from|once)/);
+    // Mark bans the em dash in copy; these were the lines that still carried one.
+    expect(text, "an em dash in the message").not.toContain("—");
     // And no image was emitted for it — the whole point of the counts path.
     const imgs = blocks.filter((b) =>
       (b as { alt_text?: string }).alt_text?.startsWith("Landing page")
@@ -1867,7 +1876,7 @@ describe("conversion-digest handler", () => {
 
     // No per-arm headline, no per-arm chart, no verdict.
     expect(json).not.toContain("Landing page → survey");
-    expect(json).not.toContain("visit-days →");
+    expect(json).not.toContain("visits → ");
     expect(json).not.toContain("genuinely ahead");
     expect(json).not.toContain("no clear winner yet");
     const landingCharts = landingChartPayloads(arg.blocks);

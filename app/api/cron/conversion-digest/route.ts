@@ -681,7 +681,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   if (cohorts === null) {
     blocks.push(
-      section("*Could not read the experiment data* — a measurement failure, not a result.")
+      section("*Could not read the experiment data.* A measurement failure, not a result.")
     );
   }
 
@@ -1105,7 +1105,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const line = named
         .map((arm) => {
           const t = armTotal(arm)!;
-          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
+          return `• *${armLabel("landing", arm).short}*: ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
         })
         .join("\n");
       /**
@@ -1121,7 +1121,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const unknown = armTotal("unknown");
       const unattributed =
         unknown && unknown.sessions > 0
-          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
+          ? `\n• _no landing page recorded_: ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
           : "";
       midwayBlocks.push(section(`*Midway progress, by landing page*\n${line}${unattributed}`));
 
@@ -1159,7 +1159,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       // "no one gets halfway".
       midwayBlocks.push(
         context(
-          `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)} — before that, drafts did not record which landing page the visitor came from.`
+          `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)}. Before that, drafts did not record which landing page the visitor came from.`
         )
       );
     }
@@ -1188,8 +1188,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const armLine = (arm: string) => {
       const label = armLabel("landing", arm).short;
       const row = totalFor(arm);
-      if (!row || row.visits === 0) return `• *${label}* — no visits recorded yet`;
-      return `• *${label}* — ${row.visits} visit-days → ${row.starts} started the survey`;
+      if (!row || row.visits === 0) return `• *${label}*: no visits recorded yet`;
+      return `• *${label}*: ${row.visits} visits → ${row.starts} started the survey`;
     };
     /**
      * Both directions, in one line. The step mismatch flatters V2; the all-page
@@ -1203,7 +1203,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * marketing's naming convention exists to retire.
      */
     const caveat =
-      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
+      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views. The two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
 
     if (landingIsLive && hasAny && series.labels.length > 1) {
@@ -1238,14 +1238,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         };
         landingStartBlocks.push(
           section(
-            `*Landing page → survey* — ${armLabel("landing", liveArms[0]).short} ${countOf(liveArms[0])} started · ${armLabel("landing", liveArms[1]).short} ${countOf(liveArms[1])}. ${caveat}`
+            `*Landing page → survey*: ${armLabel("landing", liveArms[0]).short} ${countOf(liveArms[0])} started · ${armLabel("landing", liveArms[1]).short} ${countOf(liveArms[1])}. ${caveat}`
           )
         );
         landingStartBlocks.push({
           type: "image",
           image_url: url,
           alt_text:
-            "Started-the-survey rate per landing page arm over the reporting window. A trend, not a verdict — the two arms measure different funnel steps.",
+            "Started-the-survey rate per landing page arm over the reporting window. A trend, not a verdict: the two arms measure different funnel steps.",
         });
       }
     } else if (!landingIsLive) {
@@ -1279,7 +1279,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        * "10 days of per-arm data" above two empty bullets.
        */
       landingStartBlocks.push(
-        section("*Landing page → survey* — no per-arm data in this window yet.")
+        section("*Landing page → survey*: no data per landing page in this window yet.")
       );
     } else {
       /**
@@ -1315,7 +1315,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       landingStartBlocks.push(
         section(
           [
-            `*Landing page → survey* — ${days === 1 ? "one day" : `${days} days`} of per-arm data${readyClause}`,
+            `*Landing page → survey*: ${days === 1 ? "one day" : `${days} days`} of data per landing page${readyClause}`,
             armLine(liveArms[0]),
             armLine(liveArms[1]),
             `• ${caveat}`,
@@ -1325,9 +1325,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     }
   } else {
     landingStartBlocks.push(
-      context(
-        "_Landing page → survey is not available right now — its data source did not answer._"
-      )
+      context("_Landing page → survey is not available right now: its data source did not answer._")
     );
   }
 
@@ -1424,7 +1422,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       // the emails got no clicks.
       blocks.push(
         context(
-          "Email A/B results start accumulating from this deploy — before it, the arm an email was sent with was never recorded anywhere."
+          "Email A/B results start accumulating from this deploy. Before it, the arm an email was sent with was never recorded anywhere."
         )
       );
     }

@@ -86,7 +86,7 @@ describe("buildSurveySignals", () => {
     );
     const drop = find(sigs, "Where sessions end");
     expect(drop?.value).toBe("21%");
-    expect(drop?.where).toBe(`${qn("00000")} — What is your email?`);
+    expect(drop?.where).toBe(`${qn("00000")}: What is your email?`);
     expect(drop?.status).toBe("watch");
   });
 

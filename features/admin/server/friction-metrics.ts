@@ -158,7 +158,7 @@ async function fetchFrictionSnapshot(
 /** Human question label. `question_index` is 0-based; readers count from 1. */
 function qLabel(index: number, qId: string, names: Map<string, string>): string {
   const name = names.get(qId);
-  return name ? `Q${index + 1} — ${name}` : `Q${index + 1}`;
+  return name ? `Q${index + 1}: ${name}` : `Q${index + 1}`;
 }
 
 /** The same question for a sentence: "Q58 (What is your email?)". */
@@ -184,7 +184,7 @@ const ASKED_POSITION = new Map(
 );
 
 /**
- * How many questions the survey asks today: 57 since 2026-09-11. Not the length
+ * How many questions the survey asks today: 62 on 2026-10-07. Not the length
  * of survey-data.ts, which still holds the question that stopped being asked.
  * Printed on the drop-off chart, so nobody has to count bars to know it.
  */

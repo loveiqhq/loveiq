@@ -779,7 +779,7 @@ export function renderLongitudinal(p: LongitudinalPayload): {
           shares it. */}
       <div style={{ display: "flex", marginTop: 6, fontSize: 12, color: COLORS.textMuted }}>
         {isRate
-          ? `left: % ${liveRows.length > 1 ? "— one scale for every row, so the rows compare" : "of the group named on the left"}${hasXAxis ? " · bottom: date" : ""}`
+          ? `left: % ${liveRows.length > 1 ? "(one scale for every row, so the rows compare)" : "of the group named on the left"}${hasXAxis ? " · bottom: date" : ""}`
           : `left: people${hasXAxis ? " · bottom: date" : ""}`}
       </div>
     </div>,
@@ -1361,7 +1361,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
     typeof v === "string" && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v) ? v : fallback;
   const colFirst = asHex(p.colorFirst, COLORS.accentBlue);
   const colLast = asHex(p.colorLast, COLORS.accentOrange);
-  const title = p.title ?? "Where users quit by arm — email first vs last";
+  const title = p.title ?? "Where users quit by arm: email first vs last";
   const unit = p.unit === "" ? "" : "%";
   const withUnit = (v: number) => `${fmtAxis(v)}${unit}`;
   const n = Math.max(first.length, last.length);
@@ -1378,7 +1378,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
         title,
         p.windowLabel ?? "",
         <div style={{ display: "flex", color: COLORS.textMuted, fontSize: 18, padding: 24 }}>
-          {p.emptyLabel ?? "Awaiting data — not enough per-arm traffic in this window yet."}
+          {p.emptyLabel ?? "Awaiting data: not enough traffic per arm in this window yet."}
         </div>
       ),
       height: HEIGHT,
@@ -1604,7 +1604,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
   const carried: string[] = [];
   if (hasFirst && !showFirstLabel) carried.push(`${shortFirst} ${withUnit(endFirst)}`);
   if (hasLast && !showLastLabel) carried.push(`${shortLast} ${withUnit(endLast)}`);
-  const footnote = carried.length > 0 ? `${carried.join(" · ")} — ${footnoteBase}` : footnoteBase;
+  const footnote = carried.length > 0 ? `${carried.join(" · ")} · ${footnoteBase}` : footnoteBase;
 
   const element = chartShell(
     title,
@@ -1617,8 +1617,8 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
         {/* A single series is named by the title, so it gets no legend at all —
             two swatches for one line is the "(unused) — no data yet" row this
             renderer produced the first time it was handed one series. */}
-        {!solo && swatch(colFirst, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
-        {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast} — no data yet`)}
+        {!solo && swatch(colFirst, hasFirst ? legendFirst : `${legendFirst}: no data yet`)}
+        {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast}: no data yet`)}
       </div>
 
       {/* ONE coordinate system for the whole plot: axis labels, gridlines, lines,
@@ -1735,12 +1735,12 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
       >
         {p.headline ??
           (solo
-            ? `Latest — ${withUnit(endFirst)}`
+            ? `Latest: ${withUnit(endFirst)}`
             : hasFirst && hasLast
-              ? `Latest — ${withUnit(endFirst)} vs ${withUnit(endLast)}`
+              ? `Latest: ${withUnit(endFirst)} vs ${withUnit(endLast)}`
               : hasFirst
-                ? `Latest — ${withUnit(endFirst)} (${shortLast}: no data yet)`
-                : `Latest — ${withUnit(endLast)} (${shortFirst}: no data yet)`)}
+                ? `Latest: ${withUnit(endFirst)} (${shortLast}: no data yet)`
+                : `Latest: ${withUnit(endLast)} (${shortFirst}: no data yet)`)}
       </div>
       <div style={{ display: "flex", marginTop: 5, fontSize: 12, color: COLORS.textMuted }}>
         {footnote}
