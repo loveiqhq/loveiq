@@ -358,14 +358,24 @@ export async function fetchLandingStartFunnel(
  * digest omits the row until the migration is applied rather than failing the
  * whole send.
  */
+/**
+ * `finished`: how many of `reached` are finished surveys rather than drafts. Present
+ * since migration 20261007190000, which counts a finished survey (it has no draft any
+ * more) as a session that reached every question; absent from the function before it,
+ * when `sessions` and `reached` held drafts only.
+ */
 export interface MidwayProgress {
-  overall: { sessions: number; reached: number };
-  daily: Array<{ day: string; arm: string; sessions: number; reached: number }>;
-  totals: Array<{ arm: string; sessions: number; reached: number }>;
+  overall: { sessions: number; reached: number; finished?: number };
+  daily: Array<{ day: string; arm: string; sessions: number; reached: number; finished?: number }>;
+  totals: Array<{ arm: string; sessions: number; reached: number; finished?: number }>;
   midwayIndex: number;
   /** First day drafts carried an arm. Days before it are ABSENT, never zero. */
   firstArmDay: string | null;
 }
+
+/** `finished` only when the function returned it, so its absence stays visible. */
+const finishedOf = (r: Record<string, unknown>): { finished?: number } =>
+  r.finished === undefined ? {} : { finished: int(r.finished) };
 
 export async function fetchMidwayProgress(
   sinceIso: string,
@@ -404,7 +414,13 @@ export async function fetchMidwayProgress(
       const day = str(r.day);
       const arm = str(r.arm);
       if (!day || !arm) continue;
-      daily.push({ day, arm, sessions: int(r.sessions), reached: int(r.reached) });
+      daily.push({
+        day,
+        arm,
+        sessions: int(r.sessions),
+        reached: int(r.reached),
+        ...finishedOf(r),
+      });
     }
     const totals: MidwayProgress["totals"] = [];
     for (const row of Array.isArray(raw.totals) ? raw.totals : []) {
@@ -412,11 +428,11 @@ export async function fetchMidwayProgress(
       const r = row as Record<string, unknown>;
       const arm = str(r.arm);
       if (!arm) continue;
-      totals.push({ arm, sessions: int(r.sessions), reached: int(r.reached) });
+      totals.push({ arm, sessions: int(r.sessions), reached: int(r.reached), ...finishedOf(r) });
     }
 
     return {
-      overall: { sessions: int(o.sessions), reached: int(o.reached) },
+      overall: { sessions: int(o.sessions), reached: int(o.reached), ...finishedOf(o) },
       daily,
       totals,
       // Echoed back by the RPC. Trusting the REQUEST's number here would let the

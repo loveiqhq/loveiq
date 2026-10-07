@@ -1023,7 +1023,7 @@ describe("conversion-digest handler", () => {
     expect(flat).toContain("Landing Page V2 (Survey in Hero, before V3)");
     expect(flat).not.toContain("white_prev");
     // The counts are named, not bare percentages.
-    expect(flat).toContain("224 of 420 drafts reached question 30");
+    expect(flat).toContain("224 of 420 surveys reached question 30");
 
     // And the trend chart is drawn, in each arm's own colour.
     const midwayChart = blocks
@@ -1078,7 +1078,7 @@ describe("conversion-digest handler", () => {
 
     // The counts ARE worth printing.
     expect(flat).toContain("Midway progress, by landing page");
-    expect(flat).toContain("48 of 90 drafts reached question 30");
+    expect(flat).toContain("48 of 90 surveys reached question 30");
     // The chart is not.
     const titles = blocks
       .map((b) => (b as { image_url?: string }).image_url)
@@ -1152,7 +1152,7 @@ describe("conversion-digest handler", () => {
     const blocks = await landingLiveBlocks();
     const flat = blockText(blocks);
     expect(flat).toContain("no landing page recorded");
-    expect(flat).toContain("61 of 104 drafts");
+    expect(flat).toContain("61 of 104 surveys");
     // 476 + 420 + 104 = 1000 = overall.sessions, and every part is on screen.
   });
 
@@ -1849,7 +1849,7 @@ describe("conversion-digest handler", () => {
     // round 3's. The funnel's own midway row stays: it was never split by arm.
     expect(json).toContain("Midway (question 30)");
     expect(json).not.toContain("Midway progress");
-    expect(json).not.toContain("drafts reached question");
+    expect(json).not.toContain("surveys reached question");
     // And no "concluded" notice: the test is running.
     expect(json).not.toContain("Landing page test concluded");
   });
@@ -1941,6 +1941,43 @@ describe("conversion-digest handler", () => {
       expect(failedDrafts).not.toContain("what this test is decided on");
       const failedCohorts = await build({ cohorts: null });
       expect(failedCohorts).toContain("Survey starts per visit is not available today");
+    });
+
+    /**
+     * Migration 20261007190000: get_midway_progress_daily counts finished surveys itself
+     * (a submit deletes the draft, so they were missing) and says how many. `reached` is
+     * then the whole count, and adding the cohort's finishers again would count them
+     * twice. Same numbers as above, so the line must not move.
+     */
+    const withFinished = {
+      ...startsPastFirst,
+      overall: { sessions: 310, reached: 130, finished: 10 },
+      totals: [
+        { arm: "white_card", sessions: 64, reached: 24, finished: 4 },
+        { arm: "white_video", sessions: 76, reached: 31, finished: 6 },
+        { arm: "white", sessions: 170, reached: 75, finished: 0 },
+      ],
+    };
+
+    it("reads finished surveys from the migrated function once, not twice", async () => {
+      const text = await build({ startsPastFirst: withFinished });
+      expect(text).toContain(`${card} 24 of 280 visits (8.6%: 20 past question one, 4 finished)`);
+      expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
+    });
+
+    it("takes the finishers from the function, so it needs no cohort and ignores a different one", async () => {
+      const noCohorts = await build({ startsPastFirst: withFinished, cohorts: null });
+      expect(noCohorts).not.toContain("not available today");
+      expect(noCohorts).toContain(
+        `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
+      );
+      const otherCohorts = await build({
+        startsPastFirst: withFinished,
+        cohorts: [{ axis: "landing" as const, arm: "white_video", n: 99, conversions: 0 }],
+      });
+      expect(otherCohorts).toContain(
+        `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
+      );
     });
 
     it("says an arm has no visits rather than printing 0% beside it", async () => {

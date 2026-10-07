@@ -1759,9 +1759,11 @@ export const TOOLS = [
       "anything shipped since is not in the picture. A page that is not on the list has no " +
       "screenshot, which is a gap in what was captured and not a page that looks like " +
       "nothing. " +
-      "The landing page appears TWICE: `landing-white` is the one every visitor gets, and " +
-      "`landing-white-prev` is the design retired on 2026-09-19 (the A/B ended; it opens " +
-      "only with ?variant=white_prev). Critique the live one unless asked to compare.",
+      "The landing page has a live A/B test on its hero: `landing-white` is arm A (question 1 " +
+      "in the hero) and `landing-white-video` arm B (the intro video in that slot), each " +
+      "shown to half of visitors; the `-mobile` shots are the same arms on a phone. " +
+      "`landing-white-prev` is round 2's design, retired on 2026-09-19 (it opens only with " +
+      "?variant=white_prev). Critique the live arms unless asked to compare.",
     inputSchema: {
       type: "object",
       properties: {

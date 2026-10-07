@@ -461,8 +461,8 @@ interface DigestInput {
   /**
    * Treat these axes as live, retired arms included.
    *
-   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing` alone, since
-   * `landing` concluded on 2026-09-19.
+   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing`, and `landing`
+   * for its round 3 (round 2 concluded on 2026-09-19).
    *
    * ONE field, not an axis list plus a retired-arms flag, because those two can
    * disagree and a message has to have a single answer to "what is running". An
@@ -1017,7 +1017,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const line = named
         .map((arm) => {
           const t = armTotal(arm)!;
-          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
+          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} surveys reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
         })
         .join("\n");
       /**
@@ -1033,7 +1033,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const unknown = armTotal("unknown");
       const unattributed =
         unknown && unknown.sessions > 0
-          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
+          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} surveys (${computeRate(unknown.reached, unknown.sessions)}%)`
           : "";
       midwayBlocks.push(section(`*Midway progress, by landing page*\n${line}${unattributed}`));
 
@@ -1048,7 +1048,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           labels: series.labels,
           first: series.first,
           last: series.last,
-          title: `Drafts reaching question ${midway.midwayIndex}, by landing page`,
+          title: `Surveys reaching question ${midway.midwayIndex}, by landing page`,
           legendFirst: armLabel("landing", landingArms[0]).short,
           legendLast: armLabel("landing", landingArms[1]).short,
           colorFirst: armColor("landing", landingArms[0]),
@@ -1059,13 +1059,13 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
                 `${armLabel("landing", a).short} ${armTotal(a)!.reached}/${armTotal(a)!.sessions}`
             )
             .join("  ·  "),
-          footnote: `reached ÷ drafts saved, 7-day trailing · peak {peak}%`,
+          footnote: `reached ÷ surveys started (finished ones included), 7-day trailing · peak {peak}%`,
         });
         if (url) {
           midwayBlocks.push({
             type: "image",
             image_url: url,
-            alt_text: `Share of survey drafts reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
+            alt_text: `Share of surveys reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
           });
         }
       }
@@ -1255,8 +1255,19 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      *
      * Counts and rates only. The verdict is taken once, at the decision date in the
      * experiment registry, not re-taken every morning.
+     *
+     * Since migration 20261007190000 get_midway_progress_daily counts the finished
+     * surveys itself, each session once, and says how many (`finished`): `reached` is
+     * then the whole count. Before it, `reached` held drafts only and the finishers
+     * came from the submission cohort, which is still how a function without
+     * `finished` is read, so the order the code and the migration ship in cannot
+     * double-count the finishers or drop them.
      */
-    if (landingIsLive && (input.startsPastFirst === null || cohorts === null)) {
+    const countsFinished = input.startsPastFirst?.overall.finished !== undefined;
+    if (
+      landingIsLive &&
+      (input.startsPastFirst === null || (!countsFinished && cohorts === null))
+    ) {
       // A failed read says so. Without this line the deciding number simply vanished
       // for the day, which reads as "nothing to decide on yet", not "we could not read it".
       landingStartBlocks.push(
@@ -1264,15 +1275,22 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           "_Survey starts per visit is not available today — one of its data sources did not answer._"
         )
       );
-    } else if (landingIsLive && input.startsPastFirst && cohorts) {
+    } else if (landingIsLive && input.startsPastFirst) {
       const pastFirst = input.startsPastFirst;
-      const perArm = liveArms.map((arm) => ({
-        arm,
-        visits: totalFor(arm)?.visits ?? 0,
-        // An arm with no draft past question one has no row, so zero is the true count.
-        drafts: pastFirst.totals.find((t) => t.arm === arm)?.reached ?? 0,
-        finished: cohorts.find((c) => c.axis === "landing" && c.arm === arm)?.n ?? 0,
-      }));
+      const perArm = liveArms.map((arm) => {
+        // An arm with no survey past question one has no row, so zero is the true count.
+        const row = pastFirst.totals.find((t) => t.arm === arm);
+        const reached = row?.reached ?? 0;
+        const finished = countsFinished
+          ? (row?.finished ?? 0)
+          : (cohorts?.find((c) => c.axis === "landing" && c.arm === arm)?.n ?? 0);
+        return {
+          arm,
+          visits: totalFor(arm)?.visits ?? 0,
+          drafts: countsFinished ? reached - finished : reached,
+          finished,
+        };
+      });
       if (perArm.some((a) => a.visits > 0)) {
         // Both halves of each count are printed, so a half that went missing shows as a
         // zero beside the other instead of quietly lowering the total.

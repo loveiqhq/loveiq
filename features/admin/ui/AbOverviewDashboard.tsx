@@ -362,8 +362,8 @@ export function AbOverviewView({
             ))}
           </div>
         ) : (
-          // A heading over an empty grid reads as a loading failure. Nothing has
-          // been randomised since the landing test concluded on 19 Sep 2026.
+          // A heading over an empty grid reads as a loading failure. Shown only when
+          // no axis is live (LIVE_AXES in experiment-readouts.ts).
           <p className="rounded-xl border border-white/10 bg-surface p-5 text-sm text-text-muted">
             Nothing is being tested right now. Every version we were comparing has been settled —
             the results are below.

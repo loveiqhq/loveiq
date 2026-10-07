@@ -534,13 +534,8 @@ describe("the compact incoming-survey layout", () => {
     const types = (message.blocks as Array<{ type: string }>).map((b) => b.type);
     expect(types).toContain("header");
     expect(types).toContain("context");
-    /**
-     * No "Experiments they were in" section, because there is no experiment.
-     * The landing axis concluded 2026-09-19 and was the last one randomised, so
-     * this heading would sit over a `section` with `fields: []` — which Slack
-     * rejects outright, failing the whole message rather than the block.
-     */
-    expect(JSON.stringify(message.blocks)).not.toContain("Experiments they were in");
+    // The landing test (round 3) is live, so the buyer's landing version is listed.
+    expect(JSON.stringify(message.blocks)).toContain("Experiments they were in");
     // And no dwell line leaked across.
     expect(JSON.stringify(message.blocks)).not.toContain("Report time");
   });
@@ -557,7 +552,8 @@ describe("pricing arm — the Pricing 3.0 test", () => {
     JSON.stringify(
       buildJourneyMessage(
         journey({
-          arms: { landing: "white", survey: "white", pricing, paywall: null },
+          // A live landing arm, so "retired arm" below can only be the pricing one.
+          arms: { landing: "white_card", survey: "white", pricing, paywall: null },
           money: { plan: "all_reports", amount: 39.99, currency: "EUR" },
           milestones: { ...journey().milestones, purchasedAt: "2026-10-06T19:10:00.000Z" },
         }),
@@ -588,10 +584,52 @@ describe("pricing arm — the Pricing 3.0 test", () => {
   it("shows no pricing row before the report has quoted a price", () => {
     const text = purchase(null);
     expect(text).not.toContain("Report pricing");
-    // Nor the concluded landing test, so no experiments block at all: never a heading
-    // over an empty field list, which Slack rejects.
-    expect(text).not.toContain("Landing page design");
-    expect(text).not.toContain("Experiments they were in");
+    // The live landing row stays, so the heading never sits over an empty field list,
+    // which Slack rejects.
+    expect(text).toContain("Experiments they were in");
+    expect(text).toContain("*Landing page design*");
+  });
+});
+
+describe("landing arm — round 3 of the landing test", () => {
+  /**
+   * The landing test is live again (V2's question card vs V3's hero video), and a
+   * purchase is where it pays off, so the buyer's message says which version they came
+   * through. Round 2 left this message when it concluded on 2026-09-19; round 3 put it
+   * back. A stamp from before round 3 still reads, marked as retired.
+   */
+  const purchase = (landing: string | null, pricing: string | null = "B3") =>
+    JSON.stringify(
+      buildJourneyMessage(
+        journey({
+          arms: { landing, survey: null, pricing, paywall: null },
+          money: { plan: "all_reports", amount: 19.99, currency: "EUR" },
+          milestones: { ...journey().milestones, purchasedAt: "2026-10-08T10:00:00.000Z" },
+        }),
+        {
+          kind: "purchase",
+          planLabel: "All 14 Archetype Reports",
+          archetype: null,
+          amountText: "EUR 19.99",
+        }
+      ).blocks
+    );
+
+  it("names the version a buyer came through, above the pricing arm", () => {
+    const video = purchase("white_video");
+    expect(video).toContain("*Landing page design*\\nLanding Page V3 (Video in Hero)");
+    expect(video).not.toContain("retired arm");
+    expect(video.indexOf("Landing page design")).toBeLessThan(video.indexOf("Report pricing"));
+    expect(purchase("white_card")).toContain(
+      "*Landing page design*\\nLanding Page V2 (Survey in Hero)"
+    );
+  });
+
+  it("keeps the row when nothing was recorded, and marks an earlier round's stamp", () => {
+    expect(purchase(null)).toContain("*Landing page design*\\nNot recorded");
+    expect(purchase("white")).toContain(
+      "Landing Page V2 (Survey in Hero, before V3) _(retired arm)_"
+    );
   });
 });
 

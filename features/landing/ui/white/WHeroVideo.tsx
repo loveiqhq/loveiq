@@ -108,6 +108,9 @@ const WHeroVideo: FC = () => {
   const pausedByViewerRef = useRef(false);
   const startTimerRef = useRef<number | undefined>(undefined);
   const previewErrorSentRef = useRef(false);
+  // Set when the video had focus as it handed back to the poster: the button it returns
+  // focus to exists only once that render has committed.
+  const refocusButtonRef = useRef(false);
 
   const moveTo = useCallback((next: Phase) => {
     phaseRef.current = next;
@@ -120,6 +123,12 @@ const WHeroVideo: FC = () => {
   }, []);
 
   useEffect(() => clearStartTimer, [clearStartTimer]);
+
+  useEffect(() => {
+    if (phase !== "preview" || !refocusButtonRef.current) return;
+    refocusButtonRef.current = false;
+    buttonRef.current?.focus({ preventScroll: true });
+  }, [phase]);
 
   /** Once per page: a broken loop file or codec. A blocked autoplay never gets here. */
   const reportPreviewError = useCallback((reason: string) => {
@@ -174,6 +183,23 @@ const WHeroVideo: FC = () => {
   }, [previewOn, syncPreview]);
 
   /**
+   * The full video as it was before the first tap: no source, nothing loading, no error.
+   *
+   * A media element that has failed keeps its error, and play() on it then rejects at
+   * once (NotSupportedError, in Chrome, Safari and Firefox alike), so without this the
+   * button came back after a dropped connection and every later tap failed. One given up
+   * on by the timeout would also keep downloading, and could start later, with sound,
+   * behind the poster. The next tap names the file again, exactly like the first.
+   */
+  const resetFull = () => {
+    const full = fullRef.current;
+    if (!full) return;
+    full.pause();
+    full.removeAttribute("src");
+    full.load();
+  };
+
+  /**
    * A start that will not play: back to the poster and an enabled button, so a second
    * tap can try again, and one event saying why. Acts only while starting, so the
    * several signals one failure can raise (a rejection, `pause`, `error`) count once.
@@ -181,12 +207,24 @@ const WHeroVideo: FC = () => {
   const failStart = (reason: string) => {
     if (phaseRef.current !== "starting") return;
     clearStartTimer();
-    // Given up on by the timeout it may still be loading, and must not start later,
-    // with sound, behind the poster. Already paused, this does nothing.
-    fullRef.current?.pause();
+    resetFull();
+    // The button is disabled while it starts, and a focused control that is disabled
+    // loses focus to the page (measured: Chrome, Safari and Firefox), so a keyboard
+    // user who pressed Watch was left at the top of the page. Back on the button,
+    // unless they have moved on to something else meanwhile.
+    const active = document.activeElement;
+    refocusButtonRef.current = !active || active === document.body || active === buttonRef.current;
     moveTo("preview");
     syncPreview();
     trackHeroVideoError({ video: "full", reason });
+  };
+
+  /** Back to the poster and the button, handing focus back if the video had it. */
+  const backToPoster = (full: WebkitVideo) => {
+    refocusButtonRef.current = document.activeElement === full;
+    exitFullscreen(full);
+    moveTo("preview");
+    syncPreview();
   };
 
   const startFullVideo = () => {
@@ -236,10 +274,15 @@ const WHeroVideo: FC = () => {
   };
 
   const onFullError = () => {
-    const reason = `media-error-${fullRef.current?.error?.code ?? "unknown"}`;
+    const full = fullRef.current as WebkitVideo | null;
+    const reason = `media-error-${full?.error?.code ?? "unknown"}`;
     if (phaseRef.current === "starting") return failStart(reason);
-    // Mid-film the native controls show the failure; it is still worth counting.
-    if (phaseRef.current === "playing") trackHeroVideoError({ video: "full", reason });
+    if (phaseRef.current !== "playing" || !full) return;
+    // Mid-film: a player that cannot go on, and cannot be restarted from its own controls.
+    // Back to the poster, so a tap can start it again.
+    trackHeroVideoError({ video: "full", reason });
+    backToPoster(full);
+    resetFull();
   };
 
   const onFullPlay = () => {
@@ -266,11 +309,8 @@ const WHeroVideo: FC = () => {
   const onFullEnded = () => {
     const full = fullRef.current as WebkitVideo | null;
     trackHeroVideoComplete();
-    const hadFocus = !!full && document.activeElement === full;
-    if (full) exitFullscreen(full);
-    moveTo("preview");
-    syncPreview();
-    if (hadFocus) requestAnimationFrame(() => buttonRef.current?.focus({ preventScroll: true }));
+    // Not reset: a replay plays from what is already loaded.
+    if (full) backToPoster(full);
   };
 
   const fullShowing = phase === "playing";
@@ -325,6 +365,9 @@ const WHeroVideo: FC = () => {
         // Focusable while it plays, so its controls are reachable by keyboard — and a tap
         // on it is not mistaken for a click on nothing by the dead-click signal.
         tabIndex={fullShowing ? 0 : -1}
+        // Invisible until it plays, so hidden from screen readers too: until then the
+        // button is the way to it, and a second, unseen "video" beside it is noise.
+        aria-hidden={fullShowing ? undefined : true}
         aria-label="LoveIQ intro video"
         onPlaying={onFullPlaying}
         onPlay={onFullPlay}
