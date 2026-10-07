@@ -23,6 +23,7 @@ import {
   getDiscountAdjustment,
   getPricingBucketsForPlan,
   getReportPriceQuoteForContext,
+  markReportPriceQuotePurchased,
   normalizePriceEnding,
   pricingArmForReport,
 } from "@features/pricing/logic/reportPricing";
@@ -779,6 +780,43 @@ describe("reportPricing", () => {
       // would advertise "€9.99, was €45.99", a 78% discount nobody authorised.
       expect(quote.currentPriceCents).toBe(999);
       expect(quote.msrpCents).toBe(4599);
+    });
+  });
+
+  /**
+   * One full_report quote serves the single report for every archetype, so a second
+   * single is paid on the same quote. The audit's example, production quote 7897: bought
+   * at 19:42:55, and a checkout started on it again at 19:43:15.
+   */
+  describe("a second purchase on the same quote", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("keeps the first purchase's time and payment id", async () => {
+      const row: { metadata: Record<string, unknown>; purchased_at: string | null } = {
+        metadata: { generatedAt: "2026-10-06T19:40:00.000Z" },
+        purchased_at: null,
+      };
+      // PostgREST on this one row: a PATCH whose filter the row fails changes nothing.
+      mockFetchWithTimeout.mockImplementation(
+        async (url: string, options?: { body?: string; method?: string }) => {
+          if (options?.method !== "PATCH") return createJsonResponse([row]);
+          if (!url.includes("purchased_at=is.null") || row.purchased_at === null) {
+            Object.assign(row, JSON.parse(options.body ?? "{}"));
+          }
+          return createJsonResponse([]);
+        }
+      );
+      vi.useFakeTimers({ toFake: ["Date"] });
+
+      vi.setSystemTime(new Date("2026-10-06T19:42:55.000Z"));
+      await markReportPriceQuotePurchased({ paymentId: 101, quoteId: 7897 });
+      vi.setSystemTime(new Date("2026-10-06T19:44:02.000Z"));
+      await markReportPriceQuotePurchased({ paymentId: 102, quoteId: 7897 });
+
+      expect(row.purchased_at).toBe("2026-10-06T19:42:55.000Z");
+      expect(row.metadata).toEqual({ generatedAt: "2026-10-06T19:40:00.000Z", paymentId: 101 });
     });
   });
 });
