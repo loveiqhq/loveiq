@@ -18,7 +18,6 @@ import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsub
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
   getPurchaseTitle,
-  getReportPurchasePlanTitle,
   isReportPurchasePlanId,
   PRICING_CATALOG,
   type ReportPurchasePlanId,
@@ -109,6 +108,7 @@ async function notifySlackPurchase({
   landingVariant,
   paymentId,
   plan,
+  purchaseTitle,
   submissionId,
   utmTracker,
 }: {
@@ -126,10 +126,15 @@ async function notifySlackPurchase({
   landingVariant: string | null;
   paymentId: number;
   plan: ReportPurchasePlanId;
+  /**
+   * What was bought, as the receipt reads it (`getPurchaseTitle`). The plan's own title
+   * said "Only Your Highest Archetype" for a single report bought for another archetype.
+   */
+  purchaseTitle: string;
   submissionId: number;
   utmTracker: string | null;
 }) {
-  const planLabel = getReportPurchasePlanTitle(plan);
+  const planLabel = purchaseTitle;
   const formattedAmount =
     typeof amount === "number" && Number.isFinite(amount)
       ? `${(currency ?? "EUR").toUpperCase()} ${amount.toFixed(2)}`
@@ -1485,6 +1490,7 @@ async function syncCheckoutSessionPayment({
         landingVariant: settledSession.metadata?.landingVariant ?? null,
         paymentId,
         plan,
+        purchaseTitle,
         submissionId: context.submissionId,
         utmTracker: recipient.utmTracker,
       });
