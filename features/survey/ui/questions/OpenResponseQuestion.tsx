@@ -132,7 +132,8 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
       {/* Input */}
       {anonymous ? (
         /* The email question test's anonymous arm, Figma 11600:15119: one underline field,
-           523.5 x 48 from 640px (the full column on a phone), and no confirm box. The frame
+           523.5 x 48 from 640px but never wider than the column, which is narrower up to
+           about 660px (the full column on a phone), and no confirm box. The frame
            draws only the empty field: typed text takes the placeholder's size in the
            title's ink, and focus and error keep today's orange and red lines. Nothing sits
            under the field until there is an error, so the Why row stays 20px under the line,
@@ -151,7 +152,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             placeholder={question.placeholder || "Type your answer…"}
             autoComplete="email"
             spellCheck={false}
-            className={`h-[48px] w-full bg-transparent font-sans text-[17.45px] font-light leading-[23.84px] text-[#161021] placeholder:text-[rgba(52,52,52,0.54)] focus:outline-none forced-colors:border-b-[1.454px] sm:w-[523.5px] ${
+            className={`h-[48px] w-full max-w-full bg-transparent font-sans text-[17.45px] font-light leading-[23.84px] text-[#161021] placeholder:text-[rgba(52,52,52,0.54)] focus:outline-none forced-colors:border-b-[1.454px] sm:w-[523.5px] ${
               error
                 ? "shadow-[inset_0_-1.454px_0_0_#ef4444]"
                 : "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)] focus:shadow-[inset_0_-1.454px_0_0_rgba(254,104,57,0.4)]"
