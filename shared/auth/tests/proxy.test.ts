@@ -227,6 +227,32 @@ describe("proxy middleware", () => {
     expect(mockResponseHeaders.get("Cross-Origin-Opener-Policy")).toBe("same-origin-allow-popups");
   });
 
+  it("keeps pages and API responses Cross-Origin-Resource-Policy: same-origin", async () => {
+    for (const path of ["/", "/survey", "/api/report/status"]) {
+      await proxy(makeNextRequest(`http://localhost:3000${path}`));
+      expect(mockResponseHeaders.get("Cross-Origin-Resource-Policy"), path).toBe("same-origin");
+    }
+  });
+
+  /**
+   * Session replay (PostHog, Clarity) loads every recorded <img> from its own origin.
+   * Under `same-origin` each wizard and report icon drew as a broken image in every
+   * replay, though visitors saw them fine (Mark, 2026-10-07).
+   */
+  it("lets other origins load static media: CORP cross-origin on icons, fonts, video", async () => {
+    for (const path of [
+      "/survey/wizard/note.svg",
+      "/report/v3/nav/badge-unlocked.svg",
+      "/report/v3/premium/footer-shield.svg",
+      "/report/paygate/shield.svg",
+      "/fonts/plus-jakarta-sans.woff2",
+      "/videos/landing.mp4",
+    ]) {
+      await proxy(makeNextRequest(`http://localhost:3000${path}`));
+      expect(mockResponseHeaders.get("Cross-Origin-Resource-Policy"), path).toBe("cross-origin");
+    }
+  });
+
   it("sets CSRF cookie when not present", () => {
     proxy(makeNextRequest());
     expect(mockCookiesSet).toHaveBeenCalledWith(
@@ -937,10 +963,11 @@ describe("CSP — the consent banner can reach its own region lookup", () => {
 });
 
 /**
- * Every response this middleware touches says Cross-Origin-Resource-Policy: same-origin,
- * and browsers enforce that on <img>. So an image an email draws must come from a path the
- * middleware skips: served from the site root, the logo drew as a broken image inside
- * Outlook on the web (2026-10-04).
+ * Pages this middleware touches say Cross-Origin-Resource-Policy: same-origin, and
+ * browsers enforce that on <img>: served from the site root, the email logo drew as a
+ * broken image inside Outlook on the web (2026-10-04). Static media has said
+ * `cross-origin` since 2026-10-07, but the logo stays on a path the middleware skips
+ * so no future header change can break every email at once.
  */
 describe("the email logo stays outside the middleware", () => {
   const runsOn = (path: string) => new RegExp(`^${config.matcher[0]!.source}$`).test(path);

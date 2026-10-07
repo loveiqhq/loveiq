@@ -721,7 +721,17 @@ export async function proxy(request: NextRequest) {
   // with COOP for Spectre-class defence-in-depth. We don't use COEP yet
   // because it requires every embedded resource (Stripe, reCAPTCHA, GTM
   // iframes) to also set CORP — a separate compatibility audit.
-  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  //
+  // Static media is the exception: `cross-origin`. Session replay (PostHog, Clarity)
+  // rebuilds the page on its own origin and loads every recorded <img> from there,
+  // so `same-origin` drew each wizard and report icon as a broken image in every
+  // replay (Mark, 2026-10-07), while visitors, on our origin, saw them fine. Public
+  // icons, fonts and videos hold nothing to protect; pages and API responses keep
+  // `same-origin`. The same header broke the email logo in Outlook (2026-10-04).
+  response.headers.set(
+    "Cross-Origin-Resource-Policy",
+    STATIC_MEDIA_RE.test(request.nextUrl.pathname) ? "cross-origin" : "same-origin"
+  );
 
   // Set CSRF cookie if not present
   const existingCsrf = request.cookies.get(CSRF_COOKIE_NAME);
