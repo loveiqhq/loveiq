@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -339,120 +340,105 @@ export async function POST(request: Request) {
       }
     }
 
-    // P-03: idempotency key dedupes double-clicks within the same minute.
-    // Stripe matches on (key + endpoint + params); identical (submission, plan,
-    // archetype, promo, minute) bucket returns the previously-created session
-    // instead of creating a second one. Promo is included so a freshly-resolved
-    // promo doesn't reuse a no-promo session from the same minute. The minute
-    // bucket is intentional — it keeps the key stable across rapid retries but
-    // lets the user create a fresh session a minute later (e.g. after Stripe's
-    // 24h hold on the prior one).
+    const params: Stripe.Checkout.SessionCreateParams = {
+      // Manual promo entry on Stripe's hosted page is intentionally ON (product
+      // decision 2026-06-10) so staff can hand-redeem test codes (e.g. a 100%-off
+      // code) on production. Owned nurture codes from a ?promo= email link still
+      // auto-apply via discounts[]. discounts[] and allow_promotion_codes are
+      // mutually exclusive, so the pre-applied branch leaves allow_promotion_codes
+      // unset. (Reverts the [Audit L6] field-off control — residual risk accepted:
+      // a forwarded single-use LIQ code could be hand-typed by the wrong person.)
+      ...(nurturePromoMatch
+        ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
+        : { allow_promotion_codes: true }),
+      billing_address_collection: "auto",
+      customer_email: customerEmail,
+      line_items: [
+        {
+          price_data: {
+            currency: quote.currency.toLowerCase(),
+            // No description: the frame leaves the line under the name empty.
+            product_data: {
+              name: lineItemName,
+            },
+            // `chargedPriceCents`, never `currentPriceCents`: it is the same number
+            // every price surface renders, so
+            // the screen and the invoice cannot disagree.
+            unit_amount: quote.chargedPriceCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        archetype: archetypeName ?? "",
+        basePriceBucket: quote.basePriceBucket,
+        behavioralBucket: quote.behavioralBucket,
+        countryTier: quote.countryTier,
+        // What we charged, and the base it was built from — so a support question
+        // about a €2 difference is answerable from the payment alone.
+        currentPrice: String((quote.chargedPriceCents / 100).toFixed(2)),
+        basePrice: String((quote.currentPriceCents / 100).toFixed(2)),
+        deviceType: quote.deviceType,
+        discountStep: String(quote.discountStep),
+        engagementScore: String(quote.engagementScore),
+        experimentGroup: quote.experimentGroup,
+        // GA4 Measurement Protocol context — replayed server-side at fulfillment
+        // so the purchase reaches GA4 even when the client event is lost. Consent
+        // is stored so the server send stays consent-compliant ("1"/"0").
+        gaClientId: toStripeMetadataValue(parsed.data.gaClientId ?? null),
+        gaSessionId: toStripeMetadataValue(parsed.data.gaSessionId ?? null),
+        gaAnalyticsConsent: parsed.data.gaConsent ? "1" : "0",
+        landingVariant,
+        initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
+        msrp: String((quote.msrpCents / 100).toFixed(2)),
+        plan: parsed.data.plan,
+        pricingCatalog: PRICING_CATALOG,
+        pricingClusterId: quote.pricingClusterId,
+        pricingQuoteId: String(quote.id),
+        ...(nurturePromoMatch && {
+          promoCode: parsed.data.promo ?? "",
+          promoStage: nurturePromoMatch.stage,
+          promoPercentOff: String(nurturePromoMatch.percentOff),
+        }),
+        requestIp: toStripeMetadataValue(ip),
+        requestUserAgent: toStripeMetadataValue(userAgent),
+        reportSessionId: parsed.data.reportSessionId ?? "",
+        reportToken: parsed.data.reportToken ?? "",
+        startingPrice: String((quote.startingPriceCents / 100).toFixed(2)),
+        trafficSource: quote.trafficSource,
+      },
+      mode: "payment",
+      invoice_creation: { enabled: true },
+      payment_intent_data: { receipt_email: customerEmail },
+      success_url: buildSuccessUrl({
+        anchor: parsed.data.anchor ?? null,
+        // A single report returns to the report bought; all 14 to the one being read.
+        archetypeSlug: parsed.data.plan === "all_reports" ? viewSlug : archetypeSlug,
+        origin: siteUrl,
+        plan: parsed.data.plan,
+        reportToken: returnToken,
+      }),
+      cancel_url: buildCancelUrl({
+        anchor: parsed.data.anchor ?? null,
+        archetypeSlug: viewSlug ?? archetypeSlug,
+        origin: siteUrl,
+        reportToken: returnToken,
+      }),
+    };
+
+    // P-03: the idempotency key dedupes double-clicks within the same minute: under the
+    // same key Stripe returns the session it already made instead of a second one. It is
+    // built from EVERYTHING sent, because Stripe refuses a reused key whose parameters
+    // differ. The old key named only some fields, so a reader who backed out of Stripe,
+    // answered the cookie banner or changed network (consent, the GA ids and the IP ride
+    // in the metadata) and paid again within the minute got an error instead of a
+    // session. The literal above fixes the key order, so equal requests hash equal. The
+    // minute bucket lets a fresh session be made a minute later.
     const idempotencyKey = createHash("sha256")
-      .update(
-        [
-          parsed.data.reportToken ?? parsed.data.reportSessionId ?? "",
-          parsed.data.plan,
-          parsed.data.archetype ?? "",
-          nurturePromoMatch?.stripePromotionCodeId ?? "",
-          // The anchor rides in the success and cancel URLs, and Stripe refuses a reused
-          // key whose parameters differ: a reader who backs out and pays again from another
-          // spot within the minute would get an error instead of a session.
-          parsed.data.anchor ?? "",
-          // In the return URLs too, so it is part of what Stripe compares under one key.
-          parsed.data.viewArchetype ?? "",
-          String(Math.floor(Date.now() / 60_000)),
-        ].join("|")
-      )
+      .update(`${Math.floor(Date.now() / 60_000)}|${JSON.stringify(params)}`)
       .digest("hex");
 
-    const session = await stripe.checkout.sessions.create(
-      {
-        // Manual promo entry on Stripe's hosted page is intentionally ON (product
-        // decision 2026-06-10) so staff can hand-redeem test codes (e.g. a 100%-off
-        // code) on production. Owned nurture codes from a ?promo= email link still
-        // auto-apply via discounts[]. discounts[] and allow_promotion_codes are
-        // mutually exclusive, so the pre-applied branch leaves allow_promotion_codes
-        // unset. (Reverts the [Audit L6] field-off control — residual risk accepted:
-        // a forwarded single-use LIQ code could be hand-typed by the wrong person.)
-        ...(nurturePromoMatch
-          ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
-          : { allow_promotion_codes: true }),
-        billing_address_collection: "auto",
-        customer_email: customerEmail,
-        line_items: [
-          {
-            price_data: {
-              currency: quote.currency.toLowerCase(),
-              // No description: the frame leaves the line under the name empty.
-              product_data: {
-                name: lineItemName,
-              },
-              // `chargedPriceCents`, never `currentPriceCents`: it is the same number
-              // every price surface renders, so
-              // the screen and the invoice cannot disagree.
-              unit_amount: quote.chargedPriceCents,
-            },
-            quantity: 1,
-          },
-        ],
-        metadata: {
-          archetype: archetypeName ?? "",
-          basePriceBucket: quote.basePriceBucket,
-          behavioralBucket: quote.behavioralBucket,
-          countryTier: quote.countryTier,
-          // What we charged, and the base it was built from — so a support question
-          // about a €2 difference is answerable from the payment alone.
-          currentPrice: String((quote.chargedPriceCents / 100).toFixed(2)),
-          basePrice: String((quote.currentPriceCents / 100).toFixed(2)),
-          deviceType: quote.deviceType,
-          discountStep: String(quote.discountStep),
-          engagementScore: String(quote.engagementScore),
-          experimentGroup: quote.experimentGroup,
-          // GA4 Measurement Protocol context — replayed server-side at fulfillment
-          // so the purchase reaches GA4 even when the client event is lost. Consent
-          // is stored so the server send stays consent-compliant ("1"/"0").
-          gaClientId: toStripeMetadataValue(parsed.data.gaClientId ?? null),
-          gaSessionId: toStripeMetadataValue(parsed.data.gaSessionId ?? null),
-          gaAnalyticsConsent: parsed.data.gaConsent ? "1" : "0",
-          landingVariant,
-          initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
-          msrp: String((quote.msrpCents / 100).toFixed(2)),
-          plan: parsed.data.plan,
-          pricingCatalog: PRICING_CATALOG,
-          pricingClusterId: quote.pricingClusterId,
-          pricingQuoteId: String(quote.id),
-          ...(nurturePromoMatch && {
-            promoCode: parsed.data.promo ?? "",
-            promoStage: nurturePromoMatch.stage,
-            promoPercentOff: String(nurturePromoMatch.percentOff),
-          }),
-          requestIp: toStripeMetadataValue(ip),
-          requestUserAgent: toStripeMetadataValue(userAgent),
-          reportSessionId: parsed.data.reportSessionId ?? "",
-          reportToken: parsed.data.reportToken ?? "",
-          startingPrice: String((quote.startingPriceCents / 100).toFixed(2)),
-          trafficSource: quote.trafficSource,
-        },
-        mode: "payment",
-        invoice_creation: { enabled: true },
-        payment_intent_data: { receipt_email: customerEmail },
-        success_url: buildSuccessUrl({
-          anchor: parsed.data.anchor ?? null,
-          // A single report returns to the report bought; all 14 to the one being read.
-          archetypeSlug: parsed.data.plan === "all_reports" ? viewSlug : archetypeSlug,
-          origin: siteUrl,
-          plan: parsed.data.plan,
-          reportToken: returnToken,
-        }),
-        cancel_url: buildCancelUrl({
-          anchor: parsed.data.anchor ?? null,
-          archetypeSlug: viewSlug ?? archetypeSlug,
-          origin: siteUrl,
-          reportToken: returnToken,
-        }),
-      },
-      { idempotencyKey }
-    );
+    const session = await stripe.checkout.sessions.create(params, { idempotencyKey });
 
     // Nothing above this line may record a checkout. A session without a hosted
     // URL cannot be handed off: the reader gets a 500 and never sees Stripe, so
