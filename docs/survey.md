@@ -123,7 +123,7 @@ The last seven questions are asked in this order, in both C13 arms:
 | 3     | `16016` | C9 — "Beyond sex, which of these…" (up to three)       | Thirteen collapsible categories, 53 topics.                           |
 | 4     | `16017` | C10 — "Thinking about what you just picked…"           | Refers back to C9, so it always follows it.                           |
 | 5     | `16018` | C12 — first access to the area picked                  | The waitlist opt-in.                                                  |
-| 6     | `00000` | Email                                                  | Asked last but one since the email-position test (2026-08-16).        |
+| 6     | `00000` | Email                                                  | Last but one since the email-position test (2026-08-16). See below.   |
 | 7     | `16015` | Marketing opt-in                                       | Always the final question.                                            |
 
 All five survey-content ids sit above `16015`, because every free id below it is live or
@@ -154,6 +154,41 @@ is for you." (10004, the comfort scale: "Select how comfortable you are with thi
 
 To read the answers, use the admin CSV export, which has one column per qId. The company brain
 masks `answer_text`, per the decision of 2026-09-09.
+
+### The email question test
+
+The email question loses more of the people who reach it than any other question, about
+12%, and most of them leave without typing anything (LoveIQ Sync, 2026-10-07). Marcus's
+redesign, Figma `IdxyUUVvJSYRTpI9CYRtJI` node `11600:15119`, runs against today's question
+as a 50/50 test named `survey-email-anonymous`:
+
+|             | `control` (today)                         | `anonymous`                                                      |
+| ----------- | ----------------------------------------- | ---------------------------------------------------------------- |
+| Title       | What is your email?                       | What’s your email? Feel free to use an anonymous one.            |
+| Guide       | "Use an inbox you actually check…"        | The same opening, then the case for an anonymous or private one. |
+| Field       | The address, then "Confirm email address" | One underline field, no confirm box                              |
+| Placeholder | `your@email.com`                          | `e.g. nickname@example.com`                                      |
+
+Both arms keep the purple instruction and the Why row, and both refuse an address the server
+would refuse (`isValidSurveyEmail`).
+
+- **The arm** is a pure function of the survey session id, salted with the test's name so it
+  splits independently of C13 ([`emailQuestionArm.ts`](../shared/experiments/emailQuestionArm.ts)).
+  No session id means control. `?email=control` or `?email=anonymous` previews an arm on dev
+  and staging, never on production.
+- **The copy** lives in [`anonymousEmail.ts`](../features/survey/anonymousEmail.ts), not in
+  `survey-data.ts`, so ending the test is one deletion. `OpenResponseQuestion` draws the field
+  when it is given `emailArm="anonymous"`.
+- **What is recorded.** The first time the email question shows, `experiment_exposure` fires
+  once (`surface: "survey_email_question"`) and the arm goes onto PostHog and GA4 as
+  `email_question_arm`. Both go to PostHog and GA4 only: there is no submission yet to attach
+  a stored event to. The server stamps the same key into `utm_tracker` on every partial save
+  and submission ([API](api.md#post-apisurvey-partial)).
+- **Reading it.** Per arm, the sessions that reached the email question against those that
+  went on to submit. Always filter by the production start date: the arm is defined for every
+  session ever recorded, including all the ones that only ever saw today's question.
+- **Status.** On staging since 2026-10-07, not yet on production. Record the production start
+  date here when it ships.
 
 ### Measuring CTA click-through by urgency band
 
