@@ -1968,12 +1968,16 @@ describe("conversion-digest handler", () => {
     it("takes the finishers from the function, so it needs no cohort and ignores a different one", async () => {
       const noCohorts = await build({ startsPastFirst: withFinished, cohorts: null });
       expect(noCohorts).not.toContain("not available today");
-      expect(noCohorts).toContain(`${video} 31 of 308 visits`);
+      expect(noCohorts).toContain(
+        `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
+      );
       const otherCohorts = await build({
         startsPastFirst: withFinished,
         cohorts: [{ axis: "landing" as const, arm: "white_video", n: 99, conversions: 0 }],
       });
-      expect(otherCohorts).toContain(`${video} 31 of 308 visits`);
+      expect(otherCohorts).toContain(
+        `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
+      );
     });
 
     it("says an arm has no visits rather than printing 0% beside it", async () => {
