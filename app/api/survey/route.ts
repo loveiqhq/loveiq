@@ -451,8 +451,9 @@ export async function POST(request: Request) {
   mergedUtmTracker = mergeTrackerArm(mergedUtmTracker, QUESTION_ORDER_ARM_KEY, questionOrderArm);
   /**
    * The email question test's arm (`emailQuestionArm.ts`), by the same rules and from
-   * the same session id, so the stamp is always the email question this respondent was
-   * shown. It joins after C13's, so a tracker near the limit gives this one up first.
+   * the same session id the browser drew it from, so the stamp is the version this
+   * respondent was shown (a staging preview with `?email=` excepted). It joins after
+   * C13's, so a tracker near the limit gives this one up first.
    */
   mergedUtmTracker = mergeTrackerArm(
     mergedUtmTracker,

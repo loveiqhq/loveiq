@@ -176,11 +176,11 @@ Submits a completed survey and schedules downstream scoring/notification work af
 **A/B stamps on `utmTracker`.** The server may add fields to the JSON object before
 storing it on `survey_submission.utm_tracker`:
 
-| Key                  | Values                   | Source                                                                            |
-| -------------------- | ------------------------ | --------------------------------------------------------------------------------- |
-| `landing_variant`    | the landing arm          | The sticky landing cookie, when present.                                          |
-| `question_order_arm` | `control` \| `variant`   | Derived server-side from `sessionId` (C13 opening-order test).                    |
-| `email_question_arm` | `control` \| `anonymous` | Derived server-side from `sessionId` (the email question test, `docs/survey.md`). |
+| Key                    | Values                   | Source                                                                            |
+| ---------------------- | ------------------------ | --------------------------------------------------------------------------------- |
+| `landing_variant`      | the landing arm          | The sticky landing cookie, when present.                                          |
+| `question_order_arm`   | `control` \| `variant`   | Derived server-side from `sessionId` (C13 opening-order test).                    |
+| `contact_question_arm` | `control` \| `anonymous` | Derived server-side from `sessionId` (the email question test, `docs/survey.md`). |
 
 All three are additive and none is read from the request body, so a client cannot
 misreport its arm. Two rules matter for anyone querying this column:
@@ -194,9 +194,11 @@ misreport its arm. Two rules matter for anyone querying this column:
   the serialised object still fits, independently and in the order above, so a tracker
   near the limit loses the newer stamp rather than the older one.
 
-`question_order_arm` and `email_question_arm` are conveniences for grouping, never the
+`question_order_arm` and `contact_question_arm` are conveniences for grouping, never the
 record: each is a pure function of `survey_submission.session_id`, so an unstamped
-respondent's arm is recomputed rather than read.
+respondent's arm is recomputed rather than read. `contact_question_arm` is the email
+question test's key, named without "email" because the admin's UTM filter matches any part
+of the tracker, in any case, and `utm_source=email` is common.
 
 **`durationMs` is clamped by the client.** `startedAt` is restored from the browser's
 saved draft, so a respondent who begins the survey, leaves, and returns days later would
@@ -264,7 +266,7 @@ Autosaves partial survey progress using an upsert keyed by `sessionId`.
 | `_csrf`        | string | No       | Body fallback for `sendBeacon` when the header is not available.  |
 
 **A/B stamps on `utmTracker`.** The draft gets the same `landing_variant` and
-`email_question_arm` stamps as [`POST /api/survey`](#post-apisurvey), under the same rules:
+`contact_question_arm` stamps as [`POST /api/survey`](#post-apisurvey), under the same rules:
 never a tracker created for a stamp, never an arm taken from the body, within 1000
 characters. Someone who stops at the email question leaves only this row, so this is where
 the email question test sees who left.

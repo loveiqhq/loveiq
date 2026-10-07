@@ -14,7 +14,9 @@
  * nothing to mint or retire, and recomputable for every stored session, including
  * the drop-offs, because `survey_partial_save` and `survey_submission` both keep the
  * session id. The salt makes the split independent of C13's, which runs on the same
- * sessions. No session id means control.
+ * sessions. No session id means control, though in a browser there always is one: where
+ * storage is blocked, `getSessionId` makes a new id on every page load, so those
+ * respondents are drawn afresh on each load and stamped with that load's arm.
  *
  * READING THE RESULT: FILTER BY START DATE, ALWAYS. The arm is a pure function of the
  * session id, so it returns an arm for every session ever recorded, including all
@@ -30,8 +32,14 @@ export type EmailQuestionArm = "control" | "anonymous";
 /** The experiment's name in analytics and its salt. */
 export const EMAIL_QUESTION_EXPERIMENT = "survey-email-anonymous";
 
-/** The arm's key in `utm_tracker` (`survey_submission`, `survey_partial_save`). */
-export const EMAIL_QUESTION_ARM_KEY = "email_question_arm";
+/**
+ * The arm's key in `utm_tracker` (`survey_submission`, `survey_partial_save`), and its
+ * name on PostHog and GA4. Not "email_question_arm": the admin's UTM filter matches any
+ * substring of the tracker (`utm_tracker ILIKE '%' || filter || '%'`), and "email" is a
+ * source our own links carry, so that key would have matched the filter on every stamped
+ * row. "Contact", because the question asks how to contact them.
+ */
+export const EMAIL_QUESTION_ARM_KEY = "contact_question_arm";
 
 export function isEmailQuestionArm(value: unknown): value is EmailQuestionArm {
   return value === "control" || value === "anonymous";
