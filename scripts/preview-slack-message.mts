@@ -34,6 +34,7 @@ import { dirname, join } from "node:path";
 import {
   buildConversionDigest,
   MIDWAY_QUESTION_INDEX,
+  STARTED_QUESTION_INDEX,
   WINDOW_DAYS,
 } from "../app/api/cron/conversion-digest/route";
 import { buildSubmissionJourney } from "../features/attribution/server/journey";
@@ -408,6 +409,7 @@ async function main(): Promise<void> {
     paywall,
     emailExperiments,
     unitEconomics,
+    startsPastFirst,
   ] = await Promise.all([
     fetchLandingArmFunnel(windowStart, windowEnd),
     fetchArmCohorts(windowStart, windowEnd),
@@ -428,6 +430,8 @@ async function main(): Promise<void> {
     adCostByDay()
       .catch(() => ({ byDay: new Map<string, number>(), from: null, to: null }))
       .then((ad) => fetchUnitEconomics(ad, windowStart, windowEnd, WINDOW_DAYS)),
+    // The landing test's deciding number reads drafts past question one too.
+    fetchMidwayProgress(windowStart, windowEnd, STARTED_QUESTION_INDEX),
   ]);
 
   // adSpend deliberately null: GA4 needs a service-account credential this
@@ -442,6 +446,7 @@ async function main(): Promise<void> {
     adSpend: null,
     friction,
     midway,
+    startsPastFirst,
     paywall,
     emailExperiments,
     unitEconomics,

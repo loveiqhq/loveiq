@@ -65,10 +65,12 @@
 
 ## Landing Page
 
-> The landing page is the white design at `features/landing/ui/white/`, in a 50/50
-> A/B against `features/landing/ui/white-v1/` — the white landing as it stood before
-> the 2026-08-10 rebuild (round 1, white-vs-dark, concluded 2026-06-19 and the dark
-> sections were deleted). `S06Archetypes.tsx`
+> The landing page is the white design at `features/landing/ui/white/`. Its hero is in
+> a 50/50 A/B (round 3, `shared/experiments/landingVariant.ts`): question 1 (arm A,
+> `white_card`) against the presenter video (arm B, `white_video`); every other section
+> is shared. `features/landing/ui/white-v1/` is the white landing from before the
+> 2026-08-10 rebuild, round 2's retired arm (round 1, white-vs-dark, concluded
+> 2026-06-19 and the dark sections were deleted). `S06Archetypes.tsx`
 > is kept outside `white/` because `WArchetypeCards` imports its `ArchetypeCard` +
 > `archetypes`. `FooterSection`/`ScrollAnimator`/`NavSection` are shared with other routes.
 
@@ -80,6 +82,7 @@
 | Scroll animations        | `features/landing/ui/ScrollAnimator.tsx`                                                                                                                       |
 | Hero section             | `features/landing/ui/white/WHero.tsx`                                                                                                                          |
 | Question-1 widget        | `features/landing/ui/white/WQuestionCard.tsx` (hero + closing CTA)                                                                                             |
+| Hero video (arm B)       | `features/landing/ui/white/WHeroVideo.tsx` (files: `public/videos/white/`, poster `public/images/white/emma-poster.*.jpg`)                                     |
 | Trust strip              | `features/landing/ui/white/WTrustStrip.tsx`                                                                                                                    |
 | What you'll find out     | `features/landing/ui/white/WDiscover.tsx`                                                                                                                      |
 | The language / vocab     | `features/landing/ui/white/WVocab.tsx`                                                                                                                         |

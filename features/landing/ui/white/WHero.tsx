@@ -4,7 +4,21 @@ import { useSyncExternalStore, type FC } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
+import WHeroVideo from "./WHeroVideo";
 import WQuestionCard from "./WQuestionCard";
+
+// WHeroVideo is imported statically, so both arms load the same JavaScript (2.8 KB
+// gzipped of it for arm B's video). It was a `next/dynamic` import, which renders no
+// Suspense boundary of its own: arm B's whole page then waited on that chunk to
+// hydrate. Measured on a production build with the chunk held back 4 s: arm B's page
+// hydrated at 4.4 s against 1.3 s, its menu dead until then, its exposure late. That
+// would have measured page speed alongside the video.
+
+/**
+ * What the hero's right-hand slot holds, by arm of the landing test: question 1
+ * (`card`, arm A and everyone outside the test) or the presenter video (`video`).
+ */
+export type HeroMedia = "card" | "video";
 
 /** Reused from the field-reports rating row so the faces stay consistent. */
 const RATING_AVATARS = [
@@ -24,7 +38,7 @@ const CONCURRENT_CLIENT =
 
 const subscribeNoop = () => () => {};
 
-const WHero: FC = () => {
+const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
   // Same pattern the deleted /checkout page used: the server renders a fixed number (so
   // hydration matches) and the client swaps in the randomised one — without a
   // setState-in-effect and its extra render.
@@ -37,7 +51,16 @@ const WHero: FC = () => {
   return (
     <section className="relative overflow-hidden bg-white pt-[64px]">
       <div className="content-shell">
-        <div className="grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_471px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]">
+        <div
+          className={
+            // Two literal strings, not one with an interpolated width: Tailwind only
+            // generates classes it can read whole. Arm B's track is Figma's 472, so the
+            // video ends exactly on the content edge.
+            media === "video"
+              ? "grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_472px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
+              : "grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_471px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
+          }
+        >
           {/* Left: copy */}
           <div className="flex max-w-[38rem] flex-col">
             <div className="animate-on-load flex items-center gap-2.5">
@@ -150,10 +173,19 @@ const WHero: FC = () => {
             </p>
           </div>
 
-          {/* Right: live question 1 */}
-          <div className="animate-on-load stagger-2 w-full lg:justify-self-end">
-            <WQuestionCard size="hero" location="hero" />
-          </div>
+          {media === "video" ? (
+            /* Right, arm B: the presenter video (Figma Report-3.0 1503:12473). Figma's
+               spacing: on a phone 51.25px below the copy (the grid's 40 plus 11.25), on
+               a desktop its top 60px into the row, i.e. 194px from the top of the page. */
+            <div className="animate-on-load stagger-2 mt-[11.25px] w-full lg:mt-[60px] lg:self-start">
+              <WHeroVideo />
+            </div>
+          ) : (
+            /* Right: live question 1 */
+            <div className="animate-on-load stagger-2 w-full lg:justify-self-end">
+              <WQuestionCard size="hero" location="hero" />
+            </div>
+          )}
         </div>
       </div>
     </section>

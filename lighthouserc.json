@@ -2,7 +2,8 @@
   "ci": {
     "collect": {
       "url": [
-        "http://localhost:3000/?variant=white",
+        "http://localhost:3000/?variant=white_card",
+        "http://localhost:3000/?variant=white_video",
         "http://localhost:3000/about",
         "http://localhost:3000/glossary"
       ],

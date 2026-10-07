@@ -12,6 +12,7 @@ import { test, expect } from "@playwright/test";
 //
 //   landing-page            last reviewed: 2026-08-23 — Linux baseline, `white` arm
 //   landing-page-white-prev last reviewed: 2026-08-23 — Linux baseline, `white_prev` arm
+//   landing-page-white-video  added 2026-10-06 — Linux baseline, `white_video` arm (round 3)
 //   about-page              last reviewed: 2026-08-23 — Linux baseline
 //   survey-intro            last reviewed: 2026-08-23 — Linux baseline
 //   glossary-page           last reviewed: 2026-08-23 — Linux baseline
@@ -138,9 +139,13 @@ test.describe("Visual Regression", () => {
   // that has nothing to do with the page changing. `?variant=` is the QA
   // override the middleware already honours, so pin the arm and keep one
   // baseline each — a regression in either arm is a real regression.
+  // `white` renders arm A's page (the hero card), so its baseline also covers
+  // `white_card`; `white_video` is round 3's arm B. Reduced motion (above) keeps the
+  // video's silent loop off, so its poster is what gets compared.
   const LANDING_ARMS = [
     { variant: "white", snapshot: "landing-page.png" },
     { variant: "white_prev", snapshot: "landing-page-white-prev.png" },
+    { variant: "white_video", snapshot: "landing-page-white-video.png" },
   ] as const;
 
   for (const arm of LANDING_ARMS) {
@@ -231,7 +236,10 @@ test.describe("Component Visual Regression", () => {
   });
 
   test("nav mobile menu open state", async ({ page }) => {
-    await page.goto("/");
+    // The open menu is a floating panel, so the hero shows around and below it, and
+    // the hero is what the two landing arms differ in. Pinned like the full-page
+    // shots above: in this job's production build a bare "/" is a coin flip.
+    await page.goto("/?variant=white_card");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
 

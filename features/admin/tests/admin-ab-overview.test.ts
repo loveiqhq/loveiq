@@ -487,15 +487,20 @@ describe("GET /api/admin/ab-overview", () => {
     // than a randomised split. All three are listed under `concluded`, which
     // carries prose and no rates.
     //
-    // The fixture deliberately supplies a dark survey arm and an arm-A quote:
-    // this asserts the axis list is what removes them, not absent values.
+    // The fixture deliberately supplies a dark survey arm, an arm-A quote and a
+    // round-2 landing stamp: this asserts the axis and arm lists are what remove
+    // them, not absent values.
     routeData([submission(1, "white", "dark")], [quote(1, "A", false)]);
     const body = await (await GET(req(36))).json();
     // Pricing is listed, but as Pricing 3.0's test: the arm-A quote is not an arm of it.
-    // Landing concluded on 2026-09-19, so it is a final readout, not a live one.
-    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual(["pricing"]);
+    // Landing is live again for round 3 (V2's card vs V3's video); its round-2 V1-vs-V2
+    // result stays a final readout.
+    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual(["pricing", "landing"]);
     const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
     expect(pricing.arms.map((x: { arm: string }) => x.arm)).toEqual(["A3", "B3"]);
+    // Round 3 compares only its own arms; the round-2 "white" stamp is not one of them.
+    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    expect(landing.arms.map((x: { arm: string }) => x.arm)).toEqual(["white_card", "white_video"]);
     expect(body.concludedReadouts.map((e: { axis: string }) => e.axis)).toEqual(["landing"]);
     const titles = body.concluded.map((c: { title: string }) => c.title);
     expect(titles).toContain("Paywall style");

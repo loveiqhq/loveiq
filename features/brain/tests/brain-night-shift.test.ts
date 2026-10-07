@@ -408,7 +408,9 @@ describe("runResearchAgent", () => {
       url: "https://www.loveiq.org/api/mcp",
       headers: { Authorization: "Bearer token-for-test" },
     });
-    expect(seen!.mode).toBe(0o600);
+    // Windows has no POSIX modes: chmod there only sets the read-only bit and stat
+    // reports 0o666 whatever was asked. The night shift runs on Linux, where it counts.
+    if (process.platform !== "win32") expect(seen!.mode).toBe(0o600);
     const cwd = mockRunClaude.mock.calls[0]![4] as string;
     expect(existsSync(join(cwd, "mcp.json"))).toBe(false);
   });

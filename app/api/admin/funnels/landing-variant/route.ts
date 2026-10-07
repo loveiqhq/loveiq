@@ -5,6 +5,7 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { armLabel } from "@features/attribution/server/labels";
+import { LANDING_VARIANT_ARMS } from "@shared/experiments/landingVariant";
 
 interface VariantRow {
   variant: string;
@@ -86,6 +87,23 @@ export async function GET(request: Request) {
         paidRate: r.completed > 0 ? Math.round((r.paid / r.completed) * 1000) / 10 : 0,
       };
     });
+
+    // The arms being tested right now always get a row, at zero until their first
+    // finished survey. The RPC's own always-show list is round 2's arms (white,
+    // white_prev, control), so without this a round-3 arm with no completion yet was
+    // missing from the comparison instead of reading 0.
+    for (const arm of LANDING_VARIANT_ARMS) {
+      if (rows.some((r) => r.variant === arm)) continue;
+      rows.push({
+        variant: arm,
+        label: armLabel("landing", arm).short,
+        retired: false,
+        completed: 0,
+        paid: 0,
+        revenue: 0,
+        paidRate: 0,
+      });
+    }
 
     // Active arms first, then retired, then the unattributed bucket last — reading
     // order matches how much the row can tell you.

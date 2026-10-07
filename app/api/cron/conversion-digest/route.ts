@@ -92,6 +92,10 @@ import {
 import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
 import { adCostByDay, adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
 import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import {
+  LANDING_HERO_VIDEO_LAUNCH_DAY,
+  LANDING_VARIANT_ARMS,
+} from "@shared/experiments/landingVariant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,16 +135,26 @@ const LANDING_CONCLUDED_ON = "2026-09-19";
 export const MIDWAY_QUESTION_INDEX = 30;
 
 /**
- * The axes worth a verdict. `paywall`, `survey` and `landing` are deliberately
- * absent — all three experiments are concluded (the paywall in favour of the forced
- * wall and then removed entirely, the survey theme in favour of white on 2026-08-25,
- * the landing page in favour of V2 on 2026-09-19) and nothing randomises any of them
- * any more, so presenting one as a live test is exactly the mistake the /admin
- * dashboard made before it was corrected. A verdict on a test nobody is running is
- * not a verdict. `pricing` is the Pricing 3.0 test (A3 vs B3), but only once the
- * whole window lies after its launch (`verdictAxesFor`).
+ * The landing test's deciding number counts a survey as started once it has a draft
+ * at this question index or later (or has finished). One, not zero: V2's hero card
+ * saves a draft at question one before its answerer reaches the survey, which V3's
+ * visitors cannot do. Exported so the local preview reads the same threshold.
  */
-const VERDICT_AXES: ExperimentAxis[] = ["pricing"];
+export const STARTED_QUESTION_INDEX = 1;
+
+/**
+ * The axes worth a verdict. `paywall` and `survey` are deliberately absent — both
+ * experiments are concluded (the paywall in favour of the forced wall and then
+ * removed entirely, the survey theme in favour of white on 2026-08-25) and nothing
+ * randomises either any more, so presenting one as a live test is exactly the
+ * mistake the /admin dashboard made before it was corrected. A verdict on a test
+ * nobody is running is not a verdict. `pricing` is the Pricing 3.0 test (A3 vs B3),
+ * but only once the whole window lies after its launch (`verdictAxesFor`).
+ * `landing` is live again for its round 3 (V2's question card vs V3's hero video);
+ * its arms are new values, so its verdict can only ever count round-3 readers and
+ * needs no launch cut of its own.
+ */
+const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
 
 /**
  * The cohorts behind a verdict span the whole window. Before the window lies wholly
@@ -243,6 +257,31 @@ function shortDay(day: string): string {
 
 function money(amount: number): string {
   return `EUR ${amount.toFixed(2)}`;
+}
+
+/**
+ * The share of `of`, as the funnel and the landing test's deciding line print it.
+ * NOT `computeRate`.
+ *
+ * `computeRate` is right for a trend chart and wrong here, in two ways that
+ * both produce a confident wrong number:
+ *
+ *   * it CLAMPS to 100. buildFunnel deliberately leaves the last steps
+ *     unclamped, because a promo one-tap or an admin-granted unlock sets
+ *     purchased_at without a checkout, so unlocks CAN exceed checkouts
+ *     truthfully. 6 from 5 printed "100%" and hid a real 120%.
+ *   * it returns 0 for a zero denominator, which printed "<0.1%": a vanishing
+ *     ratio, for a ratio that does not exist.
+ *
+ * A non-zero count whose share rounds to nothing prints "<0.1%", never "0".
+ * With 5 payments against 12,308 visits the share is 0.04%, and a bare "0"
+ * beside a count of five says that nobody paid.
+ */
+function shareText(count: number, of: number): string {
+  if (of <= 0) return "—";
+  const raw = (count / of) * 100;
+  if (raw > 0 && raw < 0.05) return "<0.1%";
+  return `${Math.round(raw * 10) / 10}%`;
 }
 
 /**
@@ -422,8 +461,8 @@ interface DigestInput {
   /**
    * Treat these axes as live, retired arms included.
    *
-   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing` alone, since
-   * `landing` concluded on 2026-09-19.
+   * Production omits it and gets VERDICT_AXES: Pricing 3.0's `pricing`, and `landing`
+   * for its round 3 (round 2 concluded on 2026-09-19).
    *
    * ONE field, not an axis list plus a retired-arms flag, because those two can
    * disagree and a message has to have a single answer to "what is running". An
@@ -441,6 +480,30 @@ interface DigestInput {
    * iterating an empty list, which is a suite that cannot fail.
    */
   liveAxesOverride?: ExperimentAxis[];
+  /**
+   * The landing pair the per-arm blocks compare, in reading order, and the day that
+   * comparison starts. Production omits both and gets round 3's live arms (V2's
+   * question card, then V3's video) from LANDING_HERO_VIDEO_LAUNCH_DAY. A read of
+   * round 2 passes ["white_prev", "white"] and 2026-08-21.
+   *
+   * The day matters even with new arm values: the per-arm series take their x-axis
+   * from every day the RPC returns, so without the cut the first week after launch
+   * would show one- to six-day windows labelled as 7-day trailing rates.
+   */
+  landingArms?: readonly [string, string];
+  landingFrom?: string;
+  /**
+   * Per-axis floors for the trend charts, replacing AXIS_VALID_FROM for this read.
+   * Production omits it. A read of round 2 passes { landing: "2026-08-21" }.
+   */
+  trendValidFrom?: Partial<Record<ExperimentAxis, string>>;
+  /**
+   * Drafts past question one, per landing arm (get_midway_progress_daily at index
+   * 1). With the finished surveys from `cohorts` they make the landing test's
+   * deciding number: survey starts per visit. Finished surveys have no draft any
+   * more (submitting deletes it), so neither half counts a reader twice.
+   */
+  startsPastFirst?: MidwayProgress | null;
   funnel: LandingArmFunnel | null;
   cohorts: AxisCohort[] | null;
   /** Landing -> survey-start. Null until its migration is applied. */
@@ -513,6 +576,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const emailExperiments = input.emailExperiments;
   const axisRows = input.axisRows ?? [];
   const verdictAxes = input.liveAxesOverride ?? VERDICT_AXES;
+  const landingArms: readonly [string, string] = input.landingArms ?? LANDING_VARIANT_ARMS;
+  const landingFrom = input.landingFrom ?? LANDING_HERO_VIDEO_LAUNCH_DAY;
   // An overridden axis is being declared live, so its arms are live too.
   const includeRetired = input.liveAxesOverride !== undefined;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
@@ -673,29 +738,6 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const worstIndex = leak ? leak.index + 1 : -1;
     blocks.push(divider());
     /**
-     * The share of `of`, as the funnel prints it. NOT `computeRate`.
-     *
-     * `computeRate` is right for a trend chart and wrong here, in two ways that
-     * both produce a confident wrong number:
-     *
-     *   * it CLAMPS to 100. buildFunnel deliberately leaves the last steps
-     *     unclamped, because a promo one-tap or an admin-granted unlock sets
-     *     purchased_at without a checkout, so unlocks CAN exceed checkouts
-     *     truthfully. 6 from 5 printed "100%" and hid a real 120%.
-     *   * it returns 0 for a zero denominator, which printed "<0.1%": a vanishing
-     *     ratio, for a ratio that does not exist.
-     *
-     * A non-zero count whose share rounds to nothing prints "<0.1%", never "0".
-     * With 5 payments against 12,308 visits the share is 0.04%, and a bare "0"
-     * beside a count of five says that nobody paid.
-     */
-    const share = (count: number, of: number): string => {
-      if (of <= 0) return "—";
-      const raw = (count / of) * 100;
-      if (raw > 0 && raw < 0.05) return "<0.1%";
-      return `${Math.round(raw * 10) / 10}%`;
-    };
-    /**
      * Says so when the paywall step covers less of the window than the steps
      * above it. Only when it actually does: once the instrument is older than the
      * window this line disappears on its own rather than becoming furniture.
@@ -725,7 +767,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       // eslint-disable-next-line security/detect-object-injection -- numeric index into a local array.
       const to = steps[worstIndex]!;
       const from = steps[worstIndex - 1]!;
-      return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${share(to.count, from.count)}).`;
+      return `Biggest drop: of ${count(from.count)} who ${from.did}, ${count(to.count)} ${to.did} (${shareText(to.count, from.count)}).`;
     })();
 
     /**
@@ -774,7 +816,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         alt_text: `${funnelTitle}: ${steps
           .map(
             (s, i) =>
-              `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${share(s.count, steps[i - 1]!.count)} of the step above)`}`
+              `${s.step} ${count(s.count)}${i === 0 ? "" : ` (${shareText(s.count, steps[i - 1]!.count)} of the step above)`}`
           )
           .join("; ")}.`,
       });
@@ -784,7 +826,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        * funnel as a monospace table, so the message never loses its numbers.
        */
       const rows = steps.map((s, i) => {
-        const stepShare = i === 0 ? "—" : share(s.count, steps[i - 1]!.count);
+        const stepShare = i === 0 ? "—" : shareText(s.count, steps[i - 1]!.count);
         return `\`${String(s.count).padStart(6)}  ${stepShare.padStart(6)}\`  ${escapeSlack(s.step)}`;
       });
       blocks.push(
@@ -969,15 +1011,13 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const landingIsLive = verdictAxes.includes("landing");
   if (midway && midwayRowShown && landingIsLive) {
     const armTotal = (arm: string) => midway.totals.find((t) => t.arm === arm);
-    const named = (["white_prev", "white"] as const).filter(
-      (a) => (armTotal(a)?.sessions ?? 0) > 0
-    );
+    const named = landingArms.filter((a) => (armTotal(a)?.sessions ?? 0) > 0);
 
     if (named.length > 0) {
       const line = named
         .map((arm) => {
           const t = armTotal(arm)!;
-          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
+          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} surveys reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
         })
         .join("\n");
       /**
@@ -993,11 +1033,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       const unknown = armTotal("unknown");
       const unattributed =
         unknown && unknown.sessions > 0
-          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
+          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} surveys (${computeRate(unknown.reached, unknown.sessions)}%)`
           : "";
       midwayBlocks.push(section(`*Midway progress, by landing page*\n${line}${unattributed}`));
 
-      const series = buildMidwaySeries(midway, ["white_prev", "white"]);
+      const series = buildMidwaySeries(
+        { ...midway, daily: midway.daily.filter((r) => r.day >= landingFrom) },
+        [landingArms[0], landingArms[1]]
+      );
       const hasReal = series.first.some((v) => v != null) || series.last.some((v) => v != null);
       if (hasReal && series.labels.length > 1) {
         const url = await signedChartUrl({
@@ -1005,30 +1048,32 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           labels: series.labels,
           first: series.first,
           last: series.last,
-          title: `Drafts reaching question ${midway.midwayIndex}, by landing page`,
-          legendFirst: armLabel("landing", "white_prev").short,
-          legendLast: armLabel("landing", "white").short,
-          colorFirst: armColor("landing", "white_prev"),
-          colorLast: armColor("landing", "white"),
+          title: `Surveys reaching question ${midway.midwayIndex}, by landing page`,
+          legendFirst: armLabel("landing", landingArms[0]).short,
+          legendLast: armLabel("landing", landingArms[1]).short,
+          colorFirst: armColor("landing", landingArms[0]),
+          colorLast: armColor("landing", landingArms[1]),
           headline: named
             .map(
               (a) =>
                 `${armLabel("landing", a).short} ${armTotal(a)!.reached}/${armTotal(a)!.sessions}`
             )
             .join("  ·  "),
-          footnote: `reached ÷ drafts saved, 7-day trailing · peak {peak}%`,
+          footnote: `reached ÷ surveys started (finished ones included), 7-day trailing · peak {peak}%`,
         });
         if (url) {
           midwayBlocks.push({
             type: "image",
             image_url: url,
-            alt_text: `Share of survey drafts reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
+            alt_text: `Share of surveys reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
           });
         }
       }
-    } else if (midway.firstArmDay) {
+    } else if (midway.firstArmDay && midway.firstArmDay >= landingFrom) {
       // Says WHY it is empty and WHEN it starts, so nobody reads the absence as
-      // "no one gets halfway".
+      // "no one gets halfway". Only when drafts began carrying an arm within this
+      // round: in round 3 they have carried one since before it, so the empty state
+      // is simply that neither version has a draft yet, and the date would be false.
       midwayBlocks.push(
         context(
           `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)} — before that, drafts did not record which landing page the visitor came from.`
@@ -1040,7 +1085,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const landingStartBlocks: SlackBlock[] = [];
   if (startFunnel) {
     /**
-     * V1 then V2, so the message reads in version order.
+     * In version order (V2 then V3 in round 3), so the message reads that way.
      *
      * This used to be sorted by label, and the sort was load-bearing: the renderer
      * coloured by POSITION, so the order the arms were passed in decided which one
@@ -1050,18 +1095,21 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * colour. Colour is now bound to the arm itself (`armColor`), so ORDER HERE IS
      * ONLY READING ORDER and changing it cannot repaint anything.
      */
-    const liveArms: [string, string] = ["white_prev", "white"];
+    const liveArms: [string, string] = [landingArms[0], landingArms[1]];
     // `landingIsLive` gates this comparison (see the midway block above). The
     // site-wide "Visits that reach the survey" chart is unaffected — it never
-    // split by arm, and it is the one that still measures something.
-    const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
+    // split by arm. The series starts at the comparison's own first day.
+    const series = buildStartSeries(
+      { ...startFunnel, daily: startFunnel.daily.filter((r) => r.day >= landingFrom) },
+      [liveArms[0], liveArms[1]]
+    );
     const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
     const armLine = (arm: string) => {
       const label = armLabel("landing", arm).short;
       const row = totalFor(arm);
       if (!row || row.visits === 0) return `• *${label}* — no visits recorded yet`;
-      return `• *${label}* — ${row.visits} visit-days → ${row.starts} started the survey`;
+      return `• *${label}* — ${row.visits} visits → ${row.starts} started the survey`;
     };
     /**
      * Both directions, in one line. The step mismatch flatters V2; the all-page
@@ -1075,7 +1123,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * marketing's naming convention exists to retire.
      */
     const caveat =
-      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
+      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown. The test is decided on survey starts per visit, below.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
 
     if (landingIsLive && hasAny && series.labels.length > 1) {
@@ -1151,7 +1199,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        * "10 days of per-arm data" above two empty bullets.
        */
       landingStartBlocks.push(
-        section("*Landing page → survey* — no per-arm data in this window yet.")
+        section("*Landing page → survey* — no visits recorded for either version yet.")
       );
     } else {
       /**
@@ -1187,13 +1235,77 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       landingStartBlocks.push(
         section(
           [
-            `*Landing page → survey* — ${days === 1 ? "one day" : `${days} days`} of per-arm data${readyClause}`,
+            `*Landing page → survey* — ${days === 1 ? "one day" : `${days} days`} of data for each version${readyClause}`,
             armLine(liveArms[0]),
             armLine(liveArms[1]),
             `• ${caveat}`,
           ].join("\n")
         )
       );
+    }
+    /**
+     * The landing test's deciding number: survey starts per visit, per arm.
+     *
+     * A start is a survey answered past question one (a draft at index 1 or later) or
+     * finished (finishing deletes the draft, so nobody counts twice). Both halves and
+     * the visits are written by our server for every visitor, consent or not, and all
+     * three carry the arm from the same cookie — unlike the chart above, whose starts
+     * need analytics consent. "Past question one" keeps the arms level: V2's hero card
+     * saves a draft at question one before its answerer reaches the survey.
+     *
+     * Counts and rates only. The verdict is taken once, at the decision date in the
+     * experiment registry, not re-taken every morning.
+     *
+     * Since migration 20261007190000 get_midway_progress_daily counts the finished
+     * surveys itself, each session once, and says how many (`finished`): `reached` is
+     * then the whole count. Before it, `reached` held drafts only and the finishers
+     * came from the submission cohort, which is still how a function without
+     * `finished` is read, so the order the code and the migration ship in cannot
+     * double-count the finishers or drop them.
+     */
+    const countsFinished = input.startsPastFirst?.overall.finished !== undefined;
+    if (
+      landingIsLive &&
+      (input.startsPastFirst === null || (!countsFinished && cohorts === null))
+    ) {
+      // A failed read says so. Without this line the deciding number simply vanished
+      // for the day, which reads as "nothing to decide on yet", not "we could not read it".
+      landingStartBlocks.push(
+        context(
+          "_Survey starts per visit is not available today — one of its data sources did not answer._"
+        )
+      );
+    } else if (landingIsLive && input.startsPastFirst) {
+      const pastFirst = input.startsPastFirst;
+      const perArm = liveArms.map((arm) => {
+        // An arm with no survey past question one has no row, so zero is the true count.
+        const row = pastFirst.totals.find((t) => t.arm === arm);
+        const reached = row?.reached ?? 0;
+        const finished = countsFinished
+          ? (row?.finished ?? 0)
+          : (cohorts?.find((c) => c.axis === "landing" && c.arm === arm)?.n ?? 0);
+        return {
+          arm,
+          visits: totalFor(arm)?.visits ?? 0,
+          drafts: countsFinished ? reached - finished : reached,
+          finished,
+        };
+      });
+      if (perArm.some((a) => a.visits > 0)) {
+        // Both halves of each count are printed, so a half that went missing shows as a
+        // zero beside the other instead of quietly lowering the total.
+        const parts = perArm.map((a) => {
+          const label = armLabel("landing", a.arm).short;
+          if (a.visits === 0) return `${label} — no visits recorded yet`;
+          const starts = a.drafts + a.finished;
+          return `${label} ${starts} of ${a.visits} visits (${shareText(starts, a.visits)}: ${a.drafts} past question one, ${a.finished} finished)`;
+        });
+        landingStartBlocks.push(
+          section(
+            `*Survey starts per visit* — what this test is decided on: ${parts.join("  ·  ")}. A start is a survey answered past question one or finished, counted for every visitor. Counts and rates, not a verdict.`
+          )
+        );
+      }
     }
   } else {
     landingStartBlocks.push(
@@ -1224,7 +1336,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // from the tail, so a cut can only ever lose the picture and keep the caveat,
   // never the reverse.
   {
-    const trends = buildAxisTrends(axisRows, dayKey, verdictAxes, { includeRetired });
+    // One set of options for the trend AND the rows its chart is drawn from. The chart
+    // used to re-read the rows with none, so a read that included retired arms (or set
+    // its own floor) built a trend whose picture then came out empty and was dropped.
+    const trendOpts = {
+      includeRetired,
+      ...(input.trendValidFrom ? { validFrom: input.trendValidFrom } : {}),
+    };
+    const trends = buildAxisTrends(axisRows, dayKey, verdictAxes, trendOpts);
     if (
       trends.charted.length > 0 ||
       trends.counts.length > 0 ||
@@ -1239,7 +1358,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     blocks.push(...midwayBlocks);
     for (const chart of trends.charted) {
       const series = buildArmSeries(
-        rowsForAxis(axisRows, chart.axis).rows,
+        rowsForAxis(axisRows, chart.axis, trendOpts).rows,
         chart.arms,
         (r) => r.checkouts
       );
@@ -1468,6 +1587,7 @@ export async function GET(request: Request) {
       paywall,
       emailExperiments,
       unitEconomics,
+      startsPastFirst,
     ] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
@@ -1479,6 +1599,8 @@ export async function GET(request: Request) {
       fetchPaywallHits(windowStart, windowEnd),
       fetchEmailExperimentResults(windowStart, windowEnd),
       fetchUnitEconomics(ad, windowStart, windowEnd, WINDOW_DAYS),
+      // Drafts past question one: half of the landing test's deciding number.
+      fetchMidwayProgress(windowStart, windowEnd, STARTED_QUESTION_INDEX),
     ]);
 
     /**
@@ -1494,6 +1616,7 @@ export async function GET(request: Request) {
       cohorts,
       startFunnel,
       midway,
+      startsPastFirst,
       paywall,
       emailExperiments,
       unitEconomics,

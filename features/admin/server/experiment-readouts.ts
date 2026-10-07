@@ -400,15 +400,17 @@ export function armReader(
 /*
  * Only genuinely randomised, currently-running splits belong here.
  *
- * Pricing 3.0 (A3 vs B3, 50/50 by report id) is the one running now, read from its
- * launch by `armReader`. The landing test moved to `concluded` below on
- * 2026-09-19: V2 serves 100% of traffic, so there is one design and nothing to
- * compare. Every other axis left on 2026-08-31. The forced paywall was REMOVED from
+ * Pricing 3.0 (A3 vs B3, 50/50 by report id) runs, read from its launch by
+ * `armReader`. The landing test runs again since its round 3 (V2's question card
+ * vs V3's hero video, 50/50 by cookie): its arms are new values, so `tallyAxis`
+ * compares only them and every earlier landing stamp (`white`, `white_prev`,
+ * `control`) reads as not attributable. Round 2 (V1 vs V2) stays in `concluded`
+ * below. Every other axis left on 2026-08-31. The forced paywall was REMOVED from
  * the product, so nothing stamps an arm at all. The 2.x price test was settled by
  * dropping the higher-priced arm; its A/B rows are retired arms, never pooled into
  * 3.0's, which is why 3.0 took new letters.
  */
-export const LIVE_AXES: ExperimentAxis[] = ["pricing"];
+export const LIVE_AXES: ExperimentAxis[] = ["pricing", "landing"];
 
 export function liveReadouts(outcomes: ArmOutcomes): ExperimentReadout[] {
   return LIVE_AXES.map((axis) =>
@@ -444,7 +446,7 @@ export const CONCLUDED: ConcludedExperiment[] = [
       // No rates in the prose, by the same rule as the entries below — a
       // finished test must not read as a live one. The numbers are above,
       // in the readout, where they are labelled as final.
-      "Finished on 19 September 2026 and settled on V2, the version with the first survey question in the hero. Everyone now sees it. V2 reached checkout more often over the 30 days to 19 September, but that gap is not one this many people can prove: the range the true difference could sit in still runs from V1 being slightly ahead to V2 being well ahead. Separating a gap that size would need roughly six times as many readers per design, which at our traffic is about six more months. V1 was nominally ahead on payments, two against one, and three payments is not a result. It was called on the checkout rate, and on not spending six more months running a design we already believed was worse.",
+      "Finished on 19 September 2026 and settled on V2, the version with the first survey question in the hero. Everyone saw it until the next test began, which runs V2 against V3, the same page with the intro video in the hero in its place (listed above as a live test). V2 reached checkout more often over the 30 days to 19 September, but that gap is not one this many people can prove: the range the true difference could sit in still runs from V1 being slightly ahead to V2 being well ahead. Separating a gap that size would need roughly six times as many readers per design, which at our traffic is about six more months. V1 was nominally ahead on payments, two against one, and three payments is not a result. It was called on the checkout rate, and on not spending six more months running a design we already believed was worse.",
   },
   {
     title: "Report pricing (A vs B)",

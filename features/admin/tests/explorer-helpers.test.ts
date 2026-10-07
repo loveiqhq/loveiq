@@ -305,8 +305,8 @@ describe("new dimensions", () => {
   );
 
   it("a real arm is still passed through untouched", () => {
-    // The fix must not swallow genuine values -- white_prev is the live round-2 arm.
-    for (const arm of ["white", "white_prev", "control"]) {
+    // The fix must not swallow genuine values: round 3's live arms, and every earlier one.
+    for (const arm of ["white_card", "white_video", "white", "white_prev", "control"]) {
       expect(dimensionValue(row({ landingVariant: arm }), "landingVariant", opts)).toBe(arm);
     }
   });
@@ -657,7 +657,10 @@ describe("parseLandingVariant", () => {
   const stamp = (arm: string) => JSON.stringify({ utm_source: "google", landing_variant: arm });
 
   it("gives each arm its own plain-English name", () => {
-    expect(parseLandingVariant(stamp("white"))).toBe("Landing Page V2 (Survey in Hero)");
+    expect(parseLandingVariant(stamp("white_card"))).toBe("Landing Page V2 (Survey in Hero)");
+    expect(parseLandingVariant(stamp("white_video"))).toBe("Landing Page V3 (Video in Hero)");
+    // V2 before round 3 is named apart, so it never pools with round 3's arm A.
+    expect(parseLandingVariant(stamp("white"))).toBe("Landing Page V2 (Survey in Hero, before V3)");
     expect(parseLandingVariant(stamp("white_prev"))).toBe("Landing Page V1 (First Design)");
     expect(parseLandingVariant(stamp("control"))).toBe("Dark landing page (before V1)");
   });

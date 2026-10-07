@@ -54,5 +54,7 @@ describe("check-docs-impact.sh when main has moved", () => {
     expect(out).toContain("All checks passed");
     expect(out).not.toContain("docs/other.md");
     expect(existsSync(join(work, ".git", "shallow"))).toBe(false);
-  });
+    // About twenty-five git processes through bash: a second or two on Linux, but past
+    // the suite's 15 s default on a busy Windows machine, where each spawn is slow.
+  }, 60_000);
 });

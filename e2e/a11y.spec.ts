@@ -2,7 +2,10 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const criticalRoutes = [
-  "/",
+  // Both landing arms by name: question 1 in the hero (A) and the hero video (B).
+  // A bare "/" would be a coin flip in CI's production build (see playwright.config.ts).
+  "/?variant=white_card",
+  "/?variant=white_video",
   "/about",
   "/glossary",
   "/glossary/abandonment-insecurity",

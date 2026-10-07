@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { describe, it, expect } from "vitest";
 import { jsonLdString } from "@shared/seo/json-ld";
 
@@ -46,7 +46,9 @@ describe("every JSON-LD script tag is escaped", () => {
   const HELPER = "shared/seo/json-ld.ts"; // defines jsonLdString; mentions the type in its docstring
 
   const files = ROOTS.flatMap((r) => walk(join(process.cwd(), r)))
-    .map((f) => [f.replace(process.cwd() + "/", ""), readFileSync(f, "utf8")] as const)
+    // Repo-relative with forward slashes on every OS: stripping `${cwd}/` left
+    // Windows paths absolute, and the list below never matched there.
+    .map((f) => [relative(process.cwd(), f).split(sep).join("/"), readFileSync(f, "utf8")] as const)
     .filter(([f, src]) => src.includes("application/ld+json") && f !== HELPER);
 
   // The exact set is pinned rather than counted. A threshold ("at least N") lets a

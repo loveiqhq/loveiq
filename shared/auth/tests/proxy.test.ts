@@ -610,12 +610,15 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
   const landingCookieCalls = () =>
     mockCookiesSet.mock.calls.filter((c) => c[0] === "__liq_lv" || c[0] === "__Host-liq_lv");
   const variantHeader = () => mockNextOpts.value?.request?.headers?.get("x-landing-variant");
+  const withCookie = (arm: string) =>
+    makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, arm);
+  const LIVE = ["white_card", "white_video"];
 
   it("assigns one of the two live arms on / and mints it as a sticky cookie", async () => {
     await proxy(makeNextRequest("http://localhost:3000/"));
-    // Round 2 is current-white vs previous-white, 50/50 — either is valid here,
-    // and the distribution itself is asserted below.
-    expect(["white", "white_prev"]).toContain(variantHeader());
+    // Round 3 is question card vs presenter video, 50/50 — either is valid here, and
+    // both sides of the coin are proved reachable below.
+    expect(LIVE).toContain(variantHeader());
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
     expect(calls[0]![1]).toBe(variantHeader());
@@ -624,29 +627,30 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
     );
   });
 
-  it("no longer flips a coin — every visitor gets the winner", async () => {
+  it("flips a crypto coin, and both sides of it are reachable", async () => {
     /**
-     * The round-2 split ENDED 2026-09-19 in favour of V2. This used to drive
-     * `crypto.getRandomValues` directly to prove both sides of the flip were
-     * reachable; the flip is gone, so the thing worth proving is that no source
-     * of randomness can produce the losing arm any more.
-     *
-     * Driven through the same byte values the old test used, so a reinstated
-     * coin flip fails here rather than passing by never being exercised.
+     * Driven through crypto.getRandomValues directly, so a coin that could only ever
+     * land on one side — the bug a hard-coded arm would be — fails here rather than
+     * passing by never being exercised. Even bytes are arm A, odd bytes arm B.
      */
     const original = globalThis.crypto.getRandomValues;
     try {
-      for (const byte of [0, 1, 2, 255]) {
+      for (const [byte, arm] of [
+        [0, "white_card"],
+        [1, "white_video"],
+        [2, "white_card"],
+        [255, "white_video"],
+      ] as const) {
         (globalThis.crypto as { getRandomValues: (a: Uint8Array) => Uint8Array }).getRandomValues =
-          (arr: Uint8Array) => {
-            arr[0] = byte;
-            return arr;
+          (buf: Uint8Array) => {
+            buf[0] = byte;
+            return buf;
           };
         mockNextOpts.value = null;
         mockCookiesSet.mockClear();
         await proxy(makeNextRequest("http://localhost:3000/"));
-        expect(variantHeader()).toBe("white");
-        expect(landingCookieCalls()[0]![1]).toBe("white");
+        expect(variantHeader()).toBe(arm);
+        expect(landingCookieCalls()[0]![1]).toBe(arm);
       }
     } finally {
       (globalThis.crypto as { getRandomValues: typeof original }).getRandomValues = original;
@@ -654,86 +658,63 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
   });
 
   it("honours a ?variant= override and makes it stick", async () => {
-    await proxy(makeNextRequest("http://localhost:3000/?variant=white_prev"));
-    expect(variantHeader()).toBe("white_prev");
+    await proxy(makeNextRequest("http://localhost:3000/?variant=white_video"));
+    expect(variantHeader()).toBe("white_video");
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white_prev");
+    expect(calls[0]![1]).toBe("white_video");
+  });
+
+  it("still opens round 2's V1 through ?variant=white_prev, for QA", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/?variant=white_prev"));
+    expect(variantHeader()).toBe("white_prev");
   });
 
   it("ignores an unknown ?variant= value", async () => {
     await proxy(makeNextRequest("http://localhost:3000/?variant=purple"));
-    expect(["white", "white_prev"]).toContain(variantHeader());
+    expect(LIVE).toContain(variantHeader());
   });
 
-  it("keeps a winner cookie as-is and does not re-set it", async () => {
-    mockNextOpts.value = null;
-    mockCookiesSet.mockClear();
-    await proxy(
-      makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, "white")
-    );
-    expect(variantHeader()).toBe("white");
-    expect(landingCookieCalls()).toHaveLength(0);
+  it("keeps a live arm's cookie as-is and does not re-set it", async () => {
+    for (const arm of LIVE) {
+      mockNextOpts.value = null;
+      mockCookiesSet.mockClear();
+      await proxy(withCookie(arm));
+      expect(variantHeader()).toBe(arm);
+      expect(landingCookieCalls()).toHaveLength(0);
+    }
   });
 
-  it("moves a returning visitor off the retired arm", async () => {
+  it("re-rolls a cookie from an earlier round onto a live arm", async () => {
     /**
-     * `white_prev` used to be sticky, and it must not stay so. A concluded arm
-     * that keeps being served to everyone who ever saw it leaves a slice of real
-     * traffic on the losing design indefinitely — and keeps feeding it into
-     * every per-arm number, so the test we just ended never actually stops.
+     * `white` is the one that matters: every visitor between round 2's end
+     * (2026-09-19) and this round's launch holds it for a year. Kept sticky, it would
+     * have parked every returning visitor in arm A, and only new visitors could ever
+     * reach B. `white_prev` and `control` are older still.
      */
-    mockNextOpts.value = null;
-    mockCookiesSet.mockClear();
-    await proxy(
-      makeNextRequest(
-        "http://localhost:3000/",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "white_prev"
-      )
-    );
-    expect(variantHeader()).toBe("white");
-    expect(landingCookieCalls()[0]![1]).toBe("white");
+    for (const old of ["white", "white_prev", "control"]) {
+      mockNextOpts.value = null;
+      mockCookiesSet.mockClear();
+      await proxy(withCookie(old));
+      expect(LIVE, `a "${old}" cookie was kept`).toContain(variantHeader());
+      const calls = landingCookieCalls();
+      expect(calls).toHaveLength(1);
+      expect(calls[0]![1]).toBe(variantHeader());
+    }
   });
 
-  it("re-assigns a visitor still carrying the retired control cookie", async () => {
-    await proxy(
-      makeNextRequest(
-        "http://localhost:3000/",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "control"
-      )
-    );
-    // The dark landing no longer exists, so "control" cannot be served: the
-    // visitor joins one of the two live arms and the cookie is re-stamped.
-    expect(["white", "white_prev"]).toContain(variantHeader());
-    const calls = landingCookieCalls();
-    expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe(variantHeader());
-  });
-
-  it("serves the current arm to crawlers and never sets a cookie (one indexed page)", async () => {
-    await proxy(
-      makeNextRequest(
-        "http://localhost:3000/",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
-      )
-    );
-    // Bots are pinned to "white" so `/` has one canonical rendering in the index,
-    // and they are still never given a cookie.
-    expect(variantHeader()).toBe("white");
-    expect(landingCookieCalls()).toHaveLength(0);
+  it("serves crawlers arm A's page, never an arm, and never sets a cookie", async () => {
+    const googlebot = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+    for (const url of ["http://localhost:3000/", "http://localhost:3000/?variant=white_video"]) {
+      mockNextOpts.value = null;
+      mockCookiesSet.mockClear();
+      await proxy(
+        makeNextRequest(url, undefined, undefined, undefined, undefined, undefined, googlebot)
+      );
+      // One canonical rendering in the index, and no crawler counted in either arm.
+      expect(variantHeader()).toBe("white");
+      expect(landingCookieCalls()).toHaveLength(0);
+    }
   });
 
   it("does not touch the landing cookie or header on non-landing routes", async () => {
@@ -886,8 +867,10 @@ describe("proxy — consent-independent daily unique-visit count", () => {
 
   it("flags x-liq-new-visit (with the arm) + sets the liq_dv cookie on a fresh daily document visit", async () => {
     await proxy(makeVisitRequest({ dest: "document" }));
-    // A/B concluded → the landing arm is always "white" on "/".
-    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("white");
+    // The visit is tagged with the arm this same request was assigned on "/".
+    const visitArm = mockNextOpts.value?.request?.headers?.get("x-liq-new-visit");
+    expect(["white_card", "white_video"]).toContain(visitArm);
+    expect(visitArm).toBe(mockNextOpts.value?.request?.headers?.get("x-landing-variant"));
     const dvCall = mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv");
     expect(dvCall).toBeDefined();
     expect(dvCall![2]).toEqual(
@@ -898,6 +881,11 @@ describe("proxy — consent-independent daily unique-visit count", () => {
   it("carries the white arm in x-liq-new-visit when ?variant=white", async () => {
     await proxy(makeVisitRequest({ path: "/?variant=white", dest: "document" }));
     expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("white");
+  });
+
+  it("carries the video arm in x-liq-new-visit when ?variant=white_video", async () => {
+    await proxy(makeVisitRequest({ path: "/?variant=white_video", dest: "document" }));
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("white_video");
   });
 
   it("does NOT flag/set when liq_dv already equals today (deduped)", async () => {
@@ -953,5 +941,22 @@ describe("the email logo stays outside the middleware", () => {
 
   it("would catch the old logo, which sat at the site root", () => {
     expect(runsOn("/apple-touch-icon.png")).toBe(true);
+  });
+});
+
+/**
+ * A browser plays a video in many byte-range requests. Run through the middleware, each
+ * one would pay for CSP headers, the CSRF cookie and the staging gate on a static file.
+ */
+describe("the landing hero video stays outside the middleware", () => {
+  const runsOn = (path: string) => new RegExp(`^${config.matcher[0]!.source}$`).test(path);
+
+  it("serves everything under /videos/ without running the middleware", () => {
+    expect(runsOn("/videos/white/emma-intro.96705e65.mp4")).toBe(false);
+    expect(runsOn("/videos/white/emma-preview.a47a3687.mp4")).toBe(false);
+  });
+
+  it("still runs on a video at the site root, so the exclusion is the folder, not the type", () => {
+    expect(runsOn("/couple-hero.mp4")).toBe(true);
   });
 });

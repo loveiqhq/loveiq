@@ -133,9 +133,10 @@ describe("experiments: the registry, read", () => {
 
   it("reads a running test live from its own start, in /admin's words", async () => {
     rows = [row()];
+    // Round 3's arm A: a live arm, so the live readout counts it.
     const arms: Array<[string, boolean]> = [
-      ...Array.from({ length: 40 }, (): [string, boolean] => ["white", false]),
-      ...Array.from({ length: 5 }, (): [string, boolean] => ["white", true]),
+      ...Array.from({ length: 40 }, (): [string, boolean] => ["white_card", false]),
+      ...Array.from({ length: 5 }, (): [string, boolean] => ["white_card", true]),
     ];
     const load = vi.fn(async () => outcomes(arms));
     const text = await listExperiments(NOW, load);

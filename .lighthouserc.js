@@ -5,7 +5,13 @@ module.exports = {
       startServerCommand: "npm run start",
       startServerReadyPattern: "Ready in",
       startServerReadyTimeout: 30000,
-      url: ["http://localhost:3000/", "http://localhost:3000/about"],
+      // Both arms of the landing test, by name: a bare "/" would audit whichever
+      // arm the coin gave this run.
+      url: [
+        "http://localhost:3000/?variant=white_card",
+        "http://localhost:3000/?variant=white_video",
+        "http://localhost:3000/about",
+      ],
       numberOfRuns: 1,
     },
     assert: {

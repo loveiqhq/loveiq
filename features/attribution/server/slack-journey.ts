@@ -236,10 +236,10 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
 /**
  * The experiments as a two-column fields block.
  *
- * The LIVE axes are always shown, so an arm that failed to record stays visible
- * rather than quietly missing. Concluded axes are not: `paywall` since it was
- * settled in favour of the forced wall, and `survey` since the theme test was
- * settled in favour of white on 2026-08-25. An arm nothing randomises is either a
+ * The LIVE axes are shown (landing always, pricing once a price was quoted), so an arm
+ * that failed to record stays visible rather than quietly missing. Concluded axes are
+ * not: `paywall` since it was settled in favour of the forced wall, and `survey` since
+ * the theme test was settled in favour of white on 2026-08-25. An arm nothing randomises is either a
  * permanent "Not recorded" or a permanent constant, and both are noise on every
  * single message — the class of blank row that made these look broken. The
  * historical value is still stored, and still in the structured log line beside
@@ -247,12 +247,14 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * axis rather than the arm.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  // `landing` concluded on 2026-09-19 in favour of V2, so it is not shown: an arm
-  // nothing assigns is a permanent constant on every message. Pricing 3.0 is live, but
-  // its arm is assigned when the report first quotes a price, after the survey, so a
-  // survey-completed message has none yet. That is not a missing record, and a
-  // permanent "Not recorded" row on every one would be noise, so it shows when set.
-  const axes: ExperimentAxis[] = journey.arms.pricing ? ["pricing"] : [];
+  // `landing` is live again for its round 3 (V2's question card vs V3's hero video), so
+  // a buyer's message says which version they came through, and keeps the row when it
+  // was not recorded, like the survey message's line. It left this list when round 2
+  // concluded on 2026-09-19 and must leave again when round 3 does. Pricing 3.0 is
+  // live, but its arm is assigned when the report first quotes a price, after the
+  // survey, so a survey-completed message has none yet. That is not a missing record,
+  // and a permanent "Not recorded" row on every one would be noise, so it shows when set.
+  const axes: ExperimentAxis[] = journey.arms.pricing ? ["landing", "pricing"] : ["landing"];
   return fields(
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
