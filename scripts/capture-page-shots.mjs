@@ -106,6 +106,44 @@ const SHOTS = [
   { name: "trust-zone", path: "/trust-zone", viewport: VIEWPORT, what: "the trust page" },
 ];
 
+/**
+ * A CAPTURE MUST NOT COUNT AS A VISITOR. Run against production, every shot used to be a
+ * fresh visit: a `funnel_event` visit row per context (the digest's denominator, and the
+ * landing test's), a survey-page row for the /survey shots, and a PostHog and Clarity
+ * session each. Now each context carries what the site already honours for our own runs:
+ * `loveiq_probe=1` (PostHog off, no report_session; shared/http/probe-cookie.ts) and today's
+ * Berlin-day dedup cookies `liq_dv` / `liq_ds` (proxy.ts counts one visit per browser per
+ * day, so a browser that already has today's never writes a row). Every third-party request
+ * is aborted except fonts and the banner script, and the banner is still answered with Reject All.
+ */
+const BERLIN_TODAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(
+  new Date()
+);
+const ORIGIN_URL = new URL(ORIGIN);
+const NO_TRACE_COOKIES = [
+  ["loveiq_probe", "1"],
+  ["liq_dv", BERLIN_TODAY],
+  ["liq_ds", BERLIN_TODAY],
+].map(([name, value]) => ({
+  name,
+  value,
+  domain: ORIGIN_URL.hostname,
+  path: "/",
+  secure: ORIGIN_URL.protocol === "https:",
+}));
+/**
+ * Everything but the site itself, its fonts and the consent banner's script is aborted: an
+ * ALLOWLIST, not a list of trackers. A blocklist leaks whatever it forgot to name; measured
+ * 2026-10-07, one that named google.com and google-analytics.com let consent-denied pings
+ * through to analytics.google.com and the country domain www.google.ba.
+ */
+const ALLOWED_HOSTS = new Set([
+  ORIGIN_URL.hostname,
+  "fonts.googleapis.com",
+  "fonts.gstatic.com",
+  "cdn-cookieyes.com",
+]);
+
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const browser = await chromium.launch();
@@ -114,6 +152,11 @@ async function main() {
 
   for (const shot of SHOTS) {
     const ctx = await browser.newContext({ viewport: shot.viewport, deviceScaleFactor: 1 });
+    await ctx.addCookies(NO_TRACE_COOKIES);
+    await ctx.route("**/*", (route) => {
+      const host = new URL(route.request().url()).hostname;
+      return ALLOWED_HOSTS.has(host) ? route.continue() : route.abort();
+    });
     const page = await ctx.newPage();
     try {
       await page.goto(`${ORIGIN}${shot.path}`, { waitUntil: "networkidle", timeout: 45_000 });
