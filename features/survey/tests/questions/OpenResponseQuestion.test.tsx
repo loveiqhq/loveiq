@@ -323,6 +323,13 @@ describe("OpenResponseQuestion: the anonymous email arm", () => {
     }
   });
 
+  it("never runs wider than its column", () => {
+    // From 640px to about 660px (a classic scrollbar included) the column is narrower
+    // than 523.5px, and the line ran past the title by up to ~20px.
+    renderAnonymous("");
+    expect(screen.getByRole("textbox").className).toContain("max-w-full");
+  });
+
   it("adds no gap under the field until there is something to say", () => {
     // The frame puts the Why row 20px under the line; an always-on 8px gap would make it 28.
     renderAnonymous("");
