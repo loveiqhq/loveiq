@@ -744,6 +744,41 @@ describe("Pricing 3.0 — what Stripe is asked to sell", () => {
     expect(keys[2]).not.toBe(keys[0]);
   });
 
+  /**
+   * Stripe refuses a reused key whose parameters differ, and consent rides in the
+   * metadata: a reader who backed out, answered the cookie banner and paid again within
+   * the minute got "We couldn't prepare secure checkout" instead of a session.
+   */
+  it("gives a retry after the cookie banner its own idempotency key, and an identical one the same", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-07T10:00:05.000Z"));
+    try {
+      const createSession = enableStripe();
+      const post = async (gaConsent: boolean) => {
+        const res = await POST(
+          makeRequest({
+            archetype: "Spark Seeker",
+            gaClientId: "1234567890.1759830000",
+            gaConsent,
+            gaSessionId: "1759830000",
+            plan: "full_report",
+            reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+          })
+        );
+        expect(res.status).toBe(200);
+      };
+      await post(false);
+      await post(false);
+      await post(true);
+      const calls = createSession.mock.calls;
+      expect(calls.map((call) => call[0].metadata.gaAnalyticsConsent)).toEqual(["0", "0", "1"]);
+      expect(calls[1]![1].idempotencyKey).toBe(calls[0]![1].idempotencyKey);
+      expect(calls[2]![1].idempotencyKey).not.toBe(calls[0]![1].idempotencyKey);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("carries the unlock position through both return URLs", async () => {
     const createSession = enableStripe();
     const anchor = "desire_drivers~2~-120~340";

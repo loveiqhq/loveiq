@@ -22,6 +22,7 @@ import {
   trackReportPurchase,
 } from "@features/analytics/client";
 import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
+import { clearReportNurturePromos } from "@features/survey/ui/hooks/surveySession";
 
 type ReturnState =
   | {
@@ -195,6 +196,12 @@ const CheckoutReturnPage: FC<Props> = ({
   const canReturnToUnlockedReport =
     state.status === "ready" && isPaidAndComplete && state.accessPlan !== null;
   const isRedirecting = canReturnToUnlockedReport;
+
+  // The email's promo code is spent once Stripe completes the checkout that used it. Left
+  // in this tab it rode along on the reader's next checkout, which Stripe then refused.
+  useEffect(() => {
+    if (isPaidAndComplete) clearReportNurturePromos();
+  }, [isPaidAndComplete]);
 
   // Fire `checkout_return_viewed` exactly once per (sessionId, terminal state)
   // pair so a 30s polling loop doesn't double-count. Bind the submission

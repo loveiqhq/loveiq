@@ -1613,15 +1613,23 @@ export async function markReportPriceQuotePurchased({
     metadata: Record<string, unknown> | null;
   }>;
   const existingMetadata = lookupRows[0]?.metadata ?? {};
-  const response = await supabaseServiceFetch(`/rest/v1/report_price_quote?id=eq.${quoteId}`, {
-    body: JSON.stringify({
-      metadata: paymentId ? { ...existingMetadata, paymentId } : existingMetadata,
-      purchased_at: new Date().toISOString(),
-      updated_date_time: new Date().toISOString(),
-    }),
-    headers: { Prefer: "return=minimal" },
-    method: "PATCH",
-  });
+  // Write-once: the FIRST purchase keeps the stamp and its payment id. One full_report
+  // quote serves the single report for every archetype, so a second single bought on it
+  // moved `purchased_at` later and replaced `paymentId`, and the first sale's day moved
+  // with it in every daily readout. Each payment row carries `pricing_quote_id`, so the
+  // later purchases are still found from the payment side.
+  const response = await supabaseServiceFetch(
+    `/rest/v1/report_price_quote?id=eq.${quoteId}&purchased_at=is.null`,
+    {
+      body: JSON.stringify({
+        metadata: paymentId ? { ...existingMetadata, paymentId } : existingMetadata,
+        purchased_at: new Date().toISOString(),
+        updated_date_time: new Date().toISOString(),
+      }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    }
+  );
 
   if (!response.ok) {
     throw new Error("pricing_quote_purchase_update_failed");

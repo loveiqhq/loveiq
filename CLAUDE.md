@@ -702,7 +702,8 @@ testing on either.
   often refused in our Stripe sessions, so stage an alias on one of that submission's quotes:
   `report_price_quote.metadata.nurturePromoCodes.team_test` =
   `{code: "LIQ-100-TESTONLY", stripePromotionCodeId: <the code's promo_ id>, percentOff: 100, expiresAt: <tomorrow>}`.
-  Then open `/report/<token>?promo=LIQ-100-TESTONLY`.
+  Then open `/report/<token>?promo=LIQ-100-TESTONLY`. The tab forgets the code once a
+  purchase completes, so open that link again before each further test purchase.
 - On Stripe, press the button only when it says **Complete order**. "Pay" means real money.
 - Why this is safe for ads and revenue: at €0 the browser sends no GA4 purchase and no
   Google Ads conversion (`trackReportPurchase`). The server-side GA4 send skips staff and

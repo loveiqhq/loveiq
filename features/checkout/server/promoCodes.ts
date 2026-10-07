@@ -80,7 +80,8 @@ async function resolveSubmissionId({
 /**
  * Resolve a user-typed nurture promo code against the recipient's stored
  * per-user promotion records. Returns null on any miss (unknown code, wrong
- * owner, expired) — never throws. Callers fall through to the no-promo flow.
+ * owner, expired, already used) — never throws. Callers fall through to the
+ * no-promo flow.
  *
  * Scoping by submission ensures a leaked code can only be redeemed by the
  * user it was issued to. Stripe-side `max_redemptions: 1` + 24h expiry are
@@ -142,6 +143,27 @@ export async function resolveNurturePromo({
 
       const expiresAt = Date.parse(expiresAtRaw);
       if (!Number.isFinite(expiresAt) || expiresAt < now) continue;
+
+      // Each code redeems once, and the purchase that used it spent it. The tab keeps the
+      // code in sessionStorage, so the reader's next checkout sent it again, Stripe refused
+      // the session, and every retry read "We couldn't prepare secure checkout" until the
+      // code expired. A refund or dispute does not give the redemption back. The team's
+      // test alias (`team_test`, CLAUDE.md) is reusable on purpose: several test purchases
+      // on one report.
+      if (stage !== "team_test") {
+        const used = await fetchWithTimeout(
+          `${cfg.url}/rest/v1/payment?metadata->>promoCode=eq.${encodeURIComponent(userCode)}&status=in.(succeeded,refunded,disputed)&select=id&limit=1`,
+          { cache: "no-store", headers: cfg.headers, timeoutMs: SUPABASE_TIMEOUT_MS }
+        );
+        if (!used.ok) {
+          logger.warn(
+            { status: used.status, submissionId: resolved },
+            "resolveNurturePromo: payment lookup failed"
+          );
+          return null;
+        }
+        if (((await used.json()) as unknown[]).length > 0) return null;
+      }
 
       return { stage, percentOff, stripePromotionCodeId: stripeId };
     }
