@@ -773,9 +773,16 @@ async function fetchWebhookEventRecord(stripeEventId: string) {
 }
 
 async function fetchExistingPayment({
+  checkoutSessionId,
   stripeChargeId,
   stripePaymentIntentId,
 }: {
+  /**
+   * The only key a €0 checkout has: no PaymentIntent, no charge. Without it the webhook
+   * arriving after the return page's fallback found no row and recorded the purchase a
+   * second time (a second payment row, Slack post, PostHog event and email).
+   */
+  checkoutSessionId?: string | null;
   stripeChargeId?: string | null;
   stripePaymentIntentId?: string | null;
 }) {
@@ -795,12 +802,28 @@ async function fetchExistingPayment({
     if (rows[0]) return rows[0];
   }
 
-  if (!stripeChargeId) {
+  if (stripeChargeId) {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/payment?stripe_charge_id=eq.${encodeURIComponent(stripeChargeId)}&select=id,personal_report_id&limit=1`
+    );
+
+    if (!response.ok) {
+      throw new Error("payment_lookup_failed");
+    }
+
+    const rows = (await response.json()) as Array<{
+      id: number;
+      personal_report_id: number | null;
+    }>;
+    if (rows[0]) return rows[0];
+  }
+
+  if (!checkoutSessionId) {
     return null;
   }
 
   const response = await supabaseServiceFetch(
-    `/rest/v1/payment?stripe_charge_id=eq.${encodeURIComponent(stripeChargeId)}&select=id,personal_report_id&limit=1`
+    `/rest/v1/payment?metadata->>checkoutSessionId=eq.${encodeURIComponent(checkoutSessionId)}&select=id,personal_report_id&limit=1`
   );
 
   if (!response.ok) {
@@ -1229,6 +1252,7 @@ async function syncCheckoutSessionPayment({
   const requestIp = getMetadataString(settledSession.metadata?.requestIp);
   const requestUserAgent = getMetadataString(settledSession.metadata?.requestUserAgent);
   const existingPayment = await fetchExistingPayment({
+    checkoutSessionId: settledSession.id,
     stripeChargeId: charge?.id ?? null,
     stripePaymentIntentId: paymentIntentId,
   });
@@ -1236,9 +1260,8 @@ async function syncCheckoutSessionPayment({
   // fallback + cron sweep can all reach this function. We only want one of each
   // per unique purchase, so gate them on whether THIS run is the first write —
   // i.e. there was no payment row before we got here.
-  // ponytail: the row is found by PaymentIntent or charge id. A €0 checkout has
-  // neither, and two runs at the same instant both find none, so either can still
-  // send twice; a run that fails after writing the row sends nothing on its retry.
+  // ponytail: two runs at the same instant both find no row, so either can still send
+  // twice; a run that fails after writing the row sends nothing on its retry.
   // Upgrade: a per-checkout-session claim, released when the sends fail.
   const isFirstFulfillment = !existingPayment;
 
