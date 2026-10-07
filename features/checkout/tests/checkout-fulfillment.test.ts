@@ -931,7 +931,7 @@ describe("checkout fulfillment", () => {
     }
 
     function setupHappyPathMocks(
-      opts: { existingPayment?: boolean; utmTracker?: string | null } = {}
+      opts: { existingPayment?: boolean; primary?: string; utmTracker?: string | null } = {}
     ) {
       const slackCalls: Array<{ url: string; body: string }> = [];
 
@@ -954,6 +954,14 @@ describe("checkout fulfillment", () => {
             url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.cs_test_slack_001")
           ) {
             return createJsonResponse(opts.existingPayment ? [{ id: 99 }] : []);
+          }
+          // The reader's own archetype, which names a single report (getPurchaseTitle).
+          if (url.includes("/rest/v1/scoring_result?survey_submission_id=eq.70")) {
+            return createJsonResponse(
+              opts.primary
+                ? [{ primary_archetype: opts.primary, v5_primary_archetype: opts.primary }]
+                : []
+            );
           }
           // Recipient lookup for the Slack payload
           if (url.includes("/rest/v1/survey_submission?id=eq.70&select=")) {
@@ -1033,7 +1041,7 @@ describe("checkout fulfillment", () => {
 
     it("fires one Slack ping with masked email + plan + archetype + amount on first fulfillment", async () => {
       process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
-      const slackCalls = setupHappyPathMocks();
+      const slackCalls = setupHappyPathMocks({ primary: "Relational Nurturer" });
 
       await processStripeWebhookEvent({
         event: {
@@ -1246,7 +1254,7 @@ describe("checkout fulfillment", () => {
         process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
         delete process.env.ADMIN_TEST_EMAIL_REGEX;
         __resetStaffEmailRegexForTests();
-        const slackCalls = setupHappyPathMocks();
+        const slackCalls = setupHappyPathMocks({ primary: "Spark Seeker" });
         await processStripeWebhookEvent({
           event: {
             id: `evt_slack_whose_${amountTotal}`,
@@ -1323,6 +1331,28 @@ describe("checkout fulfillment", () => {
      * webhook has not reached yet, and Stripe re-delivers. Slack, GA4 and PostHog went
      * out once; the buyer's email went out on every pass.
      */
+    it("names a single report bought for another archetype in #payments", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({ primary: "Relational Nurturer" });
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_other_archetype",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: { plan: "full_report", archetype: "Spark Seeker" },
+            },
+          },
+        } as never,
+        stripe: buildStripe("full_report", "Spark Seeker") as never,
+      });
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("Only the Spark Seeker Report");
+      expect(all).not.toContain("Only Your Highest Archetype");
+    });
+
     it("sends the buyer's confirmation email once when the same purchase is processed twice", async () => {
       process.env.RESEND_API_KEY = "re_test_not_real";
       mockResendSend.mockResolvedValue({ data: { id: "email_test_1" }, error: null });
