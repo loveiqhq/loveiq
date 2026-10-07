@@ -441,7 +441,11 @@ export async function proxy(request: NextRequest) {
     `style-src 'self' 'unsafe-inline' ${googleFontStyleSources}`, // Tailwind requires unsafe-inline for styles
     "worker-src 'self' blob:",
     `font-src 'self' data: ${googleFontSources}`,
-    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com ${GOOGLE_COUNTRY_DOMAINS} https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
+    // The Ads hosts are here as well as in connect-src: Safari sends the conversion pings
+    // to ad.doubleclick.net and pagead2.googlesyndication.com as images, and img-src alone
+    // refused them (measured on production in WebKit, 2026-10-06), so Safari buyers'
+    // conversions never reached Google Ads.
+    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://ad.doubleclick.net https://pagead2.googlesyndication.com https://www.googleadservices.com https://www.google.com ${GOOGLE_COUNTRY_DOMAINS} https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
     "media-src 'self'",
     // GA4 does not post only to www.google-analytics.com: it uses region-scoped
     // hosts (region1.google-analytics.com, analytics.google.com) and Google Ads
