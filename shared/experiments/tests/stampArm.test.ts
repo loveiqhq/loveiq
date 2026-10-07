@@ -187,12 +187,12 @@ describe("stampLandingArm", () => {
  * anything else.
  */
 describe("mergeTrackerArm", () => {
-  const KEY = "email_question_arm";
+  const KEY = "contact_question_arm";
 
   it("adds the arm to a tracker that exists", () => {
     expect(parse(mergeTrackerArm('{"utm_source":"google"}', KEY, "anonymous"))).toEqual({
       utm_source: "google",
-      email_question_arm: "anonymous",
+      contact_question_arm: "anonymous",
     });
   });
 
@@ -204,14 +204,16 @@ describe("mergeTrackerArm", () => {
 
   it("replaces an arm the browser claims with the derived one", () => {
     expect(
-      parse(mergeTrackerArm('{"utm_source":"x","email_question_arm":"control"}', KEY, "anonymous"))
-    ).toEqual({ utm_source: "x", email_question_arm: "anonymous" });
+      parse(
+        mergeTrackerArm('{"utm_source":"x","contact_question_arm":"control"}', KEY, "anonymous")
+      )
+    ).toEqual({ utm_source: "x", contact_question_arm: "anonymous" });
   });
 
   it("strips a claimed arm even when there is none to derive", () => {
     // No session id means no arm, and the browser's word is never one.
     expect(
-      parse(mergeTrackerArm('{"utm_source":"x","email_question_arm":"anonymous"}', KEY, null))
+      parse(mergeTrackerArm('{"utm_source":"x","contact_question_arm":"anonymous"}', KEY, null))
     ).toEqual({
       utm_source: "x",
     });
@@ -229,15 +231,17 @@ describe("mergeTrackerArm", () => {
   });
 
   it("stamps at exactly 1000 characters and gives the arm up past that", () => {
-    // ',"email_question_arm":"control"' adds 31 characters.
-    const snug = JSON.stringify({ utm_campaign: "x".repeat(950) }); // 969
-    const fat = JSON.stringify({ utm_campaign: "x".repeat(951) }); // 970
+    // The stamp adds `,"<key>":"control"`, so the padding follows the key's length.
+    const stamp = `,${JSON.stringify(KEY)}:"control"`.length;
+    const room = 1000 - stamp - JSON.stringify({ utm_campaign: "" }).length;
+    const snug = JSON.stringify({ utm_campaign: "x".repeat(room) }); // + the stamp = 1000
+    const fat = JSON.stringify({ utm_campaign: "x".repeat(room + 1) }); // + the stamp = 1001
     expect(mergeTrackerArm(snug, KEY, "control")).toHaveLength(1000);
     expect(mergeTrackerArm(fat, KEY, "control")).toBe(fat);
   });
 
   it("still strips a claim when the derived arm will not fit", () => {
-    const claimed = JSON.stringify({ utm_campaign: "x".repeat(951), email_question_arm: "x" });
+    const claimed = JSON.stringify({ utm_campaign: "x".repeat(951), contact_question_arm: "x" });
     expect(parse(mergeTrackerArm(claimed, KEY, "anonymous"))).toEqual({
       utm_campaign: "x".repeat(951),
     });

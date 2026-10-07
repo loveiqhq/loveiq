@@ -57,7 +57,7 @@ function makeRequest(body: unknown) {
 }
 
 /** The email test's arm for validBody()'s session (written out, so a re-split fails). */
-const EMAIL = { email_question_arm: "anonymous" };
+const EMAIL = { contact_question_arm: "anonymous" };
 
 function validBody() {
   return {
@@ -168,7 +168,7 @@ describe("POST /api/survey-partial", () => {
       makeRequest({ ...validBody(), sessionId, utmTracker: JSON.stringify({ utm_source: "x" }) })
     );
     const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
-    expect(JSON.parse(row.utm_tracker).email_question_arm).toBe(arm);
+    expect(JSON.parse(row.utm_tracker).contact_question_arm).toBe(arm);
   });
 
   it("never creates a tracker just for the email question's arm", async () => {
@@ -183,11 +183,14 @@ describe("POST /api/survey-partial", () => {
       makeRequest({
         ...validBody(),
         sessionId: "00000000-0000-4000-8000-000000000007",
-        utmTracker: JSON.stringify({ utm_source: "x", email_question_arm: "anonymous" }),
+        utmTracker: JSON.stringify({ utm_source: "x", contact_question_arm: "anonymous" }),
       })
     );
     const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
-    expect(JSON.parse(row.utm_tracker)).toEqual({ utm_source: "x", email_question_arm: "control" });
+    expect(JSON.parse(row.utm_tracker)).toEqual({
+      utm_source: "x",
+      contact_question_arm: "control",
+    });
   });
 
   it("saves a draft with a long Other text, cut, instead of refusing it", async () => {

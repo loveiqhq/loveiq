@@ -174,16 +174,21 @@ would refuse (`isValidSurveyEmail`).
 
 - **The arm** is a pure function of the survey session id, salted with the test's name so it
   splits independently of C13 ([`emailQuestionArm.ts`](../shared/experiments/emailQuestionArm.ts)).
-  No session id means control. `?email=control` or `?email=anonymous` previews an arm on dev
-  and staging, never on production.
+  No session id means control, but in a browser there always is one: where storage is blocked,
+  each page load makes its own, so those people are drawn afresh on every load.
+  `?email=control` or `?email=anonymous` previews an arm on dev and staging, never on
+  production.
 - **The copy** lives in [`anonymousEmail.ts`](../features/survey/anonymousEmail.ts), not in
   `survey-data.ts`, so ending the test is one deletion. `OpenResponseQuestion` draws the field
   when it is given `emailArm="anonymous"`.
-- **What is recorded.** The first time the email question shows, `experiment_exposure` fires
-  once (`surface: "survey_email_question"`) and the arm goes onto PostHog and GA4 as
-  `email_question_arm`. Both go to PostHog and GA4 only: there is no submission yet to attach
-  a stored event to. The server stamps the same key into `utm_tracker` on every partial save
-  and submission ([API](api.md#post-apisurvey-partial)).
+- **What is recorded.** The first time the email question shows on a page load,
+  `experiment_exposure` fires (`surface: "survey_email_question"`) and the arm goes onto
+  PostHog and GA4 as `contact_question_arm`. A reload on or after the email question sends it
+  again, so count people, not events. Both go to PostHog and GA4 only: there is no submission
+  yet to attach a stored event to. The server stamps the same key into `utm_tracker` on every
+  partial save and submission ([API](api.md#post-apisurvey-partial)). The key leaves out the
+  word "email" on purpose: the admin's UTM filter matches any part of the tracker, and
+  "email" is a UTM source our own links carry.
 - **Reading it.** Per arm, the sessions that reached the email question against those that
   went on to submit. Always filter by the production start date: the arm is defined for every
   session ever recorded, including all the ones that only ever saw today's question.

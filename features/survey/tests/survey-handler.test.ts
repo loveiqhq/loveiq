@@ -850,7 +850,7 @@ describe("POST /api/survey", () => {
             utmTracker: JSON.stringify({ utm_source: "google" }),
           })
         );
-        expect(JSON.parse(rpcTracker()).email_question_arm).toBe(arm);
+        expect(JSON.parse(rpcTracker()).contact_question_arm).toBe(arm);
       }
     );
 
@@ -859,10 +859,10 @@ describe("POST /api/survey", () => {
         makeRequest({
           ...validBody(),
           sessionId: "00000000-0000-4000-8000-000000000007",
-          utmTracker: JSON.stringify({ utm_source: "google", email_question_arm: "anonymous" }),
+          utmTracker: JSON.stringify({ utm_source: "google", contact_question_arm: "anonymous" }),
         })
       );
-      expect(JSON.parse(rpcTracker()).email_question_arm).toBe("control");
+      expect(JSON.parse(rpcTracker()).contact_question_arm).toBe("control");
     });
 
     it("never creates a tracker just to hold it", async () => {
@@ -884,7 +884,7 @@ describe("POST /api/survey", () => {
       );
       const out = JSON.parse(rpcTracker());
       expect(out.question_order_arm).toBe("control");
-      expect(out.email_question_arm).toBeUndefined();
+      expect(out.contact_question_arm).toBeUndefined();
     });
   });
 

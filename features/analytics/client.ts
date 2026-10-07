@@ -400,7 +400,7 @@ export const setLandingVariant = (variant: LandingVariant | null) => {
  * The email question test's arm (`survey-email-anonymous`), set the first time the
  * email question shows. PostHog carries it on every later event and GA4 takes it as a
  * user property (consent-gated like all GA4 traffic; register a user-scoped custom
- * dimension `email_question_arm` to see it in GA4 reports). Same key as the server's
+ * dimension `contact_question_arm` to see it in GA4 reports). Same key as the server's
  * utm_tracker stamp, so every source groups by one name.
  */
 export const setEmailQuestionArm = (arm: EmailQuestionArm) => {

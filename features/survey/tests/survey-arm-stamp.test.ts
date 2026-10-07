@@ -117,7 +117,7 @@ const validBody = () => ({
 const C13 = { question_order_arm: assignQuestionOrderArm(validBody().sessionId) };
 
 /** The email test's arm for the same session (written out, so a re-split fails). */
-const EMAIL = { email_question_arm: "anonymous" };
+const EMAIL = { contact_question_arm: "anonymous" };
 
 /** The utm_tracker as it reached submitSurveyOnce, parsed. */
 function trackerOnPayload(): Record<string, unknown> | null {
