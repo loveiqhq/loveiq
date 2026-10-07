@@ -48,13 +48,14 @@ export type LandingVariant = "control" | "white" | "white_prev" | "white_card" |
 export const LANDING_VARIANT_EXPERIMENT = "landing-hero-video-ab";
 
 /**
- * The day round 3 started assigning arms (Berlin day). Its readouts start here: the
- * axis trend and the conversion digest cut the landing comparison at this day, so a
- * window that reaches back before it is never read as days of a test that was not
- * running. Staging has run round 3 since it was merged; set this to the day it
- * reaches production, in the PR into main.
+ * The day round 3 started assigning arms on production (Berlin day). Its readouts
+ * start here: the axis trend and the conversion digest cut the landing comparison at
+ * this day, so a window that reaches back before it is never read as days of a test
+ * that was not running. Staging ran it from 2026-10-06. If the release lands on a
+ * later day than this, move it to that day: a day too early only shows as an empty
+ * first day, but a day too late would drop real data from the readouts.
  */
-export const LANDING_HERO_VIDEO_LAUNCH_DAY = "2026-10-06";
+export const LANDING_HERO_VIDEO_LAUNCH_DAY = "2026-10-07";
 
 /**
  * Sticky assignment cookie. `__Host-` prefix in production (requires Secure +
