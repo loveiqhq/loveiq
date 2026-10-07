@@ -112,6 +112,17 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
       expect(card("all_reports").querySelector(".rpg-card__was")?.textContent).toBe(was);
       // The single report keeps its own price.
       expect(within(card("full_report")).getByText("€14.99")).toHaveClass("rpg-card__amount");
+      // price_shown says All 14 was credited, so per-arm price analysis can leave it out.
+      expect(trackPriceShown).toHaveBeenCalledWith(
+        expect.objectContaining({
+          plan: "all_reports",
+          price: charged / 100,
+          upgrade_credit: credit / 100,
+        })
+      );
+      expect(trackPriceShown).toHaveBeenCalledWith(
+        expect.not.objectContaining({ plan: "full_report", upgrade_credit: expect.anything() })
+      );
     }
   );
 

@@ -335,6 +335,7 @@ const ReportPricingModal: FC<Props> = ({
         experiment_group: quote.experimentGroup,
         msrp: quote.msrpCents / 100,
         initial_price: quote.initialPriceCents / 100,
+        ...(quote.upgradeCreditCents ? { upgrade_credit: quote.upgradeCreditCents / 100 } : {}),
       });
     }
   }, [open, quotes, priceShownFiredRef]);
