@@ -5,7 +5,7 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mockGet }),
 }));
 
-import { stampLandingArm } from "@shared/experiments/stampArm";
+import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
 import { LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 
 /** Set the landing-arm cookie to `value`, or clear it when null. */
@@ -177,5 +177,69 @@ describe("stampLandingArm", () => {
       throw new Error("called outside a request scope");
     });
     expect(parse(await stampLandingArm('{"landing_variant":"white"}'))).toEqual({});
+  });
+});
+
+/**
+ * The rules every session-derived arm (C13, the email question test) joins a tracker
+ * by. The arm is a pure function of the stored session id, so a stamp is a convenience
+ * for grouping, never the record, and these rules may refuse it rather than distort
+ * anything else.
+ */
+describe("mergeTrackerArm", () => {
+  const KEY = "email_question_arm";
+
+  it("adds the arm to a tracker that exists", () => {
+    expect(parse(mergeTrackerArm('{"utm_source":"google"}', KEY, "anonymous"))).toEqual({
+      utm_source: "google",
+      email_question_arm: "anonymous",
+    });
+  });
+
+  it("never creates a tracker just to hold the arm", () => {
+    // `utm_tracker IS NOT NULL` means "has attribution data" to four analytics
+    // queries; a tracker made only for the arm would count the visitor as 'direct'.
+    expect(mergeTrackerArm(null, KEY, "anonymous")).toBeNull();
+  });
+
+  it("replaces an arm the browser claims with the derived one", () => {
+    expect(
+      parse(mergeTrackerArm('{"utm_source":"x","email_question_arm":"control"}', KEY, "anonymous"))
+    ).toEqual({ utm_source: "x", email_question_arm: "anonymous" });
+  });
+
+  it("strips a claimed arm even when there is none to derive", () => {
+    // No session id means no arm, and the browser's word is never one.
+    expect(
+      parse(mergeTrackerArm('{"utm_source":"x","email_question_arm":"anonymous"}', KEY, null))
+    ).toEqual({
+      utm_source: "x",
+    });
+  });
+
+  it("leaves the blob byte-identical when there is nothing to do", () => {
+    const raw = '{ "utm_source" : "x" }';
+    expect(mergeTrackerArm(raw, KEY, null)).toBe(raw);
+  });
+
+  it("leaves a tracker that is not a JSON object exactly as it was", () => {
+    for (const raw of ["not json", "[1,2]", "42", "null"]) {
+      expect(mergeTrackerArm(raw, KEY, "control")).toBe(raw);
+    }
+  });
+
+  it("stamps at exactly 1000 characters and gives the arm up past that", () => {
+    // ',"email_question_arm":"control"' adds 31 characters.
+    const snug = JSON.stringify({ utm_campaign: "x".repeat(950) }); // 969
+    const fat = JSON.stringify({ utm_campaign: "x".repeat(951) }); // 970
+    expect(mergeTrackerArm(snug, KEY, "control")).toHaveLength(1000);
+    expect(mergeTrackerArm(fat, KEY, "control")).toBe(fat);
+  });
+
+  it("still strips a claim when the derived arm will not fit", () => {
+    const claimed = JSON.stringify({ utm_campaign: "x".repeat(951), email_question_arm: "x" });
+    expect(parse(mergeTrackerArm(claimed, KEY, "anonymous"))).toEqual({
+      utm_campaign: "x".repeat(951),
+    });
   });
 });
