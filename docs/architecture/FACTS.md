@@ -192,10 +192,14 @@ quote, carrying the plan, the base price and every multiplier that moved it.
 plans, each on two price lists, and every reader is on one list for both (50/50, fixed by
 their report id; the stored arm is `A3` or `B3`):
 
-| Plan                                         | List A3                  | List B3                  |
-| -------------------------------------------- | ------------------------ | ------------------------ |
-| `all_reports`, "All 14 Archetype Reports"    | EUR 39.99 (strike 49.99) | EUR 19.99 (strike 29.99) |
-| `full_report`, "Only Your Highest Archetype" | EUR 29.99                | EUR 14.99                |
+| Plan                                         | List A3                  | List B3                |
+| -------------------------------------------- | ------------------------ | ---------------------- |
+| `all_reports`, "All 14 Archetype Reports"    | EUR 39.99 (strike 49.99) | EUR 6.99 (strike 9.99) |
+| `full_report`, "Only Your Highest Archetype" | EUR 29.99                | EUR 4.99               |
+
+List B3 was EUR 19.99 (strike 29.99) and EUR 14.99 until 2026-10-08, when the
+`Pricing_3.0` tab lowered it; every unpaid B3 quote was moved to the new prices
+(migration 20261008120000). List A3 has not changed.
 
 `essentials` (EUR 9.99) and `core` (EUR 39) are no longer sold; their buyers keep what they
 bought. Before 3.0, `full_report` was EUR 29 and `all_reports` EUR 49 for everyone.
@@ -204,7 +208,9 @@ The quote rows also store `country_multiplier`, `device_multiplier`, `traffic_mu
 `behavioral_multiplier` and `engagement_multiplier`, but none of them moves the price while
 the `pricing_uplift_enabled` flag is off, as it has been since 2026-08-03. Earlier uplifted
 quotes and promotion codes are why **what people actually paid ranges from EUR 3.74 to
-EUR 49.99**, and why the average order value is far below any list price.
+EUR 49.99**, and why the average order value is far below any list price. List B3's
+2026-10-08 prices go lower: EUR 2.49 for its single with the 50% code (Stripe rounds the
+discount up), and EUR 2.00 for All 14 after its single.
 
 **The wrong answer this displaces: EUR 129.49.** That figure stood in this paragraph until
 2026-09-23 and is not a price anyone paid — both rows at it are `is_test = true`, staff
@@ -221,7 +227,7 @@ conversions and never inside them — see the decision record of 2026-09-19. The
 order value is deliberately NOT restated here: it moves on every sale, and the
 `analytics` all-time row already carries it.
 
-A discount also arrives from the nurture email. There are **two** stages —
+A discount also arrives from the nurture email. There is **one** stage —
 `72h_no_unlock` alone, and `type Stage` in
 `app/api/cron/nurture-sequence/route.ts` is the source of truth. In practice a reader who
 does not convert receives exactly ONE follow-up: `72h_no_unlock`, which mints a per-user

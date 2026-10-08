@@ -71,11 +71,12 @@ const PRICING_SIGNAL_SELECT = [
  * in Drive, agreed at the 1 Oct sync and launched with the new paygate (Figma
  * 1382:2557). Two products, two price lists, 50/50:
  *
- *   all_reports  "All 14 Archetype Reports"     A3 €39.99 (strike €49.99)   B3 €19.99 (strike €29.99)
- *   full_report  "Only Your Highest Archetype"  A3 €29.99 (no strike)       B3 €14.99 (no strike)
+ *   all_reports  "All 14 Archetype Reports"     A3 €39.99 (strike €49.99)   B3 €6.99 (strike €9.99)
+ *   full_report  "Only Your Highest Archetype"  A3 €29.99 (no strike)       B3 €4.99 (no strike)
  *
  * A3 is the price the Figma frames show; B3 is the "one lower price tier" Marcus asked
- * for beside it. `startingCents` is what the reader is charged and `msrpCents` the
+ * for beside it. B3 was €19.99 (strike €29.99) and €14.99 until the sheet lowered it on
+ * 2026-10-08 (re-synced by 20261008120000). `startingCents` is what the reader is charged and `msrpCents` the
  * struck-out anchor; a bucket priced at its own anchor draws no strike.
  *
  * WHY "A3"/"B3" AND NOT "A"/"B". `experiment_group` already holds A and B from the
@@ -114,13 +115,13 @@ const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [{ code: "B", weight: 100, msrpCents: 2999, startingCents: 999 }],
   full_report: [
     { code: "A3", weight: 50, msrpCents: 2999, startingCents: 2999 },
-    { code: "B3", weight: 50, msrpCents: 1499, startingCents: 1499 },
+    { code: "B3", weight: 50, msrpCents: 499, startingCents: 499 },
   ],
   // Retired with Pricing 3.0; kept for historical rows only.
   core: [{ code: "B", weight: 100, msrpCents: 8700, startingCents: 3900 }],
   all_reports: [
     { code: "A3", weight: 50, msrpCents: 4999, startingCents: 3999 },
-    { code: "B3", weight: 50, msrpCents: 2999, startingCents: 1999 },
+    { code: "B3", weight: 50, msrpCents: 999, startingCents: 699 },
   ],
 };
 
@@ -1564,8 +1565,8 @@ const STRIPE_MIN_CHARGE_CENTS = 50;
 /**
  * What a reader already paid for reports on this personal report: every succeeded payment
  * except All 14 itself, less refunds. All 14 credits it, so singles never add up to more
- * than All 14 costs. Before this, two singles on the lower list (€29.98) cost more than
- * All 14 (€19.99), and report 165 bought three in one night. €0 comps add nothing, and
+ * than All 14 costs. Before this, two singles on the lower list (then €29.98) cost more
+ * than All 14 (€19.99), and report 165 bought three in one night. €0 comps add nothing, and
  * staff test purchases are left out like everywhere money is counted.
  */
 export async function getUpgradeCreditCents(personalReportId: number): Promise<number> {
