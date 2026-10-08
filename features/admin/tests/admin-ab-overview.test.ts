@@ -24,8 +24,8 @@ vi.mock("@features/admin/server/digest-metrics", async () => {
 
 import { __resetAbOverviewCacheForTests, GET } from "@/app/api/admin/ab-overview/route";
 import {
-  PRICING_3_LAUNCH_AT,
-  PRICING_3_LAUNCH_DAY,
+  PRICE_TEST_START_AT,
+  PRICE_TEST_START_DAY,
 } from "@features/checkout/server/reportPurchase";
 
 function req(days = 90) {
@@ -350,11 +350,13 @@ describe("GET /api/admin/ab-overview", () => {
     expect(body.funnelCaveats.join(" ")).toContain("our own servers");
   });
 
-  it("reads the Pricing 3.0 test from readers who finished after it went live", async () => {
-    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
-    // The launch day's morning, before 18:18 UTC: these readers saw the 2.x prices and
-    // were re-priced at launch, so a 3.0 stamp, but not the test's.
-    const before = `${PRICING_3_LAUNCH_DAY}T10:00:00.000Z`;
+  it("reads the price test from readers who finished after its lists went live", async () => {
+    // The day cut (axis trend, digest) and the moment cut (this readout) move together.
+    expect(PRICE_TEST_START_AT.slice(0, 10)).toBe(PRICE_TEST_START_DAY);
+    const after = new Date(Date.parse(PRICE_TEST_START_AT) + 3_600_000).toISOString();
+    // The change day's morning, before 15:23 UTC: these readers saw list B's old prices
+    // and were re-priced, so a 3.0 stamp, but not the test's.
+    const before = `${PRICE_TEST_START_DAY}T10:00:00.000Z`;
     const subs = [
       ...Array.from({ length: 40 }, (_, i) => submission(i + 1, "white", null, after)),
       ...Array.from({ length: 60 }, (_, i) => submission(i + 41, "white", null, after)),
@@ -393,7 +395,7 @@ describe("GET /api/admin/ab-overview", () => {
   it("leaves our own test runs out of every count", async () => {
     // #2416 on 6 October: a team member's B3 run, paid with EUR 0 test payments, read as
     // "Pricing 3.0 B 1 of 5 bought". Left out by the owner's address, whatever was paid.
-    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
+    const after = new Date(Date.parse(PRICE_TEST_START_AT) + 3_600_000).toISOString();
     routeData(
       [
         submission(1, "white", null, after),
@@ -419,7 +421,7 @@ describe("GET /api/admin/ab-overview", () => {
   it("counts a sale only where money settled, at the amount paid", async () => {
     // purchased_at is also set by a 100%-off unlock, and current_price is the list price:
     // #2416's EUR 0 test runs read as EUR 34.98 of revenue.
-    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
+    const after = new Date(Date.parse(PRICE_TEST_START_AT) + 3_600_000).toISOString();
     routeData(
       [submission(1, "white", null, after), submission(2, "white", null, after)],
       // 1 paid EUR 14.99 against a 29.99 list price; 2 unlocked for nothing.
@@ -442,7 +444,7 @@ describe("GET /api/admin/ab-overview", () => {
   it("reads the pricing arm from the 3.0 quote, never a retired list-B one beside it", async () => {
     // A reader re-priced at launch holds essentials and core quotes on list B next to
     // their A3 ones, and whichever came back first used to decide the arm.
-    const after = new Date(Date.parse(PRICING_3_LAUNCH_AT) + 3_600_000).toISOString();
+    const after = new Date(Date.parse(PRICE_TEST_START_AT) + 3_600_000).toISOString();
     routeData(
       [submission(1, "white", null, after)],
       [quote(1, "B", false, 9.99), quote(1, "A3", false, 29.99)]

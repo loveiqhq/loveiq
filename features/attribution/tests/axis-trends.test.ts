@@ -8,7 +8,7 @@ import {
   rowsForAxis,
   type AxisFunnelRow,
 } from "@features/attribution/server/axis-trends";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
 import { LANDING_HERO_VIDEO_LAUNCH_DAY } from "@shared/experiments/landingVariant";
 
 /**
@@ -103,8 +103,8 @@ describe("axis trend charts — which experiments may be drawn", () => {
   });
 
   it("reads the price test from Pricing 3.0's own arms and launch day only", () => {
-    expect(AXIS_VALID_FROM.pricing?.day).toBe(PRICING_3_LAUNCH_DAY);
-    const launch = PRICING_3_LAUNCH_DAY;
+    expect(AXIS_VALID_FROM.pricing?.day).toBe(PRICE_TEST_START_DAY);
+    const launch = PRICE_TEST_START_DAY;
     const input = [
       // The concluded 2.x arms, still in the data for everyone who bought under them.
       ...rows("pricing", "A", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),

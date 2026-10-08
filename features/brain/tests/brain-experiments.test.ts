@@ -54,7 +54,7 @@ vi.mock("@features/brain/server/people", () => {
 
 import { listExperiments, recordExperiment } from "@features/brain/server/experiments";
 import type { ArmOutcomes } from "@features/admin/server/experiment-readouts";
-import { PRICING_3_LAUNCH_AT } from "@features/checkout/server/reportPurchase";
+import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
 
 const NOW = Date.parse("2026-09-26T09:00:00Z");
 const row = (over: Record<string, unknown> = {}) => ({
@@ -155,7 +155,7 @@ describe("experiments: the registry, read", () => {
     const priced: ArmOutcomes = {
       submissions: [1, 2, 3].map((id) => ({
         id,
-        created_date_time: PRICING_3_LAUNCH_AT,
+        created_date_time: PRICE_TEST_START_AT,
         utm_tracker: null,
       })),
       bySubmission: new Map([

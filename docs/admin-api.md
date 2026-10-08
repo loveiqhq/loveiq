@@ -81,10 +81,10 @@ Canonical role hierarchy from [`features/admin/server/roles.ts`](../features/adm
 `features/admin/server/experiment-readouts.ts`) leaves the team's own test runs out:
 submissions whose owner email is staff (`isStaffEmail`, the rule that sets
 `payment.is_test`) are not counted. A sale is a succeeded, non-test payment above €0 and its
-revenue is what was paid, not the quote's list price. Pricing 3.0 counts readers who
-finished from its launch time (2026-10-06 18:18 UTC, set in
-`features/checkout/server/reportPurchase.ts`) and reads their arm from the A3/B3
-quote only. The digest's funnel functions exclude staff the same way (migration
+revenue is what was paid, not the quote's list price. The price test counts readers who
+finished from when its current lists went live (2026-10-08 15:23 UTC, when list B was
+lowered; set in `features/checkout/server/reportPurchase.ts`) and reads their arm from
+the A3/B3 quote only. The digest's funnel functions exclude staff the same way (migration
 `20261006230000`).
 
 ### Workflow, Registries, and Collaboration

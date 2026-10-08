@@ -103,7 +103,7 @@ import {
   buildUnitEconomicsLines,
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
 
 /** Two arms, 30 days, shaped like the real RPC response. */
 function makeFunnel(overrides: Partial<{ visitorArms: Record<string, number> }> = {}) {
@@ -3081,7 +3081,7 @@ describe("the Pricing 3.0 verdict waits for a window wholly after the launch", (
   ];
   const digestOn = async (daysAfterLaunch: number) => {
     const day = new Date(
-      Date.parse(`${PRICING_3_LAUNCH_DAY}T00:00:00Z`) + daysAfterLaunch * 86_400_000
+      Date.parse(`${PRICE_TEST_START_DAY}T00:00:00Z`) + daysAfterLaunch * 86_400_000
     )
       .toISOString()
       .slice(0, 10);

@@ -27,7 +27,7 @@
  */
 
 import { computeRate } from "@features/admin/server/digest-metrics";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
 import { LANDING_HERO_VIDEO_LAUNCH_DAY } from "@shared/experiments/landingVariant";
 import {
   armLabel,
@@ -93,10 +93,11 @@ export const AXIS_VALID_FROM: Partial<Record<ChartAxis, { day: string; why: stri
     why: "the question card and the hero video only started running against each other on its launch day",
   },
   // Pricing 3.0. A3/B3 are new arm names, but the launch re-priced every reader who
-  // had not bought yet, so readers who finished before it carry a 3.0 arm too.
+  // had not bought yet, so readers who finished before it carry a 3.0 arm too; and list
+  // B was lowered on 2026-10-08, which re-priced list B's readers again.
   pricing: {
-    day: PRICING_3_LAUNCH_DAY,
-    why: "Pricing 3.0's two price lists only started on its launch day",
+    day: PRICE_TEST_START_DAY,
+    why: "the two price lists running now only started on 2026-10-08, when list B was lowered",
   },
 };
 

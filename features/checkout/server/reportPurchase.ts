@@ -120,20 +120,22 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
 export const PRICING_CATALOG = "3.0";
 
 /**
- * The day Pricing 3.0 started quoting (UTC). The price test is read from here on: the
- * axis trend counts readers who finished the survey from this day (the /admin readout
- * from PRICING_3_LAUNCH_AT), and the conversion digest treats it as the last
- * repricing. Readers from before it were re-priced at launch, after seeing the 2.x
- * prices, so they belong to neither list. Live on production since 2026-10-06 (staging
- * ran it from 2026-10-05).
+ * The day the price lists running now started (UTC). The price test is read from here
+ * on: the axis trend counts readers who finished the survey from this day (the /admin
+ * readout from PRICE_TEST_START_AT), and the conversion digest treats it as the last
+ * repricing. Pricing 3.0 launched on 2026-10-06 (18:18 UTC); list B was lowered to
+ * €6.99 / €4.99 on 2026-10-08 (#545), which restarted the test. Readers from before it
+ * had seen list B's old prices, or the 2.x ones, so they belong to neither list.
  */
-export const PRICING_3_LAUNCH_DAY = "2026-10-06";
+export const PRICE_TEST_START_DAY = "2026-10-08";
 
 /**
- * The moment Pricing 3.0 went live on production. The /admin readout cuts its cohort
- * here rather than at the day: the morning's readers finished under the 2.x prices.
+ * The moment list B's new prices were live on production: the deploy at 15:22:29 UTC
+ * and the re-sync of every unpaid B3 quote (20261008120000) at 15:23:00. The /admin
+ * readout cuts its cohort here rather than at the day: the morning's readers finished
+ * under list B's old prices.
  */
-export const PRICING_3_LAUNCH_AT = "2026-10-06T18:18:00Z";
+export const PRICE_TEST_START_AT = "2026-10-08T15:23:00Z";
 
 /** The plans the paygate sells — and so the only ones quoted or checked out. */
 export const OFFERED_REPORT_PURCHASE_PLAN_IDS: ReportPurchasePlanId[] = REPORT_PURCHASE_PLANS.map(
