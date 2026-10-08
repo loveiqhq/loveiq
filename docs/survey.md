@@ -192,8 +192,8 @@ would refuse (`isValidSurveyEmail`).
 - **Reading it.** Per arm, the sessions that reached the email question against those that
   went on to submit. Always filter by the production start date: the arm is defined for every
   session ever recorded, including all the ones that only ever saw today's question.
-- **Status.** On staging since 2026-10-07, not yet on production. Record the production start
-  date here when it ships.
+- **Status.** On production since **2026-10-08 09:12 UTC** (11:12 Berlin, #539), on staging
+  since 2026-10-07. Every readout starts there; a run begun before it is outside the test.
 
 ### Measuring CTA click-through by urgency band
 
