@@ -102,14 +102,14 @@ describe("axis trend charts — which experiments may be drawn", () => {
     }
   });
 
-  it("reads the price test from Pricing 3.0's own arms and launch day only", () => {
+  it("reads the price test from Pricing 3.0's own arms and its lists' first whole day only", () => {
     expect(AXIS_VALID_FROM.pricing?.day).toBe(PRICE_TEST_START_DAY);
     const launch = PRICE_TEST_START_DAY;
     const input = [
       // The concluded 2.x arms, still in the data for everyone who bought under them.
       ...rows("pricing", "A", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
       ...rows("pricing", "B", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
-      // 3.0 arms on days BEFORE the launch: readers re-priced by the launch re-sync.
+      // 3.0 arms on days BEFORE the lists started: readers re-priced by a re-sync.
       ...rows("pricing", "A3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
       ...rows("pricing", "B3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 2 }),
     ];

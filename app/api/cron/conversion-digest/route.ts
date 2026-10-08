@@ -164,7 +164,7 @@ const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
  * inside the current price lists they include readers who finished under earlier
  * prices and were re-priced (the 2.x lists, list B's first prices), and a verdict pooled
  * over them would call that a result. The price test is still in *The tests*
- * meanwhile, cut to the day its lists started.
+ * meanwhile, cut to the first whole day of its lists (PRICE_TEST_START_DAY).
  */
 function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[] {
   const windowStartDay = new Date(
