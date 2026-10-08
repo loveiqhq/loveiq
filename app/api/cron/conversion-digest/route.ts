@@ -91,7 +91,10 @@ import {
 } from "@features/admin/server/conversion-digest";
 import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
 import { adCostByDay, adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
-import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
+import {
+  PRICE_TEST_START_AT,
+  PRICE_TEST_START_DAY,
+} from "@features/checkout/server/reportPurchase";
 import {
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_VARIANT_ARMS,
@@ -173,14 +176,13 @@ function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[
 }
 
 /**
- * When report prices last changed. `buildAlerts` uses it to suppress the
- * "conversion dropped" alert around a repricing, where a rate change is expected
- * rather than a regression. Update this on the next price change.
+ * When report prices last changed, handed to `buildAlerts` (no alert reads it since its
+ * pricing-cutover warning went). It follows PRICE_TEST_START_AT on the next price change.
  *
  * Pricing 3.0 (2026-10-06): two new products on two new price lists, for every reader
  * who had not bought yet. 2026-10-08: list B lowered to €6.99 / €4.99.
  */
-const PRICING_CUTOVER_ISO = `${PRICE_TEST_START_DAY}T00:00:00Z`;
+const PRICING_CUTOVER_ISO = PRICE_TEST_START_AT;
 
 /**
  * Makes each preview's Slack `kind` distinct so notifySlack's 60-second dedup

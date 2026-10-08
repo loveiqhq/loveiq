@@ -97,7 +97,7 @@ export const AXIS_VALID_FROM: Partial<Record<ChartAxis, { day: string; why: stri
   // B was lowered on 2026-10-08, which re-priced list B's readers again.
   pricing: {
     day: PRICE_TEST_START_DAY,
-    why: "the two price lists running now only started on 2026-10-08, when list B was lowered",
+    why: "list B's new prices began late on 2026-10-08, so the chart starts on their first whole day",
   },
 };
 

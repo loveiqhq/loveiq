@@ -120,14 +120,17 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
 export const PRICING_CATALOG = "3.0";
 
 /**
- * The day the price lists running now started (UTC). The price test is read from here
- * on: the axis trend counts readers who finished the survey from this day (the /admin
- * readout from PRICE_TEST_START_AT), and the conversion digest treats it as the last
- * repricing. Pricing 3.0 launched on 2026-10-06 (18:18 UTC); list B was lowered to
- * €6.99 / €4.99 on 2026-10-08 (#545), which restarted the test. Readers from before it
- * had seen list B's old prices, or the 2.x ones, so they belong to neither list.
+ * The first whole (Berlin) reporting day of the price lists running now. The day-level
+ * reads start here: the axis trend counts readers who finished the survey from this day,
+ * and the conversion digest gives the price test a verdict only once its window does.
+ * A day cut cannot split a day, so it is the first day that starts after
+ * PRICE_TEST_START_AT (the /admin readout's own, exact cut): 2026-10-08 itself still
+ * holds readers who saw list B's old prices. Pricing 3.0 launched on 2026-10-06 (18:18
+ * UTC); list B was lowered to €6.99 / €4.99 on 2026-10-08 (#545), which restarted the
+ * test. Readers from before had seen list B's old prices, or the 2.x ones, so they
+ * belong to neither list.
  */
-export const PRICE_TEST_START_DAY = "2026-10-08";
+export const PRICE_TEST_START_DAY = "2026-10-09";
 
 /**
  * The moment list B's new prices were live on production: the deploy at 15:22:29 UTC

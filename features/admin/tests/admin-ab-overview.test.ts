@@ -27,6 +27,7 @@ import {
   PRICE_TEST_START_AT,
   PRICE_TEST_START_DAY,
 } from "@features/checkout/server/reportPurchase";
+import { reportingDayStart } from "@shared/time/reporting-day";
 
 function req(days = 90) {
   return new Request(`https://x.test/api/admin/ab-overview?days=${days}`);
@@ -351,12 +352,16 @@ describe("GET /api/admin/ab-overview", () => {
   });
 
   it("reads the price test from readers who finished after its lists went live", async () => {
-    // The day cut (axis trend, digest) and the moment cut (this readout) move together.
-    expect(PRICE_TEST_START_AT.slice(0, 10)).toBe(PRICE_TEST_START_DAY);
+    // The day cuts (axis trend, digest) start on the first whole Berlin day after this
+    // readout's moment cut: never earlier (that day still holds old-price readers), and
+    // no more than a day later.
+    const firstDay = reportingDayStart(PRICE_TEST_START_DAY).getTime();
+    expect(firstDay).toBeGreaterThanOrEqual(Date.parse(PRICE_TEST_START_AT));
+    expect(firstDay - Date.parse(PRICE_TEST_START_AT)).toBeLessThan(86_400_000);
     const after = new Date(Date.parse(PRICE_TEST_START_AT) + 3_600_000).toISOString();
-    // The change day's morning, before 15:23 UTC: these readers saw list B's old prices
-    // and were re-priced, so a 3.0 stamp, but not the test's.
-    const before = `${PRICE_TEST_START_DAY}T10:00:00.000Z`;
+    // An hour before the change: these readers saw list B's old prices and were
+    // re-priced, so a 3.0 stamp, but not the test's.
+    const before = new Date(Date.parse(PRICE_TEST_START_AT) - 3_600_000).toISOString();
     const subs = [
       ...Array.from({ length: 40 }, (_, i) => submission(i + 1, "white", null, after)),
       ...Array.from({ length: 60 }, (_, i) => submission(i + 41, "white", null, after)),
