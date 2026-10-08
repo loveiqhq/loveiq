@@ -7,7 +7,11 @@ import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
-import { stampLandingArm } from "@shared/experiments/stampArm";
+import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
+import {
+  assignEmailQuestionArm,
+  EMAIL_QUESTION_ARM_KEY,
+} from "@shared/experiments/emailQuestionArm";
 import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 
 const partialSchema = z.object({
@@ -93,8 +97,16 @@ export async function POST(request: Request) {
      * record that exists for someone who never finishes, so without this the
      * mid-funnel cannot be split by experiment at all — which is exactly what
      * "Midway Progress has no source" turned out to mean.
+     *
+     * The email question test's arm joins it, derived from the session id: someone who
+     * stops at the email question leaves only this row. `mergeTrackerArm` never creates
+     * a tracker for it, so the session id stays the record and the stamp a convenience.
      */
-    utm_tracker: await stampLandingArm(parsed.data.utmTracker),
+    utm_tracker: mergeTrackerArm(
+      await stampLandingArm(parsed.data.utmTracker),
+      EMAIL_QUESTION_ARM_KEY,
+      assignEmailQuestionArm(parsed.data.sessionId)
+    ),
     client_ip: ip,
     saved_at: new Date().toISOString(),
   };

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup, act, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 const mockSetAnswer = vi.fn();
@@ -90,6 +91,7 @@ vi.mock("@features/analytics/client", () => ({
   setReportSubmissionContext: vi.fn(),
   setSurveyVariant: vi.fn(),
   trackExperimentExposure: vi.fn(),
+  setEmailQuestionArm: vi.fn(),
 }));
 
 vi.mock("@features/survey/ui/questions/SingleChoiceQuestion", () => ({
@@ -105,8 +107,14 @@ vi.mock("@features/survey/ui/questions/ScaleQuestion", () => ({
 }));
 
 vi.mock("@features/survey/ui/questions/OpenResponseQuestion", () => ({
-  default: (props: { question: { question: string } }) => (
-    <div data-testid="open-response">{props.question.question}</div>
+  default: (props: { question: { question: string; placeholder?: string }; emailArm?: string }) => (
+    <div
+      data-testid="open-response"
+      data-email-arm={props.emailArm ?? ""}
+      data-placeholder={props.question.placeholder ?? ""}
+    >
+      {props.question.question}
+    </div>
   ),
 }));
 
@@ -139,11 +147,13 @@ vi.mock("@features/survey/ui/SurveyNav", () => ({
     hasAnswer: boolean;
     onNext: () => void;
     onPrevious: () => void;
+    progress?: ReactNode;
   }) => (
     <div data-testid="survey-nav" data-ready={String(props.hasAnswer)}>
       <button data-testid="survey-nav-prev" onClick={props.onPrevious}>
         Previous
       </button>
+      {props.progress}
       <button data-testid="survey-nav-next" onClick={props.onNext} disabled={!props.canGoNext}>
         Next
       </button>
@@ -174,6 +184,8 @@ vi.mock("@features/survey/ui/ProcessingSequence", () => ({
 
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
 import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
+import { setEmailQuestionArm, trackExperimentExposure } from "@features/analytics/client";
+import { SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -316,6 +328,13 @@ describe("SurveyEngine", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("survey-nav")).toBeInTheDocument();
     expect(screen.getByTestId("survey-progress")).toBeInTheDocument();
+  });
+
+  it("draws the progress strip inside the footer row, between Previous and Next", () => {
+    // Figma 11303:174, ready for dev 2026-10-06: one slim row, not two.
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    const nav = screen.getByTestId("survey-nav");
+    expect(nav).toContainElement(screen.getByTestId("survey-progress"));
   });
 
   it("feeds the progress strip the position on screen, out of the questions asked", () => {
@@ -884,9 +903,7 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
     expect(back).toHaveBeenCalledTimes(1); // the history steps back onto this question
   });
 
-  it("refuses a Forward off the email question until the address is confirmed", () => {
-    // Back to the email question clears the confirmation; an edit and the browser's
-    // Forward then submitted an address nobody had confirmed.
+  const emailThenOptIn = () => {
     mockQuestions = [
       makeSurveyQuestion({
         qId: "00000",
@@ -900,7 +917,15 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
     mockGetAnswer.mockImplementation((qId: string) =>
       qId === "00000" ? "reader@example.com" : null
     );
-    window.history.replaceState(q(0, 0), "", "/survey");
+  };
+
+  it("refuses a Forward off the email question until the address is confirmed", () => {
+    // Back to the email question clears the confirmation; an edit and the browser's
+    // Forward then submitted an address nobody had confirmed. Only the control arm of
+    // the email question test has a confirm box, so the arm is pinned: a session id
+    // drawn at random would land in the anonymous arm half the time.
+    emailThenOptIn();
+    window.history.replaceState(q(0, 0), "", "/survey?email=control");
     mockCurrentIndex = 0;
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
@@ -909,6 +934,19 @@ describe("SurveyEngine — the phone's Back button walks the questions", () => {
 
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
     expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a Forward off the email question through in the anonymous arm, with no box to confirm", () => {
+    emailThenOptIn();
+    window.history.replaceState(q(0, 0), "", "/survey?email=anonymous");
+    mockCurrentIndex = 0;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    popTo(q(1, 0));
+
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(1);
+    expect(back).not.toHaveBeenCalled();
   });
 
   it("refuses a Forward off a multiple choice over its limit", () => {
@@ -1135,5 +1173,121 @@ describe("SurveyEngine once the survey is over", () => {
       new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })
     );
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The email question test (`emailQuestionArm.ts`): today's question against Marcus's
+ * anonymous redesign, Figma 11600:15119. The arm is drawn once from the session id, and
+ * `?email=` previews either one off production.
+ */
+describe("SurveyEngine — the email question test", () => {
+  const ANONYMOUS_TITLE = "What’s your email? Feel free to use an anonymous one.";
+  const emailStep = () => {
+    mockQuestions = [
+      makeSurveyQuestion({ qId: "q1", question: "First?" }),
+      makeSurveyQuestion({
+        qId: "00000",
+        question: "What is your email?",
+        answerType: "open",
+        inputType: "email",
+        options: [],
+        placeholder: "your@email.com",
+      }),
+      makeSurveyQuestion({ qId: "16015", question: "Keep me posted?" }),
+    ];
+    mockCurrentIndex = 1;
+  };
+  const preview = (arm: string) => window.history.replaceState(null, "", `/survey?email=${arm}`);
+
+  beforeEach(() => {
+    vi.mocked(trackExperimentExposure).mockClear();
+    vi.mocked(setEmailQuestionArm).mockClear();
+    window.sessionStorage.clear();
+  });
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+    window.sessionStorage.clear();
+  });
+
+  it("shows the anonymous arm its copy and its field", () => {
+    emailStep();
+    preview("anonymous");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    const question = screen.getByTestId("open-response");
+    expect(question).toHaveTextContent(ANONYMOUS_TITLE);
+    expect(question).toHaveAttribute("data-email-arm", "anonymous");
+    expect(question).toHaveAttribute("data-placeholder", "e.g. nickname@example.com");
+  });
+
+  it("leaves the control arm today's question", () => {
+    emailStep();
+    preview("control");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    const question = screen.getByTestId("open-response");
+    expect(question).toHaveTextContent("What is your email?");
+    expect(question).toHaveAttribute("data-email-arm", "control");
+  });
+
+  it("lets the anonymous arm go on with a valid address and no confirm box", () => {
+    emailStep();
+    preview("anonymous");
+    mockGetAnswer.mockReturnValue("jane@example.com");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav-next")).not.toBeDisabled();
+  });
+
+  it("still asks the control arm to confirm the address", () => {
+    emailStep();
+    preview("control");
+    mockGetAnswer.mockReturnValue("jane@example.com");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav-next")).toBeDisabled();
+  });
+
+  it("still refuses an address the server would refuse, in either arm", () => {
+    emailStep();
+    preview("anonymous");
+    mockGetAnswer.mockReturnValue("na..me@gmail.com");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("survey-nav-next")).toBeDisabled();
+  });
+
+  it("draws the arm from the session id when no preview applies", () => {
+    // On production `?email=` is ignored; this session id hashes to the anonymous arm.
+    emailStep();
+    mockNonProd = false;
+    preview("control");
+    window.sessionStorage.setItem(SURVEY_SESSION_KEY, "00000000-0000-4000-8000-000000000000");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("open-response")).toHaveAttribute("data-email-arm", "anonymous");
+  });
+
+  it("records one exposure when the email question shows, with its arm", () => {
+    emailStep();
+    preview("anonymous");
+    const { rerender } = render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    // Back to the question before, then to the email question again: the second visit
+    // is not a second exposure.
+    mockCurrentIndex = 0;
+    rerender(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    mockCurrentIndex = 1;
+    rerender(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(trackExperimentExposure).toHaveBeenCalledTimes(1);
+    expect(trackExperimentExposure).toHaveBeenCalledWith({
+      experiment: "survey-email-anonymous",
+      variant: "anonymous",
+      surface: "survey_email_question",
+    });
+    expect(setEmailQuestionArm).toHaveBeenCalledWith("anonymous");
+  });
+
+  it("records nothing before the email question is reached", () => {
+    emailStep();
+    mockCurrentIndex = 0;
+    preview("anonymous");
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(trackExperimentExposure).not.toHaveBeenCalled();
+    expect(setEmailQuestionArm).not.toHaveBeenCalled();
   });
 });

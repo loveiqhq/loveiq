@@ -256,3 +256,106 @@ describe("OpenResponseQuestion: the empty confirm box", () => {
     expect(screen.queryByText(PROMPT)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The email question test's anonymous arm, Figma IdxyUUVvJSYRTpI9CYRtJI 11600:15119:
+ * one underline input, no confirm box. The copy reaches this component already swapped
+ * (`applyEmailQuestionArm`); what changes here is the field itself.
+ */
+describe("OpenResponseQuestion: the anonymous email arm", () => {
+  const email = makeOpenQuestion({
+    qId: "00000",
+    question: "What’s your email? Feel free to use an anonymous one.",
+    inputType: "email",
+    placeholder: "e.g. nickname@example.com",
+  });
+  const renderAnonymous = (value: string, forceValidation = false) =>
+    render(
+      <OpenResponseQuestion
+        question={email}
+        value={value}
+        onChange={vi.fn()}
+        confirmValue=""
+        onConfirmChange={vi.fn()}
+        forceValidation={forceValidation}
+        emailArm="anonymous"
+      />
+    );
+
+  it("asks for the address once, with no confirm box", () => {
+    renderAnonymous("");
+    const boxes = screen.getAllByRole("textbox");
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]).toHaveAttribute("type", "email");
+    expect(boxes[0]).toHaveAttribute("placeholder", "e.g. nickname@example.com");
+    expect(screen.queryByLabelText("Confirm email address")).not.toBeInTheDocument();
+    expect(screen.queryByText("Type your email again to confirm it.")).not.toBeInTheDocument();
+  });
+
+  it("is named by the question it answers", () => {
+    renderAnonymous("");
+    expect(
+      screen.getByRole("textbox", {
+        name: "What’s your email? Feel free to use an anonymous one.",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("draws the frame's underline field", () => {
+    renderAnonymous("");
+    const box = screen.getByRole("textbox");
+    // 523.5 x 48 from 640px (the full column on a phone), a 1.454px line at
+    // rgba(59,59,59,.264), Manrope Light 17.45/23.84 placeholder at 54%. The line is an
+    // inset shadow, because browsers draw a 1.454px border 1px thick; under forced
+    // colours, which drop shadows, a border takes its place.
+    for (const cls of [
+      "w-full",
+      "sm:w-[523.5px]",
+      "h-[48px]",
+      "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)]",
+      "forced-colors:border-b-[1.454px]",
+      "font-light",
+      "text-[17.45px]",
+      "leading-[23.84px]",
+      "placeholder:text-[rgba(52,52,52,0.54)]",
+    ]) {
+      expect(box.className, cls).toContain(cls);
+    }
+  });
+
+  it("never runs wider than its column", () => {
+    // From 640px to about 660px (a classic scrollbar included) the column is narrower
+    // than 523.5px, and the line ran past the title by up to ~20px.
+    renderAnonymous("");
+    expect(screen.getByRole("textbox").className).toContain("max-w-full");
+  });
+
+  it("adds no gap under the field until there is something to say", () => {
+    // The frame puts the Why row 20px under the line; an always-on 8px gap would make it 28.
+    renderAnonymous("");
+    expect(screen.getByRole("textbox").parentElement?.className).not.toContain("gap-");
+  });
+
+  it("still says when the address is not one the server would take", () => {
+    renderAnonymous("na..me@gmail.com", true);
+    expect(screen.getByText(/doesn.t look like a valid email/i)).toBeInTheDocument();
+    expect(screen.getByRole("textbox").className).toContain(
+      "shadow-[inset_0_-1.454px_0_0_#ef4444]"
+    );
+  });
+
+  it("keeps today's two boxes in the control arm", () => {
+    render(
+      <OpenResponseQuestion
+        question={email}
+        value=""
+        onChange={vi.fn()}
+        confirmValue=""
+        onConfirmChange={vi.fn()}
+        emailArm="control"
+      />
+    );
+    expect(screen.getAllByRole("textbox")).toHaveLength(2);
+    expect(screen.getByLabelText("Confirm email address")).toBeInTheDocument();
+  });
+});

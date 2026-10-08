@@ -46,6 +46,7 @@
  */
 
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
+import { sessionArmHash } from "@shared/experiments/sessionHash";
 
 export type QuestionOrderArm = "control" | "variant";
 
@@ -70,58 +71,10 @@ export function resolveQuestionOrderOverride(
 }
 
 /**
- * FNV-1a, 32-bit, FINISHED WITH AN AVALANCHE STEP. Not a security primitive: it
- * only needs to spread session ids evenly across two buckets, and — because it is
- * salted with the experiment name — to spread them DIFFERENTLY from any other test
- * seeded the same way.
- *
- * WHY THE FINALIZER IS NOT OPTIONAL. Taking `% 2` of raw FNV-1a is not a coin
- * flip. The multiplier (0x01000193) is odd, so multiplying never changes the low
- * bit, and the whole hash collapses to
- *
- *     low bit = parity(offset basis) XOR parity(c1) XOR ... XOR parity(cn)
- *
- * — i.e. "does this string contain an odd number of odd-valued characters?".
- * Measured on production data before this changed: the arm agreed with that
- * parity on 500 of 500 session ids, with no cross-cells at all.
- *
- * Two consequences, one harmless and one not:
- *
- *   - Balance was FINE (50.24% over 200k random uuids), because that parity is
- *     itself unbiased for a random uuid. So the split was valid.
- *   - The SALT DID NOTHING. Changing it can only flip the parity wholesale, so it
- *     re-labels the two groups without re-drawing them. Measured: changing the salt
- *     moved 0.00% of 200,000 ids between buckets. The promise made right above this
- *     comment — that a future test seeded from the same session id would be
- *     uncorrelated — was therefore exactly false: it would have produced the
- *     identical split, or its exact complement, and the two experiments would have
- *     been impossible to tell apart afterwards.
- *
- * `fmix32` is murmur3's finalizer, whose entire job is to make every output bit
- * depend on every input bit. With it, changing the salt moves 50.04% of ids —
- * a genuinely independent draw. Picking a different single bit of the unfinished
- * hash (the top one balances and salts fine too) would have worked by luck rather
- * than by construction, which is the same mistake one bit over.
+ * The split is `sessionArmHash` (sessionHash.ts) salted with this experiment's name;
+ * why it is FNV-1a with murmur3's finalizer, and why that finalizer is not optional,
+ * is written there.
  */
-function hash(seed: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < seed.length; i += 1) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return fmix32(h);
-}
-
-/** murmur3's 32-bit finalizer. Mirrored exactly by `c13_arm()` in SQL. */
-function fmix32(input: number): number {
-  let h = input;
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x85ebca6b);
-  h ^= h >>> 13;
-  h = Math.imul(h, 0xc2b2ae35);
-  h ^= h >>> 16;
-  return h >>> 0;
-}
 
 /**
  * This session's arm. Pure, deterministic and total: the same session id always
@@ -129,7 +82,7 @@ function fmix32(input: number): number {
  */
 export function assignQuestionOrderArm(sessionId: string | null | undefined): QuestionOrderArm {
   if (!sessionId?.trim()) return "control";
-  return hash(`c13-opening-order:${sessionId}`) % 2 === 0 ? "control" : "variant";
+  return sessionArmHash(`c13-opening-order:${sessionId}`) % 2 === 0 ? "control" : "variant";
 }
 
 /**

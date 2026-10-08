@@ -2,7 +2,14 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
+import {
+  assignQuestionOrderArm,
+  QUESTION_ORDER_ARM_KEY,
+} from "@shared/experiments/questionOrderArm";
+import {
+  assignEmailQuestionArm,
+  EMAIL_QUESTION_ARM_KEY,
+} from "@shared/experiments/emailQuestionArm";
 import {
   checkRateLimit,
   checkCooldown,
@@ -12,7 +19,7 @@ import {
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
-import { stampLandingArm } from "@shared/experiments/stampArm";
+import { mergeTrackerArm, stampLandingArm } from "@shared/experiments/stampArm";
 import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
@@ -444,21 +451,21 @@ export async function POST(request: Request) {
    * It commits only if it still fits the 1000-char budget, AFTER the landing arm,
    * so a tracker near the limit loses this stamp and keeps the older one. A client's
    * own `question_order_arm` is dropped either way, as the landing stamp drops its
-   * `landing_variant`: the arm is derived, never claimed.
+   * `landing_variant`: the arm is derived, never claimed. The rules live in
+   * `mergeTrackerArm`, shared with the email question test's arm below.
    */
-  if (questionOrderArm && mergedUtmTracker) {
-    try {
-      const base: unknown = JSON.parse(mergedUtmTracker);
-      if (base && typeof base === "object" && !Array.isArray(base)) {
-        const { question_order_arm: claimed, ...rest } = base as Record<string, unknown>;
-        const candidate = JSON.stringify({ ...rest, question_order_arm: questionOrderArm });
-        if (candidate.length <= 1000) mergedUtmTracker = candidate;
-        else if (claimed !== undefined) mergedUtmTracker = JSON.stringify(rest);
-      }
-    } catch {
-      /* utmTracker wasn't JSON — leave it untouched */
-    }
-  }
+  mergedUtmTracker = mergeTrackerArm(mergedUtmTracker, QUESTION_ORDER_ARM_KEY, questionOrderArm);
+  /**
+   * The email question test's arm (`emailQuestionArm.ts`), by the same rules and from
+   * the same session id the browser drew it from, so the stamp is the version this
+   * respondent was shown (a staging preview with `?email=` excepted). It joins after
+   * C13's, so a tracker near the limit gives this one up first.
+   */
+  mergedUtmTracker = mergeTrackerArm(
+    mergedUtmTracker,
+    EMAIL_QUESTION_ARM_KEY,
+    sessionId ? assignEmailQuestionArm(sessionId) : null
+  );
 
   if (website) {
     // Honeypot field was filled — almost certainly a bot. Fire-and-forget

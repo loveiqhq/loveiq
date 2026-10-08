@@ -56,6 +56,9 @@ function makeRequest(body: unknown) {
   });
 }
 
+/** The email test's arm for validBody()'s session (written out, so a re-split fails). */
+const EMAIL = { contact_question_arm: "anonymous" };
+
 function validBody() {
   return {
     sessionId: "550e8400-e29b-41d4-a716-446655440000",
@@ -148,7 +151,46 @@ describe("POST /api/survey-partial", () => {
 
     const call = mockFetchWithTimeout.mock.calls[0];
     const row = JSON.parse(call[1].body);
-    expect(row.utm_tracker).toBe(utmJson);
+    expect(JSON.parse(row.utm_tracker)).toEqual({ utm_source: "google", ...EMAIL });
+  });
+
+  /**
+   * The draft is the only row someone who stops at the email question leaves behind,
+   * so the email test's arm goes on it too: derived from the session id, never taken
+   * from the body, and only onto a tracker that exists. Literal arms, so a change to
+   * the hash or the salt fails here.
+   */
+  it.each([
+    { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
+    { sessionId: "00000000-0000-4000-8000-000000000000", arm: "anonymous" },
+  ] as const)("stamps the email question the respondent saw ($arm)", async ({ sessionId, arm }) => {
+    await POST(
+      makeRequest({ ...validBody(), sessionId, utmTracker: JSON.stringify({ utm_source: "x" }) })
+    );
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(JSON.parse(row.utm_tracker).contact_question_arm).toBe(arm);
+  });
+
+  it("never creates a tracker just for the email question's arm", async () => {
+    mockCookieGet.mockReturnValue(undefined);
+    await POST(makeRequest({ ...validBody(), sessionId: "00000000-0000-4000-8000-000000000000" }));
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(row.utm_tracker).toBeNull();
+  });
+
+  it("replaces an email arm the body claims with the derived one", async () => {
+    await POST(
+      makeRequest({
+        ...validBody(),
+        sessionId: "00000000-0000-4000-8000-000000000007",
+        utmTracker: JSON.stringify({ utm_source: "x", contact_question_arm: "anonymous" }),
+      })
+    );
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(JSON.parse(row.utm_tracker)).toEqual({
+      utm_source: "x",
+      contact_question_arm: "control",
+    });
   });
 
   it("saves a draft with a long Other text, cut, instead of refusing it", async () => {
@@ -195,6 +237,7 @@ describe("POST /api/survey-partial", () => {
     expect(JSON.parse(row.utm_tracker)).toEqual({
       utm_source: "google",
       landing_variant: "white_prev",
+      ...EMAIL,
     });
   });
 
@@ -205,7 +248,7 @@ describe("POST /api/survey-partial", () => {
     await POST(makeRequest(validBody()));
 
     const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
-    expect(JSON.parse(row.utm_tracker)).toEqual({ landing_variant: "white" });
+    expect(JSON.parse(row.utm_tracker)).toEqual({ landing_variant: "white", ...EMAIL });
   });
 
   it("refuses an arm the body claims when no cookie backs it", async () => {
@@ -219,7 +262,7 @@ describe("POST /api/survey-partial", () => {
     );
 
     const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
-    expect(JSON.parse(row.utm_tracker)).toEqual({ utm_source: "google" });
+    expect(JSON.parse(row.utm_tracker)).toEqual({ utm_source: "google", ...EMAIL });
   });
 
   // The email-position A/B was retired 2026-08-16 (email is asked last for

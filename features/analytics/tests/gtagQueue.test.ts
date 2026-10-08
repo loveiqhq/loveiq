@@ -114,6 +114,35 @@ describe("gtag delivery queue", () => {
     ]);
   });
 
+  it("sets the email question test's arm as a GA4 user property before the event it decorates", async () => {
+    const gtag = vi.fn();
+    const mod = await import("@features/analytics/client");
+    stubWindowBeforeGtagJs(gtag);
+
+    mod.setEmailQuestionArm("anonymous");
+    mod.track("experiment_exposure", { experiment: "survey-email-anonymous" });
+    gtagJsLoads();
+    vi.advanceTimersByTime(300);
+
+    expect(gtag.mock.calls.map((c) => [c[0], c[1], c[2]])).toEqual([
+      ["set", "user_properties", { contact_question_arm: "anonymous" }],
+      ["event", "experiment_exposure", { experiment: "survey-email-anonymous" }],
+    ]);
+  });
+
+  it("does not set the email question test's arm in GA4 without analytics consent", async () => {
+    document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+    const gtag = vi.fn();
+    const mod = await import("@features/analytics/client");
+    stubWindowBeforeGtagJs(gtag);
+    gtagJsLoads();
+
+    mod.setEmailQuestionArm("control");
+    vi.advanceTimersByTime(300);
+
+    expect(gtag.mock.calls.filter((c) => c[0] === "set")).toEqual([]);
+  });
+
   it("gives up if gtag.js never arrives, rather than queueing forever", async () => {
     // Ad blocker, analytics consent withheld, or the script 404s. The page must not
     // accumulate calls or throw; the data is simply lost, which is already the case.

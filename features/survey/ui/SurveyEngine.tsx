@@ -21,9 +21,19 @@ import {
   trackSurveyFormError,
   setReportSubmissionContext,
   setSurveyVariant,
+  setEmailQuestionArm,
+  trackExperimentExposure,
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { orderAskedQuestions } from "./questionOrder";
+import { EMAIL_QID, orderAskedQuestions } from "./questionOrder";
+import {
+  assignEmailQuestionArm,
+  EMAIL_QUESTION_EXPERIMENT,
+  resolveEmailQuestionOverride,
+  type EmailQuestionArm,
+} from "@shared/experiments/emailQuestionArm";
+import { applyEmailQuestionArm } from "@features/survey/anonymousEmail";
+import { getSessionId } from "./hooks/surveySession";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -134,6 +144,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const footerRef = useRef<HTMLDivElement | null>(null);
   const [footerFloating, setFooterFloating] = useState(false);
 
+  // The email question test: today's question against Marcus's anonymous redesign
+  // (Figma 11600:15119). Drawn from the session id with its own salt, so the split is
+  // independent of C13's. Unlike C13's arm it is not kept in the draft: it moves no
+  // question, so a resumed run skips nothing whichever arm it draws, and a run begun
+  // before the test launched is outside every readout by its start date.
+  // `?email=control|anonymous` previews either arm on dev and staging, never on
+  // production.
+  const [emailArm] = useState<EmailQuestionArm>(() => {
+    const devParam =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("email");
+    return resolveEmailQuestionOverride(devParam) ?? assignEmailQuestionArm(getSessionId());
+  });
+
   // Questions answered before the survey opened (the landing-page card) are
   // dropped from the flow so nobody is asked twice. Their answers stay in
   // `answers` and submit + score exactly like the rest, so the total is
@@ -147,14 +172,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   // would otherwise skip the questions the variant moves forward). A fresh run is
   // bucketed by its session id; no session id (storage blocked) means control.
   // `?order=control|variant` previews either arm on dev and staging, never on production.
+  // The email test's copy goes onto the question in the same pass, so the heading, the
+  // screen-reader line and the jump menu all read the same words.
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
     () =>
       orderAskedQuestions(surveyQuestions, orderArm)
         .filter((q) => !isHidden(q.qId))
-        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
-    [prefilledKey, orderArm]
+        .filter((q) => !prefilledKey.split(",").includes(q.qId))
+        .map((q) => applyEmailQuestionArm(q, emailArm)),
+    [prefilledKey, orderArm, emailArm]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
@@ -179,6 +207,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
      */
     setSurveyVariant(surveyVariant);
   }, [surveyVariant]);
+
+  // The email test's exposure, the per-arm denominator: once, the first time the email
+  // question is on screen, which is also when the arm goes onto PostHog and GA4.
+  const emailExposureFired = useRef(false);
+  const onEmailQuestion = question?.qId === EMAIL_QID;
+  useEffect(() => {
+    if (!onEmailQuestion || emailExposureFired.current) return;
+    emailExposureFired.current = true;
+    setEmailQuestionArm(emailArm);
+    trackExperimentExposure({
+      experiment: EMAIL_QUESTION_EXPERIMENT,
+      variant: emailArm,
+      surface: "survey_email_question",
+    });
+  }, [onEmailQuestion, emailArm]);
 
   // Post-survey completion phase management
   // Mounting onto a finished run: a pending submission shows its retry screen. With none,
@@ -275,12 +318,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     // The server's own rule (features/survey/email.ts): an address this let through and the
     // server refused stranded the reader at the final submit.
     if (!isValidSurveyEmail(currentAnswer)) return false;
+    // The email test's anonymous arm draws no confirm box.
+    if (emailArm === "anonymous") return true;
     return (
       emailConfirmValue.trim().length > 0 &&
       tidySurveyEmail(emailConfirmValue).toLowerCase() ===
         tidySurveyEmail(currentAnswer).toLowerCase()
     );
-  }, [question, currentAnswer, emailConfirmValue]);
+  }, [question, currentAnswer, emailConfirmValue, emailArm]);
 
   const isSelectionCountValid = useMemo(() => {
     if (question?.answerType !== "multiple") return true;
@@ -727,9 +772,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
 
   return (
-    // The question screen, Figma 11303:174 (2026-10-04): one card holding the
-    // question, then Previous / Next, then the progress strip. The theme provider
-    // stays for the components that still read it; it is always "white".
+    // The question screen, Figma 11303:174 (ready for dev 2026-10-06): one card holding
+    // the question, then one footer row with Previous, the progress strip and Next. The
+    // theme provider stays for the components that still read it; it is always "white".
     <SurveyThemeProvider variant={surveyVariant}>
       {/* NOTE: the survey root is deliberately NOT masked from session replay
           (owner decision, 2026-08-10) — this reverses audit finding L8. It
@@ -788,7 +833,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
             <div
               key={animKey}
               ref={bodyRef}
-              className="flex flex-1 flex-col gap-5 px-[18.4px] pt-[22.4px] motion-safe:animate-[survey-fade-up_0.4s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:px-[35px] sm:pb-3 sm:pt-[33px]"
+              className="flex flex-1 flex-col gap-5 px-[18.4px] pb-3 pt-[22.4px] motion-safe:animate-[survey-fade-up_0.4s_cubic-bezier(0.16,1,0.3,1)_backwards] sm:px-[35px] sm:pt-[33px]"
             >
               {question.answerType === "open" && (
                 <OpenResponseQuestion
@@ -798,6 +843,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                   forceValidation={attemptedNext}
                   confirmValue={emailConfirmValue}
                   onConfirmChange={setEmailConfirmValue}
+                  emailArm={emailArm}
                 />
               )}
               {question.answerType === "scale" && (
@@ -837,18 +883,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
               <GuidancePanel question={question} />
             </div>
 
-            {/* Previous / Next and the progress strip stay on screen while a long
-                question scrolls (above the cookie banner while it is up). Not in a
-                window 500px tall or less (a landscape phone, a short desktop window),
-                where they would cover a third to half of it: there they follow the
-                question and the page scrolls to them. */}
+            {/* The footer row (Previous, the progress strip, Next) stays on screen while
+                a long question scrolls (above the cookie banner while it is up). Not in
+                a window 500px tall or less (a landscape phone, a short desktop window),
+                where it would cover a third to half of it: there it follows the
+                question and the page scrolls to it. The row draws its own hairline, so
+                floating adds only the soft shadow. */}
             <div
               ref={footerRef}
               data-survey-footer
               className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
-                footerFloating
-                  ? "shadow-[0_-1px_0_rgba(22,16,33,0.09),0_-12px_24px_-16px_rgba(22,16,33,0.2)]"
-                  : ""
+                footerFloating ? "shadow-[0_-12px_24px_-16px_rgba(22,16,33,0.2)]" : ""
               }`}
             >
               <SurveyNav
@@ -859,8 +904,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 hasAnswer={hasAnswer || !question.required}
                 onPrevious={goPrev}
                 onNext={goNext}
+                progress={<SurveyProgress index={currentIndex} total={totalQuestions} />}
               />
-              <SurveyProgress index={currentIndex} total={totalQuestions} />
             </div>
             <div ref={cardEndRef} aria-hidden className="absolute bottom-0 h-px w-px" />
           </section>

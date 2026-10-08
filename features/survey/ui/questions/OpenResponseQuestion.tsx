@@ -6,6 +6,7 @@ import { isMultiline } from "@features/survey/questionFlags";
 import QuestionHeading from "./QuestionHeading";
 import { useSurveyTheme } from "../SurveyThemeContext";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
+import type { EmailQuestionArm } from "@shared/experiments/emailQuestionArm";
 
 interface OpenResponseQuestionProps {
   question: SurveyQuestion;
@@ -14,6 +15,8 @@ interface OpenResponseQuestionProps {
   forceValidation?: boolean;
   confirmValue?: string;
   onConfirmChange?: (value: string) => void;
+  /** The email question test's arm: "anonymous" draws Figma 11600:15119's single field. */
+  emailArm?: EmailQuestionArm;
 }
 
 const AlertCircleIcon: FC = () => (
@@ -75,6 +78,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
   forceValidation,
   confirmValue,
   onConfirmChange,
+  emailArm,
 }) => {
   const [touched, setTouched] = useState(false);
   const [confirmTouched, setConfirmTouched] = useState(false);
@@ -90,6 +94,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
   const error = showError ? getValidationError(currentValue, question.inputType, limit) : null;
 
   const isEmailField = question.inputType === "email";
+  const anonymous = isEmailField && emailArm === "anonymous";
   const confirmCurrent = confirmValue ?? "";
   const emailMismatch =
     isEmailField &&
@@ -125,69 +130,35 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
       <QuestionHeading question={question} />
 
       {/* Input */}
-      <div className="flex flex-col gap-2">
-        {multiline ? (
-          /* A list or a few sentences (Mark's content asks). data-clarity-mask keeps the
-             words out of session replay: the survey root is unmasked by owner decision
-             (10.08), and this is the one place people type free text about their own
-             sexuality. Fatih, 29.09. */
-          <textarea
-            name={question.qId}
-            aria-label={question.question}
-            value={currentValue}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={() => setTouched(true)}
-            onKeyDown={containEditingKeys}
-            placeholder={question.placeholder || "Type your answer…"}
-            autoComplete="off"
-            rows={5}
-            maxLength={MULTILINE_MAX_LENGTH}
-            data-clarity-mask="true"
-            className={`min-h-[152px] w-full resize-y rounded-[16px] border px-[18px] py-[14px] font-sans text-[17px] leading-[26px] transition-[border-color] duration-200 focus:outline-none ${
-              white
-                ? "bg-[#f5f6f8] text-[#161021] placeholder:text-black/35"
-                : "bg-white/[0.05] text-white placeholder:text-white/30"
-            } ${
-              error
-                ? "border-[#ef4444]"
-                : white
-                  ? "border-black/[0.08] focus:border-[rgba(254,104,57,0.45)]"
-                  : "border-white/10 focus:border-[rgba(254,104,57,0.45)]"
-            }`}
-          />
-        ) : (
+      {anonymous ? (
+        /* The email question test's anonymous arm, Figma 11600:15119: one underline field,
+           523.5 x 48 from 640px but never wider than the column, which is narrower up to
+           about 660px (the full column on a phone), and no confirm box. The frame
+           draws only the empty field: typed text takes the placeholder's size in the
+           title's ink, and focus and error keep today's orange and red lines. Nothing sits
+           under the field until there is an error, so the Why row stays 20px under the line,
+           as drawn. The line is an inset shadow, not a border: Chrome draws a 1.454px border
+           1px thick at every pixel density (a third lighter than the frame), while the
+           shadow keeps the fraction. Forced colours drop shadows, so a border stands in. */
+        <div className="flex flex-col">
           <input
-            type={question.inputType === "email" ? "email" : "text"}
+            type="email"
             name={question.qId}
             aria-label={question.question}
+            aria-invalid={error ? true : undefined}
             value={currentValue}
             onChange={(e) => onChange(e.target.value)}
             onBlur={() => setTouched(true)}
             placeholder={question.placeholder || "Type your answer…"}
-            autoComplete={question.inputType === "email" ? "email" : "off"}
-            spellCheck={question.inputType === "email" ? false : undefined}
-            maxLength={limit ?? (question.qId === NAME_QID ? NAME_MAX_LENGTH : undefined)}
-            className={`${inputBase} ${
+            autoComplete="email"
+            spellCheck={false}
+            className={`h-[48px] w-full max-w-full bg-transparent font-sans text-[17.45px] font-light leading-[23.84px] text-[#161021] placeholder:text-[rgba(52,52,52,0.54)] focus:outline-none forced-colors:border-b-[1.454px] sm:w-[523.5px] ${
               error
-                ? "border-[#ef4444]"
-                : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
+                ? "shadow-[inset_0_-1.454px_0_0_#ef4444]"
+                : "shadow-[inset_0_-1.454px_0_0_rgba(59,59,59,0.264)] focus:shadow-[inset_0_-1.454px_0_0_rgba(254,104,57,0.4)]"
             }`}
-            style={
-              white
-                ? undefined
-                : {
-                    ["--autofill-bg" as string]: "#0a0510",
-                    ["--autofill-font-size" as string]: "22px",
-                    ["--autofill-font-size-sm" as string]: "24px",
-                  }
-            }
           />
-        )}
-
-        {/* Below input: error message left, char count right */}
-        <div className="flex items-start justify-between gap-4">
-          {/* Error message */}
-          <div className="flex items-center gap-1.5" aria-live="polite">
+          <div className={`flex items-center gap-1.5${error ? " mt-2" : ""}`} aria-live="polite">
             {error && (
               <>
                 <span className="text-[#ef4444]">
@@ -197,20 +168,95 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
               </>
             )}
           </div>
-
-          {/* Character counter (hidden for unlimited Qs) */}
-          {limited && (
-            <span
-              className={`font-sans text-[12px] font-medium ${white ? "text-black/40" : "text-white/30"}`}
-            >
-              {currentValue.length} / {limit}
-            </span>
-          )}
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {multiline ? (
+            /* A list or a few sentences (Mark's content asks). data-clarity-mask keeps the
+             words out of session replay: the survey root is unmasked by owner decision
+             (10.08), and this is the one place people type free text about their own
+             sexuality. Fatih, 29.09. */
+            <textarea
+              name={question.qId}
+              aria-label={question.question}
+              value={currentValue}
+              onChange={(e) => onChange(e.target.value)}
+              onBlur={() => setTouched(true)}
+              onKeyDown={containEditingKeys}
+              placeholder={question.placeholder || "Type your answer…"}
+              autoComplete="off"
+              rows={5}
+              maxLength={MULTILINE_MAX_LENGTH}
+              data-clarity-mask="true"
+              className={`min-h-[152px] w-full resize-y rounded-[16px] border px-[18px] py-[14px] font-sans text-[17px] leading-[26px] transition-[border-color] duration-200 focus:outline-none ${
+                white
+                  ? "bg-[#f5f6f8] text-[#161021] placeholder:text-black/35"
+                  : "bg-white/[0.05] text-white placeholder:text-white/30"
+              } ${
+                error
+                  ? "border-[#ef4444]"
+                  : white
+                    ? "border-black/[0.08] focus:border-[rgba(254,104,57,0.45)]"
+                    : "border-white/10 focus:border-[rgba(254,104,57,0.45)]"
+              }`}
+            />
+          ) : (
+            <input
+              type={question.inputType === "email" ? "email" : "text"}
+              name={question.qId}
+              aria-label={question.question}
+              value={currentValue}
+              onChange={(e) => onChange(e.target.value)}
+              onBlur={() => setTouched(true)}
+              placeholder={question.placeholder || "Type your answer…"}
+              autoComplete={question.inputType === "email" ? "email" : "off"}
+              spellCheck={question.inputType === "email" ? false : undefined}
+              maxLength={limit ?? (question.qId === NAME_QID ? NAME_MAX_LENGTH : undefined)}
+              className={`${inputBase} ${
+                error
+                  ? "border-[#ef4444]"
+                  : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
+              }`}
+              style={
+                white
+                  ? undefined
+                  : {
+                      ["--autofill-bg" as string]: "#0a0510",
+                      ["--autofill-font-size" as string]: "22px",
+                      ["--autofill-font-size-sm" as string]: "24px",
+                    }
+              }
+            />
+          )}
 
-      {/* Confirm email field (email-input questions only) */}
-      {isEmailField && (
+          {/* Below input: error message left, char count right */}
+          <div className="flex items-start justify-between gap-4">
+            {/* Error message */}
+            <div className="flex items-center gap-1.5" aria-live="polite">
+              {error && (
+                <>
+                  <span className="text-[#ef4444]">
+                    <AlertCircleIcon />
+                  </span>
+                  <span className="font-sans text-[13px] font-medium text-[#ef4444]">{error}</span>
+                </>
+              )}
+            </div>
+
+            {/* Character counter (hidden for unlimited Qs) */}
+            {limited && (
+              <span
+                className={`font-sans text-[12px] font-medium ${white ? "text-black/40" : "text-white/30"}`}
+              >
+                {currentValue.length} / {limit}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm email field (email-input questions only; the anonymous arm has none) */}
+      {isEmailField && !anonymous && (
         <div className="flex flex-col gap-2">
           <input
             type="email"
