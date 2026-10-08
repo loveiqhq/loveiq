@@ -43,7 +43,7 @@ import {
   SUBMIT_OUTCOME_UNKNOWN,
   submitSurveyOnce,
 } from "@features/survey/server/server";
-import { dropBlankOptionalAnswers } from "@features/survey/server/utils";
+import { describeQuestionCount, dropBlankOptionalAnswers } from "@features/survey/server/utils";
 import { SURVEY_EMAIL_RE, tidySurveyEmail } from "@features/survey/email";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 
@@ -260,7 +260,7 @@ const notifySlackSurvey = async ({
     await notifySlack({
       channel: "survey",
       kind: "survey_completed",
-      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${questionCount} questions in ~${Math.round(durationMs / 60_000)} min`,
+      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${describeQuestionCount(questionCount)} in ~${Math.round(durationMs / 60_000)} min`,
       username: "survey_response",
       context: { submissionId, sessionId },
     });

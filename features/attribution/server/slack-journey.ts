@@ -20,6 +20,7 @@ import {
 } from "@features/checkout/server/reportPurchase";
 import type { SubmissionJourney } from "@features/attribution/server/journey";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
+import { describeQuestionCount } from "@features/survey/server/utils";
 import {
   codeSpan,
   context,
@@ -572,7 +573,7 @@ export function buildJourneyMessage(
      * it is genuinely useful (57 vs 58 after the survey work order) and costs
      * nothing in a line nobody reads in-channel.
      */
-    text = `:memo: Survey submission #${journey.submissionId} — ${options.questionCount} question${options.questionCount === 1 ? "" : "s"}${surveyTime ? ` in ${surveyTime}` : ""}`;
+    text = `:memo: Survey submission #${journey.submissionId} — ${describeQuestionCount(options.questionCount)}${surveyTime ? ` in ${surveyTime}` : ""}`;
     blocks.push(section(compactSurveyLines(journey, options.reachedFloor).join("\n")));
   }
 
