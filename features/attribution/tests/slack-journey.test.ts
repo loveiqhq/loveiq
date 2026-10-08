@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildJourneyMessage, formatDuration } from "@features/attribution/server/slack-journey";
 import type { SubmissionJourney } from "@features/attribution/server/journey";
 import type { SlackBlock } from "@shared/observability/slack";
+import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 
 /**
  * `slack-journey.ts` had NO test file, which is how two defects shipped and
@@ -508,6 +509,22 @@ describe("the compact incoming-survey layout", () => {
     expect(rendered).not.toContain("58 question");
     expect(message.text).toContain("58 questions");
     expect(soleSection(message.blocks).split("\n")[0]).toContain("`a***@gmail.com`");
+  });
+
+  it("says how many of the survey's questions were answered when the optional ones were skipped", () => {
+    // The survey shows "Question X of SURVEY_TOTAL_QUESTIONS"; the two content asks are
+    // optional, so a finished survey has 60, 61 or 62 answers today.
+    const text = (count: number) =>
+      buildJourneyMessage(journey(), { kind: "survey_completed", questionCount: count }).text;
+    expect(text(SURVEY_TOTAL_QUESTIONS - 2)).toContain(
+      `${SURVEY_TOTAL_QUESTIONS - 2} of ${SURVEY_TOTAL_QUESTIONS} questions`
+    );
+    expect(text(SURVEY_TOTAL_QUESTIONS - 1)).toContain(
+      `${SURVEY_TOTAL_QUESTIONS - 1} of ${SURVEY_TOTAL_QUESTIONS} questions`
+    );
+    // Everything answered, or an earlier survey's shorter count: a bare count.
+    expect(text(SURVEY_TOTAL_QUESTIONS)).toContain(`— ${SURVEY_TOTAL_QUESTIONS} questions`);
+    expect(text(59)).toContain("— 59 questions");
   });
 
   it("says question, not questions, for a single answer", () => {
