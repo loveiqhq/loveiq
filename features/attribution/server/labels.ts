@@ -196,7 +196,7 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     // pool into this one (reportPricing.ts, PLAN_BUCKETS). The validated live pair,
     // list A blue and list B orange, for good. Named by what the reader pays, not by
     // letter (founder, 2026-10-06): A3 is the higher list (€39.99 all 14, €29.99
-    // single), B3 the lower one (€19.99, €14.99).
+    // single), B3 the lower one (€6.99, €4.99; €19.99 and €14.99 until 2026-10-08).
     A3: { short: "Pricing 3.0 higher", long: "Pricing 3.0: higher prices", color: SERIES.BLUE },
     B3: { short: "Pricing 3.0 lower", long: "Pricing 3.0: lower prices", color: SERIES.ORANGE },
   },

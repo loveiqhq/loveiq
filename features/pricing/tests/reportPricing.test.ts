@@ -84,19 +84,19 @@ describe("reportPricing", () => {
   describe("price list (Pricing 3.0)", () => {
     // Two products on two price lists, 50/50 (the Pricing_3.0 tab of "Tracking &
     // Pricing"). These assert the exact numbers because they are what the reader is
-    // charged; the re-sync migration carries the same four rows, and the test below
-    // reads them out of it so the two cannot drift.
-    it("full_report is €29.99 or €14.99, each at its own anchor so neither strikes", () => {
+    // charged; the re-sync migrations carry the same four rows, and the test below
+    // reads them out of them so the two cannot drift. List B was lowered on 2026-10-08.
+    it("full_report is €29.99 or €4.99, each at its own anchor so neither strikes", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
         { code: "A3", weight: 50, msrpCents: 2999, startingCents: 2999 },
-        { code: "B3", weight: 50, msrpCents: 1499, startingCents: 1499 },
+        { code: "B3", weight: 50, msrpCents: 499, startingCents: 499 },
       ]);
     });
 
-    it("all_reports is €39.99 (strike €49.99) or €19.99 (strike €29.99)", () => {
+    it("all_reports is €39.99 (strike €49.99) or €6.99 (strike €9.99)", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
         { code: "A3", weight: 50, msrpCents: 4999, startingCents: 3999 },
-        { code: "B3", weight: 50, msrpCents: 2999, startingCents: 1999 },
+        { code: "B3", weight: 50, msrpCents: 999, startingCents: 699 },
       ]);
     });
 
@@ -110,21 +110,36 @@ describe("reportPricing", () => {
     });
 
     it("re-syncs existing quotes to exactly these prices", () => {
-      const sql = readFileSync(
-        join(process.cwd(), "supabase/migrations/20261005120100_pricing_3_resync_quotes.sql"),
-        "utf8"
-      );
-      const rows = [
-        ...sql.matchAll(
-          /\('(full_report|all_reports)'(?:::text)?,\s*'(A3|B3)'(?:::text)?,\s*([\d.]+)(?:::numeric)?,\s*([\d.]+)/g
+      const migration = (name: string) =>
+        readFileSync(join(process.cwd(), "supabase/migrations", name), "utf8");
+      const cents = (euros: string) => Math.round(Number(euros) * 100);
+      // A3 is still the 3.0 launch re-sync's; B3 is the 2026-10-08 one's, which moves
+      // only rows already on B3.
+      const launch = [
+        ...migration("20261005120100_pricing_3_resync_quotes.sql").matchAll(
+          /\('(full_report|all_reports)'(?:::text)?,\s*'(A3)'(?:::text)?,\s*([\d.]+)(?:::numeric)?,\s*([\d.]+)/g
         ),
       ].map(([, plan, code, msrp, starting]) => ({
         plan,
         code,
-        msrpCents: Math.round(Number(msrp) * 100),
-        startingCents: Math.round(Number(starting) * 100),
+        msrpCents: cents(msrp),
+        startingCents: cents(starting),
       }));
-      expect(rows).toHaveLength(4);
+      const listBSql = migration("20261008120000_pricing_3_list_b_lower_resync.sql");
+      expect(listBSql).toContain("AND q.experiment_group = 'B3'");
+      const listB = [
+        ...listBSql.matchAll(
+          /\('(full_report|all_reports)'(?:::text)?,\s*([\d.]+)(?:::numeric)?,\s*([\d.]+)/g
+        ),
+      ].map(([, plan, msrp, starting]) => ({
+        plan,
+        code: "B3",
+        msrpCents: cents(msrp),
+        startingCents: cents(starting),
+      }));
+      const rows = [...launch, ...listB];
+      expect(launch).toHaveLength(2);
+      expect(listB).toHaveLength(2);
       for (const row of rows) {
         const bucket = getPricingBucketsForPlan(row.plan as "full_report" | "all_reports").find(
           (b) => b.code === row.code
@@ -323,11 +338,11 @@ describe("reportPricing", () => {
       experiment_group: "B3",
       forced_paywall_arm: null,
       base_price_bucket: "B3",
-      base_price: 29.99,
-      msrp: 29.99,
-      starting_price: 19.99,
-      current_price: 19.99,
-      initial_price: 19.99,
+      base_price: 9.99,
+      msrp: 9.99,
+      starting_price: 6.99,
+      current_price: 6.99,
+      initial_price: 6.99,
       discount_step: 0,
       discount_multiplier: 1,
       pricing_cluster_id: "B3-all_reports-B3-tier_2-desktop-google-serious-engaged-d0",
@@ -356,7 +371,7 @@ describe("reportPricing", () => {
         if (url.includes("/rest/v1/payment?personal_report_id=eq.9")) {
           return createJsonResponse([
             {
-              amount: 14.99,
+              amount: 4.99,
               refund_amount: null,
               currency: "EUR",
               metadata: { plan: "full_report" },
@@ -400,16 +415,16 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
-    // €19.99 less the €14.99 single bought on this report.
+    // €6.99 less the €4.99 single bought on this report.
     expect(quote).toEqual(
-      expect.objectContaining({ chargedPriceCents: 500, upgradeCreditCents: 1499 })
+      expect.objectContaining({ chargedPriceCents: 200, upgradeCreditCents: 499 })
     );
     // The stored quote keeps the list price: the credit is never written back.
     const patches = mockFetchWithTimeout.mock.calls.filter(
       ([, options]) => (options as { method?: string } | undefined)?.method === "PATCH"
     );
     for (const [, options] of patches) {
-      expect(JSON.parse((options as { body: string }).body).current_price ?? 19.99).toBe(19.99);
+      expect(JSON.parse((options as { body: string }).body).current_price ?? 6.99).toBe(6.99);
     }
   });
 
@@ -426,11 +441,11 @@ describe("reportPricing", () => {
             plan: "all_reports",
             experiment_group: "B3",
             base_price_bucket: "B3",
-            base_price: 29.99,
-            msrp: 29.99,
-            starting_price: 19.99,
-            current_price: 19.99,
-            initial_price: 19.99,
+            base_price: 9.99,
+            msrp: 9.99,
+            starting_price: 6.99,
+            current_price: 6.99,
+            initial_price: 6.99,
             discount_step: 0,
             discount_multiplier: 1,
             metadata: null,
@@ -453,7 +468,7 @@ describe("reportPricing", () => {
 
     // The pay screen falls back to the full price...
     await expect(getReportPriceQuoteForContext(args)).resolves.toEqual(
-      expect.objectContaining({ chargedPriceCents: 1999 })
+      expect.objectContaining({ chargedPriceCents: 699 })
     );
     // ...but checkout must not charge it after the screen may have shown the credit.
     await expect(
@@ -724,7 +739,7 @@ describe("reportPricing", () => {
 
   it.each([
     { reportId: 4243, arm: "A3", starting: 3999, msrp: 4999 },
-    { reportId: 4242, arm: "B3", starting: 1999, msrp: 2999 },
+    { reportId: 4242, arm: "B3", starting: 699, msrp: 999 },
   ])(
     "an all_reports fresh quote in $arm is its list's base verbatim (step 0)",
     async ({ reportId, arm, starting, msrp }) => {

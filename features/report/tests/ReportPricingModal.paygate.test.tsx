@@ -18,10 +18,10 @@ function quote(plan: "full_report" | "all_reports", arm: "A3" | "B3") {
     plan === "all_reports"
       ? arm === "A3"
         ? [4999, 3999]
-        : [2999, 1999]
+        : [999, 699]
       : arm === "A3"
         ? [2999, 2999]
-        : [1499, 1499];
+        : [499, 499];
   return {
     id: plan === "full_report" ? 2 : 3,
     plan,
@@ -74,7 +74,7 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
 
   it.each([
     { arm: "A3" as const, all: "€39.99", strike: "€49.99 - 20% off", single: "€29.99" },
-    { arm: "B3" as const, all: "€19.99", strike: "€29.99 - 33% off", single: "€14.99" },
+    { arm: "B3" as const, all: "€6.99", strike: "€9.99 - 30% off", single: "€4.99" },
   ])(
     "prices both plans off the $arm quote, striking only All 14",
     ({ arm, all, strike, single }) => {
@@ -94,9 +94,9 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
 
   // All 14 credits what the reader already paid on the report (getUpgradeCreditCents).
   it.each([
-    { paid: 1499, credit: 1499, charged: 500, all: "€5.00", was: "€19.99 - €14.99 already paid" },
-    // Two singles (€29.98) cost more than All 14: free, and the line says all that was paid.
-    { paid: 2998, credit: 1999, charged: 0, all: "€0.00", was: "€19.99 - €29.98 already paid" },
+    { paid: 499, credit: 499, charged: 200, all: "€2.00", was: "€6.99 - €4.99 already paid" },
+    // Two singles (€9.98) cost more than All 14: free, and the line says all that was paid.
+    { paid: 998, credit: 699, charged: 0, all: "€0.00", was: "€6.99 - €9.98 already paid" },
   ])(
     "credits the singles already bought on All 14 ($all)",
     ({ paid, credit, charged, all, was }) => {
@@ -111,7 +111,7 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
       expect(within(card("all_reports")).getByText(all)).toHaveClass("rpg-card__amount");
       expect(card("all_reports").querySelector(".rpg-card__was")?.textContent).toBe(was);
       // The single report keeps its own price.
-      expect(within(card("full_report")).getByText("€14.99")).toHaveClass("rpg-card__amount");
+      expect(within(card("full_report")).getByText("€4.99")).toHaveClass("rpg-card__amount");
       // price_shown says All 14 was credited, so per-arm price analysis can leave it out.
       expect(trackPriceShown).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -188,10 +188,10 @@ describe("ReportPricingModal — the Pricing 3.0 paygate (Figma 842:584 / 963:6)
     view.rerender(<ReportPricingModal {...base} quotes={quotes("B3")} />);
     expect(trackPriceShown).toHaveBeenCalledTimes(2);
     expect(trackPriceShown).toHaveBeenCalledWith(
-      expect.objectContaining({ plan: "all_reports", price: 19.99, experiment_group: "B3" })
+      expect.objectContaining({ plan: "all_reports", price: 6.99, experiment_group: "B3" })
     );
     expect(trackPriceShown).toHaveBeenCalledWith(
-      expect.objectContaining({ plan: "full_report", price: 14.99, experiment_group: "B3" })
+      expect.objectContaining({ plan: "full_report", price: 4.99, experiment_group: "B3" })
     );
   });
 
