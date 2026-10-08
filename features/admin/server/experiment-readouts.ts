@@ -17,7 +17,7 @@ import {
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
 import { readStampedArms } from "@features/attribution/server/traffic";
-import { PRICING_3_LAUNCH_AT } from "@features/checkout/server/reportPurchase";
+import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
 import { isStaffEmail } from "@shared/env/staff-email";
 import logger from "@shared/observability/logger";
 
@@ -375,8 +375,9 @@ export function tallyAxis(
  * are stamped on the submission, pricing on its quote. Nothing stamps a paywall arm since
  * the forced paywall was removed on 2026-08-31, so that axis reads nothing.
  *
- * Pricing counts only readers who finished after Pricing 3.0 went live: the launch
- * re-priced everyone who had not bought yet, after they had seen the 2.x prices, so their
+ * Pricing counts only readers who finished after the current price lists went live
+ * (PRICE_TEST_START_AT: list B was lowered on 2026-10-08). Each repricing re-priced
+ * everyone who had not bought yet, after they had seen the earlier prices, so their
  * A3/B3 stamp is not the test's. They read as unattributed rather than in either list.
  */
 export function armReader(
@@ -387,7 +388,7 @@ export function armReader(
     // eslint-disable-next-line security/detect-object-injection -- axis is "landing" or "survey" here.
     return (_id, tracker) => readStampedArms(tracker)[axis];
   if (axis === "pricing") {
-    const launch = Date.parse(PRICING_3_LAUNCH_AT);
+    const launch = Date.parse(PRICE_TEST_START_AT);
     const finishedAt = new Map(
       outcomes.submissions.map((s) => [s.id, Date.parse(s.created_date_time ?? "")])
     );
@@ -400,8 +401,8 @@ export function armReader(
 /*
  * Only genuinely randomised, currently-running splits belong here.
  *
- * Pricing 3.0 (A3 vs B3, 50/50 by report id) runs, read from its launch by
- * `armReader`. The landing test runs again since its round 3 (V2's question card
+ * Pricing 3.0 (A3 vs B3, 50/50 by report id) runs, read by `armReader` from when its
+ * current lists started (list B lowered 2026-10-08). The landing test runs again since its round 3 (V2's question card
  * vs V3's hero video, 50/50 by cookie): its arms are new values, so `tallyAxis`
  * compares only them and every earlier landing stamp (`white`, `white_prev`,
  * `control`) reads as not attributable. Round 2 (V1 vs V2) stays in `concluded`

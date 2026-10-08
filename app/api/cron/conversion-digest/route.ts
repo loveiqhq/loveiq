@@ -91,7 +91,10 @@ import {
 } from "@features/admin/server/conversion-digest";
 import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
 import { adCostByDay, adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import {
+  PRICE_TEST_START_AT,
+  PRICE_TEST_START_DAY,
+} from "@features/checkout/server/reportPurchase";
 import {
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_VARIANT_ARMS,
@@ -149,7 +152,7 @@ export const STARTED_QUESTION_INDEX = 1;
  * randomises either any more, so presenting one as a live test is exactly the
  * mistake the /admin dashboard made before it was corrected. A verdict on a test
  * nobody is running is not a verdict. `pricing` is the Pricing 3.0 test (A3 vs B3),
- * but only once the whole window lies after its launch (`verdictAxesFor`).
+ * but only once the whole window lies after its current lists started (`verdictAxesFor`).
  * `landing` is live again for its round 3 (V2's question card vs V3's hero video);
  * its arms are new values, so its verdict can only ever count round-3 readers and
  * needs no launch cut of its own.
@@ -158,9 +161,10 @@ const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
 
 /**
  * The cohorts behind a verdict span the whole window. Before the window lies wholly
- * inside Pricing 3.0 they include readers who finished under the 2.x prices and were
- * re-priced at launch, and a verdict pooled over them would call that a result. The
- * price test is still in *The tests* meanwhile, cut to its launch day.
+ * inside the current price lists they include readers who finished under earlier
+ * prices and were re-priced (the 2.x lists, list B's first prices), and a verdict pooled
+ * over them would call that a result. The price test is still in *The tests*
+ * meanwhile, cut to the first whole day of its lists (PRICE_TEST_START_DAY).
  */
 function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[] {
   const windowStartDay = new Date(
@@ -168,18 +172,17 @@ function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[
   )
     .toISOString()
     .slice(0, 10);
-  return axes.filter((axis) => axis !== "pricing" || windowStartDay >= PRICING_3_LAUNCH_DAY);
+  return axes.filter((axis) => axis !== "pricing" || windowStartDay >= PRICE_TEST_START_DAY);
 }
 
 /**
- * When report prices last changed. `buildAlerts` uses it to suppress the
- * "conversion dropped" alert around a repricing, where a rate change is expected
- * rather than a regression. Update this on the next price change.
+ * When report prices last changed, handed to `buildAlerts` (no alert reads it since its
+ * pricing-cutover warning went). It follows PRICE_TEST_START_AT on the next price change.
  *
- * Pricing 3.0: two new products on two new price lists, for every reader who had not
- * bought yet.
+ * Pricing 3.0 (2026-10-06): two new products on two new price lists, for every reader
+ * who had not bought yet. 2026-10-08: list B lowered to €6.99 / €4.99.
  */
-const PRICING_CUTOVER_ISO = `${PRICING_3_LAUNCH_DAY}T00:00:00Z`;
+const PRICING_CUTOVER_ISO = PRICE_TEST_START_AT;
 
 /**
  * Makes each preview's Slack `kind` distinct so notifySlack's 60-second dedup

@@ -103,7 +103,7 @@ import {
   buildUnitEconomicsLines,
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
+import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
 
 /** Two arms, 30 days, shaped like the real RPC response. */
 function makeFunnel(overrides: Partial<{ visitorArms: Record<string, number> }> = {}) {
@@ -3073,7 +3073,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("the Pricing 3.0 verdict waits for a window wholly after the launch", () => {
+describe("the price test's verdict waits for a window wholly after its lists started", () => {
   // A decisive split, so the only thing that can hold the verdict back is the window.
   const cohorts = [
     { axis: "pricing", arm: "A3", n: 500, conversions: 80 },
@@ -3081,7 +3081,7 @@ describe("the Pricing 3.0 verdict waits for a window wholly after the launch", (
   ];
   const digestOn = async (daysAfterLaunch: number) => {
     const day = new Date(
-      Date.parse(`${PRICING_3_LAUNCH_DAY}T00:00:00Z`) + daysAfterLaunch * 86_400_000
+      Date.parse(`${PRICE_TEST_START_DAY}T00:00:00Z`) + daysAfterLaunch * 86_400_000
     )
       .toISOString()
       .slice(0, 10);
@@ -3098,12 +3098,12 @@ describe("the Pricing 3.0 verdict waits for a window wholly after the launch", (
     return blockText(blocks);
   };
 
-  it("stays silent while the 30-day cohorts still hold readers from before 3.0", async () => {
+  it("stays silent while the 30-day cohorts still hold readers from before the lists", async () => {
     // Day 28 after the launch: the window starts the day before it.
     expect(await digestOn(28)).not.toContain("Worth acting on");
   });
 
-  it("calls it once every reader in the window finished under 3.0", async () => {
+  it("calls it once every reader in the window finished under the current lists", async () => {
     const text = await digestOn(29);
     expect(text).toContain("Worth acting on");
     expect(text).toContain("Pricing 3.0 higher");
