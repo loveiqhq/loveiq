@@ -1935,6 +1935,44 @@ describe("ReportPage", () => {
       const owner = render(<ReportPage />);
       expect(owner.container.querySelector(".report-sticky-unlock")).not.toBeNull();
     });
+
+    // Marcus, 09.10, with a recording from production: the bar's "Unlock Full Report →"
+    // went straight to Stripe for the single report. It "should link first to the
+    // selection of the plans vs directly to payment page", as every lock does.
+    it("opens the plans from the sticky bar, and Stripe only from a plan", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = view("owner");
+      // No ladder discount, so nothing else opens the plans on mount.
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      const bar = container.querySelector<HTMLElement>(".report-sticky-unlock--mobile")!;
+      await user.click(within(bar).getByRole("button", { name: "Unlock full report" }));
+
+      const modal = container.querySelector<HTMLElement>(".report-pricing-modal")!;
+      expect(modal).toHaveAttribute("data-state", "open");
+      expect(modal.querySelector(".rpg__tiers")).not.toBeNull();
+      expect(mockStartReportCheckout).not.toHaveBeenCalled();
+      expect(screen.queryByText(/taking you to secure checkout/i)).not.toBeInTheDocument();
+      // The bar steps aside while the plans are open.
+      expect(bar).toHaveAttribute("aria-hidden", "true");
+      expect(vi.mocked(analytics.trackStickyUnlockClicked)).toHaveBeenCalledWith({
+        variant: "mobile",
+        archetype: "Spark Seeker",
+      });
+
+      await user.click(
+        within(modal).getByRole("button", { name: /^only unlock my highest scoring report$/i })
+      );
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout.mock.calls[0][0]).toMatchObject({
+        plan: "full_report",
+        archetype: "Spark Seeker",
+      });
+    });
   });
 
   describe("V4 — a chapter the reader has no access to is locked outright (review 26.09)", () => {

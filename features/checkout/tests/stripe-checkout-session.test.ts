@@ -309,10 +309,11 @@ describe("POST /api/stripe/checkout-session", () => {
   });
 
   /**
-   * The sticky "Unlock Full Report" bar goes straight to Stripe without the pricing
-   * pop-up, and only the pop-up's /api/price call stamped `paywall_reached_at`: 7 of 15
-   * real readers who checked out from 15 September on had no paywall record, so the
-   * funnel's paywall step read lower than the checkout step under it.
+   * The sticky "Unlock Full Report" bar went straight to Stripe without the pricing
+   * pop-up until 09.10 (V1's "Unlock the full report" still does), and only the pop-up's
+   * /api/price call stamped `paywall_reached_at`: 7 of 15 real readers who checked out
+   * from 15 September on had no paywall record, so the funnel's paywall step read lower
+   * than the checkout step under it.
    */
   it("stamps the paywall as reached when a checkout starts, and a failed stamp costs nothing", async () => {
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);

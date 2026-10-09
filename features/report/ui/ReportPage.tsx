@@ -3210,9 +3210,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   );
 
   /**
-   * The single door to Stripe. Every checkout surface — the pricing modal and the
-   * sticky unlock bar — ends here, and this is the only thing that pushes
-   * to /checkout, so it is the only honest place to count a checkout start.
+   * The single door to Stripe. Every checkout surface — the pricing modal and V1's
+   * "Unlock the full report" under the archetype list — ends here, and this is the
+   * only thing that pushes to /checkout, so it is the only honest place to count a
+   * checkout start. The sticky unlock bar is not one of them: it opens the pricing
+   * modal (Marcus, 09.10: the plans first, then the payment page).
    *
    * `begin_checkout` used to be fired by each of those three components instead, each
    * guarded on `if (quote)` while the navigation ran unconditionally. So a click on a
@@ -3247,7 +3249,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // purchase looked like it had not worked (production, 2026-10-06). Its top instead.
     const opensAnotherReport =
       Boolean(archetypeForCheckout) && archetypeForCheckout !== viewArchetype;
-    // From the pay screen, the spot it was opened from; from the sticky footer, here.
+    // From the pay screen, the spot it was opened from; from a button that buys
+    // straight away (V1's archetype list), here.
     const anchor = opensAnotherReport
       ? null
       : serializeUnlockAnchor(
@@ -3679,16 +3682,19 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           </div>
         </div>
       )}
-      {/* The bar sells `full_report`, so the question is whether the reader's plan
+      {/* The bar unlocks the full report, so the question is whether the reader's plan
           already covers that tier — not whether it equals one of two named plans.
           `core` buys the top-3 archetypes AT full_report tier, so listing plans
           by hand showed a paying core buyer a permanent "Unlock full report" bar
-          whose CTA sent them to Stripe for something they already owned. */}
+          whose CTA sent them to Stripe for something they already owned.
+          It opens the plans, as every lock does, rather than buying `full_report`
+          straight away: on 09.10 its tap went to Stripe for the single report
+          (Marcus: "should link first to the selection of the plans"). */}
       {viewMode === "owner" &&
         !ownsFullReportFor(data.accessPlan, data.archetypeTiers, effectiveViewArchetype) && (
           <ReportStickyUnlockBar
             quote={pricingQuotes?.full_report ?? null}
-            onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
+            onUnlock={() => openPricingModal(effectiveViewArchetype)}
             hidden={isPricingModalOpen || isShareModalOpen}
             archetype={effectiveViewArchetype}
             v4={isV4}

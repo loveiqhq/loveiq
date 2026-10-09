@@ -249,10 +249,11 @@ describe("each measure", () => {
       ev(36 * S, "begin_checkout", { plan: "core" }),
     ];
     expect(measure("CTA hesitation", v)).toBe(6 * S);
-    // Straight from the sticky bar to Stripe: no plans were shown to weigh.
+    // Straight to Stripe from outside the plans (V1's archetype list; the sticky bar until
+    // 09.10): no plans were shown to weigh.
     expect(measure("CTA hesitation", [ev(0, "begin_checkout")])).toBeNull();
-    // Closed, then pressed with no opening recorded since: the sticky bar, or a reopened
-    // picker that sent nothing. Unknown, not the 36 s since the closed opening.
+    // Closed, then pressed with no opening recorded since: a way straight to Stripe, or a
+    // reopened picker that sent nothing. Unknown, not the 36 s since the closed opening.
     const closed = [
       ev(0, "price_shown"),
       ev(4 * S, "paywall_dismissed"),

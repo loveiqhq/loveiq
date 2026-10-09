@@ -1046,9 +1046,10 @@ export const trackStickyUnlockClicked = (params: {
   };
   track("sticky_unlock_clicked", payload);
   persistAnalyticsEvent("sticky_unlock_clicked", payload);
-  // The sticky bar goes straight to checkout without opening the paywall, so it is
-  // the one unlock CTA that never reaches trackPaywallInitiated — hence its own
-  // call. See trackUnlockClick for why these are the only two places.
+  // The sticky bar is the one unlock CTA that never reaches trackPaywallInitiated —
+  // hence its own call. It opens the plans since 09.10 (it used to go straight to
+  // checkout), but calling that too would count this one tap twice. See
+  // trackUnlockClick for why these are the only two places.
   trackUnlockClick("sticky_bar", payload);
 };
 
