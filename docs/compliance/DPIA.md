@@ -77,18 +77,35 @@ If Q16015 copy changes, we lose proof of what each user consented to.
 
 - **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant.
 
+### R3.8 — Team data export (HIGH — accepted by decision, 2026-10-10)
+
+Every customer and product table, unmasked, is exported as CSV to a Google Drive folder shared
+with six named team members (Eman, Marcus, Mark, Fatih, Sanjin, Ajna), so the team can explore
+the data freely. It is R3.1's leaked export in file form: a copy that leaves the folder links an
+email to that person's answers.
+
+- **Decision**: Eman, 2026-10-10. The team gets all of it, unmasked, and nobody else gets any of it.
+- **Mitigations**:
+  - The folder is shared with those six only. Editors cannot share it on, and it has no link sharing.
+  - The data-request log is never exported.
+  - While anyone has restricted processing (Art. 18), the export does not run at all.
+  - The script refuses to write inside a git repository.
+  - After an erasure (Art. 17) the export is refreshed the same day
+    ([`TEAM_DATA_EXPORT.md`](../runbooks/TEAM_DATA_EXPORT.md)).
+- **Residual**: copies a team member downloads are outside these controls.
+
 ## 4. Data subject rights: how we handle a deletion request, a data export, a DSAR, unsubscribe and the right to be forgotten
 
-| Right (GDPR article)              | Status                                                                     | Mechanism                                                    |
-| --------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Access (Art. 15)                  | ✅ DSAR export endpoint                                                    | `/api/admin/data-subject` action=export (F-01)               |
-| Rectification (Art. 16)           | ✅ Admin PATCH supports first_name + email (T-08)                          | `/api/admin/submissions/[id]` PATCH                          |
-| Erasure (Art. 17)                 | ✅ DSAR delete endpoint                                                    | `/api/admin/data-subject` action=delete (F-01)               |
-| Restriction (Art. 18)             | ✅ `app_user.processing_restricted_at` column + nurture-cron filter (T-09) | Admin UI for setting it is a follow-up                       |
-| Portability (Art. 20)             | ✅ DSAR export JSON                                                        | F-01                                                         |
-| Objection (Art. 21)               | ✅ Unsubscribe one-click + suppression list                                | `/api/unsubscribe` + Resend Audience cleanup (R-05)          |
-| Automated decisions (Art. 22)     | ✅ Not solely automated decision-making with legal/significant effect      | Self-knowledge product; no Art. 22 mechanism required        |
-| Withdrawal of consent (Art. 7(3)) | ✅ Unsubscribe + DSAR delete                                               | `/api/unsubscribe` + `/api/admin/data-subject` action=delete |
+| Right (GDPR article)              | Status                                                                     | Mechanism                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Access (Art. 15)                  | ✅ DSAR export endpoint                                                    | `/api/admin/data-subject` action=export (F-01)                                      |
+| Rectification (Art. 16)           | ✅ Admin PATCH supports first_name + email (T-08)                          | `/api/admin/submissions/[id]` PATCH                                                 |
+| Erasure (Art. 17)                 | ✅ DSAR delete endpoint                                                    | `/api/admin/data-subject` action=delete (F-01), then refresh the team export (R3.8) |
+| Restriction (Art. 18)             | ✅ `app_user.processing_restricted_at` column + nurture-cron filter (T-09) | Admin UI for setting it is a follow-up                                              |
+| Portability (Art. 20)             | ✅ DSAR export JSON                                                        | F-01                                                                                |
+| Objection (Art. 21)               | ✅ Unsubscribe one-click + suppression list                                | `/api/unsubscribe` + Resend Audience cleanup (R-05)                                 |
+| Automated decisions (Art. 22)     | ✅ Not solely automated decision-making with legal/significant effect      | Self-knowledge product; no Art. 22 mechanism required                               |
+| Withdrawal of consent (Art. 7(3)) | ✅ Unsubscribe + DSAR delete                                               | `/api/unsubscribe` + `/api/admin/data-subject` action=delete                        |
 
 ## 5. Security controls
 
