@@ -1,0 +1,75 @@
+# Team data export
+
+Every customer and product table in the production database, as one CSV per table, in a Google
+Drive folder that only the team can open. The team uses it to explore the data freely, for
+example in Marcus's survey explorer.
+
+**Decision (Eman, 2026-10-10):** the team gets all of it, unmasked, and nobody else gets any of
+it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R3.8 in
+[`docs/compliance/DPIA.md`](../compliance/DPIA.md).
+
+## Where it is
+
+- The Drive folder **"LoveIQ team data (production export, team only)"**, owned by Eman's
+  `ec@` account.
+- The other five are **editors**: they can open, download, add, rename and delete files in it.
+  They cannot share it with anyone, and the folder has no link sharing.
+- To add or remove a person, the owner changes the folder's sharing. Nothing in code holds the
+  list.
+- The README in the folder lists every file, its row count and when it was made.
+
+## What is in it, and what is not
+
+- **In it:** every table and materialized view in the `public` schema. Nothing in it is masked
+  or removed: emails, names, free-text answers, report links and payment details are all there.
+- `survey_submission` and `survey_partial_save` gain `is_likely_test` and `test_reasons`. They
+  flag staff emails and runs too fast to be real, using the admin panel's rule.
+- **Not in it:**
+  - `brain_*`, Jarvis's index of the company's own email, Slack, WhatsApp and documents
+    (everyone can search it through Jarvis already);
+  - job and alert plumbing: `cron_run`, `rate_limits`, `system_flags`, `slack_*`;
+  - `data_subject_request_log`: copying the list of people who asked to be deleted would
+    defeat their request;
+- It is read table by table over a few minutes, not as one snapshot. A row written meanwhile
+  can be in one file and not in its partner.
+
+## Refreshing it
+
+Run it from a checkout of `main` on a machine that has:
+
+- the production `.env.local`, with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and
+  `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT`;
+- a fresh Google login: `gcloud auth application-default login`.
+
+```bash
+npx tsx --env-file=.env.local scripts/team-data-export.ts \
+  --out ~/team-data-export --drive-folder <the folder's id, from its Drive address>
+rm -rf ~/team-data-export
+```
+
+- It refuses an `--out` inside any git repository, so the data cannot be committed by accident.
+- The local copy is readable only by you (folder 700, files 600). Delete it once uploaded.
+- Each CSV replaces the Drive file of the same name, so links to the files keep working. Files
+  of a table that no longer exists stay in the folder until someone deletes them. A team
+  member's own file saved under a table's name is overwritten by the next refresh.
+- If a run fails part-way, run it again. The README is uploaded last, so its date is never
+  newer than the files.
+
+## When someone restricts processing
+
+While anyone has `app_user.processing_restricted_at` set (GDPR Art. 18), the export does not run.
+It stops before writing anything and says how many people are restricted.
+
+- No filter could promise to leave such a person out. Their details also sit in payloads, URLs
+  and free text, in more encodings than a matcher decodes, and each matcher tried here had a
+  way past it.
+- What to do:
+  - If they asked to be erased, erase them (below), then refresh.
+  - Otherwise, decide with Eman before the next refresh.
+- Nobody had restricted processing on 2026-10-10, and there is no admin screen that sets it.
+
+## After a deletion request
+
+Erasing a person in the database (`/api/admin/data-subject`, action=delete) does not reach this
+folder. **Refresh the export the same day**, so the Drive copy drops them too. Copies a team
+member downloaded are outside our reach: ask the team to delete theirs.

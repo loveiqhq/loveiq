@@ -9,6 +9,7 @@
 # Project dictionary for cspell — domain, brand, and technical vocabulary.
 # Security / compliance / infra acronyms + terms
 # These are legitimate words (not typos). Add new terms as needed.
+Ajna
 Börner
 Clickjacking
 Contentsquare
