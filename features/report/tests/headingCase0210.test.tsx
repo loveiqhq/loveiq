@@ -190,7 +190,7 @@ describe("the paywall card and V4's sticky footer follow the 02.10 heading rule"
   });
 
   it("in the footer's guarantee, phone and desktop", () => {
-    const { container } = render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} v4 />);
+    const { container } = render(<ReportStickyUnlockBar quote={null} onUnlock={() => {}} v4 />);
     const heads = texts(container, ".report-sticky-unlock__badge-head");
     expect(heads).toHaveLength(2);
     heads.forEach(follows);

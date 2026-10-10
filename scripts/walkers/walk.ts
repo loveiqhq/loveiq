@@ -1432,9 +1432,10 @@ async function main(argv: string[]): Promise<number> {
     }
 
     // The paywall, reached the way a person reaches each plan: the sticky "Unlock full
-    // report" bar buys the default plan straight away, and the plan picker opens from a lock.
-    // The report can also open the picker by itself while the reader scrolls; then it is
-    // already in front of them, and the page behind it is out of reach.
+    // report" bar for the default plan (it opens the plan picker since 2026-10-09; it used to
+    // buy straight away), and a lock for the others, which opens the picker too. The report
+    // can also open the picker by itself while the reader scrolls; then it is already in
+    // front of them, and the page behind it is out of reach.
     if (plants && (plants.escape !== "none" || plants.quit === "paywall")) {
       await tryPlant("the paywall visit", plantPaywallVisit);
       if (plants.quit === "paywall") {
@@ -1446,13 +1447,14 @@ async function main(argv: string[]): Promise<number> {
     }
     const toStripe = () => page.url().includes("checkout.stripe.com");
     // Whichever comes first: the picker (the report can open it on a timer or on scroll), or
-    // a way in. For the default plan, the sticky bar or the "Unlock the full report" button
-    // under the archetype list, both of which go straight to Stripe. For the others, the
-    // picker: an archetype row's "Unlock report", a padlock on a locked chart, or (V4) a
-    // locked chapter's row, "Core Insecurities of the Spark Seeker Unlock Report". The padlock
-    // and that button share the name "Unlock the full report" but not the behaviour, so the
-    // padlock is found by its class. A V4 chapter that is closed keeps its "Unlock your
-    // report" in an inert body, which is why the chapter row is tried before it.
+    // a way in. For the default plan, the sticky bar, which opens the picker, or the "Unlock
+    // the full report" button under the archetype list, which goes straight to Stripe. For
+    // the others, the picker: an archetype row's "Unlock report", a padlock on a locked
+    // chart, or (V4) a locked chapter's row, "Core Insecurities of the Spark Seeker Unlock
+    // Report". The padlock and that button share the name "Unlock the full report" but not
+    // the behaviour, so the padlock is found by its class. A V4 chapter that is closed keeps
+    // its "Unlock your report" in an inert body, which is why the chapter row is tried before
+    // it.
     const ways: Array<[() => ReturnType<typeof button>, string]> =
       plan === "full_report"
         ? [
@@ -1530,11 +1532,23 @@ async function main(argv: string[]): Promise<number> {
       if (!walk.paywallOpenedBy) await page.waitForTimeout(500);
     }
     if (!walk.paywallOpenedBy) throw new Error("no way to the paywall on the report");
-    // The default plan's ways in buy straight away, so wait for Stripe rather than race the
-    // picker, which the report can open by itself in the same moment: on 2026-09-30 a walk
-    // saw the picker appear, Stripe then took the page, and it pressed a button that was no
-    // longer there. Only if no checkout opens does the walk look for the picker.
-    const direct = plan === "full_report" && walk.paywallOpenedBy !== "the report, by itself";
+    // A way in that buys straight away: wait for Stripe rather than race the picker, which
+    // the report can open by itself in the same moment: on 2026-09-30 a walk saw the picker
+    // appear, Stripe then took the page, and it pressed a button that was no longer there.
+    // Only if no checkout opens does the walk look for the picker. The sticky bar opens the
+    // picker since 2026-10-09; where it still buys straight away (a branch without that
+    // change) it says "Taking you to secure checkout...", and is then direct too.
+    const direct =
+      plan === "full_report" &&
+      (walk.paywallOpenedBy === "the Unlock the full report button" ||
+        (walk.paywallOpenedBy === "the sticky bar" &&
+          (await page
+            .locator(".report-checkout-handoff")
+            .waitFor({ state: "visible", timeout: 2_000 })
+            .then(
+              () => true,
+              () => false
+            ))));
     if (direct && plants) log.checkoutPlan = plan;
     if (direct) {
       await page.waitForURL(/checkout\.stripe\.com/, { timeout: 45_000 }).catch(() => {});

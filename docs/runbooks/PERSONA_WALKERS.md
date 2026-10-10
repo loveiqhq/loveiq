@@ -55,7 +55,10 @@ Mark asked for this on 2026-09-05: "a systematic way to thoroughly test" the pro
   - The single report (`full_report`: "Only Your Highest Archetype" on staging, "Just a
     snapshot" on main) is bought the way most people reach it: the sticky "Unlock full
     report" bar, or, on the default report, the "Unlock the full report" button under the
-    archetype list. Both go straight to Stripe for that plan.
+    archetype list. The button goes straight to Stripe for that plan. The bar opens the plan
+    picker since 2026-10-09 (Marcus: the plans first, then the payment page), where the walk
+    presses the single report's button; on a branch where the bar still buys straight away,
+    its "Taking you to secure checkout..." tells the walk to wait for Stripe instead.
   - All 14 (`all_reports`: "All 14 Archetype Reports" on staging, "For you & your partner" on
     main) is bought from the plan picker, opened from an archetype row's "Unlock report"
     ("Unlock Spark Seeker report" on a phone), a padlock on a locked chart (V4 only), or a

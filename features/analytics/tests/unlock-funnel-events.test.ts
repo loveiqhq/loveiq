@@ -194,9 +194,10 @@ describe("unlock_click is one canonical event across every unlock surface", () =
     });
   });
 
-  it("fires for the sticky bar, which never opens the paywall", () => {
-    // The sticky bar goes straight to checkout, so it is the one unlock CTA that
-    // does not route through trackPaywallInitiated.
+  it("fires for the sticky bar, which never calls trackPaywallInitiated", () => {
+    // The sticky bar is the one unlock CTA that does not route through
+    // trackPaywallInitiated. It opens the plans since 09.10 (it went straight to
+    // checkout before), so calling that too would count one tap twice.
     client.trackStickyUnlockClicked({ variant: "mobile", archetype: "Loyal Ritualist" });
 
     const [[, params]] = captured("unlock_click") as Array<[string, Record<string, unknown>]>;
