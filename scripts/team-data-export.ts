@@ -268,15 +268,39 @@ export function uniqueRows(rows: Row[], identity: string[]): Row[] {
   });
 }
 
+/** A value inside a quoted Drive query term: backslashes and single quotes escaped. */
+export function driveQuoted(value: string): string {
+  return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+/**
+ * The one file a refresh replaces, or none to create. Two files with a table's name (an
+ * editor's copy saved under it) stop the run: refreshing only the first would leave the
+ * other holding old data, people erased since included.
+ */
+export function fileToReplace(found: Array<{ id: string }>, name: string): string | null {
+  if (found.length > 1) {
+    throw new Error(
+      `${found.length} files are named ${name} in the Drive folder; rename or delete the extra ones, then run again`
+    );
+  }
+  return found[0]?.id ?? null;
+}
+
 async function driveUpload(token: string, folderId: string, name: string, body: string) {
   const auth = { Authorization: `Bearer ${token}` };
-  const q = encodeURIComponent(`'${folderId}' in parents and name='${name}' and trashed=false`);
+  const q = encodeURIComponent(
+    `${driveQuoted(folderId)} in parents and name=${driveQuoted(name)} and trashed=false`
+  );
   const search = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, {
     headers: auth,
   });
   // Stop rather than guess: an unread folder would otherwise get a second copy of every file.
   if (!search.ok) throw new Error(`Drive could not list the folder (${search.status})`);
-  const existing = ((await search.json()) as { files?: Array<{ id: string }> }).files?.[0]?.id;
+  const existing = fileToReplace(
+    ((await search.json()) as { files?: Array<{ id: string }> }).files ?? [],
+    name
+  );
   // Resumable, because a simple upload stops at 5 MB and the larger tables pass it.
   const start = await fetch(
     existing

@@ -14,6 +14,8 @@ import { describe, expect, it } from "vitest";
 import {
   assertOutsideRepo,
   csvCell,
+  driveQuoted,
+  fileToReplace,
   isExported,
   prepare,
   readme,
@@ -209,6 +211,16 @@ describe("the team data export", () => {
     expect(text).toContain("| app_user.csv | 2 |");
     expect(text).toContain("The export stops while anyone has.");
     expect(text).toMatch(/Eman, Marcus, Mark, Fatih, Sanjin, Ajna/);
+  });
+
+  it("replaces exactly one Drive file per table, and stops on two", () => {
+    expect(fileToReplace([], "app_user.csv")).toBeNull();
+    expect(fileToReplace([{ id: "a" }], "app_user.csv")).toBe("a");
+    expect(() => fileToReplace([{ id: "a" }, { id: "b" }], "app_user.csv")).toThrow(
+      /2 files are named app_user.csv/
+    );
+    expect(driveQuoted("it's")).toBe("'it\\'s'");
+    expect(driveQuoted("a\\b")).toBe("'a\\\\b'");
   });
 
   it("refuses to write inside any git repository", () => {
