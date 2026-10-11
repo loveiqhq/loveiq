@@ -19,6 +19,8 @@ let indexedIds: string[] = [];
 let previousOpen: string[] | null = null;
 let previousSeen: Record<string, string> = {};
 let previousHint: Record<string, string> = {};
+/** The day the last report was written (its meta.noticed_on); old enough for a reminder by default. */
+let previousNoticedOn = "2026-10-05";
 let failCorpus = false;
 const dbPaths: string[] = [];
 /** PATCHes the check sent (the in-place refresh of last-seen days), and whether they fail. */
@@ -52,6 +54,7 @@ vi.mock("@features/admin/server/supabase", () => ({
                 meta: {
                   kind: "notice",
                   noticed_by: "notion-reach",
+                  noticed_on: previousNoticedOn,
                   reach_open: previousOpen,
                   reach_seen: previousSeen,
                   reach_hint: previousHint,
@@ -454,6 +457,7 @@ describe("checkNotionReach", () => {
     previousOpen = null;
     previousSeen = {};
     previousHint = {};
+    previousNoticedOn = "2026-10-05";
     patches.length = 0;
     failPatch = false;
     failCorpus = false;
@@ -910,6 +914,17 @@ describe("checkNotionReach", () => {
     expect(more.findingKey).not.toBe(first.findingKey);
   });
 
+  it("skips Monday's reminder after a report on the weekend, and keeps it a week later", async () => {
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    previousOpen = [C];
+    previousSeen = { [C]: "2026-10-11" };
+    previousNoticedOn = "2026-10-11"; // posted on Sunday evening
+    expect((await checkNotionReach(MONDAY)).noticed).toBe(false);
+    previousNoticedOn = "2026-10-05"; // a week old
+    expect((await checkNotionReach(MONDAY)).noticed).toBe(true);
+  });
+
   it("refreshes when a reported page was last seen, in place, on a day with no news", async () => {
     previousOpen = [C];
     previousSeen = { [C]: "2026-10-01" };
@@ -927,6 +942,7 @@ describe("checkNotionReach", () => {
     expect(patches[0]!.body.meta).toEqual({
       kind: "notice",
       noticed_by: "notion-reach",
+      noticed_on: "2026-10-05", // kept: it is what spaces Monday's reminder
       reach_open: [C],
       reach_seen: { [C]: "2026-10-11" },
       reach_hint: { [C]: "Playbook" },
