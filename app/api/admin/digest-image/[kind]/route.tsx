@@ -1785,14 +1785,24 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
 
 
 // ─── Drop-off per question, week by week (Notion KPI page) ────────────────
+//
+// Built to be read in ten seconds, as Mark asked of every KPI chart (pictures,
+// not text): a bar per question for the last full week, the worst three named in
+// red in plain words, then the week-by-week table to look a question up.
 const WEEKLY_ROW_H = 16;
 const WEEKLY_NUM_W = 34;
 const WEEKLY_LABEL_W = 330;
 const WEEKLY_HEAD_H = 22;
-const WEEKLY_FOOT_H = 64;
+const WEEKLY_FOOT_H = 52;
 const WEEKLY_WORST_N = 3;
+const WEEKLY_BAR_PLOT_H = 150;
+const WEEKLY_AXIS_W = 34;
+/** Bars that are not among the worst three: quiet, so the red ones carry the message. */
+const WEEKLY_BAR_GREY = "#8a94a6";
 /** Where the colour scale tops out: 15% of the people who reached a question leaving there. */
 const WEEKLY_SCALE_TOP = 15;
+/** Bar section: heading, plot, question ticks, the three named worst, spacing. */
+const WEEKLY_BARS_H = 22 + 8 + WEEKLY_BAR_PLOT_H + 16 + 8 + WEEKLY_WORST_N * 18 + 22;
 
 /** White to the danger red, by rate; text flips to white once the cell is dark. */
 function weeklyCellColour(rate: number): { bg: string; fg: string } {
@@ -1804,17 +1814,13 @@ function weeklyCellColour(rate: number): { bg: string; fg: string } {
   };
 }
 
-function weeklyFigure(rate: number): string {
-  return rate < 10 ? rate.toFixed(1) : String(Math.round(rate));
+/** Whole percentages: "12%", "<1%", "0%". The decimals never changed a decision. */
+export function weeklyFigure(rate: number): string {
+  if (rate === 0) return "0%";
+  if (rate < 1) return "<1%";
+  return `${Math.round(rate)}%`;
 }
 
-/**
- * Every question (rows, in today's order) against the last weeks (columns).
- *
- * A heatmap rather than one line per question: 62 questions, and the reader's
- * question is "which rows are dark, and did a row change colour after we changed
- * it". The worst three of the latest complete week are named in red.
- */
 export function renderDropoutWeekly(p: DropoffWeeklyPayload): {
   element: React.ReactElement;
   height: number;
@@ -1823,22 +1829,121 @@ export function renderDropoutWeekly(p: DropoffWeeklyPayload): {
   const cellW = cols
     ? Math.min(46, Math.floor((WIDTH - 56 - WEEKLY_NUM_W - WEEKLY_LABEL_W) / cols))
     : 46;
-  // Rank on the latest COMPLETE week: the week in progress is a few days of data.
+  // The bars and the red names use the latest COMPLETE week: the week in
+  // progress is a few days of data.
   const rankCol = p.partialLast && cols > 1 ? cols - 2 : cols - 1;
-  const worst = new Set(
-    p.rows
-      .filter((r) => rankCol >= 0 && r.r[rankCol] != null)
-      .sort((a, b) => (b.r[rankCol] ?? 0) - (a.r[rankCol] ?? 0))
-      .slice(0, WEEKLY_WORST_N)
-      .map((r) => r.n)
-  );
-  const height = 56 + 36 + 18 + WEEKLY_HEAD_H + p.rows.length * WEEKLY_ROW_H + WEEKLY_FOOT_H;
+  const rated = p.rows.filter((r) => rankCol >= 0 && r.r[rankCol] != null);
+  const worstRows = [...rated]
+    .sort((a, b) => (b.r[rankCol] ?? 0) - (a.r[rankCol] ?? 0))
+    .slice(0, WEEKLY_WORST_N);
+  const worst = new Set(worstRows.map((r) => r.n));
+  const peak = Math.max(0, ...rated.map((r) => r.r[rankCol] ?? 0));
+  const axisMax = Math.max(WEEKLY_SCALE_TOP, Math.ceil(peak / 5) * 5);
+  const ticks = [axisMax, axisMax / 2, 0];
+  const slot = Math.max(4, Math.floor((WIDTH - 56 - WEEKLY_AXIS_W) / Math.max(1, p.rows.length)));
+  const barW = Math.max(2, slot - 3);
+  const height =
+    56 + 36 + 18 + WEEKLY_BARS_H + WEEKLY_HEAD_H + p.rows.length * WEEKLY_ROW_H + WEEKLY_FOOT_H;
 
-  const body = (
+  const bars = (
+    <div style={{ display: "flex", flexDirection: "column", height: WEEKLY_BARS_H }}>
+      <div style={{ display: "flex", fontSize: 15, fontWeight: 600, color: COLORS.text }}>
+        {rankCol >= 0
+          ? `Week of ${p.weeks[rankCol]}: % of people who left the survey at each question`
+          : "No complete week yet"}
+      </div>
+      <div style={{ display: "flex", marginTop: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            width: WEEKLY_AXIS_W,
+            height: WEEKLY_BAR_PLOT_H,
+            fontSize: 10,
+            color: COLORS.textMuted,
+          }}
+        >
+          {ticks.map((t) => (
+            <div key={t} style={{ display: "flex" }}>{`${t}%`}</div>
+          ))}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            height: WEEKLY_BAR_PLOT_H,
+            position: "relative",
+            borderBottom: `1px solid ${COLORS.baseline}`,
+          }}
+        >
+          {ticks.slice(0, -1).map((t) => (
+            <div
+              key={`g${t}`}
+              style={{
+                display: "flex",
+                position: "absolute",
+                left: 0,
+                width: slot * p.rows.length,
+                bottom: Math.round((t / axisMax) * WEEKLY_BAR_PLOT_H),
+                borderTop: `1px solid ${COLORS.gridline}`,
+              }}
+            />
+          ))}
+          {p.rows.map((row) => {
+            const v = rankCol >= 0 ? row.r[rankCol] : null;
+            const h = v == null ? 0 : Math.max(1, Math.round((v / axisMax) * WEEKLY_BAR_PLOT_H));
+            return (
+              <div
+                key={row.n}
+                style={{
+                  display: "flex",
+                  width: barW,
+                  height: h,
+                  marginRight: slot - barW,
+                  background: worst.has(row.n) ? COLORS.danger : WEEKLY_BAR_GREY,
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ display: "flex", marginLeft: WEEKLY_AXIS_W, height: 16 }}>
+        {p.rows.map((row) => (
+          <div
+            key={row.n}
+            style={{ display: "flex", width: slot, fontSize: 10, color: COLORS.textMuted }}
+          >
+            {row.n === 1 || row.n % 10 === 0 ? `Q${row.n}` : ""}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", marginTop: 8 }}>
+        {worstRows.map((row) => (
+          <div
+            key={row.n}
+            style={{ display: "flex", fontSize: 13, height: 18, color: COLORS.danger }}
+          >
+            {`${weeklyFigure(row.r[rankCol] ?? 0)} left at Q${row.n}: ${row.q}`}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const table = (
     <div style={{ display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", height: WEEKLY_HEAD_H, alignItems: "flex-end" }}>
-        <div style={{ display: "flex", width: WEEKLY_NUM_W + WEEKLY_LABEL_W, fontSize: 11, color: COLORS.textMuted }}>
-          Question (as asked today)
+        <div
+          style={{
+            display: "flex",
+            width: WEEKLY_NUM_W + WEEKLY_LABEL_W,
+            fontSize: 12,
+            fontWeight: 600,
+            color: COLORS.text,
+          }}
+        >
+          Week by week, every question
         </div>
         {p.weeks.map((w, i) => (
           <div
@@ -1884,7 +1989,7 @@ export function renderDropoutWeekly(p: DropoffWeeklyPayload): {
               {row.q}
             </div>
             {row.r.map((rate, i) => {
-              const c = rate == null ? { bg: "#fafafa", fg: "#b8bec8" } : weeklyCellColour(rate);
+              const c = rate == null ? { bg: "transparent", fg: COLORS.textMuted } : weeklyCellColour(rate);
               return (
                 <div
                   key={i}
@@ -1900,7 +2005,7 @@ export function renderDropoutWeekly(p: DropoffWeeklyPayload): {
                     fontSize: 10,
                   }}
                 >
-                  {rate == null ? "·" : weeklyFigure(rate)}
+                  {rate == null ? "" : weeklyFigure(rate)}
                 </div>
               );
             })}
@@ -1910,18 +2015,27 @@ export function renderDropoutWeekly(p: DropoffWeeklyPayload): {
       <div
         style={{
           display: "flex",
-          marginTop: 12,
+          marginTop: 10,
           fontSize: 11,
           color: COLORS.textMuted,
           lineHeight: 1.4,
         }}
       >
-        {`Each cell: of the people who reached the question that week, the % who left the survey there and never finished. · = fewer than ${p.floor} reached it.${p.partialLast ? " * = this week so far, through yesterday." : ""} Weeks start on Monday (Berlin). Team test runs can't be told apart and are included. Worst 3 of the last full week in red.`}
+        {`Each %: of the people who reached the question that week, how many left the survey there and never finished. Empty: under ${p.floor} people reached it, or it was not asked yet.${p.partialLast ? " * this week so far." : ""} Weeks start Monday. Team tests are included.`}
       </div>
     </div>
   );
+
   return {
-    element: chartShell("Drop-off per question, week by week", `Updated ${p.updated}`, body, height),
+    element: chartShell(
+      "Where people leave the survey",
+      `Updated ${p.updated}`,
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {bars}
+        {table}
+      </div>,
+      height
+    ),
     height,
   };
 }

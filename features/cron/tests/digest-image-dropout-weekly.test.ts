@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReactElement } from "react";
-import { renderDropoutWeekly } from "@/app/api/admin/digest-image/[kind]/route";
+import { renderDropoutWeekly, weeklyFigure } from "@/app/api/admin/digest-image/[kind]/route";
 import type { DropoffWeeklyPayload } from "@features/admin/server/dropoff-weekly";
 
 /** The Notion KPI chart. Asserted on what the renderer DRAWS, as the other chart tests do. */
@@ -61,11 +61,29 @@ describe("renderDropoutWeekly", () => {
     );
   });
 
-  it("draws a week under the floor as a blank, never as 0", () => {
-    const cells = walk(renderDropoutWeekly(payload()).element).map(text);
-    expect(cells.filter((t) => t === "·")).toHaveLength(2);
-    expect(cells).toContain("15");
-    expect(cells).toContain("4.3");
+  it("leaves a week empty when too few people (or nobody) reached the question, never 0%", () => {
+    const rows = walk(renderDropoutWeekly(payload()).element).filter(
+      (el) => style(el).height === 16 && Array.isArray((el.props ?? {}).children)
+    );
+    const added = rows.find((r) => walk(r).map(text).includes("Added on 6 Oct"))!;
+    const cells = walk(added)
+      .filter((el) => style(el).width === 46 - 2)
+      .map(text);
+    expect(cells).toEqual(["", "", "1%"]);
+  });
+
+  it("shows whole percentages, the way people read them", () => {
+    const all = walk(renderDropoutWeekly(payload()).element).map(text);
+    expect(all).toContain("15%");
+    expect(all).toContain("4%");
+    expect(weeklyFigure(0)).toBe("0%");
+    expect(weeklyFigure(0.4)).toBe("<1%");
+  });
+
+  it("draws one bar per question with exactly the worst three in red, named in plain words", () => {
+    const els = walk(renderDropoutWeekly(payload()).element);
+    expect(els.filter((el) => style(el).background === DANGER)).toHaveLength(3);
+    expect(els.map(text)).toContain("15% left at Q5: What is your email?");
   });
 
   it("marks the week in progress and grows with the question list", () => {
