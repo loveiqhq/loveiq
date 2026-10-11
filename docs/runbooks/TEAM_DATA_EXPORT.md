@@ -13,7 +13,14 @@ it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R
 - The Drive folder **"LoveIQ team data (production export, team only)"**, owned by Eman's
   `ec@` account.
 - The other five are **editors**: they can open, download, add, rename and delete files in it.
-  They cannot share it with anyone, and the folder has no link sharing.
+  They cannot share the folder or any file in it with anyone, and there is no link sharing.
+  Every refresh sets each file so that only the owner can share it: a folder's own setting
+  does not reach its files, and until 2026-10-11 every file let editors share it.
+- The folder carries a Drive property, `loveiq_team_export=production`, which the server finds
+  it by, so renaming or moving the folder is safe. To use another folder, set the tag on the new
+  one and remove it from the old one, as `ec@`: a Drive `files.update` with
+  `{"properties": {"loveiq_team_export": "production"}}` (or `null` to remove it). The server
+  writes only to a tagged folder `ec@` owns, and stops if there is not exactly one.
 - To add or remove a person, the owner changes the folder's sharing. Nothing in code holds the
   list.
 - The README in the folder lists every file, its row count and when it was made.
@@ -35,7 +42,30 @@ it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R
 
 ## Refreshing it
 
-Run it from a checkout of `main` on a machine that has:
+**Ask Claude** ("export all the data", "refresh the team data"). Jarvis's `export_all_data`
+starts the export on the server (`/api/cron/team-export`, production only) and replies with the
+folder's link and who can open it; nobody's laptop is needed, and the data goes from the
+database to Drive without passing through the chat.
+
+- It takes a few minutes. To see whether it has finished, or how the last one went, ask Claude;
+  it uses `export_status`, which changes nothing.
+- One runs at a time on the server. Asking again after one has finished starts another copy, so
+  a refresh after a deletion request always runs. If one is already running when someone is
+  deleted, start another once it finishes: the running one may have read them first.
+- Every run is recorded in Redis when it starts and when it ends, so a check reports a run the
+  server killed as one that never finished. A failed run alerts #prod-alerts and records
+  `error` or `timeout` in `cron_run`; a check, or the next start, says why it failed.
+- Anyone who can use Jarvis can start a refresh. That changes how fresh the copy is, not who can
+  open it.
+
+Before writing anything, both ways check the folder and every file a run will replace: owned
+by `ec@`, open only to individual loveiq.org accounts (no link, whole-domain or group sharing,
+since Drive does not list a group's members), and the folder's editors unable to share it on.
+If any check fails, nothing is written and the error names the file and the reason. A request
+that fails part-way through the upload leaves the files before it refreshed and the README
+older than them; the next run completes it.
+
+**From a laptop**, run it from a checkout of `main` on a machine that has:
 
 - the production `.env.local`, with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and
   `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT`;
@@ -47,6 +77,7 @@ npx tsx --env-file=.env.local scripts/team-data-export.ts \
 rm -rf ~/team-data-export
 ```
 
+- It takes no lock: do not run it while the server's export runs (ask Claude to check first).
 - It refuses an `--out` inside any git repository, so the data cannot be committed by accident.
 - The local copy is readable only by you (folder 700, files 600). Delete it once uploaded.
 - Each CSV replaces the Drive file of the same name, so links to the files keep working. Files

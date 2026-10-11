@@ -5,9 +5,9 @@
 **Entry:** Routes inline at `app/api/cron/<job>/route.ts`. Tests in `tests/`.
 
 **`vercel.json` and `brain-daily.yml` are the source of truth for WHICH of them run** — a
-route on disk is not a scheduled job, and the difference has hidden a dead job before. 34
-routes exist: 23 are scheduled in `vercel.json`, 5 run in GitHub Actions, and 6 do not run
-at all (a test in `tests/cron-stall.test.ts` keeps these lists true):
+route on disk is not a scheduled job, and the difference has hidden a dead job before. 35
+routes exist: 23 are scheduled in `vercel.json`, 5 run in GitHub Actions, 1 is started on demand
+by Jarvis, and 6 do not run at all (a test in `tests/cron-stall.test.ts` keeps these lists true):
 
 - _Product & ops_ — invite-reminders, survey-paused, nurture-sequence,
   payment-fulfillment-sweep, anomaly-watcher, security-storm-detector, conversion-digest,
@@ -17,6 +17,7 @@ at all (a test in `tests/cron-stall.test.ts` keeps these lists true):
 - _Company brain, in GitHub Actions_ (`brain-daily.yml` runs them through
   `scripts/brain-cron.ts`, because they need the `claude` binary) — brain-brief,
   brain-mine, brain-radar, brain-night-shift, brain-health
+- _Started on demand by Jarvis_ (its `export_all_data` tool calls the route) — team-export
 
 **The routes that do not run are not faults**: `purge-old-data` is deliberately off (see
 CLAUDE.md, "Postponed / TODO"), and `chapter-nudge`, `deep-engagement-alert`,

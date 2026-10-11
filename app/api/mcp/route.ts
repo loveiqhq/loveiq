@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
 import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
@@ -1329,6 +1330,47 @@ export const TOOLS = [
       },
       required: ["recorded_by"],
     },
+  },
+  {
+    name: "export_all_data",
+    title: "Export all the data to the team's Drive folder",
+    annotations: {
+      readOnlyHint: false,
+      // It replaces every file in the folder and deletes their old versions, on purpose: an
+      // erased customer must not live on in last week's copy. Neither can be undone.
+      destructiveHint: true,
+      // Each start after the last one finished makes another copy.
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    description:
+      "A fresh copy of ALL the data, as files: every customer and product table in the " +
+      "database, one CSV per table (Excel opens them), nothing masked, written straight into " +
+      "the team's private Google Drive folder. Returns the folder's link and who can open it. " +
+      "Use it whenever someone wants all the data, the raw data, a full copy, a dump, or an " +
+      "Excel file of everything or of a whole large table. Never page through " +
+      "query_product_data to build a copy: it returns 1,000 rows a call into this chat, and " +
+      "the whole database is far too big for a chat. This tool never puts the data in the " +
+      "chat, so its size does not matter.\n\n" +
+      "Only the LoveIQ team can open the folder; share the link, never the data. A copy takes " +
+      "a few minutes on the server and then replaces every file in the folder. Every call " +
+      "starts another copy unless one is running, so to see whether a copy has finished use " +
+      "export_status, never this. After a customer's data is deleted, start a copy the same " +
+      "day. Not in it: Jarvis's own index, job plumbing, and the log of people who asked us to " +
+      "delete their data. While anyone has asked us to restrict processing their data, it " +
+      "stops and writes nothing.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "export_status",
+    title: "How the team's copy of all the data is going",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Whether a copy of all the data (export_all_data) is being made right now, when the " +
+      "last one finished and how it went, with the team folder's link and who can open it. " +
+      "Changes nothing. Use it for 'is the export done?', 'how fresh is the team's data?' or " +
+      "'did the copy work?'.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "count_context",
@@ -5494,6 +5536,106 @@ async function callTool(
     );
   }
 
+  if (name === "export_all_data" || name === "export_status") {
+    const check = name === "export_status";
+    if (!isProdCronHost()) {
+      return textResult(
+        "The full export runs only on the production site, from the production database." +
+          (check ? "" : " Nothing was started."),
+        true
+      );
+    }
+    let res: Response;
+    try {
+      // The work runs in its own function: this one has a minute, and an export takes several.
+      // The production address itself, not NEXT_PUBLIC_SITE_URL: the apex form redirects, and a
+      // redirect would carry the secret to wherever it points.
+      res = await fetchWithTimeout(
+        `https://www.loveiq.org/api/cron/team-export${check ? "?check=1" : ""}`,
+        {
+          headers: { Authorization: `Bearer ${process.env.CRON_SECRET ?? ""}` },
+          redirect: "manual",
+          timeoutMs: 45_000,
+        }
+      );
+    } catch (err) {
+      logger.error({ err }, "brain: no answer from the team export");
+      return textResult(
+        check
+          ? "The export job did not answer in time, so how the copy is going is not known. " +
+              "Try export_status again in a minute."
+          : "The export job did not answer in time, so it is not known whether a copy " +
+              "started. In a minute, use export_status to see.",
+        true
+      );
+    }
+    const job = (await res.json().catch(() => ({}))) as {
+      running?: string | null;
+      startedAt?: string;
+      folderUrl?: string;
+      people?: string[];
+      error?: string;
+      last?: {
+        startedAt?: string;
+        finishedAt?: string;
+        status?: string;
+        error?: string;
+        folderUrl?: string;
+        people?: string[];
+      } | null;
+    };
+    stats.sourceCount = 1;
+    const at = (iso?: string | null) =>
+      iso ? `${iso.slice(0, 16).replace("T", " ")} UTC` : "an unknown time";
+    const last = job.last ?? null;
+    const folder = job.folderUrl ?? last?.folderUrl;
+    const where = folder
+      ? `\n${folder}\nOnly these people can open it: ${(job.people ?? last?.people ?? []).join(", ")}.`
+      : "";
+    const howLast = !last
+      ? "No copy has been made from Jarvis yet."
+      : !last.finishedAt
+        ? `The copy started at ${at(last.startedAt)} never recorded an end: the server ` +
+          "probably stopped it before it finished."
+        : last.status === "success"
+          ? `The last copy finished at ${at(last.finishedAt)}.`
+          : `The last attempt, at ${at(last.startedAt)}, failed: ${last.error ?? last.status}`;
+    if (check) {
+      if (res.status !== 200) {
+        return textResult(
+          `Could not check the export (${res.status}): ${job.error ?? "no reason given"}`,
+          true
+        );
+      }
+      return textResult(
+        job.running
+          ? `A copy of all the data has been in progress since ${at(job.running)}; it takes a ` +
+              `few minutes. Ask export_status again to see when it finishes.${where}`
+          : `No copy is being made now. ${howLast}${where}`
+      );
+    }
+    if (res.status === 202) {
+      return textResult(
+        `Started a fresh copy of all the data at ${at(job.startedAt)}. In a few minutes every ` +
+          `file in the team's folder is replaced:${where}\nOne CSV per table; README.md lists ` +
+          "them and says when the copy was made. In Excel: Data > From Text/CSV. To see whether " +
+          "it has finished, use export_status." +
+          (last && last.status !== "success" ? `\n\nBefore this: ${howLast}` : "")
+      );
+    }
+    if (res.status === 409) {
+      return textResult(
+        `A copy of all the data is already being made, since ${at(job.running)}; it takes a ` +
+          "few minutes, and export_status says when it has finished. If someone's data was " +
+          `deleted after it started, start another copy once it has finished.${where}`
+      );
+    }
+    return textResult(
+      `The export did not start (${res.status}): ${job.error ?? "no reason given"}`,
+      true
+    );
+  }
+
   if (name === "whats_new") {
     const raw = typeof args.since === "string" ? args.since.trim() : "";
     let since = new Date(Date.now() - 86_400_000);
@@ -6180,6 +6322,12 @@ export const MCP_INSTRUCTIONS =
   "one). Use list_product_tables then query_product_data, and " +
   "prefer an rpc/get_* analysis function when one fits — those encode the business " +
   "logic already.\n\n" +
+  "ALL THE DATA, AS FILES: export_all_data puts a fresh copy of every customer and product " +
+  "table (one CSV each, unmasked; Excel opens them) in the team's private Google Drive folder " +
+  "and returns its link; export_status says how the copy is going and changes nothing. Use " +
+  "export_all_data whenever someone wants all the data, a full copy or a whole large table: " +
+  "query_product_data returns 1,000 rows a call into the chat, so never page through it to " +
+  "build a copy.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +
@@ -6239,7 +6387,7 @@ export const MCP_INSTRUCTIONS =
   "`write_to_notion` adds a page or a task to the Notion workspace, and " +
   "`write_to_google_doc` creates a Google Doc or appends to one — both reversible, " +
   "and neither can delete anything. `send_email` DRAFTS by default and sends only when explicitly told " +
-  "to — it is the one action here that nobody can undo, so draft it, show it, and " +
+  "to — it leaves the company and nobody can undo it, so draft it, show it, and " +
   "send only if asked. Do what you were asked to do, and never announce your own " +
   "progress.\n\n" +
   "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +

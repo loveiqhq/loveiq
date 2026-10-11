@@ -1531,6 +1531,162 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("export_all_data", () => {
+      const call = async (name = "export_all_data") =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 31,
+                method: "tools/call",
+                params: { name, arguments: {} },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const status = () => call("export_status");
+      const folder = "https://drive.google.com/drive/folders/F1";
+      const people = ["Eman Cickusic", "Marcus Börner"];
+      const job = (status: number, body: Record<string, unknown>) =>
+        mockFetch.mockResolvedValueOnce({ ok: status < 300, status, json: async () => body });
+      const jobCalls = () =>
+        mockFetch.mock.calls.filter(([url]) => String(url).includes("/api/cron/team-export"));
+      let site: string | undefined;
+      let secret: string | undefined;
+      beforeEach(() => {
+        site = process.env.NEXT_PUBLIC_SITE_URL;
+        secret = process.env.CRON_SECRET;
+        // The apex form, which redirects: the tool must call the www address directly.
+        process.env.NEXT_PUBLIC_SITE_URL = "https://loveiq.org";
+        process.env.CRON_SECRET = "cron-secret";
+      });
+      afterEach(() => {
+        if (site === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+        else process.env.NEXT_PUBLIC_SITE_URL = site;
+        if (secret === undefined) delete process.env.CRON_SECRET;
+        else process.env.CRON_SECRET = secret;
+      });
+
+      it("starts the copy in its own job, with the cron secret, and says who can open it", async () => {
+        job(202, {
+          startedAt: "2026-10-11T09:00:00.000Z",
+          folderUrl: folder,
+          people,
+          last: {
+            startedAt: "2026-10-10T09:00:00Z",
+            finishedAt: "2026-10-10T09:03:00Z",
+            status: "success",
+          },
+        });
+        const r = await call();
+        expect(r.isError).toBeFalsy();
+        const [[url, init]] = jobCalls() as Array<[string, Record<string, unknown>]>;
+        expect(url).toBe("https://www.loveiq.org/api/cron/team-export");
+        expect(init.headers).toEqual({ Authorization: "Bearer cron-secret" });
+        // A redirect would carry the secret wherever it points.
+        expect(init.redirect).toBe("manual");
+        const text = r.content[0]!.text;
+        expect(text).toContain("Started a fresh copy of all the data at 2026-10-11 09:00 UTC");
+        expect(text).toContain(folder);
+        expect(text).toContain("Only these people can open it: Eman Cickusic, Marcus Börner.");
+        expect(text).toContain("To see whether it has finished, use export_status.");
+        expect(text).not.toContain("Before this");
+      });
+
+      it("says why the attempt before failed, or that it never finished", async () => {
+        job(202, {
+          startedAt: "2026-10-11T09:00:00.000Z",
+          folderUrl: folder,
+          people,
+          last: {
+            startedAt: "2026-10-11T08:00:05.000Z",
+            finishedAt: "2026-10-11T08:00:09.000Z",
+            status: "error",
+            error: "1 people asked us to restrict processing their data",
+          },
+        });
+        expect((await call()).content[0]!.text).toContain(
+          "Before this: The last attempt, at 2026-10-11 08:00 UTC, failed: 1 people asked us"
+        );
+        job(202, {
+          startedAt: "2026-10-11T09:30:00.000Z",
+          folderUrl: folder,
+          people,
+          last: { startedAt: "2026-10-11T09:00:00.000Z" },
+        });
+        expect((await call()).content[0]!.text).toContain(
+          "The copy started at 2026-10-11 09:00 UTC never recorded an end"
+        );
+      });
+
+      it("reports how the copy is going with its own tool, which starts nothing", async () => {
+        job(200, { running: "2026-10-11T09:00:00.000Z", last: { folderUrl: folder, people } });
+        const running = await status();
+        expect(String(jobCalls().at(-1)![0])).toBe(
+          "https://www.loveiq.org/api/cron/team-export?check=1"
+        );
+        expect(running.content[0]!.text).toContain("in progress since 2026-10-11 09:00 UTC");
+        job(200, {
+          running: null,
+          last: {
+            startedAt: "2026-10-11T09:00:00.000Z",
+            finishedAt: "2026-10-11T09:03:00.000Z",
+            status: "success",
+            folderUrl: folder,
+            people,
+          },
+        });
+        const done = (await status()).content[0]!.text;
+        expect(done).toContain(
+          "No copy is being made now. The last copy finished at 2026-10-11 09:03 UTC."
+        );
+        expect(done).toContain(folder);
+        job(200, { running: null, last: null });
+        expect((await status()).content[0]!.text).toContain(
+          "No copy has been made from Jarvis yet."
+        );
+        // A status call that fails says so as a check, not as an export that did not start.
+        job(503, { error: "Redis did not answer" });
+        const down = await status();
+        expect(down.isError).toBe(true);
+        expect(down.content[0]!.text).toContain("Could not check the export (503)");
+        mockFetch.mockRejectedValueOnce(new Error("Request timeout after 45000ms"));
+        expect((await status()).content[0]!.text).toContain("how the copy is going is not known");
+        // Every status call asked for the check, never for a start.
+        expect(jobCalls().every(([url]) => String(url).endsWith("?check=1"))).toBe(true);
+      });
+
+      it("reports a copy already being made instead of starting another", async () => {
+        job(409, { running: "2026-10-11T09:00:00.000Z", last: { folderUrl: folder, people } });
+        const r = await call();
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("already being made, since 2026-10-11 09:00 UTC");
+        expect(r.content[0]!.text).toContain("deleted after it started, start another copy");
+        expect(r.content[0]!.text).toContain(folder);
+      });
+
+      it("says when it could not start, and does not guess when it got no answer", async () => {
+        job(500, { error: "0 of ec@'s Drive folders carry the team export's tag (one must)" });
+        const refused = await call();
+        expect(refused.isError).toBe(true);
+        expect(refused.content[0]!.text).toContain("did not start (500): 0 of ec@'s Drive");
+        mockFetch.mockRejectedValueOnce(new Error("Request timeout after 45000ms"));
+        const silent = await call();
+        expect(silent.isError).toBe(true);
+        expect(silent.content[0]!.text).toContain("not known whether a copy started");
+        expect(silent.content[0]!.text).not.toContain("nothing was started");
+      });
+
+      it("runs only on production, and starts nothing elsewhere", async () => {
+        process.env.NEXT_PUBLIC_SITE_URL = "https://staging.loveiq.org";
+        const r = await call();
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("only on the production site");
+        expect(jobCalls()).toHaveLength(0);
+      });
+    });
+
     describe("what_shipped", () => {
       const commit = (pr: number, line: string, date: string) => ({
         sha: `c${pr}0000000`,
@@ -1633,6 +1789,8 @@ describe("/api/mcp", () => {
         "file_call_notes",
         "settle_decision_conflict",
         "record_experiment",
+        "export_all_data",
+        "export_status",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -1708,16 +1866,18 @@ describe("/api/mcp", () => {
         "file_call_notes",
         "settle_decision_conflict",
         "record_experiment",
+        "export_all_data",
       ]);
       /**
-       * EXACTLY ONE TOOL IS DESTRUCTIVE, and it is the one whose effect nobody can undo.
-       * A Slack message can be deleted by a person, a Notion page archived, a decision
-       * corrected — an email is gone the moment it is accepted. Asserted as a list so
-       * that marking a second tool destructive, or unmarking this one, breaks here.
+       * EXACTLY TWO TOOLS ARE DESTRUCTIVE, the two whose effect nobody can undo. A Slack
+       * message can be deleted by a person, a Notion page archived, a decision corrected —
+       * an email is gone the moment it is accepted, and the export replaces every file in
+       * the team's folder and deletes their old versions. Asserted as a list so that
+       * marking another tool destructive, or unmarking one of these, breaks here.
        */
       expect(
         tools.filter((t) => t.annotations?.destructiveHint === true).map((t) => t.name)
-      ).toEqual(["send_email"]);
+      ).toEqual(["send_email", "export_all_data"]);
       for (const t of tools) {
         expect(typeof t.title, t.name).toBe("string");
         // `destructiveHint` means something ONLY when `readOnlyHint` is false, per the
@@ -1754,6 +1914,7 @@ describe("/api/mcp", () => {
       ).toEqual([
         "comment_asks",
         "explain_change",
+        "export_all_data",
         "file_call_notes",
         "post_to_slack",
         "query_external_service",
@@ -7297,6 +7458,7 @@ describe("the runbook's tool count is the real one", () => {
     36: "Thirty-six",
     37: "Thirty-seven",
     38: "Thirty-eight",
+    39: "Thirty-nine",
   };
 
   it("matches what the server actually exposes", () => {
