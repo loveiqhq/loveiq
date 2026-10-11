@@ -420,7 +420,8 @@ describe("retrieve — when the full search does not answer", () => {
     // Everything else is the same request: the caller's filters still apply.
     expect(small.sources).toEqual(["doc"]);
     expect(small.query_text).toBe(full.query_text);
-    expect(optsOf(1)).toMatchObject({ timeoutMs: 6_000, breaker: "supabase-search" });
+    // Its own breaker: a run of slow full searches must not shut the fallback too.
+    expect(optsOf(1)).toMatchObject({ timeoutMs: 6_000, breaker: "supabase-search-fallback" });
     expect(shaping.partial).toBe(true);
     expect(shaping.stageMs).toEqual({
       embed: expect.any(Number),

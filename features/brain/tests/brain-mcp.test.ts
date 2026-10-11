@@ -4848,6 +4848,24 @@ describe("/api/mcp", () => {
       expect(writes().every((w) => !("stage_ms" in w))).toBe(true);
     });
 
+    it("calls an empty fallback search inconclusive, never an empty record", async () => {
+      mockRetrieve.mockImplementation(
+        async (_q: unknown, _l: unknown, _o: unknown, shaping: Record<string, unknown>) => {
+          shaping.partial = true;
+          shaping.stageMs = { embed: 300, search: 15_001, fallback: 640 };
+          return [];
+        }
+      );
+      const body = await (await call({ query: "a question nobody wrote about" })).json();
+      const text = body.result.content[0].text as string;
+      expect(text).toContain("That is an inconclusive search, not an empty record");
+      expect(text).not.toContain("Nothing in the indexed corpus matches");
+      await flushAfterResponse();
+      expect(writes()[0]).toMatchObject({
+        stage_ms: { embed: 300, search: 15_001, fallback: 640 },
+      });
+    });
+
     it("filters by a person's name as they spell it, in search and in counting", async () => {
       // The registry is cached for five minutes; start from this test's own.
       clearPeopleCache();

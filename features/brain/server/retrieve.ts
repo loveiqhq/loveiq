@@ -380,11 +380,14 @@ const SEARCH_TIMEOUT_MS = 15_000;
 const FALLBACK_TIMEOUT_MS = 6_000;
 const FALLBACK_CANDIDATES = 40;
 const SEARCH_BREAKER = "supabase-search";
+/** Its own, so a run of slow full searches cannot shut the fallback that covers them. */
+const FALLBACK_BREAKER = "supabase-search-fallback";
 
 /** One brain_search call. Throws CorpusUnavailableError when it does not answer with rows. */
 async function searchOnce(
   body: Record<string, unknown>,
-  timeoutMs: number
+  timeoutMs: number,
+  breaker: string
 ): Promise<Array<Record<string, unknown>>> {
   let rows: unknown;
   try {
@@ -392,7 +395,7 @@ async function searchOnce(
       method: "POST",
       body: JSON.stringify(body),
       timeoutMs,
-      breaker: SEARCH_BREAKER,
+      breaker,
     });
     if (!res.ok) {
       logger.error({ status: res.status }, "brain_search RPC failed");
@@ -528,7 +531,7 @@ export async function retrieve(
   };
   let rows: Array<Record<string, unknown>>;
   try {
-    rows = await searchOnce(body, SEARCH_TIMEOUT_MS);
+    rows = await searchOnce(body, SEARCH_TIMEOUT_MS, SEARCH_BREAKER);
     shaping.stageMs = { embed: embedMs, search: Date.now() - searchStarted };
   } catch (err) {
     if (!(err instanceof CorpusUnavailableError)) throw err;
@@ -544,7 +547,8 @@ export async function retrieve(
     const fallbackStarted = Date.now();
     rows = await searchOnce(
       { ...body, k: FALLBACK_CANDIDATES, per_source: 2, query_embedding: null },
-      FALLBACK_TIMEOUT_MS
+      FALLBACK_TIMEOUT_MS,
+      FALLBACK_BREAKER
     );
     shaping.partial = true;
     shaping.stageMs = {

@@ -169,6 +169,10 @@ describe("canonicalPeople — a filter in the spelling the index uses", () => {
     await expect(canonicalPeople({ people: ["Fatih Hadžić"] })).resolves.toEqual({
       people: ["Fatih Hadzic"],
     });
+    // The same name with "ž" and "ć" spelled as a letter plus a combining mark.
+    await expect(canonicalPeople({ people: ["Fatih Hadz\u030Cic\u0301"] })).resolves.toEqual({
+      people: ["Fatih Hadzic"],
+    });
     await expect(canonicalPeople({ people: "FH@loveiq.org ", source: "x" })).resolves.toEqual({
       people: ["Fatih Hadzic"],
       source: "x",

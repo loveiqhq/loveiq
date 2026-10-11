@@ -3397,6 +3397,8 @@ async function callTool(
     const shaping: RetrieveShaping = {};
     try {
       chunks = await retrieve(query, limit, opts, shaping);
+      // Recorded before any early return, so an empty answer still says where its time went.
+      stats.stageMs = shaping.stageMs;
     } catch (err) {
       if (!(err instanceof CorpusUnavailableError)) throw err;
       // Deliberately NOT "no results". Telling a model the corpus is empty when
@@ -3449,6 +3451,15 @@ async function callTool(
         }),
       ]).finally(() => clearTimeout(timer));
     };
+    if (chunks.length === 0 && shaping.partial) {
+      // The smaller search finding nothing says nothing about the record.
+      return textResult(
+        `The full search did not answer in time, and the smaller keyword-only search ` +
+          `found nothing for "${query}". That is an inconclusive search, not an empty ` +
+          `record: it misses whatever shares no words with the question. Ask again in a ` +
+          `minute before concluding LoveIQ has no record of this.`
+      );
+    }
     if (chunks.length === 0) {
       /**
        * A NARROW FILTER IS NOT AN EMPTY CORPUS, and the two must never read alike.
@@ -3483,7 +3494,6 @@ async function callTool(
 
     stats.sourceCount = chunks.length;
     stats.topScore = chunks[0]?.score;
-    stats.stageMs = shaping.stageMs;
     /** Said first, so a short list is never read as everything LoveIQ has on record. */
     const partial = shaping.partial
       ? "\n\nPARTIAL RESULTS. The full search did not answer in time, so this is a smaller " +
