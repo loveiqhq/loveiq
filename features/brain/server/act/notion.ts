@@ -404,3 +404,84 @@ export async function updateNotionPage(
 ): Promise<void> {
   await notion(`/pages/${pageId}`, { method: "PATCH", body: { properties } });
 }
+
+/**
+ * Upload a PNG to Notion's own storage and return the upload id to attach.
+ *
+ * An uploaded file rather than an external image URL: Notion caches external
+ * images by URL, refuses URLs over 2,000 characters (a 62-row chart payload is
+ * several times that), and an external link would make the numbers public to
+ * anyone holding it. An upload nobody attaches expires on its own after an hour.
+ */
+export async function uploadNotionPng(bytes: Uint8Array, filename: string): Promise<string> {
+  const created = await notion("/file_uploads", {
+    method: "POST",
+    body: { filename, content_type: "image/png" },
+  });
+  const id = String(created.id ?? "");
+  if (!id) throw new Error("notion: file upload created without an id");
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(bytes)], { type: "image/png" }), filename);
+  const { "content-type": _json, ...auth } = headers();
+  const res = await fetchWithTimeout(`${NOTION_API}/file_uploads/${id}/send`, {
+    method: "POST",
+    headers: auth, // fetch sets the multipart boundary itself
+    body: form,
+    timeoutMs: 30_000,
+  });
+  const json = (await res.json()) as Record<string, unknown>;
+  if (!res.ok || json.status !== "uploaded") {
+    throw new Error(String(json.message ?? `notion upload ${res.status}`));
+  }
+  return id;
+}
+
+function plainCaption(block: Record<string, unknown>): string {
+  const image = block.image as { caption?: Array<{ plain_text?: string }> } | undefined;
+  return (image?.caption ?? []).map((t) => t.plain_text ?? "").join("");
+}
+
+/**
+ * Put an uploaded image on a page, REPLACING the one this job put there before,
+ * found by a marker in its caption. Every other block is left alone: people
+ * write on these pages. The first run appends a heading and the image at the end.
+ */
+export async function upsertMarkedImage(
+  pageId: string,
+  opts: { marker: string; caption: string; heading: string; fileUploadId: string }
+): Promise<"updated" | "created"> {
+  let mine: Record<string, unknown> | undefined;
+  let cursor: string | undefined;
+  do {
+    const page = await notion(
+      `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`
+    );
+    const results = (page.results ?? []) as Array<Record<string, unknown>>;
+    mine = results.find((b) => b.type === "image" && plainCaption(b).includes(opts.marker));
+    cursor = page.has_more ? String(page.next_cursor) : undefined;
+  } while (!mine && cursor);
+
+  const image = {
+    file_upload: { id: opts.fileUploadId },
+    caption: [{ type: "text", text: { content: opts.caption } }],
+  };
+  if (mine) {
+    // Updating refuses `type` ("body.image.type should be not present"); creating needs it.
+    await notion(`/blocks/${String(mine.id)}`, { method: "PATCH", body: { image } });
+    return "updated";
+  }
+  await notion(`/blocks/${pageId}/children`, {
+    method: "PATCH",
+    body: {
+      children: [
+        {
+          object: "block",
+          type: "heading_3",
+          heading_3: { rich_text: [{ type: "text", text: { content: opts.heading } }] },
+        },
+        { object: "block", type: "image", image: { type: "file_upload", ...image } },
+      ],
+    },
+  });
+  return "created";
+}

@@ -35,6 +35,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/kpi-dropoff",
+      "schedule": "30 8 * * *"
+    },
+    {
       "path": "/api/cron/journey-backfill",
       "schedule": "0 4 1 1 *"
     },

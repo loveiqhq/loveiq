@@ -40,6 +40,8 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // window the route itself looks back over.
   "ux-review": 90 * 60_000,
   "conversion-digest": 26 * 3_600_000,
+  // Daily at 08:30 UTC, redrawing the drop-off chart on the Notion KPI page.
+  "kpi-dropoff": 26 * 3_600_000,
   /**
    * WEEKLY, so eight days of silence is one missed run. Re-enabled 2026-09-19
    * after 2026-07-26's pause, and weekly rather than daily on purpose: the daily

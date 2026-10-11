@@ -17,6 +17,8 @@ import {
   resolveDatabase,
   toBlocks,
   updateNotionPage,
+  uploadNotionPng,
+  upsertMarkedImage,
 } from "@features/brain/server/act/notion";
 
 const prop = (type: string, options?: string[]) => ({
@@ -343,5 +345,91 @@ describe("reading and updating rows", () => {
     expect(JSON.parse(String((init as { body: string }).body))).toEqual({
       properties: { "Last touch": { date: { start: "2026-09-29" } } },
     });
+  });
+});
+
+describe("the KPI chart image", () => {
+  type Call = [string, { method?: string; body?: unknown; headers?: Record<string, string> }];
+  const calls = () => mockFetch.mock.calls as Call[];
+  const json = (body: unknown, ok = true) => ({ ok, json: async () => body });
+  const image = (id: string, caption: string) => ({
+    id,
+    type: "image",
+    image: { caption: [{ plain_text: caption }] },
+  });
+
+  beforeEach(() => {
+    process.env.NOTION_TOKEN = "secret_test";
+    mockFetch.mockReset();
+  });
+
+  it("uploads the PNG in two steps and lets fetch set the multipart boundary", async () => {
+    mockFetch
+      .mockResolvedValueOnce(json({ id: "up-1", status: "pending" }))
+      .mockResolvedValueOnce(json({ id: "up-1", status: "uploaded" }));
+    expect(await uploadNotionPng(new Uint8Array([1, 2, 3]), "chart.png")).toBe("up-1");
+    const [createUrl, create] = calls()[0]!;
+    expect(createUrl).toBe("https://api.notion.com/v1/file_uploads");
+    expect(JSON.parse(String(create.body))).toEqual({
+      filename: "chart.png",
+      content_type: "image/png",
+    });
+    const [sendUrl, send] = calls()[1]!;
+    expect(sendUrl).toBe("https://api.notion.com/v1/file_uploads/up-1/send");
+    expect(send.body).toBeInstanceOf(FormData);
+    expect(send.headers?.["content-type"]).toBeUndefined();
+    expect(send.headers?.authorization).toBe("Bearer secret_test");
+  });
+
+  it("fails loudly when Notion did not accept the bytes", async () => {
+    mockFetch
+      .mockResolvedValueOnce(json({ id: "up-1", status: "pending" }))
+      .mockResolvedValueOnce(json({ id: "up-1", status: "pending" }));
+    await expect(uploadNotionPng(new Uint8Array([1]), "c.png")).rejects.toThrow();
+  });
+
+  it("replaces only the image carrying its marker, even on the second page of blocks", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        json({ results: [image("theirs", "Marcus's sketch")], has_more: true, next_cursor: "c2" })
+      )
+      .mockResolvedValueOnce(
+        json({ results: [image("ours", "Updated 11 Oct by the kpi-dropoff job")], has_more: false })
+      )
+      .mockResolvedValueOnce(json({ id: "ours" }));
+    const action = await upsertMarkedImage("page-1", {
+      marker: "kpi-dropoff job",
+      caption: "Updated 12 Oct by the kpi-dropoff job",
+      heading: "Drop-off per question, week by week",
+      fileUploadId: "up-2",
+    });
+    expect(action).toBe("updated");
+    expect(calls()[1]![0]).toContain("start_cursor=c2");
+    const [url, init] = calls()[2]!;
+    expect(url).toBe("https://api.notion.com/v1/blocks/ours");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(String(init.body)).image.file_upload).toEqual({ id: "up-2" });
+    // Notion refuses `type` on an update (checked live 2026-10-11).
+    expect(JSON.parse(String(init.body)).image.type).toBeUndefined();
+    expect(calls().some(([u]) => u.includes("/blocks/theirs"))).toBe(false);
+  });
+
+  it("adds a heading and the image at the end the first time", async () => {
+    mockFetch
+      .mockResolvedValueOnce(json({ results: [image("theirs", "no marker")], has_more: false }))
+      .mockResolvedValueOnce(json({ results: [] }));
+    const action = await upsertMarkedImage("page-1", {
+      marker: "kpi-dropoff job",
+      caption: "Updated 12 Oct by the kpi-dropoff job",
+      heading: "Drop-off per question, week by week",
+      fileUploadId: "up-3",
+    });
+    expect(action).toBe("created");
+    const [url, init] = calls()[1]!;
+    expect(url).toBe("https://api.notion.com/v1/blocks/page-1/children");
+    const children = JSON.parse(String(init.body)).children;
+    expect(children.map((c: { type: string }) => c.type)).toEqual(["heading_3", "image"]);
+    expect(children[1].image.file_upload).toEqual({ id: "up-3" });
+    expect(children[1].image.type).toBe("file_upload");
   });
 });
