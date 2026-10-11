@@ -54,6 +54,7 @@ export async function GET(request: Request) {
       `${result.summary} · links ${result.linked}, checked ${result.checked}, ` +
       `new ${result.fresh}, fixed ${result.fixed}, unknown ${result.unknown}, ` +
       `not reached ${result.unreached}, in trash ${result.trashed}, ` +
+      `other workspaces ${result.otherWorkspaces}, ` +
       `visible not yet indexed ${result.visibleNotIndexed}, ` +
       `mention pages ${result.mentionPages}/${result.mentionTotal}`;
 

@@ -139,6 +139,7 @@ import {
   breakEven,
 } from "@features/brain/server/break-even";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { canonicalPeople } from "@features/brain/server/people";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
@@ -3390,7 +3391,12 @@ async function callTool(
    * return sites, three of them mid-branch, and a third top-level key on a tool
    * result is not something MCP defines.
    */
-  stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {},
+  stats: {
+    sourceCount?: number;
+    topScore?: number;
+    contentScore?: number;
+    stageMs?: Record<string, number>;
+  } = {},
   /** Who is asking; the shared token when nobody signed in. Names the recorder of a decision. */
   caller: Caller = { kind: "shared" }
 ) {
@@ -3497,7 +3503,7 @@ async function callTool(
       excludeSources: asStrings(args.exclude_sources),
       since: typeof args.since === "string" ? args.since : undefined,
       until: typeof args.until === "string" ? args.until : undefined,
-      meta: asMeta(args.meta),
+      meta: await canonicalPeople(asMeta(args.meta)),
       offset: intArg(args.offset, 0, 0, Number.MAX_SAFE_INTEGER),
     };
 
@@ -3522,7 +3528,11 @@ async function callTool(
     const shaping: RetrieveShaping = {};
     try {
       chunks = await retrieve(query, limit, opts, shaping);
+      // Recorded before any early return, so an empty answer still says where its time went.
+      stats.stageMs = shaping.stageMs;
     } catch (err) {
+      // And when both searches failed, so the log still says where the time went.
+      stats.stageMs = shaping.stageMs;
       if (!(err instanceof CorpusUnavailableError)) throw err;
       // Deliberately NOT "no results". Telling a model the corpus is empty when
       // the database is unreachable makes it assert absence with confidence.
@@ -3541,6 +3551,15 @@ async function callTool(
      * "nothing at offset 60" the same way as "LoveIQ has no record of this" is the single
      * failure this whole server is written against.
      */
+    if (chunks.length === 0 && shaping.partial) {
+      // The smaller search finding nothing says nothing about the record.
+      return textResult(
+        `The full search did not answer in time, and the smaller keyword-only search ` +
+          `found nothing for "${query}". That is an inconclusive search, not an empty ` +
+          `record: it misses whatever shares no words with the question. Ask again in a ` +
+          `minute before concluding LoveIQ has no record of this.`
+      );
+    }
     if (chunks.length === 0 && (opts.offset ?? 0) > 0) {
       return textResult(
         `No results past offset ${opts.offset}. A ranked search considers roughly 100 ` +
@@ -3608,6 +3627,13 @@ async function callTool(
 
     stats.sourceCount = chunks.length;
     stats.topScore = chunks[0]?.score;
+    /** Said first, so a short list is never read as everything LoveIQ has on record. */
+    const partial = shaping.partial
+      ? "\n\nPARTIAL RESULTS. The full search did not answer in time, so this is a smaller " +
+        "keyword-only search over fewer candidates. It can miss what the full search finds, " +
+        "above all records that share no words with the question. Ask again in a minute for " +
+        "the full ranking before concluding something is not on record."
+      : "";
 
     /**
      * NOTICING, WHICH IS THE POINT.
@@ -3851,7 +3877,7 @@ async function callTool(
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${weakMatch}${outside}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true, asOf: opts.until })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${partial}${weakMatch}${outside}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true, asOf: opts.until })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );
@@ -4228,7 +4254,7 @@ async function callTool(
       excludeSources: asStrings(args.exclude_sources),
       since: typeof args.since === "string" ? args.since : undefined,
       until: typeof args.until === "string" ? args.until : undefined,
-      meta: asMeta(args.meta),
+      meta: await canonicalPeople(asMeta(args.meta)),
     };
     // A book filter without the book source matches nothing, because books are opt-in, and
     // "widen it" was the wrong advice for that.
@@ -6965,7 +6991,12 @@ export async function POST(request: Request) {
       }
     }
     const started = Date.now();
-    const stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {};
+    const stats: {
+      sourceCount?: number;
+      topScore?: number;
+      contentScore?: number;
+      stageMs?: Record<string, number>;
+    } = {};
     let out: { content: ContentBlock[]; isError: boolean };
     try {
       out = await callTool(name, args, readVercelOidcToken(request), stats, caller);
@@ -7016,6 +7047,7 @@ export async function POST(request: Request) {
         sourceCount: stats.sourceCount ?? null,
         topScore: stats.topScore ?? null,
         contentScore: stats.contentScore ?? null,
+        stageMs: stats.stageMs ?? null,
         latencyMs: Date.now() - started,
         // Allow-listed, not free text: the header is caller-supplied and this column
         // is what the usage analysis groups by, so an arbitrary value would let a

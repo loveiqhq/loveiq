@@ -297,6 +297,89 @@ describe("selfReport", () => {
   });
 });
 
+describe("search stages", () => {
+  it("gives the middle and the slow end of each stage, over the searches that timed them", () => {
+    const s = windowStats(
+      [
+        search("a", 3, 5, { stage_ms: { embed: 300, search: 900 } }),
+        search("b", 3, 5, { stage_ms: { embed: 500, search: 1_100 } }),
+        search("c", 3, 5, { stage_ms: { embed: 400, search: 15_000, fallback: 800 } }),
+        // Logged before stages were recorded: left out, not counted as zero.
+        search("d", 3, 5),
+        row({ stage_ms: { embed: 1, search: 1 } }),
+      ],
+      FLOOR
+    );
+    expect(s.searchStages).toMatchObject({
+      timed: 3,
+      embedP50: 400,
+      searchP50: 1_100,
+      fallbacks: 1,
+    });
+    // The slow end, on a week's worth: 19 ordinary searches and two that ran long.
+    const week = windowStats(
+      [
+        ...Array.from({ length: 19 }, () =>
+          search("x", 3, 5, { stage_ms: { embed: 300, search: 1_000 } })
+        ),
+        ...Array.from({ length: 2 }, () =>
+          search("y", 3, 5, { stage_ms: { embed: 300, search: 15_000, fallback: 700 } })
+        ),
+      ],
+      FLOOR
+    );
+    expect(week.searchStages).toMatchObject({
+      timed: 21,
+      searchP50: 1_000,
+      searchP95: 15_000,
+      fallbacks: 2,
+    });
+  });
+
+  it("says where a search's time went, and how many fell back", () => {
+    const now = windowStats(
+      [
+        search("a", 3, 5, { stage_ms: { embed: 300, search: 900 } }),
+        search("c", 3, 5, { stage_ms: { embed: 400, search: 15_000, fallback: 800 } }),
+      ],
+      FLOOR
+    );
+    const text = renderSelfReport(
+      {
+        days: 7,
+        since: "2026-09-21",
+        until: "2026-09-28",
+        now,
+        before: windowStats([], FLOOR),
+        testCalls: 0,
+        batteries: null,
+        jobs: null,
+      } as unknown as SelfReport,
+      FLOOR,
+      { withQuestions: false, nowMs: NOW }
+    );
+    expect(text).toMatch(
+      /Search stages, over 2 timed searches: embedding the question took 0\.\d s/
+    );
+    expect(text).toContain("1 fell back to the smaller keyword-only search");
+    const quiet = renderSelfReport(
+      {
+        days: 7,
+        since: "2026-09-21",
+        until: "2026-09-28",
+        now: windowStats([search("a", 3)], FLOOR),
+        before: windowStats([], FLOOR),
+        testCalls: 0,
+        batteries: null,
+        jobs: null,
+      } as unknown as SelfReport,
+      FLOOR,
+      { withQuestions: false, nowMs: NOW }
+    );
+    expect(quiet).not.toContain("Search stages");
+  });
+});
+
 describe("renderSelfReport", () => {
   const stats = windowStats(
     [search("kpi framework targets", 1.2), search("pricing", 3), row({ error: "Nope. Really." })],
