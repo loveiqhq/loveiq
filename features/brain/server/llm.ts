@@ -115,7 +115,18 @@ export interface LlmMessage {
 }
 
 export type LlmResult =
-  | { ok: true; text: string; truncated: boolean }
+  | {
+      ok: true;
+      text: string;
+      truncated: boolean;
+      /**
+       * `claude -p` only, when it says: the turns the answer took (2 or more means a tool
+       * was used) and how many tool calls were refused. A caller that gave the model files
+       * to read uses these to tell an answer about the files from one that never saw them.
+       */
+      turns?: number;
+      denials?: number;
+    }
   | {
       ok: false;
       reason: "unconfigured" | "rate_limited" | "overloaded" | "error";
@@ -504,6 +515,30 @@ export function runClaude(
 }
 
 /**
+ * A `claude` child's whole environment: enough to run and to sign in, and none of the job's
+ * other secrets (Supabase, Slack), so a page or a picture that talks it into reading its own
+ * environment finds nothing worth leaking. For callers that give the model a tool that reads
+ * files: the persona walkers' judge, and the Slack screenshot describer.
+ */
+export function cliEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  // USER, LOGNAME and SHELL are how a laptop's own Claude sign-in (the macOS keychain) is
+  // found; on the runner the token is enough. None of them is a secret.
+  const keep = [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "LANG",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+  ];
+  return Object.fromEntries(
+    keep.filter((k) => env[k]).map((k) => [k, env[k]])
+  ) as NodeJS.ProcessEnv;
+}
+
+/**
  * What `claude -p --output-format json` printed, as an LlmResult.
  *
  * Measured 2026-09-24 on v2.1.281: EVERY outcome prints one JSON object on stdout, errors
@@ -517,6 +552,8 @@ export function cliOutcome(stdout: string): LlmResult {
     result?: unknown;
     stop_reason?: unknown;
     api_error_status?: unknown;
+    num_turns?: unknown;
+    permission_denials?: unknown;
   } | null = null;
   try {
     json = JSON.parse(stdout);
@@ -550,5 +587,13 @@ export function cliOutcome(stdout: string): LlmResult {
     logger.error({}, "brain llm: the claude CLI returned no content");
     return { ok: false, reason: "error", detail: "empty completion" };
   }
-  return { ok: true, text: text.trim(), truncated: json.stop_reason === "max_tokens" };
+  return {
+    ok: true,
+    text: text.trim(),
+    truncated: json.stop_reason === "max_tokens",
+    // Measured on v2.1.296: an answer that read one file took 2 turns, and a Read refused by
+    // the allow rule is listed in `permission_denials`.
+    ...(typeof json.num_turns === "number" ? { turns: json.num_turns } : {}),
+    ...(Array.isArray(json.permission_denials) ? { denials: json.permission_denials.length } : {}),
+  };
 }
