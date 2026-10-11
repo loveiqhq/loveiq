@@ -42,6 +42,13 @@ const ARRAY_FIELDS = ["participants", "speakers", "attendees"] as const;
 let cache: { at: number; byAlias: Map<string, Person> } | null = null;
 const TTL_MS = 5 * 60_000;
 
+/**
+ * How a name is looked up: trimmed, lower-cased, and in one Unicode form. "ž" can arrive as
+ * one character or as "z" plus a combining caron (macOS file names do that); they look the
+ * same and would not match without NFC.
+ */
+export const nameKey = (name: string) => name.normalize("NFC").trim().toLowerCase();
+
 export function clearPeopleCache(): void {
   cache = null;
 }
@@ -61,8 +68,8 @@ export async function loadPeople(): Promise<Map<string, Person> | null> {
     for (const r of rows) {
       const person: Person = { canonical: r.canonical, kind: r.kind };
       // The canonical name resolves to itself even when it is not listed as an alias.
-      byAlias.set(r.canonical.toLowerCase(), person);
-      for (const a of r.aliases ?? []) byAlias.set(a.toLowerCase(), person);
+      byAlias.set(nameKey(r.canonical), person);
+      for (const a of r.aliases ?? []) byAlias.set(nameKey(a), person);
     }
     cache = { at: Date.now(), byAlias };
     return byAlias;
@@ -116,11 +123,33 @@ export function peopleIn(
   if (!byAlias) return undefined;
   const found = new Set<string>();
   for (const raw of rawIdentities(meta)) {
-    const hit = byAlias.get(raw.toLowerCase());
+    const hit = byAlias.get(nameKey(raw));
     // Bots and shared mailboxes are deliberately excluded. `dependabot[bot]` authors many
     // commit chunks and `teamwork@loveiq.org` owns thousands of Drive chunks; counting
     // either as a colleague makes "who has written the most" answer with a robot.
     if (hit && hit.kind === "person") found.add(hit.canonical);
   }
   return found.size > 0 ? [...found].sort() : undefined;
+}
+
+/**
+ * A `people` filter in the spelling the index uses.
+ *
+ * `meta.people` holds each colleague's canonical name and a filter matches it exactly, so
+ * "Fatih Hadžić", as he writes his name, found none of the 447 records tagged "Fatih Hadzic"
+ * (2026-10-11), while the registry already listed both spellings. Each name the registry
+ * knows becomes its canonical one; an unknown name is kept as asked, and so is the whole
+ * filter when the registry cannot be read.
+ */
+export async function canonicalPeople<T extends Record<string, string | string[]>>(
+  meta: T | undefined
+): Promise<T | undefined> {
+  const asked = meta?.people;
+  if (!asked) return meta;
+  const byAlias = await loadPeople();
+  if (!byAlias) return meta;
+  const names = (Array.isArray(asked) ? asked : [asked]).map(
+    (n) => byAlias.get(nameKey(n))?.canonical ?? n
+  );
+  return { ...meta, people: [...new Set(names)] };
 }

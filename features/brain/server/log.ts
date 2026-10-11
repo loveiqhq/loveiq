@@ -228,6 +228,8 @@ export async function recordToolCall(input: {
    * logged calls unable to say which questions the corpus struggles with.
    */
   contentScore?: number | null;
+  /** Search only: milliseconds per stage (embed, search, and the fallback when it ran). */
+  stageMs?: Record<string, number> | null;
   latencyMs: number;
   error?: string | null;
   /**
@@ -273,6 +275,9 @@ export async function recordToolCall(input: {
          */
         top_score: input.topScore ?? null,
         content_score: input.contentScore ?? null,
+        // Only when there is one: the column is new, and a key PostgREST does not know
+        // rejects the whole row, so every other tool's log stays as it was.
+        ...(input.stageMs ? { stage_ms: input.stageMs } : {}),
 
         latency_ms: input.latencyMs,
         error: input.error ? input.error.slice(0, 500) : null,

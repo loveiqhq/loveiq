@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { peopleIn, type Person } from "@features/brain/server/people";
+const mockSupabaseFetch = vi.fn();
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: (...a: unknown[]) => mockSupabaseFetch(...(a as [])),
+}));
+vi.mock("@shared/observability/logger", () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import {
+  canonicalPeople,
+  clearPeopleCache,
+  peopleIn,
+  type Person,
+} from "@features/brain/server/people";
 
 /** The shape `loadPeople` returns: every alias, lower-cased, pointing at one person. */
 function registry(entries: Array<[string, string[], Person["kind"]]>): Map<string, Person> {
@@ -133,5 +146,53 @@ describe("peopleIn — one name for a person, whatever the source called them", 
 
   it("reads nothing from a chunk with no identity fields at all", () => {
     expect(peopleIn({ grain: "day", channel: "all-loveiq" }, REG)).toBeUndefined();
+  });
+});
+
+describe("canonicalPeople — a filter in the spelling the index uses", () => {
+  beforeEach(() => {
+    clearPeopleCache();
+    mockSupabaseFetch.mockReset().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          canonical: "Fatih Hadzic",
+          aliases: ["fatih", "fatih hadžić", "fh@loveiq.org"],
+          kind: "person",
+        },
+      ],
+    });
+  });
+
+  it("turns a name as its owner writes it into the one the index tags", async () => {
+    // 447 records tagged "Fatih Hadzic"; a filter on "Fatih Hadžić" found none of them.
+    await expect(canonicalPeople({ people: ["Fatih Hadžić"] })).resolves.toEqual({
+      people: ["Fatih Hadzic"],
+    });
+    // The same name with "ž" and "ć" spelled as a letter plus a combining mark.
+    await expect(canonicalPeople({ people: ["Fatih Hadz\u030Cic\u0301"] })).resolves.toEqual({
+      people: ["Fatih Hadzic"],
+    });
+    await expect(canonicalPeople({ people: "FH@loveiq.org ", source: "x" })).resolves.toEqual({
+      people: ["Fatih Hadzic"],
+      source: "x",
+    });
+  });
+
+  it("keeps a name the registry does not know, once, and the rest of the filter as it was", async () => {
+    await expect(canonicalPeople({ status: "WIP" })).resolves.toEqual({ status: "WIP" });
+    await expect(canonicalPeople(undefined)).resolves.toBeUndefined();
+    // No people key, no registry read.
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+    await expect(
+      canonicalPeople({ people: ["Fatih", "Someone New", "fatih hadžić"] })
+    ).resolves.toEqual({ people: ["Fatih Hadzic", "Someone New"] });
+  });
+
+  it("leaves the filter as asked when the registry cannot be read", async () => {
+    mockSupabaseFetch.mockReset().mockResolvedValue({ ok: false, status: 503 });
+    await expect(canonicalPeople({ people: ["Fatih Hadžić"] })).resolves.toEqual({
+      people: ["Fatih Hadžić"],
+    });
   });
 });
