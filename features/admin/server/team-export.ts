@@ -279,7 +279,10 @@ export function masker(key: Buffer = randomBytes(32)): Masker {
     if (Array.isArray(value)) return value.map((v) => json(v, where));
     if (value && typeof value === "object") {
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => {
+        Object.entries(value).map(([raw, v]) => {
+          // A key can itself be personal (a map keyed by address or token): it is masked like
+          // text, here and in the error that names it, which reaches logs, Slack and cron_run.
+          const k = text(raw);
           const key = snakeKey(k);
           if (v === null || v === undefined) return [k, v];
           if (PERSONAL_KEYS.has(key) || PERSONAL_COLUMNS.has(key)) return [k, MASKED];
