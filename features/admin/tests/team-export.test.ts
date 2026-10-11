@@ -701,9 +701,10 @@ describe("Drive, with requests answered here", () => {
       method: (init as RequestInit | undefined)?.method ?? "GET",
       body: (init as RequestInit | undefined)?.body,
     }));
+  // The owner is listed second, as Drive may: the reply must not assume the first person shares.
   const team = [
-    { type: "user", emailAddress: "ec@loveiq.org", displayName: "Eman Cickusic" },
-    { type: "user", emailAddress: "mb@loveiq.org", displayName: "Marcus Börner" },
+    { type: "user", role: "writer", emailAddress: "mb@loveiq.org", displayName: "Marcus Börner" },
+    { type: "user", role: "owner", emailAddress: "ec@loveiq.org", displayName: "Eman Cickusic" },
   ];
   const folderMeta = {
     mimeType: "application/vnd.google-apps.folder",
@@ -721,7 +722,9 @@ describe("Drive, with requests answered here", () => {
       .mockResolvedValueOnce(answer(folderMeta));
     await expect(findTeamFolder("tok")).resolves.toEqual({
       id: "F1",
-      people: ["Eman Cickusic", "Marcus Börner"],
+      people: ["Marcus Börner", "Eman Cickusic"],
+      // Editors cannot share it on (writersCanShare is off), so only the owner can add someone.
+      owner: "Eman Cickusic",
     });
     const q = query(calls()[0]!.url);
     // Owned, because anyone can share a tagged folder with ec@: this repository is public.
@@ -729,6 +732,15 @@ describe("Drive, with requests answered here", () => {
     expect(q).toContain("properties has { key='loveiq_team_export' and value='production' }");
     expect(q).toContain("trashed=false");
     expect(calls()[1]!.url).toContain("/drive/v3/files/F1?fields=");
+    expect(decodeURIComponent(calls()[1]!.url)).toContain("permissions(type,role,");
+  });
+
+  it("names the folder's owner only when Drive says who that is", async () => {
+    const noRoles = team.map(({ role: _role, ...p }) => p);
+    fetchMock
+      .mockResolvedValueOnce(answer({ files: [{ id: "F1" }] }))
+      .mockResolvedValueOnce(answer({ ...folderMeta, permissions: noRoles }));
+    await expect(findTeamFolder("tok")).resolves.toMatchObject({ owner: "the folder's owner" });
   });
 
   it("stops when no folder, or more than one, carries the tag", async () => {

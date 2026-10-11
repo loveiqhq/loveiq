@@ -68,8 +68,9 @@ its older versions, so the first masked copy removes the unmasked one from Drive
 
 **Ask Claude** ("export all the data", "refresh the team data"). Jarvis's `export_all_data`
 starts the export on the server (`/api/cron/team-export`, production only) and replies with the
-folder's link and who can open it; nobody's laptop is needed, and the data goes from the
-database to Drive without passing through the chat.
+folder's link, who can open it and who owns it; nobody's laptop is needed, and the data goes
+from the database to Drive without passing through the chat. Only the owner can add someone,
+since editors cannot share the folder on, so the reply names the owner as the person to ask.
 
 - It takes a few minutes. To see whether it has finished, or how the last one went, ask Claude;
   it uses `export_status`, which changes nothing.
