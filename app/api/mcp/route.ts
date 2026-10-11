@@ -3459,6 +3459,8 @@ async function callTool(
       // Recorded before any early return, so an empty answer still says where its time went.
       stats.stageMs = shaping.stageMs;
     } catch (err) {
+      // And when both searches failed, so the log still says where the time went.
+      stats.stageMs = shaping.stageMs;
       if (!(err instanceof CorpusUnavailableError)) throw err;
       // Deliberately NOT "no results". Telling a model the corpus is empty when
       // the database is unreachable makes it assert absence with confidence.
@@ -3477,6 +3479,15 @@ async function callTool(
      * "nothing at offset 60" the same way as "LoveIQ has no record of this" is the single
      * failure this whole server is written against.
      */
+    if (chunks.length === 0 && shaping.partial) {
+      // The smaller search finding nothing says nothing about the record.
+      return textResult(
+        `The full search did not answer in time, and the smaller keyword-only search ` +
+          `found nothing for "${query}". That is an inconclusive search, not an empty ` +
+          `record: it misses whatever shares no words with the question. Ask again in a ` +
+          `minute before concluding LoveIQ has no record of this.`
+      );
+    }
     if (chunks.length === 0 && (opts.offset ?? 0) > 0) {
       return textResult(
         `No results past offset ${opts.offset}. A ranked search considers roughly 100 ` +
@@ -3510,15 +3521,6 @@ async function callTool(
         }),
       ]).finally(() => clearTimeout(timer));
     };
-    if (chunks.length === 0 && shaping.partial) {
-      // The smaller search finding nothing says nothing about the record.
-      return textResult(
-        `The full search did not answer in time, and the smaller keyword-only search ` +
-          `found nothing for "${query}". That is an inconclusive search, not an empty ` +
-          `record: it misses whatever shares no words with the question. Ask again in a ` +
-          `minute before concluding LoveIQ has no record of this.`
-      );
-    }
     if (chunks.length === 0) {
       /**
        * A NARROW FILTER IS NOT AN EMPTY CORPUS, and the two must never read alike.

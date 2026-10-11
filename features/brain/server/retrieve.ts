@@ -545,17 +545,23 @@ export async function retrieve(
      * The caller is told the list is partial. If this fails too, it is reported as before.
      */
     const fallbackStarted = Date.now();
-    rows = await searchOnce(
-      { ...body, k: FALLBACK_CANDIDATES, per_source: 2, query_embedding: null },
-      FALLBACK_TIMEOUT_MS,
-      FALLBACK_BREAKER
-    );
+    // Timed whether or not it answers, so a search that failed twice still says where it spent.
+    const timed = () =>
+      (shaping.stageMs = {
+        embed: embedMs,
+        search: fallbackStarted - searchStarted,
+        fallback: Date.now() - fallbackStarted,
+      });
+    try {
+      rows = await searchOnce(
+        { ...body, k: FALLBACK_CANDIDATES, per_source: 2, query_embedding: null },
+        FALLBACK_TIMEOUT_MS,
+        FALLBACK_BREAKER
+      );
+    } finally {
+      timed();
+    }
     shaping.partial = true;
-    shaping.stageMs = {
-      embed: embedMs,
-      search: fallbackStarted - searchStarted,
-      fallback: Date.now() - fallbackStarted,
-    };
     logger.warn(
       { err, stageMs: shaping.stageMs },
       "brain: full search failed, answered keyword-only"

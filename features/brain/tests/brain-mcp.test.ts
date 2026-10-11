@@ -4896,6 +4896,34 @@ describe("/api/mcp", () => {
       expect(writes().every((w) => !("stage_ms" in w))).toBe(true);
     });
 
+    it("logs where the time went when both searches failed", async () => {
+      mockRetrieve.mockImplementation(
+        async (_q: unknown, _l: unknown, _o: unknown, shaping: Record<string, unknown>) => {
+          shaping.stageMs = { embed: 280, search: 15_003, fallback: 6_001 };
+          throw new CorpusUnavailableError("Request timeout");
+        }
+      );
+      const body = await (await call({ query: "anything" })).json();
+      expect(body.result.content[0].text).toContain("The knowledge base is unreachable");
+      await flushAfterResponse();
+      expect(writes()[0]).toMatchObject({
+        stage_ms: { embed: 280, search: 15_003, fallback: 6_001 },
+      });
+    });
+
+    it("calls an empty later page of a fallback search inconclusive, not the end of the ranking", async () => {
+      mockRetrieve.mockImplementation(
+        async (_q: unknown, _l: unknown, _o: unknown, shaping: Record<string, unknown>) => {
+          shaping.partial = true;
+          return [];
+        }
+      );
+      const body = await (await call({ query: "anything", offset: 60 })).json();
+      const text = body.result.content[0].text as string;
+      expect(text).toContain("That is an inconclusive search, not an empty record");
+      expect(text).not.toContain("No results past offset");
+    });
+
     it("calls an empty fallback search inconclusive, never an empty record", async () => {
       mockRetrieve.mockImplementation(
         async (_q: unknown, _l: unknown, _o: unknown, shaping: Record<string, unknown>) => {

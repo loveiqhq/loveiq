@@ -445,8 +445,18 @@ describe("retrieve — when the full search does not answer", () => {
 
   it("says unavailable only when the smaller search fails too, after exactly two tries", async () => {
     mockSupabaseFetch.mockRejectedValue(new Error("Request timeout"));
-    await expect(retrieve("a real question", 8)).rejects.toBeInstanceOf(CorpusUnavailableError);
+    const shaping: Parameters<typeof retrieve>[3] = {};
+    await expect(retrieve("a real question", 8, {}, shaping)).rejects.toBeInstanceOf(
+      CorpusUnavailableError
+    );
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
+    // Timed anyway, so the log says where a search that failed twice spent its time.
+    expect(shaping.stageMs).toEqual({
+      embed: expect.any(Number),
+      search: expect.any(Number),
+      fallback: expect.any(Number),
+    });
+    expect(shaping.partial).toBeUndefined();
   });
 });
 
