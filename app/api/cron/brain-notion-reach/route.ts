@@ -2,18 +2,23 @@
  * GET /api/cron/brain-notion-reach — daily, before the morning brief.
  *
  * Finds the Notion pages the team links to (in WhatsApp, Slack, email, Drive and
- * Notion itself, plus @-mentions) that Jarvis cannot open, and says so in a notice
- * when something changed. See features/brain/server/notion-reach.ts for why.
+ * Notion itself, plus @-mentions and relations) that Jarvis cannot open, and says so
+ * in the brain channel and in a notice when something changed, and on Mondays. See
+ * features/brain/server/notion-reach.ts for why.
  *
  * Its one-line result in `cron_run` is what list_sources shows beside Notion, so a
  * reader asking Jarvis what it can see is told what it cannot.
  */
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { checkNotionReach } from "@features/brain/server/notion-reach";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
+import { escapeSlack, notifySlack } from "@shared/observability/slack";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
+  tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import logger from "@shared/observability/logger";
@@ -49,16 +54,36 @@ export async function GET(request: Request) {
       `${result.summary} · links ${result.linked}, checked ${result.checked}, ` +
       `new ${result.fresh}, fixed ${result.fixed}, unknown ${result.unknown}, ` +
       `not reached ${result.unreached}, ` +
-      `visible not yet indexed ${result.visibleNotIndexed}, mention pages ${result.mentionPages}`;
-    if (result.noticeFailed) {
-      // The finding exists and nobody will hear about it: that is a failure, and it
-      // must reach a person (the brain channel), not only this row.
+      `visible not yet indexed ${result.visibleNotIndexed}, ` +
+      `mention pages ${result.mentionPages}/${result.mentionTotal}`;
+
+    if (result.notice) {
+      // The post is what a person sees; the notice is the second sink beside it
+      // (notice.ts). One post per finding per day, however often the cron is re-run.
+      const day = new Date(startedAtMs).toISOString().slice(0, 10);
+      const hash = createHash("sha1").update(result.notice.headline).digest("hex").slice(0, 10);
+      const key = `brain_notion_reach:${hash}`;
+      if (await tryClaimSlackAlert(key, "day", day)) {
+        await notifySlack({
+          channel: "brain",
+          kind: "brain_notion_reach",
+          username: "ops_alerts",
+          text: `:jigsaw: *${escapeSlack(result.notice.headline)}*\n${escapeSlack(result.notice.detail)}`,
+        });
+        await markSlackAlertDelivered(key, "day", day);
+      }
+    }
+
+    // A run that could not do its job, or could not remember what it found, is not a
+    // clean bill: it fails, and the error reaches the brain channel, not only this row.
+    const failures = [
+      result.problem,
+      result.noticeFailed ? "the notice could not be written" : null,
+    ].filter((f): f is string => Boolean(f));
+    if (failures.length) {
       status = "error";
-      detail = `the notice could not be written · ${detail}`;
-      logger.error(
-        { detail },
-        "brain notion-reach: found pages Jarvis cannot open but could not record the notice"
-      );
+      detail = `${failures.join("; ")} · ${detail}`;
+      logger.error({ detail }, `brain notion-reach: ${failures.join("; ")}`);
     }
     return NextResponse.json(
       { ok: status === "success", missing: result.missing, noticed: result.noticed },

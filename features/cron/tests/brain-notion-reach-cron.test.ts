@@ -11,10 +11,20 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 const mockRecordCronRun = vi.fn();
+const mockClaim = vi.fn(async () => true);
+const mockDelivered = vi.fn();
 vi.mock("@shared/observability/slack-alert-dedup", () => ({
   verifyCronAuth: (req: Request) => req.headers.get("authorization") === "Bearer s",
   recordCronRun: (...a: unknown[]) => mockRecordCronRun(...a),
   startCronTimer: () => async () => undefined,
+  tryClaimSlackAlert: (...a: unknown[]) => mockClaim(...(a as [])),
+  markSlackAlertDelivered: (...a: unknown[]) => mockDelivered(...a),
+}));
+
+const mockSlack = vi.fn();
+vi.mock("@shared/observability/slack", async (orig) => ({
+  ...(await orig<typeof import("@shared/observability/slack")>()),
+  notifySlack: (...a: unknown[]) => mockSlack(...a),
 }));
 
 const mockProdHost = vi.fn(() => true);
@@ -44,6 +54,8 @@ const result = (over: Record<string, unknown> = {}) => ({
   unreached: 0,
   visibleNotIndexed: 15,
   mentionPages: 4,
+  mentionTotal: 4,
+  problem: null,
   noticed: true,
   noticeFailed: false,
   summary: "4 linked Notion pages Jarvis cannot open (Email Marketing Playbook, …)",
@@ -55,6 +67,9 @@ describe("GET /api/cron/brain-notion-reach", () => {
   beforeEach(() => {
     mockRecordCronRun.mockReset();
     mockLogError.mockReset();
+    mockSlack.mockReset();
+    mockDelivered.mockReset();
+    mockClaim.mockReset().mockResolvedValue(true);
     mockCheck.mockReset().mockResolvedValue(result());
     mockProdHost.mockReturnValue(true);
   });
@@ -80,7 +95,7 @@ describe("GET /api/cron/brain-notion-reach", () => {
     expect(detail.split(" · ")[0]).toBe(
       "4 linked Notion pages Jarvis cannot open (Email Marketing Playbook, …)"
     );
-    expect(detail).toContain("not reached 0, visible not yet indexed 15");
+    expect(detail).toContain("not reached 0, visible not yet indexed 15, mention pages 4/4");
   });
 
   it("gives the check a clock that runs out before the function is killed", async () => {
@@ -96,6 +111,50 @@ describe("GET /api/cron/brain-notion-reach", () => {
     expect(mockRecordCronRun.mock.calls[0]![2]).toBe("error");
     // `brain …` routes the alert to the brain channel; a cron_run row alone tells nobody.
     expect(String(mockLogError.mock.calls[0]![1])).toMatch(/^brain notion-reach/);
+  });
+
+  it("posts a due notice to the brain channel once per finding per day, escaped", async () => {
+    const notice = {
+      headline: "Jarvis cannot open 1 Notion page the team links to",
+      detail:
+        'New since the last check:\n• "R&D <draft>", linked in Slack: https://www.notion.so/x',
+      kind: "notion-reach",
+    };
+    mockCheck.mockResolvedValue(result({ notice }));
+    await call();
+    const [key, scope, day] = mockClaim.mock.calls[0] as unknown as [string, string, string];
+    expect(key).toMatch(/^brain_notion_reach:[0-9a-f]{10}$/);
+    expect([scope, day]).toEqual(["day", new Date().toISOString().slice(0, 10)]);
+    const post = mockSlack.mock.calls[0]![0] as { channel: string; text: string };
+    expect(post.channel).toBe("brain");
+    expect(post.text).toContain("*Jarvis cannot open 1 Notion page the team links to*");
+    expect(post.text).toContain("R&amp;D &lt;draft&gt;");
+    expect(mockDelivered).toHaveBeenCalledWith(key, "day", day);
+
+    // Already posted today (a re-run): no second post.
+    mockSlack.mockReset();
+    mockClaim.mockResolvedValue(false);
+    await call();
+    expect(mockSlack).not.toHaveBeenCalled();
+  });
+
+  it("posts nothing on a day with nothing to say", async () => {
+    await call();
+    expect(mockClaim).not.toHaveBeenCalled();
+    expect(mockSlack).not.toHaveBeenCalled();
+  });
+
+  it("fails a run that could not do its job instead of calling it clean", async () => {
+    mockCheck.mockResolvedValue(
+      result({ problem: "Notion answered none of the 71 questions it was asked" })
+    );
+    const res = await call();
+    expect(res.status).toBe(502);
+    expect(mockRecordCronRun.mock.calls[0]![2]).toBe("error");
+    expect(mockRecordCronRun.mock.calls[0]![3]).toMatch(/^Notion answered none of the 71/);
+    expect(String(mockLogError.mock.calls[0]![1])).toBe(
+      "brain notion-reach: Notion answered none of the 71 questions it was asked"
+    );
   });
 
   it("records a failed run when the check throws", async () => {

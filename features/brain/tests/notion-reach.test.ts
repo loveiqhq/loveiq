@@ -44,6 +44,12 @@ vi.mock("@features/admin/server/supabase", () => ({
 /** HTTP status Notion gives for GET /blocks/<id>; absent = 200. */
 let pageStatus: Record<string, number> = {};
 let pageBlocks: Record<string, unknown[]> = {};
+/** Properties GET /pages/<id> returns, and its status when not 200. */
+let pageProps: Record<string, Record<string, unknown>> = {};
+let pageReadStatus: Record<string, number> = {};
+/** Ids Notion answers 200 for, but from its trash. */
+let trashed = new Set<string>();
+let searchStatus = 200;
 let sharedDatabases: string[] = [];
 /** Whole database objects from /search, for relations. */
 let databaseObjects: Array<Record<string, unknown>> = [];
@@ -54,15 +60,24 @@ vi.mock("@features/brain/server/ingest/notion", () => ({
     notionPaths.push(path);
     const children = /^\/blocks\/([^/?]+)\/children/.exec(path);
     if (children) return { results: pageBlocks[children[1]!] ?? [], has_more: false };
+    const page = /^\/pages\/([^/?]+)$/.exec(path)?.[1];
+    if (page) {
+      const status = pageReadStatus[page] ?? 200;
+      if (status !== 200) throw new Error(`Notion ${path} failed (${status}): x`);
+      return { object: "page", id: page, properties: pageProps[page] ?? {} };
+    }
     const id = /^\/blocks\/([^/?]+)$/.exec(path)?.[1] ?? "";
     const status = pageStatus[id] ?? 200;
     if (status !== 200) throw new Error(`Notion ${path} failed (${status}): x`);
-    return { object: "block", id };
+    return { object: "block", id, in_trash: trashed.has(id) };
   }),
-  notionPost: vi.fn(async () => ({
-    results: [...sharedDatabases.map((id) => ({ id, object: "database" })), ...databaseObjects],
-    has_more: false,
-  })),
+  notionPost: vi.fn(async (_token: string, path: string) => {
+    if (searchStatus !== 200) throw new Error(`Notion ${path} failed (${searchStatus}): x`);
+    return {
+      results: [...sharedDatabases.map((id) => ({ id, object: "database" })), ...databaseObjects],
+      has_more: false,
+    };
+  }),
   attachChildren: vi.fn(async () => undefined),
 }));
 
@@ -78,6 +93,7 @@ vi.mock("@features/brain/server/notice", () => ({
   ),
 }));
 
+import { MAX_BODY_CHARS } from "@features/brain/server/ingest/upsert";
 import {
   buildReachNotice,
   checkNotionReach,
@@ -261,7 +277,7 @@ describe("buildReachNotice", () => {
     ],
     [C, { id: C, hint: "Glossary", refs: [] }],
   ]);
-  const base = { gaps, linked: 82, checked: 19, day: "2026-10-12" };
+  const base = { gaps, linked: 82, asked: 19, listed: 0, unreached: 0, day: "2026-10-12" };
 
   it("says what is new, what is still open, and how to fix it, in plain words", () => {
     const n = buildReachNotice({ ...base, fresh: [B], still: [A], fixed: [] });
@@ -290,6 +306,46 @@ describe("buildReachNotice", () => {
     expect(n.detail).toContain(`"Glossary" https://www.notion.so/${flat(C)}`);
     expect(n.detail).not.toContain("Connections");
     expect(n.meta).toEqual({ reach_open: [] });
+  });
+
+  it("fits the stored body however many pages there are, the fix and the evidence included", async () => {
+    const { buildNoticeRow } = await vi.importActual<
+      typeof import("@features/brain/server/notice")
+    >("@features/brain/server/notice");
+    const many = new Map<string, Gap>();
+    const ids: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      const id = `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`;
+      ids.push(id);
+      many.set(id, {
+        id,
+        hint: `A very long page title that keeps going and going ${"x".repeat(80)} ${i}`,
+        refs: [
+          {
+            where: `Gmail: ${"An extremely long email subject line ".repeat(4)}`,
+            day: "2026-10-01",
+          },
+        ],
+      });
+    }
+    const n = buildReachNotice({
+      gaps: many,
+      fresh: ids,
+      still: [],
+      fixed: [],
+      linked: 60,
+      asked: 60,
+      listed: 0,
+      unreached: 0,
+      day: "2026-10-12",
+    });
+    const body = buildNoticeRow(n, new Date("2026-10-12T05:20:00Z")).body;
+    expect(body.length).toBeLessThanOrEqual(MAX_BODY_CHARS);
+    expect(body).toMatch(/…and \d+ more\./);
+    expect(body).toContain("To fix one:");
+    expect(body).toContain("every page under it follows");
+    expect(body).toContain("Evidence: 60 Notion pages linked by the team");
+    expect(n.meta).toEqual({ reach_open: [...ids].sort() });
   });
 
   it("keeps a page it could not re-check in the reported set", () => {
@@ -322,6 +378,10 @@ describe("checkNotionReach", () => {
     failCorpus = false;
     pageStatus = {};
     pageBlocks = {};
+    pageProps = {};
+    pageReadStatus = {};
+    trashed = new Set();
+    searchStatus = 200;
     sharedDatabases = [];
     databaseObjects = [];
     recorded.length = 0;
@@ -334,8 +394,8 @@ describe("checkNotionReach", () => {
     linkRows = [
       row({ body: `KPI: https://app.notion.com/p/${flat(B)}` }), // shared database: skip
       row({ source_id: "wa:2", body: `https://www.notion.so/Glossary-${flat(F)}` }), // indexed: skip
+      row({ source_id: "wa:4", body: `https://www.notion.so/${flat(E)}` }), // 403, untitled first
       row({ source_id: "wa:3", body: `https://www.notion.so/Playbook-${flat(C)}` }), // 404
-      row({ source_id: "wa:4", body: `https://www.notion.so/${flat(E)}` }), // 403
       row({ source_id: "wa:5", body: `https://www.notion.so/Busy-${flat(D)}` }), // 429: unknown
     ];
     sharedDatabases = [B];
@@ -363,7 +423,11 @@ describe("checkNotionReach", () => {
     expect(recorded[0]!.evidence).toContain("4 asked one by one, 1 shown open");
     expect(recorded).toHaveLength(1);
     expect(recorded[0]!.meta).toEqual({ reach_open: [C, E].sort() });
-    expect(r.summary).toBe("2 linked Notion pages Jarvis cannot open (Playbook, untitled)");
+    // D answered 429: never "all readable" while one went unanswered.
+    expect(r.summary).toBe(
+      "2 linked Notion pages Jarvis cannot open (Playbook, untitled); 1 more could not be checked"
+    );
+    expect(r.problem).toBeNull();
   });
 
   it("only counts messages from the last 90 days, but a document's links while it exists", async () => {
@@ -387,6 +451,10 @@ describe("checkNotionReach", () => {
     ];
     pageStatus = { [C]: 404, [D]: 404, [E]: 404 };
     const r = await checkNotionReach(NOW);
+    // The window is applied in the query too, so old messages never use up the row cap.
+    expect(
+      dbPaths.some((p) => p.includes("or=(source.in.(notion,drive,doc),period_end.gte.2026-07-13)"))
+    ).toBe(true);
     expect(recorded[0]!.meta).toEqual({ reach_open: [D] });
     expect(r.missing).toBe(1);
   });
@@ -455,6 +523,10 @@ describe("checkNotionReach", () => {
     const r = await checkNotionReach(NOW, () => true); // out of time before the first check
     expect(r.checked).toBe(0);
     expect(r).toMatchObject({ fixed: 0, fresh: 0, missing: 0, unreached: 1, noticed: false });
+    expect(r.summary).toBe(
+      "no linked Notion page found unreadable, but 1 of 1 could not be checked"
+    );
+    expect(r.problem).toBe("time ran out before Notion was asked about any of 1 page");
   });
 
   it("writes nothing in a dry run, but shows the notice it would have written", async () => {
@@ -558,6 +630,78 @@ describe("checkNotionReach", () => {
     const r = await checkNotionReach(NOW);
     expect(r.fixed).toBe(1);
     expect(notionPaths.some((p) => p === `/blocks/${B}`)).toBe(false);
+  });
+
+  it("says plainly when every linked page is readable", async () => {
+    linkRows = [row({ body: `https://www.notion.so/${flat(A)} https://www.notion.so/${flat(C)}` })];
+    expect((await checkNotionReach(NOW)).summary).toBe("all 2 linked Notion pages are readable");
+    linkRows = [row({ body: `https://www.notion.so/${flat(A)}` })];
+    expect((await checkNotionReach(NOW)).summary).toBe("the one linked Notion page is readable");
+  });
+
+  it("fails the run when Notion refuses the token itself, wherever it happens", async () => {
+    linkRows = [row({ body: `https://www.notion.so/${flat(C)}` })];
+    pageStatus = { [C]: 401 };
+    await expect(checkNotionReach(NOW)).rejects.toThrow(/401/);
+    pageStatus = {};
+    searchStatus = 401;
+    await expect(checkNotionReach(NOW)).rejects.toThrow(/401/);
+    searchStatus = 200;
+    untitledRows = [row({ source: "notion", source_id: `page:${A}`, body: "See Untitled" })];
+    pageReadStatus = { [A]: 401 };
+    await expect(checkNotionReach(NOW)).rejects.toThrow(/401/);
+  });
+
+  it("keeps a link Notion answers 400 for, and calls a run with no answers a problem", async () => {
+    linkRows = [row({ body: `https://www.notion.so/${flat(C)}` })];
+    previousOpen = [C];
+    pageStatus = { [C]: 400 };
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ linked: 1, unknown: 1, fixed: 0 });
+    expect(r.problem).toBe("Notion answered none of the 1 questions it was asked");
+  });
+
+  it("treats a page in Notion's trash as a dead link, not a missing connection", async () => {
+    linkRows = [row({ body: `https://www.notion.so/Old-${flat(C)}` })];
+    previousOpen = [C];
+    trashed = new Set([C]);
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ linked: 0, missing: 0, fixed: 0, noticed: false });
+  });
+
+  it("reads an @-mention inside a page's properties, not only its blocks", async () => {
+    untitledRows = [
+      row({
+        source: "notion",
+        source_id: `task:${A}`,
+        title: "KPI: Traffic",
+        body: "Traffic: Untitled",
+      }),
+    ];
+    pageProps = {
+      [A]: {
+        Traffic: {
+          type: "rich_text",
+          rich_text: [{ type: "mention", mention: { type: "page", page: { id: D } } }],
+        },
+        Name: { type: "title", title: [{ type: "text", plain_text: "Traffic" }] },
+      },
+    };
+    pageStatus = { [D]: 404 };
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ missing: 1, mentionPages: 1, mentionTotal: 1 });
+    expect(recorded[0]!.detail).toContain("linked in KPI: Traffic");
+  });
+
+  it("keeps a reported page referenced when its mentions could not be re-read today", async () => {
+    // D was reported because page A mentions it. A cannot be read today: D must stay
+    // "still", not silently drop off and come back as "new" tomorrow.
+    previousOpen = [D];
+    untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
+    pageReadStatus = { [A]: 502 };
+    pageStatus = { [D]: 404 };
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ missing: 1, fresh: 0, fixed: 0 });
   });
 
   it("does not ask Notion about a link to the page it sits on", async () => {

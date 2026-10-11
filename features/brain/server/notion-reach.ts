@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { attachChildren, notionGet, notionPost } from "./ingest/notion";
-import { chunkPage } from "./ingest/upsert";
+import { chunkPage, MAX_BODY_CHARS } from "./ingest/upsert";
 import { NOTICE_SOURCE, recordNotice, type NoticeInput } from "./notice";
 
 /**
@@ -34,9 +34,9 @@ import { NOTICE_SOURCE, recordNotice, type NoticeInput } from "./notice";
  * Jarvis already holds are asked too, after the rest, in a different order each day.
  * Only Notion's own database listing counts as an answer without a question.
  *
- * What cannot be opened becomes a notice in the daily brief, but only when something
- * changed (new or fixed) and on Mondays as a reminder; the reported set rides in the
- * notice's meta.
+ * What cannot be opened is posted to the brain channel and kept as a notice for the
+ * daily brief, but only when something changed (new or fixed) and on Mondays as a
+ * reminder; the reported set rides in the notice's meta.
  *
  * Measured 2026-10-11 and deliberately NOT read: hyperlinks with their own text and
  * link-to-page blocks inside Notion pages, which the stored text drops. All 74
@@ -54,7 +54,9 @@ export const MAX_CHECKS = 200;
 export const MAX_MENTION_PAGES = 20;
 const MAX_REF_ROWS = 5000;
 const MENTION_BLOCK_PAGES = 10;
-const NOTION_HOSTS = "notion.so | www.notion.so | app.notion.com | notion.site";
+// The workspace's public pages live on loveiq.notion.site (none linked on 2026-10-11).
+const NOTION_HOSTS =
+  "notion.so | www.notion.so | app.notion.com | notion.site | loveiq.notion.site";
 /** Documents whose links stay current while the document exists (see the window below). */
 export const LIVING_SOURCES: ReadonlySet<string> = new Set(["notion", "drive", "doc"]);
 
@@ -211,15 +213,31 @@ function openUrl(id: string): string {
   return `https://www.notion.so/${id.replace(/-/g, "")}`;
 }
 
+/** One long title must not crowd the other pages out of a notice. */
+const MAX_LABEL = 70;
+function clip(text: string): string {
+  return text.length > MAX_LABEL ? `${text.slice(0, MAX_LABEL - 1).trimEnd()}…` : text;
+}
+
 function gapLine(gap: Gap): string {
   const refs = [...gap.refs].sort((a, b) => (b.day ?? "").localeCompare(a.day ?? ""));
   const first = refs[0];
-  const where = first ? `linked in ${first.where}` : "reported before";
+  const where = first ? `linked in ${clip(first.where)}` : "reported before";
   const more = refs.length > 1 ? ` and ${plural(refs.length - 1, "other place")}` : "";
   return gap.hint
-    ? `• "${gap.hint}", ${where}${more}: ${openUrl(gap.id)}`
+    ? `• "${clip(gap.hint)}", ${where}${more}: ${openUrl(gap.id)}`
     : `• A page ${where}${more} (the link carries no title): ${openUrl(gap.id)}`;
 }
+
+const FIX_TEXT =
+  'To fix one: open it in Notion, click ⋯ (top right), then Connections, and add "Claude connection". ' +
+  "If Claude connection is already listed, disconnect it and add it again: a connection can show there " +
+  "without working. Or ask Claude to connect it for you. A link to a deleted page or to another " +
+  `workspace shows up here too, and drops off once nobody has linked it for ${REACH_LOOKBACK_DAYS} days.`;
+const MASS_LOSS_AT = 10;
+const MASS_LOSS_TEXT =
+  "So many at once usually means a whole teamspace or top page lost the connection: add Claude " +
+  "connection on that top page and every page under it follows.";
 
 /**
  * The notice, in plain words: what Jarvis cannot open, what is new, what got fixed,
@@ -243,38 +261,46 @@ export function buildReachNotice(input: {
   const { gaps, fresh, still, fixed } = input;
   const open = fresh.length + still.length;
   const line = (id: string) => gapLine(gaps.get(id) ?? { id, hint: null, refs: [] });
-  const sections: string[] = [];
-  if (fresh.length) sections.push(["New since the last check:", ...fresh.map(line)].join("\n"));
-  if (still.length) sections.push(["Still not shared:", ...still.map(line)].join("\n"));
-  if (fixed.length) {
-    const name = (id: string) => (gaps.get(id)?.hint ? `"${gaps.get(id)?.hint}"` : "A page");
-    sections.push(
-      ["Jarvis can open these now:", ...fixed.map((id) => `• ${name(id)} ${openUrl(id)}`)].join(
-        "\n"
-      )
-    );
-  }
-  if (open) {
-    sections.push(
-      'To fix one: open it in Notion, click ⋯ (top right), then Connections, and add "Claude connection". ' +
-        "If Claude connection is already listed, disconnect it and add it again: a connection can show there " +
-        "without working. Or ask Claude to connect it for you. A link to a deleted page or to another " +
-        `workspace shows up here too, and drops off once nobody has linked it for ${REACH_LOOKBACK_DAYS} days.`
-    );
-  }
+  const fixedLine = (id: string) => {
+    const hint = gaps.get(id)?.hint;
+    return `• ${hint ? `"${clip(hint)}"` : "A page"} ${openUrl(id)}`;
+  };
+  const items = [
+    ...fresh.map((id) => ["New since the last check:", line(id)] as const),
+    ...still.map((id) => ["Still not shared:", line(id)] as const),
+    ...fixed.map((id) => ["Jarvis can open these now:", fixedLine(id)] as const),
+  ];
+  const fix = open ? FIX_TEXT + (open >= MASS_LOSS_AT ? ` ${MASS_LOSS_TEXT}` : "") : "";
+  const evidence =
+    `${plural(input.linked, "Notion page")} linked by the team, checked on ${input.day} through ` +
+    `Jarvis's own Notion access: ${input.asked} asked one by one, ${input.listed} shown open in ` +
+    `Notion's own list of databases` +
+    (input.unreached ? `, ${input.unreached} not reached before the run's time ran out.` : ".");
+  const render = (n: number) => {
+    const sections = new Map<string, string[]>();
+    for (const [title, text] of items.slice(0, n)) {
+      sections.set(title, [...(sections.get(title) ?? []), text]);
+    }
+    const parts = [...sections].map(([title, lines]) => [title, ...lines].join("\n"));
+    if (n < items.length) parts.push(`…and ${items.length - n} more.`);
+    if (fix) parts.push(fix);
+    return parts.join("\n\n");
+  };
+  // The stored body is cut at MAX_BODY_CHARS with no marker, which would take the fix
+  // and the evidence first. So the list gives way instead; 100 covers the notice's own
+  // first line ("Noticed on … without being asked.") and the separators.
+  const room = MAX_BODY_CHARS - 100 - evidence.length;
+  let shown = items.length;
+  while (shown > 0 && render(shown).length > room) shown -= 1;
   const headline = open
     ? `Jarvis cannot open ${plural(open, "Notion page")} the team links to` +
       (fresh.length && still.length ? ` (${fresh.length} new)` : "")
     : `Jarvis can now open ${plural(fixed.length, "Notion page")} it could not before`;
   return {
     headline,
-    detail: sections.join("\n\n"),
+    detail: render(shown),
     kind: REACH_KIND,
-    evidence:
-      `${plural(input.linked, "Notion page")} linked by the team, checked on ${input.day} through ` +
-      `Jarvis's own Notion access: ${input.asked} asked one by one, ${input.listed} shown open in ` +
-      `Notion's own list of databases` +
-      (input.unreached ? `, ${input.unreached} not reached before the run's time ran out.` : "."),
+    evidence,
     meta: { reach_open: [...new Set([...fresh, ...still, ...(input.carried ?? [])])].sort() },
   };
 }
@@ -302,6 +328,16 @@ export function isLiving(row: { source: string; meta?: { state?: unknown } | nul
   return LIVING_SOURCES.has(row.source) && row.meta?.state !== "done";
 }
 
+/** The HTTP status inside a notionGet/notionPost error; 0 for a timeout or a network failure. */
+function statusOf(err: unknown): number {
+  return Number(/failed \((\d{3})\)/.exec(String(err))?.[1] ?? 0);
+}
+
+/** A token Notion refuses outright is not a page problem: it fails the run, loudly. */
+function rethrowIfTokenRefused(err: unknown): void {
+  if (statusOf(err) === 401) throw err;
+}
+
 async function pagedRows(path: string, cap: number): Promise<CorpusRow[]> {
   const out: CorpusRow[] = [];
   for (let offset = 0; offset < cap; offset += 1000) {
@@ -310,11 +346,11 @@ async function pagedRows(path: string, cap: number): Promise<CorpusRow[]> {
     out.push(...batch);
     if (batch.length < 1000) return out;
   }
-  // ponytail: the oldest rows are the ones cut, living documents included. Page by
-  // source if this ever fires (185 link rows on 2026-10-11 against 5,000).
-  logger.warn(
+  // ponytail: the oldest rows are the ones cut. Page by source if this ever fires (185
+  // link rows on 2026-10-11 against 5,000). An error, so it reaches the brain channel.
+  logger.error(
     { path: path.slice(0, 120), cap },
-    "brain notion-reach: row cap reached, oldest rows unread"
+    "brain notion-reach: row cap reached, so the oldest rows were not read"
   );
   return out;
 }
@@ -340,6 +376,10 @@ export interface ReachResult {
   unknown: number;
   /** Linked ids the clock did not reach this run: neither new nor fixed. */
   unreached: number;
+  /** Pages whose @-mentions were re-read, out of how many carry an "Untitled". */
+  mentionTotal: number;
+  /** Why this run cannot be trusted as a clean bill, or null. Fails the cron. */
+  problem: string | null;
   visibleNotIndexed: number;
   mentionPages: number;
   noticed: boolean;
@@ -363,6 +403,8 @@ export async function checkNotionReach(
   const token = process.env.NOTION_TOKEN;
   if (!token) throw new Error("NOTION_TOKEN is unset");
   const day = now.toISOString().slice(0, 10);
+  /** A per-day order: stable within a day, different the next, so a cap never skips the same ones. */
+  const shuffle = (id: string) => createHash("sha1").update(`${day}:${id}`).digest("hex");
   const since = new Date(now.getTime() - REACH_LOOKBACK_DAYS * 86_400_000)
     .toISOString()
     .slice(0, 10);
@@ -385,8 +427,9 @@ export async function checkNotionReach(
   const linkRows = (
     await pagedRows(
       `/rest/v1/brain_chunk?select=source,source_id,title,body,period_end,meta` +
-        `&fts=fts(simple).${encodeURIComponent(NOTION_HOSTS)}` +
-        `&source=neq.${NOTICE_SOURCE}&order=period_end.desc.nullslast`,
+        `&fts=fts(simple).${encodeURIComponent(NOTION_HOSTS)}&source=neq.${NOTICE_SOURCE}` +
+        `&or=(source.in.(${[...LIVING_SOURCES].join(",")}),period_end.gte.${since})` +
+        `&order=period_end.desc.nullslast,id.asc`,
       MAX_REF_ROWS
     )
   ).filter((row) => isLiving(row) || (row.period_end ?? "") >= since);
@@ -402,7 +445,7 @@ export async function checkNotionReach(
   const untitled = (
     await pagedRows(
       `/rest/v1/brain_chunk?select=source,source_id,title,body,period_end` +
-        `&source=eq.notion&fts=fts(english).untitled&order=period_end.desc.nullslast`,
+        `&source=eq.notion&fts=fts(english).untitled&order=period_end.desc.nullslast,id.asc`,
       1000
     )
   ).filter((r) => /\bUntitled\b/.test(r.body ?? ""));
@@ -411,14 +454,29 @@ export async function checkNotionReach(
     const id = pageIdOf(row.source_id);
     if (id && !mentionPages.has(id)) mentionPages.set(id, row);
   }
-  // ponytail: always the newest 20 (4 on 2026-10-11); rotate like the checks below if
-  // the count ever nears the cap.
+  // Its own slice of the clock, so re-reading can never leave the questions none, and a
+  // per-day order, so past the cap a different 20 are read each day.
+  const mentionDeadline = Date.now() + 20_000;
+  const mentionsOutOfTime = () => isOutOfTime() || Date.now() > mentionDeadline;
+  /** Some mentions went unread: what was reported stays referenced rather than dropping off. */
+  let mentionsPartial = mentionPages.size > MAX_MENTION_PAGES;
   let mentionRead = 0;
-  for (const [pageId, row] of mentionPages) {
-    if (mentionRead >= MAX_MENTION_PAGES || isOutOfTime()) break;
+  const mentionOrder = [...mentionPages].sort(([a], [b]) => shuffle(a).localeCompare(shuffle(b)));
+  for (const [pageId, row] of mentionOrder) {
+    if (mentionRead >= MAX_MENTION_PAGES) break;
+    if (mentionsOutOfTime()) {
+      mentionsPartial = true;
+      break;
+    }
     mentionRead += 1;
     try {
+      // A mention inside a property ("Traffic: Untitled") is stored the same way.
+      const page = await notionGet(token, `/pages/${pageId}`);
       const blocks: Block[] = [];
+      for (const prop of Object.values((page.properties ?? {}) as Record<string, Block | null>)) {
+        const rich = prop?.rich_text ?? prop?.title;
+        if (Array.isArray(rich)) blocks.push({ type: "paragraph", paragraph: { rich_text: rich } });
+      }
       let cursor: string | undefined;
       for (let i = 0; i < MENTION_BLOCK_PAGES; i++) {
         const json = await notionGet(
@@ -429,12 +487,16 @@ export async function checkNotionReach(
         cursor = json.has_more ? String(json.next_cursor) : undefined;
         if (!cursor) break;
       }
-      await attachChildren(token, blocks, 0, { left: 40 }, isOutOfTime);
+      const budget = { left: 40 };
+      await attachChildren(token, blocks, 0, budget, mentionsOutOfTime);
+      if (cursor || budget.left <= 0) mentionsPartial = true;
       for (const id of notionIdsInBlocks(blocks)) {
         if (id !== pageId) note(id, null, { where: whereOf(row), day: row.period_end });
       }
     } catch (err) {
+      rethrowIfTokenRefused(err);
       // One unreadable page costs its mentions this run, never the whole check.
+      mentionsPartial = true;
       logger.warn({ err, pageId }, "brain notion-reach: could not re-read a page's mentions");
     }
   }
@@ -482,6 +544,7 @@ export async function checkNotionReach(
       if (!cursor) break;
     }
   } catch (err) {
+    rethrowIfTokenRefused(err);
     logger.warn({ err }, "brain notion-reach: database listing failed; checking links one by one");
   }
   for (const { target, where } of relations) {
@@ -506,12 +569,12 @@ export async function checkNotionReach(
   // freshest link first (the likely gaps), then pages it holds, shuffled by the day so
   // a run the clock cuts short never skips the same ones twice.
   const referenced = new Set([...gaps.keys()]);
+  if (mentionsPartial) for (const id of previous) referenced.add(id);
   const reach = new Map<string, Reach>();
   for (const id of new Set([...referenced, ...previous])) {
     if (databases.has(id)) reach.set(id, "visible");
   }
   const lastDay = (g: Gap) => g.refs.reduce((m, r) => ((r.day ?? "") > m ? (r.day ?? "") : m), "");
-  const shuffle = (id: string) => createHash("sha1").update(`${day}:${id}`).digest("hex");
   const linkedGaps = [...gaps.values()].filter((g) => !reach.has(g.id) && !previous.has(g.id));
   const toCheck = [
     ...[...previous].filter((id) => !reach.has(id)),
@@ -529,15 +592,18 @@ export async function checkNotionReach(
     if (asked >= MAX_CHECKS || isOutOfTime()) break;
     asked += 1;
     try {
-      await notionGet(token, `/blocks/${id}`);
-      reach.set(id, "visible");
+      const block = await notionGet(token, `/blocks/${id}`);
+      // In Notion's trash: a dead link, not a missing connection, and connecting it
+      // would fix nothing. It leaves the count, and a reported one quietly drops off.
+      if (block.in_trash === true || block.archived === true) referenced.delete(id);
+      else reach.set(id, "visible");
     } catch (err) {
-      const status = Number(/failed \((\d{3})\)/.exec(String(err))?.[1] ?? 0);
+      rethrowIfTokenRefused(err);
+      const status = statusOf(err);
       // 404 object_not_found: not shared, deleted, or another workspace. 403: shared
-      // without the capability. 400: not a Notion id at all. Anything else (429, 5xx,
-      // a timeout) proves nothing either way.
+      // without the capability. Anything else (400, 429, 5xx, a timeout) proves nothing
+      // either way, and never drops a link.
       if (status === 404 || status === 403) reach.set(id, "missing");
-      else if (status === 400) referenced.delete(id);
       else reach.set(id, "unknown");
     }
   }
@@ -569,15 +635,28 @@ export async function checkNotionReach(
   // A dry run writes nothing, so "would have written" is not a failure either.
   const noticed = notice && !options.dryRun ? await recordNotice(notice) : false;
 
-  const names = listed
+  // Named pages first: "untitled" tells a reader of list_sources nothing.
+  const names = [...listed]
+    .sort((a, b) => Number(!gaps.get(a)?.hint) - Number(!gaps.get(b)?.hint))
     .slice(0, 3)
     .map((id) => gaps.get(id)?.hint ?? "untitled")
     .join(", ");
+  // Never "all readable" while some went unasked or unanswered.
+  const notChecked = unknown + unreached;
   const summary = listed.length
-    ? `${plural(listed.length, "linked Notion page")} Jarvis cannot open (${names}${listed.length > 3 ? ", …" : ""})`
-    : unknown
-      ? `no linked Notion page found unreadable, ${unknown} could not be checked`
-      : `every linked Notion page it checked is readable`;
+    ? `${plural(listed.length, "linked Notion page")} Jarvis cannot open (${names}${listed.length > 3 ? ", …" : ""})` +
+      (notChecked ? `; ${notChecked} more could not be checked` : "")
+    : notChecked
+      ? `no linked Notion page found unreadable, but ${notChecked} of ${linked} could not be checked`
+      : linked
+        ? `${linked === 1 ? "the one linked Notion page is" : `all ${linked} linked Notion pages are`} readable`
+        : "found no Notion links to check";
+  const problem =
+    asked > 0 && unknown === asked
+      ? `Notion answered none of the ${asked} questions it was asked`
+      : asked === 0 && toCheck.length > 0
+        ? `time ran out before Notion was asked about any of ${plural(toCheck.length, "page")}`
+        : null;
   return {
     linked,
     checked: asked,
@@ -588,6 +667,8 @@ export async function checkNotionReach(
     unreached,
     visibleNotIndexed,
     mentionPages: mentionRead,
+    mentionTotal: mentionPages.size,
+    problem,
     noticed,
     noticeFailed: due && !options.dryRun && !noticed,
     summary,
