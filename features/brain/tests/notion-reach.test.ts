@@ -356,6 +356,8 @@ describe("checkNotionReach", () => {
       unknown: 1,
       unreached: 0,
       checked: 4,
+      // B is open by Notion's own listing and F is indexed: neither is "not yet indexed".
+      visibleNotIndexed: 0,
       noticed: true,
     });
     expect(recorded[0]!.evidence).toContain("4 asked one by one, 1 shown open");
@@ -442,6 +444,7 @@ describe("checkNotionReach", () => {
     pageStatus = {}; // C answers 200 now
     const r = await checkNotionReach(NOW);
     expect(r.fixed).toBe(2);
+    expect(r.visibleNotIndexed).toBe(1); // C opens and is not indexed yet; D is
     expect(recorded[0]!.headline).toBe("Jarvis can now open 2 Notion pages it could not before");
     expect(recorded[0]!.meta).toEqual({ reach_open: [] });
   });
