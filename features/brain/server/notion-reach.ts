@@ -129,12 +129,13 @@ export function notionLinksIn(text: string): NotionLink[] {
     if (!TEAM_HOSTS.has(url.hostname.toLowerCase())) continue;
     const segments = url.pathname.split("/").filter(Boolean);
     if (NOT_PAGES.has(segments[0]?.toLowerCase() ?? "")) continue;
-    // "notion.so/<workspace>/<page>" and "app.notion.com/p/<workspace>/<page>" name a workspace.
-    const named =
-      url.hostname.toLowerCase() === "app.notion.com" && segments[0] === "p"
-        ? segments.slice(1)
-        : segments;
-    const workspace = named.length >= 2 ? named[0]!.toLowerCase() : null;
+    // "notion.so/<workspace>/<page>" and "app.notion.com/p/<workspace>/<page>" name a workspace
+    // in the path. On <workspace>.notion.site the host names it (only the team's is let in
+    // above), so a nested path there is pages, never a workspace.
+    const host = url.hostname.toLowerCase();
+    const named = host === "app.notion.com" && segments[0] === "p" ? segments.slice(1) : segments;
+    const workspace =
+      !host.endsWith(".notion.site") && named.length >= 2 ? named[0]!.toLowerCase() : null;
     const foreign = workspace && workspace !== TEAM_WORKSPACE ? { foreign: workspace } : {};
     const last = decodeSafely(segments[segments.length - 1] ?? "");
     const pathId = toNotionId(last);

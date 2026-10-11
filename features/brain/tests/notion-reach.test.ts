@@ -238,6 +238,10 @@ describe("notionLinksIn", () => {
     expect(notionLinksIn(`https://fine-bathroom-41f.notion.site/Careers-${flat(C)}`)).toEqual([
       { id: C, hint: "Careers" },
     ]);
+    // On the team's public site the host names the workspace: a nested path is still ours.
+    expect(
+      notionLinksIn(`https://fine-bathroom-41f.notion.site/Marketing/Careers-${flat(C)}`)
+    ).toEqual([{ id: C, hint: "Careers" }]);
   });
 
   it("survives the punctuation and brackets text puts around a link, once per page", () => {
