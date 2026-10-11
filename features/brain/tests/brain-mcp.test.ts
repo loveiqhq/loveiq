@@ -6692,6 +6692,16 @@ describe("/api/mcp", () => {
       );
     });
 
+    it("does not spend the team's minute on a call it refuses for its inputs", async () => {
+      await call({});
+      await call({ file: "VpDMMtuN0JkxlMxQZDg86k", since: "last monday" });
+      expect(
+        mockRateLimit.mock.calls.filter(
+          (c) => (c[1] as { bucket?: string } | undefined)?.bucket === "mcp-design-changes"
+        )
+      ).toHaveLength(0);
+    });
+
     it("says a missing credential is not a design that did not change", async () => {
       delete process.env.FIGMA_TOKEN;
       delete process.env.FIGMA_ACCESS_TOKEN;

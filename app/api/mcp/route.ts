@@ -5545,6 +5545,29 @@ async function callTool(
         true
       );
     }
+    /**
+     * ONE BUCKET FOR EVERYONE, because Figma's allowance is one for everyone: a comparison can
+     * cost two of its per-minute file reads (15 a minute on Professional), so eight a minute
+     * would lock the whole team out of Figma, as on 2026-09-29. Keyed on the tool alone, not
+     * on the address like the image bucket, since every address spends the same allowance.
+     * Charged only here, after the inputs are checked, so a call refused for a missing file or
+     * a bad date does not spend the team's minute.
+     */
+    const figmaRate = await checkRateLimit("figma", {
+      bucket: "mcp-design-changes",
+      limit: DESIGN_CHANGES_PER_MINUTE,
+      windowMs: 60_000,
+    });
+    if (!figmaRate.allowed) {
+      return textResult(
+        `Too many design comparisons in the last minute (${DESIGN_CHANGES_PER_MINUTE} a ` +
+          "minute for everyone together, because each one can cost two of Figma's " +
+          "per-minute reads and that allowance is the whole team's). This is a limit on " +
+          "this door, not a problem with the design: wait a minute and ask about the one " +
+          "page or frame you need.",
+        true
+      );
+    }
     const day = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
     const out = await designChanges(
       {
@@ -6955,35 +6978,6 @@ export async function POST(request: Request) {
                 "Too many renders in the last minute (20/min on the image tools, separate " +
                 "from the 120/min on everything else). This is a limit on this door, not a " +
                 "problem with the design — wait a moment and ask again.",
-            },
-          ],
-          isError: true,
-        });
-      }
-    }
-    /**
-     * ONE BUCKET FOR EVERYONE, because Figma's allowance is one for everyone: a comparison can
-     * cost two of its per-minute file reads (15 a minute on Professional), so eight a minute
-     * would lock the whole team out of Figma, as on 2026-09-29. Keyed on the tool alone, not
-     * on the address like the image bucket, since every address spends the same allowance.
-     */
-    if (name === "design_changes") {
-      const figmaRate = await checkRateLimit("figma", {
-        bucket: "mcp-design-changes",
-        limit: DESIGN_CHANGES_PER_MINUTE,
-        windowMs: 60_000,
-      });
-      if (!figmaRate.allowed) {
-        return result(id, {
-          content: [
-            {
-              type: "text",
-              text:
-                `Too many design comparisons in the last minute (${DESIGN_CHANGES_PER_MINUTE} a ` +
-                "minute for everyone together, because each one can cost two of Figma's " +
-                "per-minute reads and that allowance is the whole team's). This is a limit on " +
-                "this door, not a problem with the design: wait a minute and ask about the one " +
-                "page or frame you need.",
             },
           ],
           isError: true,
