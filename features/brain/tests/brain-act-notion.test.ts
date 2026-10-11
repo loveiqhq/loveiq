@@ -409,6 +409,8 @@ describe("the KPI chart image", () => {
     expect(url).toBe("https://api.notion.com/v1/blocks/ours");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(String(init.body)).image.file_upload).toEqual({ id: "up-2" });
+    // Notion refuses `type` on an update (checked live 2026-10-11).
+    expect(JSON.parse(String(init.body)).image.type).toBeUndefined();
     expect(calls().some(([u]) => u.includes("/blocks/theirs"))).toBe(false);
   });
 
@@ -428,5 +430,6 @@ describe("the KPI chart image", () => {
     const children = JSON.parse(String(init.body)).children;
     expect(children.map((c: { type: string }) => c.type)).toEqual(["heading_3", "image"]);
     expect(children[1].image.file_upload).toEqual({ id: "up-3" });
+    expect(children[1].image.type).toBe("file_upload");
   });
 });

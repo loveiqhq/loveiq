@@ -462,11 +462,11 @@ export async function upsertMarkedImage(
   } while (!mine && cursor);
 
   const image = {
-    type: "file_upload",
     file_upload: { id: opts.fileUploadId },
     caption: [{ type: "text", text: { content: opts.caption } }],
   };
   if (mine) {
+    // Updating refuses `type` ("body.image.type should be not present"); creating needs it.
     await notion(`/blocks/${String(mine.id)}`, { method: "PATCH", body: { image } });
     return "updated";
   }
@@ -479,7 +479,7 @@ export async function upsertMarkedImage(
           type: "heading_3",
           heading_3: { rich_text: [{ type: "text", text: { content: opts.heading } }] },
         },
-        { object: "block", type: "image", image },
+        { object: "block", type: "image", image: { type: "file_upload", ...image } },
       ],
     },
   });
