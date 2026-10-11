@@ -13,7 +13,14 @@ it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R
 - The Drive folder **"LoveIQ team data (production export, team only)"**, owned by Eman's
   `ec@` account.
 - The other five are **editors**: they can open, download, add, rename and delete files in it.
-  They cannot share it with anyone, and the folder has no link sharing.
+  They cannot share the folder or any file in it with anyone, and there is no link sharing.
+  Every refresh sets each file so that only the owner can share it: a folder's own setting
+  does not reach its files, and until 2026-10-11 every file let editors share it.
+- The folder carries a Drive property, `loveiq_team_export=production`, which the server finds
+  it by, so renaming or moving the folder is safe. To use another folder, set the tag on the new
+  one and remove it from the old one, as `ec@`: a Drive `files.update` with
+  `{"properties": {"loveiq_team_export": "production"}}` (or `null` to remove it). The server
+  writes only to a tagged folder `ec@` owns, and stops if there is not exactly one.
 - To add or remove a person, the owner changes the folder's sharing. Nothing in code holds the
   list.
 - The README in the folder lists every file, its row count and when it was made.
@@ -35,7 +42,23 @@ it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R
 
 ## Refreshing it
 
-Run it from a checkout of `main` on a machine that has:
+**Ask Claude** ("export all the data", "refresh the team data"). Jarvis's `export_all_data`
+starts the export on the server (`/api/cron/team-export`, production only) and replies with the
+folder's link; nobody's laptop is needed, and the data goes from the database to Drive without
+passing through the chat.
+
+- It takes about three minutes. Asking again says whether it is still running or finished.
+- One runs at a time, and a copy under ten minutes old is reused rather than made again.
+- A failed run alerts #prod-alerts and records `error` in `cron_run`; the next ask says why it
+  failed, and starts a new one.
+- Anyone who can use Jarvis can start a refresh. That changes how fresh the copy is, not who can
+  open it.
+
+Before writing anything, both ways check the folder is still team-only: owned by `ec@`, shared
+with loveiq.org people only, no link or whole-domain sharing, and editors unable to share it on.
+If any of that has changed, nothing is written and the error says what.
+
+**From a laptop**, run it from a checkout of `main` on a machine that has:
 
 - the production `.env.local`, with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and
   `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT`;

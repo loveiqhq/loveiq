@@ -86,7 +86,13 @@ email to that person's answers.
 
 - **Decision**: Eman, 2026-10-10. The team gets all of it, unmasked, and nobody else gets any of it.
 - **Mitigations**:
-  - The folder is shared with those six only. Editors cannot share it on, and it has no link sharing.
+  - The folder is shared with those six only. Editors cannot share the folder or its files on,
+    and there is no link sharing. Every upload first checks the folder is still like that
+    (owned by `ec@`, loveiq.org people only, no link or domain sharing) and writes nothing if not.
+  - Refreshes run on the server (Vercel, already a processor of this data) when someone asks
+    Jarvis, or from a laptop with the script. The data never passes through a chat or an AI
+    model. Anyone who can use Jarvis can start one; that changes how fresh the copy is, not who
+    can open it.
   - The data-request log is never exported.
   - While anyone has restricted processing (Art. 18), the export does not run at all.
   - The script refuses to write inside a git repository.

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
 import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
@@ -1329,6 +1330,37 @@ export const TOOLS = [
       },
       required: ["recorded_by"],
     },
+  },
+  {
+    name: "export_all_data",
+    title: "Export all the data to the team's Drive folder",
+    annotations: {
+      readOnlyHint: false,
+      // It replaces every file in the folder and deletes their old versions, on purpose: an
+      // erased customer must not live on in last week's copy. Neither can be undone.
+      destructiveHint: true,
+      // Asked again while one runs, or within ten minutes of one finishing, it reports that
+      // one instead of starting another.
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+    description:
+      "A fresh copy of ALL the data, as files: every customer and product table in the " +
+      "database, one CSV per table (Excel opens them), nothing masked, written straight into " +
+      "the team's private Google Drive folder. Returns the folder's link. Use it whenever " +
+      "someone wants all the data, the raw data, a full copy, a dump, or an Excel file of " +
+      "everything or of a whole large table. Never page through query_product_data to build " +
+      "a copy: it returns 1,000 rows a call into this chat, and the whole database is far too " +
+      "big for a chat. This tool never puts the data in the chat, so its size does not " +
+      "matter.\n\n" +
+      "Only the LoveIQ team can open the folder (Eman, Marcus, Mark, Fatih, Sanjin and Ajna), " +
+      "so share the link, never the data. It runs on the server for about three minutes and " +
+      "replaces every file in the folder; call it again to see whether it has finished. A " +
+      "copy finished in the last ten minutes is reused rather than made again. Not in it: " +
+      "Jarvis's own index, job plumbing, and the log of people who asked us to delete their " +
+      "data. While anyone has asked us to restrict processing their data, it stops and " +
+      "writes nothing.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "count_context",
@@ -5494,6 +5526,76 @@ async function callTool(
     );
   }
 
+  if (name === "export_all_data") {
+    if (!isProdCronHost()) {
+      return textResult(
+        "The full export runs only on the production site, from the production database. " +
+          "Nothing was started.",
+        true
+      );
+    }
+    let res: Response;
+    try {
+      // The work runs in its own function (app/api/cron/team-export): this one has a minute,
+      // and an export takes about three.
+      res = await fetchWithTimeout(
+        new URL("/api/cron/team-export", process.env.NEXT_PUBLIC_SITE_URL).toString(),
+        {
+          headers: { Authorization: `Bearer ${process.env.CRON_SECRET ?? ""}` },
+          // A redirect would carry the secret to wherever it points: refuse one instead.
+          redirect: "manual",
+          timeoutMs: 45_000,
+        }
+      );
+    } catch (err) {
+      logger.error({ err }, "brain: could not reach the team export");
+      return textResult(
+        "Could not reach the export job, so nothing was started. Try again in a minute.",
+        true
+      );
+    }
+    const run = (await res.json().catch(() => ({}))) as {
+      startedAt?: string;
+      finishedAt?: string;
+      folderUrl?: string;
+      error?: string;
+      previous?: { status?: string; completed_at?: string; error_message?: string } | null;
+    };
+    stats.sourceCount = 1;
+    const at = (iso?: string) =>
+      iso ? `${iso.slice(0, 16).replace("T", " ")} UTC` : "an unknown time";
+    const folder = run.folderUrl ?? "the team's Drive folder";
+    if (res.status === 202) {
+      const prev = run.previous;
+      return textResult(
+        `Started a fresh copy of all the data at ${at(run.startedAt)}. In about three minutes ` +
+          `every file in the team's folder is replaced:\n${folder}\n` +
+          "Only the team can open it (Eman, Marcus, Mark, Fatih, Sanjin and Ajna). One CSV per " +
+          "table; README.md lists them and says when the copy was made. In Excel: Data > From " +
+          "Text/CSV.\nCall export_all_data again to see whether it has finished." +
+          (prev && prev.status !== "success"
+            ? `\n\nThe previous attempt, at ${at(prev.completed_at)}, did not finish: ` +
+              `${prev.error_message ?? prev.status}`
+            : "")
+      );
+    }
+    if (res.status === 409) {
+      return textResult(
+        run.finishedAt
+          ? `The team's folder already holds a fresh copy of all the data, finished at ` +
+              `${at(run.finishedAt)}:\n${folder}\nA copy under ten minutes old is reused ` +
+              "rather than made again."
+          : `A fresh copy of all the data has been running since ${at(run.startedAt)}; it ` +
+              `takes about three minutes. Call export_all_data again to see whether it has ` +
+              `finished. The folder:\n${folder}`
+      );
+    }
+    return textResult(
+      `The export did not start (${res.status}): ${run.error ?? "no reason given"}`,
+      true
+    );
+  }
+
   if (name === "whats_new") {
     const raw = typeof args.since === "string" ? args.since.trim() : "";
     let since = new Date(Date.now() - 86_400_000);
@@ -6180,6 +6282,11 @@ export const MCP_INSTRUCTIONS =
   "one). Use list_product_tables then query_product_data, and " +
   "prefer an rpc/get_* analysis function when one fits — those encode the business " +
   "logic already.\n\n" +
+  "ALL THE DATA, AS FILES: export_all_data puts a fresh copy of every customer and product " +
+  "table (one CSV each, unmasked; Excel opens them) in the team's private Google Drive folder " +
+  "and returns its link. Use it whenever someone wants all the data, a full copy or a whole " +
+  "large table: query_product_data returns 1,000 rows a call into the chat, so never page " +
+  "through it to build a copy.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +
@@ -6239,7 +6346,7 @@ export const MCP_INSTRUCTIONS =
   "`write_to_notion` adds a page or a task to the Notion workspace, and " +
   "`write_to_google_doc` creates a Google Doc or appends to one — both reversible, " +
   "and neither can delete anything. `send_email` DRAFTS by default and sends only when explicitly told " +
-  "to — it is the one action here that nobody can undo, so draft it, show it, and " +
+  "to — it leaves the company and nobody can undo it, so draft it, show it, and " +
   "send only if asked. Do what you were asked to do, and never announce your own " +
   "progress.\n\n" +
   "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +

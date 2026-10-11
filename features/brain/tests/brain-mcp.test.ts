@@ -1531,6 +1531,112 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("export_all_data", () => {
+      const call = async () =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 31,
+                method: "tools/call",
+                params: { name: "export_all_data", arguments: {} },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const folder = "https://drive.google.com/drive/folders/F1";
+      const job = (status: number, body: Record<string, unknown>) =>
+        mockFetch.mockResolvedValueOnce({ ok: status < 300, status, json: async () => body });
+      const jobCalls = () =>
+        mockFetch.mock.calls.filter(([url]) => String(url).includes("/api/cron/team-export"));
+      let site: string | undefined;
+      let secret: string | undefined;
+      beforeEach(() => {
+        site = process.env.NEXT_PUBLIC_SITE_URL;
+        secret = process.env.CRON_SECRET;
+        process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+        process.env.CRON_SECRET = "cron-secret";
+      });
+      afterEach(() => {
+        if (site === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+        else process.env.NEXT_PUBLIC_SITE_URL = site;
+        if (secret === undefined) delete process.env.CRON_SECRET;
+        else process.env.CRON_SECRET = secret;
+      });
+
+      it("starts the export in its own job, with the cron secret, and gives the link", async () => {
+        job(202, {
+          startedAt: "2026-10-11T09:00:00.000Z",
+          folderUrl: folder,
+          previous: { status: "success" },
+        });
+        const r = await call();
+        expect(r.isError).toBeFalsy();
+        const [[url, init]] = jobCalls() as Array<[string, Record<string, unknown>]>;
+        expect(url).toBe("https://www.loveiq.org/api/cron/team-export");
+        expect(init.headers).toEqual({ Authorization: "Bearer cron-secret" });
+        // A redirect would carry the secret wherever it points.
+        expect(init.redirect).toBe("manual");
+        const text = r.content[0]!.text;
+        expect(text).toContain("Started a fresh copy of all the data at 2026-10-11 09:00 UTC");
+        expect(text).toContain(folder);
+        expect(text).toContain("Eman, Marcus, Mark, Fatih, Sanjin and Ajna");
+        expect(text).not.toContain("previous attempt");
+      });
+
+      it("says why the previous attempt failed", async () => {
+        job(202, {
+          startedAt: "2026-10-11T09:00:00.000Z",
+          folderUrl: folder,
+          previous: {
+            status: "error",
+            completed_at: "2026-10-11T08:00:05.000Z",
+            error_message: "1 people asked us to restrict processing their data",
+          },
+        });
+        expect((await call()).content[0]!.text).toContain(
+          "The previous attempt, at 2026-10-11 08:00 UTC, did not finish: 1 people asked us"
+        );
+      });
+
+      it("reports a running or fresh copy instead of starting another", async () => {
+        job(409, { startedAt: "2026-10-11T09:00:00.000Z", folderUrl: folder });
+        const running = await call();
+        expect(running.isError).toBeFalsy();
+        expect(running.content[0]!.text).toContain("running since 2026-10-11 09:00 UTC");
+        job(409, {
+          startedAt: "2026-10-11T09:00:00.000Z",
+          finishedAt: "2026-10-11T09:03:00.000Z",
+          folderUrl: folder,
+        });
+        const fresh = await call();
+        expect(fresh.content[0]!.text).toContain(
+          "already holds a fresh copy of all the data, finished at 2026-10-11 09:03 UTC"
+        );
+        expect(fresh.content[0]!.text).toContain(folder);
+      });
+
+      it("says when it could not start, and why", async () => {
+        job(500, { error: "0 of ec@'s Drive folders carry the team export's tag (one must)" });
+        const refused = await call();
+        expect(refused.isError).toBe(true);
+        expect(refused.content[0]!.text).toContain("did not start (500): 0 of ec@'s Drive");
+        mockFetch.mockRejectedValueOnce(new Error("Request timeout after 45000ms"));
+        const unreachable = await call();
+        expect(unreachable.isError).toBe(true);
+        expect(unreachable.content[0]!.text).toContain("Could not reach the export job");
+      });
+
+      it("runs only on production, and starts nothing elsewhere", async () => {
+        process.env.NEXT_PUBLIC_SITE_URL = "https://staging.loveiq.org";
+        const r = await call();
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("only on the production site");
+        expect(jobCalls()).toHaveLength(0);
+      });
+    });
+
     describe("what_shipped", () => {
       const commit = (pr: number, line: string, date: string) => ({
         sha: `c${pr}0000000`,
@@ -1633,6 +1739,7 @@ describe("/api/mcp", () => {
         "file_call_notes",
         "settle_decision_conflict",
         "record_experiment",
+        "export_all_data",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -1708,16 +1815,18 @@ describe("/api/mcp", () => {
         "file_call_notes",
         "settle_decision_conflict",
         "record_experiment",
+        "export_all_data",
       ]);
       /**
-       * EXACTLY ONE TOOL IS DESTRUCTIVE, and it is the one whose effect nobody can undo.
-       * A Slack message can be deleted by a person, a Notion page archived, a decision
-       * corrected — an email is gone the moment it is accepted. Asserted as a list so
-       * that marking a second tool destructive, or unmarking this one, breaks here.
+       * EXACTLY TWO TOOLS ARE DESTRUCTIVE, the two whose effect nobody can undo. A Slack
+       * message can be deleted by a person, a Notion page archived, a decision corrected —
+       * an email is gone the moment it is accepted, and the export replaces every file in
+       * the team's folder and deletes their old versions. Asserted as a list so that
+       * marking another tool destructive, or unmarking one of these, breaks here.
        */
       expect(
         tools.filter((t) => t.annotations?.destructiveHint === true).map((t) => t.name)
-      ).toEqual(["send_email"]);
+      ).toEqual(["send_email", "export_all_data"]);
       for (const t of tools) {
         expect(typeof t.title, t.name).toBe("string");
         // `destructiveHint` means something ONLY when `readOnlyHint` is false, per the
@@ -1754,6 +1863,7 @@ describe("/api/mcp", () => {
       ).toEqual([
         "comment_asks",
         "explain_change",
+        "export_all_data",
         "file_call_notes",
         "post_to_slack",
         "query_external_service",
