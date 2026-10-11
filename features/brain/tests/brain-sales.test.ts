@@ -85,7 +85,9 @@ describe("renderSales", () => {
         sale(),
         sale({ charged: 4.99, net: 4.99, groups: { plan: "all_reports" } }),
         sale({ groups: { plan: "all_reports" } }),
+        // Either side of the period: neither counts.
         sale({ day: "2026-09-30" }),
+        sale({ day: "2026-11-01" }),
       ],
       ["plan"],
       "2026-10-01",
