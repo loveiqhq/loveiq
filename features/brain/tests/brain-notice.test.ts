@@ -9,6 +9,24 @@ import { MAX_INJECTED, buildNoticeRow, renderOpenNotices } from "@features/brain
 const NOW = new Date("2026-09-12T09:00:00Z");
 
 describe("buildNoticeRow", () => {
+  it("keeps the state a job hands it, but never lets it overwrite who noticed what when", () => {
+    const row = buildNoticeRow(
+      {
+        headline: "Jarvis cannot open 1 Notion page the team links to",
+        detail: "x",
+        kind: "notion-reach",
+        meta: { reach_open: ["a"], kind: "forged", noticed_by: "forged", noticed_on: "1999-01-01" },
+      },
+      new Date("2026-10-12T05:20:00Z")
+    );
+    expect(row.meta).toEqual({
+      reach_open: ["a"],
+      kind: "notice",
+      noticed_by: "notion-reach",
+      noticed_on: "2026-10-12",
+    });
+  });
+
   it("puts the headline in the TITLE, where ranking weighs it double", () => {
     // A title of "Notice" shares no word with any question anyone asks — the same
     // lesson `record_decision` already paid for.

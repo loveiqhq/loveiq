@@ -5090,11 +5090,15 @@ describe("/api/mcp", () => {
     /** Latest cron_run per job, keyed by cron name. Empty means "never ran". */
     let cronRuns: Record<string, { started_at: string; status: string; error_message?: string }> =
       {};
+    /** Crons whose cron_run read fails outright. */
+    let unreadCrons = new Set<string>();
 
     function wireCorpus(present: Record<string, number>, unlisted: string[] = []) {
       mockSupabaseFetch.mockImplementation(async (path: string) => {
         if (path.includes("/cron_run?")) {
           const name = decodeURIComponent(/cron_name=eq\.([^&]+)/.exec(path)?.[1] ?? "");
+          if (unreadCrons.has(name))
+            return { ok: false, headers: new Headers(), json: async () => [] };
           const run = cronRuns[name];
           return { ok: true, headers: new Headers(), json: async () => (run ? [run] : []) };
         }
@@ -5161,6 +5165,104 @@ describe("/api/mcp", () => {
       cronRuns = { "brain-notion": { started_at: "2026-08-30T22:41:39Z", status: "success" } };
       wireCorpus({ notion: 1404 });
       expect(await text()).toContain("brain-notion ok at 2026-08-30 22:41");
+    });
+
+    describe("the Notion reach line", () => {
+      // Its staleness is judged against the real clock, so the clock is pinned.
+      beforeEach(() => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-10-12T09:00:00Z"));
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+        unreadCrons = new Set();
+      });
+
+      it("says beside Notion which linked pages Jarvis cannot open", async () => {
+        // The 📊 KPI database was invisible for a week while this line read "ok".
+        cronRuns = {
+          "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" },
+          "brain-notion-reach": {
+            started_at: "2026-10-12T05:20:00Z",
+            status: "success",
+            error_message:
+              "2 linked Notion pages Jarvis cannot open (Email Marketing Playbook, untitled) · links 82, checked 19",
+          },
+        };
+        wireCorpus({ notion: 1404 });
+        const out = await text();
+        expect(out).toContain(
+          "brain-notion ok at 2026-10-12 05:41; reach check 2026-10-12: 2 linked Notion pages Jarvis cannot open (Email Marketing Playbook, untitled)"
+        );
+        // The counters stay in cron_run.
+        expect(out).not.toContain("checked 19");
+      });
+
+      it("says when the Notion reach check itself failed", async () => {
+        cronRuns = {
+          "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" },
+          "brain-notion-reach": {
+            started_at: "2026-10-12T05:20:00Z",
+            status: "error",
+            error_message: "x",
+          },
+        };
+        wireCorpus({ notion: 1404 });
+        expect(await text()).toContain("; the Notion reach check FAILED on 2026-10-12");
+      });
+
+      it("adds the reach sentence to Notion only, and says when the check has not run yet", async () => {
+        cronRuns = {
+          "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" },
+          "brain-gmail": { started_at: "2026-10-12T05:11:00Z", status: "success" },
+          "brain-notion-reach": {
+            started_at: "2026-10-12T05:20:00Z",
+            status: "success",
+            error_message: "all 80 linked Notion pages are readable · links 80",
+          },
+        };
+        wireCorpus({ notion: 1404, gmail: 10 });
+        const lines = (await text()).split("\n");
+        const gmail = lines.find((l) => l.startsWith("gmail:")) ?? "";
+        const notion = lines.find((l) => l.startsWith("notion:")) ?? "";
+        expect(gmail).toContain("brain-gmail ok at 2026-10-12 05:11");
+        expect(gmail).not.toContain("reach check");
+        expect(notion).toContain("reach check 2026-10-12: all 80 linked Notion pages are readable");
+
+        // Silence would read as "nothing missing".
+        cronRuns = { "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" } };
+        expect(await text()).toContain(
+          "brain-notion ok at 2026-10-12 05:41; the Notion reach check has not run yet"
+        );
+      });
+
+      it("calls a reach sentence older than a day stale instead of repeating it", async () => {
+        cronRuns = {
+          "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" },
+          "brain-notion-reach": {
+            started_at: "2026-10-10T05:20:00Z",
+            status: "success",
+            error_message: "all 80 linked Notion pages are readable · links 80",
+          },
+        };
+        wireCorpus({ notion: 1404 });
+        const out = await text();
+        expect(out).toContain("; the Notion reach check has not run since 2026-10-10");
+        expect(out).not.toContain("all 80 linked Notion pages are readable");
+      });
+
+      it("says a job's status could not be read rather than that it never ran", async () => {
+        cronRuns = { "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" } };
+        unreadCrons = new Set(["brain-notion-reach", "brain-gmail"]);
+        wireCorpus({ notion: 1404, gmail: 10 });
+        const lines = (await text()).split("\n");
+        expect(lines.find((l) => l.startsWith("notion:"))).toContain(
+          "; the Notion reach check's status could not be read"
+        );
+        expect(lines.find((l) => l.startsWith("gmail:"))).toContain(
+          "brain-gmail status could not be read"
+        );
+      });
     });
 
     /**
