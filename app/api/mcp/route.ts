@@ -1145,7 +1145,8 @@ export const TOOLS = [
       "Documents are created as the Workspace account the server acts for, so they are " +
       "owned by a person and shareable normally rather than stranded in a robot's Drive. " +
       "Text is inserted as plain text — Markdown is not rendered, so write prose, not " +
-      "syntax.",
+      "syntax. Not for handing over data: rows or totals for someone to work with go " +
+      "through export_all_data.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1344,14 +1345,19 @@ export const TOOLS = [
       openWorldHint: true,
     },
     description:
-      "A fresh copy of ALL the data, as files: every customer and product table in the " +
-      "database, one CSV per table (Excel opens them), nothing masked, written straight into " +
-      "the team's private Google Drive folder. Returns the folder's link and who can open it. " +
-      "Use it whenever someone wants all the data, the raw data, a full copy, a dump, or an " +
-      "Excel file of everything or of a whole large table. Never page through " +
-      "query_product_data to build a copy: it returns 1,000 rows a call into this chat, and " +
-      "the whole database is far too big for a chat. This tool never puts the data in the " +
-      "chat, so its size does not matter.\n\n" +
+      "The data itself, as files: every customer and product table in the database (survey " +
+      "submissions and answers, drafts, reports, payments, users, events and the rest), one " +
+      "CSV per table that Excel opens, written straight into the team's private Google Drive " +
+      "folder. Returns the folder's link and who can open it.\n\n" +
+      "THIS is the tool when someone wants the survey data, the raw data, a dataset for an " +
+      "app, a prototype, an analysis or Excel, a full copy, or a whole large table, and also " +
+      "when they ask for it without names or emails. Then say plainly that names and emails " +
+      "ARE in it: the copy holds whole tables, unmasked by the owner's decision (2026-10-10), " +
+      "in a folder only the team can open, and they leave out the columns they do not need. " +
+      "Never build a dataset in the chat or in a document " +
+      "from query_product_data rows or user_totals instead: those answer questions, this " +
+      "hands over the data, and the data never passes through the chat, so its size does not " +
+      "matter.\n\n" +
       "Only the LoveIQ team can open the folder; share the link, never the data. A copy takes " +
       "a few minutes on the server and then replaces every file in the folder. Every call " +
       "starts another copy unless one is running, so to see whether a copy has finished use " +
@@ -1619,7 +1625,9 @@ export const TOOLS = [
       "construction. " +
       "Prefer an rpc/get_* function when one matches the question \u2014 they encode the " +
       "business logic already. Use search_company_context instead for anything written " +
-      "down or historical narrative.",
+      "down or historical narrative. To hand someone the data itself (whole tables for an " +
+      "app, an analysis or Excel), use export_all_data: this tool answers questions, 1,000 " +
+      "rows a call into the chat.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1958,7 +1966,8 @@ export const TOOLS = [
       "are not summarised. Each answer is protected on its own: two answers can still be " +
       "subtracted (a day apart, one filter narrower), so never use it to find out about one " +
       "person. For one person's record, or for a table this does not cover, use " +
-      "query_product_data.",
+      "query_product_data. For the data itself rather than totals (a dataset for an app, an " +
+      "analysis or Excel), use export_all_data.",
     inputSchema: {
       type: "object",
       properties: {
@@ -6324,10 +6333,12 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   "ALL THE DATA, AS FILES: export_all_data puts a fresh copy of every customer and product " +
   "table (one CSV each, unmasked; Excel opens them) in the team's private Google Drive folder " +
-  "and returns its link; export_status says how the copy is going and changes nothing. Use " +
-  "export_all_data whenever someone wants all the data, a full copy or a whole large table: " +
-  "query_product_data returns 1,000 rows a call into the chat, so never page through it to " +
-  "build a copy.\n\n" +
+  "and returns its link; export_status says how the copy is going and changes nothing. It is " +
+  "the answer whenever someone wants the survey data or any data to work with (an app, a " +
+  "prototype, an analysis, Excel), even 'without names or emails': they get whole tables in " +
+  "a folder only the team can open and leave out what they do not need. Never assemble data " +
+  "in the chat or in a document from query_product_data rows or user_totals: " +
+  "query_product_data returns 1,000 rows a call into the chat.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +
