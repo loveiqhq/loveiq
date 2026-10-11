@@ -1,5 +1,6 @@
 import { dimensions as TRAIT_DEFS } from "@/data/scoring-config";
 import { surveyQuestions } from "@/data/survey-data";
+import { readerSessionDurationsMs } from "@features/admin/server/reader-sessions";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { readAll } from "@features/brain/server/read-all";
 import { CAMPAIGN_LABELS } from "@shared/emails/unsubscribe-token";
@@ -48,7 +49,7 @@ export const DIMENSIONS = [
 export type Dimension = (typeof DIMENSIONS)[number];
 
 /** What to count about each group. */
-export const MEASURES = ["people", "traits", "emails", "answers"] as const;
+export const MEASURES = ["people", "traits", "emails", "answers", "reading"] as const;
 export type Measure = (typeof MEASURES)[number];
 
 /** The engine's 21 traits, each one survey answer, in the scoring config's own words. */
@@ -89,6 +90,8 @@ export interface Person {
   invited?: boolean;
   /** answers: the options they chose for the question asked about, from the latest finish. */
   answer?: string[];
+  /** reading: ms on their report, every visit whose end was recorded added up. */
+  readingMs?: number;
 }
 
 interface Row {
@@ -125,6 +128,7 @@ interface Row {
       status: string;
       is_test: boolean | null;
     }> | null;
+    report_session?: Array<{ started_at: string; ended_at: string | null }> | null;
   } | null;
 }
 
@@ -225,8 +229,17 @@ function extras(r: Row, mail?: MailFacts): Partial<Person> {
     ]);
     if (chosen.length) out.answer = [...new Set(chosen.map((c) => clean(c)))];
   }
+  const sessions = r.personal_report?.report_session;
+  if (sessions) {
+    // The admin's own measure (reader-sessions.ts), with the core KPIs' 4-hour cap.
+    const visits = readerSessionDurationsMs(sessions, READING_CAP_MS);
+    if (visits.length) out.readingMs = visits.reduce((a, b) => a + b, 0);
+  }
   return out;
 }
+
+/** A visit longer than this is a tab left open, not reading (the core KPIs' cap). */
+const READING_CAP_MS = 4 * 3_600_000;
 
 /** A survey question as the answers measure needs it. */
 export interface AskedQuestion {
@@ -348,6 +361,7 @@ export async function loadPeople(
   const traits = opts.measure === "traits" ? ",uDimensions:diagnostics->uDimensions" : "";
   const reminders =
     opts.measure === "emails" ? ",report_price_quote(reminders:metadata->nurtureEmailsSent)" : "";
+  const sessions = opts.measure === "reading" ? ",report_session(started_at,ended_at)" : "";
   const answer =
     opts.measure === "answers" && opts.questionId !== undefined
       ? ",answer:survey_submission_answer(normalized_value,answer_option(option_text)," +
@@ -358,7 +372,7 @@ export async function loadPeople(
       `age:survey_submission_answer(answer_option(option_text)),` +
       `app_user(email,user_profile(gender,sexual_orientation,relationship_status,location_primary)),` +
       `scoring_result(v5_primary_archetype,primary_archetype${traits}),` +
-      `personal_report(payment!fk_payment_personal_report(amount,currency,status,is_test))` +
+      `personal_report(payment!fk_payment_personal_report(amount,currency,status,is_test)${sessions})` +
       `${reminders}${answer}` +
       `&age.survey_question_id=eq.${ageId}` +
       (answer ? `&answer.survey_question_id=eq.${opts.questionId}` : "") +
@@ -413,6 +427,11 @@ export function onePerPerson(people: Person[]): Person[] {
       bounced: p.bounced || seen.bounced || undefined,
       complained: p.complained || seen.complained || undefined,
       invited: p.invited || seen.invited || undefined,
+      // Each finish has its own report, and time on any of them is their reading.
+      readingMs:
+        p.readingMs === undefined && seen.readingMs === undefined
+          ? undefined
+          : (seen.readingMs ?? 0) + (p.readingMs ?? 0),
     });
   }
   return out;
@@ -653,6 +672,79 @@ export function renderTraits(req: TotalsRequest, people: Person[]): string {
       `- ${label} (${n(scored.length)} people): most above: ${deltas.slice(0, 3).map(fmt).join(", ")}; ` +
         `most below: ${deltas.slice(-3).reverse().map(fmt).join(", ")}`
     );
+  }
+  out.push(...hiddenLine(g));
+  return out.join("\n");
+}
+
+const measuredOf = (ps: Person[]) => ps.filter((p) => p.readingMs !== undefined);
+const minutes = (ms: number) => `${(ms / 60_000).toFixed(1)} min`;
+
+/** "median 4.2 min, average 6.0 min", over the people with a measured visit. */
+function readingStats(ps: Person[]): string {
+  const v = measuredOf(ps)
+    .map((p) => p.readingMs!)
+    .sort((a, b) => a - b);
+  const mid = Math.floor(v.length / 2);
+  const median = v.length % 2 ? v[mid]! : (v[mid - 1]! + v[mid]!) / 2;
+  return `median ${minutes(median)}, average ${minutes(v.reduce((a, b) => a + b, 0) / v.length)}`;
+}
+
+/**
+ * How long readers spent on their report (Marcus, 29 Sep: "track payment CVR & avr. reading
+ * time"), as /admin measures it: every report visit whose end was recorded, added up per
+ * reader. The report records a visit's end since 2026-09-18, so earlier finishes have none.
+ * Averages follow the trait rule: TRAIT_MIN_GROUP measured readers, and none withheld groups'
+ * figures can be worked back out from the rest.
+ */
+export function renderReading(req: TotalsRequest, people: Person[]): string {
+  const g = groupPeople(req, people, "finished the survey");
+  if (typeof g === "string") return g;
+  const all = measuredOf(g.matches);
+  const out = [
+    `Report reading time of survey finishers${g.scope}: each reader's time on their report, ` +
+      "every visit added up. Only visits whose end was recorded count, which the report does " +
+      "since 2026-09-18 (a phone locked mid-read records none); staff are left out, and a " +
+      "visit over 4 hours is dropped as a tab left open.",
+  ];
+  if (all.length < TRAIT_MIN_GROUP) {
+    out.push(
+      `Fewer than ${TRAIT_MIN_GROUP} readers have a measured visit here, so no reading time ` +
+        "is shown: an average of so few is each one's own reading."
+    );
+    return out.join("\n");
+  }
+  out.push(
+    `- All: ${n(g.matches.length)} finished, ${n(all.length)} with a measured visit: ` +
+      `${readingStats(g.matches)} per reader`
+  );
+  if (!req.groupBy.length) return out.join("\n");
+  // As for traits: everyone's average and the shown groups' averages with their counts give
+  // the average of whoever is left over, so that remainder must be none or TRAIT_MIN_GROUP+.
+  let averaged = g.shown.filter(([, ps]) => measuredOf(ps).length >= TRAIT_MIN_GROUP);
+  const leftOver = () => all.length - averaged.reduce((s, [, ps]) => s + measuredOf(ps).length, 0);
+  while (averaged.length && leftOver() > 0 && leftOver() < TRAIT_MIN_GROUP) {
+    const smallest = averaged.reduce((a, b) =>
+      measuredOf(b[1]).length < measuredOf(a[1]).length ? b : a
+    );
+    averaged = averaged.filter((x) => x !== smallest);
+  }
+  out.push("", `By ${req.groupBy.join(" and ")}:`);
+  for (const [label, ps] of g.shown) {
+    const measured = measuredOf(ps).length;
+    if (measured < TRAIT_MIN_GROUP) {
+      out.push(
+        `- ${label}: ${n(ps.length)} finished; fewer than ${TRAIT_MIN_GROUP} with a measured visit, so no reading time.`
+      );
+    } else if (!averaged.some(([k]) => k === label)) {
+      out.push(
+        `- ${label}: ${n(ps.length)} finished; reading time withheld, so a smaller group cannot be worked out from the rest.`
+      );
+    } else {
+      out.push(
+        `- ${label}: ${n(ps.length)} finished, ${cell(measured, ps.length)} measured: ${readingStats(ps)} per reader`
+      );
+    }
   }
   out.push(...hiddenLine(g));
   return out.join("\n");

@@ -52,7 +52,11 @@ vi.mock("@features/brain/server/people", () => {
   };
 });
 
-import { listExperiments, recordExperiment } from "@features/brain/server/experiments";
+import {
+  listExperiments,
+  perArmSample,
+  recordExperiment,
+} from "@features/brain/server/experiments";
 import type { ArmOutcomes } from "@features/admin/server/experiment-readouts";
 import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
 
@@ -203,6 +207,68 @@ describe("experiments: the registry, read", () => {
       /- #9 .*2026-09-20 to 2026-09-25\)[^\n]*\n {2}Outcome: Badge won by 2 points\./
     );
     expect(text).toContain("  Outcome: not recorded");
+  });
+
+  describe("how many people a running test needs, and when it gets them", () => {
+    /** `n` people in each landing arm of round 3, `card` and `video` of them bought. */
+    const split = (n: number, card: number, video: number) =>
+      outcomes([
+        ...Array.from({ length: n }, (_, i): [string, boolean] => ["white_card", i < card]),
+        ...Array.from({ length: n }, (_, i): [string, boolean] => ["white_video", i < video]),
+      ]);
+    const needed = async (o: ArmOutcomes) => {
+      rows = [row()];
+      const text = await listExperiments(
+        NOW,
+        vi.fn(async () => o)
+      );
+      return text.split("\n").find((l) => l.startsWith("  Needed:"));
+    };
+
+    it("sizes a test the textbook way: 435 a side to tell 10% from 5%", () => {
+      expect(perArmSample(0.1, 0.05)).toBe(435);
+    });
+
+    it("gives the people per arm for the gap so far, and the day at the pace so far", async () => {
+      // 100 a side arrived from 21 Sep 10:00 to 26 Sep 09:00: 20.2 a day per arm.
+      expect(await needed(split(100, 10, 5))).toBe(
+        "  Needed: about 435 people per arm to tell 10.0% from 5.0% apart, at 95% confidence " +
+          "and 80% power; the smaller arm has 100. At 20.2 a day per arm, that is around " +
+          "2026-10-13, if the gap holds."
+      );
+    });
+
+    it("sizes level arms for a 50% lift, since no number of people shows a gap of zero", async () => {
+      expect(await needed(split(100, 10, 10))).toContain(
+        "about 686 people per arm to see a 50% lift on 10.0%, since the arms are level so far"
+      );
+    });
+
+    it("says when the arms already have enough, or when it is out of reach", async () => {
+      expect(await needed(split(500, 50, 25))).toContain(
+        "the smaller arm has 500. Both have enough, so the verdict above is the answer."
+      );
+      expect(await needed(split(100, 11, 10))).toContain(
+        "that is more than a year away, so purchases alone will not settle it"
+      );
+    });
+
+    it("cannot size a test before anyone buys, and says so", async () => {
+      expect(await needed(split(100, 0, 0))).toBe(
+        "  Needed: nobody has bought in any arm yet, so how many people a result needs cannot be worked out."
+      );
+    });
+
+    it("counts only the arms being compared, so an older arm does not slow the pace", async () => {
+      const o = split(100, 10, 5);
+      // A round-2 visitor from long before: a retired arm, not counted, so not the start.
+      o.submissions.push({
+        id: 999,
+        created_date_time: "2026-08-01T00:00:00Z",
+        utm_tracker: JSON.stringify({ landing_variant: "white" }),
+      });
+      expect(await needed(o)).toContain("At 20.2 a day per arm");
+    });
   });
 
   it("throws when the registry cannot be read, so the tool can call it an outage", async () => {
