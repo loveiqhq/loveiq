@@ -343,6 +343,8 @@ export function buildReachNotice(input: {
     kind: REACH_KIND,
     evidence,
     meta: {
+      // The Berlin day of this report: notice.ts's noticed_on is a UTC day.
+      reach_day: input.day,
       reach_open: reachOpen,
       reach_seen: Object.fromEntries(reachOpen.map((id) => [id, input.seenOn?.(id) ?? input.day])),
       reach_hint: Object.fromEntries(
@@ -645,7 +647,13 @@ export async function checkNotionReach(
   // ---- what was reported last time ---------------------------------------------
   const previousRows = await chunkPage<{
     source_id?: string;
-    meta?: { reach_open?: unknown; reach_seen?: unknown; reach_hint?: unknown } | null;
+    meta?: {
+      reach_open?: unknown;
+      reach_seen?: unknown;
+      reach_hint?: unknown;
+      reach_day?: unknown;
+      noticed_on?: unknown;
+    } | null;
   }>(
     REACH_KIND,
     await supabaseFetch(
@@ -747,10 +755,15 @@ export async function checkNotionReach(
   // A held page Notion still refuses is still open: it stays in the list (and in Monday's
   // reminder) as "reported before", never as linked, since today's run could not see where.
   const heldMissing = heldOver.filter((id) => reach.get(id) === "missing");
+  // The Monday reminder is for news that has gone quiet: after a report on the weekend (a
+  // manual run, say), repeating the same pages on Monday morning is noise, not a reminder.
+  // Berlin days on both sides (reach_day); noticed_on, a UTC day, only for older reports.
+  const lastReport = previousRows[0]?.meta?.reach_day ?? previousRows[0]?.meta?.noticed_on;
+  const reportIsOld = typeof lastReport !== "string" || lastReport <= daysBefore(day, 3);
   const due =
     fresh.length > 0 ||
     fixed.length > 0 ||
-    (isReportingMonday(now) && listed.length + heldMissing.length > 0);
+    (isReportingMonday(now) && reportIsOld && listed.length + heldMissing.length > 0);
   const notice = due
     ? buildReachNotice({
         gaps,

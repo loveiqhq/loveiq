@@ -19,6 +19,10 @@ let indexedIds: string[] = [];
 let previousOpen: string[] | null = null;
 let previousSeen: Record<string, string> = {};
 let previousHint: Record<string, string> = {};
+/** The day the last report was written (its meta.noticed_on); old enough for a reminder by default. */
+let previousNoticedOn = "2026-10-05";
+/** The Berlin day of the last report (meta.reach_day); absent on reports from before it existed. */
+let previousReachDay: string | undefined;
 let failCorpus = false;
 const dbPaths: string[] = [];
 /** PATCHes the check sent (the in-place refresh of last-seen days), and whether they fail. */
@@ -52,6 +56,8 @@ vi.mock("@features/admin/server/supabase", () => ({
                 meta: {
                   kind: "notice",
                   noticed_by: "notion-reach",
+                  noticed_on: previousNoticedOn,
+                  ...(previousReachDay ? { reach_day: previousReachDay } : {}),
                   reach_open: previousOpen,
                   reach_seen: previousSeen,
                   reach_hint: previousHint,
@@ -454,6 +460,8 @@ describe("checkNotionReach", () => {
     previousOpen = null;
     previousSeen = {};
     previousHint = {};
+    previousNoticedOn = "2026-10-05";
+    previousReachDay = undefined;
     patches.length = 0;
     failPatch = false;
     failCorpus = false;
@@ -910,6 +918,36 @@ describe("checkNotionReach", () => {
     expect(more.findingKey).not.toBe(first.findingKey);
   });
 
+  it("skips Monday's reminder after a report on the weekend, and keeps it a week later", async () => {
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    previousOpen = [C];
+    previousSeen = { [C]: "2026-10-11" };
+    previousNoticedOn = "2026-10-11"; // posted on Sunday evening
+    expect((await checkNotionReach(MONDAY)).noticed).toBe(false);
+    previousNoticedOn = "2026-10-05"; // a week old
+    expect((await checkNotionReach(MONDAY)).noticed).toBe(true);
+  });
+
+  it("spaces the reminder in Berlin days, not the UTC day a notice is filed under", async () => {
+    // A report at 00:30 Berlin on Saturday is filed under Friday in UTC: counted from
+    // Friday, Monday would remind after two days.
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    previousOpen = [C];
+    previousSeen = { [C]: "2026-10-10" };
+    previousNoticedOn = "2026-10-09";
+    previousReachDay = "2026-10-10";
+    expect((await checkNotionReach(MONDAY)).noticed).toBe(false);
+  });
+
+  it("records the Berlin day of each report", async () => {
+    linkRows = [row({ body: `https://www.notion.so/${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    await checkNotionReach(new Date("2026-10-11T22:30:00Z")); // 00:30 on Monday in Berlin
+    expect(recorded[0]!.meta?.reach_day).toBe("2026-10-12");
+  });
+
   it("refreshes when a reported page was last seen, in place, on a day with no news", async () => {
     previousOpen = [C];
     previousSeen = { [C]: "2026-10-01" };
@@ -927,6 +965,7 @@ describe("checkNotionReach", () => {
     expect(patches[0]!.body.meta).toEqual({
       kind: "notice",
       noticed_by: "notion-reach",
+      noticed_on: "2026-10-05", // kept: it is what spaces Monday's reminder
       reach_open: [C],
       reach_seen: { [C]: "2026-10-11" },
       reach_hint: { [C]: "Playbook" },
