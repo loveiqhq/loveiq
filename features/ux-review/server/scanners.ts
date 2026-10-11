@@ -19,9 +19,13 @@
  * what ONE scanner can spend per period so it cannot starve the others; it is
  * not a cap on the org bill. Estimates below were measured with
  * `vision-scanners-estimate-create` against 7 real days on 2026-09-14, and
- * re-measured on 2026-10-11 from four weeks of `$recording_observed` after the
- * survey and report scanners ran out mid-period (11 and 5 Oct) and stopped
- * watching. Caps now sit about 20% above the measured spend.
+ * re-measured on 2026-10-11 after the survey and report scanners ran out
+ * mid-period (11 and 5 Oct) and stopped watching. Counting `$recording_observed`
+ * would understate demand once a cap is hit, so the new figures count the
+ * sessions that fire each trigger event (survey_started, report_viewed,
+ * rage_click) over the 14 days to 10 Oct, at 2 credits per observation. Caps sit
+ * about 40% above that, because survey traffic is still rising (51 a day in the
+ * last week against 46 over two).
  */
 
 export interface UxScanner {
@@ -206,8 +210,8 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     triggerEvent: "survey_started",
     // COMPREHENSIVE, not focused — see SAMPLING below the scanner list.
     samplingMode: "comprehensive",
-    estimatedMonthlyCredits: 2700,
-    creditLimit: 3300,
+    estimatedMonthlyCredits: 2800,
+    creditLimit: 4000,
     scannerVersion: 2,
     prompt: [
       "You are reviewing a recording of the LoveIQ survey — a one-question-per-screen",
@@ -241,8 +245,8 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     triggerEvent: "report_viewed",
     // COMPREHENSIVE, not focused — see SAMPLING below the scanner list.
     samplingMode: "comprehensive",
-    estimatedMonthlyCredits: 1500,
-    creditLimit: 1800,
+    estimatedMonthlyCredits: 1600,
+    creditLimit: 2200,
     scannerVersion: 2,
     prompt: [
       "You are reviewing a recording of the LoveIQ report — a long, scroll-based",
@@ -276,7 +280,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     role: "champion",
     triggerEvent: "rage_click",
     samplingMode: "comprehensive",
-    estimatedMonthlyCredits: 380,
+    estimatedMonthlyCredits: 370,
     creditLimit: 500,
     scannerVersion: 2,
     prompt: [
