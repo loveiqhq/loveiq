@@ -5,7 +5,7 @@
  * file Claude Code cannot read is treated as documentation, and a skill naming a renamed
  * tool just stops working. So both are checked here.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -66,6 +66,24 @@ const claudeCodeSkills = readdirSync(resolve(ROOT, ".claude/skills"), { withFile
     }
   });
 
+/**
+ * Skills copied from other projects, as listed in the table of .claude/skills/THIRD_PARTY.md.
+ * They are not part of the Jarvis pack: their backticked snake_case names are their own.
+ */
+const thirdPartySkills = [
+  ...read(".claude/skills/THIRD_PARTY.md").matchAll(/^\| `([a-z0-9-]+)` +\|/gm),
+].map((m) => m[1]!);
+
+describe("the third-party skills", () => {
+  it("are each a real skill folder that keeps its upstream license", () => {
+    expect(thirdPartySkills).toEqual(expect.arrayContaining(["security-audit", "impeccable"]));
+    for (const d of thirdPartySkills) {
+      expect(claudeCodeSkills, d).toContain(d);
+      expect(existsSync(resolve(ROOT, `.claude/skills/${d}/LICENSE`)), d).toBe(true);
+    }
+  });
+});
+
 describe("the tool names the pack relies on", () => {
   it("reads Jarvis's real tools and prompts, so the check below can fail", () => {
     expect(JARVIS.has("search_company_context")).toBe(true);
@@ -76,7 +94,9 @@ describe("the tool names the pack relies on", () => {
 
   const packFiles = [
     ...skillDirs().map((d) => [`claude.ai ${d}`, join(SKILLS_DIR, d, "SKILL.md")] as const),
-    ...claudeCodeSkills.map((d) => [`Claude Code ${d}`, `.claude/skills/${d}/SKILL.md`] as const),
+    ...claudeCodeSkills
+      .filter((d) => !thirdPartySkills.includes(d))
+      .map((d) => [`Claude Code ${d}`, `.claude/skills/${d}/SKILL.md`] as const),
     ["the Project instructions", join(SKILLS_DIR, "PROJECT_INSTRUCTIONS.md")] as const,
   ];
 
