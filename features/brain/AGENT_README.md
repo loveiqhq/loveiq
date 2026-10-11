@@ -69,7 +69,8 @@ Claude Code) is the door people use; the operator's guide is
   date handling, the compute-twice reconciler, and the house-voice checks.
 - `server/act/` — the five tools that write (Slack, email drafts, Notion, Google Docs; decisions
   go through `record_decision` in the route). `server/see/` — Figma frames and page
-  screenshots as pixels.
+  screenshots as pixels, and `design-changes.ts` behind `design_changes`: two saved
+  versions of a Figma design compared in one call (any file, read off the link).
 - `tests/` — one file per concern; `scripts/brain-battery.ts` is the retrieval and MCP
   battery that runs against real data.
 
