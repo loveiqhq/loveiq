@@ -1798,19 +1798,28 @@ const WEEKLY_BAR_PLOT_H = 150;
 const WEEKLY_AXIS_W = 34;
 /** Bars that are not among the worst three: quiet, so the red ones carry the message. */
 const WEEKLY_BAR_GREY = "#8a94a6";
-/** Where the colour scale tops out: 15% of the people who reached a question leaving there. */
+/** The bar axis never shows less than 0-15%, so a quiet week does not look alarming. */
 const WEEKLY_SCALE_TOP = 15;
 /** Bar section: heading, plot, question ticks, the three named worst, spacing. */
 const WEEKLY_BARS_H = 22 + 8 + WEEKLY_BAR_PLOT_H + 16 + 8 + WEEKLY_WORST_N * 18 + 22;
 
-/** White to the danger red, by rate; text flips to white once the cell is dark. */
+/**
+ * Five steps rather than a smooth ramp, each with the text colour that stays
+ * legible on it (every pair at least 4.5:1). A smooth ramp left a band around 7%
+ * where neither white nor dark text reached 4.5:1 at this size (review on #553),
+ * and five steps are also quicker to read than fifty shades.
+ * The top step is not COLORS.danger: that red means "worst three" on this chart.
+ */
+const WEEKLY_STEPS: ReadonlyArray<{ below: number; bg: string; fg: string }> = [
+  { below: 2, bg: "#fdeaea", fg: COLORS.text }, // 13.4:1
+  { below: 5, bg: "#f8c4c4", fg: COLORS.text }, // 10.1:1
+  { below: 10, bg: "#ef7d7d", fg: COLORS.text }, // 5.8:1
+  { below: Infinity, bg: "#c53030", fg: "#ffffff" }, // 5.5:1
+];
+
 function weeklyCellColour(rate: number): { bg: string; fg: string } {
-  const t = Math.min(Math.max(rate, 0) / WEEKLY_SCALE_TOP, 1);
-  const mix = (from: number, to: number) => Math.round(from + (to - from) * t);
-  return {
-    bg: `rgb(${mix(255, 185)}, ${mix(244, 28)}, ${mix(242, 28)})`,
-    fg: t > 0.45 ? "#ffffff" : COLORS.text,
-  };
+  if (rate === 0) return { bg: "#f6f6f7", fg: COLORS.textMuted }; // 5.5:1
+  return WEEKLY_STEPS.find((step) => rate < step.below)!;
 }
 
 /** Whole percentages: "12%", "<1%", "0%". The decimals never changed a decision. */

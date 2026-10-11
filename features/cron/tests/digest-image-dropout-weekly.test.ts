@@ -93,4 +93,29 @@ describe("renderDropoutWeekly", () => {
       height - 4 * 16
     );
   });
+
+  it("keeps every cell's figure legible: at least 4.5:1 against its colour", () => {
+    const lum = (hex: string) => {
+      const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const [r, g, b] = c.map((x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const ratio = (a: string, b: string) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+      return (hi! + 0.05) / (lo! + 0.05);
+    };
+    const rates = [0, 0.4, 1.9, 2, 4.9, 5, 6.8, 7, 9.9, 10, 15, 40];
+    const els = walk(
+      renderDropoutWeekly(payload({ rows: [{ n: 1, q: "q", r: rates }], weeks: rates.map(String) }))
+        .element
+    );
+    const cells = els.filter(
+      (el) => typeof style(el).background === "string" && text(el).endsWith("%")
+    );
+    expect(cells).toHaveLength(rates.length);
+    for (const el of cells) {
+      const { background, color } = style(el) as { background: string; color: string };
+      expect(ratio(background, color), `${text(el)} on ${background}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });
