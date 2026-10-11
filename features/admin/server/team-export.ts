@@ -638,6 +638,7 @@ interface Permission {
   type?: string;
   emailAddress?: string;
   displayName?: string;
+  role?: string;
 }
 
 interface FolderMeta {
@@ -729,12 +730,14 @@ async function drive(
 }
 
 const FOLDER_FIELDS =
-  "mimeType,trashed,ownedByMe,writersCanShare,permissions(type,emailAddress,displayName)";
+  "mimeType,trashed,ownedByMe,writersCanShare,permissions(type,role,emailAddress,displayName)";
 
 /** Who can open the team's folder: names for replies, addresses for checking its files. */
 export interface FolderPeople {
   people: string[];
   emails: string[];
+  /** The one person who can add someone: editors cannot share the folder on. */
+  owner: string;
 }
 
 /** Checks a folder by id before anything goes into it, and returns who can open it. */
@@ -751,6 +754,10 @@ export async function checkFolder(token: string, id: string): Promise<FolderPeop
   return {
     people: permissions.map((p) => p.displayName || p.emailAddress || "someone"),
     emails: permissions.map((p) => (p.emailAddress ?? "").toLowerCase()),
+    owner: (() => {
+      const o = permissions.find((p) => p.role === "owner");
+      return o?.displayName || o?.emailAddress || "the folder's owner";
+    })(),
   };
 }
 
@@ -759,7 +766,9 @@ export async function checkFolder(token: string, id: string): Promise<FolderPeop
  * can share a folder with ec@ and set the same tag on it (this repository is public), and the
  * export must never go into a folder somebody else controls.
  */
-export async function findTeamFolder(token: string): Promise<{ id: string; people: string[] }> {
+export async function findTeamFolder(
+  token: string
+): Promise<{ id: string; people: string[]; owner: string }> {
   const q = encodeURIComponent(
     `properties has { key=${driveQuoted(TEAM_FOLDER_TAG.key)} and value=${driveQuoted(TEAM_FOLDER_TAG.value)} } ` +
       "and mimeType='application/vnd.google-apps.folder' and 'me' in owners and trashed=false"
@@ -777,7 +786,8 @@ export async function findTeamFolder(token: string): Promise<{ id: string; peopl
         "see docs/runbooks/TEAM_DATA_EXPORT.md. Nothing written."
     );
   }
-  return { id: found[0]!.id, people: (await checkFolder(token, found[0]!.id)).people };
+  const { people, owner } = await checkFolder(token, found[0]!.id);
+  return { id: found[0]!.id, people, owner };
 }
 
 /** Every file in the folder, with its owner and who can open it: one request for all. */

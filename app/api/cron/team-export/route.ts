@@ -70,6 +70,7 @@ interface Lock {
 interface LastRun extends Lock {
   folderUrl?: string;
   people?: string[];
+  owner?: string;
   finishedAt?: string;
   status?: "success" | "error" | "timeout";
   error?: string;
@@ -174,7 +175,7 @@ export async function GET(request: Request) {
   // either at once, and the login comes from this request's identity, which the work after
   // the response cannot read.
   let drive: string;
-  let folder: { id: string; people: string[] };
+  let folder: { id: string; people: string[]; owner: string };
   try {
     const token = await getDelegatedToken(
       TEAM_EXPORT_OWNER,
@@ -200,7 +201,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error, last }, { status: 500 });
   }
 
-  const record: LastRun = { ...mine, folderUrl: folderUrl(folder.id), people: folder.people };
+  const record: LastRun = {
+    ...mine,
+    folderUrl: folderUrl(folder.id),
+    people: folder.people,
+    owner: folder.owner,
+  };
   await redis
     .set(LAST, record)
     .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not record the start"));
