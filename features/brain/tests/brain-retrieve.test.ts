@@ -9,6 +9,12 @@ vi.mock("@shared/observability/logger", () => ({
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
+// No vector by default, as with no embedding service; one test supplies one.
+const mockEmbed = vi.fn(async (): Promise<string | null> => null);
+vi.mock("@features/brain/server/embed", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/embed")>()),
+  embedQuery: (...args: unknown[]) => mockEmbed(...(args as [])),
+}));
 
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
 import { toSlackMrkdwn } from "@features/brain/server/answer";
@@ -399,6 +405,7 @@ describe("retrieve — when the full search does not answer", () => {
   });
 
   it("tries once more, keyword-only over fewer candidates, and marks the answer partial", async () => {
+    mockEmbed.mockResolvedValueOnce("[0.1,0.2]");
     mockSupabaseFetch
       .mockRejectedValueOnce(new Error("Request timeout after 15000ms"))
       .mockResolvedValueOnce(ok([row({ source: "doc", source_id: "a", score: 1 })]));
@@ -407,6 +414,8 @@ describe("retrieve — when the full search does not answer", () => {
     expect(out.map((r) => r.sourceId)).toEqual(["a"]);
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
     const [full, small] = [bodyOf(0), bodyOf(1)];
+    // The full search had a vector; the smaller one goes without it.
+    expect(full.query_embedding).toBe("[0.1,0.2]");
     expect(small).toMatchObject({ k: 40, per_source: 2, query_embedding: null });
     // Everything else is the same request: the caller's filters still apply.
     expect(small.sources).toEqual(["doc"]);
