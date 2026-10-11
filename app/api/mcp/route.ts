@@ -6091,14 +6091,20 @@ async function callTool(
      * false-confidence bug this whole tool is meant to remove, pointed the other way.
      */
     const lastRun = new Map<string, { status: string; error: string | null; at: string }>();
-    const crons = [...new Set(Object.values(CRON_FOR_SOURCE))];
+    /** Crons whose status could not be READ: not the same as never having run. */
+    const unread = new Set<string>();
+    // `brain-notion-reach` feeds no source; its result is shown beside Notion (below).
+    const crons = [...new Set([...Object.values(CRON_FOR_SOURCE), "brain-notion-reach"])];
     await Promise.all(
       crons.map(async (cron) => {
         const res = await supabaseFetch(
           `/rest/v1/cron_run?select=started_at,status,error_message` +
             `&cron_name=eq.${encodeURIComponent(cron)}&order=started_at.desc&limit=1`
         );
-        if (!res.ok) return;
+        if (!res.ok) {
+          unread.add(cron);
+          return;
+        }
         const rows = (await res.json().catch(() => [])) as Array<{
           started_at?: string;
           status?: string;
@@ -6148,11 +6154,42 @@ async function callTool(
       const cron = CRON_FOR_SOURCE[source];
       if (!cron) return "";
       const run = lastRun.get(cron);
-      if (!run) return ` · no record of ${cron} ever running`;
+      const reach = source === "notion" ? notionReach() : "";
+      if (!run)
+        return unread.has(cron)
+          ? ` · ${cron} status could not be read${reach}`
+          : ` · no record of ${cron} ever running${reach}`;
       const when = run.at.slice(0, 16).replace("T", " ");
-      if (run.status === "success") return ` · ${cron} ok at ${when}`;
-      return ` · ${cron} FAILING since at least ${when}${run.error ? ` (${run.error})` : ""}`;
+      if (run.status === "success") return ` · ${cron} ok at ${when}${reach}`;
+      return ` · ${cron} FAILING since at least ${when}${run.error ? ` (${run.error})` : ""}${reach}`;
     };
+
+    /**
+     * WHAT JARVIS CANNOT SEE, said where a reader looks for what it can.
+     *
+     * Notion shows the integration only the pages someone connected, so "notion: 1,400
+     * chunks, ok" reads as complete while a database the team uses daily is invisible —
+     * which is exactly how the 📊 KPI database went unseen for a week (2026-10-11). The
+     * daily reach check's own sentence is repeated here; its counters stay in cron_run.
+     */
+    function notionReach(): string {
+      const cron = "brain-notion-reach";
+      const run = lastRun.get(cron);
+      // Silence here would read as "nothing missing", the very confidence this removes.
+      if (!run) {
+        return unread.has(cron)
+          ? "; the Notion reach check's status could not be read"
+          : "; the Notion reach check has not run yet";
+      }
+      const when = run.at.slice(0, 10);
+      // Daily at 05:20 UTC; past 26 hours its last sentence is stale (cron-stall's bar too).
+      if (Date.now() - Date.parse(run.at) > 26 * 3_600_000) {
+        return `; the Notion reach check has not run since ${when}`;
+      }
+      if (run.status !== "success") return `; the Notion reach check FAILED on ${when}`;
+      const said = (run.error ?? "").split(" · ")[0]?.trim();
+      return said ? `; reach check ${when}: ${said}` : "";
+    }
 
     const describe = async (source: string): Promise<string> => {
       const base = `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}`;
