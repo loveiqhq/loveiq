@@ -139,8 +139,32 @@ export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: nu
   const rate = (a: ArmStat) => a.purchases / a.n;
   const [lead, next] = [...arms].sort((x, y) => rate(y) - rate(x)) as [ArmStat, ArmStat];
   const [hi, lo] = [rate(lead), rate(next)];
+  const have = Math.min(...arms.map((x) => x.n));
+  // A day at least, so an hour of traffic is not projected as a pace.
+  const perDay = have / Math.max((now - firstAt) / DAY_MS, 1);
+  /** When `need` people per arm arrive at this pace, as a sentence. */
+  const when = (need: number, ifTheGapHolds: boolean) => {
+    const days = perDay > 0 ? Math.ceil((need - have) / perDay) : Infinity;
+    if (days > 365) {
+      return (
+        `At ${perDay.toFixed(1)} a day per arm that is more than a year away, so purchases ` +
+        "alone will not settle it: test a bigger change, or decide on an earlier step such as checkout starts."
+      );
+    }
+    // The day as the team reads it, in Berlin.
+    const day = reportingDay(new Date(now + days * DAY_MS));
+    return `At ${perDay.toFixed(1)} a day per arm, that is around ${day}${ifTheGapHolds ? ", if the gap holds" : ""}.`;
+  };
+  // The readout counts purchases whatever metric decides the test, so the size is for them.
+  const label = "  Needed, for a difference in purchases (what the readout above counts):";
+  const power = "at 95% confidence and 80% power";
   if (hi === 0) {
-    return "  Needed: nobody has bought in any arm yet, so how many people a result needs cannot be worked out.";
+    const yardstick = perArmSample(0.015, 0.01);
+    return (
+      `${label} nobody has bought yet, so there is no rate to size against. As a yardstick, ` +
+      `telling 1.0% from 1.5% takes about ${yardstick} people per arm, ${power}; the smaller ` +
+      `arm has ${have}. ${when(yardstick, false)}`
+    );
   }
   // Level arms are sized for a 50% lift, or for halfway to 100% when a 50% lift would pass
   // it (above 66.7% there is no such rate, and the formula would return NaN).
@@ -157,20 +181,9 @@ export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: nu
         ];
   // The readout will not judge until every arm has MIN_CELL_COUNT buyers.
   const need = Math.max(perArmSample(a, b), b > 0 ? Math.ceil(MIN_CELL_COUNT / b) : 0);
-  const have = Math.min(...arms.map((x) => x.n));
-  const head = `  Needed: about ${need} people per arm ${basis}, at 95% confidence and 80% power; the smaller arm has ${have}.`;
+  const head = `${label} about ${need} people per arm ${basis}, ${power}; the smaller arm has ${have}.`;
   if (have >= need) return `${head} Both have enough, so the verdict above is the answer.`;
-  // A day at least, so an hour of traffic is not projected as a pace.
-  const perDay = have / Math.max((now - firstAt) / DAY_MS, 1);
-  const days = perDay > 0 ? Math.ceil((need - have) / perDay) : Infinity;
-  if (days > 365) {
-    return (
-      `${head} At ${perDay.toFixed(1)} a day per arm that is more than a year away, so purchases ` +
-      "alone will not settle it: test a bigger change, or decide on an earlier step such as checkout starts."
-    );
-  }
-  // The day as the team reads it, in Berlin.
-  return `${head} At ${perDay.toFixed(1)} a day per arm, that is around ${reportingDay(new Date(now + days * DAY_MS))}, if the gap holds.`;
+  return `${head} ${when(need, hi > lo)}`;
 }
 
 /** A running test's readout since its own start, by the same code /admin's overview runs. */

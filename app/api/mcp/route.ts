@@ -2135,8 +2135,9 @@ export const TOOLS = [
       "The experiment registry: every A/B test with its hypothesis, the metric that decides " +
       "it, its dates and its outcome, plus the live readout of a running test whose arms are " +
       "stamped, in the same words /admin's A/B overview uses (it never calls a winner the " +
-      "numbers cannot support), with how many people each arm needs before it can be called " +
-      "(95% confidence, 80% power) and the day that is reached at the pace so far. Also the " +
+      "numbers cannot support), with how many people each arm needs before a difference in " +
+      "purchases can be called (95% confidence, 80% power; the readout counts purchases " +
+      "whatever metric decides the test) and the day that is reached at the pace so far. Also the " +
       "tests that ended before the registry existed: the landing page, pricing, paywall and " +
       "survey designs. Use it for 'what are we testing', 'how is the paywall test doing', " +
       "'what did the pricing test conclude', 'what sample size do we need', 'when will we " +

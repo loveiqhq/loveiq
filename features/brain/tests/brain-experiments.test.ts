@@ -222,7 +222,7 @@ describe("experiments: the registry, read", () => {
         NOW,
         vi.fn(async () => o)
       );
-      return text.split("\n").find((l) => l.startsWith("  Needed:"));
+      return text.split("\n").find((l) => l.startsWith("  Needed"));
     };
 
     it("sizes a test the textbook way: 435 a side to tell 10% from 5%", () => {
@@ -232,9 +232,9 @@ describe("experiments: the registry, read", () => {
     it("gives the people per arm for the gap so far, and the day at the pace so far", async () => {
       // 100 a side arrived from 21 Sep 10:00 to 26 Sep 09:00: 20.2 a day per arm.
       expect(await needed(split(100, 10, 5))).toBe(
-        "  Needed: about 435 people per arm to tell 10.0% from 5.0% apart, at 95% confidence " +
-          "and 80% power; the smaller arm has 100. At 20.2 a day per arm, that is around " +
-          "2026-10-13, if the gap holds."
+        "  Needed, for a difference in purchases (what the readout above counts): about 435 " +
+          "people per arm to tell 10.0% from 5.0% apart, at 95% confidence and 80% power; the " +
+          "smaller arm has 100. At 20.2 a day per arm, that is around 2026-10-13, if the gap holds."
       );
     });
 
@@ -285,10 +285,17 @@ describe("experiments: the registry, read", () => {
       expect(text).toContain("that is around 2026-10-01, if the gap holds");
     });
 
-    it("cannot size a test before anyone buys, and says so", async () => {
+    it("before anyone buys, gives a yardstick and how long it takes at today's pace", async () => {
+      // Every running test had 0 buyers on 2026-10-11; "cannot be worked out" told Marcus nothing.
       expect(await needed(split(100, 0, 0))).toBe(
-        "  Needed: nobody has bought in any arm yet, so how many people a result needs cannot be worked out."
+        "  Needed, for a difference in purchases (what the readout above counts): nobody has " +
+          "bought yet, so there is no rate to size against. As a yardstick, telling 1.0% from " +
+          "1.5% takes about 7750 people per arm, at 95% confidence and 80% power; the smaller " +
+          "arm has 100. At 20.2 a day per arm that is more than a year away, so purchases alone " +
+          "will not settle it: test a bigger change, or decide on an earlier step such as checkout starts."
       );
+      // At a pace that gets there, the day it does, with no gap to hold.
+      expect(await needed(split(2000, 0, 0))).toMatch(/that is around 2026-10-11\.$/);
     });
 
     it("counts only the arms being compared, so an older arm does not slow the pace", async () => {
