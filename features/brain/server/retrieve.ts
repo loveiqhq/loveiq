@@ -274,6 +274,13 @@ function sanitiseQuery(q: string): string {
  * and simply learns nothing, which is what it did before.
  */
 export interface RetrieveShaping {
+  /** Milliseconds per stage: embedding the question, the ranked search, and the fallback. */
+  stageMs?: { embed: number; search: number; fallback?: number };
+  /**
+   * Set when the full search failed and the smaller keyword-only one answered instead, so
+   * the caller can say the list may be missing what the full search would have found.
+   */
+  partial?: boolean;
   /** Source -> how many of its matches were cut to make room for other sources. */
   heldBack?: Map<string, number>;
   /**
@@ -364,6 +371,55 @@ export function normaliseMetaFilter(
   return out;
 }
 
+/**
+ * The full search's own time limit and breaker. Searching takes 0.6 to 1.5 s in the database
+ * and 1 to 3 s end to end (measured 2026-10-11, after the index halved), so 15 s is room for
+ * a bad moment, not a target. Its own breaker, so slow searches cannot fail every other read.
+ */
+const SEARCH_TIMEOUT_MS = 15_000;
+const FALLBACK_TIMEOUT_MS = 6_000;
+const FALLBACK_CANDIDATES = 40;
+const SEARCH_BREAKER = "supabase-search";
+/** Its own, so a run of slow full searches cannot shut the fallback that covers them. */
+const FALLBACK_BREAKER = "supabase-search-fallback";
+
+/** One brain_search call. Throws CorpusUnavailableError when it does not answer with rows. */
+async function searchOnce(
+  body: Record<string, unknown>,
+  timeoutMs: number,
+  breaker: string
+): Promise<Array<Record<string, unknown>>> {
+  let rows: unknown;
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/brain_search", {
+      method: "POST",
+      body: JSON.stringify(body),
+      timeoutMs,
+      breaker,
+    });
+    if (!res.ok) {
+      logger.error({ status: res.status }, "brain_search RPC failed");
+      throw new CorpusUnavailableError(`rpc ${res.status}`);
+    }
+    rows = await res.json();
+  } catch (err) {
+    if (err instanceof CorpusUnavailableError) throw err;
+    // CircuitOpenError lands here too, which is exactly right: an open breaker
+    // means we did not ask, so we cannot claim there is nothing to find.
+    logger.error({ err }, "brain retrieval failed");
+    throw new CorpusUnavailableError(err instanceof Error ? err.message : "unknown");
+  }
+  // A 200 whose body is not an array means the RPC did not answer — a
+  // proxy-wrapped error page, a scalar, null. That is "could not query", and
+  // returning [] here was a leftover of the behaviour this file now rejects:
+  // the asker was told the corpus contains nothing about their question.
+  if (!Array.isArray(rows)) {
+    logger.error({ got: typeof rows }, "brain_search returned a non-array body");
+    throw new CorpusUnavailableError("rpc returned a non-array body");
+  }
+  return rows as Array<Record<string, unknown>>;
+}
+
 export async function retrieve(
   question: string,
   limit = 12,
@@ -386,6 +442,7 @@ export async function retrieve(
    * Embedded BEFORE the try, and never allowed to throw: this sits on the path of
    * every question, and a failure here must cost recall, not the whole answer.
    */
+  const embedStarted = Date.now();
   let queryVector: string | null = null;
   try {
     const { embedQuery } = await import("./embed");
@@ -394,108 +451,122 @@ export async function retrieve(
     logger.warn({ err }, "brain: could not embed the question, falling back to lexical search");
   }
 
-  let rows: Array<Record<string, unknown>> = [];
+  const searchStarted = Date.now();
+  const embedMs = searchStarted - embedStarted;
+  // `per_source` is what makes the cap below meaningful. Without it the
+  // over-fetch is not diverse: measured, "how much did we spend on google ads
+  // in august and what did we earn" returned 30 of the top 32 from `ga4`
+  // alone -- every GA4 chunk carries "Google Analytics" in its title -- so the
+  // revenue row was never a candidate and the model could only answer half
+  // the question. Capping candidates PER SOURCE in SQL, before truncation,
+  // is the only place that can be fixed.
+  const body = {
+    // Relative time expressions are rewritten into the absolute period names
+    // the corpus uses. Without this, "how are we doing this month" returned
+    // May, June and July and omitted the current month entirely -- see
+    // `expandRelativePeriods` for the measured scores.
+    query_text: searchText(trimmed),
+    k: CANDIDATE_CEILING,
+    /**
+     * A NARROWED REQUEST MUST NOT BE BOUND BY THE DIVERSITY CAP.
+     *
+     * `PER_BUCKET_CANDIDATES` exists to stop one source taking every slot on an
+     * open question. When the caller has named the source, or filtered on metadata
+     * only one source carries, there is nothing to diversify AGAINST — the cap
+     * stops being a fairness rule and becomes a silent truncation of exactly what
+     * was asked for.
+     *
+     * MEASURED 2026-09-06, `sources:['notion'] meta:{status:'WIP'}`: 3 rows back
+     * at `per_source` 3, 12 at 12, against 49 WIP tasks in the board. The caller
+     * asked for six and got three, with nothing saying it had been cut. It also
+     * capped the decision browse — `{"section":"summary"}` returned three meetings
+     * however many were in range, which quietly undercut the filter documented one
+     * commit earlier as the way to ask what was decided.
+     *
+     * Only `sources` and `meta` collapse the bucket count, so only they raise it.
+     * `since`/`until` and `exclude_sources` leave the buckets spread and their
+     * current behaviour is measured, so they are deliberately left alone.
+     * `CANDIDATE_CEILING` still bounds the total, and the share cap has a backfill
+     * for the single-source case — verified: the same filter at `per_source` 12
+     * returns 12, so nothing downstream re-imposes the limit.
+     */
+    per_source:
+      opts.sources?.length || (opts.meta && Object.keys(opts.meta).length)
+        ? Math.max(PER_BUCKET_CANDIDATES, limit)
+        : PER_BUCKET_CANDIDATES,
+    // SEMANTIC RECALL. Postgres cannot run the model, so the question is
+    // embedded here and the vector passed in. Null when embedding fails, which
+    // the SQL treats as "lexical only" — an embedding outage degrades the
+    // answers rather than breaking search.
+    query_embedding: queryVector,
+    // Only the keys the caller actually set. Every filter defaults to NULL in
+    // the function and NULL means "no filter", so an omitted key and an
+    // explicit null behave identically -- but sending only what was asked for
+    // keeps the arguments recorded in `brain_query` readable as intent.
+    ...(opts.sources?.length ? { sources: opts.sources } : {}),
+    ...(opts.excludeSources?.length ? { exclude_sources: opts.excludeSources } : {}),
+    ...(opts.since ? { since: opts.since } : {}),
+    ...(opts.until ? { until: opts.until } : {}),
+    ...(opts.meta && Object.keys(opts.meta).length
+      ? { meta_filter: normaliseMetaFilter(opts.meta) }
+      : {}),
+    /**
+     * WHERE THE RECENCY TERM MEASURES FROM, when the question names a period.
+     *
+     * The 0.6 recency weight is a prior about what is wanted when the question does
+     * not say. Once it does say, the prior competes with the answer and was measured
+     * winning: "how many sessions did google analytics record in june 2026" returned
+     * SEPTEMBER at rank 1, and "in march 2026" did not return March in the top 3 at
+     * all -- three of nine period questions lost to a more recent period.
+     *
+     * Not a filter. Nothing is excluded, so a question that names a month while
+     * wanting something undated ("what did we decide in June about pricing") still
+     * reaches the decision record; it is only re-weighted. Null when no period is
+     * named, which is the arithmetic the function had before this existed.
+     */
+    ...((): { anchor_date?: string; anchor_grain?: string } => {
+      const anchor = periodAnchor(trimmed);
+      return anchor ? { anchor_date: anchor.date, anchor_grain: anchor.grain } : {};
+    })(),
+  };
+  let rows: Array<Record<string, unknown>>;
   try {
-    const res = await supabaseFetch("/rest/v1/rpc/brain_search", {
-      method: "POST",
-      // `per_source` is what makes the cap below meaningful. Without it the
-      // over-fetch is not diverse: measured, "how much did we spend on google ads
-      // in august and what did we earn" returned 30 of the top 32 from `ga4`
-      // alone -- every GA4 chunk carries "Google Analytics" in its title -- so the
-      // revenue row was never a candidate and the model could only answer half
-      // the question. Capping candidates PER SOURCE in SQL, before truncation,
-      // is the only place that can be fixed.
-      body: JSON.stringify({
-        // Relative time expressions are rewritten into the absolute period names
-        // the corpus uses. Without this, "how are we doing this month" returned
-        // May, June and July and omitted the current month entirely -- see
-        // `expandRelativePeriods` for the measured scores.
-        query_text: searchText(trimmed),
-        k: CANDIDATE_CEILING,
-        /**
-         * A NARROWED REQUEST MUST NOT BE BOUND BY THE DIVERSITY CAP.
-         *
-         * `PER_BUCKET_CANDIDATES` exists to stop one source taking every slot on an
-         * open question. When the caller has named the source, or filtered on metadata
-         * only one source carries, there is nothing to diversify AGAINST — the cap
-         * stops being a fairness rule and becomes a silent truncation of exactly what
-         * was asked for.
-         *
-         * MEASURED 2026-09-06, `sources:['notion'] meta:{status:'WIP'}`: 3 rows back
-         * at `per_source` 3, 12 at 12, against 49 WIP tasks in the board. The caller
-         * asked for six and got three, with nothing saying it had been cut. It also
-         * capped the decision browse — `{"section":"summary"}` returned three meetings
-         * however many were in range, which quietly undercut the filter documented one
-         * commit earlier as the way to ask what was decided.
-         *
-         * Only `sources` and `meta` collapse the bucket count, so only they raise it.
-         * `since`/`until` and `exclude_sources` leave the buckets spread and their
-         * current behaviour is measured, so they are deliberately left alone.
-         * `CANDIDATE_CEILING` still bounds the total, and the share cap has a backfill
-         * for the single-source case — verified: the same filter at `per_source` 12
-         * returns 12, so nothing downstream re-imposes the limit.
-         */
-        per_source:
-          opts.sources?.length || (opts.meta && Object.keys(opts.meta).length)
-            ? Math.max(PER_BUCKET_CANDIDATES, limit)
-            : PER_BUCKET_CANDIDATES,
-        // SEMANTIC RECALL. Postgres cannot run the model, so the question is
-        // embedded here and the vector passed in. Null when embedding fails, which
-        // the SQL treats as "lexical only" — an embedding outage degrades the
-        // answers rather than breaking search.
-        query_embedding: queryVector,
-        // Only the keys the caller actually set. Every filter defaults to NULL in
-        // the function and NULL means "no filter", so an omitted key and an
-        // explicit null behave identically -- but sending only what was asked for
-        // keeps the arguments recorded in `brain_query` readable as intent.
-        ...(opts.sources?.length ? { sources: opts.sources } : {}),
-        ...(opts.excludeSources?.length ? { exclude_sources: opts.excludeSources } : {}),
-        ...(opts.since ? { since: opts.since } : {}),
-        ...(opts.until ? { until: opts.until } : {}),
-        ...(opts.meta && Object.keys(opts.meta).length
-          ? { meta_filter: normaliseMetaFilter(opts.meta) }
-          : {}),
-        /**
-         * WHERE THE RECENCY TERM MEASURES FROM, when the question names a period.
-         *
-         * The 0.6 recency weight is a prior about what is wanted when the question does
-         * not say. Once it does say, the prior competes with the answer and was measured
-         * winning: "how many sessions did google analytics record in june 2026" returned
-         * SEPTEMBER at rank 1, and "in march 2026" did not return March in the top 3 at
-         * all -- three of nine period questions lost to a more recent period.
-         *
-         * Not a filter. Nothing is excluded, so a question that names a month while
-         * wanting something undated ("what did we decide in June about pricing") still
-         * reaches the decision record; it is only re-weighted. Null when no period is
-         * named, which is the arithmetic the function had before this existed.
-         */
-        ...((): { anchor_date?: string; anchor_grain?: string } => {
-          const anchor = periodAnchor(trimmed);
-          return anchor ? { anchor_date: anchor.date, anchor_grain: anchor.grain } : {};
-        })(),
-      }),
-    });
-    if (!res.ok) {
-      logger.error({ status: res.status }, "brain_search RPC failed");
-      throw new CorpusUnavailableError(`rpc ${res.status}`);
-    }
-    rows = (await res.json()) as Array<Record<string, unknown>>;
+    rows = await searchOnce(body, SEARCH_TIMEOUT_MS, SEARCH_BREAKER);
+    shaping.stageMs = { embed: embedMs, search: Date.now() - searchStarted };
   } catch (err) {
-    if (err instanceof CorpusUnavailableError) throw err;
-    // CircuitOpenError lands here too, which is exactly right: an open breaker
-    // means we did not ask, so we cannot claim there is nothing to find.
-    logger.error({ err }, "brain retrieval failed");
-    throw new CorpusUnavailableError(err instanceof Error ? err.message : "unknown");
+    if (!(err instanceof CorpusUnavailableError)) throw err;
+    /**
+     * ONE SMALLER TRY BEFORE "UNREACHABLE".
+     *
+     * Every "knowledge base is unreachable" answer between 1 and 11 Oct 2026 was this call
+     * running past its time, not the database being down (they all ended at ~8.2 s), and an
+     * answer that says "outage" stops the asker cold. So a failed search is retried once,
+     * keyword-only and over fewer candidates, which is the cheap half of the same ranking.
+     * The caller is told the list is partial. If this fails too, it is reported as before.
+     */
+    const fallbackStarted = Date.now();
+    // Timed whether or not it answers, so a search that failed twice still says where it spent.
+    const timed = () =>
+      (shaping.stageMs = {
+        embed: embedMs,
+        search: fallbackStarted - searchStarted,
+        fallback: Date.now() - fallbackStarted,
+      });
+    try {
+      rows = await searchOnce(
+        { ...body, k: FALLBACK_CANDIDATES, per_source: 2, query_embedding: null },
+        FALLBACK_TIMEOUT_MS,
+        FALLBACK_BREAKER
+      );
+    } finally {
+      timed();
+    }
+    shaping.partial = true;
+    logger.warn(
+      { err, stageMs: shaping.stageMs },
+      "brain: full search failed, answered keyword-only"
+    );
   }
-  // A 200 whose body is not an array means the RPC did not answer — a
-  // proxy-wrapped error page, a scalar, null. That is "could not query", and
-  // returning [] here was a leftover of the behaviour this file now rejects:
-  // the asker was told the corpus contains nothing about their question.
-  if (!Array.isArray(rows)) {
-    logger.error({ got: typeof rows }, "brain_search returned a non-array body");
-    throw new CorpusUnavailableError("rpc returned a non-array body");
-  }
-
   const candidates: BrainChunk[] = rows.map((r) => ({
     source: String(r.source ?? ""),
     sourceId: String(r.source_id ?? ""),
