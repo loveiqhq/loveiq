@@ -1,4 +1,7 @@
 {
+  "env": {
+    "PLAYWRIGHT_MCP_ISOLATED": "true"
+  },
   "hooks": {
     "PostToolUse": [
       {
@@ -67,6 +70,7 @@
     "greptile@claude-plugins-official": true,
     "hookify@claude-plugins-official": false,
     "playground@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
     "linear@claude-plugins-official": true,
     "learning-output-style@claude-plugins-official": true,
     "stripe@claude-plugins-official": true,

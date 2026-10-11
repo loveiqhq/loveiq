@@ -18,6 +18,17 @@ text into the project's instructions.
 All four skills have been in the organization library since 2026-10-05, installed by default
 for everyone.
 
+## Third-party skills, and the Claude Code half
+
+Fifteen skills from outside LoveIQ go in the organization library too: `security-audit`
+(Cloudflare), `impeccable`, ten `taste-skill` design skills, `awesome-design-md`, `img2threejs`
+and `playwright-cli`. So do the Claude Code skills in `.claude/skills/` (`copy-gate`,
+`report-chapter`, `jarvis-brief`, `assessment-factory` and `integration-nextjs-app-router`), so
+that everyone has them outside this repo as well. The copy of record for all of them is
+`.claude/skills/`; `.claude/skills/THIRD_PARTY.md` lists each upstream, its pinned commit, what
+the audit found and the update steps. `npm run skills:pack` does not build them. Zip the folder
+itself instead, after moving the front matter keys claude.ai refuses, as that file describes.
+
 ## Install one
 
 1. Build the zips: `npm run skills:pack`. It checks each skill (only the front matter
