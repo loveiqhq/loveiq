@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,6 +29,10 @@ import {
   driveQuoted,
   findTeamFolder,
   isExported,
+  unclassifiedColumns,
+  MASKED,
+  masker,
+  maskRow,
   OutOfTime,
   plan,
   readme,
@@ -46,6 +51,17 @@ type Dataset = Record<string, Row[]>;
 /** A report token in its real shape: `rpt_` and twenty alphanumerics. */
 const TOKEN = "rpt_A1b2C3d4E5f6G7h8I9j0";
 
+/** The survey's questions: its email, name and postcode ones, a scale and an open one. */
+const QUESTIONS: Dataset = {
+  survey_question: [
+    { id: 1, frontend_qid: "00000", question: "What is your email?" },
+    { id: 2, frontend_qid: "00001", question: "What is your name?" },
+    { id: 5, frontend_qid: "01002", question: "How often do you think about sex?" },
+    { id: 40, frontend_qid: "15002", question: "Which ZIP / postal code do you live in?" },
+    { id: 67, frontend_qid: "16019", question: "Was there a learning that changed you?" },
+  ],
+};
+
 /** One person with a submission and what hangs off it, in several tables. */
 function person(id: number, o: { email?: string; durationMs?: number } = {}): Dataset {
   const email = o.email ?? `person${id}@example.com`;
@@ -59,7 +75,16 @@ function person(id: number, o: { email?: string; durationMs?: number } = {}): Da
         processing_restricted_at: null,
       },
     ],
-    user_profile: [{ id: id * 7, gender: "woman", sexual_orientation: "bisexual" }],
+    user_profile: [
+      {
+        id: id * 7,
+        last_name: `Surname${id}`,
+        birthday: "1990-05-0" + id,
+        gender: "woman",
+        sexual_orientation: "bisexual",
+      },
+    ],
+    report_access_email: [{ id: id * 3, personal_report_id: id * 20, email }],
     survey_submission: [
       {
         id: id * 10,
@@ -70,13 +95,47 @@ function person(id: number, o: { email?: string; durationMs?: number } = {}): Da
       },
     ],
     survey_submission_answer: [
-      { id: id * 100, survey_submission_id: id * 10, answer_text: "self-described answer" },
+      {
+        id: id * 100,
+        survey_submission_id: id * 10,
+        survey_question_id: 1,
+        answer_text: email,
+        normalized_value: email,
+      },
+      {
+        id: id * 100 + 1,
+        survey_submission_id: id * 10,
+        survey_question_id: 2,
+        answer_text: `Name${id}`,
+        normalized_value: null,
+      },
+      {
+        id: id * 100 + 2,
+        survey_submission_id: id * 10,
+        survey_question_id: 40,
+        answer_text: "10115",
+        normalized_value: null,
+      },
+      {
+        id: id * 100 + 3,
+        survey_submission_id: id * 10,
+        survey_question_id: 5,
+        answer_text: null,
+        normalized_value: 4,
+      },
+      {
+        id: id * 100 + 4,
+        survey_submission_id: id * 10,
+        survey_question_id: 67,
+        answer_text: `Reading Esther Perel. Write to me at ${email}`,
+        normalized_value: null,
+      },
     ],
     survey_partial_save: [
       {
         id: id * 2,
         session_id: `session-${id}`,
-        answers: { "00000": email, "01002": "a" },
+        answers: { "00000": email, "00001": `Name${id}`, "15002": "10115", "01002": "a" },
         started_at: "2026-10-01T10:00:00Z",
         saved_at: "2026-10-01T10:20:00Z",
       },
@@ -90,7 +149,8 @@ function person(id: number, o: { email?: string; durationMs?: number } = {}): Da
         amount: 29,
         receipt_url: "https://pay.stripe.com/receipts/abc",
         card_last4: "4242",
-        metadata: { plan: "full_report", reportToken: TOKEN },
+        ip_address: "203.0.113.7",
+        metadata: { plan: "full_report", reportToken: TOKEN, requestIp: "203.0.113.7" },
       },
     ],
   };
@@ -120,25 +180,223 @@ const csvOf = (files: Array<{ name: string; body: string }>, table: string) =>
   files.find((f) => f.name === `${table}.csv`)?.body ?? "";
 
 describe("the team data export", () => {
-  it("changes nothing in the data: emails, names, answers, report links, payments", async () => {
-    const data = merge(person(1), person(2));
-    const specs = specsFor(data);
-    const files = await buildExport(specs, reader(data));
-    for (const spec of specs) {
-      if (spec.name === "survey_submission" || spec.name === "survey_partial_save") continue;
-      expect(csvOf(files, spec.name), spec.name).toBe(toCsv(data[spec.name]!, spec.columns));
+  it("masks what identifies a person, and keeps what they answered and did", async () => {
+    const data = merge(QUESTIONS, person(1), person(2));
+    const files = await buildExport(specsFor(data), reader(data));
+    const all = files.map((f) => f.body).join("\n");
+    // No address and no report token anywhere, in any file.
+    expect(all).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    expect(all).not.toContain("rpt_");
+    expect(all).not.toContain("203.0.113.7");
+    for (const id of [1, 2]) {
+      expect(all).not.toContain(`Name${id}`);
+      expect(all).not.toContain(`Surname${id}`);
+      expect(all).not.toContain(`1990-05-0${id}`);
     }
-    // The two flagged tables keep every column they had, plus the flags.
-    const submissions = csvOf(files, "survey_submission");
-    expect(submissions.split("\n")[0]).toBe(
-      "id,user_id,session_id,duration_ms,regeneration_url,is_likely_test,test_reasons"
+    expect(all).not.toContain("10115");
+    expect(all).not.toContain("4242");
+    expect(all).not.toContain("pay.stripe.com");
+    // One person's address is one code everywhere in the copy, so tables still join on it.
+    const code = (table: string) => csvOf(files, table).match(/masked-[0-9a-f]{12}/g) ?? [];
+    expect(code("app_user")).toHaveLength(2);
+    expect(code("report_access_email")).toEqual(code("app_user"));
+    expect(code("survey_submission_answer")).toEqual(
+      expect.arrayContaining([code("app_user")[0], code("app_user")[1]])
     );
-    expect(submissions).toContain(TOKEN);
-    expect(csvOf(files, "app_user")).toContain("person2@example.com");
+    // What they answered and did stays: the scale answer, the open answer's words, the
+    // demographics, the payment.
+    const answers = csvOf(files, "survey_submission_answer");
+    expect(answers).toContain(",5,,4\n");
+    expect(answers).toContain("Reading Esther Perel. Write to me at masked-");
+    expect(answers.match(/\[masked\]/g)).toHaveLength(2 * 3 + 2);
+    expect(csvOf(files, "user_profile")).toContain(",woman,bisexual");
+    expect(csvOf(files, "payment")).toContain(",29,");
+    expect(csvOf(files, "payment")).toContain('""plan"":""full_report""');
+    expect(csvOf(files, "survey_partial_save")).toContain('""01002"":""a""');
+  });
+
+  it("gives every copy new codes and keeps them steady inside one", () => {
+    const a = masker();
+    expect(a.email("Person@Example.com ")).toMatch(/^masked-[0-9a-f]{12}$/);
+    expect(a.email("person@example.com")).toBe(a.email(" PERSON@example.com"));
+    expect(masker().email("person@example.com")).not.toBe(a.email("person@example.com"));
+  });
+
+  it("masks by column and by key, and leaves what only looks similar", () => {
+    const m = masker(Buffer.alloc(32));
+    const ids = new Set([1]);
+    // `email_position` is the A/B arm, not an address; a column of addresses is masked whole.
+    expect(maskRow("funnel_event", { email_position: "top" }, m, ids)).toEqual({
+      email_position: "top",
+    });
+    expect(maskRow("waitlist_user", { email: "typo@nodomain" }, m, ids).email).toMatch(/^masked-/);
+    expect(
+      maskRow(
+        "admin_dashboard_subscription",
+        { subscriber_emails: ["a@loveiq.org", "ops-team"] },
+        m,
+        ids
+      ).subscriber_emails
+    ).toEqual([m.email("a@loveiq.org"), m.email("ops-team")]);
+    // Links and tokens by their column or key, whatever shape the token takes.
+    expect(maskRow("personal_report", { url: "report/legacy123" }, m, ids).url).toBe(MASKED);
+    expect(maskRow("report_access_token", { token: "tok_legacy" }, m, ids).token).toBe(MASKED);
+    expect(
+      maskRow("payment", { metadata: { reportToken: "legacy123", plan: "full" } }, m, ids).metadata
+    ).toEqual({ reportToken: MASKED, plan: "full" });
+    // Credentials, addresses and answers inside JSON, and the raw payloads whole.
+    expect(
+      maskRow(
+        "report_price_quote",
+        {
+          metadata: {
+            reportToken: TOKEN,
+            nurturePromoCodes: { "30h_no_unlock": "SAVE50-X" },
+            urgency: "high",
+          },
+        },
+        m,
+        ids
+      ).metadata
+    ).toEqual({ reportToken: MASKED, nurturePromoCodes: MASKED, urgency: "high" });
+    expect(maskRow("admin_audit_log", { metadata: { answer: "Anna" } }, m, ids).metadata).toEqual({
+      answer: MASKED,
+    });
+    expect(maskRow("booking_event", { raw: { name: "Anna" } }, m, ids).raw).toBe(MASKED);
+    expect(maskRow("payment_webhook_event", { event_data: { id: "evt" } }, m, ids).event_data).toBe(
+      MASKED
+    );
+    // An address with its @ as %40, inside a link, is the same person's code.
+    expect(
+      maskRow("analytics_event", { metadata: { pathname: "/x?e=a%40b.com" } }, m, ids).metadata
+    ).toEqual({ pathname: `/x?e=${m.email("a@b.com")}` });
+    // The stand-in an earlier fix left in old rows goes too, so no `rpt_` survives anywhere.
+    expect(
+      maskRow("analytics_event", { metadata: { p: "token=rpt_<redacted>&x=1" } }, m, ids).metadata
+    ).toEqual({
+      p: `token=${MASKED}&x=1`,
+    });
+    // A link with the token as a query parameter, the other shape it travels in.
+    expect(
+      maskRow("analytics_event", { metadata: { pathname: `/checkout?token=${TOKEN}` } }, m, ids)
+        .metadata
+    ).toEqual({ pathname: `/checkout?token=${MASKED}` });
+    // Outside tools' session ids, whose recordings show the person, and an admin's search.
+    expect(
+      maskRow(
+        "survey_submission",
+        { session_id: "s1", posthog_session_id: "ph", hotjar_user_id: "hj" },
+        m,
+        ids
+      )
+    ).toEqual({ session_id: "s1", posthog_session_id: MASKED, hotjar_user_id: MASKED });
+    expect(
+      maskRow("admin_audit_log", { metadata: { query: "Anna K", tool: "search" } }, m, ids).metadata
+    ).toEqual({ query: MASKED, tool: "search" });
+    // Keys are matched however they are written, as deep as they go: camelCase, ALL CAPS.
+    expect(
+      maskRow(
+        "scoring_result",
+        {
+          diagnostics: {
+            overlaysText: { OVL_POSTAL_CODE: "10115", OVL_COUNTRY: "Germany" },
+            customer: { firstName: "Anna", fullName: "Anna K", customerEmail: "a@b.com" },
+          },
+        },
+        m,
+        ids
+      ).diagnostics
+    ).toEqual({
+      overlaysText: { OVL_POSTAL_CODE: MASKED, OVL_COUNTRY: "Germany" },
+      customer: { firstName: MASKED, fullName: MASKED, customerEmail: m.email("a@b.com") },
+    });
+    // Keys that only look personal stay.
+    expect(
+      maskRow("payment", { metadata: { couponName: "nurture_50", pathname: "/r" } }, m, ids)
+        .metadata
+    ).toEqual({ couponName: "nurture_50", pathname: "/r" });
+    expect(m.unclassified()).toEqual([]);
+    // A key that is itself an address or a token is masked like text, and so is what it holds.
+    expect(
+      maskRow(
+        "report_price_quote",
+        { metadata: { "anna@b.com": "Anna Smith", [TOKEN]: { plan: "full" }, kept: 1 } },
+        m,
+        ids
+      ).metadata
+    ).toEqual({ [m.email("anna@b.com")]: MASKED, [MASKED]: MASKED, kept: 1 });
+    // Nothing to mask stays as it was, empty included.
+    expect(maskRow("survey_submission", { id: 3, duration_ms: 5, utm: null }, m, ids)).toEqual({
+      id: 3,
+      duration_ms: 5,
+      utm: null,
+    });
+  });
+
+  it("stops when a column that may hold personal data has not been classified", async () => {
+    const data = merge(QUESTIONS, person(1), { lead: [{ id: 1, phone_number: "+49 30 1234" }] });
+    const read = reader(data);
+    await expect(buildExport(specsFor(data), read)).rejects.toThrow(
+      /not classified yet: lead.phone_number/
+    );
+    expect(read).not.toHaveBeenCalled();
+    // A thing's name in a table of things is fine; a person's name column is masked anyway.
+    expect(
+      unclassifiedColumns([
+        { name: "admin_segment", columns: ["name", "rules"], key: ["id"] },
+        { name: "app_user", columns: ["first_name", "email", "utm_tracker"], key: ["id"] },
+      ])
+    ).toEqual([]);
+    // An outside tool's id must be classified too: a new one stops the export.
+    expect(
+      unclassifiedColumns([
+        { name: "survey_submission", columns: ["clarity_user_id"], key: ["id"] },
+      ])
+    ).toEqual(["survey_submission.clarity_user_id"]);
+    expect(unclassifiedColumns([{ name: "partner", columns: ["name"], key: ["id"] }])).toEqual([
+      "partner.name",
+    ]);
+  });
+
+  it("stops when a key inside a JSON value may hold personal data and is not classified", async () => {
+    const data = merge(QUESTIONS, person(1), {
+      analytics_event: [{ id: 1, metadata: { device: { mobilePhone: "+49 30 1234" } } }],
+    });
+    await expect(buildExport(specsFor(data), reader(data))).rejects.toThrow(
+      /not classified yet: analytics_event.metadata.device.mobile_phone/
+    );
+    // Under a key that is an address, everything is masked, so nothing there needs naming:
+    // the run goes on, and the address appears nowhere.
+    const keyed = merge(QUESTIONS, person(1), {
+      analytics_event: [{ id: 1, metadata: { "anna@gmail.com": { homePhone: "x" } } }],
+    });
+    const files = await buildExport(specsFor(keyed), reader(keyed));
+    expect(files.map((f) => f.body).join("\n")).not.toContain("anna@gmail.com");
+    // A key allowed at one path stays checked at every other.
+    const paths = masker();
+    paths.json({ events: [{ props: { location: "/survey" } }] }, "ux_walk_record");
+    paths.json({ location: "Berlin Mitte" }, "analytics_event.metadata");
+    expect(paths.unclassified()).toEqual(["analytics_event.metadata.location"]);
+    // New kinds of personal names are classified like the rest.
+    expect(
+      unclassifiedColumns([
+        { name: "lead", columns: ["dob", "home_location", "lat", "instagram_handle"], key: ["id"] },
+      ])
+    ).toEqual(["lead.dob", "lead.home_location", "lead.lat", "lead.instagram_handle"]);
+  });
+
+  it("stops when it cannot find the email, name or postcode question, writing nothing", async () => {
+    const data = merge(
+      { survey_question: QUESTIONS.survey_question!.filter((q) => q.frontend_qid !== "00001") },
+      person(1)
+    );
+    await expect(buildExport(specsFor(data), reader(data))).rejects.toThrow(
+      /email, name and postcode questions/
+    );
   });
 
   it("writes one CSV per table and the README last, with each table's rows", async () => {
-    const data = merge(person(1), person(2));
+    const data = merge(QUESTIONS, person(1), person(2));
     const files = await buildExport(specsFor(data), reader(data), undefined, () => "T");
     expect(files.map((f) => f.name)).toEqual([
       ...Object.keys(data)
@@ -168,20 +426,21 @@ describe("the team data export", () => {
   });
 
   it("stops while anyone has asked us to restrict processing, before reading anything else", async () => {
-    const data = merge(person(1), person(2));
+    const data = merge(QUESTIONS, person(1), person(2));
     data.app_user![1]!.processing_restricted_at = "2026-10-01T00:00:00Z";
     const read = reader(data);
     await expect(buildExport(specsFor(data), read)).rejects.toThrow(
       /1 people asked us to restrict processing/
     );
     expect(read.mock.calls.map(([spec]) => spec.name)).toEqual(["app_user"]);
-    await expect(buildExport(specsFor(merge(person(1))), reader(person(1)))).resolves.toHaveLength(
-      Object.keys(person(1)).length + 1
+    const one = merge(QUESTIONS, person(1));
+    await expect(buildExport(specsFor(one), reader(one))).resolves.toHaveLength(
+      Object.keys(one).length + 1
     );
   });
 
   it("gives up at its deadline, and says so as a timeout", async () => {
-    const data = person(1);
+    const data = merge(QUESTIONS, person(1));
     let checks = 0;
     await expect(
       buildExport(specsFor(data), reader(data), () => ++checks > 2)
@@ -202,6 +461,7 @@ describe("the team data export", () => {
       },
       user_profile: { properties: { id: { description: pk } } },
       survey_submission: { properties: { id: { description: pk }, session_id: {} } },
+      survey_question: { properties: { id: { description: pk }, frontend_qid: {} } },
       personal_report: { properties: { id: { description: pk } } },
       survey_submission_answer: { properties: { id: { description: pk } } },
       funnel_event: {
@@ -220,10 +480,15 @@ describe("the team data export", () => {
       /app_user.processing_restricted_at/
     );
     expect(() => specsOf({})).toThrow(/missing/);
+    // Without the questions' ids, masking could not find the email answers.
+    expect(() =>
+      specsOf({ ...full, survey_question: { properties: { id: { description: pk } } } })
+    ).toThrow(/survey_question.frontend_qid/);
   });
 
   it("flags test rows the way the admin panel does, and keeps them", async () => {
     const data = merge(
+      QUESTIONS,
       person(1),
       person(2, { email: "eman@loveiq.org" }),
       person(3, { durationMs: 30_000 })
@@ -280,16 +545,19 @@ describe("the team data export", () => {
     expect(toCsv([{ id: 1, is_likely_test: false }], ["id"])).toBe("id,is_likely_test\n1,false\n");
   });
 
-  it("says in the README what is in it, what is not, and how to get a fresh one", () => {
+  it("says in the README what is masked, what is kept, what is not in it, and how to refresh", () => {
     const text = readme(
       [{ name: "app_user", columns: ["id"], key: ["id"] }],
       { app_user: 2 },
       "2026-10-10T20:00:00Z"
     );
     expect(text).toContain("| app_user.csv | 2 |");
+    expect(text).toContain("Names, emails and other details that identify a person are masked");
+    expect(text).toContain("every email address reads `masked-` and a code");
     expect(text).toContain("The export stops while anyone has.");
     expect(text).toMatch(/Eman, Marcus, Mark, Fatih, Sanjin, Ajna/);
     expect(text).toContain("ask Claude (Jarvis) to export all the data");
+    expect(text).not.toMatch(/unmasked/i);
   });
 
   it("replaces exactly one Drive file per table, ours and closed, and checks them all first", () => {
@@ -445,6 +713,7 @@ describe("Drive, with requests answered here", () => {
     permissions: team,
   };
   const query = (url: string) => decodeURIComponent(new URL(url).searchParams.get("q") ?? "");
+  const md5 = (body: string) => createHash("md5").update(body).digest("hex");
 
   it("finds the folder by its tag among the ones ec@ owns, and says who can open it", async () => {
     fetchMock
@@ -483,14 +752,21 @@ describe("Drive, with requests answered here", () => {
       .mockResolvedValueOnce(
         answer({ files: [{ id: "OLD", name: "README.md", ownedByMe: true, permissions: team }] })
       )
-      // New file: created in the folder.
+      // New file: created in the folder; its one version is the current one.
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
       .mockResolvedValueOnce(answer({ id: "NEW" }))
-      .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }] }))
-      // Existing file: replaced in place, and its older version deleted.
+      .mockResolvedValueOnce(answer({ headRevisionId: "n1", md5Checksum: md5("id\n1\n") }))
+      .mockResolvedValueOnce(answer({ revisions: [{ id: "n1" }] }))
+      // Existing file: replaced in place. Drive lists the current version FIRST and spreads
+      // the rest over two pages: every other version goes, wherever it is listed.
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-2" }))
       .mockResolvedValueOnce(answer({ id: "OLD" }))
-      .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }, { id: "r2" }] }))
+      .mockResolvedValueOnce(answer({ headRevisionId: "r3", md5Checksum: md5("# readme") }))
+      .mockResolvedValueOnce(
+        answer({ revisions: [{ id: "r3" }, { id: "r1" }], nextPageToken: "p2" })
+      )
+      .mockResolvedValueOnce(answer({ revisions: [{ id: "r2" }] }))
+      .mockResolvedValueOnce(answer({}, { status: 204 }))
       .mockResolvedValueOnce(answer({}, { status: 204 }));
     await uploadExport("tok", "F1", [
       { name: "app_user.csv", body: "id\n1\n" },
@@ -508,14 +784,16 @@ describe("Drive, with requests answered here", () => {
     });
     expect(c[3]).toMatchObject({ url: "https://upload/session-1", method: "PUT" });
     expect(c[3]!.body).toBe("id\n1\n");
-    expect(c[5]).toMatchObject({ method: "PATCH" });
-    expect(c[5]!.url).toContain("/upload/drive/v3/files/OLD?uploadType=resumable");
-    expect(JSON.parse(String(c[5]!.body))).toEqual({ writersCanShare: false });
-    expect(c[6]!.body).toBe("# readme");
-    // Only the older version goes; the one just uploaded stays.
-    expect(c[8]).toMatchObject({ method: "DELETE" });
-    expect(c[8]!.url).toContain("/files/OLD/revisions/r1");
-    expect(c).toHaveLength(9);
+    expect(c[4]!.url).toContain("/files/NEW?fields=headRevisionId,md5Checksum");
+    expect(c[6]).toMatchObject({ method: "PATCH" });
+    expect(c[6]!.url).toContain("/upload/drive/v3/files/OLD?uploadType=resumable");
+    expect(JSON.parse(String(c[6]!.body))).toEqual({ writersCanShare: false });
+    expect(c[7]!.body).toBe("# readme");
+    expect(c[10]!.url).toContain("pageToken=p2");
+    // Every version but the current one goes, from both pages; the current one stays.
+    const deleted = c.filter((x) => x.method === "DELETE").map((x) => x.url.split("/").pop());
+    expect(deleted).toEqual(["r1", "r2"]);
+    expect(c).toHaveLength(13);
   });
 
   it("writes nothing when any file in the folder fails the check", async () => {
@@ -609,11 +887,32 @@ describe("Drive, with requests answered here", () => {
       )
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
       .mockResolvedValueOnce(answer({ id: "OLD" }))
+      .mockResolvedValueOnce(answer({ headRevisionId: "r2", md5Checksum: md5("x") }))
       .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }, { id: "r2" }] }))
       .mockResolvedValueOnce(answer({}, { status: 404 }));
     await expect(
       uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])
     ).resolves.toBeUndefined();
+  });
+
+  it("deletes nothing when the current version is not what was uploaded, or is not named", async () => {
+    const start = () =>
+      fetchMock
+        .mockResolvedValueOnce(answer(folderMeta))
+        .mockResolvedValueOnce(
+          answer({ files: [{ id: "OLD", name: "a.csv", ownedByMe: true, permissions: team }] })
+        )
+        .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
+        .mockResolvedValueOnce(answer({ id: "OLD" }));
+    start().mockResolvedValueOnce(answer({ headRevisionId: "r2", md5Checksum: md5("other") }));
+    await expect(uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])).rejects.toThrow(
+      "the current version of a.csv is not what was uploaded"
+    );
+    start().mockResolvedValueOnce(answer({ md5Checksum: md5("x") }));
+    await expect(uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])).rejects.toThrow(
+      "Drive did not say which version of a.csv is current"
+    );
+    expect(calls().filter((c) => c.method === "DELETE")).toHaveLength(0);
   });
 
   it("stops uploading at its deadline, before asking Drive anything", async () => {
@@ -635,25 +934,34 @@ describe("Drive, with requests answered here", () => {
 
 describe("reading the database", () => {
   const page = (rows: unknown[]) => new Response(JSON.stringify(rows));
-  const spec = { name: "app_user", columns: ["id", "processing_restricted_at"], key: ["id"] };
+  const users = { name: "app_user", columns: ["id", "processing_restricted_at"], key: ["id"] };
+  const questions = { name: "survey_question", columns: ["id", "frontend_qid"], key: ["id"] };
+  const asked = page([
+    { id: 1, frontend_qid: "00000" },
+    { id: 2, frontend_qid: "00001" },
+  ]);
   beforeEach(() => pages.fetch.mockReset());
 
   it("reads page after page by key, and checks the deadline before each page", async () => {
     pages.fetch
       .mockResolvedValueOnce(page([{ id: 1 }, { id: 2 }]))
-      .mockResolvedValueOnce(page([{ id: 3 }]));
-    const files = await buildExport([spec]);
+      .mockResolvedValueOnce(page([{ id: 3 }]))
+      .mockResolvedValueOnce(asked)
+      .mockResolvedValueOnce(page([{ id: 40, frontend_qid: "15002" }]));
+    const files = await buildExport([users, questions]);
     expect(pages.fetch.mock.calls.map(([p]) => p)).toEqual([
       "/rest/v1/app_user?select=*&order=id.asc&limit=2",
       "/rest/v1/app_user?select=*&order=id.asc&limit=2&id=gt.2",
+      "/rest/v1/survey_question?select=*&order=id.asc&limit=2",
+      "/rest/v1/survey_question?select=*&order=id.asc&limit=2&id=gt.2",
     ]);
     expect(files[0]!.body).toBe("id,processing_restricted_at\n1,\n2,\n3,\n");
 
     pages.fetch.mockReset().mockResolvedValue(page([{ id: 1 }, { id: 2 }]));
     let checks = 0;
-    await expect(buildExport([spec], undefined, () => ++checks > 1)).rejects.toBeInstanceOf(
-      OutOfTime
-    );
+    await expect(
+      buildExport([users, questions], undefined, () => ++checks > 1)
+    ).rejects.toBeInstanceOf(OutOfTime);
     // One page read, then the deadline stopped the second: inside the table, not after it.
     expect(pages.fetch).toHaveBeenCalledTimes(1);
   });

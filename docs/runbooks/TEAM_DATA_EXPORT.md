@@ -1,11 +1,13 @@
 # Team data export
 
-Every customer and product table in the production database, as one CSV per table, in a Google
-Drive folder that only the team can open. The team uses it to explore the data freely, for
-example in Marcus's survey explorer.
+Every customer and product table in the production database, as one CSV per table, with what
+identifies a person masked, in a Google Drive folder that only the team can open. The team uses
+it to explore the data, for example in Marcus's survey explorer.
 
-**Decision (Eman, 2026-10-10):** the team gets all of it, unmasked, and nobody else gets any of
-it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R3.8 in
+**Decision (Eman, 2026-10-11):** "mask the emails and names and those sensitive info". This
+replaces the unmasked copy decided on 2026-10-10. Every refresh replaces each file and deletes
+its older versions, so the first masked copy removes the unmasked one from Drive. Only the team
+(Eman, Marcus, Mark, Fatih, Sanjin and Ajna) can open it. Recorded as risk R3.8 in
 [`docs/compliance/DPIA.md`](../compliance/DPIA.md).
 
 ## Where it is
@@ -27,8 +29,24 @@ it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R
 
 ## What is in it, and what is not
 
-- **In it:** every table and materialized view in the `public` schema. Nothing in it is masked
-  or removed: emails, names, free-text answers, report links and payment details are all there.
+- **In it:** every table and materialized view in the `public` schema, every row, every column.
+- **Masked** (`maskRow` in `features/admin/server/team-export.ts`):
+  - every email address, wherever it appears, reads `masked-` and a 12-character code. The same
+    address has the same code in every file of one copy, so tables still join on it. The key is
+    new for every copy and never kept, so a code cannot be worked back to an address, and codes
+    change between copies;
+  - names, birthdays, IP addresses, report links and access tokens, card digits and expiry,
+    Stripe receipt links, promo codes, messages to a partner, PostHog and Hotjar session ids
+    (their recordings show the person) and admins' searches read `[masked]`;
+  - so do the answers to the email, name and ZIP or postcode questions (`00000`, `00001`,
+    `15002`), in submissions and in drafts, and the history of answer edits;
+  - and the raw Stripe and Calendly payloads, which repeat all of the above.
+  - If the survey's email, name or postcode question cannot be found, the export stops and
+    writes nothing, rather than copy those answers unmasked.
+- **Kept:** every answer, including the two open questions as people typed them (any email
+  address or report link in the text masked; a name someone typed into it can remain),
+  demographics, archetypes and scores, payments (amounts, plans, dates), events, and the
+  internal ids that join the tables.
 - `survey_submission` and `survey_partial_save` gain `is_likely_test` and `test_reasons`. They
   flag staff emails and runs too fast to be real, using the admin panel's rule.
 - **Not in it:**
