@@ -17,6 +17,7 @@ let linkRows: Row[] = [];
 let untitledRows: Row[] = [];
 let indexedIds: string[] = [];
 let previousOpen: string[] | null = null;
+let previousSeen: Record<string, string> = {};
 let failCorpus = false;
 const dbPaths: string[] = [];
 
@@ -35,7 +36,9 @@ vi.mock("@features/admin/server/supabase", () => ({
     if (path.includes("source=eq.notion&order=source_id.asc"))
       return ok(offset === 0 ? indexedIds.map((source_id) => ({ source_id })) : []);
     if (path.includes("noticed_by=eq.notion-reach"))
-      return ok(previousOpen ? [{ meta: { reach_open: previousOpen } }] : []);
+      return ok(
+        previousOpen ? [{ meta: { reach_open: previousOpen, reach_seen: previousSeen } }] : []
+      );
     return ok([]);
   }),
 }));
@@ -156,6 +159,29 @@ describe("notionLinksIn", () => {
   it("keeps a link whose title has a stray percent sign instead of failing the run", () => {
     expect(notionLinksIn(`https://www.notion.so/Plan-100%-done-${flat(A)}`)).toEqual([
       { id: A, hint: "Plan 100% done" },
+    ]);
+  });
+
+  it("reads the id a link ends with, even after a date in the title", () => {
+    expect(toNotionId(`Weekly-20261011-${flat(A)}`)).toBe(A);
+    expect(notionLinksIn(`https://www.notion.so/Weekly-20261011-${flat(A)}`)).toEqual([
+      { id: A, hint: "Weekly 20261011" },
+    ]);
+  });
+
+  it("counts only the team's own hosts: not Notion's terms, file proxies or apps", () => {
+    for (const url of [
+      `https://notion.notion.site/Terms-and-Privacy-${flat(C)}`,
+      `https://www.notion.so/image/https%3A%2F%2Fs3.amazonaws.com%2F${flat(C)}`,
+      `https://www.notion.so/signed/https%3A%2F%2Fs3.amazonaws.com%2F${flat(C)}`,
+      `https://calendar.notion.so/event/${flat(C)}`,
+      `https://mail.notion.so/inbox/${flat(C)}`,
+      `https://other-company.notion.site/Page-${flat(C)}`,
+    ]) {
+      expect(notionLinksIn(url)).toEqual([]);
+    }
+    expect(notionLinksIn(`https://loveiq.notion.site/Careers-${flat(C)}`)).toEqual([
+      { id: C, hint: "Careers" },
     ]);
   });
 
@@ -292,7 +318,7 @@ describe("buildReachNotice", () => {
     expect(n.detail).toContain('add "Claude connection"');
     expect(n.detail).toContain("disconnect it and add it again");
     expect(n.kind).toBe("notion-reach");
-    expect(n.meta).toEqual({ reach_open: [A, B].sort() });
+    expect(n.meta?.reach_open).toEqual([A, B].sort());
   });
 
   it("names one page in the singular and leaves out the count when everything is new", () => {
@@ -305,7 +331,7 @@ describe("buildReachNotice", () => {
     expect(n.headline).toBe("Jarvis can now open 1 Notion page it could not before");
     expect(n.detail).toContain(`"Glossary" https://www.notion.so/${flat(C)}`);
     expect(n.detail).not.toContain("Connections");
-    expect(n.meta).toEqual({ reach_open: [] });
+    expect(n.meta?.reach_open).toEqual([]);
   });
 
   it("fits the stored body however many pages there are, the fix and the evidence included", async () => {
@@ -348,7 +374,7 @@ describe("buildReachNotice", () => {
     expect(body).toContain("To fix one:");
     expect(body).toContain("every page under it follows");
     expect(body).toContain("Evidence: 60 Notion pages linked by the team");
-    expect(n.meta).toEqual({ reach_open: [...ids].sort() });
+    expect(n.meta?.reach_open).toEqual([...ids].sort());
   });
 
   it("says how many asked pages were dead links, so the counts add up", () => {
@@ -367,7 +393,7 @@ describe("buildReachNotice", () => {
 
   it("keeps a page it could not re-check in the reported set", () => {
     const n = buildReachNotice({ ...base, fresh: [A], still: [], fixed: [], carried: [C, A] });
-    expect(n.meta).toEqual({ reach_open: [A, C].sort() });
+    expect(n.meta?.reach_open).toEqual([A, C].sort());
   });
 });
 
@@ -392,6 +418,7 @@ describe("checkNotionReach", () => {
     untitledRows = [];
     indexedIds = [];
     previousOpen = null;
+    previousSeen = {};
     failCorpus = false;
     pageStatus = {};
     pageBlocks = {};
@@ -439,7 +466,7 @@ describe("checkNotionReach", () => {
     });
     expect(recorded[0]!.evidence).toContain("4 asked one by one, 1 shown open");
     expect(recorded).toHaveLength(1);
-    expect(recorded[0]!.meta).toEqual({ reach_open: [C, E].sort() });
+    expect(recorded[0]!.meta?.reach_open).toEqual([C, E].sort());
     // D answered 429: never "all readable" while one went unanswered.
     expect(r.summary).toBe(
       "2 linked Notion pages Jarvis cannot open (Playbook, untitled); 1 more could not be checked"
@@ -472,7 +499,7 @@ describe("checkNotionReach", () => {
     expect(
       dbPaths.some((p) => p.includes("or=(source.in.(notion,drive,doc),period_end.gte.2026-07-13)"))
     ).toBe(true);
-    expect(recorded[0]!.meta).toEqual({ reach_open: [D] });
+    expect(recorded[0]!.meta?.reach_open).toEqual([D]);
     expect(r.missing).toBe(1);
   });
 
@@ -531,7 +558,7 @@ describe("checkNotionReach", () => {
     expect(r.fixed).toBe(2);
     expect(r.visibleNotIndexed).toBe(1); // C opens and is not indexed yet; D is
     expect(recorded[0]!.headline).toBe("Jarvis can now open 2 Notion pages it could not before");
-    expect(recorded[0]!.meta).toEqual({ reach_open: [] });
+    expect(recorded[0]!.meta?.reach_open).toEqual([]);
   });
 
   it("never calls a page fixed or new when it simply was not checked", async () => {
@@ -575,7 +602,7 @@ describe("checkNotionReach", () => {
     pageStatus = { [F]: 404 };
     const r = await checkNotionReach(NOW);
     expect(r).toMatchObject({ missing: 1, fresh: 1, noticed: true });
-    expect(recorded[0]!.meta).toEqual({ reach_open: [F] });
+    expect(recorded[0]!.meta?.reach_open).toEqual([F]);
   });
 
   it("re-checks a reported page Jarvis now holds instead of trusting the copy", async () => {
@@ -627,7 +654,9 @@ describe("checkNotionReach", () => {
     const asked = notionPaths.filter((p) => /^\/blocks\/[^/]+$/.test(p)).map((p) => p.slice(8));
     expect(asked).toEqual([hidden]);
     expect(r).toMatchObject({ missing: 1, fresh: 1 });
-    expect(recorded[0]!.detail).toContain('linked in the relation "Priority" on 📊 KPI');
+    expect(recorded[0]!.detail).toContain(
+      `• A database that the relation "Priority" on 📊 KPI points to: https://www.notion.so/${flat(hidden)}`
+    );
   });
 
   it("asks what it reported before anything else, so a fix is never starved by new links", async () => {
@@ -741,15 +770,103 @@ describe("checkNotionReach", () => {
     expect(r.problem).toBeNull();
   });
 
-  it("keeps a reported page referenced when its mentions could not be re-read today", async () => {
-    // D was reported because page A mentions it. A cannot be read today: D must stay
-    // "still", not silently drop off and come back as "new" tomorrow.
-    previousOpen = [D];
+  it("holds a reported page it could not see today, without calling it linked", async () => {
+    // D was reported because page A mentions it, and A cannot be re-read today. Dropping D
+    // would announce it as new tomorrow; listing it would call it linked on no evidence.
+    previousOpen = [C, D];
+    previousSeen = { [C]: "2026-10-10", [D]: "2026-10-10" };
+    untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
+    pageReadStatus = { [A]: 502 };
+    pageStatus = { [D]: 404 }; // C answers 200: fixed, so a notice is written today
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ fixed: 1, missing: 0, fresh: 0 });
+    expect(recorded[0]!.meta?.reach_open).toEqual([D]);
+    expect(recorded[0]!.meta?.reach_seen).toEqual({ [D]: "2026-10-10" });
+    expect(recorded[0]!.detail).not.toContain(flat(D));
+  });
+
+  it("lets a held page go once nobody has been seen linking it for two weeks", async () => {
+    previousOpen = [C, D];
+    previousSeen = { [D]: "2026-09-20" };
     untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
     pageReadStatus = { [A]: 502 };
     pageStatus = { [D]: 404 };
+    await checkNotionReach(NOW);
+    expect(recorded[0]!.meta?.reach_open).toEqual([]);
+  });
+
+  it("records today as the day a page was seen linked", async () => {
+    linkRows = [row({ body: `https://www.notion.so/${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    await checkNotionReach(NOW);
+    expect(recorded[0]!.meta?.reach_seen).toEqual({ [C]: "2026-10-11" });
+  });
+
+  it("survives a week of real days: a failed listing on Monday does not make Tuesday 'new'", async () => {
+    const hidden = "4a1b0cbe-f1a3-8000-9c76-ce4ad7b61646";
+    const carryOver = () => {
+      const meta = recorded[recorded.length - 1]!.meta as {
+        reach_open: string[];
+        reach_seen: Record<string, string>;
+      };
+      previousOpen = meta.reach_open;
+      previousSeen = meta.reach_seen;
+    };
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    databaseObjects = [
+      {
+        id: B,
+        title: [{ plain_text: "📊 KPI" }],
+        properties: { Priority: { type: "relation", relation: { database_id: hidden } } },
+      },
+    ];
+    pageStatus = { [C]: 404, [hidden]: 404 };
+
+    await checkNotionReach(NOW); // Sunday: both new
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]!.meta?.reach_open).toEqual([C, hidden].sort());
+    carryOver();
+
+    searchStatus = 502; // Monday: the listing fails, so the relation goes unseen
+    const monday = await checkNotionReach(MONDAY);
+    expect(recorded).toHaveLength(2); // the Monday reminder
+    expect(recorded[1]!.meta?.reach_open).toEqual([C, hidden].sort()); // held, not dropped
+    expect(recorded[1]!.detail).not.toContain(flat(hidden)); // and not called linked
+    expect(monday.summary).toContain("Notion's database list could not be read in full");
+    carryOver();
+
+    searchStatus = 200; // Tuesday: seen again; nothing is new, so nothing is said
+    const tuesday = await checkNotionReach(new Date("2026-10-13T05:20:00Z"));
+    expect(tuesday).toMatchObject({ fresh: 0, missing: 2, noticed: false });
+    expect(recorded).toHaveLength(2);
+  });
+
+  it("skips a database in Notion's trash, and its relations", async () => {
+    const hidden = "4a1b0cbe-f1a3-8000-9c76-ce4ad7b61646";
+    databaseObjects = [
+      {
+        id: E,
+        in_trash: true,
+        title: [{ plain_text: "Old board" }],
+        properties: { Link: { type: "relation", relation: { database_id: hidden } } },
+      },
+    ];
+    linkRows = [row({ body: `https://www.notion.so/${flat(E)}` })];
+    trashed = new Set([E]);
     const r = await checkNotionReach(NOW);
-    expect(r).toMatchObject({ missing: 1, fresh: 0, fixed: 0 });
+    expect(notionPaths).not.toContain(`/blocks/${hidden}`);
+    expect(notionPaths).toContain(`/blocks/${E}`); // asked like any page: a dead link
+    expect(r).toMatchObject({ linked: 0, trashed: 1 });
+  });
+
+  it("reads the corpus and the last report with the queries that keep it honest", async () => {
+    await checkNotionReach(NOW);
+    const links = dbPaths.find((p) => p.includes("fts=fts(simple)"))!;
+    // Its own notice links every reported page: without this it would never age out.
+    expect(links).toContain("&source=neq.notice&");
+    expect(dbPaths.find((p) => p.includes("noticed_by=eq.notion-reach"))).toContain(
+      "&order=updated_at.desc&limit=1"
+    );
   });
 
   it("does not ask Notion about a link to the page it sits on", async () => {

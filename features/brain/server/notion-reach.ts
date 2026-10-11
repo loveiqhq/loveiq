@@ -54,21 +54,33 @@ export const MAX_CHECKS = 200;
 export const MAX_MENTION_PAGES = 20;
 const MAX_REF_ROWS = 5000;
 const MENTION_BLOCK_PAGES = 10;
-// The workspace's public pages live on loveiq.notion.site (none linked on 2026-10-11).
-const NOTION_HOSTS =
-  "notion.so | www.notion.so | app.notion.com | notion.site | loveiq.notion.site";
+/** The hosts a team page lives on; the workspace's public pages are loveiq.notion.site. */
+const TEAM_HOSTS: ReadonlySet<string> = new Set([
+  "notion.so",
+  "www.notion.so",
+  "app.notion.com",
+  "loveiq.notion.site",
+]);
+const NOTION_HOSTS = [...TEAM_HOSTS].join(" | ");
+/** First path segments that are Notion's own pages (terms) or its file proxies, never ours. */
+const NOT_PAGES: ReadonlySet<string> = new Set(["notion", "image", "signed"]);
+/** How long a reported page Jarvis did not see linked today is kept while a run was partial. */
+export const HOLD_DAYS = 14;
 /** Documents whose links stay current while the document exists (see the window below). */
 export const LIVING_SOURCES: ReadonlySet<string> = new Set(["notion", "drive", "doc"]);
 
-const UUID = /([0-9a-f]{8})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{12})/gi;
+/**
+ * The id a Notion URL segment ENDS with. Unanchored, "Weekly-20261011-<id>" read the date
+ * as the id's first eight digits and reported a page that does not exist.
+ */
+const TRAILING_ID = /(?:^|[^0-9a-f])([0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i;
 const NOTION_URL = /https?:\/\/(?:[\w-]+\.)*notion\.(?:so|site|com)\/[^\s<>()[\]"'`|]+/gi;
 
 /** A Notion id in any of its spellings, as the API's dashed lowercase, or null. */
 export function toNotionId(raw: string): string | null {
-  const all = [...raw.matchAll(UUID)];
-  const m = all[all.length - 1];
-  if (!m) return null;
-  return `${m[1]}-${m[2]}-${m[3]}-${m[4]}-${m[5]}`.toLowerCase();
+  const hex = TRAILING_ID.exec(raw.trim())?.[1]?.replace(/-/g, "").toLowerCase();
+  if (!hex) return null;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** A stray "%" ("Plan-100%-done-…") makes decodeURIComponent throw; one link must not end the run. */
@@ -90,8 +102,9 @@ export interface NotionLink {
  * Every Notion page or database a piece of text links to.
  *
  * `?p=` is the page open in a side peek and `?v=` is only a VIEW of the database in
- * the path, so p counts and v does not. Pages under `notion.so/notion/` are Notion's
- * own (its terms and privacy policy, linked from every Notion email), never ours.
+ * the path, so p counts and v does not. Only the team's own hosts count: Notion's terms
+ * (`notion.so/notion/…`, `notion.notion.site/…`, linked from every Notion email), its
+ * file proxies (`/image/`, `/signed/`), its API and its mail or calendar apps never do.
  */
 export function notionLinksIn(text: string): NotionLink[] {
   const out = new Map<string, NotionLink>();
@@ -102,13 +115,17 @@ export function notionLinksIn(text: string): NotionLink[] {
     } catch {
       continue;
     }
-    // api.notion.com/v1/blocks/<id> in code and docs is not a page anybody opens.
-    if (/^(api|developers)\./i.test(url.hostname)) continue;
+    if (!TEAM_HOSTS.has(url.hostname.toLowerCase())) continue;
     const segments = url.pathname.split("/").filter(Boolean);
-    if (segments[0]?.toLowerCase() === "notion") continue;
+    if (NOT_PAGES.has(segments[0]?.toLowerCase() ?? "")) continue;
     const last = decodeSafely(segments[segments.length - 1] ?? "");
     const pathId = toNotionId(last);
-    const words = last.replace(UUID, "").replace(/[-_]+/g, " ").trim();
+    const idText = pathId ? (TRAILING_ID.exec(last.trim())?.[1] ?? "") : "";
+    const words = last
+      .trim()
+      .slice(0, last.trim().length - idText.length)
+      .replace(/[-_]+/g, " ")
+      .trim();
     const hint = pathId && words && !/^[0-9a-f\s]+$/i.test(words) ? words : null;
     const peek = url.searchParams.get("p");
     const peekId = peek ? toNotionId(peek) : null;
@@ -167,6 +184,8 @@ export interface Ref {
   where: string;
   /** The day that record describes, YYYY-MM-DD, or null when it has none. */
   day: string | null;
+  /** Read off a database's relation: the target is a database, and it has no link text. */
+  relation?: boolean;
 }
 
 export interface Gap {
@@ -224,6 +243,9 @@ function gapLine(gap: Gap): string {
   const first = refs[0];
   const where = first ? `linked in ${clip(first.where)}` : "reported before";
   const more = refs.length > 1 ? ` and ${plural(refs.length - 1, "other place")}` : "";
+  if (!gap.hint && first?.relation) {
+    return `• A database that ${clip(first.where)} points to${more}: ${openUrl(gap.id)}`;
+  }
   return gap.hint
     ? `• "${clip(gap.hint)}", ${where}${more}: ${openUrl(gap.id)}`
     : `• A page ${where}${more} (the link carries no title): ${openUrl(gap.id)}`;
@@ -258,6 +280,8 @@ export function buildReachNotice(input: {
   unreached: number;
   /** Asked, and found in Notion's trash: dead links, no longer counted as linked. */
   trashed?: number;
+  /** The day each reported page was last seen linked; today when not given. */
+  seenOn?: (id: string) => string;
   day: string;
 }): NoticeInput {
   const { gaps, fresh, still, fixed } = input;
@@ -296,6 +320,7 @@ export function buildReachNotice(input: {
   const room = MAX_BODY_CHARS - 100 - evidence.length;
   let shown = items.length;
   while (shown > 0 && render(shown).length > room) shown -= 1;
+  const reachOpen = [...new Set([...fresh, ...still, ...(input.carried ?? [])])].sort();
   const headline = open
     ? `Jarvis cannot open ${plural(open, "Notion page")} the team links to` +
       (fresh.length && still.length ? ` (${fresh.length} new)` : "")
@@ -305,7 +330,10 @@ export function buildReachNotice(input: {
     detail: render(shown),
     kind: REACH_KIND,
     evidence,
-    meta: { reach_open: [...new Set([...fresh, ...still, ...(input.carried ?? [])])].sort() },
+    meta: {
+      reach_open: reachOpen,
+      reach_seen: Object.fromEntries(reachOpen.map((id) => [id, input.seenOn?.(id) ?? input.day])),
+    },
   };
 }
 
@@ -314,6 +342,8 @@ export function buildReachNotice(input: {
 /** The parts of a database object from `/search` this check reads. */
 type NotionDatabase = {
   id?: string;
+  archived?: boolean;
+  in_trash?: boolean;
   title?: Array<{ plain_text?: string }>;
   properties?: Record<string, { type?: string; relation?: { database_id?: string } } | null>;
 };
@@ -526,6 +556,8 @@ export async function checkNotionReach(
   // listing only costs requests: every database link is then asked one by one.
   const databases = new Set<string>();
   const relations: Array<{ target: string; where: string }> = [];
+  /** The listing failed or stopped early: relations may be missing (see the hold below). */
+  let listingPartial = false;
   try {
     let cursor: string | undefined;
     for (let i = 0; i < 5; i++) {
@@ -536,7 +568,9 @@ export async function checkNotionReach(
       });
       for (const db of (json.results as NotionDatabase[]) ?? []) {
         const id = db.id ? toNotionId(db.id) : null;
-        if (!id) continue;
+        // A database in the trash is neither open nor a source of relations; a link to it
+        // is asked like any page and dropped as a dead link.
+        if (!id || db.archived === true || db.in_trash === true) continue;
         databases.add(id);
         const name =
           (db.title ?? [])
@@ -553,16 +587,20 @@ export async function checkNotionReach(
       cursor = json.has_more ? String(json.next_cursor) : undefined;
       if (!cursor) break;
     }
+    if (cursor) listingPartial = true;
   } catch (err) {
     rethrowIfTokenRefused(err);
+    listingPartial = true;
     logger.warn({ err }, "brain notion-reach: database listing failed; checking links one by one");
   }
   for (const { target, where } of relations) {
-    if (!databases.has(target)) note(target, null, { where, day: null });
+    if (!databases.has(target)) note(target, null, { where, day: null, relation: true });
   }
 
   // ---- what was reported last time ---------------------------------------------
-  const previousRows = await chunkPage<{ meta?: { reach_open?: unknown } | null }>(
+  const previousRows = await chunkPage<{
+    meta?: { reach_open?: unknown; reach_seen?: unknown } | null;
+  }>(
     REACH_KIND,
     await supabaseFetch(
       `/rest/v1/brain_chunk?select=meta&source=eq.${NOTICE_SOURCE}` +
@@ -573,13 +611,18 @@ export async function checkNotionReach(
   const previous = new Set(
     Array.isArray(reported) ? reported.filter((x): x is string => typeof x === "string") : []
   );
+  const seenMeta = previousRows[0]?.meta?.reach_seen;
+  const lastSeen = (id: string): string | null => {
+    const v =
+      seenMeta && typeof seenMeta === "object" ? (seenMeta as Record<string, unknown>)[id] : null;
+    return typeof v === "string" ? v : null;
+  };
 
   // ---- ask Notion -----------------------------------------------------------------
   // Order: what was reported (so a fix is noticed), then pages Jarvis has never held,
   // freshest link first (the likely gaps), then pages it holds, shuffled by the day so
   // a run the clock cuts short never skips the same ones twice.
   const referenced = new Set([...gaps.keys()]);
-  if (mentionsPartial) for (const id of previous) referenced.add(id);
   const reach = new Map<string, Reach>();
   for (const id of new Set([...referenced, ...previous])) {
     if (databases.has(id)) reach.set(id, "visible");
@@ -598,7 +641,7 @@ export async function checkNotionReach(
       .sort((a, b) => shuffle(a).localeCompare(shuffle(b))),
   ];
   let asked = 0;
-  let trashed = 0;
+  const trashed = new Set<string>();
   for (const id of toCheck) {
     if (asked >= MAX_CHECKS || isOutOfTime()) break;
     asked += 1;
@@ -608,7 +651,7 @@ export async function checkNotionReach(
       // would fix nothing. It leaves the count, and a reported one quietly drops off.
       if (block.in_trash === true || block.archived === true) {
         referenced.delete(id);
-        trashed += 1;
+        trashed.add(id);
       } else reach.set(id, "visible");
     } catch (err) {
       rethrowIfTokenRefused(err);
@@ -622,6 +665,24 @@ export async function checkNotionReach(
   }
 
   const { listed, fresh, still, fixed, carried } = diffReach(previous, reach, referenced);
+  /**
+   * A run that could not read every mention page or the whole database listing may not
+   * have SEEN a page that is still linked. Dropping it from the reported set would
+   * announce it as new the day it is seen again, so it is held, for HOLD_DAYS after it
+   * was last seen linked: long enough for the per-day order to come back to its page,
+   * short enough that a dead link still ages out. Held pages are not listed as linked.
+   */
+  const holdFrom = new Date(now.getTime() - HOLD_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const heldOver =
+    mentionsPartial || listingPartial
+      ? [...previous].filter(
+          (id) =>
+            !referenced.has(id) &&
+            !trashed.has(id) &&
+            reach.get(id) !== "visible" &&
+            (lastSeen(id) ?? day) >= holdFrom
+        )
+      : [];
   const unknown = [...reach.values()].filter((r) => r === "unknown").length;
   const unreached = [...referenced].filter((id) => !reach.has(id)).length;
   const visibleNotIndexed = [...reach].filter(
@@ -637,12 +698,13 @@ export async function checkNotionReach(
         fresh,
         still,
         fixed,
-        carried,
+        carried: [...carried, ...heldOver],
+        seenOn: (id) => (referenced.has(id) ? day : (lastSeen(id) ?? day)),
         linked,
         asked,
         listed: listedOpen,
         unreached,
-        trashed,
+        trashed: trashed.size,
         day,
       })
     : null;
@@ -668,6 +730,8 @@ export async function checkNotionReach(
       : linked
         ? `${linked === 1 ? "the one linked Notion page is" : `all ${linked} linked Notion pages are`} readable`
         : "found no Notion links to check";
+  // A failed listing still asks every link, but relations go unread: say so where it shows.
+  const caveat = listingPartial ? "; Notion's database list could not be read in full" : "";
   const problem =
     asked > 0 && unknown === asked
       ? `Notion answered none of the ${asked} questions it was asked`
@@ -682,14 +746,14 @@ export async function checkNotionReach(
     fixed: fixed.length,
     unknown,
     unreached,
-    trashed,
+    trashed: trashed.size,
     visibleNotIndexed,
     mentionPages: mentionRead,
     mentionTotal: mentionPages.size,
     problem,
     noticed,
     noticeFailed: due && !options.dryRun && !noticed,
-    summary,
+    summary: summary + caveat,
     notice,
   };
 }

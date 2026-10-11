@@ -746,13 +746,22 @@ export async function ingestNotion(
   }
 
   /**
-   * NEVER-INDEXED PAGES FIRST. A page shared with the integration late (the 📊 KPI
-   * database, 61 rows, connected on 2026-10-11) is exactly what someone is waiting to
-   * ask about, and it used to queue behind every edited page and every builder-version
-   * rebuild in database-listing order. The sort is stable, so the order is otherwise
-   * unchanged.
+   * NEVER-INDEXED PAGES TAKE EVERY OTHER SLOT. A page shared with the integration late
+   * (the 📊 KPI database, 61 rows, connected on 2026-10-11) is exactly what someone is
+   * waiting to ask about, and it used to queue behind every edited page and every
+   * builder-version rebuild in database-listing order. Alternating rather than first, so
+   * a large newly shared teamspace cannot hold every edit to an indexed page back for a
+   * day either. Listing order is kept within each half.
    */
-  toFetch.sort((a, b) => Number(known.has(a.sourceId)) - Number(known.has(b.sourceId)));
+  const unseen = toFetch.filter((i) => !known.has(i.sourceId));
+  const seenBefore = toFetch.filter((i) => known.has(i.sourceId));
+  toFetch.length = 0;
+  for (let i = 0; i < Math.max(unseen.length, seenBefore.length); i++) {
+    const a = unseen[i];
+    const b = seenBefore[i];
+    if (a) toFetch.push(a);
+    if (b) toFetch.push(b);
+  }
 
   // ---- fetch what the clock allows -----------------------------------------
   //

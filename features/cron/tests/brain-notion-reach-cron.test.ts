@@ -101,10 +101,19 @@ describe("GET /api/cron/brain-notion-reach", () => {
     );
   });
 
-  it("gives the check a clock that runs out before the function is killed", async () => {
-    await call();
-    const isOutOfTime = mockCheck.mock.calls[0]![1] as () => boolean;
-    expect(isOutOfTime()).toBe(false);
+  it("gives the check a clock that runs out at 60 s, well before the 120 s kill", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-12T05:20:00Z"));
+      await call();
+      const isOutOfTime = mockCheck.mock.calls[0]![1] as () => boolean;
+      vi.setSystemTime(new Date("2026-10-12T05:20:59Z"));
+      expect(isOutOfTime()).toBe(false);
+      vi.setSystemTime(new Date("2026-10-12T05:21:01Z"));
+      expect(isOutOfTime()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails loudly when a notice was due and could not be written", async () => {
