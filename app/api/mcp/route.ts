@@ -4657,7 +4657,7 @@ async function callTool(
         new Date(Date.now() - (intArg(args.days, 30, 1, 4000) - 1) * 86_400_000)
           .toISOString()
           .slice(0, 10);
-      const sales = await loadSales();
+      const sales = await loadSales(from, until || today);
       if (!sales) {
         return textResult(
           "The payments could not be read right now. This is an outage, not a result.",
@@ -5889,6 +5889,12 @@ async function callTool(
   }
 
   if (name === "customer_feedback") {
+    for (const key of ["since", "until"] as const) {
+      // A number is not a day: dropping it would answer for all time instead.
+      if (args[key] != null && typeof args[key] !== "string") {
+        return textResult(`\`${key}\` must be a day like 2026-10-01, as text.`, true);
+      }
+    }
     const since = typeof args.since === "string" ? args.since.trim() : "";
     const until = typeof args.until === "string" ? args.until.trim() : "";
     for (const [key, val] of [

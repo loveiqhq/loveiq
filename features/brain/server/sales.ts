@@ -49,11 +49,20 @@ interface Row {
   landing: string | null;
 }
 
-/** Every real succeeded payment, comps included. Null when the read fails. */
-export async function loadSales(): Promise<Sale[] | null> {
+/**
+ * Every real succeeded payment paid in the UTC days `since` to `until`, comps included.
+ * Read for the period only, so the read stays small however long the ledger grows. Null
+ * when the read fails.
+ */
+export async function loadSales(since: string, until: string): Promise<Sale[] | null> {
+  const from = `${since}T00:00:00Z`;
+  const to = `${nextDay(until)}T00:00:00Z`;
   const rows = await readAll<Row>(
     // The filters first, in one literal, where payment-test-exclusion.test.ts reads them.
     "/rest/v1/payment?is_test=is.false&status=eq.succeeded&order=id.asc" +
+      // By the day paid, and by the attempt's day when no payment time was recorded.
+      `&or=(and(payment_date_time.gte.${from},payment_date_time.lt.${to}),` +
+      `and(payment_date_time.is.null,created_date_time.gte.${from},created_date_time.lt.${to}))` +
       "&select=amount,refund_amount,currency,payment_date_time,created_date_time," +
       "plan:metadata->>plan,price_list:metadata->>experimentGroup,device:metadata->>deviceType," +
       "source:metadata->>trafficSource,country_tier:metadata->>countryTier," +
@@ -78,6 +87,8 @@ export async function loadSales(): Promise<Sale[] | null> {
   );
 }
 
+const nextDay = (day: string) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 const eur = (n: number) => `EUR ${n.toFixed(2)}`;
 const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 

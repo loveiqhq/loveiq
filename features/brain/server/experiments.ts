@@ -24,6 +24,7 @@ import {
 } from "@features/admin/server/experiment-readouts";
 import { MIN_CELL_COUNT } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { reportingDay } from "@shared/time/reporting-day";
 import { AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
 import { loadPeople } from "@features/brain/server/people";
 
@@ -141,10 +142,19 @@ export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: nu
   if (hi === 0) {
     return "  Needed: nobody has bought in any arm yet, so how many people a result needs cannot be worked out.";
   }
+  // Level arms are sized for a 50% lift, or for halfway to 100% when a 50% lift would pass
+  // it (above 66.7% there is no such rate, and the formula would return NaN).
+  const lift = lo * 1.5 < 1;
   const [a, b, basis] =
     hi > lo
       ? [hi, lo, `to tell ${pct(hi)} from ${pct(lo)} apart`]
-      : [lo * 1.5, lo, `to see a 50% lift on ${pct(lo)}, since the arms are level so far`];
+      : [
+          lift ? lo * 1.5 : (1 + lo) / 2,
+          lo,
+          lift
+            ? `to see a 50% lift on ${pct(lo)}, since the arms are level so far`
+            : `to see ${pct(lo)} rise halfway to 100%, since the arms are level so far`,
+        ];
   // The readout will not judge until every arm has MIN_CELL_COUNT buyers.
   const need = Math.max(perArmSample(a, b), b > 0 ? Math.ceil(MIN_CELL_COUNT / b) : 0);
   const have = Math.min(...arms.map((x) => x.n));
@@ -159,7 +169,8 @@ export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: nu
       "alone will not settle it: test a bigger change, or decide on an earlier step such as checkout starts."
     );
   }
-  return `${head} At ${perDay.toFixed(1)} a day per arm, that is around ${isoDay(now + days * DAY_MS)}, if the gap holds.`;
+  // The day as the team reads it, in Berlin.
+  return `${head} At ${perDay.toFixed(1)} a day per arm, that is around ${reportingDay(new Date(now + days * DAY_MS))}, if the gap holds.`;
 }
 
 /** A running test's readout since its own start, by the same code /admin's overview runs. */

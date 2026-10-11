@@ -32,10 +32,24 @@ describe("loadFeedback", () => {
       path.startsWith("/rest/v1/report_section_feedback")
         ? answer([vote(), vote({ app_user: { email: "ec@loveiq.org" } }), vote({ app_user: null })])
         : answer([
-            { title: 'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"' },
-            { title: 'Trustpilot review of LoveIQ, 5 stars, 2026-06-16: "A"' },
+            {
+              source_id: "thread:b",
+              title: 'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"',
+            },
+            {
+              source_id: "thread:a",
+              title: 'Trustpilot review of LoveIQ, 5 stars, 2026-06-16: "A"',
+            },
             // A long review is several parts with one title.
-            { title: 'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"' },
+            {
+              source_id: "thread:b#2",
+              title: 'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"',
+            },
+            // Another review that happens to read the same: still a second review.
+            {
+              source_id: "thread:c",
+              title: 'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"',
+            },
           ])
     );
     const f = await loadFeedback("2026-10-01", "2026-10-31");
@@ -45,10 +59,13 @@ describe("loadFeedback", () => {
     );
     expect(votes).toContain("app_user(email)");
     expect(reviews).toContain("source=eq.gmail&title=like.Trustpilot%20review*");
+    // Every part, a page at a time, not the first 200.
+    expect(reviews).toContain("&limit=1000&offset=0");
     expect(f!.votes).toHaveLength(2);
-    // Newest first by the date in the title, each once.
+    // Newest first by the date in the title, each review once.
     expect(f!.reviews).toEqual([
       'Trustpilot review of LoveIQ, 5 stars, 2026-06-16: "A"',
+      'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"',
       'Trustpilot review of LoveIQ, 4 stars, 2026-06-12: "B"',
     ]);
   });

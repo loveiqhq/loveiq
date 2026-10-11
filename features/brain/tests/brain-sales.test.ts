@@ -46,13 +46,18 @@ describe("loadSales", () => {
         },
       ],
     });
-    const sales = await loadSales();
+    const sales = await loadSales("2026-10-01", "2026-10-31");
     const path = String(mockSupabaseFetch.mock.calls[0]![0]);
     // Tests and failed attempts never count (is_test is never null: NOT NULL DEFAULT false).
     expect(path).toContain("/rest/v1/payment?is_test=is.false&status=eq.succeeded&order=id.asc");
     expect(path).toContain("price_list:metadata->>experimentGroup");
     expect(path).toContain("device:metadata->>deviceType");
     expect(path).toContain("&limit=1000&offset=0");
+    // Only the period is read, by the day paid (or the attempt's day when none was kept).
+    expect(path).toContain(
+      "&or=(and(payment_date_time.gte.2026-10-01T00:00:00Z,payment_date_time.lt.2026-11-01T00:00:00Z)," +
+        "and(payment_date_time.is.null,created_date_time.gte.2026-10-01T00:00:00Z,created_date_time.lt.2026-11-01T00:00:00Z))"
+    );
     expect(sales).toEqual([
       {
         // The day it was paid, not the day the attempt began.
@@ -74,7 +79,7 @@ describe("loadSales", () => {
 
   it("is null when the read fails, so an outage is never read as no sales", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 500 });
-    await expect(loadSales()).resolves.toBeNull();
+    await expect(loadSales("2026-10-01", "2026-10-31")).resolves.toBeNull();
   });
 });
 

@@ -7128,6 +7128,9 @@ describe("/api/mcp", () => {
         { since: "last week" },
         { since: "2026-02-30" },
         { since: "2026-10-05", until: "2026-10-01" },
+        // A number is not a day; dropping it would have answered for all time.
+        { since: 20261001 },
+        { until: 20261031 },
       ]) {
         expect((await call(args)).isError, JSON.stringify(args)).toBe(true);
       }

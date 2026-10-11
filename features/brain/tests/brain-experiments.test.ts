@@ -265,6 +265,26 @@ describe("experiments: the registry, read", () => {
       expect(await needed(o)).toContain("At 100.0 a day per arm, that is around 2026-09-30");
     });
 
+    it("sizes level arms above two thirds for halfway to 100%, never NaN", async () => {
+      // 80% a side: a 50% lift would be 120%, which no rate can be.
+      const line = await needed(split(100, 80, 80));
+      expect(line).toContain("to see 80.0% rise halfway to 100%, since the arms are level so far");
+      expect(line).not.toContain("NaN");
+      expect(line).toMatch(/about \d+ people per arm/);
+    });
+
+    it("gives the day as Berlin reads it", async () => {
+      const o = split(100, 10, 5);
+      for (const sub of o.submissions) sub.created_date_time = "2026-09-26T08:00:00Z";
+      rows = [row()];
+      // 23:30 UTC on the 26th is the 27th in Berlin; four days on is the 1st there, the 30th in UTC.
+      const text = await listExperiments(
+        Date.parse("2026-09-26T23:30:00Z"),
+        vi.fn(async () => o)
+      );
+      expect(text).toContain("that is around 2026-10-01, if the gap holds");
+    });
+
     it("cannot size a test before anyone buys, and says so", async () => {
       expect(await needed(split(100, 0, 0))).toBe(
         "  Needed: nobody has bought in any arm yet, so how many people a result needs cannot be worked out."
