@@ -1783,7 +1783,6 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
   return { element, height };
 }
 
-
 // ─── Drop-off per question, week by week (Notion KPI page) ────────────────
 //
 // Built to be read in ten seconds, as Mark asked of every KPI chart (pictures,
@@ -1989,7 +1988,8 @@ export function renderDropoutWeekly(p: DropoffWeeklyPayload): {
               {row.q}
             </div>
             {row.r.map((rate, i) => {
-              const c = rate == null ? { bg: "transparent", fg: COLORS.textMuted } : weeklyCellColour(rate);
+              const c =
+                rate == null ? { bg: "transparent", fg: COLORS.textMuted } : weeklyCellColour(rate);
               return (
                 <div
                   key={i}
