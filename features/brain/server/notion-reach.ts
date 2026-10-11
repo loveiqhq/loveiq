@@ -536,8 +536,11 @@ export async function checkNotionReach(
       }
     } catch (err) {
       rethrowIfTokenRefused(err);
-      // One unreadable page costs its mentions this run, never the whole check.
-      mentionsPartial = true;
+      // One unreadable page costs its mentions this run, never the whole check. A page
+      // Jarvis lost access to answers 404/403 every day: that is not a partial read to
+      // wait out, and holding for it would keep every reported page held for good.
+      const status = statusOf(err);
+      if (status !== 404 && status !== 403) mentionsPartial = true;
       logger.warn({ err, pageId }, "brain notion-reach: could not re-read a page's mentions");
     }
   }

@@ -785,6 +785,16 @@ describe("checkNotionReach", () => {
     expect(recorded[0]!.detail).not.toContain(flat(D));
   });
 
+  it("does not hold for a mention page Jarvis has lost: that read will never succeed", async () => {
+    previousOpen = [C, D];
+    previousSeen = { [D]: "2026-10-10" };
+    untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
+    pageReadStatus = { [A]: 404 };
+    pageStatus = { [D]: 404 };
+    await checkNotionReach(NOW);
+    expect(recorded[0]!.meta?.reach_open).toEqual([]);
+  });
+
   it("lets a held page go once nobody has been seen linking it for two weeks", async () => {
     previousOpen = [C, D];
     previousSeen = { [D]: "2026-09-20" };
