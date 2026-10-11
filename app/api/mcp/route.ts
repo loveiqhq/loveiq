@@ -26,7 +26,7 @@ import {
   renderDesign,
   type ShowDesignOutcome,
 } from "@features/brain/server/see/figma";
-import { designChanges, sinceToMs } from "@features/brain/server/see/design-changes";
+import { designChanges, FILE_DEPTH, sinceToMs } from "@features/brain/server/see/design-changes";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { resolveCaller, signInChallenge, type Caller } from "@features/brain/server/sign-in";
@@ -659,6 +659,9 @@ const WRITTEN_SOURCES = new Set(["decision", "notice", "research"]);
 
 /** Tools whose results carry pixels, and so are rate-limited far more tightly. */
 const IMAGE_TOOLS = new Set(["show_design", "show_page"]);
+
+/** `design_changes` calls a minute, for everyone together; see the bucket in POST. */
+export const DESIGN_CHANGES_PER_MINUTE = 5;
 
 const NEVER_LIST = new Set([
   "admin_strategy_bet",
@@ -1815,17 +1818,23 @@ export const TOOLS = [
       "WHAT CHANGED IN A FIGMA DESIGN since a date, in ONE call: which frames, components and " +
       "text layers were added, removed, renamed or had their text changed, grouped by page and " +
       "frame with a link to each, and who saved each version and when, with its label and " +
-      "description. Use it for 'what changed in the report design this week', 'what did Marcus " +
-      "change on this page' or before reviewing a design link. NEVER compare versions by " +
+      "description. Use it for 'what changed in the report design this week', 'what changed " +
+      "on this page since the last review' or before reviewing a design link. It says who " +
+      "saved each version, not who made each change. NEVER compare versions by " +
       "reading node after node: Figma's allowance is shared by the whole team, and a " +
       "node-by-node comparison runs into its rate limit for everyone. " +
       "Pass the Figma link you were given: designs live in more than one file, and a link " +
       "names its file and, with node-id, the page or frame. For a page or frame the text is " +
-      "compared too; for a whole file only its pages, sections and frames are, because a " +
-      "whole file is too big to read twice in one call. It compares the newest saved version " +
+      "compared too; for a whole file only the pages, sections and frames in its top " +
+      `${FILE_DEPTH} levels are, because a whole file is too big to read twice in one call, and there a ` +
+      "layer shown as added or removed may only have moved up or deeper. " +
+      `It allows ${DESIGN_CHANGES_PER_MINUTE} comparisons a minute for everyone together, so ` +
+      "ask about the page or frame you need rather than going through a file frame by frame. " +
+      "It compares the newest saved version " +
       "with the last one saved before `since`, so edits after the newest save are not in it, " +
-      "and it compares names, layers and text, not colours, positions or images. Asking again " +
-      "about the same two versions is answered from a cache and costs Figma nothing.",
+      "and it compares names, layers and text, not colours, positions or images. A " +
+      "comparison of two versions is kept for a day when the shared cache is reachable, so " +
+      "asking again about the same two reads only the version list.",
     inputSchema: {
       type: "object",
       properties: {
@@ -6588,7 +6597,7 @@ export const MCP_INSTRUCTIONS =
   "picture, never from the node tree: a tree tells you a rectangle exists, not that it " +
   "collides with the text beside it. To know what CHANGED in a design, call " +
   "`design_changes` with the link: one call compares two saved versions and says who saved " +
-  "what, where comparing node by node would spend the whole team's Figma allowance. And " +
+  "each version, where comparing node by node would spend the whole team's Figma allowance. And " +
   "what is in Figma is not what shipped — a design can be ahead of the code, behind it or " +
   "never built — so `show_page` is the other " +
   "half: real screenshots of what a visitor actually gets, each carrying the date it was " +
@@ -6744,6 +6753,35 @@ export async function POST(request: Request) {
                 "Too many renders in the last minute (20/min on the image tools, separate " +
                 "from the 120/min on everything else). This is a limit on this door, not a " +
                 "problem with the design — wait a moment and ask again.",
+            },
+          ],
+          isError: true,
+        });
+      }
+    }
+    /**
+     * ONE BUCKET FOR EVERYONE, because Figma's allowance is one for everyone: a comparison can
+     * cost two of its per-minute file reads (15 a minute on Professional), so eight a minute
+     * would lock the whole team out of Figma, as on 2026-09-29. Keyed on the tool alone, not
+     * on the address like the image bucket, since every address spends the same allowance.
+     */
+    if (name === "design_changes") {
+      const figmaRate = await checkRateLimit("figma", {
+        bucket: "mcp-design-changes",
+        limit: DESIGN_CHANGES_PER_MINUTE,
+        windowMs: 60_000,
+      });
+      if (!figmaRate.allowed) {
+        return result(id, {
+          content: [
+            {
+              type: "text",
+              text:
+                `Too many design comparisons in the last minute (${DESIGN_CHANGES_PER_MINUTE} a ` +
+                "minute for everyone together, because each one can cost two of Figma's " +
+                "per-minute reads and that allowance is the whole team's). This is a limit on " +
+                "this door, not a problem with the design: wait a minute and ask about the one " +
+                "page or frame you need.",
             },
           ],
           isError: true,

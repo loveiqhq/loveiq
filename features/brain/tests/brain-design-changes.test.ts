@@ -42,8 +42,11 @@ import {
   designChanges,
   diffDesign,
   excerpt,
+  FILE_DEPTH,
+  MAX_READ_BYTES,
   renderChanges,
   sinceToMs,
+  textUpTo,
   type DesignNode,
 } from "@features/brain/server/see/design-changes";
 import {
@@ -233,7 +236,7 @@ describe("reading a Figma link", () => {
 
 describe("the comparison", () => {
   it("finds what was added, removed, renamed and rewritten", () => {
-    const { changes } = diffDesign(OLD_PAGE, NEW_PAGE, true);
+    const { changes } = diffDesign(OLD_PAGE, NEW_PAGE);
     expect(changes.map((c) => `${c.kind} ${c.id}`).sort()).toEqual([
       "added 10:5",
       "added 12:1",
@@ -251,7 +254,7 @@ describe("the comparison", () => {
   });
 
   it("lists only the outermost new layer, counting the text layers inside it", () => {
-    const { changes } = diffDesign(OLD_PAGE, NEW_PAGE, true);
+    const { changes } = diffDesign(OLD_PAGE, NEW_PAGE);
     // The two text layers inside the new "Badge" frame are part of it, not changes of their own.
     expect(changes.some((c) => c.id === "10:6" || c.id === "10:7")).toBe(false);
     expect(changes.find((c) => c.id === "10:5")?.texts).toBe(2);
@@ -276,7 +279,7 @@ describe("the comparison", () => {
       ],
       "Button/Secondary"
     );
-    expect(diffDesign(before, after, true).changes.map((c) => `${c.kind} ${c.id}`)).toEqual([
+    expect(diffDesign(before, after).changes.map((c) => `${c.kind} ${c.id}`)).toEqual([
       "renamed 20:1",
       "text I20:1;5:1",
     ]);
@@ -311,14 +314,14 @@ describe("the comparison", () => {
         },
       ],
     };
-    expect(diffDesign(before, after, false)).toEqual({
+    expect(diffDesign(before, after, FILE_DEPTH)).toEqual({
       changes: [expect.objectContaining({ kind: "renamed", id: "0:1", name: "Report v2" })],
       others: 1,
     });
   });
 
   it("says it grouped by page and frame, with links, and the same change once", () => {
-    expect(renderChanges(KEY, diffDesign(OLD_PAGE, NEW_PAGE, true), true)).toBe(
+    expect(renderChanges(KEY, diffDesign(OLD_PAGE, NEW_PAGE))).toBe(
       [
         "6 changes: 2 added, 2 removed, 1 renamed, 1 text layer rewritten.",
         "",
@@ -354,12 +357,77 @@ describe("the comparison", () => {
           report([{ id: "5:1", type: "FRAME", name: "Hero" }]),
           { id: "9:1", type: "CANVAS", name: "Rating", children: [] },
         ]),
-        false
+        FILE_DEPTH
       ),
-      false
+      FILE_DEPTH
     );
     expect(text.indexOf('added page "Rating"')).toBeGreaterThan(0);
     expect(text.indexOf('added page "Rating"')).toBeLessThan(text.indexOf('Page "Report"'));
+    // A page cannot move below the levels read, so its line carries no "or moved".
+    expect(text).toContain(`added page "Rating" https://www.figma.com/design/${KEY}?node-id=9-1`);
+  });
+
+  /**
+   * A WHOLE FILE IS READ ONLY FILE_DEPTH LEVELS DOWN, and a layer at that depth comes WITHOUT
+   * its children, so missing is not gone. The review of #562 moved a screen into a section
+   * and every layer in it was listed as removed. These trees are shaped the way Figma sends
+   * `?depth=3`: document, page, what is on the page, and what is inside that, childless.
+   */
+  describe("a whole file, read only so deep", () => {
+    const inside: DesignNode[] = [
+      { id: "20:1", type: "INSTANCE", name: "Button/Primary" },
+      { id: "20:2", type: "GROUP", name: "Header" },
+      { id: "20:3", type: "FRAME", name: "Price card" },
+    ];
+    const screen = (children?: DesignNode[]): DesignNode => ({
+      id: "10:1",
+      type: "FRAME",
+      name: "Checkout",
+      ...(children ? { children } : {}),
+    });
+    const file = (onPage: DesignNode[]): DesignNode => ({
+      id: "0:0",
+      type: "DOCUMENT",
+      children: [{ id: "0:1", type: "CANVAS", name: "Paygate", children: onPage }],
+    });
+    const atTop = file([screen(inside)]);
+    const inSection = file([
+      { id: "30:1", type: "SECTION", name: "Ready for dev", children: [screen()] },
+    ]);
+    const kinds = (from: DesignNode, to: DesignNode) =>
+      diffDesign(from, to, FILE_DEPTH).changes.map((c) => `${c.kind} ${c.id}`);
+
+    it("does not call a screen's layers removed when the screen moved into a section", () => {
+      expect(kinds(atTop, inSection)).toEqual(["added 30:1"]);
+    });
+
+    it("does not call them added when the screen moved out of a section again", () => {
+      expect(kinds(inSection, atTop)).toEqual(["removed 30:1"]);
+    });
+
+    it("says on the line itself that a layer gone from the top levels may only have moved", () => {
+      const wrapped = file([screen([{ id: "40:1", type: "FRAME", name: "Frame 12" }])]);
+      const text = renderChanges(
+        KEY,
+        diffDesign(file([screen([inside[0]!])]), wrapped, FILE_DEPTH),
+        FILE_DEPTH
+      );
+      expect(text).toContain("2 changes in the top 3 levels: 1 added, 1 removed, 0 renamed.");
+      expect(text).toContain('added frame "Frame 12" (or moved up from below the top 3 levels)');
+      expect(text).toContain('removed instance "Button/Primary" (or moved below the top 3 levels)');
+    });
+
+    it("says nothing changed only as far down as it looked", () => {
+      expect(renderChanges(KEY, { changes: [], others: 0 }, FILE_DEPTH)).toBe(
+        "No pages, sections or frames in the top 3 levels of the file were added, removed or " +
+          "renamed between these versions. Deeper layers, such as a frame in a section inside " +
+          "a section, and all text are compared only for one page or frame."
+      );
+      expect(renderChanges(KEY, { changes: [], others: 0 })).toBe(
+        "No frames, components or text layers were added, removed, renamed or rewritten " +
+          "between these versions."
+      );
+    });
   });
 
   it("caps long lists and says how many more there are", () => {
@@ -389,7 +457,7 @@ describe("the comparison", () => {
       frame(100, [...Array(12).fill("Buy now"), ...Array.from({ length: 20 }, (_, k) => `b${k}`)]),
       ...Array.from({ length: 40 }, (_, i) => frame(i + 200, ["X", "Y", "Z", "W", "V"])),
     ]);
-    const text = renderChanges(KEY, diffDesign(before, after, true), true);
+    const text = renderChanges(KEY, diffDesign(before, after));
     expect(text).toContain('text "Buy" → "Buy now" (×12)');
     expect(text).toContain("…and 13 more, not listed.");
     expect(text).toMatch(/…and changes inside \d+ more frames, not listed\./);
@@ -473,7 +541,7 @@ describe("designChanges, against a mocked Figma", () => {
     const out = await run(null);
     expect(calls()[2]).toBe(`https://api.figma.com/v1/files/${KEY}?version=v1&depth=3`);
     expect(out.text).toContain('renamed page "Report" → "Report v2"');
-    expect(out.text).toContain("Not compared: text (ask about one page or frame for it)");
+    expect(out.text).toContain("Not compared: anything deeper, text");
   });
 
   it("names a node that is in neither version, and where to look instead", async () => {
@@ -493,6 +561,85 @@ describe("designChanges, against a mocked Figma", () => {
     expect(out.text).toContain("which is new since then");
     expect(out.text).toContain('added page "Paygate"');
   });
+
+  it("reads a page's two versions one after the other, never both at once", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    figma({
+      read: async (v) => {
+        if (v === "v1") await held;
+        return ok({
+          name: "Report 3.0",
+          nodes: { "1:2": { document: v === "v1" ? OLD_PAGE : NEW_PAGE } },
+        });
+      },
+    });
+    const pending = run();
+    await vi.waitFor(() => expect(calls().some((u) => u.includes("version=v1"))).toBe(true));
+    // While the older version is still arriving, the newer one has not been asked for.
+    expect(calls().some((u) => u.includes("version=v4"))).toBe(false);
+    release();
+    expect((await pending).isError).toBe(false);
+    expect(calls().filter((u) => u.includes("version="))).toHaveLength(2);
+  });
+
+  it("treats the document itself, 0:0, as the whole file rather than reading all of it", async () => {
+    figma({
+      read: () =>
+        ok({ name: "Report 3.0", document: { id: "0:0", type: "DOCUMENT", children: [] } }),
+    });
+    await run("0:0");
+    expect(calls()[2]).toBe(`https://api.figma.com/v1/files/${KEY}?version=v1&depth=3`);
+  });
+});
+
+/**
+ * A DESIGN TOO BIG TO COMPARE MUST NOT BE HELD FIRST. `res.text()` took the whole body before
+ * its length was checked, so a 74 MB document cost 74 MB twice over before being refused.
+ */
+describe("reading no more than the cap", () => {
+  /** A body Figma would stream, counting how much of it was asked for. */
+  function streamed(chunks: number, size: number) {
+    const state = { pulled: 0 };
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (state.pulled === chunks) return controller.close();
+          state.pulled++;
+          controller.enqueue(new Uint8Array(size).fill(32));
+        },
+      },
+      { highWaterMark: 0 }
+    );
+    return { body, state };
+  }
+
+  it("refuses a body whose declared length is over the cap without reading it", async () => {
+    const { body, state } = streamed(1, 10);
+    const res = new Response(body, { headers: { "content-length": String(MAX_READ_BYTES + 1) } });
+    expect(await textUpTo(res, MAX_READ_BYTES)).toBeNull();
+    expect(state.pulled).toBe(0);
+  });
+
+  it("stops reading a body with no declared length once it passes the cap", async () => {
+    const { body, state } = streamed(10, 1_000_000);
+    expect(await textUpTo(new Response(body), 3_000_000)).toBeNull();
+    expect(state.pulled).toBeLessThan(10);
+  });
+
+  it("returns a body under the cap whole", async () => {
+    expect(await textUpTo(new Response('{"a":"€"}'), 100)).toBe('{"a":"€"}');
+  });
+
+  it("calls a page over the cap too big and asks for one frame in it", async () => {
+    figma({
+      read: () => new Response("{}", { headers: { "content-length": String(MAX_READ_BYTES + 1) } }),
+    });
+    const out = await run();
+    expect(out.isError).toBe(true);
+    expect(out.text).toContain("sent more than 40 MB");
+    expect(out.text).toContain("the one frame you need inside it");
+  });
 });
 
 describe("the cache", () => {
@@ -500,7 +647,7 @@ describe("the cache", () => {
     figma();
     const first = await run();
     expect(kvSets).toEqual([
-      { key: `jarvis:design-changes:v1:${KEY}:v1:v4:1:2`, options: { ex: 86_400 } },
+      { key: `jarvis:design-changes:v2:${KEY}:v1:v4:1:2`, options: { ex: 86_400 } },
     ]);
     mockFetch.mockClear();
     const second = await run();
@@ -575,6 +722,8 @@ describe("Figma's rate limit", () => {
     });
     const out = await run();
     expect(calls().filter((u) => u.includes("version=v1"))).toHaveLength(1);
+    // Nor is the newer version asked for once the older could not be read.
+    expect(calls().some((u) => u.includes("version=v4"))).toBe(false);
     expect(out.isError).toBe(true);
     expect(out.text).toContain("it asks us to wait 120 s (plan tier: pro)");
     expect(out.text).toContain("Saved between the two: 3 versions");
@@ -615,15 +764,72 @@ describe("Figma's rate limit", () => {
     expect(out.text).toContain("Figma has no file");
   });
 
-  it("calls a design too big to arrive in time too big, and says what to ask for", async () => {
+  it("calls a whole file that does not arrive in the full 40 s too big, and asks for a page", async () => {
     figma({
       read: () => {
-        throw new Error("Request timeout after 40000ms: https://api.figma.com/v1/files/k/nodes");
+        throw new Error("Request timeout after 40000ms: https://api.figma.com/v1/files/k");
+      },
+    });
+    const out = await run(null);
+    expect(out.isError).toBe(true);
+    expect(out.text).toContain(
+      "the file as saved 2026-10-03 10:52 UTC within 40 s, so it is too big to compare in one call"
+    );
+    expect(out.text).toContain("ask about the one page you need: pass node.");
+  });
+
+  /**
+   * A page's first version gets half the time left, so a slow one cannot leave the second
+   * none; its timeout is "may only need more time", with the smaller ask if it happens again.
+   */
+  it("gives a page's slow first read half the time, and says what to do if it fails again", async () => {
+    figma({
+      read: () => {
+        throw new Error("Request timeout after 25000ms: https://api.figma.com/v1/files/k/nodes");
       },
     });
     const out = await run();
     expect(out.isError).toBe(true);
-    expect(out.text).toContain("too big to compare in one call");
-    expect(out.text).toContain("show_design with this node lists its frames");
+    expect(out.text).toContain("within 25 s, the time this call could give it");
+    expect(out.text).toContain("if it fails again, ask about the one frame you need inside it");
+    expect(calls().filter((u) => u.includes("version="))).toHaveLength(1);
+  });
+
+  /**
+   * OUT OF TIME IS NOT TOO BIG. A version list slow enough to spend the budget used to be
+   * answered "did not send it within 40 s… too big… ask about one frame": the wrong cause and
+   * advice that leads nowhere. The clock is moved forward inside the version list here.
+   */
+  it("says the time ran out, not that the design is too big, when the list spent the budget", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    figma({
+      versions: (after) => {
+        if (after === "v3") vi.setSystemTime(Date.now() + 49_500);
+        return ok(after === "v3" ? PAGE_2 : PAGE_1);
+      },
+    });
+    const out = await run();
+    expect(out.isError).toBe(true);
+    expect(out.text).toContain("There was no time left to read node 1:2");
+    expect(out.text).not.toContain("so it is too big to compare in one call");
+    expect(out.text).not.toContain("frame you need inside it");
+    expect(calls().some((u) => u.includes("version="))).toBe(false);
+  });
+
+  it("gives the time a read really had when the list left it less than the full 40 s", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    figma({
+      versions: (after) => {
+        if (after === "v3") vi.setSystemTime(Date.now() + 20_000);
+        return ok(after === "v3" ? PAGE_2 : PAGE_1);
+      },
+      read: () => {
+        throw new Error("Request timeout after 30000ms: https://api.figma.com/v1/files/k/nodes");
+      },
+    });
+    const out = await run();
+    // Thirty seconds were left, and the first of two reads gets half.
+    expect(out.text).toContain("within 15 s, the time this call could give it");
+    expect(out.text).not.toContain("so it is too big to compare in one call");
   });
 });

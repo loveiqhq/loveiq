@@ -6390,6 +6390,25 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toContain('text "Unlock for €9.99" → "Unlock for €6.99"');
     });
 
+    /**
+     * FIGMA'S ALLOWANCE IS ONE FOR THE WHOLE TEAM, so this bucket is too: keyed on the tool,
+     * never on the caller's address. Each comparison can cost two of Figma's per-minute reads,
+     * and a frame-by-frame loop of them was the 2026-09-29 incident over again.
+     */
+    it("allows only a few comparisons a minute, for everyone together", async () => {
+      mockRateLimit.mockImplementation(async (...a: unknown[]) => ({
+        allowed: (a[1] as { bucket: string }).bucket !== "mcp-design-changes",
+      }));
+      const r = await call({ file: "VpDMMtuN0JkxlMxQZDg86k" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("Too many design comparisons");
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockRateLimit).toHaveBeenCalledWith(
+        "figma",
+        expect.objectContaining({ bucket: "mcp-design-changes", limit: 5 })
+      );
+    });
+
     it("says a missing credential is not a design that did not change", async () => {
       delete process.env.FIGMA_TOKEN;
       delete process.env.FIGMA_ACCESS_TOKEN;

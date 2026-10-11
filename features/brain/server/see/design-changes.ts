@@ -28,11 +28,14 @@ const MAX_VERSION_PAGES = 6;
 export const FILE_DEPTH = 3;
 /** The route has 60 s; the rest is for answering. */
 const BUDGET_MS = 50_000;
-/** One version's read. Both are read at once, so this is most of the budget. */
+/** One version's read; a later read gets only what is left of the budget. */
 export const READ_TIMEOUT_MS = 40_000;
 const VERSIONS_TIMEOUT_MS = 10_000;
-/** Not parsed above this: two versions of it would not fit in the function's memory. */
-const MAX_READ_CHARS = 40_000_000;
+/**
+ * Bytes of one version's JSON. Paygate, the largest page measured, is 27 MB; the whole Report
+ * 3.0 document is 74 MB and is refused, as is anything else this big, before it is all held.
+ */
+export const MAX_READ_BYTES = 40_000_000;
 /** Two saved versions never change, so a day is only about how long the cache holds it. */
 const CACHE_SECONDS = 86_400;
 /** Change lines in one answer, and per frame or page, before it says how many more. */
@@ -57,7 +60,17 @@ interface Version {
   user?: { handle?: string } | null;
 }
 
-type Failure = { ok: false; status: number; headers?: Headers; why?: "timeout" | "too big" };
+/**
+ * Why a read failed, when it is not Figma's own status: `timeout` after `waitedMs`, `too big`
+ * past MAX_READ_BYTES, or `no time` when the budget was spent before the read could start.
+ */
+type Failure = {
+  ok: false;
+  status: number;
+  headers?: Headers;
+  why?: "timeout" | "too big" | "no time";
+  waitedMs?: number;
+};
 
 /** The layers worth naming. Shapes, vectors and images are counted, not listed. */
 const SHOWN = new Set([
@@ -96,6 +109,34 @@ function cache(): Redis | null {
   return _cache;
 }
 
+/**
+ * The body as text, or null past `max` bytes. Read in chunks and stopped there, so a design
+ * too large to compare never costs more memory than the cap: `res.text()` held all of it
+ * before its size could be checked.
+ */
+export async function textUpTo(res: Response, max: number): Promise<string | null> {
+  // A compressed length is a floor on the real one, so over the cap is over the cap.
+  if (Number(res.headers?.get("content-length")) > max) {
+    await res.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!res.body) return res.text();
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    parts.push(value);
+  }
+  return Buffer.concat(parts).toString("utf8");
+}
+
 async function figmaJson(
   url: string,
   token: string,
@@ -103,18 +144,20 @@ async function figmaJson(
   deadline: number
 ): Promise<{ ok: true; body: unknown } | Failure> {
   const timeoutMs = Math.min(cap, deadline - Date.now());
-  if (timeoutMs < 1_000) return { ok: false, status: 0, why: "timeout" };
+  if (timeoutMs < 1_000) return { ok: false, status: 0, why: "no time" };
   try {
     const res = await figmaFetch(url, { headers: { "X-Figma-Token": token }, timeoutMs }, deadline);
     if (!res.ok) return { ok: false, status: res.status, headers: res.headers };
     // The timeout covers the body too, so a design too large to arrive in time throws here.
-    const text = await res.text();
-    if (text.length > MAX_READ_CHARS) return { ok: false, status: res.status, why: "too big" };
+    const text = await textUpTo(res, MAX_READ_BYTES);
+    if (text === null) return { ok: false, status: res.status, why: "too big" };
     return { ok: true, body: JSON.parse(text) };
   } catch (err) {
     logger.warn({ err, url: url.split("?")[0] }, "brain: a design_changes read failed");
     const timedOut = err instanceof Error && /abort|timeout/i.test(`${err.name} ${err.message}`);
-    return { ok: false, status: 0, why: timedOut ? "timeout" : undefined };
+    return timedOut
+      ? { ok: false, status: 0, why: "timeout", waitedMs: timeoutMs }
+      : { ok: false, status: 0 };
   }
 }
 
@@ -168,7 +211,8 @@ async function readDesign(
   token: string,
   versionId: string,
   nodeId: string | null,
-  deadline: number
+  deadline: number,
+  cap = READ_TIMEOUT_MS
 ): Promise<{ ok: true; name: string; root: DesignNode | null } | Failure> {
   const version = encodeURIComponent(versionId);
   const res = await figmaJson(
@@ -176,7 +220,7 @@ async function readDesign(
       ? api(fileKey, `/files/<key>/nodes?ids=${encodeURIComponent(nodeId)}&version=${version}`)
       : api(fileKey, `/files/<key>?version=${version}&depth=${FILE_DEPTH}`),
     token,
-    READ_TIMEOUT_MS,
+    cap,
     deadline
   );
   if (!res.ok) return res;
@@ -212,9 +256,15 @@ export interface Change {
   was?: string;
   /** Text layers inside an added or removed layer, added or removed with it. */
   texts?: number;
+  /**
+   * The depth a whole file was read to, when this layer may only have moved: "removed" may
+   * be moved below it, "added" moved up from below it.
+   */
+  orMovedBelow?: number;
   place: Place;
 }
 
+/** Each layer by id, with its ancestors from the root down: `chain.length` is its depth. */
 type Indexed = Map<string, { node: DesignNode; chain: DesignNode[] }>;
 
 /** Every layer by id, with its ancestors from the root down. */
@@ -248,12 +298,18 @@ function placeOf(chain: DesignNode[]): Place {
  * so a duplicated screen is one line rather than two hundred. Layers inside an instance (ids
  * starting with `I`) come and go with their component and are not listed, except for their
  * text, which is where an instance's own copy lives.
+ *
+ * `depth` is how deep the trees were read. A whole file is read FILE_DEPTH levels down, and a
+ * layer at that depth comes WITHOUT its children, so missing is not the same as gone: the
+ * review of #562 moved a screen into a section and every layer in it was listed as removed.
+ * Text is compared only in a tree read whole, the default.
  */
 export function diffDesign(
   from: DesignNode | null,
   to: DesignNode | null,
-  withText: boolean
+  depth = Infinity
 ): { changes: Change[]; others: number } {
+  const withText = !Number.isFinite(depth);
   const before = indexTree(from);
   const after = indexTree(to);
   const changes: Change[] = [];
@@ -270,6 +326,9 @@ export function diffDesign(
     const { node, chain } = tree.get(id)!;
     const parent = chain[chain.length - 1];
     if ((parent && !other.has(parent.id)) || id.startsWith("I")) return;
+    // In the other version the parent came without its children, so this layer may well be
+    // under it still: it is not called added or removed at all.
+    if (parent && other.get(parent.id)!.chain.length >= depth) return;
     // A whole file is compared without its text, so a text layer is neither listed nor counted.
     if (node.type === "TEXT" && !withText) return;
     if (!SHOWN.has(node.type ?? "")) {
@@ -283,6 +342,9 @@ export function diffDesign(
       type: node.type ?? "",
       name: node.type === "TEXT" ? textOf(node) : (node.name ?? ""),
       ...(texts ? { texts } : {}),
+      // Anything but a page can move to or from below the depth read, which looks the same as
+      // being deleted or created. Said on the line itself, where a reader cannot miss it.
+      ...(!withText && node.type !== "CANVAS" ? { orMovedBelow: depth } : {}),
       place: placeOf(chain),
     });
   };
@@ -375,7 +437,12 @@ function line(c: Change, fileKey: string, where = "", withLink = false): string 
     return `renamed ${word(c.type)} "${clip(c.was ?? "", 60)}" → "${clip(c.name, 60)}"${where}${link}`;
   }
   const texts = c.texts ? ` with ${c.texts} text layer${c.texts === 1 ? "" : "s"}` : "";
-  return `${c.kind} ${word(c.type)} "${clip(c.name, 90)}"${texts}${where}${link}`;
+  const moved = c.orMovedBelow
+    ? c.kind === "removed"
+      ? ` (or moved below the top ${c.orMovedBelow} levels)`
+      : ` (or moved up from below the top ${c.orMovedBelow} levels)`
+    : "";
+  return `${c.kind} ${word(c.type)} "${clip(c.name, 90)}"${texts}${where}${moved}${link}`;
 }
 
 /** The same line many times (one label changed in every instance) is said once, counted. */
@@ -385,22 +452,30 @@ function counted(lines: string[]): string[] {
   return [...n].map(([l, k]) => (k > 1 ? `${l} (×${k})` : l));
 }
 
-/** The changes, grouped by page and by the frame they sit in, each frame with its link. */
+/**
+ * The changes, grouped by page and by the frame they sit in, each frame with its link.
+ * `depth` is the one the trees were read to, as for `diffDesign`.
+ */
 export function renderChanges(
   fileKey: string,
   diff: { changes: Change[]; others: number },
-  withText: boolean
+  depth = Infinity
 ): string {
   const { changes, others } = diff;
+  const withText = !Number.isFinite(depth);
   const n = (kind: Change["kind"]) => changes.filter((c) => c.kind === kind).length;
   const othersNote = others
     ? ` ${others} other layer${others === 1 ? "" : "s"} (shapes, vectors, images) were added or removed and are not listed.`
     : "";
   if (changes.length === 0) {
-    return (
-      `No ${withText ? "frames, components or text layers" : "pages, sections or frames"} were ` +
-      `added, removed, renamed${withText ? " or rewritten" : ""} between these versions.${othersNote}`
-    );
+    // A whole file is only read so deep, so "nothing changed" is only true that far down.
+    return withText
+      ? `No frames, components or text layers were added, removed, renamed or rewritten ` +
+          `between these versions.${othersNote}`
+      : `No pages, sections or frames in the top ${depth} levels of the file were added, ` +
+          `removed or renamed between these versions.${othersNote} Deeper layers, such as a ` +
+          `frame in a section inside a section, and all text are compared only for one page ` +
+          `or frame.`;
   }
 
   type Frame = { label: string; lines: string[] };
@@ -447,8 +522,9 @@ export function renderChanges(
     return out;
   };
   const out: string[] = [
-    `${changes.length} change${changes.length === 1 ? "" : "s"}: ${n("added")} added, ` +
-      `${n("removed")} removed, ${n("renamed")} renamed` +
+    `${changes.length} change${changes.length === 1 ? "" : "s"}` +
+      (withText ? "" : ` in the top ${depth} levels`) +
+      `: ${n("added")} added, ${n("removed")} removed, ${n("renamed")} renamed` +
       (withText ? `, ${n("text")} text layer${n("text") === 1 ? "" : "s"} rewritten` : "") +
       `.${othersNote}`,
   ];
@@ -538,13 +614,31 @@ function failureText(
   nodeId: string | null,
   design: boolean
 ): string {
-  if (f.why === "too big" || (f.why === "timeout" && design)) {
+  const smaller = nodeId
+    ? `ask about the one frame you need inside it: show_design with this node lists its frames.`
+    : `ask about the one page you need: pass node.`;
+  // Out of time is not too big: told apart, because the advice for each is the opposite.
+  if (f.why === "no time") {
     return (
-      `Figma ${f.why === "too big" ? "sent more than can be compared at once" : `did not send it within ${READ_TIMEOUT_MS / 1000} s`} ` +
-      `for ${what}, so it is too big to compare in one call. ` +
-      (nodeId
-        ? `Ask about one frame inside it: show_design with this node lists its frames.`
-        : `Ask about one page of it instead: pass node.`)
+      `There was no time left to read ${what}: the reads before it took up the minute this ` +
+      `has. That is Figma being slow, not a design too big to compare; ask again in a minute.`
+    );
+  }
+  if (f.why === "too big") {
+    return (
+      `Figma sent more than ${MAX_READ_BYTES / 1_000_000} MB for ${what}, so it is too big ` +
+      `to compare in one call. Instead, ${smaller}`
+    );
+  }
+  if (f.why === "timeout" && design) {
+    // Only a read that had the whole READ_TIMEOUT_MS and still did not finish is too big.
+    const waited = f.waitedMs ?? READ_TIMEOUT_MS;
+    return (
+      `Figma did not send ${what} within ${Math.round(waited / 1000)} s` +
+      (waited >= READ_TIMEOUT_MS
+        ? `, so it is too big to compare in one call. Instead, ${smaller}`
+        : `, the time this call could give it, so it may only need more time. Ask again ` +
+          `in a minute; if it fails again, ${smaller}`)
     );
   }
   if (f.status === 429) return figmaLimitText(f.headers, what);
@@ -561,7 +655,8 @@ function failureText(
     );
   }
   return (
-    `Figma ${f.status ? `returned ${f.status}` : "did not answer in time"} for ${what}. That is ` +
+    `Figma ${f.status ? `returned ${f.status}` : f.why === "timeout" ? "did not answer in time" : "could not be reached"} ` +
+    `for ${what}. That is ` +
     `a failure to read the design, not a design that did not change.`
   );
 }
@@ -578,13 +673,16 @@ export function sinceToMs(since: string): number {
 
 /**
  * The answer to "what changed in this design since then": the newest saved version against
- * the last one saved before `since`, and who saved what in between.
+ * the last one saved before `since`, and who saved each version in between.
  */
 export async function designChanges(
   input: { fileKey: string; nodeId: string | null; sinceMs: number; sinceLabel: string },
   token: string
 ): Promise<{ text: string; isError: boolean }> {
-  const { fileKey, nodeId, sinceMs, sinceLabel } = input;
+  const { fileKey, sinceMs, sinceLabel } = input;
+  // 0:0 is the document itself: read whole it is the 74 MB this never reads, so it is the
+  // whole-file comparison, which says how deep it looks.
+  const nodeId = input.nodeId === "0:0" ? null : input.nodeId;
   const deadline = Date.now() + BUDGET_MS;
 
   const listed = await listVersions(fileKey, token, sinceMs, deadline);
@@ -625,7 +723,9 @@ export async function designChanges(
     };
   }
 
-  const key = `jarvis:design-changes:v1:${fileKey}:${from.id}:${to.id}:${nodeId ?? "file"}`;
+  // v2: a whole-file comparison stopped calling layers below its depth removed (#562 review),
+  // so nothing worked out the old way is served again.
+  const key = `jarvis:design-changes:v2:${fileKey}:${from.id}:${to.id}:${nodeId ?? "file"}`;
   let result: { title: string; changes: string } | null = null;
   try {
     result = (await cache()?.get<{ title: string; changes: string }>(key)) ?? null;
@@ -635,10 +735,8 @@ export async function designChanges(
   if (result) {
     logger.info({ fileKey, nodeId }, "brain: design_changes answered from the cache");
   } else {
-    const [older, newer] = await Promise.all([
-      readDesign(fileKey, token, from.id, nodeId, deadline),
-      readDesign(fileKey, token, to.id, nodeId, deadline),
-    ]);
+    const read = (v: Version, cap?: number) =>
+      readDesign(fileKey, token, v.id, nodeId, deadline, cap);
     // The version list is still worth having when the design itself could not be read.
     const failed = (f: Failure, v: Version) => ({
       text:
@@ -651,6 +749,19 @@ export async function designChanges(
         ) + `\n\n${renderVersions(saved)}`,
       isError: true,
     });
+    // A page or frame can be tens of megabytes a version, so its two versions are read one
+    // after the other, never held raw at once, and the second is not asked for when the
+    // first failed. The first gets at most half the time left, so a slow one cannot leave
+    // the second none. A whole file FILE_DEPTH levels deep is a few megabytes: both at once.
+    let older: Awaited<ReturnType<typeof read>>;
+    let newer: Awaited<ReturnType<typeof read>>;
+    if (nodeId) {
+      older = await read(from, Math.min(READ_TIMEOUT_MS, (deadline - Date.now()) / 2));
+      if (!older.ok) return failed(older, from);
+      newer = await read(to);
+    } else {
+      [older, newer] = await Promise.all([read(from), read(to)]);
+    }
     if (!older.ok) return failed(older, from);
     if (!newer.ok) return failed(newer, to);
     const root = newer.root ?? older.root;
@@ -662,18 +773,20 @@ export async function designChanges(
         isError: true,
       };
     }
-    const withText = Boolean(nodeId);
-    const diff = diffDesign(older.root, newer.root, withText);
+    // A page or frame is read whole; a whole file only FILE_DEPTH levels down.
+    const depth = nodeId ? Infinity : FILE_DEPTH;
+    const diff = diffDesign(older.root, newer.root, depth);
     const scope = nodeId
       ? `Only ${word(root.type)} "${clip(root.name ?? "", 80)}" (${nodeId})` +
         (newer.root ? ` ${nodeLink(fileKey, nodeId)}` : ", which no longer exists") +
         (older.root ? "." : ", which is new since then.")
-      : `The whole file, ${FILE_DEPTH} levels deep: its pages, what is on them and what is in ` +
-        `their sections. Text is compared only within one page or frame: ask again with node ` +
-        `set to its id, or pass a link that carries node-id.`;
+      : `The whole file, its top ${FILE_DEPTH} levels: its pages, what is on them and what is ` +
+        `directly inside that, so a frame in a section but not one in a section inside a ` +
+        `section. Text is compared only within one page or frame: ask again with node set to ` +
+        `its id, or pass a link that carries node-id.`;
     result = {
       title: `${clip(newer.name, 120)} (${fileKey}). ${scope}`,
-      changes: renderChanges(fileKey, diff, withText),
+      changes: renderChanges(fileKey, diff, depth),
     };
     logger.info(
       { fileKey, nodeId, changes: diff.changes.length, others: diff.others },
@@ -696,8 +809,9 @@ export async function designChanges(
       (nodeId
         ? `Compared: layers added, removed or renamed, and text. Not compared: colours, ` +
           `positions, sizes or images.`
-        : `Compared: pages, sections and frames added, removed or renamed. Not compared: text ` +
-          `(ask about one page or frame for it), colours, positions, sizes or images.`) +
+        : `Compared: pages, sections and frames in the top ${FILE_DEPTH} levels, added, ` +
+          `removed or renamed. Not compared: anything deeper, text (ask about one page or ` +
+          `frame for both), colours, positions, sizes or images.`) +
       `\n\n${renderVersions(saved)}`,
     isError: false,
   };
