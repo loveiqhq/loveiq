@@ -18,6 +18,7 @@ let untitledRows: Row[] = [];
 let indexedIds: string[] = [];
 let previousOpen: string[] | null = null;
 let previousSeen: Record<string, string> = {};
+let previousHint: Record<string, string> = {};
 let failCorpus = false;
 const dbPaths: string[] = [];
 
@@ -37,7 +38,17 @@ vi.mock("@features/admin/server/supabase", () => ({
       return ok(offset === 0 ? indexedIds.map((source_id) => ({ source_id })) : []);
     if (path.includes("noticed_by=eq.notion-reach"))
       return ok(
-        previousOpen ? [{ meta: { reach_open: previousOpen, reach_seen: previousSeen } }] : []
+        previousOpen
+          ? [
+              {
+                meta: {
+                  reach_open: previousOpen,
+                  reach_seen: previousSeen,
+                  reach_hint: previousHint,
+                },
+              },
+            ]
+          : []
       );
     return ok([]);
   }),
@@ -432,6 +443,7 @@ describe("checkNotionReach", () => {
     indexedIds = [];
     previousOpen = null;
     previousSeen = {};
+    previousHint = {};
     failCorpus = false;
     pageStatus = {};
     pageBlocks = {};
@@ -798,7 +810,7 @@ describe("checkNotionReach", () => {
     expect(recorded[0]!.meta?.reach_seen).toEqual({ [D]: "2026-10-10" });
     // Still open, so still listed, but as reported before: today's run could not see where.
     expect(recorded[0]!.detail).toContain(
-      `• A page reported before (the link carries no title): https://www.notion.so/${flat(D)}`
+      `• A page reported before (not seen linked today): https://www.notion.so/${flat(D)}`
     );
   });
 
@@ -828,7 +840,7 @@ describe("checkNotionReach", () => {
     expect(monday.noticed).toBe(true);
     expect(recorded[0]!.detail).toContain("Still not shared:");
     expect(recorded[0]!.detail).toContain(
-      `reported before (the link carries no title): https://www.notion.so/${flat(D)}`
+      `reported before (not seen linked today): https://www.notion.so/${flat(D)}`
     );
   });
 
@@ -849,6 +861,41 @@ describe("checkNotionReach", () => {
     const r = await checkNotionReach(NOW);
     expect(r).toMatchObject({ missing: 1, fresh: 1, mentionPages: 0 });
     expect(r.summary).toContain("some @-mentions could not be re-read");
+  });
+
+  it("keeps a held page's title from the last report, and writes titles down for the next", async () => {
+    previousOpen = [D];
+    previousSeen = { [D]: "2026-10-10" };
+    previousHint = { [D]: "Review KPI Sheet" };
+    untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
+    pageReadStatus = { [A]: 502 };
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404, [D]: 404 };
+    await checkNotionReach(MONDAY);
+    expect(recorded[0]!.detail).toContain(
+      `• "Review KPI Sheet", reported before (not seen linked today): https://www.notion.so/${flat(D)}`
+    );
+    expect(recorded[0]!.meta?.reach_hint).toEqual({ [C]: "Playbook", [D]: "Review KPI Sheet" });
+  });
+
+  it("names a finding by its pages, so Monday's re-run is the same finding and a new page is not", async () => {
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404, [E]: 404 };
+    const first = await checkNotionReach(MONDAY); // "New since the last check: C"
+    const meta = recorded[0]!.meta as {
+      reach_open: string[];
+      reach_seen: Record<string, string>;
+      reach_hint: Record<string, string>;
+    };
+    previousOpen = meta.reach_open;
+    previousSeen = meta.reach_seen;
+    previousHint = meta.reach_hint;
+    const again = await checkNotionReach(MONDAY); // "Still not shared: C", the Monday reminder
+    expect(recorded[1]!.detail).toContain("Still not shared:");
+    expect(again.findingKey).toBe(first.findingKey);
+    linkRows.push(row({ source_id: "wa:2", body: `https://www.notion.so/${flat(E)}` }));
+    const more = await checkNotionReach(MONDAY);
+    expect(more.findingKey).not.toBe(first.findingKey);
   });
 
   it("lets a held page go once nobody has been seen linking it for two weeks", async () => {
@@ -908,7 +955,7 @@ describe("checkNotionReach", () => {
     expect(recorded).toHaveLength(2); // the Monday reminder
     expect(recorded[1]!.meta?.reach_open).toEqual([C, hidden].sort()); // held, not dropped
     expect(recorded[1]!.detail).toContain(
-      `• A page reported before (the link carries no title): https://www.notion.so/${flat(hidden)}`
+      `• A page reported before (not seen linked today): https://www.notion.so/${flat(hidden)}`
     ); // still open, but not called linked: today's run could not see the relation
     expect(monday.summary).toContain("Notion's database list could not be read in full");
     carryOver();

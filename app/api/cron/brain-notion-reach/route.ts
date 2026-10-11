@@ -9,7 +9,6 @@
  * Its one-line result in `cron_run` is what list_sources shows beside Notion, so a
  * reader asking Jarvis what it can see is told what it cannot.
  */
-import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { checkNotionReach } from "@features/brain/server/notion-reach";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -58,16 +57,11 @@ export async function GET(request: Request) {
       `visible not yet indexed ${result.visibleNotIndexed}, ` +
       `mention pages ${result.mentionPages}/${result.mentionTotal}`;
 
-    if (result.notice) {
+    if (result.notice && result.findingKey) {
       // The post is what a person sees; the notice is the second sink beside it
       // (notice.ts). One post per finding per day, however often the cron is re-run.
       const day = reportingDay(new Date(startedAtMs));
-      // The whole text, not the headline: two fixes of one page each read the same on top.
-      const hash = createHash("sha1")
-        .update(`${result.notice.headline}\n${result.notice.detail}`)
-        .digest("hex")
-        .slice(0, 10);
-      const key = `brain_notion_reach:${hash}`;
+      const key = `brain_notion_reach:${result.findingKey}`;
       if (await tryClaimSlackAlert(key, "day", day)) {
         await notifySlack({
           channel: "brain",

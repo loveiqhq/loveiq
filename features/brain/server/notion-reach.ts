@@ -244,7 +244,13 @@ function clip(text: string): string {
 function gapLine(gap: Gap): string {
   const refs = [...gap.refs].sort((a, b) => (b.day ?? "").localeCompare(a.day ?? ""));
   const first = refs[0];
-  const where = first ? `linked in ${clip(first.where)}` : "reported before";
+  // Held from the last report: still unreadable, but today's run did not see the link.
+  if (!first) {
+    return gap.hint
+      ? `• "${clip(gap.hint)}", reported before (not seen linked today): ${openUrl(gap.id)}`
+      : `• A page reported before (not seen linked today): ${openUrl(gap.id)}`;
+  }
+  const where = `linked in ${clip(first.where)}`;
   const more = refs.length > 1 ? ` and ${plural(refs.length - 1, "other place")}` : "";
   if (!gap.hint && first?.relation) {
     return `• A database that ${clip(first.where)} points to${more}: ${openUrl(gap.id)}`;
@@ -285,13 +291,16 @@ export function buildReachNotice(input: {
   trashed?: number;
   /** The day each reported page was last seen linked; today when not given. */
   seenOn?: (id: string) => string;
+  /** A title from the last report, for a page today's run did not see linked. */
+  hintOf?: (id: string) => string | null;
   day: string;
 }): NoticeInput {
   const { gaps, fresh, still, fixed } = input;
   const open = fresh.length + still.length;
-  const line = (id: string) => gapLine(gaps.get(id) ?? { id, hint: null, refs: [] });
+  const hintFor = (id: string) => gaps.get(id)?.hint ?? input.hintOf?.(id) ?? null;
+  const line = (id: string) => gapLine({ id, hint: hintFor(id), refs: gaps.get(id)?.refs ?? [] });
   const fixedLine = (id: string) => {
-    const hint = gaps.get(id)?.hint;
+    const hint = hintFor(id);
     return `• ${hint ? `"${clip(hint)}"` : "A page"} ${openUrl(id)}`;
   };
   const items = [
@@ -336,6 +345,12 @@ export function buildReachNotice(input: {
     meta: {
       reach_open: reachOpen,
       reach_seen: Object.fromEntries(reachOpen.map((id) => [id, input.seenOn?.(id) ?? input.day])),
+      reach_hint: Object.fromEntries(
+        reachOpen.flatMap((id) => {
+          const hint = hintFor(id);
+          return hint ? [[id, hint]] : [];
+        })
+      ),
     },
   };
 }
@@ -424,6 +439,12 @@ export interface ReachResult {
   mentionTotal: number;
   /** Why this run cannot be trusted as a clean bill, or null. Fails the cron. */
   problem: string | null;
+  /**
+   * Names a due notice by the pages it shows, not its wording, for the once-a-day Slack
+   * claim: Monday's re-run "Still not shared: X" is the same news as that morning's
+   * "New since the last check: X", while two different one-page fixes are not.
+   */
+  findingKey: string | null;
   visibleNotIndexed: number;
   mentionPages: number;
   noticed: boolean;
@@ -621,7 +642,7 @@ export async function checkNotionReach(
 
   // ---- what was reported last time ---------------------------------------------
   const previousRows = await chunkPage<{
-    meta?: { reach_open?: unknown; reach_seen?: unknown } | null;
+    meta?: { reach_open?: unknown; reach_seen?: unknown; reach_hint?: unknown } | null;
   }>(
     REACH_KIND,
     await supabaseFetch(
@@ -640,6 +661,12 @@ export async function checkNotionReach(
     )
   );
   const lastSeen = (id: string): string | null => seenOn.get(id) ?? null;
+  const hintMeta = previousRows[0]?.meta?.reach_hint;
+  const hints = new Map(
+    Object.entries(hintMeta && typeof hintMeta === "object" ? hintMeta : {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
+  );
 
   // ---- ask Notion -----------------------------------------------------------------
   // Order: what was reported (so a fix is noticed), then pages Jarvis has never held,
@@ -729,6 +756,7 @@ export async function checkNotionReach(
         fixed,
         carried: [...carried, ...heldOver],
         seenOn: (id) => (referenced.has(id) ? day : (lastSeen(id) ?? day)),
+        hintOf: (id) => hints.get(id) ?? null,
         linked,
         asked,
         listed: listedOpen,
@@ -785,6 +813,14 @@ export async function checkNotionReach(
     noticed,
     noticeFailed: due && !options.dryRun && !noticed,
     summary: summary + caveat,
+    findingKey: notice
+      ? createHash("sha1")
+          .update(
+            `${[...fresh, ...still, ...heldMissing].sort().join(",")}|${[...fixed].sort().join(",")}`
+          )
+          .digest("hex")
+          .slice(0, 10)
+      : null,
     notice,
   };
 }

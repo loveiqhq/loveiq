@@ -58,6 +58,7 @@ const result = (over: Record<string, unknown> = {}) => ({
   mentionPages: 4,
   mentionTotal: 4,
   problem: null,
+  findingKey: "abcdef0123",
   noticed: true,
   noticeFailed: false,
   summary: "4 linked Notion pages Jarvis cannot open (Email Marketing Playbook, …)",
@@ -136,7 +137,8 @@ describe("GET /api/cron/brain-notion-reach", () => {
     mockCheck.mockResolvedValue(result({ notice }));
     await call();
     const [key, scope, day] = mockClaim.mock.calls[0] as unknown as [string, string, string];
-    expect(key).toMatch(/^brain_notion_reach:[0-9a-f]{10}$/);
+    // The finding's own key (its pages), so a same-day re-run of the same news is one post.
+    expect(key).toBe("brain_notion_reach:abcdef0123");
     expect([scope, day]).toEqual(["day", reportingDay(new Date())]);
     const post = mockSlack.mock.calls[0]![0] as { channel: string; text: string };
     expect(post.channel).toBe("brain");
@@ -154,11 +156,17 @@ describe("GET /api/cron/brain-notion-reach", () => {
   it("posts a second, different finding the same day even under the same headline", async () => {
     const headline = "Jarvis can now open 1 Notion page it could not before";
     mockCheck.mockResolvedValueOnce(
-      result({ notice: { headline, detail: "• X", kind: "notion-reach" } })
+      result({
+        notice: { headline, detail: "• X", kind: "notion-reach" },
+        findingKey: "x000000000",
+      })
     );
     await call();
     mockCheck.mockResolvedValueOnce(
-      result({ notice: { headline, detail: "• Y", kind: "notion-reach" } })
+      result({
+        notice: { headline, detail: "• Y", kind: "notion-reach" },
+        findingKey: "y000000000",
+      })
     );
     await call();
     const keys = mockClaim.mock.calls.map((c) => (c as unknown as [string])[0]);
