@@ -58,8 +58,96 @@ export type ShowDesignOutcome =
    */
   | { kind: "list-instead"; reason: string };
 
-function api(fileKey: string, path: string): string {
+export function api(fileKey: string, path: string): string {
   return `https://api.figma.com/v1${path.replace("<key>", encodeURIComponent(fileKey))}`;
+}
+
+/** `1-2` as a link writes it, or `1:2` as the API does; instance layers look like `I1:2;3:4`. */
+export function figmaNodeId(raw: string): string | null {
+  const id = raw.trim().replace(/-/g, ":");
+  // Part by part rather than one pattern with a repeated group, which a regex scan flags.
+  return id
+    .replace(/^I/, "")
+    .split(";")
+    .every((part) => /^\d+:\d+$/.test(part))
+    ? id
+    : null;
+}
+
+/** The kinds of Figma link that name a file. */
+const FILE_LINK_KINDS = new Set(["design", "file", "proto", "board", "slides", "deck"]);
+const isFileKey = (v: string | undefined) => /^[A-Za-z0-9]{10,64}$/.test(v ?? "");
+
+/**
+ * A FIGMA LINK NAMES ITS OWN FILE, and LoveIQ's designs live in more than one.
+ *
+ * list_sources used to say every design was in one file, so ids copied from the Report 3.0
+ * file, the one Marcus links for reviews, were sent to the main file and came back "No node
+ * in this file". Counted 2026-10-11 over 60 days: 859 of 890 node-by-node reads were on that
+ * other file. The key is in the link, `figma.com/design/<key>/<name>?node-id=1-2` (or /file/,
+ * /proto/, /board/), and a branch's own key follows `/branch/`. Null when it is not a Figma
+ * file link, or when its node-id is not one.
+ */
+export function parseFigmaLink(raw: string): { fileKey: string; nodeId: string | null } | null {
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)figma\.com$/i.test(url.hostname)) return null;
+  const [, kind, key, branch, branchKey] = url.pathname.split("/");
+  if (!FILE_LINK_KINDS.has(kind ?? "") || !isFileKey(key)) return null;
+  const node = url.searchParams.get("node-id");
+  const nodeId = node ? figmaNodeId(node) : null;
+  if (node && !nodeId) return null;
+  return { fileKey: branch === "branch" && isFileKey(branchKey) ? branchKey! : key!, nodeId };
+}
+
+/**
+ * The file and node a caller means, from whatever was pasted into either argument: a file
+ * key, a node id in either spelling, or a whole link. A plain node id beats a link's
+ * node-id; two links naming different files are refused rather than one of them guessed.
+ */
+export function figmaTarget(
+  file: string,
+  node: string
+): { fileKey: string | null; nodeId: string | null } | { error: string } {
+  const isLink = (v: string) => /figma\.com\//i.test(v);
+  const fromFile = isLink(file) ? parseFigmaLink(file) : null;
+  const fromNode = isLink(node) ? parseFigmaLink(node) : null;
+  for (const [v, link] of [
+    [file, fromFile],
+    [node, fromNode],
+  ] as const) {
+    if (isLink(v) && !link) {
+      return {
+        error: `\`${v}\` is not a Figma file link I can read: a file link looks like https://www.figma.com/design/<key>/<name>?node-id=1-2.`,
+      };
+    }
+  }
+  if (file && !fromFile && !isFileKey(file)) {
+    return { error: `\`${file}\` is neither a Figma file key nor a Figma link.` };
+  }
+  const plainNode = node && !fromNode ? figmaNodeId(node) : null;
+  if (node && !fromNode && !plainNode) {
+    return { error: `\`${node}\` is not a Figma node id like 1:2 (or 1-2, as links write it).` };
+  }
+  const fileKey = fromFile?.fileKey ?? (file || null);
+  if (fileKey && fromNode && fromNode.fileKey !== fileKey) {
+    return {
+      error: `The file and the node's link name different Figma files (${fileKey} and ${fromNode.fileKey}). Pass one link.`,
+    };
+  }
+  return {
+    fileKey: fileKey ?? fromNode?.fileKey ?? null,
+    nodeId: plainNode ?? fromNode?.nodeId ?? fromFile?.nodeId ?? null,
+  };
+}
+
+/** A link that opens one node in Figma; the API's `1:2` is `1-2` in a URL. */
+export function nodeLink(fileKey: string, nodeId: string): string {
+  return `https://www.figma.com/design/${fileKey}?node-id=${encodeURIComponent(nodeId.replace(/:/g, "-"))}`;
 }
 
 /**
@@ -81,17 +169,29 @@ export function retryAfterSeconds(headers: Headers | undefined): number | null {
   return /^\d+$/.test(raw) ? Number(raw) : null;
 }
 
-/** Every Figma API read goes through here: one retry on a short 429, never more. */
+/**
+ * Every Figma API read goes through here: one retry on a short 429, never more.
+ *
+ * `deadline` (epoch ms) is for a caller with a time limit of its own. A wait that would leave
+ * the retry no time before it is not waited out, and the 429 goes back to the caller to
+ * report: a retry cut off by the function's own time limit answers nothing at all.
+ */
 export async function figmaFetch(
   url: string,
-  init: Parameters<typeof fetchWithTimeout>[1]
+  init: Parameters<typeof fetchWithTimeout>[1],
+  deadline = Infinity
 ): Promise<Response> {
   const res = await fetchWithTimeout(url, init);
   const wait = res.status === 429 ? retryAfterSeconds(res.headers) : null;
   if (wait === null || wait > FIGMA_RETRY_MAX_S) return res;
+  const left = deadline - Date.now() - wait * 1000;
+  if (left < 1_000) return res;
   await res.body?.cancel().catch(() => undefined);
   await new Promise((r) => setTimeout(r, wait * 1000));
-  return fetchWithTimeout(url, init);
+  return fetchWithTimeout(
+    url,
+    Number.isFinite(left) ? { ...init, timeoutMs: Math.min(init?.timeoutMs ?? left, left) } : init
+  );
 }
 
 /** What a 429 tells the caller: Figma's wait, its plan tier, and how to ask for less. */
@@ -120,6 +220,15 @@ async function figmaGet(
   });
   if (!res.ok) return { ok: false, status: res.status, headers: res.headers };
   return { ok: true, body: await res.json() };
+}
+
+/** Said wherever a node id finds nothing: most often it came from a different file. */
+export function noSuchNode(fileKey: string, nodeId: string): string {
+  return (
+    `No node \`${nodeId}\` is in the Figma file \`${fileKey}\`. LoveIQ's designs live in more ` +
+    `than one file and an id from one does not exist in another, so pass the Figma link you ` +
+    `were given, which names its file. Without a node, show_design lists a file's pages.`
+  );
 }
 
 /** Figma's error shape differs per endpoint; these are the two that change what we say. */
@@ -192,11 +301,7 @@ export async function listDesign(
   };
   const doc = Object.values(body.nodes ?? {})[0]?.document;
   if (!doc) {
-    return {
-      kind: "text",
-      text: `No node \`${pageId}\` is in this file. Call show_design with no arguments for the page list.`,
-      isError: true,
-    };
+    return { kind: "text", text: noSuchNode(fileKey, pageId), isError: true };
   }
   const kids = (doc.children ?? []).map((c) => {
     const b = (c.absoluteBoundingBox ?? {}) as { width?: number; height?: number };
@@ -250,15 +355,7 @@ export async function renderDesign(
   const node = Object.values(
     (meta.body as { nodes?: Record<string, { document?: Record<string, unknown> }> }).nodes ?? {}
   )[0]?.document;
-  if (!node) {
-    return {
-      kind: "text",
-      text:
-        `No node \`${nodeId}\` is in this file. Ids come from show_design's own listing — ` +
-        `call it with no arguments for the pages, then with a page id for its frames.`,
-      isError: true,
-    };
-  }
+  if (!node) return { kind: "text", text: noSuchNode(fileKey, nodeId), isError: true };
   const box = (node.absoluteBoundingBox ?? {}) as { width?: number; height?: number };
   const w = Math.round(box.width ?? 0);
   const h = Math.round(box.height ?? 0);

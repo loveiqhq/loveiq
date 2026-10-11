@@ -187,6 +187,7 @@ const KNOWN_NON_SCHEMA = new Set([
   "write_to_notion",
   "write_to_google_doc",
   "show_design",
+  "design_changes",
   "show_page",
   "related_context",
   "exclude_sources",

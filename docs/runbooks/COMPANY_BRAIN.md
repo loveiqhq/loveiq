@@ -481,7 +481,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Thirty-nine tools, in three groups.** Twenty-nine read, ten write. The write ones act
+**Forty tools, in three groups.** Thirty read, ten write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -583,22 +583,31 @@ later `date:` is the current decision.
 
 **Live state — read at ask time, full history, no lag:**
 
-| Tool                     | For                                                                                                                                                                                                                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                              |
-| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                 |
-| `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
+| Tool                     | For                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                                                                                                                                                              |
+| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                                                                                                                                                 |
+| `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file                                                                                                                                 |
+| `design_changes`         | What changed in a Figma design since a date, in one call: frames, components and text layers added, removed, renamed or rewritten, grouped by page and frame with links, and who saved each version (with its label and description). Takes the Figma link, so any file; text is compared within one page or frame, and a whole file only three levels deep. Each pair of versions is cached for a day |
+
+**LoveIQ's designs live in more than one Figma file**, and a link names its file
+(`figma.com/design/<key>/<name>?node-id=1-2`). `show_design` and `design_changes` take the
+link itself; the main file is only the default when no link is given. The Jarvis
+descriptions used to say every design was in one file, so ids from the Report 3.0 file,
+the one Marcus links for reviews, were sent to the main file and came back "No node in
+this file".
 
 **Figma's rate limit is one allowance for the whole team.** Figma counts per user and
 plan, so every tool on the token shares it (file, node and image reads: 15 a minute on
 Professional and 20 on Organization for a full or dev seat; a seat that can only view or
-comment on design files gets 20 a month). `show_design` and the gateway's Figma reads both go
-through `figmaFetch` in `features/brain/server/see/figma.ts`: a 429 whose `Retry-After`
-is 10 seconds or less is waited out once, and a longer one is answered with the wait,
-the plan tier Figma reports, and how to ask for less (several node ids in one
+comment on design files gets 20 a month). `show_design`, `design_changes` and the gateway's
+Figma reads all go through `figmaFetch` in `features/brain/server/see/figma.ts`: a 429 whose
+`Retry-After` is 10 seconds or less is waited out once, and a longer one is answered with
+the wait, the plan tier Figma reports, and how to ask for less (several node ids in one
 `nodes?ids=a,b,c` request). On 2026-09-29 an agent sent 31 single-node reads in one
-minute and got seven 429s in 40 seconds. `comment_asks` reads comments with its own
-fetch, and a 429 there is reported as a Figma file that could not be read.
+minute and got seven 429s in 40 seconds; `design_changes` exists so that comparing two
+versions costs the version list and two reads instead. `comment_asks` reads comments with
+its own fetch, and a 429 there is reported as a Figma file that could not be read.
 
 **Read-only by allowlist — the HTTP method was never the guard.** This section
 used to claim construction was enough: a table read is a GET, a function call is a

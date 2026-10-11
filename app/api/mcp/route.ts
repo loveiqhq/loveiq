@@ -21,10 +21,12 @@ import {
   MAX_EDGE_PX,
   figmaFetch,
   figmaLimitText,
+  figmaTarget,
   listDesign,
   renderDesign,
   type ShowDesignOutcome,
 } from "@features/brain/server/see/figma";
+import { designChanges, sinceToMs } from "@features/brain/server/see/design-changes";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { resolveCaller, signInChallenge, type Caller } from "@features/brain/server/sign-in";
@@ -1763,16 +1765,17 @@ export const TOOLS = [
     title: "See a screen from the design file",
     annotations: { readOnlyHint: true, openWorldHint: true },
     description:
-      "LOOK AT THE DESIGN, as pixels. Returns a rendered PNG of one frame from LoveIQ's " +
+      "LOOK AT THE DESIGN, as pixels. Returns a rendered PNG of one frame from a LoveIQ " +
       "Figma file — an image you can actually see, not a node tree describing one. " +
-      "Call with NO arguments for the page list, then with a page's id for its frames, " +
-      "then with a frame's id to see it. " +
+      "Given a Figma link, it shows what the link points at: designs live in more than one " +
+      "file, and a link names its file and, with node-id, the page or frame. " +
+      "Without one, call with NO arguments for the main file's page list, then with a page's " +
+      "id for its frames, then with a frame's id to see it. " +
       "Use it before critiquing a screen: a critique written from JSON is a critique of a " +
       "data structure, and cannot tell you that two elements collide or that the eye lands " +
-      "in the wrong place. " +
+      "in the wrong place. To see what CHANGED in a design, use `design_changes` instead. " +
       "WHAT IT IS NOT: this is what is in Figma, which may be ahead of the code, behind it, " +
-      "or a direction nobody built — Report_3.0 and Report_4.0 exist here and not in the " +
-      "product. `show_page` is what a visitor actually gets. " +
+      "or a direction nobody built. `show_page` is what a visitor actually gets. " +
       "A frame longer than 3:1 is REFUSED with its children offered instead, because a " +
       "vision model shrinks anything over ~1568px on its longest edge and a tall frame " +
       "arrives as an unreadable stripe.",
@@ -1782,14 +1785,17 @@ export const TOOLS = [
         node_id: {
           type: "string",
           description:
-            "A page or frame id from this tool's own listing, e.g. '5445:357'. Omit to list " +
-            "the pages. A page id lists its frames; a frame id renders it.",
+            "A page or frame id from this tool's own listing, e.g. '5445:357', or a whole " +
+            "Figma link. Omit to list the pages. A page id lists its frames; a frame id " +
+            "renders it.",
         },
         file_key: {
           type: "string",
           description:
-            "Defaults to the one LoveIQ design file, which list_sources names. Pass this only " +
-            "for a different file.",
+            "A Figma file key or any Figma link (figma.com/design/... or /file/...); a link's " +
+            "node-id is used when node_id is not given. Defaults to the main LoveIQ design " +
+            "file, which list_sources names. A node id from one file does not exist in " +
+            "another, so pass the link you were given.",
         },
         max_px: {
           type: "number",
@@ -1799,6 +1805,51 @@ export const TOOLS = [
             "bytes on detail you will not receive.",
         },
       },
+    },
+  },
+  {
+    name: "design_changes",
+    title: "What changed in a design",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "WHAT CHANGED IN A FIGMA DESIGN since a date, in ONE call: which frames, components and " +
+      "text layers were added, removed, renamed or had their text changed, grouped by page and " +
+      "frame with a link to each, and who saved each version and when, with its label and " +
+      "description. Use it for 'what changed in the report design this week', 'what did Marcus " +
+      "change on this page' or before reviewing a design link. NEVER compare versions by " +
+      "reading node after node: Figma's allowance is shared by the whole team, and a " +
+      "node-by-node comparison runs into its rate limit for everyone. " +
+      "Pass the Figma link you were given: designs live in more than one file, and a link " +
+      "names its file and, with node-id, the page or frame. For a page or frame the text is " +
+      "compared too; for a whole file only its pages, sections and frames are, because a " +
+      "whole file is too big to read twice in one call. It compares the newest saved version " +
+      "with the last one saved before `since`, so edits after the newest save are not in it, " +
+      "and it compares names, layers and text, not colours, positions or images. Asking again " +
+      "about the same two versions is answered from a cache and costs Figma nothing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        file: {
+          type: "string",
+          description:
+            "A Figma link (figma.com/design/... or /file/..., with or without node-id) or a " +
+            "file key. A link's node-id limits the comparison to that page or frame; pass the " +
+            "bare file key for the whole file.",
+        },
+        since: {
+          type: "string",
+          description:
+            "From when: a day like 2026-10-04 or a time like 2026-10-04T09:00:00Z, in UTC. " +
+            "Default: seven days ago.",
+        },
+        node: {
+          type: "string",
+          description:
+            "Optional: one page or frame to compare, as an id like 195:234 (or 195-234, as " +
+            "links write it). Overrides the link's node-id.",
+        },
+      },
+      required: ["file"],
     },
   },
   {
@@ -2301,9 +2352,11 @@ export const TOOLS = [
  * `envKey: null` means the API needs no credential (the repo is public).
  */
 /**
- * The one Figma file every LoveIQ design lives in. Read at call time so it can be
- * changed in the environment without a deploy, with the real key as the default so an
- * unset var degrades to "correct" rather than to "broken".
+ * The MAIN Figma file, the one `show_design` lists when no link names another. Designs live
+ * in more than one file (the Report 3.0 file Marcus links for reviews is separate), so this
+ * is a default, not the only file. Read at call time so it can be changed in the environment
+ * without a deploy, with the real key as the default so an unset var degrades to "correct"
+ * rather than to "broken".
  */
 export function figmaFileKey(): string {
   return process.env.FIGMA_FILE_KEY?.trim() || "IdxyUUVvJSYRTpI9CYRtJI";
@@ -2410,27 +2463,37 @@ export const EXTERNAL_SERVICES: Record<
     envKeys: ["FIGMA_TOKEN", "FIGMA_ACCESS_TOKEN"],
     auth: { kind: "header", name: "X-Figma-Token" },
     /**
-     * THE FILE KEY IS CONFIGURATION, NOT A DOCUMENT, and it is printed here because it
-     * was previously unfindable.
+     * THE FILE KEYS ARE CONFIGURATION, NOT DOCUMENTS, and they are printed here because
+     * they were previously unfindable.
      *
-     * Every LoveIQ design lives in ONE Figma file. Its key appeared in exactly one place
-     * in the repo -- `docs/plans/2026-03-13-survey-redesign.md` -- and `docs/plans/` is
-     * excluded from corpus ingest for a measured reason (plan docs ranked 3rd on four
-     * unrelated questions). So the brain held a working Figma credential and no way to
-     * learn which file to point it at. Un-excluding the directory to fix that would
-     * reintroduce a known ranking harm to publish one constant.
+     * The main file's key appeared in exactly one place in the repo --
+     * `docs/plans/2026-03-13-survey-redesign.md` -- and `docs/plans/` is excluded from
+     * corpus ingest for a measured reason (plan docs ranked 3rd on four unrelated
+     * questions). So the brain held a working Figma credential and no way to learn which
+     * file to point it at. Un-excluding the directory to fix that would reintroduce a known
+     * ranking harm to publish one constant.
      *
-     * The env var lets it be changed without a deploy; the literal is the documented
-     * default so an unset var is not an outage.
+     * This note used to say EVERY design was in that one file. It is not: Marcus links the
+     * separate Report 3.0 file for reviews, and by 2026-10-11 859 of 890 node-by-node reads
+     * in 60 days were on it, while ids from it sent to the main file came back "No node in
+     * this file". So the note says how to read a key off a link.
+     *
+     * The env var lets the main key be changed without a deploy; the literal is the
+     * documented default so an unset var is not an outage.
      */
     note:
       "Files, nodes, comments and component metadata. Figma uses its own header rather " +
       "than a bearer token. " +
-      `EVERY LoveIQ DESIGN IS IN ONE FILE, key \`${figmaFileKey()}\` — pages: ` +
-      "Systematic & Architecture, Brand positioning, Website, Legal pages, Survey, " +
-      "Report_2.0, Report_3.0, Report_4.0, Psychograph concepts, Pay to survey, " +
-      "Refer a friend, Share Report. Report_3.0 and Report_4.0 exist in the design and " +
-      "NOT in the code. " +
+      "LoveIQ's DESIGNS LIVE IN MORE THAN ONE FILE, and a Figma link names its file: in " +
+      "figma.com/design/<key>/<name>?node-id=1-2 (or /file/), <key> is the file and node-id " +
+      "1-2 is node 1:2. Use the key from the link you were given; an id from one file does " +
+      `not exist in another. The main design file is \`${figmaFileKey()}\` (LoveIQ), with ` +
+      "pages such as Production, Website, Survey, Report_2.0, Report_3.0, Report_4.0, Pay to " +
+      "survey, Refer a friend and Share Report; the Report 3.0 file Marcus links for reviews " +
+      "is a separate one, `VpDMMtuN0JkxlMxQZDg86k`. What is in Figma may be ahead of the " +
+      "code or never built; `show_page` shows what shipped. " +
+      "To see what CHANGED between versions, call `design_changes` with the link: one call, " +
+      "never a node-by-node walk. " +
       "Start with `/files/<key>?depth=1` (about 9 KB, the page list); a whole page at " +
       "`depth=2` exceeds the 40,000-character result cap and comes back truncated. " +
       "`/images/<key>?ids=<node>` returns a URL to a render, which is a LINK and not a " +
@@ -5266,11 +5329,14 @@ async function callTool(
       );
     }
 
-    const fileKey =
-      typeof args.file_key === "string" && args.file_key.trim()
-        ? args.file_key.trim()
-        : figmaFileKey();
-    const nodeId = typeof args.node_id === "string" ? args.node_id.trim() : "";
+    // A link in either argument names its own file, so it is never sent to the main one.
+    const target = figmaTarget(
+      typeof args.file_key === "string" ? args.file_key.trim() : "",
+      typeof args.node_id === "string" ? args.node_id.trim() : ""
+    );
+    if ("error" in target) return textResult(target.error, true);
+    const fileKey = target.fileKey ?? figmaFileKey();
+    const nodeId = target.nodeId ?? "";
     const maxPx = intArg(args.max_px, DEFAULT_EDGE_PX, 200, MAX_EDGE_PX);
 
     let outcome: ShowDesignOutcome;
@@ -5315,6 +5381,52 @@ async function callTool(
     return textResult(
       `${outcome.reason} The list of what is inside it could not be read just now.`,
       true
+    );
+  }
+
+  if (name === "design_changes") {
+    const svc = EXTERNAL_SERVICES.figma;
+    const token = svc?.envKeys.map((k) => process.env[k]).find(Boolean) ?? null;
+    if (!token) {
+      return textResult(
+        `figma is not configured on this deployment (${svc?.envKeys.join(" / ")} unset), so I ` +
+          `cannot read the design. This is a missing credential, not a design that did not change.`,
+        true
+      );
+    }
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const target = figmaTarget(str(args.file), str(args.node));
+    if ("error" in target) return textResult(target.error, true);
+    if (!target.fileKey) {
+      return textResult(
+        "`file` is required: the Figma link you were given, or a file key. Designs live in " +
+          "more than one file, so there is no default.",
+        true
+      );
+    }
+    const since = str(args.since);
+    if (since && badDateMessage("since", since)) {
+      return textResult(
+        `\`since\` must be a day like 2026-10-04 or a time like 2026-10-04T09:00:00Z — ` +
+          `"${since}" is not one. Relative dates are not read; work out the day and pass it.`,
+        true
+      );
+    }
+    const day = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const out = await designChanges(
+      {
+        fileKey: target.fileKey,
+        nodeId: target.nodeId,
+        sinceMs: sinceToMs(since || day),
+        sinceLabel: since || `${day} (seven days ago)`,
+      },
+      token
+    );
+    // Layer names, text and version notes are written by whoever edits the file.
+    return textResult(
+      `${UNTRUSTED_DATA_PREAMBLE}\n\n${out.text}`,
+      out.isError,
+      "ask about one page or frame (node), or a shorter period"
     );
   }
 
@@ -6469,11 +6581,16 @@ export const MCP_INSTRUCTIONS =
   "chapter by chapter, and which question feeds which scoring dimension. Reach for a " +
   "definition there before inferring one from how a word was used in a chapter.\n\n" +
   "YOU CAN SEE, NOT JUST READ. `show_design` returns a rendered " +
-  "frame from LoveIQ's Figma file as an image — call it with no arguments for the pages, " +
-  "a page id for its frames, a frame id to look at one. Critique a screen from the " +
+  "frame from a LoveIQ Figma file as an image — pass the Figma link you were given, or " +
+  "call it with no arguments for the main file's pages, a page id for its frames, a frame " +
+  "id to look at one. Designs live in more than one Figma file, and a link names its file. " +
+  "Critique a screen from the " +
   "picture, never from the node tree: a tree tells you a rectangle exists, not that it " +
-  "collides with the text beside it. And what is in Figma is not what shipped — " +
-  "Report_3.0 and Report_4.0 are designed and unbuilt — so `show_page` is the other " +
+  "collides with the text beside it. To know what CHANGED in a design, call " +
+  "`design_changes` with the link: one call compares two saved versions and says who saved " +
+  "what, where comparing node by node would spend the whole team's Figma allowance. And " +
+  "what is in Figma is not what shipped — a design can be ahead of the code, behind it or " +
+  "never built — so `show_page` is the other " +
   "half: real screenshots of what a visitor actually gets, each carrying the date it was " +
   "taken. Say which of the two you looked at, and note that the landing page is a live " +
   "A/B whose two arms are different pages, listed separately.\n\n" +
@@ -6672,7 +6789,14 @@ export async function POST(request: Request) {
         // or `group_by`. For the one tool that writes, the decision text is what makes
         // the log reviewable at a glance rather than a list of `record_decision` rows.
         question: String(
-          args.query ?? args.decision ?? args.q ?? args.id ?? args.table ?? args.path ?? name
+          args.query ??
+            args.decision ??
+            args.q ??
+            args.id ??
+            args.table ??
+            args.path ??
+            args.file ??
+            name
         ).slice(0, 4000),
         args,
         sourceCount: stats.sourceCount ?? null,
