@@ -756,9 +756,9 @@ export async function ingestNotion(
   const unseen = toFetch.filter((i) => !known.has(i.sourceId));
   const seenBefore = toFetch.filter((i) => known.has(i.sourceId));
   toFetch.length = 0;
-  for (let i = 0; i < Math.max(unseen.length, seenBefore.length); i++) {
-    const a = unseen[i];
-    const b = seenBefore[i];
+  while (unseen.length || seenBefore.length) {
+    const a = unseen.shift();
+    const b = seenBefore.shift();
     if (a) toFetch.push(a);
     if (b) toFetch.push(b);
   }

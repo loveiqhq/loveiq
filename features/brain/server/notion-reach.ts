@@ -73,8 +73,9 @@ export const LIVING_SOURCES: ReadonlySet<string> = new Set(["notion", "drive", "
  * The id a Notion URL segment ENDS with. Unanchored, "Weekly-20261011-<id>" read the date
  * as the id's first eight digits and reported a page that does not exist.
  */
-const TRAILING_ID = /(?:^|[^0-9a-f])([0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i;
-const NOTION_URL = /https?:\/\/(?:[\w-]+\.)*notion\.(?:so|site|com)\/[^\s<>()[\]"'`|]+/gi;
+const TRAILING_ID =
+  /(?:^|[^0-9a-f])([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const NOTION_URL = /https?:\/\/[\w.-]*notion\.(?:so|site|com)\/[^\s<>()[\]"'`|]+/gi;
 
 /** A Notion id in any of its spellings, as the API's dashed lowercase, or null. */
 export function toNotionId(raw: string): string | null {
@@ -612,11 +613,12 @@ export async function checkNotionReach(
     Array.isArray(reported) ? reported.filter((x): x is string => typeof x === "string") : []
   );
   const seenMeta = previousRows[0]?.meta?.reach_seen;
-  const lastSeen = (id: string): string | null => {
-    const v =
-      seenMeta && typeof seenMeta === "object" ? (seenMeta as Record<string, unknown>)[id] : null;
-    return typeof v === "string" ? v : null;
-  };
+  const seenOn = new Map(
+    Object.entries(seenMeta && typeof seenMeta === "object" ? seenMeta : {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
+  );
+  const lastSeen = (id: string): string | null => seenOn.get(id) ?? null;
 
   // ---- ask Notion -----------------------------------------------------------------
   // Order: what was reported (so a fix is noticed), then pages Jarvis has never held,
