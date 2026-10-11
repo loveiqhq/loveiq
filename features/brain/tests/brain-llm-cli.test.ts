@@ -222,6 +222,29 @@ describe("cliOutcome", () => {
     ).toMatchObject({ ok: false, reason: "overloaded" });
   });
 
+  /**
+   * The Slack screenshot describer gives the model files to read, and an answer that never
+   * read them (or had a read refused) must not be stored as a description. Field names as
+   * printed by v2.1.296.
+   */
+  it("says how many turns the answer took and how many tool calls were refused", () => {
+    expect(
+      cliOutcome(
+        printed({
+          result: "A report page.",
+          num_turns: 3,
+          permission_denials: [{ tool_name: "Read", tool_input: { file_path: "/etc/hosts" } }],
+        })
+      )
+    ).toEqual({ ok: true, text: "A report page.", truncated: false, turns: 3, denials: 1 });
+    // Absent when the CLI does not print them, so every other caller sees what it always did.
+    expect(cliOutcome(printed({ result: "Hi" }))).toEqual({
+      ok: true,
+      text: "Hi",
+      truncated: false,
+    });
+  });
+
   it("refuses output that is not the result object, and an empty answer", () => {
     expect(cliOutcome("")).toMatchObject({ ok: false, reason: "error" });
     expect(cliOutcome("Error: something went wrong")).toMatchObject({ ok: false, reason: "error" });

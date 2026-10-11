@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { describeSlackMedia, MEDIA_JOB_SEC } from "@features/brain/server/ingest/slack-media";
+import {
+  describeSlackMedia,
+  MAX_DESCRIPTIONS_PER_RUN,
+  MEDIA_JOB_SEC,
+} from "@features/brain/server/ingest/slack-media";
 import { cliBinary } from "@features/brain/server/llm";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
@@ -24,9 +28,13 @@ export const maxDuration = 60;
  * `claude` binary and the frames come from ffmpeg, neither of which Vercel has, so without
  * BRAIN_LLM_CLI this refuses rather than pretending to have run.
  *
- * `cron_run` says "error" when something stopped the run: Slack refusing the listing or a
- * download, a usage limit on the seat, or the model failing three times in a row. A single
- * file that could not be described is counted, tried again next run, and is not an error.
+ * `cron_run` says "error" when something stopped the run (Slack refusing the listing or two
+ * downloads in a row, a usage limit on the seat, the pipeline failing three times in a row)
+ * or when files were tried and none was described. One file that fails while others are
+ * described is counted against that file, and is not an error.
+ *
+ * `?limit=N` asks for at most N descriptions (never more than MAX_DESCRIPTIONS_PER_RUN): the
+ * clock asks for three at 05:41, before the brief.
  */
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
@@ -50,12 +58,17 @@ export async function GET(request: Request) {
   let status: "success" | "error" = "success";
   let detail: string | undefined;
   try {
-    const result = await describeSlackMedia();
+    const asked = Number(new URL(request.url).searchParams.get("limit"));
+    const limit =
+      Number.isInteger(asked) && asked > 0
+        ? Math.min(asked, MAX_DESCRIPTIONS_PER_RUN)
+        : MAX_DESCRIPTIONS_PER_RUN;
+    const result = await describeSlackMedia({ limit });
     const stopped = result.error !== null;
     if (stopped) status = "error";
     // Counts only: this is printed to a public Actions log.
     detail =
-      `waiting=${result.waiting} described=${result.described} skipped=${result.skipped} failed=${result.failed}` +
+      `waiting=${result.waiting} described=${result.described} skipped=${result.skipped} failed=${result.failed} given_up=${result.givenUp}` +
       (result.limited ? " stopped=rate_limited" : "") +
       (result.error ? ` error=${result.error.slice(0, 200)}` : "");
     return NextResponse.json({ ok: !stopped, ...result }, { status: stopped ? 502 : 200 });

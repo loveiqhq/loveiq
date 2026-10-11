@@ -115,7 +115,18 @@ export interface LlmMessage {
 }
 
 export type LlmResult =
-  | { ok: true; text: string; truncated: boolean }
+  | {
+      ok: true;
+      text: string;
+      truncated: boolean;
+      /**
+       * `claude -p` only, when it says: the turns the answer took (2 or more means a tool
+       * was used) and how many tool calls were refused. A caller that gave the model files
+       * to read uses these to tell an answer about the files from one that never saw them.
+       */
+      turns?: number;
+      denials?: number;
+    }
   | {
       ok: false;
       reason: "unconfigured" | "rate_limited" | "overloaded" | "error";
@@ -541,6 +552,8 @@ export function cliOutcome(stdout: string): LlmResult {
     result?: unknown;
     stop_reason?: unknown;
     api_error_status?: unknown;
+    num_turns?: unknown;
+    permission_denials?: unknown;
   } | null = null;
   try {
     json = JSON.parse(stdout);
@@ -574,5 +587,13 @@ export function cliOutcome(stdout: string): LlmResult {
     logger.error({}, "brain llm: the claude CLI returned no content");
     return { ok: false, reason: "error", detail: "empty completion" };
   }
-  return { ok: true, text: text.trim(), truncated: json.stop_reason === "max_tokens" };
+  return {
+    ok: true,
+    text: text.trim(),
+    truncated: json.stop_reason === "max_tokens",
+    // Measured on v2.1.296: an answer that read one file took 2 turns, and a Read refused by
+    // the allow rule is listed in `permission_denials`.
+    ...(typeof json.num_turns === "number" ? { turns: json.num_turns } : {}),
+    ...(Array.isArray(json.permission_denials) ? { denials: json.permission_denials.length } : {}),
+  };
 }

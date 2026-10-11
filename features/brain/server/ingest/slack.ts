@@ -161,6 +161,12 @@ export interface SlackMessage {
   type?: string;
   subtype?: string;
   user?: string;
+  /**
+   * Set on a message from another workspace, in a channel shared through Slack Connect. Our
+   * own messages carried neither field when measured (2026-10-11, 12 of 12).
+   */
+  team?: string;
+  user_team?: string;
   bot_id?: string;
   text?: string;
   ts?: string;

@@ -71,11 +71,16 @@ export function jobsDue(at: Date): GithubJob[] {
   if (hour >= 6 && hour <= 8) jobs.push(brain("brain-brief"));
   // The decision miner after the brief's last retry; the radar runs inside its job.
   if (hour === 9) jobs.push(brain("brain-mine"));
-  // Slack screenshots and screen recordings described in words, every six hours: 05:41
-  // puts the night's in before the brief, and a bug posted in the day waits at most six
-  // hours. A run with nothing new ends before it calls the model.
-  if (hour % 6 === 5) jobs.push(brain("brain-slack-media"));
+  // Slack screenshots and screen recordings described in words, every six hours: a bug
+  // posted in the day waits at most six. At 05:41 only a few, so the night's are in before
+  // the brief without spending the seat's five-hour window it shares with the brief; the
+  // backlog drains at the other three. A run with nothing new ends before it calls the model.
+  if (hour === 5) jobs.push(brain("brain-slack-media", "?limit=3"));
+  else if (hour % 6 === 5) jobs.push(brain("brain-slack-media"));
   return jobs;
 }
 
-const brain = (job: string): GithubJob => ({ workflow: "brain-daily.yml", inputs: { job } });
+const brain = (job: string, query?: string): GithubJob => ({
+  workflow: "brain-daily.yml",
+  inputs: { job, ...(query ? { query } : {}) },
+});

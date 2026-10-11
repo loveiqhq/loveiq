@@ -983,43 +983,72 @@ each one into words.
   would erase the line. The walk re-touches these rows with every other `slack` row, so its
   sweep keeps them, and its denylist purge removes them with their channel.
 - **Which files.** PNG, JPEG, GIF and WebP images up to 10 MB and MP4, MOV and WebM
-  recordings up to 50 MB, uploaded by a person in a channel the Slack walk reads: never a
-  DM, never `#hr` or `#email-inbox`, never a bot's upload, never a file named like a
-  contract or a CV. Newest first, so a new bug report never waits behind the backlog. HEIC
-  is left out: Claude cannot read it, and none had been shared by 2026-10-11.
-- **How.** `files.list` finds the images and recordings, the stored `file:` ids say which
-  are done (a file is never described twice; an unreadable list stops the run rather than
-  describe everything again), `files.info` finds the message, and the file is downloaded
-  with `SLACK_BRAIN_BOT_TOKEN` (scope `files:read`). `claude -p` on the Team seat then reads
-  it with only the Read tool, allowed only inside a temporary folder holding that one file,
-  and a scrubbed environment (`cliEnv`, shared with the persona walkers' judge). A recording
-  becomes frames first: at least one every five seconds and at most eight, spread over the
-  whole recording, cut by ffmpeg, which the workflow installs because the runner image has
-  none. Each description is written the moment it exists, so a run that dies keeps what it
-  finished.
-- **No personal data.** The model is told never to copy anyone's name, email address,
-  phone number, address, payment details or survey answers, nor any key, and to describe
-  them instead ("a customer's email"); admin-panel screenshots show all of these. Any email
-  address it writes anyway is replaced before storing. Measured 2026-10-11: before "whoever
-  it belongs to" was added to that rule, a screenshot of our own website came back with an
-  advisor's name; after, it did not.
-- **Bounds.** Twenty descriptions and ten minutes a run, every six hours (05:41, 11:41,
-  17:41 and 23:41 UTC; the first lands before the brief). A usage limit on the seat, three
-  failed answers in a row or a refused download stops the run and fails it, which alerts
-  #brain; one file that cannot be described is counted and tried again next run. The job
+  recordings up to 50 MB, uploaded by a person from our own workspace in a channel the Slack
+  walk reads: never a DM, never `#hr` or `#email-inbox`, never a bot's upload, never a file
+  named like a contract or a CV, and never from someone in another workspace posting in a
+  shared channel (the file's `user_team` and the message's team must be ours). `#payments`
+  and `#incoming-surveys` are indexed but their pictures are not described: those channels
+  exist to show customers' payments and answers. Newest first, so a new bug report never
+  waits behind the backlog. HEIC is left out: Claude cannot read it, and none had been
+  shared by 2026-10-11.
+- **How.** `auth.test` names our workspace, `files.list` finds the images and recordings,
+  the stored `file:` ids say which are done (a file is never described twice; an unreadable
+  list stops the run rather than describe everything again), `files.info` finds the
+  message, and the file is downloaded with `SLACK_BRAIN_BOT_TOKEN` (scope `files:read`),
+  which is only ever sent to `https://files.slack.com`. `claude -p` on the Team seat then
+  reads it with only the Read tool, allowed only inside a temporary folder holding that
+  one file, and a scrubbed environment (`cliEnv`, shared with the persona walkers' judge).
+  A recording becomes frames first: at least one every five seconds and at most eight,
+  spread over the whole recording, cut by ffmpeg, which the workflow installs because the
+  runner image has none. ffmpeg and ffprobe get no environment but `PATH`, only the `file`
+  protocol and a named format (`mov` or `matroska`), so an upload cannot pass itself off as
+  a playlist that fetches what it lists. Each description is written the moment it exists,
+  so a run that dies keeps what it finished.
+- **Answers that are not descriptions are not stored.** The answer must come from a call
+  that read something (two turns or more, from the CLI's own JSON), with no read refused (a
+  picture that talks the model into reading elsewhere is dropped), and not be the agreed
+  `UNREADABLE` or the model saying it could not open the files.
+- **No personal data.** The model is told that personal data comes before quoting exactly:
+  never anyone's name, email address, phone number, address, IP address, payment details,
+  Stripe ids or survey answers, nor any key, but `[name]`, `[email]` and so on in their
+  place. One person's results count too, even with no name beside them: their answers,
+  their report's scores, their archetype, their submission number, country, device or path
+  through the site. Totals across many people may be quoted. What has a shape is replaced
+  if the model writes it anyway: email addresses (spaces around the @ and non-ASCII
+  included), phone numbers, IPv4 and IPv6 addresses, and Stripe customer, payment, charge,
+  checkout, invoice and subscription ids. Names and scores have no shape, so the prompt
+  carries those alone. Measured 2026-10-11 on 40 backlog files and re-checks: no email,
+  phone number, IP address or Stripe id reached a description, and the model wrote
+  `[name]`/`[email]`/`[id]` in their place. Two earlier wordings leaked: one put an advisor's
+  name from our own website in, and one copied a person's report scores (the same file was
+  masked on another run). The current wording held on every re-check of those files.
+- **A broken file cannot block the rest.** A failure that is the file's own (gone, not a
+  picture, no frames, a timeout, an answer that is not a description) is counted in
+  `brain_refusal_log` under `source=slack-media`, `version` = runs failed. After three the
+  file is left alone (`given_up` in the run's line). A failure of the pipeline instead
+  (Slack not answering, the CLI signed out or overloaded) is never counted against a file;
+  three in a row stop the run. One refused download counts against its file; two different
+  files refused in a row stop the run and point at `files:read`. A 404 is a file that is
+  gone, never a missing scope. When a run describes nothing while three or more files fail,
+  one broken thing is likelier than three broken files, so none is counted.
+- **Bounds.** Twenty descriptions and ten minutes a run, every six hours (11:41, 17:41 and
+  23:41 UTC, and three at 05:41, so the night's are in before the brief without spending the
+  seat's five-hour window the brief shares). The job gets 30 minutes. A usage limit on the
+  seat, the pipeline failing three times in a row, two refusals in a row, a missing ffmpeg,
+  or a run that tried files and described none fails the run, which alerts #brain. The job
   logs counts only, never a description or a file name: the repository's Actions logs are
   public.
 - **Size of it.** 513 images and recordings were waiting on 2026-10-11 (499 images, 14
   recordings of 4 to 25 seconds), all in channels the walk reads, and 8 had been shared in
-  the 60 days before. At eighty a day the backlog is gone in about a week. A dry run against
-  live Slack on 2026-10-11 described the three newest in 27 seconds; the 15-second recording
-  became four frames.
+  the 60 days before. At sixty-three a day the backlog is gone in about nine days. A dry run
+  against live Slack on 2026-10-11 described the three newest in 27 seconds; the 15-second
+  recording became four frames.
 - **Needs** the repository secret `SLACK_BRAIN_BOT_TOKEN`, the brain app's bot token that
-  Vercel already holds (`gh secret set SLACK_BRAIN_BOT_TOKEN -R loveiqhq/loveiq`). The run fails with
-  "Missing repository secrets" until it is set. The app's scopes, read from `auth.test` on
-  2026-10-11, include `files:read`.
-- **To describe a file again**, delete its row (`source=slack`, `source_id=file:<id>`); the
-  next run picks it up.
+  Vercel already holds (`gh secret set SLACK_BRAIN_BOT_TOKEN -R loveiqhq/loveiq`). The run
+  fails with "Missing repository secrets" until it is set. The app's scopes, read from
+  `auth.test` on 2026-10-11, include `files:read`.
+- **To describe a file again**, delete its row (`source=slack`, `source_id=file:<id>`), and
+  its count in `brain_refusal_log` if it was given up; the next run picks it up.
 
 ### Google auth on production is keyless
 

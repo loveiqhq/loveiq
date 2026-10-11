@@ -45,8 +45,10 @@ jobs:
   run:
     runs-on: ubuntu-latest
     # The Night Shift answers up to three questions of up to 20 minutes each. The miner and
-    # the decision radar after it get 40: the radar's first run reads every topic.
-    timeout-minutes: ${{ inputs.job == 'brain-night-shift' && 75 || (inputs.job == 'brain-mine' || inputs.job == 'brain-radar') && 40 || 20 }}
+    # the decision radar after it get 40: the radar's first run reads every topic. The Slack
+    # screenshots get 30: ten minutes of starting files, a last recording of up to about six,
+    # and the installs before them (MEDIA_JOB_SEC in slack-media.ts says the same).
+    timeout-minutes: ${{ inputs.job == 'brain-night-shift' && 75 || (inputs.job == 'brain-mine' || inputs.job == 'brain-radar') && 40 || inputs.job == 'brain-slack-media' && 30 || 20 }}
     env:
       JOB: ${{ inputs.job }}
     # One of each job at a time. Overlap would be harmless (the brief's day claim and the
@@ -65,8 +67,12 @@ jobs:
       # The routes import the app's own modules, so the app's dependencies are needed.
       - run: npm ci
 
+      # The latest release, like the brain's other jobs (Eman's call, 2026-09-30); the version
+      # goes in the log, so a run that behaves differently can be traced to it.
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
 
       # Frames out of screen recordings. The ubuntu runner image has no ffmpeg (checked
       # against its package list, 2026-10-11).
@@ -80,8 +86,9 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
-          # The Night Shift's researcher reads the brain over MCP with this bearer.
-          LOVEIQ_MCP_TOKEN: ${{ secrets.LOVEIQ_MCP_TOKEN }}
+          # The Night Shift's researcher reads the brain over MCP with this bearer, and the
+          # Monday battery tests that door with it. Given to those two jobs only.
+          LOVEIQ_MCP_TOKEN: ${{ (inputs.job == 'brain-night-shift' || inputs.job == 'brain-health') && secrets.LOVEIQ_MCP_TOKEN || '' }}
           # The brain's Slack app, to list and download the screenshots. Given to that job only.
           SLACK_BRAIN_BOT_TOKEN: ${{ inputs.job == 'brain-slack-media' && secrets.SLACK_BRAIN_BOT_TOKEN || '' }}
           # The routes run only when this names production (isProdCronHost), so it is
@@ -123,7 +130,8 @@ jobs:
               exit $rc ;;
             brain-radar) npx tsx scripts/brain-cron.ts brain-radar ;;
             brain-night-shift) npx tsx scripts/brain-cron.ts brain-night-shift ;;
-            brain-slack-media) npx tsx scripts/brain-cron.ts brain-slack-media ;;
+            # ?limit=N: the clock asks for fewer at 05:41, so the brief keeps the seat.
+            brain-slack-media) npx tsx scripts/brain-cron.ts brain-slack-media "$QUERY" ;;
             # Each battery exits 0 once its result is recorded, whatever failed: failures are
             # the report's findings. All three run; the job fails if any could not.
             brain-health)
