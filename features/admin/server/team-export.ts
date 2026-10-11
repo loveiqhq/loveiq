@@ -125,17 +125,45 @@ const PERSONAL_IN: Record<string, string[]> = {
   booking_event: ["raw"],
   payment_webhook_event: ["event_data"],
 };
-/** Keys inside JSON values that hold a credential, an address or an answer. */
+/**
+ * Keys inside JSON values that hold a credential, an address, a name or an answer, written
+ * snake_case: a key is compared after `firstName` becomes `first_name`. The masked column
+ * names count as keys too.
+ */
 const PERSONAL_KEYS = new Set([
-  "reportToken",
-  "requestIp",
+  "report_token",
+  "token",
+  "request_ip",
   "answer",
-  "promoCode",
-  "promotionCode",
-  "nurturePromoCodes",
+  "promo_code",
+  "promotion_code",
+  "nurture_promo_codes",
   // An admin's search, which can be a customer's name.
   "query",
+  // A person's name, under the names payment and booking systems give it.
+  "full_name",
+  "display_name",
+  "customer_name",
+  "invitee_name",
+  "cardholder_name",
+  "billing_name",
+  "contact_name",
+  "partner_name",
+  "recipient_name",
+  "sender_name",
+  "phone",
+  "phone_number",
+  "address",
+  "postal_code",
+  // The postcode answer, copied into the scoring engine's diagnostics as OVL_POSTAL_CODE:
+  // found on 2026-10-11 by the check below, in 2,470 scoring results.
+  "ovl_postal_code",
+  "zip",
+  "city",
+  "street",
 ]);
+/** `firstName` and `first_name` alike. */
+const snakeKey = (key: string) => key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 /** The survey's questions for the email, the name and the ZIP or postal code. */
 export const PERSONAL_QUESTIONS = ["00000", "00001", "15002"];
 /** `email`, `owner_email`, `subscriber_emails`; not `email_position`, the A/B arm. */
@@ -178,6 +206,19 @@ const NOT_PERSONAL = new Set([
   "visitor_id",
   "unique_visitors",
 ]);
+/** JSON keys that look personal but hold no one's details, checked against the data on 2026-10-11. */
+const NOT_PERSONAL_KEYS = new Set([
+  // A page's path: any report token in it is masked as text.
+  "pathname",
+  // Where the email question sat (an A/B arm), and which reminder emails went.
+  "survey_email_position",
+  "nurture_emails_sent",
+  "discount_emails_sent",
+  // A coupon's name, a hash of a scoring payload, a metric in a test walk.
+  "coupon_name",
+  "payload_fingerprint",
+  "metric_name",
+]);
 /** A column that names a thing in these tables and nothing personal. */
 const NOT_PERSONAL_IN: Record<string, string[]> = {
   admin_experiment: ["name"],
@@ -208,7 +249,10 @@ export function unclassifiedColumns(specs: TableSpec[]): string[] {
 export interface Masker {
   email(value: string): string;
   text(value: string): string;
-  json(value: unknown): unknown;
+  /** `where` (table.column) names the value in the list of unclassified keys. */
+  json(value: unknown, where?: string): unknown;
+  /** JSON keys seen that look personal but are neither masked nor known to be safe. */
+  unclassified(): string[];
 }
 
 /**
@@ -223,17 +267,35 @@ export function masker(key: Buffer = randomBytes(32)): Masker {
       .digest("hex")
       .slice(0, 12)}`;
   const text = (value: string) => value.replace(EMAIL, email).replace(REPORT_TOKEN, MASKED);
-  const json = (value: unknown): unknown => {
+  const unknown = new Set<string>();
+  /**
+   * A JSON value, key by key, as deep as it goes. A key is masked like the column of the same
+   * name; an email key keeps a code; and a key that looks personal but is in no list is
+   * recorded, so the run stops before anything is written: a new key inside a JSON value
+   * must not go out unmasked any more than a new column may.
+   */
+  const json = (value: unknown, where = "json"): unknown => {
     if (typeof value === "string") return text(value);
-    if (Array.isArray(value)) return value.map(json);
+    if (Array.isArray(value)) return value.map((v) => json(v, where));
     if (value && typeof value === "object") {
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [k, PERSONAL_KEYS.has(k) ? MASKED : json(v)])
+        Object.entries(value).map(([k, v]) => {
+          const key = snakeKey(k);
+          if (v === null || v === undefined) return [k, v];
+          if (PERSONAL_KEYS.has(key) || PERSONAL_COLUMNS.has(key)) return [k, MASKED];
+          if (isEmailColumn(key)) {
+            return [k, typeof v === "string" ? email(v) : json(v, `${where}.${key}`)];
+          }
+          if (LOOKS_PERSONAL.test(key) && !NOT_PERSONAL.has(key) && !NOT_PERSONAL_KEYS.has(key)) {
+            unknown.add(`${where}.${key}`);
+          }
+          return [k, json(v, `${where}.${key}`)];
+        })
       );
     }
     return value;
   };
-  return { email, text, json };
+  return { email, text, json, unclassified: () => [...unknown].sort() };
 }
 
 /**
@@ -268,8 +330,10 @@ export function maskRow(
         typeof value === "string"
           ? m.email(value)
           : Array.isArray(value)
-            ? value.map((v) => (typeof v === "string" ? m.email(v) : m.json(v)))
-            : m.json(value);
+            ? value.map((v) =>
+                typeof v === "string" ? m.email(v) : m.json(v, `${table}.${column}`)
+              )
+            : m.json(value, `${table}.${column}`);
     } else if (
       table === "survey_partial_save" &&
       column === "answers" &&
@@ -277,9 +341,9 @@ export function maskRow(
     ) {
       const answers = { ...(value as Row) };
       for (const qid of PERSONAL_QUESTIONS) if (qid in answers) answers[qid] = MASKED;
-      out[column] = m.json(answers);
+      out[column] = m.json(answers, `${table}.${column}`);
     } else {
-      out[column] = typeof value === "string" ? m.text(value) : m.json(value);
+      out[column] = typeof value === "string" ? m.text(value) : m.json(value, `${table}.${column}`);
     }
   }
   return out;
@@ -518,6 +582,13 @@ export async function buildExport(
       );
     }
     files.push({ name: `${spec.name}.csv`, body: toCsv(rows, spec.columns) });
+  }
+  const unknownKeys = m.unclassified();
+  if (unknownKeys.length) {
+    throw new Error(
+      `keys inside JSON values whose names suggest personal data are not classified yet: ${unknownKeys.join(", ")}. ` +
+        "Mark each as masked or not personal in features/admin/server/team-export.ts. Nothing written."
+    );
   }
   // Last, so a run that fails part-way never shows a README dated after files it did not write.
   files.push({ name: "README.md", body: readme(specs, counts, generatedAt()) });

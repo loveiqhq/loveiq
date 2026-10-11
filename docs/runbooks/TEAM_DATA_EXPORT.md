@@ -5,9 +5,10 @@ identifies a person masked, in a Google Drive folder that only the team can open
 it to explore the data, for example in Marcus's survey explorer.
 
 **Decision (Eman, 2026-10-11):** "mask the emails and names and those sensitive info". This
-replaces the unmasked copy decided on 2026-10-10; the first masked copy replaced every file
-and deleted the unmasked versions from Drive. Only the team (Eman, Marcus, Mark, Fatih, Sanjin
-and Ajna) can open it. Recorded as risk R3.8 in [`docs/compliance/DPIA.md`](../compliance/DPIA.md).
+replaces the unmasked copy decided on 2026-10-10. Every refresh replaces each file and deletes
+its older versions, so the first masked copy removes the unmasked one from Drive. Only the team
+(Eman, Marcus, Mark, Fatih, Sanjin and Ajna) can open it. Recorded as risk R3.8 in
+[`docs/compliance/DPIA.md`](../compliance/DPIA.md).
 
 ## Where it is
 

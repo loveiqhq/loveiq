@@ -292,6 +292,29 @@ describe("the team data export", () => {
     expect(
       maskRow("admin_audit_log", { metadata: { query: "Anna K", tool: "search" } }, m, ids).metadata
     ).toEqual({ query: MASKED, tool: "search" });
+    // Keys are matched however they are written, as deep as they go: camelCase, ALL CAPS.
+    expect(
+      maskRow(
+        "scoring_result",
+        {
+          diagnostics: {
+            overlaysText: { OVL_POSTAL_CODE: "10115", OVL_COUNTRY: "Germany" },
+            customer: { firstName: "Anna", fullName: "Anna K", customerEmail: "a@b.com" },
+          },
+        },
+        m,
+        ids
+      ).diagnostics
+    ).toEqual({
+      overlaysText: { OVL_POSTAL_CODE: MASKED, OVL_COUNTRY: "Germany" },
+      customer: { firstName: MASKED, fullName: MASKED, customerEmail: m.email("a@b.com") },
+    });
+    // Keys that only look personal stay.
+    expect(
+      maskRow("payment", { metadata: { couponName: "nurture_50", pathname: "/r" } }, m, ids)
+        .metadata
+    ).toEqual({ couponName: "nurture_50", pathname: "/r" });
+    expect(m.unclassified()).toEqual([]);
     // Nothing to mask stays as it was, empty included.
     expect(maskRow("survey_submission", { id: 3, duration_ms: 5, utm: null }, m, ids)).toEqual({
       id: 3,
@@ -323,6 +346,15 @@ describe("the team data export", () => {
     expect(unclassifiedColumns([{ name: "partner", columns: ["name"], key: ["id"] }])).toEqual([
       "partner.name",
     ]);
+  });
+
+  it("stops when a key inside a JSON value may hold personal data and is not classified", async () => {
+    const data = merge(QUESTIONS, person(1), {
+      analytics_event: [{ id: 1, metadata: { device: { mobilePhone: "+49 30 1234" } } }],
+    });
+    await expect(buildExport(specsFor(data), reader(data))).rejects.toThrow(
+      /not classified yet: analytics_event.metadata.device.mobile_phone/
+    );
   });
 
   it("stops when it cannot find the email, name or postcode question, writing nothing", async () => {

@@ -88,9 +88,9 @@ and booking payloads read `[masked]`. Answers about people's sex lives remain, s
 pseudonymised special-category data, not anonymous data.
 
 - **Decision**: Eman, 2026-10-11: "mask the emails and names and those sensitive info",
-  replacing the unmasked copy decided on 2026-10-10. The first masked refresh replaced every
-  file and deleted the unmasked versions in Drive; copies downloaded before it are outside our
-  reach.
+  replacing the unmasked copy decided on 2026-10-10. Every refresh replaces each file and
+  deletes its older versions, so the first masked refresh removes the unmasked copy from Drive;
+  copies downloaded before it are outside our reach.
 - **Mitigations**:
   - The folder is shared with those six only. Editors cannot share the folder or its files on,
     and there is no link sharing. Every upload first checks the folder and every file it will
