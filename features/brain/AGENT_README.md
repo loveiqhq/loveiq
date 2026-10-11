@@ -11,7 +11,9 @@ Claude Code) is the door people use; the operator's guide is
   analytics, GA4 and Search Console through `google.ts`, Clarity, evidence, report voice,
   domain vocabulary, skills, people) plus `upsert.ts`, the shared write path. That path refuses
   credentials and masks one-time links, and it holds the exclusions every source shares
-  (`isJobApplication`, `isLegalInstrument`).
+  (`isJobApplication`, `isLegalInstrument`). `ingest/slack-media.ts` puts Slack screenshots
+  and screen recordings into words with `claude -p` (the `brain-slack-media` job, in GitHub
+  Actions only).
 - `server/retrieve.ts` — calls the `brain_search` RPC (lexical plus vector arm), dedupes by
   parent, and caps how much of a result any one source may take.
 - `server/embed.ts` — query embeddings through the `brain-embed` edge function.

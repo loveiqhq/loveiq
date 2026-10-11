@@ -103,6 +103,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // Daily, straight after the miner in the same GitHub job: decisions that may not both
   // stand. It records a run whether or not anything changed, so a missing day shows.
   "brain-radar": 26 * 3_600_000,
+  // Every six hours in GitHub Actions: Slack screenshots described in words. It records a
+  // run whether or not anything was new, so thirteen hours is two missed runs.
+  "brain-slack-media": 13 * 3_600_000,
   // WEEKLY, Mondays in GitHub Actions: the two test batteries record their results, then
   // the brain's report on itself is written. Eight days is one missed Monday, and a missed
   // Monday means a week with no accuracy measurement at all.
@@ -159,6 +162,7 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-mine": "brain-daily.yml",
   "brain-night-shift": "brain-daily.yml",
   "brain-radar": "brain-daily.yml",
+  "brain-slack-media": "brain-daily.yml",
   // All three run in brain-daily.yml's `brain-health` job; start that one.
   "brain-health": "brain-daily.yml",
   "brain-battery-retrieval": "brain-daily.yml",

@@ -157,7 +157,7 @@ const NOISE_SUBTYPES = new Set([
   "tombstone",
 ]);
 
-interface SlackMessage {
+export interface SlackMessage {
   type?: string;
   subtype?: string;
   user?: string;
@@ -179,7 +179,7 @@ interface SlackMessage {
   }>;
 }
 
-interface SlackChannel {
+export interface SlackChannel {
   /** Set on private channels. Slack only returns ones the bot was invited to. */
   is_private?: boolean;
   /** Set on group DMs (multi-person IMs). Named `mpdm-a--b--c-1` by Slack. */
@@ -192,7 +192,16 @@ interface SlackChannel {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function slackGet(
+/**
+ * The conversations this ingest reads, out of everything `conversations.list` returned.
+ * Shared with `slack-media.ts`, so a screenshot is described only where its message is
+ * indexed: never in a denylisted channel, never in a DM.
+ */
+export function isIndexedChannel(c: SlackChannel): boolean {
+  return Boolean(c.is_member && !c.is_archived && c.id && c.name && !NEVER_INDEX.has(c.name));
+}
+
+export async function slackGet(
   token: string,
   path: string,
   params: Record<string, string | number>,
@@ -258,7 +267,10 @@ async function slackGet(
  * page and a refused call must not look the same, or a missing scope would read
  * as "the bot is in no channels" and sweep the corpus.
  */
-async function listConversations(token: string, types: string): Promise<SlackChannel[] | null> {
+export async function listConversations(
+  token: string,
+  types: string
+): Promise<SlackChannel[] | null> {
   const out: SlackChannel[] = [];
   let cursor = "";
   for (let page = 0; page < 20; page++) {
@@ -277,7 +289,7 @@ async function listConversations(token: string, types: string): Promise<SlackCha
 }
 
 /** display name per user id, so a chunk reads "Marcus: …" not "<@U0B…>: …". */
-async function userNames(token: string): Promise<Map<string, string>> {
+export async function userNames(token: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   let cursor = "";
   for (let page = 0; page < 5; page++) {
@@ -322,8 +334,9 @@ function reactionSuffix(m: SlackMessage): string {
 
 /**
  * Uploads worth reading. Images dominate what Slack actually holds — 25 of 36 files
- * shared since June 2026 are screenshots — and there is no OCR here, so they are
- * named by `renderMessage` and never fetched.
+ * shared since June 2026 are screenshots — and there is no OCR here, so this walk only
+ * names them (`renderMessage`). Screenshots and screen recordings are described in words
+ * by a separate job with a model, into rows of their own (`slack-media.ts`).
  */
 const SLACK_FILE_TYPES = new Set(["pdf", "docx", "csv", "text", "markdown", "javascript", "json"]);
 export const MAX_SLACK_FILE_BYTES = 4_000_000;
@@ -623,9 +636,7 @@ export async function ingestSlack(
   // survive in the corpus just because the denylist arrived after it did.
   await purgeDenylistedChannels();
 
-  const channels = (listed ?? []).filter(
-    (c) => c.is_member && !c.is_archived && c.id && c.name && !NEVER_INDEX.has(c.name)
-  );
+  const channels = (listed ?? []).filter(isIndexedChannel);
   // Membership is the boundary: the bot reads only channels somebody added it to,
   // and Slack enforces that regardless of scope.
   if (channels.length === 0) {

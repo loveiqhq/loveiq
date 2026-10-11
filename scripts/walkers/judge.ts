@@ -20,7 +20,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { cliBinary, runClaude } from "@features/brain/server/llm";
+import { cliBinary, cliEnv, runClaude } from "@features/brain/server/llm";
 import { recordNotice } from "@features/brain/server/notice";
 import { escapeSlack } from "@shared/observability/slack";
 
@@ -311,25 +311,9 @@ export function judgeArgs(model: string, dirs: string[]): string[] {
 /**
  * The judge's whole environment: enough to run and to sign in, and none of this job's other
  * secrets (Supabase, Slack), so a page that talks it into reading its own environment finds
- * nothing worth leaking.
+ * nothing worth leaking. Shared with the Slack screenshot describer, so it lives in llm.ts.
  */
-export function judgeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  // USER, LOGNAME and SHELL are how a laptop's own Claude sign-in (the macOS keychain) is
-  // found; on the runner the token is enough. None of them is a secret.
-  const keep = [
-    "PATH",
-    "HOME",
-    "TMPDIR",
-    "LANG",
-    "USER",
-    "LOGNAME",
-    "SHELL",
-    "CLAUDE_CODE_OAUTH_TOKEN",
-  ];
-  return Object.fromEntries(
-    keep.filter((k) => env[k]).map((k) => [k, env[k]])
-  ) as NodeJS.ProcessEnv;
-}
+export const judgeEnv = cliEnv;
 
 const SEVERITIES = new Set(["high", "medium", "low"]);
 const norm = (t: string) =>

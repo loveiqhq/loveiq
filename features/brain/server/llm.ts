@@ -504,6 +504,30 @@ export function runClaude(
 }
 
 /**
+ * A `claude` child's whole environment: enough to run and to sign in, and none of the job's
+ * other secrets (Supabase, Slack), so a page or a picture that talks it into reading its own
+ * environment finds nothing worth leaking. For callers that give the model a tool that reads
+ * files: the persona walkers' judge, and the Slack screenshot describer.
+ */
+export function cliEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  // USER, LOGNAME and SHELL are how a laptop's own Claude sign-in (the macOS keychain) is
+  // found; on the runner the token is enough. None of them is a secret.
+  const keep = [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "LANG",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+  ];
+  return Object.fromEntries(
+    keep.filter((k) => env[k]).map((k) => [k, env[k]])
+  ) as NodeJS.ProcessEnv;
+}
+
+/**
  * What `claude -p --output-format json` printed, as an LlmResult.
  *
  * Measured 2026-09-24 on v2.1.281: EVERY outcome prints one JSON object on stdout, errors

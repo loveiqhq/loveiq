@@ -71,6 +71,10 @@ export function jobsDue(at: Date): GithubJob[] {
   if (hour >= 6 && hour <= 8) jobs.push(brain("brain-brief"));
   // The decision miner after the brief's last retry; the radar runs inside its job.
   if (hour === 9) jobs.push(brain("brain-mine"));
+  // Slack screenshots and screen recordings described in words, every six hours: 05:41
+  // puts the night's in before the brief, and a bug posted in the day waits at most six
+  // hours. A run with nothing new ends before it calls the model.
+  if (hour % 6 === 5) jobs.push(brain("brain-slack-media"));
   return jobs;
 }
 

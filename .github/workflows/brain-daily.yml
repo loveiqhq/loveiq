@@ -1,7 +1,8 @@
 name: Company Brain daily jobs
 
 # The brain crons that need a language model run here instead of on Vercel: the brief,
-# the decision miner, and the Night Shift that answers questions queued with queue_research.
+# the decision miner, the Night Shift that answers questions queued with queue_research, and
+# the describer that puts Slack screenshots and screen recordings into words.
 #
 # THE MODEL IS THE TEAM SUBSCRIPTION, NOT AN API KEY. Only the `claude` binary may use it:
 # `claude setup-token` mints CLAUDE_CODE_OAUTH_TOKEN, billed against the plan we already
@@ -11,8 +12,9 @@ name: Company Brain daily jobs
 #
 # NO `schedule:`. Vercel's clock starts each job through `inputs.job`
 # (features/cron/server/github-jobs.ts), UTC: the Night Shift at 00:41, the Monday health
-# report at 01:41, the brief at 06:41 with retries at 07:41 and 08:41, and the decision
-# miner, with the radar after it, at 09:41. GitHub's own schedule starts this repo's jobs
+# report at 01:41, the brief at 06:41 with retries at 07:41 and 08:41, the decision
+# miner, with the radar after it, at 09:41, and the Slack screenshots at 05:41, 11:41, 17:41
+# and 23:41. GitHub's own schedule starts this repo's jobs
 # hours late and drops some: on 2026-09-28 the miner ran 8.5 hours late. The brief's
 # retries are no-ops once it delivered: claim_slack_alert re-grants an undelivered day
 # only once its claim is ten minutes old.
@@ -25,7 +27,8 @@ on:
       job:
         description: "Which job to run"
         type: choice
-        options: [brain-brief, brain-mine, brain-night-shift, brain-health, brain-radar]
+        options:
+          [brain-brief, brain-mine, brain-night-shift, brain-health, brain-radar, brain-slack-media]
       query:
         description: "Optional query string, e.g. ?day=2026-09-22 or ?limit=3"
         required: false
@@ -65,6 +68,12 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+      # Frames out of screen recordings. The ubuntu runner image has no ffmpeg (checked
+      # against its package list, 2026-10-11).
+      - name: Install ffmpeg
+        if: inputs.job == 'brain-slack-media'
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
+
       - name: Run the job
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -73,6 +82,8 @@ jobs:
           SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
           # The Night Shift's researcher reads the brain over MCP with this bearer.
           LOVEIQ_MCP_TOKEN: ${{ secrets.LOVEIQ_MCP_TOKEN }}
+          # The brain's Slack app, to list and download the screenshots. Given to that job only.
+          SLACK_BRAIN_BOT_TOKEN: ${{ inputs.job == 'brain-slack-media' && secrets.SLACK_BRAIN_BOT_TOKEN || '' }}
           # The routes run only when this names production (isProdCronHost), so it is
           # pinned here rather than read from a secret.
           NEXT_PUBLIC_SITE_URL: https://loveiq.org
@@ -93,6 +104,7 @@ jobs:
           [ "$JOB" = "brain-night-shift" ] && need="$need LOVEIQ_MCP_TOKEN"
           # The tool battery opens the MCP door with the same bearer.
           [ "$JOB" = "brain-health" ] && need="$need LOVEIQ_MCP_TOKEN"
+          [ "$JOB" = "brain-slack-media" ] && need="$need SLACK_BRAIN_BOT_TOKEN"
           for v in $need; do
             [ -n "${!v:-}" ] || missing="$missing $v"
           done
@@ -111,6 +123,7 @@ jobs:
               exit $rc ;;
             brain-radar) npx tsx scripts/brain-cron.ts brain-radar ;;
             brain-night-shift) npx tsx scripts/brain-cron.ts brain-night-shift ;;
+            brain-slack-media) npx tsx scripts/brain-cron.ts brain-slack-media ;;
             # Each battery exits 0 once its result is recorded, whatever failed: failures are
             # the report's findings. All three run; the job fails if any could not.
             brain-health)

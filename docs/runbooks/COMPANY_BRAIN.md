@@ -38,9 +38,10 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
   `query_product_data` for `report_price_quote`, not the written record.
 - **Money outside the product.** No payroll, no bank balance, no runway — those
   live in systems nothing here reads.
-- **Pictures.** Screenshots and photos are named but never read — there is no OCR
-  here. Of the 184 files shared in Slack, 148 are images, so for most of them the
-  file name is all there will ever be.
+- **Pictures outside Slack.** Screenshots and screen recordings shared in the Slack
+  channels it reads are described in words, so a question about a reported bug finds what
+  the picture showed (see "Slack screenshots and screen recordings, in words" below).
+  Images in Drive, email and Notion are still only named: there is no OCR there.
 
 ### Ready-made prompts
 
@@ -77,10 +78,11 @@ turned out to hold one tab of two. Counting documents cannot see inside them.
 
 | Read                                                    | Not read                                       |
 | ------------------------------------------------------- | ---------------------------------------------- |
-| Every tab of a Google Sheet, each under its own heading | Images and video — no OCR                      |
+| Every tab of a Google Sheet, each under its own heading | Images and video outside Slack — no OCR        |
 | PDF, Word and text attachments on email threads         | Anything over 4 MB — that is data, not prose   |
 | PDF, Word and text files shared in Slack channels       | `.xlsx` and `.pptx` uploads — no parser here   |
 | Google Docs, including documents with several tabs      | Files in channels the bot was never invited to |
+| Slack screenshots and recordings, in words              | HEIC photos — Claude cannot read them          |
 
 Bounded on purpose: at most five attachments per email thread and about ten
 chunks' worth of text per thread, because five 20,000-character attachments is a
@@ -169,6 +171,7 @@ a transcript. Filter on `surface` to tell the two apart.
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------- |
 | Repo docs                                                                                  | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
 | GA4, call notes, funnel numbers, Slack                                                     | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Slack screenshots and screen recordings, described in words                                | `brain-daily.yml` → `/api/cron/brain-slack-media` (GitHub Actions)     | every 6 hours           |
 | Notion (board + pages)                                                                     | `/api/cron/brain-notion`                                               | hourly, at :41          |
 | Gmail (every mailbox on the domain)                                                        | `/api/cron/brain-gmail`                                                | hourly, at :11          |
 | Search Console                                                                             | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
@@ -963,6 +966,61 @@ ids rather than failing.
 Private channels additionally need `groups:read` + `groups:history`; decide that
 separately, since it widens what one shared token can reach.
 
+### Slack screenshots and screen recordings, in words
+
+The team reports bugs by posting a screenshot or a screen recording, often with no
+caption, and the Slack walk above only names the file: before this job, a question about
+Marcus's recording of 9 October found `[shared: ScreenRecording_10-09-2026 21-30-00_1.MP4]`
+and nothing else. `brain-slack-media` (`features/brain/server/ingest/slack-media.ts`) puts
+each one into words.
+
+- **What it writes.** One `slack` row per file, `file:<Slack file id>`, beside the day's
+  chunk: the title names the channel, the day and who shared it, then the message as the
+  day chunk shows it, then `[screenshot: …]` or `[screen recording: …]`. It links to the
+  message and is dated by its day (`period_end`), so search finds the description and the
+  report together. A row of its own rather than a line in the day chunk, because the Slack
+  walk rewrites a day's chunk while the day is current and after every builder bump, which
+  would erase the line. The walk re-touches these rows with every other `slack` row, so its
+  sweep keeps them, and its denylist purge removes them with their channel.
+- **Which files.** PNG, JPEG, GIF and WebP images up to 10 MB and MP4, MOV and WebM
+  recordings up to 50 MB, uploaded by a person in a channel the Slack walk reads: never a
+  DM, never `#hr` or `#email-inbox`, never a bot's upload, never a file named like a
+  contract or a CV. Newest first, so a new bug report never waits behind the backlog. HEIC
+  is left out: Claude cannot read it, and none had been shared by 2026-10-11.
+- **How.** `files.list` finds the images and recordings, the stored `file:` ids say which
+  are done (a file is never described twice; an unreadable list stops the run rather than
+  describe everything again), `files.info` finds the message, and the file is downloaded
+  with `SLACK_BRAIN_BOT_TOKEN` (scope `files:read`). `claude -p` on the Team seat then reads
+  it with only the Read tool, allowed only inside a temporary folder holding that one file,
+  and a scrubbed environment (`cliEnv`, shared with the persona walkers' judge). A recording
+  becomes frames first: at least one every five seconds and at most eight, spread over the
+  whole recording, cut by ffmpeg, which the workflow installs because the runner image has
+  none. Each description is written the moment it exists, so a run that dies keeps what it
+  finished.
+- **No personal data.** The model is told never to copy anyone's name, email address,
+  phone number, address, payment details or survey answers, nor any key, and to describe
+  them instead ("a customer's email"); admin-panel screenshots show all of these. Any email
+  address it writes anyway is replaced before storing. Measured 2026-10-11: before "whoever
+  it belongs to" was added to that rule, a screenshot of our own website came back with an
+  advisor's name; after, it did not.
+- **Bounds.** Twenty descriptions and ten minutes a run, every six hours (05:41, 11:41,
+  17:41 and 23:41 UTC; the first lands before the brief). A usage limit on the seat, three
+  failed answers in a row or a refused download stops the run and fails it, which alerts
+  #brain; one file that cannot be described is counted and tried again next run. The job
+  logs counts only, never a description or a file name: the repository's Actions logs are
+  public.
+- **Size of it.** 513 images and recordings were waiting on 2026-10-11 (499 images, 14
+  recordings of 4 to 25 seconds), all in channels the walk reads, and 8 had been shared in
+  the 60 days before. At eighty a day the backlog is gone in about a week. A dry run against
+  live Slack on 2026-10-11 described the three newest in 27 seconds; the 15-second recording
+  became four frames.
+- **Needs** the repository secret `SLACK_BRAIN_BOT_TOKEN`, the brain app's bot token that
+  Vercel already holds (`gh secret set SLACK_BRAIN_BOT_TOKEN -R loveiqhq/loveiq`). The run fails with
+  "Missing repository secrets" until it is set. The app's scopes, read from `auth.test` on
+  2026-10-11, include `files:read`.
+- **To describe a file again**, delete its row (`source=slack`, `source_id=file:<id>`); the
+  next run picks it up.
+
 ### Google auth on production is keyless
 
 Production stores no Google credential at all. Vercel signs an OIDC token for every
@@ -1031,7 +1089,8 @@ watch behave exactly as they did on Vercel.
   request. Claude Code on Eman's laptop is signed in as teamwork@ too, so its sessions and
   these jobs share the seat's five-hour and weekly limits. The jobs take about fifteen short
   calls a day, plus the persona walkers' two long judge passes at night
-  (`persona-walkers.yml`, docs/runbooks/PERSONA_WALKERS.md), so a limit hit most likely
+  (`persona-walkers.yml`, docs/runbooks/PERSONA_WALKERS.md), plus up to eighty short picture
+  descriptions a day while the Slack backlog lasts (a week from its start), so a limit hit most likely
   means a heavy day of sessions. A hit is reported
   as `rate_limited`, the job stops for the day, and the #brain alert pings whoever looks
   after the seat (repository variable `CLAUDE_TOKEN_OWNER_SLACK_ID`, Eman). The limit resets
@@ -1056,7 +1115,8 @@ watch behave exactly as they did on Vercel.
   token passed that way. Then point the ping at whoever should hear about a limit:
   `gh variable set CLAUDE_TOKEN_OWNER_SLACK_ID -R loveiqhq/loveiq --body <Slack member id>`.
 - **Secrets it needs.** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-  `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`. The run fails when any is missing:
+  `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`, and for `brain-slack-media` only
+  `SLACK_BRAIN_BOT_TOKEN`. The run fails when any is missing:
   without the brain webhook the brief would be marked delivered into nothing. Any failure
   posts one line to the brain channel with a link to the run.
   `SLACK_OPS_WEBHOOK_URL` is deliberately absent: it is marked sensitive in Vercel and cannot

@@ -112,6 +112,15 @@ describe("when each GitHub job is due", () => {
     expect(brain("2026-09-29T15:41:00Z")).toEqual([]);
   });
 
+  it("describes Slack screenshots every six hours, the first just before the brief", () => {
+    const hours = [...Array(24).keys()].filter((h) =>
+      jobsDue(at(`2026-09-29T${String(h).padStart(2, "0")}:41:00Z`)).some(
+        (j) => j.workflow === "brain-daily.yml" && j.inputs?.job === "brain-slack-media"
+      )
+    );
+    expect(hours).toEqual([5, 11, 17, 23]);
+  });
+
   it("walks staging once a night, at 02:41, between the Night Shift and the brief", () => {
     const hours = [...Array(24).keys()].filter((h) =>
       workflows(`2026-09-29T${String(h).padStart(2, "0")}:41:00Z`).includes("persona-walkers.yml")
