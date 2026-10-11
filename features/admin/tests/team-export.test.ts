@@ -777,17 +777,22 @@ describe("Drive, with requests answered here", () => {
     // The listing is of this folder only, and of files not in the bin.
     expect(query(c[1]!.url)).toBe("'F1' in parents and trashed=false");
     expect(c[2]).toMatchObject({ method: "POST" });
+    // Each file carries the export's own tag, so Jarvis's Drive walk leaves it out wherever it goes.
     expect(JSON.parse(String(c[2]!.body))).toEqual({
       name: "app_user.csv",
       parents: ["F1"],
       writersCanShare: false,
+      properties: { loveiq_team_export_file: "production" },
     });
     expect(c[3]).toMatchObject({ url: "https://upload/session-1", method: "PUT" });
     expect(c[3]!.body).toBe("id\n1\n");
     expect(c[4]!.url).toContain("/files/NEW?fields=headRevisionId,md5Checksum");
     expect(c[6]).toMatchObject({ method: "PATCH" });
     expect(c[6]!.url).toContain("/upload/drive/v3/files/OLD?uploadType=resumable");
-    expect(JSON.parse(String(c[6]!.body))).toEqual({ writersCanShare: false });
+    expect(JSON.parse(String(c[6]!.body))).toEqual({
+      writersCanShare: false,
+      properties: { loveiq_team_export_file: "production" },
+    });
     expect(c[7]!.body).toBe("# readme");
     expect(c[10]!.url).toContain("pageToken=p2");
     // Every version but the current one goes, from both pages; the current one stays.
