@@ -53,6 +53,13 @@ const LOCK = "team-export:run";
 const LAST = "team-export:last";
 /** Longer than a run can last (its ceiling is 800 s), so a second never starts beside it. */
 const LOCK_TTL_S = 900;
+/**
+ * Deletes the lock only while it still holds the value given. Every release goes through it:
+ * a run freeing its lock late, or two requests clearing the same stale one, must never delete
+ * a lock a newer run has taken since.
+ */
+const RELEASE =
+  'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end return 0';
 
 interface Lock {
   runId: string;
@@ -68,12 +75,15 @@ interface LastRun extends Lock {
 }
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+// The stored value is the lock as JSON (the client serialises objects that way).
+const release = (redis: Redis, lock: Lock) => redis.eval(RELEASE, [LOCK], [JSON.stringify(lock)]);
 
 async function run(redis: Redis, drive: string, folderId: string, record: LastRun) {
   const startedAtMs = Date.parse(record.startedAt);
-  // Ten minutes for the work. The slowest single request (90 s for an upload, 60 s for a page
-  // of a table) and the records below still finish inside the 800-second ceiling.
-  const isOutOfTime = () => Date.now() - startedAtMs > 600_000;
+  // Nine minutes for the work. Checked before every page and every file, and the most one file
+  // can take after its check (a retried 15 s start, the 90 s upload, a retried 15 s listing and
+  // deletion: about 190 s) plus the records below still finish inside the 800-second ceiling.
+  const isOutOfTime = () => Date.now() - startedAtMs > 540_000;
   let status: "success" | "error" | "timeout" = "success";
   let error: string | undefined;
   try {
@@ -89,9 +99,9 @@ async function run(redis: Redis, drive: string, folderId: string, record: LastRu
   await redis
     .set(LAST, { ...record, finishedAt: new Date().toISOString(), status, error })
     .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not record the run"));
-  await redis
-    .del(LOCK)
-    .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not free the lock"));
+  await release(redis, { runId: record.runId, startedAt: record.startedAt }).catch((err) =>
+    logger.warn({ err, cron: NAME }, "team-export: could not free the lock")
+  );
   await recordCronRun(NAME, startedAtMs, status, error);
 }
 
@@ -111,11 +121,12 @@ export async function GET(request: Request) {
     );
   }
   // No retries: a retried SET NX whose first answer was lost would find its own lock and
-  // report a run that is not happening.
+  // report a run that is not happening. `{ retries: 0 }`, not `false`: in this client `false`
+  // still sends twice.
   const redis = new Redis({
     url: kvUrl,
     token: kvToken,
-    retry: false,
+    retry: { retries: 0 },
     signal: () => AbortSignal.timeout(3_000),
   });
   const unavailable = () =>
@@ -136,8 +147,8 @@ export async function GET(request: Request) {
   // never freed: the end's delete failed, or the platform killed the run first.
   const stale =
     lock !== null &&
-    ((last?.runId === lock.runId && last.finishedAt !== undefined) ||
-      Date.now() - Date.parse(lock.startedAt) > maxDuration * 1000);
+    ((last !== null && last.runId === lock.runId && last.finishedAt !== undefined) ||
+      !(Date.now() - Date.parse(lock.startedAt) <= maxDuration * 1000));
   if (new URL(request.url).searchParams.get("check") === "1") {
     return NextResponse.json({ running: stale ? null : (lock?.startedAt ?? null), last });
   }
@@ -146,7 +157,7 @@ export async function GET(request: Request) {
   const startedAtMs = Date.now();
   const mine: Lock = { runId: randomUUID(), startedAt: new Date(startedAtMs).toISOString() };
   try {
-    if (stale) await redis.del(LOCK);
+    if (stale) await release(redis, lock!);
     if (!(await redis.set(LOCK, mine, { nx: true, ex: LOCK_TTL_S }))) {
       const now = await redis.get<Lock>(LOCK);
       return NextResponse.json({ running: now?.startedAt ?? null, last }, { status: 409 });
@@ -154,8 +165,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.warn({ err, cron: NAME }, "team-export: Redis did not answer the lock");
     // Free the lock if the SET landed and only its answer was lost.
-    const held = await redis.get<Lock>(LOCK).catch(() => null);
-    if (held?.runId === mine.runId) await redis.del(LOCK).catch(() => undefined);
+    await release(redis, mine).catch(() => undefined);
     return unavailable();
   }
 
@@ -184,7 +194,7 @@ export async function GET(request: Request) {
       error,
     };
     await redis.set(LAST, failed).catch(() => undefined);
-    await redis.del(LOCK).catch(() => undefined);
+    await release(redis, mine).catch(() => undefined);
     await recordCronRun(NAME, startedAtMs, "error", error);
     return NextResponse.json({ error, last }, { status: 500 });
   }

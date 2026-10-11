@@ -1339,7 +1339,7 @@ export const TOOLS = [
       // It replaces every file in the folder and deletes their old versions, on purpose: an
       // erased customer must not live on in last week's copy. Neither can be undone.
       destructiveHint: true,
-      // Each start after the last one finished makes another copy; only `check` changes nothing.
+      // Each start after the last one finished makes another copy.
       idempotentHint: false,
       openWorldHint: true,
     },
@@ -1353,23 +1353,24 @@ export const TOOLS = [
       "the whole database is far too big for a chat. This tool never puts the data in the " +
       "chat, so its size does not matter.\n\n" +
       "Only the LoveIQ team can open the folder; share the link, never the data. A copy takes " +
-      "a few minutes on the server and then replaces every file in the folder. To see whether " +
-      "it has finished, or how the last one went, call it with `check: true`: that starts " +
-      "nothing, while a call without it starts another copy unless one is running. After a " +
-      "customer's data is deleted, start a copy the same day. Not in it: Jarvis's own index, " +
-      "job plumbing, and the log of people who asked us to delete their data. While anyone " +
-      "has asked us to restrict processing their data, it stops and writes nothing.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        check: {
-          type: "boolean",
-          description:
-            "true: only say whether a copy is being made and how the last one went. Starts " +
-            "nothing.",
-        },
-      },
-    },
+      "a few minutes on the server and then replaces every file in the folder. Every call " +
+      "starts another copy unless one is running, so to see whether a copy has finished use " +
+      "export_status, never this. After a customer's data is deleted, start a copy the same " +
+      "day. Not in it: Jarvis's own index, job plumbing, and the log of people who asked us to " +
+      "delete their data. While anyone has asked us to restrict processing their data, it " +
+      "stops and writes nothing.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "export_status",
+    title: "How the team's copy of all the data is going",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Whether a copy of all the data (export_all_data) is being made right now, when the " +
+      "last one finished and how it went, with the team folder's link and who can open it. " +
+      "Changes nothing. Use it for 'is the export done?', 'how fresh is the team's data?' or " +
+      "'did the copy work?'.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "count_context",
@@ -5535,15 +5536,15 @@ async function callTool(
     );
   }
 
-  if (name === "export_all_data") {
+  if (name === "export_all_data" || name === "export_status") {
+    const check = name === "export_status";
     if (!isProdCronHost()) {
       return textResult(
-        "The full export runs only on the production site, from the production database. " +
-          "Nothing was started.",
+        "The full export runs only on the production site, from the production database." +
+          (check ? "" : " Nothing was started."),
         true
       );
     }
-    const check = args.check === true;
     let res: Response;
     try {
       // The work runs in its own function: this one has a minute, and an export takes several.
@@ -5560,8 +5561,11 @@ async function callTool(
     } catch (err) {
       logger.error({ err }, "brain: no answer from the team export");
       return textResult(
-        "The export job did not answer in time, so it is not known whether a copy started. " +
-          "In a minute, call export_all_data with check: true to see.",
+        check
+          ? "The export job did not answer in time, so how the copy is going is not known. " +
+              "Try export_status again in a minute."
+          : "The export job did not answer in time, so it is not known whether a copy " +
+              "started. In a minute, use export_status to see.",
         true
       );
     }
@@ -5591,15 +5595,22 @@ async function callTool(
     const howLast = !last
       ? "No copy has been made from Jarvis yet."
       : !last.finishedAt
-        ? `The copy started at ${at(last.startedAt)} stopped without finishing (the server ended it).`
+        ? `The copy started at ${at(last.startedAt)} never recorded an end: the server ` +
+          "probably stopped it before it finished."
         : last.status === "success"
           ? `The last copy finished at ${at(last.finishedAt)}.`
           : `The last attempt, at ${at(last.startedAt)}, failed: ${last.error ?? last.status}`;
-    const toCheck = "To see whether it has finished, call export_all_data with check: true.";
-    if (res.status === 200 && check) {
+    if (check) {
+      if (res.status !== 200) {
+        return textResult(
+          `Could not check the export (${res.status}): ${job.error ?? "no reason given"}`,
+          true
+        );
+      }
       return textResult(
         job.running
-          ? `A copy of all the data has been in progress since ${at(job.running)}. ${toCheck}${where}`
+          ? `A copy of all the data has been in progress since ${at(job.running)}; it takes a ` +
+              `few minutes. Ask export_status again to see when it finishes.${where}`
           : `No copy is being made now. ${howLast}${where}`
       );
     }
@@ -5607,14 +5618,16 @@ async function callTool(
       return textResult(
         `Started a fresh copy of all the data at ${at(job.startedAt)}. In a few minutes every ` +
           `file in the team's folder is replaced:${where}\nOne CSV per table; README.md lists ` +
-          `them and says when the copy was made. In Excel: Data > From Text/CSV. ${toCheck}` +
+          "them and says when the copy was made. In Excel: Data > From Text/CSV. To see whether " +
+          "it has finished, use export_status." +
           (last && last.status !== "success" ? `\n\nBefore this: ${howLast}` : "")
       );
     }
     if (res.status === 409) {
       return textResult(
         `A copy of all the data is already being made, since ${at(job.running)}; it takes a ` +
-          `few minutes. ${toCheck}${where}`
+          "few minutes, and export_status says when it has finished. If someone's data was " +
+          `deleted after it started, start another copy once it has finished.${where}`
       );
     }
     return textResult(
@@ -6311,9 +6324,10 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   "ALL THE DATA, AS FILES: export_all_data puts a fresh copy of every customer and product " +
   "table (one CSV each, unmasked; Excel opens them) in the team's private Google Drive folder " +
-  "and returns its link; with check: true it only says how the copy is going. Use it whenever " +
-  "someone wants all the data, a full copy or a whole large table: query_product_data returns " +
-  "1,000 rows a call into the chat, so never page through it to build a copy.\n\n" +
+  "and returns its link; export_status says how the copy is going and changes nothing. Use " +
+  "export_all_data whenever someone wants all the data, a full copy or a whole large table: " +
+  "query_product_data returns 1,000 rows a call into the chat, so never page through it to " +
+  "build a copy.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +

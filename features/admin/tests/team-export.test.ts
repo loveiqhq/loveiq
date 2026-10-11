@@ -300,32 +300,54 @@ describe("the team data export", () => {
       { name: "payment.csv", body: "" },
       { name: "README.md", body: "" },
     ];
-    expect(plan(files, [ours("a", "app_user.csv"), ours("x", "mine.csv")])).toEqual([
+    const folder = ["ec@loveiq.org", "mb@loveiq.org"];
+    expect(plan(files, [ours("a", "app_user.csv"), ours("x", "mine.csv")], folder)).toEqual([
       "a",
       null,
       null,
     ]);
     // Every problem in the folder is named at once, before anything is written.
     const refused = () =>
-      plan(files, [
-        ours("a", "app_user.csv"),
-        ours("b", "app_user.csv"),
-        { ...ours("p", "payment.csv"), permissions: [{ type: "anyone" }] },
-        { ...ours("r", "README.md"), ownedByMe: false },
-      ]);
+      plan(
+        files,
+        [
+          ours("a", "app_user.csv"),
+          ours("b", "app_user.csv"),
+          { ...ours("p", "payment.csv"), permissions: [{ type: "anyone" }] },
+          { ...ours("r", "README.md"), ownedByMe: false },
+        ],
+        folder
+      );
     expect(refused).toThrow(/2 files are named app_user.csv/);
     expect(refused).toThrow(/payment.csv: it is shared by anyone link/);
     expect(refused).toThrow(/README.md belongs to someone other than ec@/);
     expect(refused).toThrow(/Nothing written/);
     // A file shared with one outside person, which the folder's sharing does not show.
     expect(() =>
-      plan(files, [
-        {
-          ...ours("p", "payment.csv"),
-          permissions: [...team, { type: "user", emailAddress: "accountant@gmail.com" }],
-        },
-      ])
+      plan(
+        files,
+        [
+          {
+            ...ours("p", "payment.csv"),
+            permissions: [...team, { type: "user", emailAddress: "accountant@gmail.com" }],
+          },
+        ],
+        folder
+      )
     ).toThrow(/payment.csv: someone outside loveiq.org can open it/);
+    // Or with a loveiq.org person the folder is not shared with: replies say exactly who can open it.
+    expect(() =>
+      plan(
+        files,
+        [
+          {
+            ...ours("p", "payment.csv"),
+            permissions: [...team, { type: "user", emailAddress: "new.hire@loveiq.org" }],
+          },
+        ],
+        folder
+      )
+    ).toThrow(/payment.csv is shared with someone the folder is not/);
     expect(driveQuoted("it's")).toBe("'it\\'s'");
     expect(driveQuoted("a\\b")).toBe("'a\\\\b'");
   });
@@ -513,18 +535,59 @@ describe("Drive, with requests answered here", () => {
     expect(calls().filter((c) => c.method !== "GET")).toHaveLength(0);
   });
 
-  it("retries a passing Drive error, and never repeats a URL when a request fails", async () => {
+  it("retries a passing Drive error once, after two seconds, and only that kind", async () => {
     vi.useFakeTimers();
     fetchMock
       .mockResolvedValueOnce(answer({}, { status: 503 }))
-      .mockResolvedValueOnce(answer(folderMeta));
+      .mockResolvedValueOnce(answer(folderMeta))
+      .mockResolvedValueOnce(answer({ files: [] }));
     const found = uploadExport("tok", "F1", []);
-    fetchMock.mockResolvedValueOnce(answer({ files: [] }));
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
     await expect(found).resolves.toBeUndefined();
     expect(calls()[0]!.url).toBe(calls()[1]!.url);
 
-    vi.useRealTimers();
+    // Once only: a second 503 is the answer.
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(answer({}, { status: 503 }))
+      .mockResolvedValueOnce(answer({}, { status: 503 }))
+      .mockResolvedValueOnce(answer(folderMeta));
+    const twice = uploadExport("tok", "F1", []);
+    const refused = expect(twice).rejects.toThrow("Drive could not read the folder (503)");
+    await vi.runAllTimersAsync();
+    await refused;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // A rate-limit 403 is passing; any other 403 is an answer.
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(
+        answer({ error: { errors: [{ reason: "userRateLimitExceeded" }] } }, { status: 403 })
+      )
+      .mockResolvedValueOnce(answer(folderMeta))
+      .mockResolvedValueOnce(answer({ files: [] }));
+    const limited = uploadExport("tok", "F1", []);
+    await vi.runAllTimersAsync();
+    await expect(limited).resolves.toBeUndefined();
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(answer({ error: "forbidden" }, { status: 403 }));
+    await expect(uploadExport("tok", "F1", [])).rejects.toThrow("(403)");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never retries the upload itself, and never repeats a URL when a request fails", async () => {
+    fetchMock
+      .mockResolvedValueOnce(answer(folderMeta))
+      .mockResolvedValueOnce(answer({ files: [] }))
+      .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
+      .mockResolvedValueOnce(answer({}, { status: 503 }));
+    await expect(uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])).rejects.toThrow(
+      "Drive upload of a.csv failed: 503"
+    );
+    expect(calls().filter((c) => c.method === "PUT")).toHaveLength(1);
+
     fetchMock.mockReset();
     fetchMock
       .mockResolvedValueOnce(answer(folderMeta))
@@ -538,12 +601,33 @@ describe("Drive, with requests answered here", () => {
     await expect(failed).rejects.not.toThrow(/SECRET-SESSION/);
   });
 
-  it("stops uploading at its deadline", async () => {
+  it("takes an old version that is already gone as gone", async () => {
+    fetchMock
+      .mockResolvedValueOnce(answer(folderMeta))
+      .mockResolvedValueOnce(
+        answer({ files: [{ id: "OLD", name: "a.csv", ownedByMe: true, permissions: team }] })
+      )
+      .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
+      .mockResolvedValueOnce(answer({ id: "OLD" }))
+      .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }, { id: "r2" }] }))
+      .mockResolvedValueOnce(answer({}, { status: 404 }));
+    await expect(
+      uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])
+    ).resolves.toBeUndefined();
+  });
+
+  it("stops uploading at its deadline, before asking Drive anything", async () => {
+    await expect(
+      uploadExport("tok", "F1", [{ name: "a.csv", body: "" }], () => true)
+    ).rejects.toBeInstanceOf(OutOfTime);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // And between files: the check before each one stops the rest.
     fetchMock
       .mockResolvedValueOnce(answer(folderMeta))
       .mockResolvedValueOnce(answer({ files: [] }));
+    let checks = 0;
     await expect(
-      uploadExport("tok", "F1", [{ name: "a.csv", body: "" }], () => true)
+      uploadExport("tok", "F1", [{ name: "a.csv", body: "" }], () => ++checks > 1)
     ).rejects.toBeInstanceOf(OutOfTime);
     expect(calls().filter((c) => c.method !== "GET")).toHaveLength(0);
   });

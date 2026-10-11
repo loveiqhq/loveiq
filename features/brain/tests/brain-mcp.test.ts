@@ -1532,7 +1532,7 @@ describe("/api/mcp", () => {
     });
 
     describe("export_all_data", () => {
-      const call = async (args: Record<string, unknown> = {}) =>
+      const call = async (name = "export_all_data") =>
         (
           await (
             await POST(
@@ -1540,11 +1540,12 @@ describe("/api/mcp", () => {
                 jsonrpc: "2.0",
                 id: 31,
                 method: "tools/call",
-                params: { name: "export_all_data", arguments: args },
+                params: { name, arguments: {} },
               })
             )
           ).json()
         ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const status = () => call("export_status");
       const folder = "https://drive.google.com/drive/folders/F1";
       const people = ["Eman Cickusic", "Marcus Börner"];
       const job = (status: number, body: Record<string, unknown>) =>
@@ -1589,7 +1590,7 @@ describe("/api/mcp", () => {
         expect(text).toContain("Started a fresh copy of all the data at 2026-10-11 09:00 UTC");
         expect(text).toContain(folder);
         expect(text).toContain("Only these people can open it: Eman Cickusic, Marcus Börner.");
-        expect(text).toContain("call export_all_data with check: true");
+        expect(text).toContain("To see whether it has finished, use export_status.");
         expect(text).not.toContain("Before this");
       });
 
@@ -1615,13 +1616,13 @@ describe("/api/mcp", () => {
           last: { startedAt: "2026-10-11T09:00:00.000Z" },
         });
         expect((await call()).content[0]!.text).toContain(
-          "The copy started at 2026-10-11 09:00 UTC stopped without finishing"
+          "The copy started at 2026-10-11 09:00 UTC never recorded an end"
         );
       });
 
-      it("checks without starting anything", async () => {
+      it("reports how the copy is going with its own tool, which starts nothing", async () => {
         job(200, { running: "2026-10-11T09:00:00.000Z", last: { folderUrl: folder, people } });
-        const running = await call({ check: true });
+        const running = await status();
         expect(String(jobCalls().at(-1)![0])).toBe(
           "https://www.loveiq.org/api/cron/team-export?check=1"
         );
@@ -1636,15 +1637,24 @@ describe("/api/mcp", () => {
             people,
           },
         });
-        const done = (await call({ check: true })).content[0]!.text;
+        const done = (await status()).content[0]!.text;
         expect(done).toContain(
           "No copy is being made now. The last copy finished at 2026-10-11 09:03 UTC."
         );
         expect(done).toContain(folder);
         job(200, { running: null, last: null });
-        expect((await call({ check: true })).content[0]!.text).toContain(
+        expect((await status()).content[0]!.text).toContain(
           "No copy has been made from Jarvis yet."
         );
+        // A status call that fails says so as a check, not as an export that did not start.
+        job(503, { error: "Redis did not answer" });
+        const down = await status();
+        expect(down.isError).toBe(true);
+        expect(down.content[0]!.text).toContain("Could not check the export (503)");
+        mockFetch.mockRejectedValueOnce(new Error("Request timeout after 45000ms"));
+        expect((await status()).content[0]!.text).toContain("how the copy is going is not known");
+        // Every status call asked for the check, never for a start.
+        expect(jobCalls().every(([url]) => String(url).endsWith("?check=1"))).toBe(true);
       });
 
       it("reports a copy already being made instead of starting another", async () => {
@@ -1652,6 +1662,7 @@ describe("/api/mcp", () => {
         const r = await call();
         expect(r.isError).toBeFalsy();
         expect(r.content[0]!.text).toContain("already being made, since 2026-10-11 09:00 UTC");
+        expect(r.content[0]!.text).toContain("deleted after it started, start another copy");
         expect(r.content[0]!.text).toContain(folder);
       });
 
@@ -1779,6 +1790,7 @@ describe("/api/mcp", () => {
         "settle_decision_conflict",
         "record_experiment",
         "export_all_data",
+        "export_status",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -7446,6 +7458,7 @@ describe("the runbook's tool count is the real one", () => {
     36: "Thirty-six",
     37: "Thirty-seven",
     38: "Thirty-eight",
+    39: "Thirty-nine",
   };
 
   it("matches what the server actually exposes", () => {

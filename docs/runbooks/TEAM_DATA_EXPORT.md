@@ -47,10 +47,11 @@ starts the export on the server (`/api/cron/team-export`, production only) and r
 folder's link and who can open it; nobody's laptop is needed, and the data goes from the
 database to Drive without passing through the chat.
 
-- It takes a few minutes. To see whether it has finished, or how the last one went, ask Claude
-  to check (`export_all_data` with `check: true`), which starts nothing.
+- It takes a few minutes. To see whether it has finished, or how the last one went, ask Claude;
+  it uses `export_status`, which changes nothing.
 - One runs at a time on the server. Asking again after one has finished starts another copy, so
-  a refresh after a deletion request always runs.
+  a refresh after a deletion request always runs. If one is already running when someone is
+  deleted, start another once it finishes: the running one may have read them first.
 - Every run is recorded in Redis when it starts and when it ends, so a check reports a run the
   server killed as one that never finished. A failed run alerts #prod-alerts and records
   `error` or `timeout` in `cron_run`; a check, or the next start, says why it failed.

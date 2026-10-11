@@ -45,28 +45,41 @@ vi.mock("@features/admin/server/team-export", async (importOriginal) => ({
   ...work,
 }));
 
-/** Redis as the route uses it: SET (NX/EX), GET and DEL, on its two keys. */
+/**
+ * Redis as the route uses it: SET (NX/EX), GET, and the compare-and-delete script, applied in
+ * the order the requests arrive, with a log of what was written in what order.
+ */
 const redis = vi.hoisted(() => ({
   store: new Map<string, unknown>(),
-  options: [] as unknown[],
+  options: [] as Array<Record<string, unknown>>,
+  ops: [] as string[],
   set: vi.fn(),
-  failNext: null as null | "get" | "set",
+  failNext: null as null | "get" | "set" | "lost-set",
+  onEnd: null as null | (() => Promise<void>),
 }));
 vi.mock("@upstash/redis", () => ({
   Redis: class {
-    constructor(options: unknown) {
+    constructor(options: Record<string, unknown>) {
       redis.options.push(options);
     }
     async set(key: string, value: unknown, opts: { nx?: boolean; ex?: number } = {}) {
       redis.set(key, value, opts);
-      if (redis.failNext === "set") {
+      if (redis.failNext === "set" || redis.failNext === "lost-set") {
+        const landed = redis.failNext === "set";
         redis.failNext = null;
-        // The write lands; only its answer is lost.
-        redis.store.set(key, structuredClone(value));
+        // "set": the write lands and only its answer is lost; "lost-set": it never lands.
+        if (landed) redis.store.set(key, structuredClone(value));
         throw new Error("fetch failed");
       }
       if (opts.nx && redis.store.has(key)) return null;
+      const ended = key === "team-export:last" && (value as { finishedAt?: string }).finishedAt;
+      redis.ops.push(ended ? "end recorded" : `set ${key}`);
       redis.store.set(key, structuredClone(value));
+      if (ended && redis.onEnd) {
+        const hook = redis.onEnd;
+        redis.onEnd = null;
+        await hook();
+      }
       return "OK";
     }
     async get(key: string) {
@@ -76,9 +89,15 @@ vi.mock("@upstash/redis", () => ({
       }
       return redis.store.get(key) ?? null;
     }
-    async del(key: string) {
-      redis.store.delete(key);
-      return 1;
+    async eval(script: string, keys: string[], args: string[]) {
+      expect(script).toContain('redis.call("get", KEYS[1]) == ARGV[1]');
+      redis.ops.push("release");
+      const held = redis.store.get(keys[0]!);
+      if (held !== undefined && JSON.stringify(held) === args[0]) {
+        redis.store.delete(keys[0]!);
+        return 1;
+      }
+      return 0;
     }
   },
 }));
@@ -105,8 +124,10 @@ describe("/api/cron/team-export", () => {
     google.oidc.mockReset();
     redis.store.clear();
     redis.options.length = 0;
+    redis.ops.length = 0;
     redis.set.mockReset();
     redis.failNext = null;
+    redis.onEnd = null;
     log.error.mockReset();
     process.env.KV_REST_API_URL = "https://kv";
     process.env.KV_REST_API_TOKEN = "kv-token";
@@ -138,8 +159,10 @@ describe("/api/cron/team-export", () => {
     redis.failNext = "get";
     expect((await GET(req())).status).toBe(503);
     expect(work.findTeamFolder).not.toHaveBeenCalled();
-    // And never retries: a retried lock request could find its own lock.
-    expect(redis.options.at(-1)).toMatchObject({ retry: false });
+    // And never retries (in this client `retry: false` still sends twice): a retried lock
+    // request could find its own lock. Every request is bounded.
+    expect(redis.options.at(-1)).toMatchObject({ retry: { retries: 0 } });
+    expect(typeof redis.options.at(-1)!.signal).toBe("function");
   });
 
   it("answers at once with the folder and its people, then exports after the response", async () => {
@@ -168,6 +191,8 @@ describe("/api/cron/team-export", () => {
     );
     expect(last()).toMatchObject({ status: "success", finishedAt: expect.any(String) });
     expect(redis.store.has("team-export:run")).toBe(false);
+    // The end is on record before the lock goes, so a start in between finds it.
+    expect(redis.ops.slice(-2)).toEqual(["end recorded", "release"]);
     expect(runs).toEqual([{ name: "team-export", status: "success", error: undefined }]);
   });
 
@@ -223,15 +248,15 @@ describe("/api/cron/team-export", () => {
     expect((await again.json()).last).toMatchObject({ status: "error" });
   });
 
-  it("gives up at ten minutes, and records that as a timeout", async () => {
+  it("gives up at nine minutes, and records that as a timeout", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-11T10:00:00Z"));
     await GET(req());
     await flushAfterResponse();
     const isOutOfTime = work.buildExport.mock.calls[0]![2] as () => boolean;
-    vi.setSystemTime(new Date("2026-10-11T10:09:59Z"));
+    vi.setSystemTime(new Date("2026-10-11T10:08:59Z"));
     expect(isOutOfTime()).toBe(false);
-    vi.setSystemTime(new Date("2026-10-11T10:10:01Z"));
+    vi.setSystemTime(new Date("2026-10-11T10:09:01Z"));
     expect(isOutOfTime()).toBe(true);
 
     work.uploadExport.mockRejectedValueOnce(new OutOfTime("ran out of time"));
@@ -283,10 +308,65 @@ describe("/api/cron/team-export", () => {
     expect((await res.json()).last).toEqual({ runId: "r2", startedAt: "2026-10-11T09:00:00Z" });
   });
 
-  it("frees the lock when it landed but the answer to it was lost", async () => {
+  it("frees the lock when it landed but the answer to it was lost, and only its own", async () => {
     redis.failNext = "set";
     expect((await GET(req())).status).toBe(503);
     expect(redis.store.has("team-export:run")).toBe(false);
     expect(work.buildExport).not.toHaveBeenCalled();
+
+    // Its SET never landed, and the lock is another request's: that one is left alone.
+    const other = { runId: "other", startedAt: new Date().toISOString() };
+    redis.failNext = "lost-set";
+    redis.store.delete("team-export:run");
+    const pending = GET(req());
+    redis.store.set("team-export:run", other);
+    expect((await pending).status).toBe(503);
+    expect(redis.store.get("team-export:run")).toEqual(other);
+  });
+
+  it("starts nothing when another request takes the lock first", async () => {
+    // Between this request's read and its SET NX, another one claims.
+    const other = { runId: "other", startedAt: new Date().toISOString() };
+    redis.set.mockImplementationOnce((key: string) => {
+      if (key === "team-export:run") redis.store.set(key, other);
+    });
+    const res = await GET(req());
+    expect(res.status).toBe(409);
+    expect((await res.json()).running).toBe(other.startedAt);
+    expect(work.findTeamFolder).not.toHaveBeenCalled();
+    expect(work.buildExport).not.toHaveBeenCalled();
+  });
+
+  it("lets only one of two simultaneous starts take over a stale lock", async () => {
+    redis.store.set("team-export:run", {
+      runId: "dead",
+      startedAt: new Date(Date.now() - 801_000).toISOString(),
+    });
+    const statuses = (await Promise.all([GET(req()), GET(req())])).map((r) => r.status).sort();
+    expect(statuses).toEqual([202, 409]);
+    await flushAfterResponse();
+    expect(work.buildExport).toHaveBeenCalledTimes(1);
+  });
+
+  it("a run that ends late never frees the lock of the run that started after it", async () => {
+    let second: Response | null = null;
+    let finishSecond: (f: typeof files) => void = () => {};
+    // The moment the first run records its end, a new start reads "finished" and takes over;
+    // the second run is held open so its lock is still there to be checked.
+    redis.onEnd = async () => {
+      work.buildExport.mockReturnValueOnce(new Promise((r) => (finishSecond = r)));
+      second = await GET(req());
+    };
+    expect((await GET(req())).status).toBe(202);
+    await vi.waitFor(() => expect(runs).toHaveLength(1));
+    expect(second!.status).toBe(202);
+    const held = redis.store.get("team-export:run") as { startedAt: string } | undefined;
+    // The first run's release came after the takeover and left the new lock alone.
+    expect(held?.startedAt).toBe((await second!.json()).startedAt);
+    // So a third start waits instead of running beside the second.
+    expect((await GET(req())).status).toBe(409);
+    finishSecond(files);
+    await flushAfterResponse();
+    expect(work.buildExport).toHaveBeenCalledTimes(2);
   });
 });
