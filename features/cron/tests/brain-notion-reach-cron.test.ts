@@ -59,6 +59,7 @@ const result = (over: Record<string, unknown> = {}) => ({
   mentionTotal: 4,
   problem: null,
   findingKey: "abcdef0123",
+  seenRefreshFailed: false,
   noticed: true,
   noticeFailed: false,
   summary: "4 linked Notion pages Jarvis cannot open (Email Marketing Playbook, …)",
@@ -190,6 +191,16 @@ describe("GET /api/cron/brain-notion-reach", () => {
     expect(mockRecordCronRun.mock.calls[0]![3]).toMatch(/^Notion answered none of the 71/);
     expect(String(mockLogError.mock.calls[0]![1])).toBe(
       "brain notion-reach: Notion answered none of the 71 questions it was asked"
+    );
+  });
+
+  it("fails a run whose last-seen days could not be saved", async () => {
+    mockCheck.mockResolvedValue(result({ seenRefreshFailed: true }));
+    const res = await call();
+    expect(res.status).toBe(502);
+    expect(mockRecordCronRun.mock.calls[0]![2]).toBe("error");
+    expect(String(mockLogError.mock.calls[0]![1])).toBe(
+      "brain notion-reach: the reported pages' last-seen days could not be saved"
     );
   });
 

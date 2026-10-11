@@ -448,6 +448,8 @@ export interface ReachResult {
   visibleNotIndexed: number;
   mentionPages: number;
   noticed: boolean;
+  /** The last-seen days of reported pages could not be saved on a quiet day. Fails the cron. */
+  seenRefreshFailed: boolean;
   /** A notice was due and could not be written: the run must not read as healthy. */
   noticeFailed: boolean;
   /** One line for cron_run and for list_sources. */
@@ -642,11 +644,12 @@ export async function checkNotionReach(
 
   // ---- what was reported last time ---------------------------------------------
   const previousRows = await chunkPage<{
+    source_id?: string;
     meta?: { reach_open?: unknown; reach_seen?: unknown; reach_hint?: unknown } | null;
   }>(
     REACH_KIND,
     await supabaseFetch(
-      `/rest/v1/brain_chunk?select=meta&source=eq.${NOTICE_SOURCE}` +
+      `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${NOTICE_SOURCE}` +
         `&meta->>noticed_by=eq.${REACH_KIND}&order=updated_at.desc&limit=1`
     )
   );
@@ -768,6 +771,39 @@ export async function checkNotionReach(
   // A dry run writes nothing, so "would have written" is not a failure either.
   const noticed = notice && !options.dryRun ? await recordNotice(notice) : false;
 
+  /**
+   * reach_seen moves only when a notice is written, so a page seen linked again on a quiet
+   * day would keep the date of the last notice, and the hold would count from the last day
+   * there was news instead of from the day it was last SEEN. So on a quiet day the dates
+   * are refreshed in place on the last report: no new notice reaches the brief, and an
+   * update of meta alone leaves updated_at (what marks a notice fresh) and its embedding be.
+   */
+  const seenAgain = [...previous].filter((id) => referenced.has(id) && lastSeen(id) !== day);
+  const last = previousRows[0];
+  let seenRefreshFailed = false;
+  if (!notice && !options.dryRun && last?.source_id && seenAgain.length) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?source=eq.${NOTICE_SOURCE}&source_id=eq.${encodeURIComponent(last.source_id)}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          meta: {
+            ...last.meta,
+            reach_seen: {
+              ...Object.fromEntries(seenOn),
+              ...Object.fromEntries(seenAgain.map((id) => [id, day])),
+            },
+          },
+        }),
+      }
+    );
+    if (!res.ok) {
+      seenRefreshFailed = true;
+      logger.warn({ status: res.status }, "brain notion-reach: last-seen days not saved");
+    }
+  }
+
   // Named pages first: "untitled" tells a reader of list_sources nothing.
   const names = [...listed]
     .sort((a, b) => Number(!gaps.get(a)?.hint) - Number(!gaps.get(b)?.hint))
@@ -812,6 +848,7 @@ export async function checkNotionReach(
     problem,
     noticed,
     noticeFailed: due && !options.dryRun && !noticed,
+    seenRefreshFailed,
     summary: summary + caveat,
     findingKey: notice
       ? createHash("sha1")

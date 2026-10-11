@@ -21,15 +21,22 @@ let previousSeen: Record<string, string> = {};
 let previousHint: Record<string, string> = {};
 let failCorpus = false;
 const dbPaths: string[] = [];
+/** PATCHes the check sent (the in-place refresh of last-seen days), and whether they fail. */
+const patches: Array<{ path: string; body: { meta: Record<string, unknown> } }> = [];
+let failPatch = false;
 
 vi.mock("@features/admin/server/supabase", () => ({
-  supabaseFetch: vi.fn(async (path: string) => {
+  supabaseFetch: vi.fn(async (path: string, init?: { method?: string; body?: string }) => {
     dbPaths.push(path);
     const ok = (rows: unknown) =>
       new Response(JSON.stringify(rows), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
+    if (init?.method === "PATCH") {
+      patches.push({ path, body: JSON.parse(init.body ?? "{}") });
+      return new Response(null, { status: failPatch ? 503 : 204 });
+    }
     if (failCorpus) return new Response("boom", { status: 500 });
     const offset = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
     if (path.includes("fts=fts(simple)")) return ok(offset === 0 ? linkRows : []);
@@ -41,7 +48,10 @@ vi.mock("@features/admin/server/supabase", () => ({
         previousOpen
           ? [
               {
+                source_id: "notice:2026-10-05-aaaaaaaaaa",
                 meta: {
+                  kind: "notice",
+                  noticed_by: "notion-reach",
                   reach_open: previousOpen,
                   reach_seen: previousSeen,
                   reach_hint: previousHint,
@@ -444,6 +454,8 @@ describe("checkNotionReach", () => {
     previousOpen = null;
     previousSeen = {};
     previousHint = {};
+    patches.length = 0;
+    failPatch = false;
     failCorpus = false;
     pageStatus = {};
     pageBlocks = {};
@@ -896,6 +908,69 @@ describe("checkNotionReach", () => {
     linkRows.push(row({ source_id: "wa:2", body: `https://www.notion.so/${flat(E)}` }));
     const more = await checkNotionReach(MONDAY);
     expect(more.findingKey).not.toBe(first.findingKey);
+  });
+
+  it("refreshes when a reported page was last seen, in place, on a day with no news", async () => {
+    previousOpen = [C];
+    previousSeen = { [C]: "2026-10-01" };
+    previousHint = { [C]: "Playbook" };
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    const r = await checkNotionReach(NOW); // a Sunday: nothing new, so no notice
+    expect(r.noticed).toBe(false);
+    expect(recorded).toHaveLength(0);
+    expect(patches).toHaveLength(1);
+    expect(patches[0]!.path).toContain(
+      "source=eq.notice&source_id=eq.notice%3A2026-10-05-aaaaaaaaaa"
+    );
+    // Everything the last report said is kept; only the day C was last seen moves.
+    expect(patches[0]!.body.meta).toEqual({
+      kind: "notice",
+      noticed_by: "notion-reach",
+      reach_open: [C],
+      reach_seen: { [C]: "2026-10-11" },
+      reach_hint: { [C]: "Playbook" },
+    });
+    expect(r.seenRefreshFailed).toBe(false);
+  });
+
+  it("does not refresh in place when a notice is written, in a dry run, or when nothing moved", async () => {
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    previousOpen = [C];
+    previousSeen = { [C]: "2026-10-01" };
+    await checkNotionReach(MONDAY); // the reminder carries fresh days itself
+    await checkNotionReach(NOW, undefined, { dryRun: true });
+    previousSeen = { [C]: "2026-10-11" };
+    await checkNotionReach(NOW); // already today
+    expect(patches).toHaveLength(0);
+  });
+
+  it("fails loudly when the last-seen days cannot be saved", async () => {
+    previousOpen = [C];
+    previousSeen = { [C]: "2026-10-01" };
+    linkRows = [row({ body: `https://www.notion.so/${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    failPatch = true;
+    expect((await checkNotionReach(NOW)).seenRefreshFailed).toBe(true);
+  });
+
+  it("counts the hold from the day a page was last seen, not the last day with news", async () => {
+    // D is seen on a quiet Sunday (refreshed in place), then goes unseen on a partial run
+    // 13 days later: still held. Counted from its old 2026-09-28 date it would have been
+    // dropped, then announced as new the day it was seen again.
+    previousOpen = [D];
+    previousSeen = { [D]: "2026-09-28" };
+    linkRows = [row({ body: `https://www.notion.so/${flat(D)}` })];
+    pageStatus = { [D]: 404 };
+    await checkNotionReach(NOW);
+    previousSeen = patches[0]!.body.meta.reach_seen as Record<string, string>;
+    linkRows = [];
+    previousOpen = [C, D];
+    untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
+    pageReadStatus = { [A]: 502 };
+    await checkNotionReach(new Date("2026-10-24T05:20:00Z")); // C opens: a notice is due
+    expect(recorded[0]!.meta?.reach_open).toEqual([D]);
   });
 
   it("lets a held page go once nobody has been seen linking it for two weeks", async () => {

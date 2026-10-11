@@ -78,6 +78,7 @@ export async function GET(request: Request) {
     const failures = [
       result.problem,
       result.noticeFailed ? "the notice could not be written" : null,
+      result.seenRefreshFailed ? "the reported pages' last-seen days could not be saved" : null,
     ].filter((f): f is string => Boolean(f));
     if (failures.length) {
       status = "error";
