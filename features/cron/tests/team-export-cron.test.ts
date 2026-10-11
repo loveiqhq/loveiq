@@ -56,6 +56,8 @@ const redis = vi.hoisted(() => ({
   set: vi.fn(),
   failNext: null as null | "get" | "set" | "lost-set",
   onEnd: null as null | (() => Promise<void>),
+  /** Milliseconds each release waits before acting, in call order. */
+  releaseDelays: [] as number[],
 }));
 vi.mock("@upstash/redis", () => ({
   Redis: class {
@@ -90,7 +92,13 @@ vi.mock("@upstash/redis", () => ({
       return redis.store.get(key) ?? null;
     }
     async eval(script: string, keys: string[], args: string[]) {
-      expect(script).toContain('redis.call("get", KEYS[1]) == ARGV[1]');
+      // The one script the route may run: delete KEYS[1] only while it holds ARGV[1].
+      expect(script).toBe(
+        'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end return 0'
+      );
+      expect(keys).toEqual(["team-export:run"]);
+      const delay = redis.releaseDelays.shift() ?? 0;
+      if (delay) await new Promise((r) => setTimeout(r, delay));
       redis.ops.push("release");
       const held = redis.store.get(keys[0]!);
       if (held !== undefined && JSON.stringify(held) === args[0]) {
@@ -128,6 +136,7 @@ describe("/api/cron/team-export", () => {
     redis.set.mockReset();
     redis.failNext = null;
     redis.onEnd = null;
+    redis.releaseDelays = [];
     log.error.mockReset();
     process.env.KV_REST_API_URL = "https://kv";
     process.env.KV_REST_API_TOKEN = "kv-token";
@@ -283,6 +292,12 @@ describe("/api/cron/team-export", () => {
     expect(runs.map((r) => r.status)).toEqual(["error", "error"]);
   });
 
+  it("takes a lock with no readable start time as stale", async () => {
+    redis.store.set("team-export:run", { runId: "odd", startedAt: "not a time" });
+    expect((await GET(req())).status).toBe(202);
+    await flushAfterResponse();
+  });
+
   it("frees a lock the end failed to free, or one older than any run can last", async () => {
     // Its run recorded an end: the delete after it failed.
     redis.store.set("team-export:run", { runId: "r1", startedAt: new Date().toISOString() });
@@ -342,8 +357,14 @@ describe("/api/cron/team-export", () => {
       runId: "dead",
       startedAt: new Date(Date.now() - 801_000).toISOString(),
     });
+    // The second request's release lands after the first has taken the lock, while its run
+    // is still going.
+    redis.releaseDelays = [0, 20];
+    let finish: (f: typeof files) => void = () => {};
+    work.buildExport.mockReturnValueOnce(new Promise((r) => (finish = r)));
     const statuses = (await Promise.all([GET(req()), GET(req())])).map((r) => r.status).sort();
     expect(statuses).toEqual([202, 409]);
+    finish(files);
     await flushAfterResponse();
     expect(work.buildExport).toHaveBeenCalledTimes(1);
   });

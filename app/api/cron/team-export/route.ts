@@ -43,7 +43,7 @@ import { recordCronRun, verifyCronAuth } from "@shared/observability/slack-alert
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** The most Vercel allows. A run takes a few minutes and gives up at ten. */
+/** The most Vercel allows. A run takes a few minutes and gives up at nine. */
 export const maxDuration = 800;
 
 const NAME = "team-export";
@@ -78,7 +78,7 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 // The stored value is the lock as JSON (the client serialises objects that way).
 const release = (redis: Redis, lock: Lock) => redis.eval(RELEASE, [LOCK], [JSON.stringify(lock)]);
 
-async function run(redis: Redis, drive: string, folderId: string, record: LastRun) {
+async function run(redis: Redis, drive: string, folderId: string, lock: Lock, record: LastRun) {
   const startedAtMs = Date.parse(record.startedAt);
   // Nine minutes for the work. Checked before every page and every file, and the most one file
   // can take after its check (a retried 15 s start, the 90 s upload, a retried 15 s listing and
@@ -99,7 +99,7 @@ async function run(redis: Redis, drive: string, folderId: string, record: LastRu
   await redis
     .set(LAST, { ...record, finishedAt: new Date().toISOString(), status, error })
     .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not record the run"));
-  await release(redis, { runId: record.runId, startedAt: record.startedAt }).catch((err) =>
+  await release(redis, lock).catch((err) =>
     logger.warn({ err, cron: NAME }, "team-export: could not free the lock")
   );
   await recordCronRun(NAME, startedAtMs, status, error);
@@ -203,6 +203,6 @@ export async function GET(request: Request) {
   await redis
     .set(LAST, record)
     .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not record the start"));
-  scheduleAfterResponse(NAME, () => run(redis, drive, folder.id, record));
+  scheduleAfterResponse(NAME, () => run(redis, drive, folder.id, mine, record));
   return NextResponse.json({ ...record, last }, { status: 202 });
 }
