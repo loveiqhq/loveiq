@@ -342,6 +342,9 @@ describe("buildReachNotice", () => {
     const body = buildNoticeRow(n, new Date("2026-10-12T05:20:00Z")).body;
     expect(body.length).toBeLessThanOrEqual(MAX_BODY_CHARS);
     expect(body).toMatch(/…and \d+ more\./);
+    // Long titles are clipped, so one cannot crowd the others out.
+    expect(body).toContain('…", linked in Gmail:');
+    expect((body.match(/^• /gm) ?? []).length).toBeGreaterThanOrEqual(6);
     expect(body).toContain("To fix one:");
     expect(body).toContain("every page under it follows");
     expect(body).toContain("Evidence: 60 Notion pages linked by the team");
