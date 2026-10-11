@@ -6,10 +6,11 @@
  * (app/api/cron/team-export), and `scripts/team-data-export.ts` runs it from a laptop. Either
  * way the data goes from the database to Drive and never through a chat.
  *
- * EVERYTHING, UNMASKED, BY DECISION. Eman, 2026-10-10: the team (Eman, Marcus, Mark, Fatih,
- * Sanjin, Ajna) gets all of it, with nothing removed or masked: emails, names, free-text
- * answers, report links, payment details. The folder it goes to is shared with those six and
- * nobody else, and `assertTeamOnly` stops an upload to a folder anyone else can open.
+ * WHAT IDENTIFIES A PERSON IS MASKED, BY DECISION. Eman, 2026-10-11: "mask the emails and
+ * names and those sensitive info", replacing the unmasked copy decided on 2026-10-10. What
+ * people answered and did stays, because that is what the copy is for; maskRow says what goes.
+ * The folder is shared with the team (Eman, Marcus, Mark, Fatih, Sanjin, Ajna) and nobody
+ * else, and `assertTeamOnly` stops an upload to a folder anyone else can open.
  *
  * Not exported, because none of it is customer or product data, or because copying it would
  * defeat its purpose:
@@ -24,6 +25,8 @@
  * panel's own rule, on `survey_submission` and `survey_partial_save`.
  * See docs/runbooks/TEAM_DATA_EXPORT.md.
  */
+import { createHmac, randomBytes } from "node:crypto";
+
 import { POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
 import { evaluateTestSubmission } from "@features/admin/server/test-submission";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -77,6 +80,202 @@ export function withTestFlag(table: string, row: Row, emailOfUser: Map<unknown, 
     : row;
 }
 
+/** What a masked value reads. */
+export const MASKED = "[masked]";
+/** An address, also with its @ written as %40, as it travels inside a link. */
+const EMAIL = /[A-Za-z0-9._%+-]+(?:@|%40)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gi;
+/**
+ * A report's access token, in a link's path or in `?token=`: both carry the `rpt_` form. Also
+ * `rpt_<redacted>`, the stand-in an earlier fix left in old analytics rows, so a check for
+ * `rpt_` finds nothing at all.
+ */
+const REPORT_TOKEN = /rpt_[A-Za-z0-9_<>-]*/g;
+/** Masked in every table that has a column of this name. */
+const PERSONAL_COLUMNS = new Set([
+  "first_name",
+  "last_name",
+  "birthday",
+  "password_hash",
+  "ip",
+  "client_ip",
+  "ip_address",
+  "card_last4",
+  "card_exp_month",
+  "card_exp_year",
+  "receipt_url",
+  "regeneration_url",
+  "share_token",
+  "prepaid_token",
+  "personal_message",
+  // An answer's edits: the email answer is the one most often corrected.
+  "old_answer_text",
+  "new_answer_text",
+]);
+/**
+ * Masked in one table, where the name alone says too little: a report's link and token, and
+ * the raw Calendly and Stripe payloads, which repeat a person's name, email and card.
+ */
+const PERSONAL_IN: Record<string, string[]> = {
+  personal_report: ["url"],
+  report_access_token: ["token"],
+  booking_event: ["raw"],
+  payment_webhook_event: ["event_data"],
+};
+/** Keys inside JSON values that hold a credential, an address or an answer. */
+const PERSONAL_KEYS = new Set([
+  "reportToken",
+  "requestIp",
+  "answer",
+  "promoCode",
+  "promotionCode",
+  "nurturePromoCodes",
+]);
+/** The survey's questions for the email, the name and the ZIP or postal code. */
+export const PERSONAL_QUESTIONS = ["00000", "00001", "15002"];
+/** `email`, `owner_email`, `subscriber_emails`; not `email_position`, the A/B arm. */
+const isEmailColumn = (column: string) => /(^|_)emails?$/.test(column);
+
+/**
+ * A column whose name suggests it may hold someone's details. Each one must be classified,
+ * as masked above or as not personal below, or the export stops: the masking is a list, and
+ * a new column must not go out unmasked because nobody added it to the list.
+ */
+const LOOKS_PERSONAL =
+  /(mail|name|phone|(^|_)ip($|_)|addr|zip|postal|birth|password|passwd|token|secret|url|href|link|card|iban|receipt|message|ssn|passport|national|tax_id|street|city)/i;
+/** Names that look personal but hold no one's details, checked against the data on 2026-10-11. */
+const NOT_PERSONAL = new Set([
+  // Links between admin records, and to sources the team cites.
+  "linked_href",
+  "source_href",
+  "evidence_links",
+  "linked_metric_key",
+  "linked_chart_key",
+  "linked_experiment_id",
+  "linked_release_id",
+  "linked_action_id",
+  "linked_question_ids",
+  "source_url",
+  "pr_url",
+  "url_path",
+  // Names of things, not of people.
+  "competitor_name",
+  "source_name",
+  "scanner_name",
+  "item_name",
+  // Where the email question sat (an A/B arm), and when a reminder went.
+  "email_position",
+  "early_access_email_sent_at",
+  // Visa or Mastercard, and the bank's reason a payment failed.
+  "card_brand",
+  "failure_message",
+]);
+/** A column that names a thing in these tables and nothing personal. */
+const NOT_PERSONAL_IN: Record<string, string[]> = {
+  admin_experiment: ["name"],
+  admin_export_preset: ["name"],
+  admin_saved_view: ["name"],
+  admin_segment: ["name"],
+  submission_tag: ["name"],
+  digest_recommendation_history: ["message"],
+};
+
+/** Columns whose names suggest personal data that are neither masked nor known to be safe. */
+export function unclassifiedColumns(specs: TableSpec[]): string[] {
+  return specs.flatMap((s) =>
+    s.columns
+      .filter(
+        (c) =>
+          LOOKS_PERSONAL.test(c) &&
+          !PERSONAL_COLUMNS.has(c) &&
+          !(PERSONAL_IN[s.name] ?? []).includes(c) &&
+          !isEmailColumn(c) &&
+          !NOT_PERSONAL.has(c) &&
+          !(NOT_PERSONAL_IN[s.name] ?? []).includes(c)
+      )
+      .map((c) => `${s.name}.${c}`)
+  );
+}
+
+export interface Masker {
+  email(value: string): string;
+  text(value: string): string;
+  json(value: unknown): unknown;
+}
+
+/**
+ * Masking for one copy. An email becomes `masked-` and a code: the same address gets the same
+ * code in every table of the copy, so tables still join on it, and the key is new for every
+ * copy and never kept, so nobody can work back from a code to an address.
+ */
+export function masker(key: Buffer = randomBytes(32)): Masker {
+  const email = (value: string) =>
+    `masked-${createHmac("sha256", key)
+      .update(value.trim().toLowerCase().replace(/%40/g, "@"))
+      .digest("hex")
+      .slice(0, 12)}`;
+  const text = (value: string) => value.replace(EMAIL, email).replace(REPORT_TOKEN, MASKED);
+  const json = (value: unknown): unknown => {
+    if (typeof value === "string") return text(value);
+    if (Array.isArray(value)) return value.map(json);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [k, PERSONAL_KEYS.has(k) ? MASKED : json(v)])
+      );
+    }
+    return value;
+  };
+  return { email, text, json };
+}
+
+/**
+ * One row as the copy holds it. Masked: emails (as codes), names, birthdays, IP addresses,
+ * report links and tokens, card details, receipt links, promo codes, messages to a partner,
+ * the email, name and postcode answers, and the raw Stripe and Calendly payloads. Every other
+ * text keeps its words with any email address or report token in it masked; a name typed
+ * into free text (the two open questions, feedback comments) can remain.
+ */
+export function maskRow(
+  table: string,
+  row: Row,
+  m: Masker,
+  personalQuestionIds: Set<unknown>
+): Row {
+  const whole = PERSONAL_IN[table] ?? [];
+  const personalAnswer =
+    table === "survey_submission_answer" && personalQuestionIds.has(row.survey_question_id);
+  const out: Row = {};
+  for (const [column, value] of Object.entries(row)) {
+    if (value === null || value === undefined) {
+      out[column] = value;
+    } else if (
+      PERSONAL_COLUMNS.has(column) ||
+      whole.includes(column) ||
+      (personalAnswer && (column === "answer_text" || column === "normalized_value"))
+    ) {
+      out[column] = MASKED;
+    } else if (isEmailColumn(column)) {
+      // The whole value, not only the part that looks like an address: a typo is still one.
+      out[column] =
+        typeof value === "string"
+          ? m.email(value)
+          : Array.isArray(value)
+            ? value.map((v) => (typeof v === "string" ? m.email(v) : m.json(v)))
+            : m.json(value);
+    } else if (
+      table === "survey_partial_save" &&
+      column === "answers" &&
+      typeof value === "object"
+    ) {
+      const answers = { ...(value as Row) };
+      for (const qid of PERSONAL_QUESTIONS) if (qid in answers) answers[qid] = MASKED;
+      out[column] = m.json(answers);
+    } else {
+      out[column] = typeof value === "string" ? m.text(value) : m.json(value);
+    }
+  }
+  return out;
+}
+
 /**
  * People who asked us to restrict processing (GDPR Art. 18) must not be in the export. No
  * filter can promise that: their details also sit in payloads, URLs and free text, in more
@@ -122,15 +321,23 @@ export function readme(
     "# LoveIQ team data export",
     "",
     `Generated ${generatedAt} from the production database.`,
-    "Everything, unmasked: emails, names, free-text answers, report links and payment details",
-    "included. For the LoveIQ team only (Eman, Marcus, Mark, Fatih, Sanjin, Ajna): it holds",
-    "customers' answers about their sex lives, so keep it in this folder and do not forward it.",
+    "Names, emails and other details that identify a person are masked; what people answered",
+    "and did is all here. For the LoveIQ team only (Eman, Marcus, Mark, Fatih, Sanjin, Ajna):",
+    "it is still about people's sex lives, so keep it in this folder and do not forward it.",
     "For a fresh copy, ask Claude (Jarvis) to export all the data; it takes a few minutes.",
     "",
     "| File | Rows |",
     "| --- | --- |",
     ...specs.map((s) => `| ${s.name}.csv | ${counts[s.name] ?? 0} |`),
     "",
+    "- Masked: every email address reads `masked-` and a code. The same address has the same",
+    "  code in every file of this copy, so tables still join on it; the codes change with every",
+    "  copy. Names, birthdays, IP addresses, report links and access tokens, card details,",
+    "  receipt links, promo codes, messages to a partner, the email, name and postcode answers,",
+    "  and the raw Stripe and Calendly payloads read [masked].",
+    "- Kept: every answer, including the two open questions as typed (any email address or",
+    "  report link in them masked; a name someone typed can remain), demographics, archetypes",
+    "  and scores, payments (amounts, plans, dates) and events.",
     "- One CSV per database table, same columns. JSON columns hold JSON text.",
     "- Not exported: Jarvis's own index (brain_*), job and alert plumbing (cron_run,",
     "  rate_limits, system_flags, slack_*), and the log of people who asked us to delete their",
@@ -172,6 +379,8 @@ export function specsOf(
     specs.some((s) => s.name === table && (!column || s.columns.includes(column)));
   const missing = [
     ["app_user", "processing_restricted_at"],
+    // Masking finds the email, name and postcode answers through it.
+    ["survey_question", "frontend_qid"],
     ["survey_submission"],
     ["personal_report"],
     ["survey_submission_answer"],
@@ -253,24 +462,53 @@ export async function buildExport(
   isOutOfTime: () => boolean = () => false,
   generatedAt: () => string = () => new Date().toISOString()
 ): Promise<ExportFile[]> {
+  const unclassified = unclassifiedColumns(specs);
+  if (unclassified.length) {
+    throw new Error(
+      `columns whose names suggest personal data are not classified yet: ${unclassified.join(", ")}. ` +
+        "Mark each as masked or not personal in features/admin/server/team-export.ts. Nothing written."
+    );
+  }
   const usersSpec = specs.find((s) => s.name === "app_user");
-  if (!usersSpec) throw new Error("the schema read has no app_user; nothing written");
+  const questionsSpec = specs.find((s) => s.name === "survey_question");
+  if (!usersSpec || !questionsSpec) {
+    throw new Error("the schema read has no app_user or survey_question; nothing written");
+  }
   const users = await read(usersSpec, isOutOfTime);
   assertNobodyRestricted(users);
+  // Before masking: the test flag reads the real address (a loveiq.org one is staff).
   const emailOfUser = new Map(users.map((u) => [u.id, String(u.email ?? "")]));
+  const questions = await read(questionsSpec, isOutOfTime);
+  const personal = questions.filter((q) => PERSONAL_QUESTIONS.includes(String(q.frontend_qid)));
+  // Fail closed: an answer to a question we cannot find would go out unmasked.
+  if (personal.length !== PERSONAL_QUESTIONS.length) {
+    throw new Error(
+      "could not find the survey's email, name and postcode questions to mask; nothing written"
+    );
+  }
+  const personalQuestionIds = new Set(personal.map((q) => q.id));
+  const m = masker();
   const counts: Record<string, number> = {};
   const files: ExportFile[] = [];
   for (const spec of specs) {
     if (isOutOfTime()) throw new OutOfTime(`ran out of time before ${spec.name}; nothing written`);
-    const rows = spec === usersSpec ? users : await read(spec, isOutOfTime);
+    const rows =
+      spec === usersSpec
+        ? users
+        : spec === questionsSpec
+          ? questions
+          : await read(spec, isOutOfTime);
     counts[spec.name] = rows.length;
-    files.push({
-      name: `${spec.name}.csv`,
-      body: toCsv(
-        rows.map((row) => withTestFlag(spec.name, row, emailOfUser)),
-        spec.columns
-      ),
-    });
+    // In place, so each original row can go as soon as its masked one exists.
+    for (let i = 0; i < rows.length; i++) {
+      rows[i] = maskRow(
+        spec.name,
+        withTestFlag(spec.name, rows[i]!, emailOfUser),
+        m,
+        personalQuestionIds
+      );
+    }
+    files.push({ name: `${spec.name}.csv`, body: toCsv(rows, spec.columns) });
   }
   // Last, so a run that fails part-way never shows a README dated after files it did not write.
   files.push({ name: "README.md", body: readme(specs, counts, generatedAt()) });

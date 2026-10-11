@@ -77,14 +77,20 @@ If Q16015 copy changes, we lose proof of what each user consented to.
 
 - **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant.
 
-### R3.8 — Team data export (HIGH — accepted by decision, 2026-10-10)
+### R3.8 — Team data export (MEDIUM — pseudonymised by decision, 2026-10-11)
 
-Every customer and product table, unmasked, is exported as CSV to a Google Drive folder shared
-with six named team members (Eman, Marcus, Mark, Fatih, Sanjin, Ajna), so the team can explore
-the data freely. It is R3.1's leaked export in file form: a copy that leaves the folder links an
-email to that person's answers.
+Every customer and product table is exported as CSV to a Google Drive folder shared with six
+named team members (Eman, Marcus, Mark, Fatih, Sanjin, Ajna), so the team can explore the data.
+What identifies a person is masked: emails become a per-copy keyed code (the same address, the
+same code within one copy), and names, birthdays, IP addresses, report links and tokens, card
+details, receipt links, promo codes, the email, name and postcode answers and the raw payment
+and booking payloads read `[masked]`. Answers about people's sex lives remain, so the copy is
+pseudonymised special-category data, not anonymous data.
 
-- **Decision**: Eman, 2026-10-10. The team gets all of it, unmasked, and nobody else gets any of it.
+- **Decision**: Eman, 2026-10-11: "mask the emails and names and those sensitive info",
+  replacing the unmasked copy decided on 2026-10-10. The first masked refresh replaced every
+  file and deleted the unmasked versions in Drive; copies downloaded before it are outside our
+  reach.
 - **Mitigations**:
   - The folder is shared with those six only. Editors cannot share the folder or its files on,
     and there is no link sharing. Every upload first checks the folder and every file it will
@@ -99,7 +105,10 @@ email to that person's answers.
   - The script refuses to write inside a git repository.
   - After an erasure (Art. 17) the export is refreshed the same day
     ([`TEAM_DATA_EXPORT.md`](../runbooks/TEAM_DATA_EXPORT.md)).
-- **Residual**: copies a team member downloads are outside these controls.
+- **Residual**: copies a team member downloads are outside these controls. A person can still
+  be singled out by a rare mix of answers (age, country, orientation), or by a name typed into
+  one of the two open questions, and the internal ids link back to the database, which Jarvis
+  can read.
 
 ## 4. Data subject rights: how we handle a deletion request, a data export, a DSAR, unsubscribe and the right to be forgotten
 

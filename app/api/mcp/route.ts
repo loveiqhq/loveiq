@@ -1349,12 +1349,17 @@ export const TOOLS = [
       "submissions and answers, drafts, reports, payments, users, events and the rest), one " +
       "CSV per table that Excel opens, written straight into the team's private Google Drive " +
       "folder. Returns the folder's link and who can open it.\n\n" +
+      "Masked in the copy, by the owner's decision (2026-10-11): emails (each address is a " +
+      "code, the same in every table of one copy, so tables still join), names, birthdays, IP " +
+      "addresses, report links and tokens, card details, receipt links, promo codes, the " +
+      "email, name and postcode answers, and the raw payment and booking payloads. Everything " +
+      "people answered and did is there, so it is pseudonymised, not anonymous: a name typed " +
+      "into an open question can remain, and a rare mix of answers can still point to one " +
+      "person. Say so, and treat it as sensitive.\n\n" +
       "THIS is the tool when someone wants the survey data, the raw data, a dataset for an " +
-      "app, a prototype, an analysis or Excel, a full copy, or a whole large table, and also " +
-      "when they ask for it without names or emails. Then say plainly that names and emails " +
-      "ARE in it: the copy holds whole tables, unmasked by the owner's decision (2026-10-10), " +
-      "in a folder only the team can open, and they leave out the columns they do not need. " +
-      "Never build a dataset in the chat or in a document " +
+      "app, a prototype, an analysis or Excel, a full copy, or a whole large table, including " +
+      "without names or emails, since those are already masked. Never build a dataset in the " +
+      "chat or in a document " +
       "from query_product_data rows or user_totals instead: those answer questions, this " +
       "hands over the data, and the data never passes through the chat, so its size does not " +
       "matter.\n\n" +
@@ -6332,11 +6337,13 @@ export const MCP_INSTRUCTIONS =
   "prefer an rpc/get_* analysis function when one fits — those encode the business " +
   "logic already.\n\n" +
   "ALL THE DATA, AS FILES: export_all_data puts a fresh copy of every customer and product " +
-  "table (one CSV each, unmasked; Excel opens them) in the team's private Google Drive folder " +
+  "table (one CSV each, names, emails and other identifying details masked, so pseudonymised " +
+  "rather than anonymous; Excel opens them) " +
+  "in the team's private Google Drive folder " +
   "and returns its link; export_status says how the copy is going and changes nothing. It is " +
   "the answer whenever someone wants the survey data or any data to work with (an app, a " +
-  "prototype, an analysis, Excel), even 'without names or emails': they get whole tables in " +
-  "a folder only the team can open and leave out what they do not need. Never assemble data " +
+  "prototype, an analysis, Excel), including 'without names or emails', which the copy " +
+  "already masks. Never assemble data " +
   "in the chat or in a document from query_product_data rows or user_totals: " +
   "query_product_data returns 1,000 rows a call into the chat.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
