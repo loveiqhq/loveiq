@@ -175,7 +175,7 @@ const isEmailColumn = (column: string) => /(^|_)emails?$/.test(column);
  * a new column must not go out unmasked because nobody added it to the list.
  */
 const LOOKS_PERSONAL =
-  /(mail|name|phone|(^|_)ip($|_)|addr|zip|postal|birth|password|passwd|token|secret|url|href|link|card|iban|receipt|message|ssn|passport|national|tax_id|street|city|posthog|hotjar|clarity|fingerprint|visitor)/i;
+  /(mail|name|phone|(^|_)ip($|_)|addr|zip|postal|birth|(^|_)dob($|_)|password|passwd|token|secret|url|href|link|card|iban|bank|account_number|receipt|message|ssn|passport|national|tax_id|license|street|city|location|(^|_)geo|latitude|longitude|(^|_)(lat|lng|lon)($|_)|social|instagram|facebook|twitter|linkedin|tiktok|handle|posthog|hotjar|clarity|fingerprint|visitor)/i;
 /** Names that look personal but hold no one's details, checked against the data on 2026-10-11. */
 const NOT_PERSONAL = new Set([
   // Links between admin records, and to sources the team cites.
@@ -219,6 +219,14 @@ const NOT_PERSONAL_KEYS = new Set([
   "payload_fingerprint",
   "metric_name",
 ]);
+/**
+ * Keys safe at one place only, by table.column.key path: a generic key such as `location`
+ * stays checked everywhere else.
+ */
+const NOT_PERSONAL_PATHS = new Set([
+  // The page an automated persona walk was on: the walks are our own tests, not people.
+  "ux_walk_record.events.props.location",
+]);
 /** A column that names a thing in these tables and nothing personal. */
 const NOT_PERSONAL_IN: Record<string, string[]> = {
   admin_experiment: ["name"],
@@ -227,6 +235,8 @@ const NOT_PERSONAL_IN: Record<string, string[]> = {
   admin_segment: ["name"],
   submission_tag: ["name"],
   digest_recommendation_history: ["message", "fingerprint"],
+  // The country someone lives in (82 values), as the country answer the copy keeps.
+  user_profile: ["location_primary"],
 };
 
 /** Columns whose names suggest personal data that are neither masked nor known to be safe. */
@@ -283,13 +293,20 @@ export function masker(key: Buffer = randomBytes(32)): Masker {
           // A key can itself be personal (a map keyed by address or token): it is masked like
           // text, here and in the error that names it, which reaches logs, Slack and cron_run.
           const k = text(raw);
+          // A key that had to be masked is about a person, and so is what it holds.
+          if (k !== raw) return [k, v === null || v === undefined ? v : MASKED];
           const key = snakeKey(k);
           if (v === null || v === undefined) return [k, v];
           if (PERSONAL_KEYS.has(key) || PERSONAL_COLUMNS.has(key)) return [k, MASKED];
           if (isEmailColumn(key)) {
             return [k, typeof v === "string" ? email(v) : json(v, `${where}.${key}`)];
           }
-          if (LOOKS_PERSONAL.test(key) && !NOT_PERSONAL.has(key) && !NOT_PERSONAL_KEYS.has(key)) {
+          if (
+            LOOKS_PERSONAL.test(key) &&
+            !NOT_PERSONAL.has(key) &&
+            !NOT_PERSONAL_KEYS.has(key) &&
+            !NOT_PERSONAL_PATHS.has(`${where}.${key}`)
+          ) {
             unknown.add(`${where}.${key}`);
           }
           return [k, json(v, `${where}.${key}`)];

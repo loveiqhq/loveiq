@@ -315,10 +315,15 @@ describe("the team data export", () => {
         .metadata
     ).toEqual({ couponName: "nurture_50", pathname: "/r" });
     expect(m.unclassified()).toEqual([]);
-    // A key that is itself an address or a token is masked like text.
+    // A key that is itself an address or a token is masked like text, and so is what it holds.
     expect(
-      maskRow("report_price_quote", { metadata: { "anna@b.com": 1, [TOKEN]: 2 } }, m, ids).metadata
-    ).toEqual({ [m.email("anna@b.com")]: 1, [MASKED]: 2 });
+      maskRow(
+        "report_price_quote",
+        { metadata: { "anna@b.com": "Anna Smith", [TOKEN]: { plan: "full" }, kept: 1 } },
+        m,
+        ids
+      ).metadata
+    ).toEqual({ [m.email("anna@b.com")]: MASKED, [MASKED]: MASKED, kept: 1 });
     // Nothing to mask stays as it was, empty included.
     expect(maskRow("survey_submission", { id: 3, duration_ms: 5, utm: null }, m, ids)).toEqual({
       id: 3,
@@ -359,13 +364,24 @@ describe("the team data export", () => {
     await expect(buildExport(specsFor(data), reader(data))).rejects.toThrow(
       /not classified yet: analytics_event.metadata.device.mobile_phone/
     );
-    // The error names keys, and a key can be an address: it is masked in the message too.
+    // Under a key that is an address, everything is masked, so nothing there needs naming:
+    // the run goes on, and the address appears nowhere.
     const keyed = merge(QUESTIONS, person(1), {
       analytics_event: [{ id: 1, metadata: { "anna@gmail.com": { homePhone: "x" } } }],
     });
-    const err = await buildExport(specsFor(keyed), reader(keyed)).catch((e: Error) => e);
-    expect(String(err)).not.toContain("anna@gmail.com");
-    expect(String(err)).toMatch(/analytics_event\.metadata\.masked-[0-9a-f]{12}\.home_phone/);
+    const files = await buildExport(specsFor(keyed), reader(keyed));
+    expect(files.map((f) => f.body).join("\n")).not.toContain("anna@gmail.com");
+    // A key allowed at one path stays checked at every other.
+    const paths = masker();
+    paths.json({ events: [{ props: { location: "/survey" } }] }, "ux_walk_record");
+    paths.json({ location: "Berlin Mitte" }, "analytics_event.metadata");
+    expect(paths.unclassified()).toEqual(["analytics_event.metadata.location"]);
+    // New kinds of personal names are classified like the rest.
+    expect(
+      unclassifiedColumns([
+        { name: "lead", columns: ["dob", "home_location", "lat", "instagram_handle"], key: ["id"] },
+      ])
+    ).toEqual(["lead.dob", "lead.home_location", "lead.lat", "lead.instagram_handle"]);
   });
 
   it("stops when it cannot find the email, name or postcode question, writing nothing", async () => {
