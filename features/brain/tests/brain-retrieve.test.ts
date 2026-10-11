@@ -383,6 +383,63 @@ describe("retrieve — failure and edge handling", () => {
   });
 });
 
+describe("retrieve — when the full search does not answer", () => {
+  const ok = (rows: unknown[]) => ({ ok: true, status: 200, json: async () => rows });
+  const bodyOf = (i: number) => JSON.parse(String(mockSupabaseFetch.mock.calls[i]![1].body));
+  const optsOf = (i: number) => mockSupabaseFetch.mock.calls[i]![1] as Record<string, unknown>;
+
+  it("gives the search its own time limit and breaker, so it cannot fail other reads", async () => {
+    respondWith([]);
+    const shaping: Parameters<typeof retrieve>[3] = {};
+    await retrieve("a real question", 8, {}, shaping);
+    expect(optsOf(0)).toMatchObject({ timeoutMs: 15_000, breaker: "supabase-search" });
+    // Timed on success too, and not partial.
+    expect(shaping.stageMs).toEqual({ embed: expect.any(Number), search: expect.any(Number) });
+    expect(shaping.partial).toBeUndefined();
+  });
+
+  it("tries once more, keyword-only over fewer candidates, and marks the answer partial", async () => {
+    mockSupabaseFetch
+      .mockRejectedValueOnce(new Error("Request timeout after 15000ms"))
+      .mockResolvedValueOnce(ok([row({ source: "doc", source_id: "a", score: 1 })]));
+    const shaping: Parameters<typeof retrieve>[3] = {};
+    const out = await retrieve("a real question", 8, { sources: ["doc"] }, shaping);
+    expect(out.map((r) => r.sourceId)).toEqual(["a"]);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
+    const [full, small] = [bodyOf(0), bodyOf(1)];
+    expect(small).toMatchObject({ k: 40, per_source: 2, query_embedding: null });
+    // Everything else is the same request: the caller's filters still apply.
+    expect(small.sources).toEqual(["doc"]);
+    expect(small.query_text).toBe(full.query_text);
+    expect(optsOf(1)).toMatchObject({ timeoutMs: 6_000, breaker: "supabase-search" });
+    expect(shaping.partial).toBe(true);
+    expect(shaping.stageMs).toEqual({
+      embed: expect.any(Number),
+      search: expect.any(Number),
+      fallback: expect.any(Number),
+    });
+  });
+
+  it("falls back on a refusal or a non-list answer as well as a timeout", async () => {
+    for (const first of [
+      { ok: false, status: 503, json: async () => ({}) },
+      { ok: true, status: 200, json: async () => ({ message: "upstream" }) },
+    ]) {
+      mockSupabaseFetch.mockReset();
+      mockSupabaseFetch.mockResolvedValueOnce(first).mockResolvedValueOnce(ok([]));
+      const shaping: Parameters<typeof retrieve>[3] = {};
+      await expect(retrieve("a real question", 8, {}, shaping)).resolves.toEqual([]);
+      expect(shaping.partial).toBe(true);
+    }
+  });
+
+  it("says unavailable only when the smaller search fails too, after exactly two tries", async () => {
+    mockSupabaseFetch.mockRejectedValue(new Error("Request timeout"));
+    await expect(retrieve("a real question", 8)).rejects.toBeInstanceOf(CorpusUnavailableError);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("toSlackMrkdwn", () => {
   it("converts double-asterisk bold to Slack's single asterisk", () => {
     // Slack renders **bold** literally, asterisks and all.
@@ -435,9 +492,11 @@ describe("semantic recall must never break search", () => {
     expect(src).toMatch(/could not embed the question, falling back to lexical search/);
     // the vector must be passed to the RPC, or the whole thing is decoration
     expect(src).toMatch(/query_embedding: queryVector/);
-    // and it must be computed BEFORE the block that throws CorpusUnavailableError
+    // and it must be computed BEFORE the search that throws CorpusUnavailableError
+    // (`searchOnce` holds the call, defined above `retrieve`; this is where it runs).
+    expect(src.indexOf("queryVector = await embedQuery")).toBeGreaterThan(0);
     expect(src.indexOf("queryVector = await embedQuery")).toBeLessThan(
-      src.indexOf("rpc/brain_search")
+      src.indexOf("rows = await searchOnce(body")
     );
   });
 

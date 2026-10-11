@@ -124,3 +124,25 @@ export function peopleIn(
   }
   return found.size > 0 ? [...found].sort() : undefined;
 }
+
+/**
+ * A `people` filter in the spelling the index uses.
+ *
+ * `meta.people` holds each colleague's canonical name and a filter matches it exactly, so
+ * "Fatih Hadžić", as he writes his name, found none of the 447 records tagged "Fatih Hadzic"
+ * (2026-10-11), while the registry already listed both spellings. Each name the registry
+ * knows becomes its canonical one; an unknown name is kept as asked, and so is the whole
+ * filter when the registry cannot be read.
+ */
+export async function canonicalPeople<T extends Record<string, string | string[]>>(
+  meta: T | undefined
+): Promise<T | undefined> {
+  const asked = meta?.people;
+  if (!asked) return meta;
+  const byAlias = await loadPeople();
+  if (!byAlias) return meta;
+  const names = (Array.isArray(asked) ? asked : [asked]).map(
+    (n) => byAlias.get(n.trim().toLowerCase())?.canonical ?? n
+  );
+  return { ...meta, people: [...new Set(names)] };
+}

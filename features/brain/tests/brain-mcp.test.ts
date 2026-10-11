@@ -121,6 +121,7 @@ vi.mock("@shared/http/ratelimit", () => ({
 }));
 
 import { flushAfterResponse } from "@shared/http/after-response";
+import { clearPeopleCache } from "@features/brain/server/people";
 import { recordToolCall } from "@features/brain/server/log";
 import { forgetSignIns } from "@features/brain/server/sign-in";
 import {
@@ -4799,6 +4800,80 @@ describe("/api/mcp", () => {
         ok: true,
         headers: new Headers(),
         json: async () => [],
+      });
+    });
+
+    it("stores how long each search stage took, and says when the answer is partial", async () => {
+      const hit = {
+        source: "doc",
+        sourceId: "a",
+        title: "t",
+        url: null,
+        body: "b",
+        meta: {},
+        score: 2,
+      };
+      mockRetrieve.mockImplementation(
+        async (_q: unknown, _l: unknown, _o: unknown, shaping: Record<string, unknown>) => {
+          shaping.partial = true;
+          shaping.stageMs = { embed: 310, search: 15_002, fallback: 870 };
+          return [hit];
+        }
+      );
+      const body = await (await call({ query: "what is our revenue" })).json();
+      expect(body.result.isError).toBe(false);
+      const text = body.result.content[0].text as string;
+      expect(text).toContain("PARTIAL RESULTS. The full search did not answer in time");
+      // Before the list, so a short list is never read as everything on record.
+      expect(text.indexOf("PARTIAL RESULTS")).toBeLessThan(text.indexOf("<<<SOURCE 1>>>"));
+      await flushAfterResponse();
+      expect(writes()[0]).toMatchObject({
+        stage_ms: { embed: 310, search: 15_002, fallback: 870 },
+      });
+
+      // A whole answer says nothing of the kind; a tool that is not search logs no stages.
+      mockRetrieve.mockReset().mockResolvedValue([hit]);
+      const whole = await (await call({ query: "what is our revenue" })).json();
+      expect(whole.result.content[0].text).not.toContain("PARTIAL RESULTS");
+      mockSupabaseFetch.mockClear();
+      await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 31,
+          method: "tools/call",
+          params: { name: "list_sources", arguments: {} },
+        })
+      );
+      await flushAfterResponse();
+      expect(writes().every((w) => !("stage_ms" in w))).toBe(true);
+    });
+
+    it("filters by a person's name as they spell it, in search and in counting", async () => {
+      // The registry is cached for five minutes; start from this test's own.
+      clearPeopleCache();
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          String(path).startsWith("/rest/v1/brain_person")
+            ? [{ canonical: "Fatih Hadzic", aliases: ["fatih hadžić"], kind: "person" }]
+            : [],
+      }));
+      mockRetrieve.mockResolvedValue([]);
+      await call({ query: "survey questions", meta: { people: ["Fatih Hadžić"] } });
+      expect(mockRetrieve.mock.calls[0]![2]).toMatchObject({ meta: { people: ["Fatih Hadzic"] } });
+      await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 32,
+          method: "tools/call",
+          params: { name: "count_context", arguments: { meta: { people: "Fatih Hadžić" } } },
+        })
+      );
+      const count = toolCalls().find(([p]) => String(p).startsWith("/rest/v1/rpc/brain_count"));
+      expect(JSON.parse(String((count![1] as { body: string }).body)).meta_filter).toEqual({
+        people: ["Fatih Hadzic"],
       });
     });
 
