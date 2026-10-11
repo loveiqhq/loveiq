@@ -1351,9 +1351,10 @@ export const TOOLS = [
       "folder. Returns the folder's link and who can open it.\n\n" +
       "THIS is the tool when someone wants the survey data, the raw data, a dataset for an " +
       "app, a prototype, an analysis or Excel, a full copy, or a whole large table, and also " +
-      "when they ask for it without names or emails: the copy holds whole tables, unmasked by " +
-      "the owner's decision (2026-10-10), in a folder only the team can open, so they leave " +
-      "out the columns they do not need. Never build a dataset in the chat or in a document " +
+      "when they ask for it without names or emails. Then say plainly that names and emails " +
+      "ARE in it: the copy holds whole tables, unmasked by the owner's decision (2026-10-10), " +
+      "in a folder only the team can open, and they leave out the columns they do not need. " +
+      "Never build a dataset in the chat or in a document " +
       "from query_product_data rows or user_totals instead: those answer questions, this " +
       "hands over the data, and the data never passes through the chat, so its size does not " +
       "matter.\n\n" +
