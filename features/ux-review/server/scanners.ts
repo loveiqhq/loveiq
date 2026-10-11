@@ -18,7 +18,10 @@
  * — currently a 5x promotion on a normal allowance of 500. `creditLimit` caps
  * what ONE scanner can spend per period so it cannot starve the others; it is
  * not a cap on the org bill. Estimates below were measured with
- * `vision-scanners-estimate-create` against 7 real days on 2026-09-14.
+ * `vision-scanners-estimate-create` against 7 real days on 2026-09-14, and
+ * re-measured on 2026-10-11 from four weeks of `$recording_observed` after the
+ * survey and report scanners ran out mid-period (11 and 5 Oct) and stopped
+ * watching. Caps now sit about 20% above the measured spend.
  */
 
 export interface UxScanner {
@@ -203,8 +206,8 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     triggerEvent: "survey_started",
     // COMPREHENSIVE, not focused — see SAMPLING below the scanner list.
     samplingMode: "comprehensive",
-    estimatedMonthlyCredits: 2118,
-    creditLimit: 2300,
+    estimatedMonthlyCredits: 2700,
+    creditLimit: 3300,
     scannerVersion: 2,
     prompt: [
       "You are reviewing a recording of the LoveIQ survey — a one-question-per-screen",
@@ -238,8 +241,8 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     triggerEvent: "report_viewed",
     // COMPREHENSIVE, not focused — see SAMPLING below the scanner list.
     samplingMode: "comprehensive",
-    estimatedMonthlyCredits: 806,
-    creditLimit: 900,
+    estimatedMonthlyCredits: 1500,
+    creditLimit: 1800,
     scannerVersion: 2,
     prompt: [
       "You are reviewing a recording of the LoveIQ report — a long, scroll-based",
@@ -273,8 +276,8 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     role: "champion",
     triggerEvent: "rage_click",
     samplingMode: "comprehensive",
-    estimatedMonthlyCredits: 326,
-    creditLimit: 400,
+    estimatedMonthlyCredits: 380,
+    creditLimit: 500,
     scannerVersion: 2,
     prompt: [
       "This recording contains at least one rage click on loveiq.org — three or more",
