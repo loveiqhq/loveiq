@@ -343,6 +343,8 @@ export function buildReachNotice(input: {
     kind: REACH_KIND,
     evidence,
     meta: {
+      // The Berlin day of this report: notice.ts's noticed_on is a UTC day.
+      reach_day: input.day,
       reach_open: reachOpen,
       reach_seen: Object.fromEntries(reachOpen.map((id) => [id, input.seenOn?.(id) ?? input.day])),
       reach_hint: Object.fromEntries(
@@ -649,6 +651,7 @@ export async function checkNotionReach(
       reach_open?: unknown;
       reach_seen?: unknown;
       reach_hint?: unknown;
+      reach_day?: unknown;
       noticed_on?: unknown;
     } | null;
   }>(
@@ -754,7 +757,8 @@ export async function checkNotionReach(
   const heldMissing = heldOver.filter((id) => reach.get(id) === "missing");
   // The Monday reminder is for news that has gone quiet: after a report on the weekend (a
   // manual run, say), repeating the same pages on Monday morning is noise, not a reminder.
-  const lastReport = previousRows[0]?.meta?.noticed_on;
+  // Berlin days on both sides (reach_day); noticed_on, a UTC day, only for older reports.
+  const lastReport = previousRows[0]?.meta?.reach_day ?? previousRows[0]?.meta?.noticed_on;
   const reportIsOld = typeof lastReport !== "string" || lastReport <= daysBefore(day, 3);
   const due =
     fresh.length > 0 ||
