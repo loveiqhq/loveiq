@@ -1811,6 +1811,7 @@ describe("/api/mcp", () => {
         "query_external_service",
         "related_context",
         "show_design",
+        "design_changes",
         "show_page",
         "what_shipped",
         "explain_change",
@@ -1926,6 +1927,7 @@ describe("/api/mcp", () => {
           .sort()
       ).toEqual([
         "comment_asks",
+        "design_changes",
         "explain_change",
         "export_all_data",
         "file_call_notes",
@@ -6507,6 +6509,48 @@ describe("/api/mcp", () => {
       }
     });
 
+    /**
+     * DESIGNS LIVE IN MORE THAN ONE FILE. Ids copied from the Report 3.0 file were sent to
+     * the main one, because list_sources said every design was there, and came back "No node
+     * in this file". A link names its file, so it is read rather than assumed.
+     */
+    it("reads the file key and node-id from a Figma link instead of assuming the main file", async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(800, 600) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(PNG) });
+      const r = await call({
+        file_key: "https://www.figma.com/design/VpDMMtuN0JkxlMxQZDg86k/Report-3.0?node-id=1-2",
+      });
+      expect(mockFetch.mock.calls[0]![0]).toBe(
+        "https://api.figma.com/v1/files/VpDMMtuN0JkxlMxQZDg86k/nodes?ids=1%3A2&depth=1"
+      );
+      expect(r.content.map((c) => c.type)).toEqual(["text", "image"]);
+    });
+
+    it("takes a link pasted as node_id, and names the file a missing node was looked for in", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ nodes: {} }) });
+      const r = await call({
+        node_id: "https://www.figma.com/file/VpDMMtuN0JkxlMxQZDg86k/Report-3.0?node-id=195-234",
+      });
+      expect(mockFetch.mock.calls[0]![0]).toBe(
+        "https://api.figma.com/v1/files/VpDMMtuN0JkxlMxQZDg86k/nodes?ids=195%3A234&depth=1"
+      );
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("`VpDMMtuN0JkxlMxQZDg86k`");
+      expect(r.content[0].text).toContain("pass the Figma link you were given");
+    });
+
+    it("refuses a link that is not Figma's rather than reading the main file", async () => {
+      const r = await call({ file_key: "https://example.com/design/VpDMMtuN0JkxlMxQZDg86k" });
+      expect(r.isError).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it("reuses the missing-credential wording, so the two doors cannot disagree", async () => {
       delete process.env.FIGMA_TOKEN;
       delete process.env.FIGMA_ACCESS_TOKEN;
@@ -6514,6 +6558,157 @@ describe("/api/mcp", () => {
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toContain("missing credential");
       expect(r.content[0].text).toContain("not an absent design");
+    });
+  });
+
+  describe("design_changes — one call instead of a node-by-node walk", () => {
+    async function call(args: Record<string, unknown>) {
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "design_changes", arguments: args },
+        })
+      );
+      return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+    }
+    const at = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+    /** Figma with two versions of one page, whose price text changed between them. */
+    function figma(newer: string, older: string) {
+      mockFetch.mockImplementation(async (raw: string) => {
+        const url = new URL(raw);
+        const body = url.pathname.endsWith("/versions")
+          ? {
+              versions: [
+                { id: "v2", created_at: newer, user: { handle: "Marcus Börner" } },
+                { id: "v1", created_at: older, user: { handle: "Mark" } },
+              ],
+              pagination: {},
+            }
+          : {
+              name: "Report 3.0",
+              nodes: {
+                "195:234": {
+                  document: {
+                    id: "195:234",
+                    type: "CANVAS",
+                    name: "Paygate",
+                    children: [
+                      {
+                        id: "5:1",
+                        type: "FRAME",
+                        name: "Checkout",
+                        children: [
+                          {
+                            id: "5:2",
+                            type: "TEXT",
+                            name: "Price",
+                            characters:
+                              url.searchParams.get("version") === "v1"
+                                ? "Unlock for €9.99"
+                                : "Unlock for €6.99",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            };
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: async () => JSON.stringify(body),
+        };
+      });
+    }
+
+    beforeEach(() => {
+      mockFetch.mockReset();
+      process.env.FIGMA_TOKEN = "figd_test";
+    });
+
+    it("needs a file, and a since that is a date, before it calls Figma", async () => {
+      const none = await call({});
+      expect(none.isError).toBe(true);
+      expect(none.content[0].text).toContain("`file` is required");
+      const bad = await call({ file: "VpDMMtuN0JkxlMxQZDg86k", since: "last monday" });
+      expect(bad.isError).toBe(true);
+      expect(bad.content[0].text).toContain("must be a day like");
+      // A number, or a time nothing can read, is refused rather than read as seven days.
+      // A leap second passes the shared date check, and Date cannot read it.
+      for (const since of [
+        20261004,
+        "2026-10-04T9:00:00Z",
+        "2026-10-04Tnoon",
+        "2026-10-04T23:59:60Z",
+      ]) {
+        const r = await call({ file: "VpDMMtuN0JkxlMxQZDg86k", since });
+        expect(r.isError, String(since)).toBe(true);
+        expect(r.content[0].text).toContain("must be a day like");
+      }
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("compares the page a link names, fenced as data other people wrote", async () => {
+      figma("2026-10-10T10:00:00Z", "2026-10-01T10:00:00Z");
+      const r = await call({
+        file: "https://www.figma.com/design/VpDMMtuN0JkxlMxQZDg86k/Report-3.0?node-id=195-234",
+        since: "2026-10-04",
+      });
+      expect(r.isError).toBe(false);
+      expect(r.content[0].text).toMatch(/^UNTRUSTED DATA/);
+      expect(r.content[0].text).toContain('text "Unlock for €9.99" → "Unlock for €6.99"');
+      expect(mockFetch.mock.calls.map(([u]) => String(u))).toContain(
+        "https://api.figma.com/v1/files/VpDMMtuN0JkxlMxQZDg86k/nodes?ids=195%3A234&version=v1"
+      );
+    });
+
+    it("looks back seven days when no since is given", async () => {
+      figma(at(1), at(10));
+      const r = await call({ file: "VpDMMtuN0JkxlMxQZDg86k", node: "195-234" });
+      expect(r.content[0].text).toContain("(seven days ago)");
+      expect(r.content[0].text).toContain('text "Unlock for €9.99" → "Unlock for €6.99"');
+    });
+
+    /**
+     * FIGMA'S ALLOWANCE IS ONE FOR THE WHOLE TEAM, so this bucket is too: keyed on the tool,
+     * never on the caller's address. Each comparison can cost two of Figma's per-minute reads,
+     * and a frame-by-frame loop of them was the 2026-09-29 incident over again.
+     */
+    it("allows only a few comparisons a minute, for everyone together", async () => {
+      mockRateLimit.mockImplementation(async (...a: unknown[]) => ({
+        allowed: (a[1] as { bucket: string }).bucket !== "mcp-design-changes",
+      }));
+      const r = await call({ file: "VpDMMtuN0JkxlMxQZDg86k" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("Too many design comparisons");
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockRateLimit).toHaveBeenCalledWith(
+        "figma",
+        expect.objectContaining({ bucket: "mcp-design-changes", limit: 5 })
+      );
+    });
+
+    it("does not spend the team's minute on a call it refuses for its inputs", async () => {
+      await call({});
+      await call({ file: "VpDMMtuN0JkxlMxQZDg86k", since: "last monday" });
+      expect(
+        mockRateLimit.mock.calls.filter(
+          (c) => (c[1] as { bucket?: string } | undefined)?.bucket === "mcp-design-changes"
+        )
+      ).toHaveLength(0);
+    });
+
+    it("says a missing credential is not a design that did not change", async () => {
+      delete process.env.FIGMA_TOKEN;
+      delete process.env.FIGMA_ACCESS_TOKEN;
+      const r = await call({ file: "VpDMMtuN0JkxlMxQZDg86k" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("missing credential");
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 

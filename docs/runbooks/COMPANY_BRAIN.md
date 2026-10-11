@@ -43,9 +43,10 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
   `query_product_data` for `report_price_quote`, not the written record.
 - **Money outside the product.** No payroll, no bank balance, no runway — those
   live in systems nothing here reads.
-- **Pictures.** Screenshots and photos are named but never read — there is no OCR
-  here. Of the 184 files shared in Slack, 148 are images, so for most of them the
-  file name is all there will ever be.
+- **Pictures outside Slack.** Screenshots and screen recordings shared in the Slack
+  channels it reads are described in words, so a question about a reported bug finds what
+  the picture showed (see "Slack screenshots and screen recordings, in words" below).
+  Images in Drive, email and Notion are still only named: there is no OCR there.
 
 ### Ready-made prompts
 
@@ -82,10 +83,11 @@ turned out to hold one tab of two. Counting documents cannot see inside them.
 
 | Read                                                    | Not read                                       |
 | ------------------------------------------------------- | ---------------------------------------------- |
-| Every tab of a Google Sheet, each under its own heading | Images and video — no OCR                      |
+| Every tab of a Google Sheet, each under its own heading | Images and video outside Slack — no OCR        |
 | PDF, Word and text attachments on email threads         | Anything over 4 MB — that is data, not prose   |
 | PDF, Word and text files shared in Slack channels       | `.xlsx` and `.pptx` uploads — no parser here   |
 | Google Docs, including documents with several tabs      | Files in channels the bot was never invited to |
+| Slack screenshots and recordings, in words              | HEIC photos — Claude cannot read them          |
 
 Bounded on purpose: at most five attachments per email thread and about ten
 chunks' worth of text per thread, because five 20,000-character attachments is a
@@ -174,6 +176,7 @@ a transcript. Filter on `surface` to tell the two apart.
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------- |
 | Repo docs                                                                                  | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
 | GA4, call notes, funnel numbers, Slack                                                     | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Slack screenshots and screen recordings, described in words                                | `brain-daily.yml` → `/api/cron/brain-slack-media` (GitHub Actions)     | every 6 hours           |
 | Notion (board + pages)                                                                     | `/api/cron/brain-notion`                                               | hourly, at :41          |
 | Gmail (every mailbox on the domain)                                                        | `/api/cron/brain-gmail`                                                | hourly, at :11          |
 | Search Console                                                                             | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
@@ -486,7 +489,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Forty tools, in three groups.** Thirty read, ten write. The write ones act
+**Forty-one tools, in three groups.** Thirty-one read, ten write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -589,22 +592,33 @@ later `date:` is the current decision.
 
 **Live state — read at ask time, full history, no lag:**
 
-| Tool                     | For                                                                                                                                                                                                                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                              |
-| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                 |
-| `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
+| Tool                     | For                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `design_changes`         | What changed in a Figma design since a date, in one call: frames, components and text layers added, removed, renamed or rewritten, grouped by page and frame with links, and who saved each version (with its label and description), not who made each change. Takes the Figma link, so any file. A page or frame is read whole, text included; a whole file only its top three levels, where a layer shown as added or removed may instead have moved up from or down below them, and the line says so. A comparison is kept for a day when the shared cache is reachable, so asking again reads only the version list. Five comparisons a minute for everyone together |
+
+**LoveIQ's designs live in more than one Figma file**, and a link names its file
+(`figma.com/design/<key>/<name>?node-id=1-2`). `show_design` and `design_changes` take the
+link itself; the main file is only the default when no link is given. The Jarvis
+descriptions used to say every design was in one file, so ids from the Report 3.0 file,
+the one Marcus links for reviews, were sent to the main file and came back "No node in
+this file".
 
 **Figma's rate limit is one allowance for the whole team.** Figma counts per user and
 plan, so every tool on the token shares it (file, node and image reads: 15 a minute on
 Professional and 20 on Organization for a full or dev seat; a seat that can only view or
-comment on design files gets 20 a month). `show_design` and the gateway's Figma reads both go
-through `figmaFetch` in `features/brain/server/see/figma.ts`: a 429 whose `Retry-After`
-is 10 seconds or less is waited out once, and a longer one is answered with the wait,
-the plan tier Figma reports, and how to ask for less (several node ids in one
+comment on design files gets 20 a month). `show_design`, `design_changes` and the gateway's
+Figma reads all go through `figmaFetch` in `features/brain/server/see/figma.ts`: a 429 whose
+`Retry-After` is 10 seconds or less is waited out once, and a longer one is answered with
+the wait, the plan tier Figma reports, and how to ask for less (several node ids in one
 `nodes?ids=a,b,c` request). On 2026-09-29 an agent sent 31 single-node reads in one
-minute and got seven 429s in 40 seconds. `comment_asks` reads comments with its own
-fetch, and a 429 there is reported as a Figma file that could not be read.
+minute and got seven 429s in 40 seconds; `design_changes` exists so that comparing two
+versions costs the version list and two reads instead, and it takes five calls a minute
+for everyone together, keyed on the tool rather than the caller, because every caller
+spends the same allowance. `comment_asks` reads comments with
+its own fetch, and a 429 there is reported as a Figma file that could not be read.
 
 **Read-only by allowlist — the HTTP method was never the guard.** This section
 used to claim construction was enough: a table read is a GET, a function call is a
@@ -969,6 +983,90 @@ ids rather than failing.
 Private channels additionally need `groups:read` + `groups:history`; decide that
 separately, since it widens what one shared token can reach.
 
+### Slack screenshots and screen recordings, in words
+
+The team reports bugs by posting a screenshot or a screen recording, often with no
+caption, and the Slack walk above only names the file: before this job, a question about
+Marcus's recording of 9 October found `[shared: ScreenRecording_10-09-2026 21-30-00_1.MP4]`
+and nothing else. `brain-slack-media` (`features/brain/server/ingest/slack-media.ts`) puts
+each one into words.
+
+- **What it writes.** One `slack` row per file, `file:<Slack file id>`, beside the day's
+  chunk: the title names the channel, the day and who shared it, then the message as the
+  day chunk shows it, then `[screenshot: …]` or `[screen recording: …]`. It links to the
+  message and is dated by its day (`period_end`), so search finds the description and the
+  report together. A row of its own rather than a line in the day chunk, because the Slack
+  walk rewrites a day's chunk while the day is current and after every builder bump, which
+  would erase the line. The walk re-touches these rows with every other `slack` row, so its
+  sweep keeps them, and its denylist purge removes them with their channel.
+- **Which files.** PNG, JPEG, GIF and WebP images up to 10 MB and MP4, MOV and WebM
+  recordings up to 50 MB, uploaded by a person from our own workspace in a channel the Slack
+  walk reads: never a DM, never `#hr` or `#email-inbox`, never a bot's upload, never a file
+  named like a contract or a CV, and never from someone in another workspace posting in a
+  shared channel (the file's `user_team` and the message's team must be ours). `#payments`
+  and `#incoming-surveys` are indexed but their pictures are not described: those channels
+  exist to show customers' payments and answers. Newest first, so a new bug report never
+  waits behind the backlog. HEIC is left out: Claude cannot read it, and none had been
+  shared by 2026-10-11.
+- **How.** `auth.test` names our workspace, `files.list` finds the images and recordings,
+  the stored `file:` ids say which are done (a file is never described twice; an unreadable
+  list stops the run rather than describe everything again), `files.info` finds the
+  message, and the file is downloaded with `SLACK_BRAIN_BOT_TOKEN` (scope `files:read`),
+  which is only ever sent to `https://files.slack.com`. `claude -p` on the Team seat then
+  reads it with only the Read tool, allowed only inside a temporary folder holding that
+  one file, and a scrubbed environment (`cliEnv`, shared with the persona walkers' judge).
+  A recording becomes frames first: at least one every five seconds and at most eight,
+  spread over the whole recording, cut by ffmpeg, which the workflow installs because the
+  runner image has none. ffmpeg and ffprobe get no environment but `PATH`, only the `file`
+  protocol and a named format (`mov` or `matroska`), so an upload cannot pass itself off as
+  a playlist that fetches what it lists. Each description is written the moment it exists,
+  so a run that dies keeps what it finished.
+- **Answers that are not descriptions are not stored.** The answer must come from a call
+  that read something (two turns or more, from the CLI's own JSON), with no read refused (a
+  picture that talks the model into reading elsewhere is dropped), and not be the agreed
+  `UNREADABLE` or the model saying it could not open the files.
+- **No personal data.** The model is told that personal data comes before quoting exactly:
+  never anyone's name, email address, phone number, address, IP address, payment details,
+  Stripe ids or survey answers, nor any key, but `[name]`, `[email]` and so on in their
+  place. One person's results count too, even with no name beside them: their answers,
+  their report's scores, their archetype, their submission number, country, device or path
+  through the site. Totals across many people may be quoted. What has a shape is replaced
+  if the model writes it anyway: email addresses (spaces around the @ and non-ASCII
+  included), phone numbers, IPv4 and IPv6 addresses, and Stripe customer, payment, charge,
+  checkout, invoice and subscription ids. Names and scores have no shape, so the prompt
+  carries those alone. Measured 2026-10-11 on 40 backlog files and re-checks: no email,
+  phone number, IP address or Stripe id reached a description, and the model wrote
+  `[name]`/`[email]`/`[id]` in their place. Two earlier wordings leaked: one put an advisor's
+  name from our own website in, and one copied a person's report scores (the same file was
+  masked on another run). The current wording held on every re-check of those files.
+- **A broken file cannot block the rest.** A failure that is the file's own (gone, not a
+  picture, no frames, a timeout, an answer that is not a description) is counted in
+  `brain_refusal_log` under `source=slack-media`, `version` = runs failed. After three the
+  file is left alone (`given_up` in the run's line). A failure of the pipeline instead
+  (Slack not answering, the CLI signed out or overloaded) is never counted against a file;
+  three in a row stop the run. One refused download counts against its file; two different
+  files refused in a row stop the run and point at `files:read`. A 404 is a file that is
+  gone, never a missing scope. When a run describes nothing while three or more files fail,
+  one broken thing is likelier than three broken files, so none is counted.
+- **Bounds.** Twenty descriptions and ten minutes a run, every six hours (11:41, 17:41 and
+  23:41 UTC, and three at 05:41, so the night's are in before the brief without spending the
+  seat's five-hour window the brief shares). The job gets 30 minutes. A usage limit on the
+  seat, the pipeline failing three times in a row, two refusals in a row, a missing ffmpeg,
+  or a run that tried files and described none fails the run, which alerts #brain. The job
+  logs counts only, never a description or a file name: the repository's Actions logs are
+  public.
+- **Size of it.** 513 images and recordings were waiting on 2026-10-11 (499 images, 14
+  recordings of 4 to 25 seconds), all in channels the walk reads, and 8 had been shared in
+  the 60 days before. At sixty-three a day the backlog is gone in about nine days. A dry run
+  against live Slack on 2026-10-11 described the three newest in 27 seconds; the 15-second
+  recording became four frames.
+- **Needs** the repository secret `SLACK_BRAIN_BOT_TOKEN`, the brain app's bot token that
+  Vercel already holds (`gh secret set SLACK_BRAIN_BOT_TOKEN -R loveiqhq/loveiq`). The run
+  fails with "Missing repository secrets" until it is set. The app's scopes, read from
+  `auth.test` on 2026-10-11, include `files:read`.
+- **To describe a file again**, delete its row (`source=slack`, `source_id=file:<id>`), and
+  its count in `brain_refusal_log` if it was given up; the next run picks it up.
+
 ### Google auth on production is keyless
 
 Production stores no Google credential at all. Vercel signs an OIDC token for every
@@ -1037,7 +1135,8 @@ watch behave exactly as they did on Vercel.
   request. Claude Code on Eman's laptop is signed in as teamwork@ too, so its sessions and
   these jobs share the seat's five-hour and weekly limits. The jobs take about fifteen short
   calls a day, plus the persona walkers' two long judge passes at night
-  (`persona-walkers.yml`, docs/runbooks/PERSONA_WALKERS.md), so a limit hit most likely
+  (`persona-walkers.yml`, docs/runbooks/PERSONA_WALKERS.md), plus up to eighty short picture
+  descriptions a day while the Slack backlog lasts (a week from its start), so a limit hit most likely
   means a heavy day of sessions. A hit is reported
   as `rate_limited`, the job stops for the day, and the #brain alert pings whoever looks
   after the seat (repository variable `CLAUDE_TOKEN_OWNER_SLACK_ID`, Eman). The limit resets
@@ -1062,7 +1161,8 @@ watch behave exactly as they did on Vercel.
   token passed that way. Then point the ping at whoever should hear about a limit:
   `gh variable set CLAUDE_TOKEN_OWNER_SLACK_ID -R loveiqhq/loveiq --body <Slack member id>`.
 - **Secrets it needs.** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-  `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`. The run fails when any is missing:
+  `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`, and for `brain-slack-media` only
+  `SLACK_BRAIN_BOT_TOKEN`. The run fails when any is missing:
   without the brain webhook the brief would be marked delivered into nothing. Any failure
   posts one line to the brain channel with a link to the run.
   `SLACK_OPS_WEBHOOK_URL` is deliberately absent: it is marked sensitive in Vercel and cannot
