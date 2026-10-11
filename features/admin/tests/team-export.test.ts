@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -712,6 +713,7 @@ describe("Drive, with requests answered here", () => {
     permissions: team,
   };
   const query = (url: string) => decodeURIComponent(new URL(url).searchParams.get("q") ?? "");
+  const md5 = (body: string) => createHash("md5").update(body).digest("hex");
 
   it("finds the folder by its tag among the ones ec@ owns, and says who can open it", async () => {
     fetchMock
@@ -750,14 +752,21 @@ describe("Drive, with requests answered here", () => {
       .mockResolvedValueOnce(
         answer({ files: [{ id: "OLD", name: "README.md", ownedByMe: true, permissions: team }] })
       )
-      // New file: created in the folder.
+      // New file: created in the folder; its one version is the current one.
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
       .mockResolvedValueOnce(answer({ id: "NEW" }))
-      .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }] }))
-      // Existing file: replaced in place, and its older version deleted.
+      .mockResolvedValueOnce(answer({ headRevisionId: "n1", md5Checksum: md5("id\n1\n") }))
+      .mockResolvedValueOnce(answer({ revisions: [{ id: "n1" }] }))
+      // Existing file: replaced in place. Drive lists the current version FIRST and spreads
+      // the rest over two pages: every other version goes, wherever it is listed.
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-2" }))
       .mockResolvedValueOnce(answer({ id: "OLD" }))
-      .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }, { id: "r2" }] }))
+      .mockResolvedValueOnce(answer({ headRevisionId: "r3", md5Checksum: md5("# readme") }))
+      .mockResolvedValueOnce(
+        answer({ revisions: [{ id: "r3" }, { id: "r1" }], nextPageToken: "p2" })
+      )
+      .mockResolvedValueOnce(answer({ revisions: [{ id: "r2" }] }))
+      .mockResolvedValueOnce(answer({}, { status: 204 }))
       .mockResolvedValueOnce(answer({}, { status: 204 }));
     await uploadExport("tok", "F1", [
       { name: "app_user.csv", body: "id\n1\n" },
@@ -775,14 +784,16 @@ describe("Drive, with requests answered here", () => {
     });
     expect(c[3]).toMatchObject({ url: "https://upload/session-1", method: "PUT" });
     expect(c[3]!.body).toBe("id\n1\n");
-    expect(c[5]).toMatchObject({ method: "PATCH" });
-    expect(c[5]!.url).toContain("/upload/drive/v3/files/OLD?uploadType=resumable");
-    expect(JSON.parse(String(c[5]!.body))).toEqual({ writersCanShare: false });
-    expect(c[6]!.body).toBe("# readme");
-    // Only the older version goes; the one just uploaded stays.
-    expect(c[8]).toMatchObject({ method: "DELETE" });
-    expect(c[8]!.url).toContain("/files/OLD/revisions/r1");
-    expect(c).toHaveLength(9);
+    expect(c[4]!.url).toContain("/files/NEW?fields=headRevisionId,md5Checksum");
+    expect(c[6]).toMatchObject({ method: "PATCH" });
+    expect(c[6]!.url).toContain("/upload/drive/v3/files/OLD?uploadType=resumable");
+    expect(JSON.parse(String(c[6]!.body))).toEqual({ writersCanShare: false });
+    expect(c[7]!.body).toBe("# readme");
+    expect(c[10]!.url).toContain("pageToken=p2");
+    // Every version but the current one goes, from both pages; the current one stays.
+    const deleted = c.filter((x) => x.method === "DELETE").map((x) => x.url.split("/").pop());
+    expect(deleted).toEqual(["r1", "r2"]);
+    expect(c).toHaveLength(13);
   });
 
   it("writes nothing when any file in the folder fails the check", async () => {
@@ -876,11 +887,32 @@ describe("Drive, with requests answered here", () => {
       )
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
       .mockResolvedValueOnce(answer({ id: "OLD" }))
+      .mockResolvedValueOnce(answer({ headRevisionId: "r2", md5Checksum: md5("x") }))
       .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }, { id: "r2" }] }))
       .mockResolvedValueOnce(answer({}, { status: 404 }));
     await expect(
       uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])
     ).resolves.toBeUndefined();
+  });
+
+  it("deletes nothing when the current version is not what was uploaded, or is not named", async () => {
+    const start = () =>
+      fetchMock
+        .mockResolvedValueOnce(answer(folderMeta))
+        .mockResolvedValueOnce(
+          answer({ files: [{ id: "OLD", name: "a.csv", ownedByMe: true, permissions: team }] })
+        )
+        .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
+        .mockResolvedValueOnce(answer({ id: "OLD" }));
+    start().mockResolvedValueOnce(answer({ headRevisionId: "r2", md5Checksum: md5("other") }));
+    await expect(uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])).rejects.toThrow(
+      "the current version of a.csv is not what was uploaded"
+    );
+    start().mockResolvedValueOnce(answer({ md5Checksum: md5("x") }));
+    await expect(uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }])).rejects.toThrow(
+      "Drive did not say which version of a.csv is current"
+    );
+    expect(calls().filter((c) => c.method === "DELETE")).toHaveLength(0);
   });
 
   it("stops uploading at its deadline, before asking Drive anything", async () => {

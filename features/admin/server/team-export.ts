@@ -25,7 +25,7 @@
  * panel's own rule, on `survey_submission` and `survey_partial_save`.
  * See docs/runbooks/TEAM_DATA_EXPORT.md.
  */
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 
 import { POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
 import { evaluateTestSubmission } from "@features/admin/server/test-submission";
@@ -877,22 +877,49 @@ async function driveUpload(
 
   /**
    * Drive keeps each replaced version for about 30 days, and editors can open them. The old
-   * versions go, or a person erased from the database would live on in last week's copy.
+   * versions go, or a person erased from the database (or an unmasked copy) would live on in
+   * last week's version. Which version is current comes from Drive itself, and its content is
+   * checked against what was sent, because the order of the version list is not promised: the
+   * last one listed is not necessarily the one just uploaded.
    */
   const id = existing ?? ((await put.json()) as { id?: string }).id;
   if (!id) throw new Error(`Drive did not say which file ${file.name} became`);
-  const listed = await drive(
-    `https://www.googleapis.com/drive/v3/files/${id}/revisions?fields=revisions(id)&pageSize=1000`,
+  const meta = await drive(
+    `https://www.googleapis.com/drive/v3/files/${id}?fields=headRevisionId,md5Checksum`,
     { headers: auth, timeoutMs: 15_000 },
-    `listing of ${file.name}'s versions`
+    `read of ${file.name}`
   );
-  if (!listed.ok)
-    throw new Error(`Drive could not list ${file.name}'s versions (${listed.status})`);
-  const revisions =
-    ((await listed.json()) as { revisions?: Array<{ id: string }> }).revisions ?? [];
-  for (const old of revisions.slice(0, -1)) {
+  if (!meta.ok) throw new Error(`Drive could not read ${file.name} (${meta.status})`);
+  const { headRevisionId: head, md5Checksum } = (await meta.json()) as {
+    headRevisionId?: string;
+    md5Checksum?: string;
+  };
+  if (!head) throw new Error(`Drive did not say which version of ${file.name} is current`);
+  if (md5Checksum !== createHash("md5").update(file.body).digest("hex")) {
+    throw new Error(`the current version of ${file.name} is not what was uploaded`);
+  }
+  const old: string[] = [];
+  let page = "";
+  do {
+    const listed = await drive(
+      `https://www.googleapis.com/drive/v3/files/${id}/revisions?fields=nextPageToken,revisions(id)&pageSize=1000` +
+        (page ? `&pageToken=${encodeURIComponent(page)}` : ""),
+      { headers: auth, timeoutMs: 15_000 },
+      `listing of ${file.name}'s versions`
+    );
+    if (!listed.ok) {
+      throw new Error(`Drive could not list ${file.name}'s versions (${listed.status})`);
+    }
+    const body = (await listed.json()) as {
+      revisions?: Array<{ id: string }>;
+      nextPageToken?: string;
+    };
+    old.push(...(body.revisions ?? []).map((r) => r.id).filter((r) => r !== head));
+    page = body.nextPageToken ?? "";
+  } while (page);
+  for (const revision of old) {
     const gone = await drive(
-      `https://www.googleapis.com/drive/v3/files/${id}/revisions/${old.id}`,
+      `https://www.googleapis.com/drive/v3/files/${id}/revisions/${revision}`,
       { method: "DELETE", headers: auth, timeoutMs: 15_000 },
       `deletion of an old version of ${file.name}`
     );
