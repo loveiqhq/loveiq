@@ -165,11 +165,25 @@ describe("notionLinksIn", () => {
     ]);
   });
 
-  it("reads app.notion.com links, a workspace path, and decodes the title", () => {
+  it("reads app.notion.com links, the team's workspace path, and decodes the title", () => {
     expect(notionLinksIn(`https://app.notion.com/p/${flat(B)}`)).toEqual([{ id: B, hint: null }]);
     expect(
-      notionLinksIn(`https://www.notion.so/loveiq/Grants-%26-Funding-${flat(C)}?pvs=4`)
+      notionLinksIn(`https://www.notion.so/fine-bathroom-41f/Grants-%26-Funding-${flat(C)}?pvs=4`)
     ).toEqual([{ id: C, hint: "Grants & Funding" }]);
+    expect(notionLinksIn(`https://app.notion.com/p/fine-bathroom-41f/${flat(D)}`)).toEqual([
+      { id: D, hint: null },
+    ]);
+  });
+
+  it("marks a link into another company's workspace, so it is never reported", () => {
+    // "Eman Onboarding" links a database in the aqvc workspace: Jarvis can never open it.
+    expect(
+      notionLinksIn(`https://app.notion.com/p/aqvc/${flat(A)}?v=381092900ea58098b2b6000c3e2d5b49`)
+    ).toEqual([{ id: A, hint: null, foreign: "aqvc" }]);
+    expect(notionLinksIn(`https://www.notion.so/acme/Plan-${flat(C)}?p=${flat(D)}`)).toEqual([
+      { id: D, hint: null, foreign: "acme" },
+      { id: C, hint: "Plan", foreign: "acme" },
+    ]);
   });
 
   it("counts the page open in a side peek, and the database, but never the view", () => {
@@ -217,12 +231,17 @@ describe("notionLinksIn", () => {
       `https://calendar.notion.so/event/${flat(C)}`,
       `https://mail.notion.so/inbox/${flat(C)}`,
       `https://other-company.notion.site/Page-${flat(C)}`,
+      `https://loveiq.notion.site/Careers-${flat(C)}`, // not ours: the team's is below
     ]) {
       expect(notionLinksIn(url)).toEqual([]);
     }
-    expect(notionLinksIn(`https://loveiq.notion.site/Careers-${flat(C)}`)).toEqual([
+    expect(notionLinksIn(`https://fine-bathroom-41f.notion.site/Careers-${flat(C)}`)).toEqual([
       { id: C, hint: "Careers" },
     ]);
+    // On the team's public site the host names the workspace: a nested path is still ours.
+    expect(
+      notionLinksIn(`https://fine-bathroom-41f.notion.site/Marketing/Careers-${flat(C)}`)
+    ).toEqual([{ id: C, hint: "Careers" }]);
   });
 
   it("survives the punctuation and brackets text puts around a link, once per page", () => {
@@ -264,6 +283,23 @@ describe("notionIdsInBlocks", () => {
       },
     ];
     expect(notionIdsInBlocks(blocks).sort()).toEqual([A, B, C, D, E, F].sort());
+  });
+
+  it("skips a hyperlink into another company's workspace", () => {
+    const blocks = [
+      {
+        type: "paragraph",
+        paragraph: {
+          rich_text: [
+            {
+              type: "text",
+              text: { content: "x", link: { url: `https://app.notion.com/p/aqvc/${flat(A)}` } },
+            },
+          ],
+        },
+      },
+    ];
+    expect(notionIdsInBlocks(blocks)).toEqual([]);
   });
 
   it("ignores user and date mentions", () => {
@@ -1106,6 +1142,24 @@ describe("checkNotionReach", () => {
     expect(dbPaths.find((p) => p.includes("noticed_by=eq.notion-reach"))).toContain(
       "&order=updated_at.desc&limit=1"
     );
+  });
+
+  it("never asks about, reports or counts as linked a page in another company's workspace", async () => {
+    linkRows = [
+      row({
+        source: "drive",
+        source_id: "drive/doc:onboarding",
+        title: "Drive: Eman Onboarding",
+        body: `https://app.notion.com/p/aqvc/${flat(E)}?v=381092900ea58098b2b6000c3e2d5b49`,
+        period_end: "2026-07-01",
+      }),
+      row({ source_id: "wa:2", body: `https://www.notion.so/Playbook-${flat(C)}` }),
+    ];
+    pageStatus = { [C]: 404, [E]: 404 };
+    const r = await checkNotionReach(NOW);
+    expect(notionPaths).not.toContain(`/blocks/${E}`);
+    expect(r).toMatchObject({ linked: 1, missing: 1, otherWorkspaces: 1 });
+    expect(recorded[0]!.detail).not.toContain(flat(E));
   });
 
   it("does not ask Notion about a link to the page it sits on", async () => {

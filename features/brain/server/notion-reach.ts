@@ -55,12 +55,18 @@ export const MAX_CHECKS = 200;
 export const MAX_MENTION_PAGES = 20;
 const MAX_REF_ROWS = 5000;
 const MENTION_BLOCK_PAGES = 10;
-/** The hosts a team page lives on; the workspace's public pages are loveiq.notion.site. */
+/**
+ * The team's Notion workspace ("Ventures") by its Notion domain, read from Notion's own page
+ * data on 2026-10-11. A link that names another workspace in its path is another company's
+ * page, which Jarvis can never open: "Eman Onboarding" links one (app.notion.com/p/aqvc/…).
+ */
+export const TEAM_WORKSPACE = "fine-bathroom-41f";
+/** The hosts a team page lives on; the workspace's public pages are <domain>.notion.site. */
 const TEAM_HOSTS: ReadonlySet<string> = new Set([
   "notion.so",
   "www.notion.so",
   "app.notion.com",
-  "loveiq.notion.site",
+  `${TEAM_WORKSPACE}.notion.site`,
 ]);
 const NOTION_HOSTS = [...TEAM_HOSTS].join(" | ");
 /** First path segments that are Notion's own pages (terms) or its file proxies, never ours. */
@@ -99,6 +105,8 @@ export interface NotionLink {
   id: string;
   /** The title the URL itself spells out ("Review-KPI-Sheet-3dde…"), when it has one. */
   hint: string | null;
+  /** The other workspace the link names in its path, when it is not the team's. */
+  foreign?: string;
 }
 
 /**
@@ -121,6 +129,14 @@ export function notionLinksIn(text: string): NotionLink[] {
     if (!TEAM_HOSTS.has(url.hostname.toLowerCase())) continue;
     const segments = url.pathname.split("/").filter(Boolean);
     if (NOT_PAGES.has(segments[0]?.toLowerCase() ?? "")) continue;
+    // "notion.so/<workspace>/<page>" and "app.notion.com/p/<workspace>/<page>" name a workspace
+    // in the path. On <workspace>.notion.site the host names it (only the team's is let in
+    // above), so a nested path there is pages, never a workspace.
+    const host = url.hostname.toLowerCase();
+    const named = host === "app.notion.com" && segments[0] === "p" ? segments.slice(1) : segments;
+    const workspace =
+      !host.endsWith(".notion.site") && named.length >= 2 ? named[0]!.toLowerCase() : null;
+    const foreign = workspace && workspace !== TEAM_WORKSPACE ? { foreign: workspace } : {};
     const last = decodeSafely(segments[segments.length - 1] ?? "");
     const pathId = toNotionId(last);
     const idText = pathId ? (TRAILING_ID.exec(last.trim())?.[1] ?? "") : "";
@@ -132,8 +148,8 @@ export function notionLinksIn(text: string): NotionLink[] {
     const hint = pathId && words && !/^[0-9a-f\s]+$/i.test(words) ? words : null;
     const peek = url.searchParams.get("p");
     const peekId = peek ? toNotionId(peek) : null;
-    if (peekId && !out.has(peekId)) out.set(peekId, { id: peekId, hint: null });
-    if (pathId && !out.has(pathId)) out.set(pathId, { id: pathId, hint });
+    if (peekId && !out.has(peekId)) out.set(peekId, { id: peekId, hint: null, ...foreign });
+    if (pathId && !out.has(pathId)) out.set(pathId, { id: pathId, hint, ...foreign });
   }
   return [...out.values()];
 }
@@ -158,7 +174,7 @@ export function notionIdsInBlocks(blocks: Block[]): string[] {
       const id = mentioned ? toNotionId(mentioned) : null;
       if (id) ids.add(id);
       const url = item?.text?.link?.url;
-      if (url) for (const link of notionLinksIn(url)) ids.add(link.id);
+      if (url) for (const link of notionLinksIn(url)) if (!link.foreign) ids.add(link.id);
     }
   };
   const walk = (list: Block[]) => {
@@ -435,6 +451,8 @@ export interface ReachResult {
   unknown: number;
   /** Linked ids the clock did not reach this run: neither new nor fixed. */
   unreached: number;
+  /** Linked pages in other companies' Notion workspaces, which are never asked or reported. */
+  otherWorkspaces: number;
   /** Asked and found in Notion's trash: dropped as dead links. */
   trashed: number;
   /** Pages whose @-mentions were re-read, out of how many carry an "Untitled". */
@@ -479,6 +497,8 @@ export async function checkNotionReach(
 
   // ---- who links to what --------------------------------------------------
   const gaps = new Map<string, Gap>();
+  /** Linked pages in other companies' workspaces, skipped: counted for the record only. */
+  const otherWorkspaces = new Set<string>();
   const note = (id: string, hint: string | null, ref: Ref) => {
     const g = gaps.get(id) ?? { id, hint: null, refs: [] };
     if (!g.hint && hint) g.hint = hint;
@@ -505,6 +525,11 @@ export async function checkNotionReach(
     const self = pageIdOf(row.source_id);
     for (const link of notionLinksIn(row.body ?? "")) {
       if (link.id === self) continue;
+      // Another company's workspace: nothing to connect, so nothing to report.
+      if (link.foreign) {
+        otherWorkspaces.add(link.id);
+        continue;
+      }
       note(link.id, link.hint, { where: whereOf(row), day: row.period_end });
     }
   }
@@ -855,6 +880,7 @@ export async function checkNotionReach(
     unknown,
     unreached,
     trashed: trashed.size,
+    otherWorkspaces: [...otherWorkspaces].filter((id) => !gaps.has(id)).length,
     visibleNotIndexed,
     mentionPages: mentionOk,
     mentionTotal: mentionPages.size,
