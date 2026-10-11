@@ -63,6 +63,10 @@ supabase/.temp/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+# Snapshots and screenshots the agents' Playwright CLI and MCP write into the working folder
+/.playwright-cli/
+/.playwright-mcp/
+/.playwright/
 
 # Lighthouse CI
 /.lighthouseci/

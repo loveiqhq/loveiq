@@ -141,7 +141,9 @@ describe("/api/cron/team-export", () => {
     log.error.mockReset();
     process.env.KV_REST_API_URL = "https://kv";
     process.env.KV_REST_API_TOKEN = "kv-token";
-    work.findTeamFolder.mockReset().mockResolvedValue({ id: "FOLDER", people: ["Eman", "Marcus"] });
+    work.findTeamFolder
+      .mockReset()
+      .mockResolvedValue({ id: "FOLDER", people: ["Eman", "Marcus"], owner: "Eman" });
     work.tableSpecs.mockReset().mockResolvedValue([]);
     work.buildExport.mockReset().mockResolvedValue(files);
     work.uploadExport.mockReset().mockResolvedValue(undefined);
@@ -184,6 +186,7 @@ describe("/api/cron/team-export", () => {
     expect(body).toMatchObject({
       folderUrl: "https://drive.google.com/drive/folders/FOLDER",
       people: ["Eman", "Marcus"],
+      owner: "Eman",
       last: null,
     });
     // The run is on record before it starts, so a killed run does not vanish.
