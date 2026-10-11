@@ -5196,12 +5196,28 @@ describe("/api/mcp", () => {
       expect(await text()).toContain("; the Notion reach check FAILED on 2026-10-12");
     });
 
-    it("adds nothing to other sources, and nothing before the first reach check", async () => {
-      cronRuns = { "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" } };
+    it("adds the reach sentence to Notion only, and nothing before the first reach check", async () => {
+      cronRuns = {
+        "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" },
+        "brain-gmail": { started_at: "2026-10-12T05:11:00Z", status: "success" },
+        "brain-notion-reach": {
+          started_at: "2026-10-12T05:20:00Z",
+          status: "success",
+          error_message: "every linked Notion page it checked is readable · links 80",
+        },
+      };
       wireCorpus({ notion: 1404, gmail: 10 });
-      const out = await text();
-      expect(out).toContain("brain-notion ok at 2026-10-12 05:41");
-      expect(out).not.toContain("reach check");
+      const lines = (await text()).split("\n");
+      const gmail = lines.find((l) => l.startsWith("gmail:")) ?? "";
+      const notion = lines.find((l) => l.startsWith("notion:")) ?? "";
+      expect(gmail).toContain("brain-gmail ok at 2026-10-12 05:11");
+      expect(gmail).not.toContain("reach check");
+      expect(notion).toContain(
+        "reach check 2026-10-12: every linked Notion page it checked is readable"
+      );
+
+      cronRuns = { "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" } };
+      expect(await text()).not.toContain("reach check");
     });
 
     /**
