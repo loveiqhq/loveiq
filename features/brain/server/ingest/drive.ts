@@ -8,6 +8,7 @@ import {
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { TEAM_FOLDER_TAG } from "@features/admin/server/team-export";
 import { splitBody } from "./notion";
 import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
 import { domainMailboxes } from "./gmail";
@@ -1229,6 +1230,66 @@ function partIdsOf(
  * Falls back to the service account's own token, so if delegation is unavailable
  * this is exactly as capable as before and never worse.
  */
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+/**
+ * Every file under the team's data export folder, at any depth (features/admin/server/
+ * team-export.ts): one CSV per database table, customers' survey answers among them, and
+ * whatever the team saves beside it. Found on 2026-10-11: since the export began on 10 Oct
+ * the hourly walk had indexed about 38,000 chunks of it, against the decisions that keep
+ * survey answers (2026-09-09) and orientation (2026-09-26) out of the corpus, and every
+ * search slowed under the extra rows.
+ *
+ * Skipped like SKIP_FILE_IDS, so the files look absent and the sweep removes what was
+ * indexed. Null when the folder cannot be checked: the walk then stops, because indexing
+ * the export by accident is worse than a missed hour.
+ */
+export async function teamExportFileIds(token: string): Promise<Set<string> | null> {
+  const list = async (q: string): Promise<DriveFile[] | null> => {
+    const out: DriveFile[] = [];
+    let pageToken: string | undefined;
+    do {
+      const res = await driveGet(
+        token,
+        `/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent("nextPageToken,files(id,mimeType)")}` +
+          `&pageSize=${PAGE_SIZE}&includeItemsFromAllDrives=true&supportsAllDrives=true` +
+          (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
+      );
+      if (!res.ok) return null;
+      const json = (await res.json().catch(() => null)) as {
+        files?: DriveFile[];
+        nextPageToken?: string;
+      } | null;
+      if (!json) return null;
+      out.push(...(json.files ?? []));
+      pageToken = json.nextPageToken;
+    } while (pageToken);
+    return out;
+  };
+  // Any owner: for leaving files OUT, a folder someone else tagged is no risk.
+  const folders = await list(
+    `properties has { key='${TEAM_FOLDER_TAG.key}' and value='${TEAM_FOLDER_TAG.value}' } ` +
+      `and mimeType='${FOLDER_MIME}' and trashed=false`
+  );
+  if (!folders) return null;
+  const ids = new Set<string>();
+  const queue = folders.map((f) => f.id).filter((id): id is string => Boolean(id));
+  const seen = new Set<string>();
+  while (queue.length) {
+    const folder = queue.shift()!;
+    if (seen.has(folder)) continue;
+    seen.add(folder);
+    const children = await list(`'${folder.replace(/'/g, "\\'")}' in parents and trashed=false`);
+    if (!children) return null;
+    for (const child of children) {
+      if (!child.id) continue;
+      ids.add(child.id);
+      if (child.mimeType === FOLDER_MIME) queue.push(child.id);
+    }
+  }
+  return ids;
+}
+
 async function driveToken(oidcToken?: string | null): Promise<string | null> {
   const admin = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim();
   if (admin) {
@@ -1335,6 +1396,10 @@ export async function ingestDrive(
   }
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
 
+  const teamExport = await teamExportFileIds(token);
+  if (!teamExport) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "team-export-check-failed" };
+  }
   const known = await knownDriveEdits();
   const raw = await listDocs(token, isOutOfTime);
   /**
@@ -1356,6 +1421,7 @@ export async function ingestDrive(
     items: resolved.docs.filter(
       (f) =>
         !SKIP_FILE_IDS.has(f.id ?? "") &&
+        !teamExport.has(f.id ?? "") &&
         !isVendorBilling(f.name, f.mimeType) &&
         !isJobApplication(f.name) &&
         !isLegalInstrument(f.name)
