@@ -164,6 +164,9 @@
     "app/api/cron/brain-notion/route.ts": {
       "maxDuration": 120
     },
+    "app/api/cron/brain-notion-reach/route.ts": {
+      "maxDuration": 120
+    },
     "app/api/cron/brain-gmail/route.ts": {
       "maxDuration": 300
     },

@@ -11,15 +11,22 @@
 import { NextResponse } from "next/server";
 import { checkNotionReach } from "@features/brain/server/notion-reach";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
-import { recordCronRun, verifyCronAuth } from "@shared/observability/slack-alert-dedup";
+import {
+  recordCronRun,
+  startCronTimer,
+  verifyCronAuth,
+} from "@shared/observability/slack-alert-dedup";
 import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
-
-/** When to stop STARTING Notion requests; the tail (one notice write) needs the rest. */
-const BUDGET_MS = 40_000;
+/**
+ * 120 with a 60 s budget, like brain-notion: the clock is checked between requests,
+ * so one that starts just inside the budget can still cost 35 s (a slow 15 s answer,
+ * the capped 5 s wait, a 15 s retry) before the notice and cron_run writes. A run
+ * killed at the ceiling leaves no cron_run row at all, so the room is not optional.
+ */
+export const maxDuration = 120;
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
@@ -30,16 +37,18 @@ export async function GET(request: Request) {
   }
 
   const startedAtMs = Date.now();
+  const checkSlow = startCronTimer("brain-notion-reach", maxDuration);
   let status: "success" | "error" = "success";
   let detail: string | undefined;
   try {
     const result = await checkNotionReach(
       new Date(startedAtMs),
-      () => Date.now() - startedAtMs > BUDGET_MS
+      () => Date.now() - startedAtMs > 60_000
     );
     detail =
       `${result.summary} · links ${result.linked}, checked ${result.checked}, ` +
       `new ${result.fresh}, fixed ${result.fixed}, unknown ${result.unknown}, ` +
+      `not reached ${result.unreached}, ` +
       `visible not yet indexed ${result.visibleNotIndexed}, mention pages ${result.mentionPages}`;
     if (result.noticeFailed) {
       // The finding exists and nobody will hear about it: that is a failure, and it
@@ -62,5 +71,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Internal" }, { status: 500 });
   } finally {
     await recordCronRun("brain-notion-reach", startedAtMs, status, detail);
+    await checkSlow();
   }
 }

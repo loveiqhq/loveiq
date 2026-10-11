@@ -45,6 +45,8 @@ vi.mock("@features/admin/server/supabase", () => ({
 let pageStatus: Record<string, number> = {};
 let pageBlocks: Record<string, unknown[]> = {};
 let sharedDatabases: string[] = [];
+/** Whole database objects from /search, for relations. */
+let databaseObjects: Array<Record<string, unknown>> = [];
 const notionPaths: string[] = [];
 
 vi.mock("@features/brain/server/ingest/notion", () => ({
@@ -58,7 +60,7 @@ vi.mock("@features/brain/server/ingest/notion", () => ({
     return { object: "block", id };
   }),
   notionPost: vi.fn(async () => ({
-    results: sharedDatabases.map((id) => ({ id, object: "database" })),
+    results: [...sharedDatabases.map((id) => ({ id, object: "database" })), ...databaseObjects],
     has_more: false,
   })),
   attachChildren: vi.fn(async () => undefined),
@@ -133,6 +135,12 @@ describe("notionLinksIn", () => {
     expect(notionLinksIn(`https://api.notion.com/v1/blocks/${A}`)).toEqual([]);
     expect(notionLinksIn(`https://developers.notion.com/x-${flat(A)}`)).toEqual([]);
     expect(notionLinksIn(`https://www.figma.com/file/${flat(A)}`)).toEqual([]);
+  });
+
+  it("keeps a link whose title has a stray percent sign instead of failing the run", () => {
+    expect(notionLinksIn(`https://www.notion.so/Plan-100%-done-${flat(A)}`)).toEqual([
+      { id: A, hint: "Plan 100% done" },
+    ]);
   });
 
   it("survives the punctuation and brackets text puts around a link, once per page", () => {
@@ -315,13 +323,14 @@ describe("checkNotionReach", () => {
     pageStatus = {};
     pageBlocks = {};
     sharedDatabases = [];
+    databaseObjects = [];
     recorded.length = 0;
     recordOk = true;
     dbPaths.length = 0;
     notionPaths.length = 0;
   });
 
-  it("reports what the team links to and Jarvis cannot open, skipping what it already holds", async () => {
+  it("reports what the team links to and Jarvis cannot open, asking what it holds last", async () => {
     linkRows = [
       row({ body: `KPI: https://app.notion.com/p/${flat(B)}` }), // shared database: skip
       row({ source_id: "wa:2", body: `https://www.notion.so/Glossary-${flat(F)}` }), // indexed: skip
@@ -336,15 +345,20 @@ describe("checkNotionReach", () => {
     const r = await checkNotionReach(NOW);
 
     const asked = notionPaths.filter((p) => /^\/blocks\/[^/]+$/.test(p)).map((p) => p.slice(8));
-    expect(asked.sort()).toEqual([C, D, E].sort());
+    // The listed database is not asked; the indexed page is, after the never-held ones.
+    expect(asked.slice(0, 3).sort()).toEqual([C, D, E].sort());
+    expect(asked[3]).toBe(F);
+    expect(asked).not.toContain(B);
     expect(r).toMatchObject({
       missing: 2,
       fresh: 2,
       fixed: 0,
       unknown: 1,
-      checked: 3,
+      unreached: 0,
+      checked: 4,
       noticed: true,
     });
+    expect(recorded[0]!.evidence).toContain("4 asked one by one, 1 shown open");
     expect(recorded).toHaveLength(1);
     expect(recorded[0]!.meta).toEqual({ reach_open: [C, E].sort() });
     expect(r.summary).toBe("2 linked Notion pages Jarvis cannot open (Playbook, untitled)");
@@ -437,7 +451,7 @@ describe("checkNotionReach", () => {
     previousOpen = [C];
     const r = await checkNotionReach(NOW, () => true); // out of time before the first check
     expect(r.checked).toBe(0);
-    expect(r).toMatchObject({ fixed: 0, fresh: 0, missing: 0, noticed: false });
+    expect(r).toMatchObject({ fixed: 0, fresh: 0, missing: 0, unreached: 1, noticed: false });
   });
 
   it("writes nothing in a dry run, but shows the notice it would have written", async () => {
@@ -459,6 +473,88 @@ describe("checkNotionReach", () => {
   it("fails the run rather than reporting a clean bill when the corpus cannot be read", async () => {
     failCorpus = true;
     await expect(checkNotionReach(NOW)).rejects.toThrow();
+  });
+
+  it("notices lost access to a page it indexed before: holding a copy proves nothing", async () => {
+    // The 2026-10-11 KPI database: connected, indexed, then refused by the API while
+    // Notion's menu still showed the connection. The corpus keeps the old chunks.
+    linkRows = [row({ body: `https://www.notion.so/KPI-${flat(F)}` })];
+    indexedIds = [`task:${F}`];
+    pageStatus = { [F]: 404 };
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ missing: 1, fresh: 1, noticed: true });
+    expect(recorded[0]!.meta).toEqual({ reach_open: [F] });
+  });
+
+  it("re-checks a reported page Jarvis now holds instead of trusting the copy", async () => {
+    previousOpen = [F];
+    linkRows = [row({ body: `https://www.notion.so/KPI-${flat(F)}` })];
+    indexedIds = [`task:${F}`];
+    pageStatus = { [F]: 404 };
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ fixed: 0, missing: 1, fresh: 0, noticed: false });
+  });
+
+  it("asks the pages it holds in a different order each day, so a short run skips different ones", async () => {
+    const held = [A, B, C, D, E, F];
+    linkRows = held.map((id, i) =>
+      row({ source_id: `wa:${i}`, body: `https://www.notion.so/${flat(id)}` })
+    );
+    indexedIds = held.map((id) => `page:${id}`);
+    const firstTwo = async (when: Date) => {
+      notionPaths.length = 0;
+      let n = 0;
+      await checkNotionReach(when, () => n++ >= 2);
+      return notionPaths.filter((p) => /^\/blocks\/[^/]+$/.test(p)).map((p) => p.slice(8));
+    };
+    const sunday = await firstTwo(NOW);
+    const monday = await firstTwo(MONDAY);
+    expect(sunday).toHaveLength(2);
+    expect(await firstTwo(NOW)).toEqual(sunday); // stable within a day
+    expect(monday).not.toEqual(sunday);
+  });
+
+  it("reports a database the team relates to that Jarvis cannot open, and skips listed ones", async () => {
+    const hidden = "4a1b0cbe-f1a3-8000-9c76-ce4ad7b61646";
+    databaseObjects = [
+      {
+        id: B,
+        object: "database",
+        title: [{ plain_text: "📊 KPI" }],
+        properties: {
+          Owner: { type: "people" },
+          Priority: { type: "relation", relation: { database_id: flat(hidden) } },
+          Itself: { type: "relation", relation: { database_id: B } },
+          Tests: { type: "relation", relation: { database_id: D } },
+        },
+      },
+      { id: D, object: "database", title: [], properties: {} },
+    ];
+    pageStatus = { [hidden]: 404 };
+    const r = await checkNotionReach(NOW);
+    const asked = notionPaths.filter((p) => /^\/blocks\/[^/]+$/.test(p)).map((p) => p.slice(8));
+    expect(asked).toEqual([hidden]);
+    expect(r).toMatchObject({ missing: 1, fresh: 1 });
+    expect(recorded[0]!.detail).toContain('linked in the relation "Priority" on 📊 KPI');
+  });
+
+  it("asks what it reported before anything else, so a fix is never starved by new links", async () => {
+    previousOpen = [C];
+    linkRows = [A, D, E].map((id, i) =>
+      row({ source_id: `wa:${i}`, body: `https://www.notion.so/${flat(id)}` })
+    );
+    let n = 0;
+    const r = await checkNotionReach(NOW, () => n++ >= 1);
+    expect(notionPaths.filter((p) => /^\/blocks\/[^/]+$/.test(p))).toEqual([`/blocks/${C}`]);
+    expect(r.fixed).toBe(1);
+  });
+
+  it("counts a reported database fixed when Notion's own list shows it, without asking", async () => {
+    previousOpen = [B];
+    sharedDatabases = [B];
+    const r = await checkNotionReach(NOW);
+    expect(r.fixed).toBe(1);
+    expect(notionPaths.some((p) => p === `/blocks/${B}`)).toBe(false);
   });
 
   it("does not ask Notion about a link to the page it sits on", async () => {

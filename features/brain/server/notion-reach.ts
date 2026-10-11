@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { attachChildren, notionGet, notionPost } from "./ingest/notion";
@@ -16,25 +17,39 @@ import { NOTICE_SOURCE, recordNotice, type NoticeInput } from "./notice";
  * team had linked. One connection even SHOWED in Notion's menu while the API still
  * refused the database, so asking Notion's UI is not a check either.
  *
- * Two kinds of evidence that the team uses a page, both already in the corpus:
+ * Three kinds of evidence that the team uses a page:
  *  - LINKS. A Notion URL in WhatsApp, Slack, an email, a Drive doc or a Notion page.
  *    The host is its own token in `brain_chunk.fts`, so finding them is one indexed
  *    read (a body ILIKE timed out in production: brain-chunk-body-ilike-times-out).
  *  - @-MENTIONS. Notion renders a mention of a page the integration cannot open as
  *    the word "Untitled", with no link in the stored text. Those few pages are read
  *    again through the API to get the ids behind the mentions.
+ *  - RELATIONS. A database Jarvis can open that relates to one it cannot: every row
+ *    points into the hidden one. Read off the database listing, at no extra cost.
  *
  * Every id is then asked of Notion through Jarvis's own token, the same access the
- * brain uses, so a broken connection counts as broken. What cannot be opened becomes
- * a notice in the daily brief, but only when something changed (new or fixed) and
- * on Mondays as a reminder; the reported set rides in the notice's meta.
+ * brain uses, so a broken connection counts as broken. HOLDING A PAGE PROVES NOTHING:
+ * the corpus is memory, and a page whose connection was removed keeps its chunks on
+ * purpose (the Notion sweep treats lost access as history, not deletion), so pages
+ * Jarvis already holds are asked too, after the rest, in a different order each day.
+ * Only Notion's own database listing counts as an answer without a question.
+ *
+ * What cannot be opened becomes a notice in the daily brief, but only when something
+ * changed (new or fixed) and on Mondays as a reminder; the reported set rides in the
+ * notice's meta.
+ *
+ * Measured 2026-10-11 and deliberately NOT read: hyperlinks with their own text and
+ * link-to-page blocks inside Notion pages, which the stored text drops. All 74
+ * standalone pages and 60 random rows held 19 such targets, none unreadable; teaching
+ * the ingester to keep them means a builder bump (every page re-read). Add it if a
+ * gap is ever found behind one.
  */
 
 export const REACH_KIND = "notion-reach";
 /** A link nobody has posted in this long stops being reported (dead links age out). */
 export const REACH_LOOKBACK_DAYS = 90;
-/** Ids asked of Notion per run, newest reference first. ~0.35s each. */
-export const MAX_CHECKS = 80;
+/** Ids asked of Notion per run (~0.35s each); in practice the cron's clock stops it first. */
+export const MAX_CHECKS = 200;
 /** Pages re-read for their @-mentions per run. */
 export const MAX_MENTION_PAGES = 20;
 const MAX_REF_ROWS = 5000;
@@ -52,6 +67,15 @@ export function toNotionId(raw: string): string | null {
   const m = all[all.length - 1];
   if (!m) return null;
   return `${m[1]}-${m[2]}-${m[3]}-${m[4]}-${m[5]}`.toLowerCase();
+}
+
+/** A stray "%" ("Plan-100%-done-…") makes decodeURIComponent throw; one link must not end the run. */
+function decodeSafely(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 export interface NotionLink {
@@ -80,7 +104,7 @@ export function notionLinksIn(text: string): NotionLink[] {
     if (/^(api|developers)\./i.test(url.hostname)) continue;
     const segments = url.pathname.split("/").filter(Boolean);
     if (segments[0]?.toLowerCase() === "notion") continue;
-    const last = decodeURIComponent(segments[segments.length - 1] ?? "");
+    const last = decodeSafely(segments[segments.length - 1] ?? "");
     const pathId = toNotionId(last);
     const words = last.replace(UUID, "").replace(/[-_]+/g, " ").trim();
     const hint = pathId && words && !/^[0-9a-f\s]+$/i.test(words) ? words : null;
@@ -208,7 +232,12 @@ export function buildReachNotice(input: {
   fixed: string[];
   carried?: string[];
   linked: number;
-  checked: number;
+  /** Asked of Notion one by one this run. */
+  asked: number;
+  /** Shown open by Notion's own database listing, so not asked. */
+  listed: number;
+  /** Linked, but the clock ran out before they were asked. */
+  unreached: number;
   day: string;
 }): NoticeInput {
   const { gaps, fresh, still, fixed } = input;
@@ -242,13 +271,22 @@ export function buildReachNotice(input: {
     detail: sections.join("\n\n"),
     kind: REACH_KIND,
     evidence:
-      `${plural(input.linked, "Notion page")} linked by the team; the ${input.checked} Jarvis does not ` +
-      `already hold were asked of Notion through Jarvis's own access on ${input.day}.`,
+      `${plural(input.linked, "Notion page")} linked by the team, checked on ${input.day} through ` +
+      `Jarvis's own Notion access: ${input.asked} asked one by one, ${input.listed} shown open in ` +
+      `Notion's own list of databases` +
+      (input.unreached ? `, ${input.unreached} not reached before the run's time ran out.` : "."),
     meta: { reach_open: [...new Set([...fresh, ...still, ...(input.carried ?? [])])].sort() },
   };
 }
 
 // ---- reading the corpus ------------------------------------------------------
+
+/** The parts of a database object from `/search` this check reads. */
+type NotionDatabase = {
+  id?: string;
+  title?: Array<{ plain_text?: string }>;
+  properties?: Record<string, { type?: string; relation?: { database_id?: string } } | null>;
+};
 
 interface CorpusRow {
   source: string;
@@ -270,8 +308,14 @@ async function pagedRows(path: string, cap: number): Promise<CorpusRow[]> {
     const res = await supabaseFetch(`${path}&limit=1000&offset=${offset}`);
     const batch = await chunkPage<CorpusRow>(REACH_KIND, res);
     out.push(...batch);
-    if (batch.length < 1000) break;
+    if (batch.length < 1000) return out;
   }
+  // ponytail: the oldest rows are the ones cut, living documents included. Page by
+  // source if this ever fires (185 link rows on 2026-10-11 against 5,000).
+  logger.warn(
+    { path: path.slice(0, 120), cap },
+    "brain notion-reach: row cap reached, oldest rows unread"
+  );
   return out;
 }
 
@@ -294,6 +338,8 @@ export interface ReachResult {
   fresh: number;
   fixed: number;
   unknown: number;
+  /** Linked ids the clock did not reach this run: neither new nor fixed. */
+  unreached: number;
   visibleNotIndexed: number;
   mentionPages: number;
   noticed: boolean;
@@ -365,6 +411,8 @@ export async function checkNotionReach(
     const id = pageIdOf(row.source_id);
     if (id && !mentionPages.has(id)) mentionPages.set(id, row);
   }
+  // ponytail: always the newest 20 (4 on 2026-10-11); rotate like the checks below if
+  // the count ever nears the cap.
   let mentionRead = 0;
   for (const [pageId, row] of mentionPages) {
     if (mentionRead >= MAX_MENTION_PAGES || isOutOfTime()) break;
@@ -391,18 +439,21 @@ export async function checkNotionReach(
     }
   }
 
-  // ---- what Jarvis already holds needs no question ----------------------------
+  // ---- what Jarvis can open right now, and what it only remembers -------------
+  // Indexed pages only decide the ORDER of the questions below (see the header):
+  // the corpus is memory, not access.
   const indexed = new Set<string>();
   for (const row of await pagedRows(
-    `/rest/v1/brain_chunk?select=source,source_id,title,period_end&source=eq.notion&order=source_id.asc`,
+    `/rest/v1/brain_chunk?select=source_id&source=eq.notion&order=source_id.asc`,
     20_000
   )) {
     const id = pageIdOf(row.source_id);
     if (id) indexed.add(id);
   }
-  // Databases are not chunks (their rows are), so ask which ones are shared. A failed
-  // listing only costs requests: every database link is then checked one by one.
+  // Notion's own list of the databases it lets Jarvis open IS an answer. A failed
+  // listing only costs requests: every database link is then asked one by one.
   const databases = new Set<string>();
+  const relations: Array<{ target: string; where: string }> = [];
   try {
     let cursor: string | undefined;
     for (let i = 0; i < 5; i++) {
@@ -411,9 +462,21 @@ export async function checkNotionReach(
         page_size: 100,
         ...(cursor ? { start_cursor: cursor } : {}),
       });
-      for (const db of (json.results as Array<{ id?: string }>) ?? []) {
+      for (const db of (json.results as NotionDatabase[]) ?? []) {
         const id = db.id ? toNotionId(db.id) : null;
-        if (id) databases.add(id);
+        if (!id) continue;
+        databases.add(id);
+        const name =
+          (db.title ?? [])
+            .map((t) => t.plain_text ?? "")
+            .join("")
+            .trim() || "a database";
+        for (const [prop, def] of Object.entries(db.properties ?? {})) {
+          const target =
+            def?.type === "relation" ? toNotionId(def.relation?.database_id ?? "") : null;
+          // A database's own id is already listed, so a self-relation drops out below.
+          if (target) relations.push({ target, where: `the relation "${prop}" on ${name}` });
+        }
       }
       cursor = json.has_more ? String(json.next_cursor) : undefined;
       if (!cursor) break;
@@ -421,7 +484,9 @@ export async function checkNotionReach(
   } catch (err) {
     logger.warn({ err }, "brain notion-reach: database listing failed; checking links one by one");
   }
-  const held = (id: string) => indexed.has(id) || databases.has(id);
+  for (const { target, where } of relations) {
+    if (!databases.has(target)) note(target, null, { where, day: null });
+  }
 
   // ---- what was reported last time ---------------------------------------------
   const previousRows = await chunkPage<{ meta?: { reach_open?: unknown } | null }>(
@@ -436,23 +501,33 @@ export async function checkNotionReach(
     Array.isArray(reported) ? reported.filter((x): x is string => typeof x === "string") : []
   );
 
-  // ---- ask Notion about the rest, freshest link first ---------------------------
+  // ---- ask Notion -----------------------------------------------------------------
+  // Order: what was reported (so a fix is noticed), then pages Jarvis has never held,
+  // freshest link first (the likely gaps), then pages it holds, shuffled by the day so
+  // a run the clock cuts short never skips the same ones twice.
   const referenced = new Set([...gaps.keys()]);
-  const lastDay = (g: Gap) => g.refs.reduce((m, r) => ((r.day ?? "") > m ? (r.day ?? "") : m), "");
   const reach = new Map<string, Reach>();
-  for (const id of previous) if (held(id)) reach.set(id, "visible");
+  for (const id of new Set([...referenced, ...previous])) {
+    if (databases.has(id)) reach.set(id, "visible");
+  }
+  const lastDay = (g: Gap) => g.refs.reduce((m, r) => ((r.day ?? "") > m ? (r.day ?? "") : m), "");
+  const shuffle = (id: string) => createHash("sha1").update(`${day}:${id}`).digest("hex");
+  const linkedGaps = [...gaps.values()].filter((g) => !reach.has(g.id) && !previous.has(g.id));
   const toCheck = [
-    ...[...gaps.values()]
-      .filter((g) => !held(g.id))
+    ...[...previous].filter((id) => !reach.has(id)),
+    ...linkedGaps
+      .filter((g) => !indexed.has(g.id))
       .sort((a, b) => lastDay(b).localeCompare(lastDay(a)))
       .map((g) => g.id),
-    // Reported last time and nobody links it now: still asked, so a fix is noticed.
-    ...[...previous].filter((id) => !held(id) && !referenced.has(id)),
+    ...linkedGaps
+      .filter((g) => indexed.has(g.id))
+      .map((g) => g.id)
+      .sort((a, b) => shuffle(a).localeCompare(shuffle(b))),
   ];
-  let checked = 0;
+  let asked = 0;
   for (const id of toCheck) {
-    if (checked >= MAX_CHECKS || isOutOfTime()) break;
-    checked += 1;
+    if (asked >= MAX_CHECKS || isOutOfTime()) break;
+    asked += 1;
     try {
       await notionGet(token, `/blocks/${id}`);
       reach.set(id, "visible");
@@ -469,12 +544,27 @@ export async function checkNotionReach(
 
   const { listed, fresh, still, fixed, carried } = diffReach(previous, reach, referenced);
   const unknown = [...reach.values()].filter((r) => r === "unknown").length;
-  const visibleNotIndexed = [...reach].filter(([id, r]) => r === "visible" && !held(id)).length;
-  const linked = [...referenced].length;
+  const unreached = [...referenced].filter((id) => !reach.has(id)).length;
+  const visibleNotIndexed = [...reach].filter(
+    ([id, r]) => r === "visible" && !indexed.has(id) && !databases.has(id)
+  ).length;
+  const linked = referenced.size;
+  const listedOpen = [...referenced].filter((id) => databases.has(id)).length;
 
   const due = fresh.length > 0 || fixed.length > 0 || (now.getUTCDay() === 1 && listed.length > 0);
   const notice = due
-    ? buildReachNotice({ gaps, fresh, still, fixed, carried, linked, checked, day })
+    ? buildReachNotice({
+        gaps,
+        fresh,
+        still,
+        fixed,
+        carried,
+        linked,
+        asked,
+        listed: listedOpen,
+        unreached,
+        day,
+      })
     : null;
   // A dry run writes nothing, so "would have written" is not a failure either.
   const noticed = notice && !options.dryRun ? await recordNotice(notice) : false;
@@ -490,11 +580,12 @@ export async function checkNotionReach(
       : `every linked Notion page it checked is readable`;
   return {
     linked,
-    checked,
+    checked: asked,
     missing: listed.length,
     fresh: fresh.length,
     fixed: fixed.length,
     unknown,
+    unreached,
     visibleNotIndexed,
     mentionPages: mentionRead,
     noticed,

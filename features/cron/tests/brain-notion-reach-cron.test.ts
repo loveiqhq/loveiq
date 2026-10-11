@@ -14,6 +14,7 @@ const mockRecordCronRun = vi.fn();
 vi.mock("@shared/observability/slack-alert-dedup", () => ({
   verifyCronAuth: (req: Request) => req.headers.get("authorization") === "Bearer s",
   recordCronRun: (...a: unknown[]) => mockRecordCronRun(...a),
+  startCronTimer: () => async () => undefined,
 }));
 
 const mockProdHost = vi.fn(() => true);
@@ -40,6 +41,7 @@ const result = (over: Record<string, unknown> = {}) => ({
   fresh: 4,
   fixed: 0,
   unknown: 0,
+  unreached: 0,
   visibleNotIndexed: 15,
   mentionPages: 4,
   noticed: true,
@@ -78,7 +80,7 @@ describe("GET /api/cron/brain-notion-reach", () => {
     expect(detail.split(" · ")[0]).toBe(
       "4 linked Notion pages Jarvis cannot open (Email Marketing Playbook, …)"
     );
-    expect(detail).toContain("visible not yet indexed 15");
+    expect(detail).toContain("not reached 0, visible not yet indexed 15");
   });
 
   it("gives the check a clock that runs out before the function is killed", async () => {
