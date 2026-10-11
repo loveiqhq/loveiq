@@ -78,7 +78,7 @@ describe("rowProperties", () => {
   it("keeps commas out of the question's select option, which Notion refuses", () => {
     const label = "02 · Right now, I feel satisfied with my sex life.";
     expect(selectName(label)).not.toContain(",");
-    expect(selectName(label)).toBe("02 · Right now‚ I feel satisfied with my sex life.");
+    expect(selectName(label)).toBe("02 · Right now\u201a I feel satisfied with my sex life.");
     expect(selectName("x".repeat(150))).toHaveLength(100);
     const p = rowProperties(row({ question: label })) as Record<string, Record<string, unknown>>;
     expect((p.Question!.select as { name: string }).name).toBe(selectName(label));

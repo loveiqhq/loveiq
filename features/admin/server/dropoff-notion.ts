@@ -7,6 +7,9 @@
  * numbers moved is updated, a row nobody computes any more (a question taken out of the
  * survey, a duplicate) goes to the trash. Unchanged rows are not touched, so a normal day
  * writes the week in progress and little else. Older weeks are left as they were.
+ *
+ * ponytail: rows are never trashed for age, about 430 are added a week. Fine for a year;
+ * when the table nears 20,000 rows, trash the weeks older than half a year here.
  */
 import {
   archiveNotionPage,
@@ -21,7 +24,7 @@ export const DROPOFF_DATA_DATABASE_ID = "e233fb12-fff9-4485-a54a-d4c29e8b26ff";
 
 /** Notion refuses a comma in a select option. U+201A looks like one and is not. */
 export function selectName(text: string): string {
-  return text.replace(/,/g, "‚").slice(0, 100);
+  return text.replace(/,/g, "\u201a").slice(0, 100);
 }
 
 /** One row's properties, in Notion's shape. The property names are the database's. */
