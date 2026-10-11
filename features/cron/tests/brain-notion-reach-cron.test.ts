@@ -52,6 +52,7 @@ const result = (over: Record<string, unknown> = {}) => ({
   fixed: 0,
   unknown: 0,
   unreached: 0,
+  trashed: 0,
   visibleNotIndexed: 15,
   mentionPages: 4,
   mentionTotal: 4,
@@ -95,7 +96,9 @@ describe("GET /api/cron/brain-notion-reach", () => {
     expect(detail.split(" · ")[0]).toBe(
       "4 linked Notion pages Jarvis cannot open (Email Marketing Playbook, …)"
     );
-    expect(detail).toContain("not reached 0, visible not yet indexed 15, mention pages 4/4");
+    expect(detail).toContain(
+      "not reached 0, in trash 0, visible not yet indexed 15, mention pages 4/4"
+    );
   });
 
   it("gives the check a clock that runs out before the function is killed", async () => {

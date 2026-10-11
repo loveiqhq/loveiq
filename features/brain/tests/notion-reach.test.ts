@@ -351,6 +351,20 @@ describe("buildReachNotice", () => {
     expect(n.meta).toEqual({ reach_open: [...ids].sort() });
   });
 
+  it("says how many asked pages were dead links, so the counts add up", () => {
+    const n = buildReachNotice({
+      ...base,
+      asked: 20,
+      trashed: 1,
+      fresh: [A],
+      still: [],
+      fixed: [],
+    });
+    expect(n.evidence).toContain(
+      "20 asked one by one (1 of them in Notion's trash, a dead link), 0 shown open"
+    );
+  });
+
   it("keeps a page it could not re-check in the reported set", () => {
     const n = buildReachNotice({ ...base, fresh: [A], still: [], fixed: [], carried: [C, A] });
     expect(n.meta).toEqual({ reach_open: [A, C].sort() });
@@ -669,7 +683,7 @@ describe("checkNotionReach", () => {
     previousOpen = [C];
     trashed = new Set([C]);
     const r = await checkNotionReach(NOW);
-    expect(r).toMatchObject({ linked: 0, missing: 0, fixed: 0, noticed: false });
+    expect(r).toMatchObject({ linked: 0, missing: 0, fixed: 0, trashed: 1, noticed: false });
   });
 
   it("reads an @-mention inside a page's properties, not only its blocks", async () => {

@@ -256,6 +256,8 @@ export function buildReachNotice(input: {
   listed: number;
   /** Linked, but the clock ran out before they were asked. */
   unreached: number;
+  /** Asked, and found in Notion's trash: dead links, no longer counted as linked. */
+  trashed?: number;
   day: string;
 }): NoticeInput {
   const { gaps, fresh, still, fixed } = input;
@@ -273,7 +275,9 @@ export function buildReachNotice(input: {
   const fix = open ? FIX_TEXT + (open >= MASS_LOSS_AT ? ` ${MASS_LOSS_TEXT}` : "") : "";
   const evidence =
     `${plural(input.linked, "Notion page")} linked by the team, checked on ${input.day} through ` +
-    `Jarvis's own Notion access: ${input.asked} asked one by one, ${input.listed} shown open in ` +
+    `Jarvis's own Notion access: ${input.asked} asked one by one` +
+    (input.trashed ? ` (${input.trashed} of them in Notion's trash, a dead link)` : "") +
+    `, ${input.listed} shown open in ` +
     `Notion's own list of databases` +
     (input.unreached ? `, ${input.unreached} not reached before the run's time ran out.` : ".");
   const render = (n: number) => {
@@ -376,6 +380,8 @@ export interface ReachResult {
   unknown: number;
   /** Linked ids the clock did not reach this run: neither new nor fixed. */
   unreached: number;
+  /** Asked and found in Notion's trash: dropped as dead links. */
+  trashed: number;
   /** Pages whose @-mentions were re-read, out of how many carry an "Untitled". */
   mentionTotal: number;
   /** Why this run cannot be trusted as a clean bill, or null. Fails the cron. */
@@ -588,6 +594,7 @@ export async function checkNotionReach(
       .sort((a, b) => shuffle(a).localeCompare(shuffle(b))),
   ];
   let asked = 0;
+  let trashed = 0;
   for (const id of toCheck) {
     if (asked >= MAX_CHECKS || isOutOfTime()) break;
     asked += 1;
@@ -595,8 +602,10 @@ export async function checkNotionReach(
       const block = await notionGet(token, `/blocks/${id}`);
       // In Notion's trash: a dead link, not a missing connection, and connecting it
       // would fix nothing. It leaves the count, and a reported one quietly drops off.
-      if (block.in_trash === true || block.archived === true) referenced.delete(id);
-      else reach.set(id, "visible");
+      if (block.in_trash === true || block.archived === true) {
+        referenced.delete(id);
+        trashed += 1;
+      } else reach.set(id, "visible");
     } catch (err) {
       rethrowIfTokenRefused(err);
       const status = statusOf(err);
@@ -629,6 +638,7 @@ export async function checkNotionReach(
         asked,
         listed: listedOpen,
         unreached,
+        trashed,
         day,
       })
     : null;
@@ -665,6 +675,7 @@ export async function checkNotionReach(
     fixed: fixed.length,
     unknown,
     unreached,
+    trashed,
     visibleNotIndexed,
     mentionPages: mentionRead,
     mentionTotal: mentionPages.size,

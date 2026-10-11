@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     detail =
       `${result.summary} · links ${result.linked}, checked ${result.checked}, ` +
       `new ${result.fresh}, fixed ${result.fixed}, unknown ${result.unknown}, ` +
-      `not reached ${result.unreached}, ` +
+      `not reached ${result.unreached}, in trash ${result.trashed}, ` +
       `visible not yet indexed ${result.visibleNotIndexed}, ` +
       `mention pages ${result.mentionPages}/${result.mentionTotal}`;
 
