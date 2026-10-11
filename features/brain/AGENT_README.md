@@ -49,6 +49,14 @@ Claude Code) is the door people use; the operator's guide is
 - `server/experiments.ts` — `experiments` and `record_experiment`: /admin's `admin_experiment`
   registry (written through `admin_upsert_experiment`, which overwrites every column, so an update
   hands back what it does not change) and live readouts from `features/admin/server/experiment-readouts.ts`.
+  A running test also gets the people each arm needs (`perArmSample`: 95% confidence, 80% power)
+  and the day that is reached at the pace so far.
+- `server/sales.ts` — `get_business_numbers` with `group_by`: a period's real sales, revenue and EUR 0
+  comps by plan, price list, device, source, country tier, landing arm or month, read from
+  `payment` (its metadata) the way the daily numbers count a sale. No model.
+- `server/feedback.ts` — `customer_feedback`: the report's chapter votes and comments
+  (`report_section_feedback`, staff left out) and the Trustpilot review emails in the index, with
+  what it cannot see named every time.
 - `server/break-even.ts` — `break_even`: spend, visitors, finishers, buyers and revenue on the days
   `adCovers` says the ad data covers (the digest's basis), the level each lever alone must reach,
   and what-ifs. No model.

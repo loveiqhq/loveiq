@@ -19,9 +19,12 @@ import {
   loadArmOutcomes,
   tallyAxis,
   type ArmOutcomes,
+  type ArmStat,
   type ExperimentReadout,
 } from "@features/admin/server/experiment-readouts";
+import { MIN_CELL_COUNT } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { reportingDay } from "@shared/time/reporting-day";
 import { AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
 import { loadPeople } from "@features/brain/server/people";
 
@@ -94,6 +97,106 @@ function describe(e: Row): string {
   );
 }
 
+/** Two-sided 95% confidence and 80% power: the usual bar for calling an A/B test. */
+const Z_CONFIDENCE = 1.959964;
+const Z_POWER = 0.841621;
+const pct = (rate: number) => `${(rate * 100).toFixed(1)}%`;
+
+/** People each arm needs to tell a buying rate of `a` from one of `b` (0 to 1) apart. */
+export function perArmSample(a: number, b: number): number {
+  const mean = (a + b) / 2;
+  const spread =
+    Z_CONFIDENCE * Math.sqrt(2 * mean * (1 - mean)) +
+    Z_POWER * Math.sqrt(a * (1 - a) + b * (1 - b));
+  return Math.ceil(spread ** 2 / (a - b) ** 2);
+}
+
+/** When the first person counted in one of the readout's arms arrived, or null if nobody has. */
+function firstCounted(
+  outcomes: ArmOutcomes,
+  read: (id: number, tracker: string | null) => string | null,
+  r: ExperimentReadout
+): number | null {
+  const arms = new Set(r.arms.map((a) => a.arm));
+  let first: number | null = null;
+  for (const s of outcomes.submissions) {
+    const arm = read(s.id, s.utm_tracker);
+    const at = Date.parse(s.created_date_time ?? "");
+    if (arm && arms.has(arm) && Number.isFinite(at) && (first === null || at < first)) first = at;
+  }
+  return first;
+}
+
+/**
+ * How many people each arm needs before the readout can call the test, and the day that
+ * comes at the pace people have arrived so far (Marcus, 5 Oct: "how long until we know?").
+ * Sized for the gap seen so far, so a smaller real gap takes longer; arms that are level so
+ * far are sized for a 50% lift, since no number of people can show a gap of zero.
+ */
+export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: number): string {
+  const arms = r.arms.filter((a) => a.n > 0);
+  if (arms.length < 2 || firstAt === null) return "";
+  const rate = (a: ArmStat) => a.purchases / a.n;
+  const [lead, next] = [...arms].sort((x, y) => rate(y) - rate(x)) as [ArmStat, ArmStat];
+  const [hi, lo] = [rate(lead), rate(next)];
+  const have = Math.min(...arms.map((x) => x.n));
+  // A day at least, so an hour of traffic is not projected as a pace.
+  const perDay = have / Math.max((now - firstAt) / DAY_MS, 1);
+  /** When `need` people per arm arrive at this pace, as a sentence. */
+  const when = (need: number, ifTheGapHolds: boolean) => {
+    const days = perDay > 0 ? Math.ceil((need - have) / perDay) : Infinity;
+    if (days > 365) {
+      return (
+        `At ${perDay.toFixed(1)} a day per arm that is more than a year away, so purchases ` +
+        "alone will not settle it: test a bigger change, or decide on an earlier step such as checkout starts."
+      );
+    }
+    // The day as the team reads it, in Berlin.
+    const day = reportingDay(new Date(now + days * DAY_MS));
+    return `At ${perDay.toFixed(1)} a day per arm, that is around ${day}${ifTheGapHolds ? ", if the gap holds" : ""}.`;
+  };
+  // The readout counts purchases whatever metric decides the test, so the size is for them.
+  const label = "  Needed, for a difference in purchases (what the readout above counts):";
+  const power = "at 95% confidence and 80% power";
+  if (hi === 0) {
+    const yardstick = perArmSample(0.015, 0.01);
+    return (
+      `${label} nobody has bought yet, so there is no rate to size against. As a yardstick, ` +
+      `telling 1.0% from 1.5% takes about ${yardstick} people per arm, ${power}; the smaller ` +
+      `arm has ${have}. ${when(yardstick, false)}`
+    );
+  }
+  // Level arms are sized for a 50% lift, or for halfway to 100% when a 50% lift would pass
+  // it (above 66.7% there is no such rate, and the formula would return NaN).
+  const lift = lo * 1.5 < 1;
+  const [a, b, basis] =
+    hi > lo
+      ? [hi, lo, `to tell ${pct(hi)} from ${pct(lo)} apart`]
+      : [
+          lift ? lo * 1.5 : (1 + lo) / 2,
+          lo,
+          lift
+            ? `to see a 50% lift on ${pct(lo)}, since the arms are level so far`
+            : `to see ${pct(lo)} rise halfway to 100%, since the arms are level so far`,
+        ];
+  // The readout will not judge until every arm has MIN_CELL_COUNT buyers.
+  const need = Math.max(perArmSample(a, b), b > 0 ? Math.ceil(MIN_CELL_COUNT / b) : 0);
+  const head = `${label} about ${need} people per arm ${basis}, ${power}; the smaller arm has ${have}.`;
+  // A rate of zero says nothing about how many people five buyers take, so enough people is
+  // not enough until every arm has the buyers the readout requires.
+  const short = arms.filter((x) => x.purchases < MIN_CELL_COUNT);
+  const buyers = short.length
+    ? `the readout needs ${MIN_CELL_COUNT} buyers in every arm before it judges, and ` +
+      short.map((x) => `${x.label} has ${x.purchases}`).join(", ")
+    : "";
+  if (have >= need) {
+    return short.length
+      ? `${head} The people are there, but ${buyers}.`
+      : `${head} Both have enough, so the verdict above is the answer.`;
+  }
+  return `${head} ${when(need, hi > lo)}${short.length ? ` Also, ${buyers}.` : ""}`;
+}
+
 /** A running test's readout since its own start, by the same code /admin's overview runs. */
 async function liveLine(
   e: Row,
@@ -109,7 +212,8 @@ async function liveLine(
     return `  Nothing stamps an arm for ${AXIS_TITLES[e.axis]} any more, so there is nothing live to read.`;
   }
   const r = tallyAxis(outcomes, e.axis, read);
-  return `  So far: ${armsLine(r)}. ${r.verdict}`;
+  const needed = sampleLine(r, firstCounted(outcomes, read, r), now);
+  return `  So far: ${armsLine(r)}. ${r.verdict}${needed ? `\n${needed}` : ""}`;
 }
 
 export async function listExperiments(
@@ -129,9 +233,12 @@ export async function listExperiments(
   if (unregistered.length) {
     const outcomes = await load(`${isoDay(now - 30 * DAY_MS)}T00:00:00Z`);
     for (const r of liveReadouts(outcomes).filter((x) => !covered.has(x.axis))) {
+      const read = armReader(r.axis, outcomes);
+      const needed = read ? sampleLine(r, firstCounted(outcomes, read, r), now) : "";
       out.push(
         `- ${r.title}: being randomised with no hypothesis on record; register it with ` +
-          `record_experiment. Last 30 days: ${armsLine(r)}. ${r.verdict}`
+          `record_experiment. Last 30 days: ${armsLine(r)}. ${r.verdict}` +
+          (needed ? `\n${needed}` : "")
       );
     }
   }

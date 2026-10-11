@@ -131,6 +131,7 @@ supa
 tappable
 teamspace
 teamspaces
+threejs
 timestamptz
 trgm
 trimable
