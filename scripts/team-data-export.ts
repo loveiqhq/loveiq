@@ -20,6 +20,7 @@ import {
   buildExport,
   checkFolder,
   tableSpecs,
+  TEAM_EXPORT_OWNER,
   uploadExport,
 } from "@features/admin/server/team-export";
 import { DRIVE_WRITE_SCOPE, getDelegatedToken } from "@shared/http/google-oauth";
@@ -62,7 +63,7 @@ async function main(): Promise<void> {
   assertOutsideRepo(out);
   const folder = arg("--drive-folder");
   const driveToken = async () => {
-    const token = await getDelegatedToken("ec@loveiq.org", DRIVE_WRITE_SCOPE);
+    const token = await getDelegatedToken(TEAM_EXPORT_OWNER, DRIVE_WRITE_SCOPE);
     if (!token) {
       throw new Error("no Drive token: needs GOOGLE_IMPERSONATE_SERVICE_ACCOUNT and gcloud ADC");
     }

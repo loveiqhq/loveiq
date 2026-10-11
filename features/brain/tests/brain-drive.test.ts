@@ -444,6 +444,42 @@ describe("ingestDrive", () => {
     }
   });
 
+  it("looks only at folders the export's owner holds, and skips an exported file anywhere", async () => {
+    // A file the export wrote, moved out of the folder: its own tag keeps it out.
+    files = [
+      FILE,
+      {
+        ...FILE,
+        id: "ZZmovedExportZZ",
+        name: "payment.csv",
+        mimeType: "text/csv",
+        properties: { loveiq_team_export_file: "production" },
+      },
+    ];
+    await ingestDrive(STAMP);
+    const lookup = decodeURIComponent(
+      httpCalls.find((u) => decodeURIComponent(u).includes("properties has"))!
+    );
+    // A stranger can share a tagged folder; nobody else can make one ec@ owns.
+    expect(lookup).toContain("'ec@loveiq.org' in owners");
+    expect(httpCalls.some((u) => u.includes("/files/ZZmovedExportZZ"))).toBe(false);
+    expect(httpCalls.some((u) => u.includes("/files/1AbCdEf"))).toBe(true);
+  });
+
+  it("stops the walk when the export folder is too deep to check, or the clock runs out", async () => {
+    teamFolders = [{ id: "ZZteamFolderZZ" }];
+    folderChildren.ZZteamFolderZZ = Array.from({ length: 60 }, (_, i) => ({
+      id: `ZZsub${i}ZZ`,
+      mimeType: "application/vnd.google-apps.folder",
+    }));
+    expect((await ingestDrive(STAMP)).skipped).toBe("team-export-check-failed");
+    let calls = 0;
+    expect((await ingestDrive(STAMP, () => ++calls > 2)).skipped).toMatch(
+      /team-export-check-failed|drive-time-budget/
+    );
+    expect(dbCalls.some((c) => c.method !== "GET" && c.path.includes("brain_chunk"))).toBe(false);
+  });
+
   it("stops the walk, indexing nothing, when the export folder cannot be checked", async () => {
     teamFolderCheckFails = true;
     const res = await ingestDrive(STAMP);

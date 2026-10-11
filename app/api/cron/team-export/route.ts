@@ -26,6 +26,7 @@ import { Redis } from "@upstash/redis";
 import {
   buildExport,
   findTeamFolder,
+  TEAM_EXPORT_OWNER,
   folderUrl,
   OutOfTime,
   tableSpecs,
@@ -176,7 +177,7 @@ export async function GET(request: Request) {
   let folder: { id: string; people: string[] };
   try {
     const token = await getDelegatedToken(
-      "ec@loveiq.org",
+      TEAM_EXPORT_OWNER,
       DRIVE_WRITE_SCOPE,
       startedAtMs,
       readVercelOidcToken(request)
