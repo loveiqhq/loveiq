@@ -253,6 +253,18 @@ describe("experiments: the registry, read", () => {
       );
     });
 
+    it("never asks for fewer people than five buyers an arm need, as the readout requires", async () => {
+      // 50% against 1.25%: the formula alone says 13 a side, but at 1.25% five buyers take 400.
+      expect(await needed(split(80, 40, 1))).toContain("about 400 people per arm");
+    });
+
+    it("does not project a pace from less than a day of traffic", async () => {
+      const o = split(100, 10, 5);
+      for (const sub of o.submissions) sub.created_date_time = "2026-09-26T08:00:00Z";
+      // An hour old: counted as a day, so 100 a day per arm, not 2,400.
+      expect(await needed(o)).toContain("At 100.0 a day per arm, that is around 2026-09-30");
+    });
+
     it("cannot size a test before anyone buys, and says so", async () => {
       expect(await needed(split(100, 0, 0))).toBe(
         "  Needed: nobody has bought in any arm yet, so how many people a result needs cannot be worked out."
