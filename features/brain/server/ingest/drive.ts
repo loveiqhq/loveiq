@@ -1415,7 +1415,13 @@ export async function ingestDrive(
   }
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
 
-  const teamExport = await teamExportFileIds(token, isOutOfTime);
+  // As the export's owner when that login can be made: the owner sees every file in the
+  // folder, whoever made it, so what the colleague walks list is covered too. Otherwise the
+  // walk's own login, which then cannot see the folder's files either.
+  const ownerToken = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim()
+    ? await getDelegatedToken(TEAM_EXPORT_OWNER, DRIVE_SCOPE, Date.now(), oidcToken)
+    : null;
+  const teamExport = await teamExportFileIds(ownerToken ?? token, isOutOfTime);
   if (!teamExport) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "team-export-check-failed" };
   }
@@ -1475,7 +1481,9 @@ export async function ingestDrive(
   // account sees only what somebody shared with it, so an empty list on a fresh
   // setup is the expected state — reported as skipped so the ops alert does not
   // fire every night for a source nobody has enabled yet.
-  if (listed.items.length === 0) {
+  // Nothing LISTED, not nothing left after the exclusions: a walk whose every file was
+  // excluded must still reach the sweep, or what was indexed before stays forever.
+  if (resolved.docs.length === 0) {
     return {
       source: SOURCE,
       rows: 0,
