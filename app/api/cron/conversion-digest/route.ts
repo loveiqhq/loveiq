@@ -52,6 +52,7 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import { computeRate, fetchFunnelCvrSparklines } from "@features/admin/server/digest-metrics";
+import { DROPOFF_KPI_URL } from "@features/admin/server/dropoff-weekly";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
   buildFrictionReport,
@@ -866,6 +867,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   if (input.friction && input.friction.signals.length > 0) {
     blocks.push(section(buildFrictionWatchList(input.friction, WINDOW_DAYS)));
   }
+  // Every question's drop-off, week by week, lives on its KPI page in Notion
+  // (Eman, 2026-10-11), redrawn each morning by the kpi-dropoff cron.
+  blocks.push(context(`<${DROPOFF_KPI_URL}|Each question's drop-off, week by week (Notion)>`));
 
   /**
    * Landing → survey, SITE-WIDE. The trend line, sitting with the funnel above

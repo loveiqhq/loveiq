@@ -22,6 +22,7 @@
 
 import { ImageResponse } from "next/og";
 import { verifyImagePayload } from "@shared/url/signed-image-url";
+import type { DropoffWeeklyPayload } from "@features/admin/server/dropoff-weekly";
 
 export const runtime = "edge";
 // Always re-evaluate on request — the URL is the cache key (Slack proxy
@@ -107,6 +108,7 @@ const VALID_KINDS = new Set([
   "metric-trend",
   "reactivation-email",
   "funnel-steps",
+  "dropout-weekly",
 ]);
 
 /**
@@ -253,7 +255,8 @@ type AnyPayload =
   | StageConversionPayload
   | DropoutPayload
   | DropoutByArmPayload
-  | FunnelStepsPayload;
+  | FunnelStepsPayload
+  | DropoffWeeklyPayload;
 
 /**
  * Titles in the words the reader uses, not ours.
@@ -1780,6 +1783,149 @@ export function renderFunnelSteps(p: FunnelStepsPayload): {
   return { element, height };
 }
 
+
+// ─── Drop-off per question, week by week (Notion KPI page) ────────────────
+const WEEKLY_ROW_H = 16;
+const WEEKLY_NUM_W = 34;
+const WEEKLY_LABEL_W = 330;
+const WEEKLY_HEAD_H = 22;
+const WEEKLY_FOOT_H = 64;
+const WEEKLY_WORST_N = 3;
+/** Where the colour scale tops out: 15% of the people who reached a question leaving there. */
+const WEEKLY_SCALE_TOP = 15;
+
+/** White to the danger red, by rate; text flips to white once the cell is dark. */
+function weeklyCellColour(rate: number): { bg: string; fg: string } {
+  const t = Math.min(Math.max(rate, 0) / WEEKLY_SCALE_TOP, 1);
+  const mix = (from: number, to: number) => Math.round(from + (to - from) * t);
+  return {
+    bg: `rgb(${mix(255, 185)}, ${mix(244, 28)}, ${mix(242, 28)})`,
+    fg: t > 0.45 ? "#ffffff" : COLORS.text,
+  };
+}
+
+function weeklyFigure(rate: number): string {
+  return rate < 10 ? rate.toFixed(1) : String(Math.round(rate));
+}
+
+/**
+ * Every question (rows, in today's order) against the last weeks (columns).
+ *
+ * A heatmap rather than one line per question: 62 questions, and the reader's
+ * question is "which rows are dark, and did a row change colour after we changed
+ * it". The worst three of the latest complete week are named in red.
+ */
+export function renderDropoutWeekly(p: DropoffWeeklyPayload): {
+  element: React.ReactElement;
+  height: number;
+} {
+  const cols = p.weeks.length;
+  const cellW = cols
+    ? Math.min(46, Math.floor((WIDTH - 56 - WEEKLY_NUM_W - WEEKLY_LABEL_W) / cols))
+    : 46;
+  // Rank on the latest COMPLETE week: the week in progress is a few days of data.
+  const rankCol = p.partialLast && cols > 1 ? cols - 2 : cols - 1;
+  const worst = new Set(
+    p.rows
+      .filter((r) => rankCol >= 0 && r.r[rankCol] != null)
+      .sort((a, b) => (b.r[rankCol] ?? 0) - (a.r[rankCol] ?? 0))
+      .slice(0, WEEKLY_WORST_N)
+      .map((r) => r.n)
+  );
+  const height = 56 + 36 + 18 + WEEKLY_HEAD_H + p.rows.length * WEEKLY_ROW_H + WEEKLY_FOOT_H;
+
+  const body = (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", height: WEEKLY_HEAD_H, alignItems: "flex-end" }}>
+        <div style={{ display: "flex", width: WEEKLY_NUM_W + WEEKLY_LABEL_W, fontSize: 11, color: COLORS.textMuted }}>
+          Question (as asked today)
+        </div>
+        {p.weeks.map((w, i) => (
+          <div
+            key={w}
+            style={{
+              display: "flex",
+              width: cellW,
+              justifyContent: "center",
+              fontSize: 11,
+              color: COLORS.textMuted,
+            }}
+          >
+            {p.partialLast && i === cols - 1 ? `${w}*` : w}
+          </div>
+        ))}
+      </div>
+      {p.rows.map((row) => {
+        const isWorst = worst.has(row.n);
+        return (
+          <div key={row.n} style={{ display: "flex", height: WEEKLY_ROW_H, alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                width: WEEKLY_NUM_W,
+                fontSize: 11,
+                color: isWorst ? COLORS.danger : COLORS.textMuted,
+                fontWeight: isWorst ? 700 : 400,
+              }}
+            >
+              {`Q${row.n}`}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: WEEKLY_LABEL_W,
+                fontSize: 11,
+                color: isWorst ? COLORS.danger : COLORS.text,
+                fontWeight: isWorst ? 700 : 400,
+                overflow: "hidden",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {row.q}
+            </div>
+            {row.r.map((rate, i) => {
+              const c = rate == null ? { bg: "#fafafa", fg: "#b8bec8" } : weeklyCellColour(rate);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    width: cellW - 2,
+                    height: WEEKLY_ROW_H - 2,
+                    marginRight: 2,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    background: c.bg,
+                    color: c.fg,
+                    fontSize: 10,
+                  }}
+                >
+                  {rate == null ? "·" : weeklyFigure(rate)}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+      <div
+        style={{
+          display: "flex",
+          marginTop: 12,
+          fontSize: 11,
+          color: COLORS.textMuted,
+          lineHeight: 1.4,
+        }}
+      >
+        {`Each cell: of the people who reached the question that week, the % who left the survey there and never finished. · = fewer than ${p.floor} reached it.${p.partialLast ? " * = this week so far, through yesterday." : ""} Weeks start on Monday (Berlin). Team test runs can't be told apart and are included. Worst 3 of the last full week in red.`}
+      </div>
+    </div>
+  );
+  return {
+    element: chartShell("Drop-off per question, week by week", `Updated ${p.updated}`, body, height),
+    height,
+  };
+}
+
 function renderForKind(
   kind: string,
   payload: AnyPayload
@@ -1802,6 +1948,8 @@ function renderForKind(
       return renderStageConversion(payload as StageConversionPayload);
     case "funnel-steps":
       return renderFunnelSteps(payload as FunnelStepsPayload);
+    case "dropout-weekly":
+      return renderDropoutWeekly(payload as DropoffWeeklyPayload);
     default:
       return {
         element: chartShell("Unknown chart kind", kind, <div>—</div>),
