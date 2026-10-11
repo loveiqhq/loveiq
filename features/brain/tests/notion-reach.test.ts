@@ -53,6 +53,8 @@ let pageReadStatus: Record<string, number> = {};
 /** Ids Notion answers 200 for, but from its trash. */
 let trashed = new Set<string>();
 let searchStatus = 200;
+/** Status a nested block read answers with (attachChildren); 200 = fine. */
+let childrenStatus = 200;
 let sharedDatabases: string[] = [];
 /** Whole database objects from /search, for relations. */
 let databaseObjects: Array<Record<string, unknown>> = [];
@@ -81,7 +83,10 @@ vi.mock("@features/brain/server/ingest/notion", () => ({
       has_more: false,
     };
   }),
-  attachChildren: vi.fn(async () => undefined),
+  attachChildren: vi.fn(async () => {
+    if (childrenStatus !== 200)
+      throw new Error(`Notion /blocks/x/children failed (${childrenStatus}): x`);
+  }),
 }));
 
 const recorded: Array<{ headline: string; detail: string; meta?: Record<string, unknown> }> = [];
@@ -159,6 +164,14 @@ describe("notionLinksIn", () => {
   it("keeps a link whose title has a stray percent sign instead of failing the run", () => {
     expect(notionLinksIn(`https://www.notion.so/Plan-100%-done-${flat(A)}`)).toEqual([
       { id: A, hint: "Plan 100% done" },
+    ]);
+  });
+
+  it("ends a link at a comma or semicolon, as a Drive export glues the next field on", () => {
+    const csv = `"Notes",https://www.notion.so/B2C-client-unterstanding-${flat(C)},Marcus Börne;https://www.notion.so/${flat(A)};x`;
+    expect(notionLinksIn(csv)).toEqual([
+      { id: C, hint: "B2C client unterstanding" },
+      { id: A, hint: null },
     ]);
   });
 
@@ -426,6 +439,7 @@ describe("checkNotionReach", () => {
     pageReadStatus = {};
     trashed = new Set();
     searchStatus = 200;
+    childrenStatus = 200;
     sharedDatabases = [];
     databaseObjects = [];
     recorded.length = 0;
@@ -782,7 +796,10 @@ describe("checkNotionReach", () => {
     expect(r).toMatchObject({ fixed: 1, missing: 0, fresh: 0 });
     expect(recorded[0]!.meta?.reach_open).toEqual([D]);
     expect(recorded[0]!.meta?.reach_seen).toEqual({ [D]: "2026-10-10" });
-    expect(recorded[0]!.detail).not.toContain(flat(D));
+    // Still open, so still listed, but as reported before: today's run could not see where.
+    expect(recorded[0]!.detail).toContain(
+      `• A page reported before (the link carries no title): https://www.notion.so/${flat(D)}`
+    );
   });
 
   it("does not hold for a mention page Jarvis has lost: that read will never succeed", async () => {
@@ -793,6 +810,45 @@ describe("checkNotionReach", () => {
     pageStatus = { [D]: 404 };
     await checkNotionReach(NOW);
     expect(recorded[0]!.meta?.reach_open).toEqual([]);
+  });
+
+  it("never calls the day clean when mentions could not be re-read, and keeps Monday's reminder", async () => {
+    previousOpen = [D];
+    previousSeen = { [D]: "2026-10-10" };
+    untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
+    pageReadStatus = { [A]: 502 };
+    linkRows = [row({ body: `https://www.notion.so/${flat(C)}` })];
+    pageStatus = { [D]: 404 };
+    const sunday = await checkNotionReach(NOW);
+    expect(sunday.summary).toBe(
+      "the one linked Notion page is readable; some @-mentions could not be re-read"
+    );
+    expect(sunday).toMatchObject({ mentionPages: 0, mentionTotal: 1, noticed: false });
+    const monday = await checkNotionReach(MONDAY);
+    expect(monday.noticed).toBe(true);
+    expect(recorded[0]!.detail).toContain("Still not shared:");
+    expect(recorded[0]!.detail).toContain(
+      `reported before (the link carries no title): https://www.notion.so/${flat(D)}`
+    );
+  });
+
+  it("keeps the mentions a page gave before a nested block refused, and calls the read partial", async () => {
+    untitledRows = [row({ source: "notion", source_id: `task:${A}`, body: "Owner: Untitled" })];
+    pageBlocks = {
+      [A]: [
+        {
+          type: "paragraph",
+          paragraph: {
+            rich_text: [{ type: "mention", mention: { type: "page", page: { id: D } } }],
+          },
+        },
+      ],
+    };
+    childrenStatus = 404; // a synced block from a page Jarvis cannot open
+    pageStatus = { [D]: 404 };
+    const r = await checkNotionReach(NOW);
+    expect(r).toMatchObject({ missing: 1, fresh: 1, mentionPages: 0 });
+    expect(r.summary).toContain("some @-mentions could not be re-read");
   });
 
   it("lets a held page go once nobody has been seen linking it for two weeks", async () => {
@@ -851,7 +907,9 @@ describe("checkNotionReach", () => {
     const monday = await checkNotionReach(MONDAY);
     expect(recorded).toHaveLength(2); // the Monday reminder
     expect(recorded[1]!.meta?.reach_open).toEqual([C, hidden].sort()); // held, not dropped
-    expect(recorded[1]!.detail).not.toContain(flat(hidden)); // and not called linked
+    expect(recorded[1]!.detail).toContain(
+      `• A page reported before (the link carries no title): https://www.notion.so/${flat(hidden)}`
+    ); // still open, but not called linked: today's run could not see the relation
     expect(monday.summary).toContain("Notion's database list could not be read in full");
     carryOver();
 

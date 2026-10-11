@@ -76,7 +76,8 @@ export const LIVING_SOURCES: ReadonlySet<string> = new Set(["notion", "drive", "
  */
 const TRAILING_ID =
   /(?:^|[^0-9a-f])([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
-const NOTION_URL = /https?:\/\/[\w.-]*notion\.(?:so|site|com)\/[^\s<>()[\]"'`|]+/gi;
+// Commas and semicolons end it too: a Drive export glues the next field on ("…<id>,Marcus").
+const NOTION_URL = /https?:\/\/[\w.-]*notion\.(?:so|site|com)\/[^\s<>()[\]"'`|,;]+/gi;
 
 /** A Notion id in any of its spellings, as the API's dashed lowercase, or null. */
 export function toNotionId(raw: string): string | null {
@@ -506,6 +507,8 @@ export async function checkNotionReach(
   /** Some mentions went unread: what was reported stays referenced rather than dropping off. */
   let mentionsPartial = mentionPages.size > MAX_MENTION_PAGES;
   let mentionRead = 0;
+  /** Pages whose mentions were read in full, for the counters. */
+  let mentionOk = 0;
   const mentionOrder = [...mentionPages].sort(([a], [b]) => shuffle(a).localeCompare(shuffle(b)));
   for (const [pageId, row] of mentionOrder) {
     if (mentionRead >= MAX_MENTION_PAGES) break;
@@ -514,14 +517,25 @@ export async function checkNotionReach(
       break;
     }
     mentionRead += 1;
+    let page: Record<string, unknown>;
     try {
-      // A mention inside a property ("Traffic: Untitled") is stored the same way.
-      const page = await notionGet(token, `/pages/${pageId}`);
-      const blocks: Block[] = [];
-      for (const prop of Object.values((page.properties ?? {}) as Record<string, Block | null>)) {
-        const rich = prop?.rich_text ?? prop?.title;
-        if (Array.isArray(rich)) blocks.push({ type: "paragraph", paragraph: { rich_text: rich } });
-      }
+      page = await notionGet(token, `/pages/${pageId}`);
+    } catch (err) {
+      rethrowIfTokenRefused(err);
+      // A page Jarvis lost access to answers 404/403 every day: that is not a partial
+      // read to wait out, and holding for it would keep every reported page held for good.
+      const status = statusOf(err);
+      if (status !== 404 && status !== 403) mentionsPartial = true;
+      logger.warn({ err, pageId }, "brain notion-reach: could not re-read a page's mentions");
+      continue;
+    }
+    // A mention inside a property ("Traffic: Untitled") is stored the same way.
+    const blocks: Block[] = [];
+    for (const prop of Object.values((page.properties ?? {}) as Record<string, Block | null>)) {
+      const rich = prop?.rich_text ?? prop?.title;
+      if (Array.isArray(rich)) blocks.push({ type: "paragraph", paragraph: { rich_text: rich } });
+    }
+    try {
       let cursor: string | undefined;
       for (let i = 0; i < MENTION_BLOCK_PAGES; i++) {
         const json = await notionGet(
@@ -536,17 +550,16 @@ export async function checkNotionReach(
       await attachChildren(token, blocks, 0, budget, mentionsOutOfTime);
       // More blocks than read, the child budget spent, or the clock cut the walk short.
       if (cursor || budget.left <= 0 || mentionsOutOfTime()) mentionsPartial = true;
-      for (const id of notionIdsInBlocks(blocks)) {
-        if (id !== pageId) note(id, null, { where: whereOf(row), day: row.period_end });
-      }
+      else mentionOk += 1;
     } catch (err) {
       rethrowIfTokenRefused(err);
-      // One unreadable page costs its mentions this run, never the whole check. A page
-      // Jarvis lost access to answers 404/403 every day: that is not a partial read to
-      // wait out, and holding for it would keep every reported page held for good.
-      const status = statusOf(err);
-      if (status !== 404 && status !== 403) mentionsPartial = true;
-      logger.warn({ err, pageId }, "brain notion-reach: could not re-read a page's mentions");
+      // The page opened but a block under it did not (one nested 404 is enough): what was
+      // gathered still counts, and the rest is a partial read.
+      mentionsPartial = true;
+      logger.warn({ err, pageId }, "brain notion-reach: could not read all of a page's mentions");
+    }
+    for (const id of notionIdsInBlocks(blocks)) {
+      if (id !== pageId) note(id, null, { where: whereOf(row), day: row.period_end });
     }
   }
 
@@ -701,12 +714,18 @@ export async function checkNotionReach(
   const linked = referenced.size;
   const listedOpen = [...referenced].filter((id) => databases.has(id)).length;
 
-  const due = fresh.length > 0 || fixed.length > 0 || (isReportingMonday(now) && listed.length > 0);
+  // A held page Notion still refuses is still open: it stays in the list (and in Monday's
+  // reminder) as "reported before", never as linked, since today's run could not see where.
+  const heldMissing = heldOver.filter((id) => reach.get(id) === "missing");
+  const due =
+    fresh.length > 0 ||
+    fixed.length > 0 ||
+    (isReportingMonday(now) && listed.length + heldMissing.length > 0);
   const notice = due
     ? buildReachNotice({
         gaps,
         fresh,
-        still,
+        still: [...still, ...heldMissing],
         fixed,
         carried: [...carried, ...heldOver],
         seenOn: (id) => (referenced.has(id) ? day : (lastSeen(id) ?? day)),
@@ -741,7 +760,9 @@ export async function checkNotionReach(
         ? `${linked === 1 ? "the one linked Notion page is" : `all ${linked} linked Notion pages are`} readable`
         : "found no Notion links to check";
   // A failed listing still asks every link, but relations go unread: say so where it shows.
-  const caveat = listingPartial ? "; Notion's database list could not be read in full" : "";
+  const caveat =
+    (listingPartial ? "; Notion's database list could not be read in full" : "") +
+    (mentionsPartial ? "; some @-mentions could not be re-read" : "");
   const problem =
     asked > 0 && unknown === asked
       ? `Notion answered none of the ${asked} questions it was asked`
@@ -758,7 +779,7 @@ export async function checkNotionReach(
     unreached,
     trashed: trashed.size,
     visibleNotIndexed,
-    mentionPages: mentionRead,
+    mentionPages: mentionOk,
     mentionTotal: mentionPages.size,
     problem,
     noticed,

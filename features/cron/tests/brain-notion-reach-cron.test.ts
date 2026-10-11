@@ -151,6 +151,21 @@ describe("GET /api/cron/brain-notion-reach", () => {
     expect(mockSlack).not.toHaveBeenCalled();
   });
 
+  it("posts a second, different finding the same day even under the same headline", async () => {
+    const headline = "Jarvis can now open 1 Notion page it could not before";
+    mockCheck.mockResolvedValueOnce(
+      result({ notice: { headline, detail: "• X", kind: "notion-reach" } })
+    );
+    await call();
+    mockCheck.mockResolvedValueOnce(
+      result({ notice: { headline, detail: "• Y", kind: "notion-reach" } })
+    );
+    await call();
+    const keys = mockClaim.mock.calls.map((c) => (c as unknown as [string])[0]);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
   it("posts nothing on a day with nothing to say", async () => {
     await call();
     expect(mockClaim).not.toHaveBeenCalled();
