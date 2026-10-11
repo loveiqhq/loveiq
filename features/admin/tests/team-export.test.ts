@@ -280,6 +280,18 @@ describe("the team data export", () => {
       maskRow("analytics_event", { metadata: { pathname: `/checkout?token=${TOKEN}` } }, m, ids)
         .metadata
     ).toEqual({ pathname: `/checkout?token=${MASKED}` });
+    // Outside tools' session ids, whose recordings show the person, and an admin's search.
+    expect(
+      maskRow(
+        "survey_submission",
+        { session_id: "s1", posthog_session_id: "ph", hotjar_user_id: "hj" },
+        m,
+        ids
+      )
+    ).toEqual({ session_id: "s1", posthog_session_id: MASKED, hotjar_user_id: MASKED });
+    expect(
+      maskRow("admin_audit_log", { metadata: { query: "Anna K", tool: "search" } }, m, ids).metadata
+    ).toEqual({ query: MASKED, tool: "search" });
     // Nothing to mask stays as it was, empty included.
     expect(maskRow("survey_submission", { id: 3, duration_ms: 5, utm: null }, m, ids)).toEqual({
       id: 3,
@@ -302,6 +314,12 @@ describe("the team data export", () => {
         { name: "app_user", columns: ["first_name", "email", "utm_tracker"], key: ["id"] },
       ])
     ).toEqual([]);
+    // An outside tool's id must be classified too: a new one stops the export.
+    expect(
+      unclassifiedColumns([
+        { name: "survey_submission", columns: ["clarity_user_id"], key: ["id"] },
+      ])
+    ).toEqual(["survey_submission.clarity_user_id"]);
     expect(unclassifiedColumns([{ name: "partner", columns: ["name"], key: ["id"] }])).toEqual([
       "partner.name",
     ]);

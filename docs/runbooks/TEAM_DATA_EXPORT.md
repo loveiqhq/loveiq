@@ -35,7 +35,8 @@ and Ajna) can open it. Recorded as risk R3.8 in [`docs/compliance/DPIA.md`](../c
     new for every copy and never kept, so a code cannot be worked back to an address, and codes
     change between copies;
   - names, birthdays, IP addresses, report links and access tokens, card digits and expiry,
-    Stripe receipt links, promo codes and messages to a partner read `[masked]`;
+    Stripe receipt links, promo codes, messages to a partner, PostHog and Hotjar session ids
+    (their recordings show the person) and admins' searches read `[masked]`;
   - so do the answers to the email, name and ZIP or postcode questions (`00000`, `00001`,
     `15002`), in submissions and in drafts, and the history of answer edits;
   - and the raw Stripe and Calendly payloads, which repeat all of the above.

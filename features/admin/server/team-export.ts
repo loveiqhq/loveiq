@@ -107,6 +107,10 @@ const PERSONAL_COLUMNS = new Set([
   "share_token",
   "prepaid_token",
   "personal_message",
+  // Sessions in PostHog and Hotjar, whose recordings show the person: our own session ids,
+  // which join the tables, stay.
+  "posthog_session_id",
+  "hotjar_user_id",
   // An answer's edits: the email answer is the one most often corrected.
   "old_answer_text",
   "new_answer_text",
@@ -129,6 +133,8 @@ const PERSONAL_KEYS = new Set([
   "promoCode",
   "promotionCode",
   "nurturePromoCodes",
+  // An admin's search, which can be a customer's name.
+  "query",
 ]);
 /** The survey's questions for the email, the name and the ZIP or postal code. */
 export const PERSONAL_QUESTIONS = ["00000", "00001", "15002"];
@@ -141,7 +147,7 @@ const isEmailColumn = (column: string) => /(^|_)emails?$/.test(column);
  * a new column must not go out unmasked because nobody added it to the list.
  */
 const LOOKS_PERSONAL =
-  /(mail|name|phone|(^|_)ip($|_)|addr|zip|postal|birth|password|passwd|token|secret|url|href|link|card|iban|receipt|message|ssn|passport|national|tax_id|street|city)/i;
+  /(mail|name|phone|(^|_)ip($|_)|addr|zip|postal|birth|password|passwd|token|secret|url|href|link|card|iban|receipt|message|ssn|passport|national|tax_id|street|city|posthog|hotjar|clarity|fingerprint|visitor)/i;
 /** Names that look personal but hold no one's details, checked against the data on 2026-10-11. */
 const NOT_PERSONAL = new Set([
   // Links between admin records, and to sources the team cites.
@@ -168,6 +174,9 @@ const NOT_PERSONAL = new Set([
   // Visa or Mastercard, and the bank's reason a payment failed.
   "card_brand",
   "failure_message",
+  // Our own first-party visitor id (it joins funnel events), and a count of visitors.
+  "visitor_id",
+  "unique_visitors",
 ]);
 /** A column that names a thing in these tables and nothing personal. */
 const NOT_PERSONAL_IN: Record<string, string[]> = {
@@ -176,7 +185,7 @@ const NOT_PERSONAL_IN: Record<string, string[]> = {
   admin_saved_view: ["name"],
   admin_segment: ["name"],
   submission_tag: ["name"],
-  digest_recommendation_history: ["message"],
+  digest_recommendation_history: ["message", "fingerprint"],
 };
 
 /** Columns whose names suggest personal data that are neither masked nor known to be safe. */
@@ -333,8 +342,8 @@ export function readme(
     "- Masked: every email address reads `masked-` and a code. The same address has the same",
     "  code in every file of this copy, so tables still join on it; the codes change with every",
     "  copy. Names, birthdays, IP addresses, report links and access tokens, card details,",
-    "  receipt links, promo codes, messages to a partner, the email, name and postcode answers,",
-    "  and the raw Stripe and Calendly payloads read [masked].",
+    "  receipt links, promo codes, messages to a partner, PostHog and Hotjar session ids, the",
+    "  email, name and postcode answers, and the raw Stripe and Calendly payloads read [masked].",
     "- Kept: every answer, including the two open questions as typed (any email address or",
     "  report link in them masked; a name someone typed can remain), demographics, archetypes",
     "  and scores, payments (amounts, plans, dates) and events.",
