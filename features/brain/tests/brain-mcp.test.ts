@@ -6516,6 +6516,18 @@ describe("/api/mcp", () => {
       const bad = await call({ file: "VpDMMtuN0JkxlMxQZDg86k", since: "last monday" });
       expect(bad.isError).toBe(true);
       expect(bad.content[0].text).toContain("must be a day like");
+      // A number, or a time nothing can read, is refused rather than read as seven days.
+      // A leap second passes the shared date check, and Date cannot read it.
+      for (const since of [
+        20261004,
+        "2026-10-04T9:00:00Z",
+        "2026-10-04Tnoon",
+        "2026-10-04T23:59:60Z",
+      ]) {
+        const r = await call({ file: "VpDMMtuN0JkxlMxQZDg86k", since });
+        expect(r.isError, String(since)).toBe(true);
+        expect(r.content[0].text).toContain("must be a day like");
+      }
       expect(mockFetch).not.toHaveBeenCalled();
     });
 

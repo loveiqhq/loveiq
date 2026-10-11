@@ -5507,7 +5507,12 @@ async function callTool(
       );
     }
     const since = str(args.since);
-    if (since && badDateMessage("since", since)) {
+    // A number is not a day, and a time Date cannot read would reach the comparison as NaN;
+    // either would quietly become "the last seven days".
+    if (
+      (args.since != null && typeof args.since !== "string") ||
+      (since && (badDateMessage("since", since) || !Number.isFinite(sinceToMs(since))))
+    ) {
       return textResult(
         `\`since\` must be a day like 2026-10-04 or a time like 2026-10-04T09:00:00Z — ` +
           `"${since}" is not one. Relative dates are not read; work out the day and pass it.`,
