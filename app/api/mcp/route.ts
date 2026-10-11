@@ -6091,7 +6091,8 @@ async function callTool(
      * false-confidence bug this whole tool is meant to remove, pointed the other way.
      */
     const lastRun = new Map<string, { status: string; error: string | null; at: string }>();
-    const crons = [...new Set(Object.values(CRON_FOR_SOURCE))];
+    // `brain-notion-reach` feeds no source; its result is shown beside Notion (below).
+    const crons = [...new Set([...Object.values(CRON_FOR_SOURCE), "brain-notion-reach"])];
     await Promise.all(
       crons.map(async (cron) => {
         const res = await supabaseFetch(
@@ -6148,11 +6149,29 @@ async function callTool(
       const cron = CRON_FOR_SOURCE[source];
       if (!cron) return "";
       const run = lastRun.get(cron);
-      if (!run) return ` · no record of ${cron} ever running`;
+      const reach = source === "notion" ? notionReach() : "";
+      if (!run) return ` · no record of ${cron} ever running${reach}`;
       const when = run.at.slice(0, 16).replace("T", " ");
-      if (run.status === "success") return ` · ${cron} ok at ${when}`;
-      return ` · ${cron} FAILING since at least ${when}${run.error ? ` (${run.error})` : ""}`;
+      if (run.status === "success") return ` · ${cron} ok at ${when}${reach}`;
+      return ` · ${cron} FAILING since at least ${when}${run.error ? ` (${run.error})` : ""}${reach}`;
     };
+
+    /**
+     * WHAT JARVIS CANNOT SEE, said where a reader looks for what it can.
+     *
+     * Notion shows the integration only the pages someone connected, so "notion: 1,400
+     * chunks, ok" reads as complete while a database the team uses daily is invisible —
+     * which is exactly how the 📊 KPI database went unseen for a week (2026-10-11). The
+     * daily reach check's own sentence is repeated here; its counters stay in cron_run.
+     */
+    function notionReach(): string {
+      const run = lastRun.get("brain-notion-reach");
+      if (!run) return "";
+      const when = run.at.slice(0, 10);
+      if (run.status !== "success") return `; the Notion reach check FAILED on ${when}`;
+      const said = (run.error ?? "").split(" · ")[0]?.trim();
+      return said ? `; reach check ${when}: ${said}` : "";
+    }
 
     const describe = async (source: string): Promise<string> => {
       const base = `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}`;

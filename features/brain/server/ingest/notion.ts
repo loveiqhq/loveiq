@@ -244,7 +244,7 @@ async function notionFetch(
   return fetchWithTimeout(url, init);
 }
 
-async function notionPost(
+export async function notionPost(
   token: string,
   path: string,
   body: Record<string, unknown>
@@ -262,7 +262,7 @@ async function notionPost(
   return (await res.json()) as Record<string, unknown>;
 }
 
-async function notionGet(token: string, path: string): Promise<Record<string, unknown>> {
+export async function notionGet(token: string, path: string): Promise<Record<string, unknown>> {
   const res = await notionFetch(`${API}${path}`, {
     headers: headers(token),
     timeoutMs: TIMEOUT_MS,
@@ -293,7 +293,7 @@ const NOT_DESCENDED = new Set(["child_page", "child_database"]);
 const MAX_BLOCK_PAGES = 20;
 const MAX_CHILD_DEPTH = 4;
 
-async function attachChildren(
+export async function attachChildren(
   token: string,
   blocks: NotionBlock[],
   depth: number,
@@ -744,6 +744,15 @@ export async function ingestNotion(
       toFetch.push({ raw, dbTitle, sourceId });
     }
   }
+
+  /**
+   * NEVER-INDEXED PAGES FIRST. A page shared with the integration late (the 📊 KPI
+   * database, 61 rows, connected on 2026-10-11) is exactly what someone is waiting to
+   * ask about, and it used to queue behind every edited page and every builder-version
+   * rebuild in database-listing order. The sort is stable, so the order is otherwise
+   * unchanged.
+   */
+  toFetch.sort((a, b) => Number(known.has(a.sourceId)) - Number(known.has(b.sourceId)));
 
   // ---- fetch what the clock allows -----------------------------------------
   //

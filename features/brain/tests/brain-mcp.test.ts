@@ -5163,6 +5163,47 @@ describe("/api/mcp", () => {
       expect(await text()).toContain("brain-notion ok at 2026-08-30 22:41");
     });
 
+    it("says beside Notion which linked pages Jarvis cannot open", async () => {
+      // The 📊 KPI database was invisible for a week while this line read "ok".
+      cronRuns = {
+        "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" },
+        "brain-notion-reach": {
+          started_at: "2026-10-12T05:20:00Z",
+          status: "success",
+          error_message:
+            "2 linked Notion pages Jarvis cannot open (Email Marketing Playbook, untitled) · links 82, checked 19",
+        },
+      };
+      wireCorpus({ notion: 1404 });
+      const out = await text();
+      expect(out).toContain(
+        "brain-notion ok at 2026-10-12 05:41; reach check 2026-10-12: 2 linked Notion pages Jarvis cannot open (Email Marketing Playbook, untitled)"
+      );
+      // The counters stay in cron_run.
+      expect(out).not.toContain("checked 19");
+    });
+
+    it("says when the Notion reach check itself failed", async () => {
+      cronRuns = {
+        "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" },
+        "brain-notion-reach": {
+          started_at: "2026-10-12T05:20:00Z",
+          status: "error",
+          error_message: "x",
+        },
+      };
+      wireCorpus({ notion: 1404 });
+      expect(await text()).toContain("; the Notion reach check FAILED on 2026-10-12");
+    });
+
+    it("adds nothing to other sources, and nothing before the first reach check", async () => {
+      cronRuns = { "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" } };
+      wireCorpus({ notion: 1404, gmail: 10 });
+      const out = await text();
+      expect(out).toContain("brain-notion ok at 2026-10-12 05:41");
+      expect(out).not.toContain("reach check");
+    });
+
     /**
      * My own first attempt read the newest 200 cron rows and picked the latest per
      * name — but `brain-fast` alone writes 96 rows a day, so the NIGHTLY job fell

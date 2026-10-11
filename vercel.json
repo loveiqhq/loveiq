@@ -55,6 +55,10 @@
       "schedule": "41 * * * *"
     },
     {
+      "path": "/api/cron/brain-notion-reach",
+      "schedule": "20 5 * * *"
+    },
+    {
       "path": "/api/cron/brain-gmail",
       "schedule": "11 * * * *"
     },

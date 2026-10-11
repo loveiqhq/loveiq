@@ -327,6 +327,21 @@ describe("a run cut short must confirm what it could not refresh", () => {
       );
   }
 
+  it("fetches a page it has never indexed before one it only has to rebuild", async () => {
+    // A database shared late (the 📊 KPI database, 2026-10-11) used to queue behind every
+    // stale and edited page in listing order. With time for ONE fetch, the never-indexed
+    // Literature row must win over the Board row whose builder version is merely old.
+    existingChunks = [
+      { source_id: "task:row-board-1", meta: { edited: ROW_BOARD.last_edited_time, v: 0 } },
+      { source_id: "page:page-1", meta: { edited: PAGE_STANDALONE.last_edited_time, v: 0 } },
+    ];
+    await ingestNotion(STAMP, outOfTimeAfterFirstFetch);
+
+    const fetched = notionCalls.filter((u) => u.includes("/blocks/"));
+    expect(fetched).toHaveLength(1);
+    expect(fetched[0]).toContain("/blocks/row-lit-1/");
+  });
+
   it("touches the pages the clock did not reach, instead of abandoning them", async () => {
     // MEASURED: a page's content costs ~1.9s, so 45s buys ~24 pages. A run that
     // walked the list in order spent its whole budget on the first 30 and touched

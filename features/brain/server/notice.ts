@@ -38,6 +38,12 @@ export interface NoticeInput {
   kind: string;
   /** Anything a reader would want to check it against. */
   evidence?: string;
+  /**
+   * What the job needs to read back tomorrow, e.g. which pages it already reported.
+   * Stored beside the notice so a job that only speaks when something changed needs
+   * no table of its own. `kind`, `noticed_by` and `noticed_on` always win.
+   */
+  meta?: Record<string, unknown>;
 }
 
 /** Same notice, same day, same id — a cron that re-runs does not post it twice. */
@@ -63,7 +69,7 @@ export function buildNoticeRow(input: NoticeInput, now: Date): BrainRow {
     ]
       .filter((l): l is string => l !== null)
       .join("\n"),
-    meta: { kind: "notice", noticed_by: input.kind, noticed_on: day },
+    meta: { ...input.meta, kind: "notice", noticed_by: input.kind, noticed_on: day },
     updated_at: now.toISOString(),
     period_end: day,
   };
