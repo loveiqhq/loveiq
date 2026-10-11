@@ -244,6 +244,20 @@ describe("experiments: the registry, read", () => {
       );
     });
 
+    it("never says enough while an arm is short of the buyers the readout needs", async () => {
+      // 10 of 100 against 0 of 100: the formula is content with 74 a side, the readout is not.
+      const line = await needed(split(100, 10, 0));
+      expect(line).not.toContain("Both have enough");
+      expect(line).toContain(
+        "The people are there, but the readout needs 5 buyers in every arm before it judges, " +
+          "and Landing Page V3 (Video in Hero) has 0."
+      );
+      // Short of people too: the date, then the buyers.
+      expect(await needed(split(60, 6, 0))).toMatch(
+        /that is around \d{4}-\d{2}-\d{2}, if the gap holds\. Also, the readout needs 5 buyers in every arm/
+      );
+    });
+
     it("says when the arms already have enough, or when it is out of reach", async () => {
       expect(await needed(split(500, 50, 25))).toContain(
         "the smaller arm has 500. Both have enough, so the verdict above is the answer."

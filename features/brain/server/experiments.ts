@@ -182,8 +182,19 @@ export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: nu
   // The readout will not judge until every arm has MIN_CELL_COUNT buyers.
   const need = Math.max(perArmSample(a, b), b > 0 ? Math.ceil(MIN_CELL_COUNT / b) : 0);
   const head = `${label} about ${need} people per arm ${basis}, ${power}; the smaller arm has ${have}.`;
-  if (have >= need) return `${head} Both have enough, so the verdict above is the answer.`;
-  return `${head} ${when(need, hi > lo)}`;
+  // A rate of zero says nothing about how many people five buyers take, so enough people is
+  // not enough until every arm has the buyers the readout requires.
+  const short = arms.filter((x) => x.purchases < MIN_CELL_COUNT);
+  const buyers = short.length
+    ? `the readout needs ${MIN_CELL_COUNT} buyers in every arm before it judges, and ` +
+      short.map((x) => `${x.label} has ${x.purchases}`).join(", ")
+    : "";
+  if (have >= need) {
+    return short.length
+      ? `${head} The people are there, but ${buyers}.`
+      : `${head} Both have enough, so the verdict above is the answer.`;
+  }
+  return `${head} ${when(need, hi > lo)}${short.length ? ` Also, ${buyers}.` : ""}`;
 }
 
 /** A running test's readout since its own start, by the same code /admin's overview runs. */
