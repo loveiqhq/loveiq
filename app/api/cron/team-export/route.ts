@@ -1,24 +1,28 @@
 /**
- * GET /api/cron/team-export
+ * GET /api/cron/team-export[?check=1]
  *
  * Refreshes the team's copy of the production data in its Google Drive folder
  * (features/admin/server/team-export.ts), on the server: nobody's laptop is needed, and the
  * data goes from the database to Drive without passing through a chat. Jarvis's
  * `export_all_data` tool starts it; it is not on a schedule.
  *
- * It answers in a few seconds and does the work after the response (about three minutes):
- *   - 202: started; the folder's link and the previous run's outcome.
- *   - 409: one is running, or one finished in the last ten minutes and is reused.
+ * It answers in a few seconds and does the work after the response (a few minutes):
+ *   - `?check=1`, 200: whether one is running, and how the last one went. Starts nothing.
+ *   - 202: started; the folder's link and who can open it.
+ *   - 409: one is already running.
  *   - 500: no Drive login, or no team-only folder to write to. Nothing written.
- * One run at a time, by a Redis lock. A failed run is logged as an error, which reaches
- * #prod-alerts, and records `error` (or `timeout`) in cron_run.
+ *   - 503: Redis, which keeps runs to one at a time, is unset or did not answer.
+ * Every run is recorded in Redis (`team-export:last`) before it starts and again when it
+ * ends, so a run the platform kills shows as one that never finished instead of vanishing;
+ * and in cron_run when it ends. A failed run is logged as an error, which reaches #prod-alerts.
  *
  * Protected by `Authorization: Bearer ${CRON_SECRET}`. Production only: the export is of
  * the production database, into the production team's folder.
  */
+import { randomUUID } from "node:crypto";
+
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
-import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   buildExport,
   findTeamFolder,
@@ -39,66 +43,56 @@ import { recordCronRun, verifyCronAuth } from "@shared/observability/slack-alert
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** The most Vercel allows. A run takes about three minutes and gives itself ten. */
+/** The most Vercel allows. A run takes a few minutes and gives up at ten. */
 export const maxDuration = 800;
 
 const NAME = "team-export";
+/** Held while a run runs: {runId, startedAt}. */
 const LOCK = "team-export:run";
+/** The last run, written when it starts and again when it ends. */
+const LAST = "team-export:last";
 /** Longer than a run can last (its ceiling is 800 s), so a second never starts beside it. */
-const RUNNING_TTL_S = 900;
-/** A copy this fresh is reused: asking again soon after is a question, not a request. */
-const FRESH_TTL_S = 600;
+const LOCK_TTL_S = 900;
 
-interface RunState {
+interface Lock {
+  runId: string;
   startedAt: string;
-  folderUrl: string;
+}
+
+interface LastRun extends Lock {
+  folderUrl?: string;
+  people?: string[];
   finishedAt?: string;
+  status?: "success" | "error" | "timeout";
+  error?: string;
 }
 
-/** The last recorded run, so a caller hears about a failure the alert already reported. */
-async function previousRun() {
-  try {
-    const res = await supabaseFetch(
-      `/rest/v1/cron_run?cron_name=eq.${NAME}&select=started_at,completed_at,status,error_message&order=started_at.desc&limit=1`
-    );
-    if (!res.ok) return null;
-    return (((await res.json()) as unknown[])[0] ?? null) as Record<string, unknown> | null;
-  } catch {
-    return null;
-  }
-}
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-async function run(redis: Redis, drive: string, folderId: string, state: RunState) {
-  const startedAtMs = Date.parse(state.startedAt);
-  // Ten minutes for the work, so the slowest request still in flight (two minutes for an
-  // upload) and the record below finish inside the 800-second ceiling.
+async function run(redis: Redis, drive: string, folderId: string, record: LastRun) {
+  const startedAtMs = Date.parse(record.startedAt);
+  // Ten minutes for the work. The slowest single request (90 s for an upload, 60 s for a page
+  // of a table) and the records below still finish inside the 800-second ceiling.
   const isOutOfTime = () => Date.now() - startedAtMs > 600_000;
   let status: "success" | "error" | "timeout" = "success";
-  let message: string | undefined;
+  let error: string | undefined;
   try {
     const files = await buildExport(await tableSpecs(), undefined, isOutOfTime);
     await uploadExport(drive, folderId, files, isOutOfTime);
     logger.info({ cron: NAME, files: files.length }, "team-export: done");
   } catch (err) {
     status = err instanceof OutOfTime ? "timeout" : "error";
-    message = err instanceof Error ? err.message : String(err);
-    logger.error({ err, cron: NAME }, `team-export failed: ${message}`);
+    error = message(err);
+    logger.error({ err, cron: NAME }, `team-export failed: ${error}`);
   }
-  try {
-    // A failed run frees the lock at once, so asking again retries; a good one is reused.
-    if (status === "success") {
-      await redis.set(
-        LOCK,
-        { ...state, finishedAt: new Date().toISOString() },
-        { ex: FRESH_TTL_S }
-      );
-    } else {
-      await redis.del(LOCK);
-    }
-  } catch (err) {
-    logger.warn({ err, cron: NAME }, "team-export: could not update the lock");
-  }
-  await recordCronRun(NAME, startedAtMs, status, message);
+  // The outcome before the lock goes: a run that starts in between must find it.
+  await redis
+    .set(LAST, { ...record, finishedAt: new Date().toISOString(), status, error })
+    .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not record the run"));
+  await redis
+    .del(LOCK)
+    .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not free the lock"));
+  await recordCronRun(NAME, startedAtMs, status, error);
 }
 
 export async function GET(request: Request) {
@@ -116,14 +110,60 @@ export async function GET(request: Request) {
       { status: 503 }
     );
   }
-  const redis = new Redis({ url: kvUrl, token: kvToken });
+  // No retries: a retried SET NX whose first answer was lost would find its own lock and
+  // report a run that is not happening.
+  const redis = new Redis({
+    url: kvUrl,
+    token: kvToken,
+    retry: false,
+    signal: () => AbortSignal.timeout(3_000),
+  });
+  const unavailable = () =>
+    NextResponse.json(
+      { error: "Redis did not answer, so it is not known whether an export is running." },
+      { status: 503 }
+    );
+
+  let lock: Lock | null;
+  let last: LastRun | null;
+  try {
+    [lock, last] = await Promise.all([redis.get<Lock>(LOCK), redis.get<LastRun>(LAST)]);
+  } catch (err) {
+    logger.warn({ err, cron: NAME }, "team-export: Redis did not answer");
+    return unavailable();
+  }
+  // A lock whose run has recorded its end, or older than any run can last, is one that was
+  // never freed: the end's delete failed, or the platform killed the run first.
+  const stale =
+    lock !== null &&
+    ((last?.runId === lock.runId && last.finishedAt !== undefined) ||
+      Date.now() - Date.parse(lock.startedAt) > maxDuration * 1000);
+  if (new URL(request.url).searchParams.get("check") === "1") {
+    return NextResponse.json({ running: stale ? null : (lock?.startedAt ?? null), last });
+  }
+  if (lock && !stale) return NextResponse.json({ running: lock.startedAt, last }, { status: 409 });
 
   const startedAtMs = Date.now();
-  const previous = await previousRun();
-  // The Drive login and the folder before answering: the caller hears about either at once,
-  // and the login comes from this request's identity, which the work after it cannot read.
+  const mine: Lock = { runId: randomUUID(), startedAt: new Date(startedAtMs).toISOString() };
+  try {
+    if (stale) await redis.del(LOCK);
+    if (!(await redis.set(LOCK, mine, { nx: true, ex: LOCK_TTL_S }))) {
+      const now = await redis.get<Lock>(LOCK);
+      return NextResponse.json({ running: now?.startedAt ?? null, last }, { status: 409 });
+    }
+  } catch (err) {
+    logger.warn({ err, cron: NAME }, "team-export: Redis did not answer the lock");
+    // Free the lock if the SET landed and only its answer was lost.
+    const held = await redis.get<Lock>(LOCK).catch(() => null);
+    if (held?.runId === mine.runId) await redis.del(LOCK).catch(() => undefined);
+    return unavailable();
+  }
+
+  // The Drive login and the folder before answering, inside the lock: the caller hears about
+  // either at once, and the login comes from this request's identity, which the work after
+  // the response cannot read.
   let drive: string;
-  let folderId: string;
+  let folder: { id: string; people: string[] };
   try {
     const token = await getDelegatedToken(
       "ec@loveiq.org",
@@ -133,32 +173,26 @@ export async function GET(request: Request) {
     );
     if (!token) throw new Error("no Drive login for ec@loveiq.org. Nothing written.");
     drive = token;
-    folderId = await findTeamFolder(drive);
+    folder = await findTeamFolder(drive);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ err, cron: NAME }, `team-export could not start: ${message}`);
-    await recordCronRun(NAME, startedAtMs, "error", message);
-    return NextResponse.json({ error: message, previous }, { status: 500 });
+    const error = message(err);
+    logger.error({ err, cron: NAME }, `team-export could not start: ${error}`);
+    const failed: LastRun = {
+      ...mine,
+      finishedAt: new Date().toISOString(),
+      status: "error",
+      error,
+    };
+    await redis.set(LAST, failed).catch(() => undefined);
+    await redis.del(LOCK).catch(() => undefined);
+    await recordCronRun(NAME, startedAtMs, "error", error);
+    return NextResponse.json({ error, last }, { status: 500 });
   }
 
-  const state: RunState = {
-    startedAt: new Date(startedAtMs).toISOString(),
-    folderUrl: folderUrl(folderId),
-  };
-  let claimed: unknown;
-  try {
-    claimed = await redis.set(LOCK, state, { nx: true, ex: RUNNING_TTL_S });
-  } catch (err) {
-    logger.error({ err, cron: NAME }, "team-export: Redis refused the lock");
-    return NextResponse.json(
-      { error: "Could not make sure no other export is running. Nothing started." },
-      { status: 503 }
-    );
-  }
-  if (!claimed) {
-    const current = await redis.get<RunState>(LOCK).catch(() => null);
-    return NextResponse.json({ ...current, folderUrl: state.folderUrl, previous }, { status: 409 });
-  }
-  scheduleAfterResponse(NAME, () => run(redis, drive, folderId, state));
-  return NextResponse.json({ ...state, previous }, { status: 202 });
+  const record: LastRun = { ...mine, folderUrl: folderUrl(folder.id), people: folder.people };
+  await redis
+    .set(LAST, record)
+    .catch((err) => logger.warn({ err, cron: NAME }, "team-export: could not record the start"));
+  scheduleAfterResponse(NAME, () => run(redis, drive, folder.id, record));
+  return NextResponse.json({ ...record, last }, { status: 202 });
 }

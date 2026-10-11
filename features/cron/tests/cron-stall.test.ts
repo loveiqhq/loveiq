@@ -222,7 +222,9 @@ describe("features/cron/AGENT_README.md says truly what runs", () => {
     const github = new Set(Object.keys(brainDailySchedules()).filter((j) => onDisk.includes(j)));
     // Started by a Jarvis tool: the MCP route calls it by its path.
     const mcp = fs.readFileSync("app/api/mcp/route.ts", "utf8");
-    const onDemand = new Set(onDisk.filter((d) => mcp.includes(`"/api/cron/${d}"`)));
+    const onDemand = new Set(
+      onDisk.filter((d) => new RegExp(`/api/cron/${d}(?![\\w-])`).test(mcp))
+    );
     const idle = onDisk.filter((d) => !vercel.has(d) && !github.has(d) && !onDemand.has(d));
 
     const counts =

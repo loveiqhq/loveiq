@@ -87,8 +87,9 @@ email to that person's answers.
 - **Decision**: Eman, 2026-10-10. The team gets all of it, unmasked, and nobody else gets any of it.
 - **Mitigations**:
   - The folder is shared with those six only. Editors cannot share the folder or its files on,
-    and there is no link sharing. Every upload first checks the folder is still like that
-    (owned by `ec@`, loveiq.org people only, no link or domain sharing) and writes nothing if not.
+    and there is no link sharing. Every upload first checks the folder and every file it will
+    replace are still like that (owned by `ec@`, individual loveiq.org accounts only, no link,
+    domain or group sharing) and writes nothing if not.
   - Refreshes run on the server (Vercel, already a processor of this data) when someone asks
     Jarvis, or from a laptop with the script. The data never passes through a chat or an AI
     model. Anyone who can use Jarvis can start one; that changes how fresh the copy is, not who

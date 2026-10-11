@@ -8,7 +8,8 @@
  *   npx tsx --env-file=.env.local scripts/team-data-export.ts --out <folder outside any git repo>
  *     [--drive-folder <Google Drive folder id>]
  * With --drive-folder each CSV replaces the file of the same name in that folder, uploaded as
- * ec@ through domain-wide delegation, so the folder's link and sharing stay as they are.
+ * ec@ through domain-wide delegation, so the folder's link and sharing stay as they are. Do not
+ * run it while the server's export runs (ask Claude to check first): this one takes no lock.
  * See docs/runbooks/TEAM_DATA_EXPORT.md.
  */
 import { spawnSync } from "node:child_process";
@@ -80,7 +81,6 @@ async function main(): Promise<void> {
   if (folder) {
     // A fresh token: one lasts an hour, and the read before this can be long.
     const token = await driveToken();
-    await checkFolder(token, folder);
     await uploadExport(token, folder, files);
     console.log(`uploaded ${files.length} files to Drive folder ${folder}`);
   }

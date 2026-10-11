@@ -206,7 +206,7 @@ export async function tableSpecs(): Promise<TableSpec[]> {
  * a row seen twice is kept once: an insert that sorts before the page boundary while the read
  * runs (funnel_event is written all the time) shifts the next page by one.
  */
-async function readAll(spec: TableSpec): Promise<Row[]> {
+async function readAll(spec: TableSpec, isOutOfTime: () => boolean): Promise<Row[]> {
   const rows: Row[] = [];
   const keyset = spec.key.length === 1 ? spec.key[0]! : null;
   const order = (keyset ? [keyset] : spec.key.length ? spec.key : spec.columns)
@@ -214,6 +214,8 @@ async function readAll(spec: TableSpec): Promise<Row[]> {
     .join(",");
   let after: unknown = null;
   for (let offset = 0; ; offset += POSTGREST_MAX_ROWS) {
+    // Every page, not every table: the largest table is over a hundred pages.
+    if (isOutOfTime()) throw new OutOfTime(`ran out of time reading ${spec.name}; nothing written`);
     const from =
       keyset && after !== null ? `&${keyset}=gt.${encodeURIComponent(String(after))}` : "";
     const page = keyset ? "" : `&offset=${offset}`;
@@ -247,20 +249,20 @@ export function uniqueRows(rows: Row[], identity: string[]): Row[] {
  */
 export async function buildExport(
   specs: TableSpec[],
-  read: (spec: TableSpec) => Promise<Row[]> = readAll,
+  read: (spec: TableSpec, isOutOfTime: () => boolean) => Promise<Row[]> = readAll,
   isOutOfTime: () => boolean = () => false,
   generatedAt: () => string = () => new Date().toISOString()
 ): Promise<ExportFile[]> {
   const usersSpec = specs.find((s) => s.name === "app_user");
   if (!usersSpec) throw new Error("the schema read has no app_user; nothing written");
-  const users = await read(usersSpec);
+  const users = await read(usersSpec, isOutOfTime);
   assertNobodyRestricted(users);
   const emailOfUser = new Map(users.map((u) => [u.id, String(u.email ?? "")]));
   const counts: Record<string, number> = {};
   const files: ExportFile[] = [];
   for (const spec of specs) {
     if (isOutOfTime()) throw new OutOfTime(`ran out of time before ${spec.name}; nothing written`);
-    const rows = spec === usersSpec ? users : await read(spec);
+    const rows = spec === usersSpec ? users : await read(spec, isOutOfTime);
     counts[spec.name] = rows.length;
     files.push({
       name: `${spec.name}.csv`,
@@ -287,19 +289,52 @@ export function driveQuoted(value: string): string {
   return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 }
 
+interface Permission {
+  type?: string;
+  emailAddress?: string;
+  displayName?: string;
+}
+
 interface FolderMeta {
   mimeType?: string;
   trashed?: boolean;
   ownedByMe?: boolean;
   writersCanShare?: boolean;
-  permissions?: Array<{ type?: string; emailAddress?: string }>;
+  permissions?: Permission[];
+}
+
+interface DriveFile {
+  id: string;
+  name: string;
+  ownedByMe?: boolean;
+  permissions?: Permission[];
 }
 
 /**
- * The folder must be ours and closed: owned by the account the export writes as, no link or
- * whole-domain sharing, every person on it a loveiq.org account, and editors unable to share
- * it on. Checked before every upload, because the data goes there unattended and a folder's
- * sharing can change after the decision that made it.
+ * Why a permission list lets in more than loveiq.org people: a link, the whole domain, a group
+ * (Drive does not list a group's members, and a group can hold outside accounts), or an
+ * outside account. Empty when only loveiq.org people can open it.
+ */
+function openTo(permissions: Permission[] | undefined): string[] {
+  // Fail closed: a reply without the list says nothing about who can open it.
+  if (!Array.isArray(permissions)) return ["Drive did not say who can open it"];
+  return permissions.flatMap((p) => {
+    if (p.type === "anyone" || p.type === "domain") return [`it is shared by ${p.type} link`];
+    if (p.type !== "user") {
+      return [
+        `it is shared with a ${p.type ?? "kind of account"} whose members Drive does not list`,
+      ];
+    }
+    const email = (p.emailAddress ?? "").toLowerCase();
+    return email.endsWith("@loveiq.org") ? [] : ["someone outside loveiq.org can open it"];
+  });
+}
+
+/**
+ * The folder must be ours and closed: owned by the account the export writes as, open only to
+ * loveiq.org people (no link, domain or group), and editors unable to share it on. Checked
+ * right before every upload, because the data goes there unattended and a folder's sharing
+ * can change after the decision that made it.
  */
 export function assertTeamOnly(folder: FolderMeta): void {
   const problems: string[] = [];
@@ -308,14 +343,7 @@ export function assertTeamOnly(folder: FolderMeta): void {
   }
   if (folder.ownedByMe !== true) problems.push("ec@loveiq.org does not own it");
   if (folder.writersCanShare !== false) problems.push("its editors can share it on");
-  // Fail closed: a reply without the list says nothing about who can open the folder.
-  if (!Array.isArray(folder.permissions)) problems.push("Drive did not say who can open it");
-  for (const p of folder.permissions ?? []) {
-    const email = (p.emailAddress ?? "").toLowerCase();
-    if (p.type === "anyone" || p.type === "domain") problems.push(`it is shared by ${p.type} link`);
-    else if (!email.endsWith("@loveiq.org"))
-      problems.push("someone outside loveiq.org can open it");
-  }
+  problems.push(...openTo(folder.permissions));
   if (problems.length) {
     throw new Error(
       `refusing to upload: the Drive folder is not team-only (${[...new Set(problems)].join("; ")}). Nothing written.`
@@ -323,16 +351,52 @@ export function assertTeamOnly(folder: FolderMeta): void {
   }
 }
 
-const FOLDER_FIELDS = "mimeType,trashed,ownedByMe,writersCanShare,permissions(type,emailAddress)";
+/**
+ * One Drive request. A 429, a 5xx or a rate-limit 403 is retried twice (after 1 s, then 3 s):
+ * a run makes about 300 requests, and one passing error would otherwise leave the folder
+ * half refreshed. A timeout is not retried, so the run's deadline holds. A request that throws
+ * fails without its URL: an upload's URL is a session link that takes content without a login
+ * for a week, and these messages reach Slack, cron_run and the chat.
+ */
+async function drive(
+  url: string,
+  init: RequestInit & { timeoutMs: number },
+  what: string
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(url, init);
+    } catch (err) {
+      const why = err instanceof Error && /timeout/i.test(err.message) ? "timed out" : "failed";
+      throw new Error(`Drive ${what} ${why}`);
+    }
+    const passing =
+      res.status === 429 ||
+      res.status >= 500 ||
+      (res.status === 403 && /rateLimitExceeded/i.test(await res.clone().text()));
+    if (!passing || attempt === 2) return res;
+    await new Promise((r) => setTimeout(r, 1000 * 3 ** attempt));
+  }
+}
 
-/** Checks a folder by id (the script's `--drive-folder`) before anything goes into it. */
-export async function checkFolder(token: string, id: string): Promise<void> {
-  const res = await fetchWithTimeout(
+const FOLDER_FIELDS =
+  "mimeType,trashed,ownedByMe,writersCanShare,permissions(type,emailAddress,displayName)";
+
+/**
+ * Checks a folder by id before anything goes into it, and returns who can open it, by name,
+ * so a reply can say exactly who.
+ */
+export async function checkFolder(token: string, id: string): Promise<string[]> {
+  const res = await drive(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=${FOLDER_FIELDS}`,
-    { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 30_000 }
+    { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 30_000 },
+    "read of the folder"
   );
   if (!res.ok) throw new Error(`Drive could not read the folder (${res.status}). Nothing written.`);
-  assertTeamOnly((await res.json()) as FolderMeta);
+  const folder = (await res.json()) as FolderMeta;
+  assertTeamOnly(folder);
+  return (folder.permissions ?? []).map((p) => p.displayName || p.emailAddress || "someone");
 }
 
 /**
@@ -340,14 +404,15 @@ export async function checkFolder(token: string, id: string): Promise<void> {
  * can share a folder with ec@ and set the same tag on it (this repository is public), and the
  * export must never go into a folder somebody else controls.
  */
-export async function findTeamFolder(token: string): Promise<string> {
+export async function findTeamFolder(token: string): Promise<{ id: string; people: string[] }> {
   const q = encodeURIComponent(
     `properties has { key=${driveQuoted(TEAM_FOLDER_TAG.key)} and value=${driveQuoted(TEAM_FOLDER_TAG.value)} } ` +
       "and mimeType='application/vnd.google-apps.folder' and 'me' in owners and trashed=false"
   );
-  const res = await fetchWithTimeout(
+  const res = await drive(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
-    { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 30_000 }
+    { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 30_000 },
+    "search for the team folder"
   );
   if (!res.ok) throw new Error(`Drive could not search for the team folder (${res.status})`);
   const found = ((await res.json()) as { files?: Array<{ id: string }> }).files ?? [];
@@ -357,44 +422,71 @@ export async function findTeamFolder(token: string): Promise<string> {
         "see docs/runbooks/TEAM_DATA_EXPORT.md. Nothing written."
     );
   }
-  await checkFolder(token, found[0]!.id);
-  return found[0]!.id;
+  return { id: found[0]!.id, people: await checkFolder(token, found[0]!.id) };
+}
+
+/** Every file in the folder, with its owner and who can open it: one request for all. */
+async function folderFiles(token: string, folderId: string): Promise<DriveFile[]> {
+  const files: DriveFile[] = [];
+  const q = encodeURIComponent(`${driveQuoted(folderId)} in parents and trashed=false`);
+  let page = "";
+  do {
+    const res = await drive(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&pageSize=1000` +
+        "&fields=nextPageToken,files(id,name,ownedByMe,permissions(type,emailAddress))" +
+        (page ? `&pageToken=${encodeURIComponent(page)}` : ""),
+      { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 30_000 },
+      "listing of the folder"
+    );
+    if (!res.ok)
+      throw new Error(`Drive could not list the folder (${res.status}). Nothing written.`);
+    const body = (await res.json()) as { files?: DriveFile[]; nextPageToken?: string };
+    files.push(...(body.files ?? []));
+    page = body.nextPageToken ?? "";
+  } while (page);
+  return files;
 }
 
 /**
- * The one file a refresh replaces, or none to create. Two files with a table's name (an
- * editor's copy saved under it) stop the run: refreshing only the first would leave the
- * other holding old data, people erased since included.
+ * The file each export file replaces (null: create it), checked for every file before any is
+ * written, so a problem stops the run with the folder untouched:
+ *   - two files with a table's name (an editor's copy saved under it): refreshing only one
+ *     would leave the other holding old data, people erased since included;
+ *   - a file ec@ does not own: its owner, not ec@, decides who it is shared with;
+ *   - a file shared beyond loveiq.org people: sharing a single file does not show on the folder.
  */
-export function fileToReplace(found: Array<{ id: string }>, name: string): string | null {
-  if (found.length > 1) {
+export function plan(files: ExportFile[], existing: DriveFile[]): Array<string | null> {
+  const problems: string[] = [];
+  const ids = files.map((f) => {
+    const same = existing.filter((e) => e.name === f.name);
+    if (same.length > 1) problems.push(`${same.length} files are named ${f.name}`);
+    const file = same.length === 1 ? same[0]! : null;
+    if (file && file.ownedByMe !== true)
+      problems.push(`${f.name} belongs to someone other than ec@`);
+    if (file) problems.push(...openTo(file.permissions).map((why) => `${f.name}: ${why}`));
+    return file?.id ?? null;
+  });
+  if (problems.length) {
     throw new Error(
-      `${found.length} files are named ${name} in the Drive folder; rename or delete the extra ones, then run again`
+      `refusing to upload: ${[...new Set(problems)].join("; ")}. Rename, unshare or delete those ` +
+        "files in the Drive folder, then run again. Nothing written."
     );
   }
-  return found[0]?.id ?? null;
+  return ids;
 }
 
-async function driveUpload(token: string, folderId: string, name: string, body: string) {
+async function driveUpload(
+  token: string,
+  folderId: string,
+  file: ExportFile,
+  existing: string | null
+): Promise<void> {
   const auth = { Authorization: `Bearer ${token}` };
-  const q = encodeURIComponent(
-    `${driveQuoted(folderId)} in parents and name=${driveQuoted(name)} and trashed=false`
-  );
-  const search = await fetchWithTimeout(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
-    { headers: auth, timeoutMs: 30_000 }
-  );
-  // Stop rather than guess: an unread folder would otherwise get a second copy of every file.
-  if (!search.ok) throw new Error(`Drive could not list the folder (${search.status})`);
-  const existing = fileToReplace(
-    ((await search.json()) as { files?: Array<{ id: string }> }).files ?? [],
-    name
-  );
   /**
    * `writersCanShare: false` on every file, new or replaced. The folder's own setting does not
    * reach the files in it: until 2026-10-11 all 77 let an editor share them with anyone.
    */
-  const start = await fetchWithTimeout(
+  const start = await drive(
     existing
       ? `https://www.googleapis.com/upload/drive/v3/files/${existing}?uploadType=resumable`
       : "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable",
@@ -404,53 +496,68 @@ async function driveUpload(token: string, folderId: string, name: string, body: 
       body: JSON.stringify(
         existing
           ? { writersCanShare: false }
-          : { name, parents: [folderId], writersCanShare: false }
+          : { name: file.name, parents: [folderId], writersCanShare: false }
       ),
-      timeoutMs: 30_000,
-    }
+      timeoutMs: 15_000,
+    },
+    `start of the upload of ${file.name}`
   );
   // Resumable, because a simple upload stops at 5 MB and the larger tables pass it.
   const session = start.headers.get("location");
-  if (!start.ok || !session) throw new Error(`Drive refused ${name}: ${start.status}`);
-  const put = await fetchWithTimeout(session, {
-    method: "PUT",
-    headers: { "Content-Type": name.endsWith(".md") ? "text/markdown" : "text/csv" },
-    body,
-    timeoutMs: 120_000,
-  });
-  if (!put.ok) throw new Error(`Drive upload of ${name} failed: ${put.status}`);
+  if (!start.ok || !session) throw new Error(`Drive refused ${file.name}: ${start.status}`);
+  const put = await drive(
+    session,
+    {
+      method: "PUT",
+      headers: { "Content-Type": file.name.endsWith(".md") ? "text/markdown" : "text/csv" },
+      body: file.body,
+      timeoutMs: 90_000,
+    },
+    `upload of ${file.name}`
+  );
+  if (!put.ok) throw new Error(`Drive upload of ${file.name} failed: ${put.status}`);
 
   /**
    * Drive keeps each replaced version for about 30 days, and editors can open them. The old
    * versions go, or a person erased from the database would live on in last week's copy.
    */
   const id = existing ?? ((await put.json()) as { id?: string }).id;
-  if (!id) throw new Error(`Drive did not say which file ${name} became`);
-  const listed = await fetchWithTimeout(
+  if (!id) throw new Error(`Drive did not say which file ${file.name} became`);
+  const listed = await drive(
     `https://www.googleapis.com/drive/v3/files/${id}/revisions?fields=revisions(id)&pageSize=1000`,
-    { headers: auth, timeoutMs: 30_000 }
+    { headers: auth, timeoutMs: 15_000 },
+    `listing of ${file.name}'s versions`
   );
-  if (!listed.ok) throw new Error(`Drive could not list ${name}'s versions (${listed.status})`);
+  if (!listed.ok)
+    throw new Error(`Drive could not list ${file.name}'s versions (${listed.status})`);
   const revisions =
     ((await listed.json()) as { revisions?: Array<{ id: string }> }).revisions ?? [];
   for (const old of revisions.slice(0, -1)) {
-    const gone = await fetchWithTimeout(
+    const gone = await drive(
       `https://www.googleapis.com/drive/v3/files/${id}/revisions/${old.id}`,
-      { method: "DELETE", headers: auth, timeoutMs: 30_000 }
+      { method: "DELETE", headers: auth, timeoutMs: 15_000 },
+      `deletion of an old version of ${file.name}`
     );
-    if (!gone.ok) throw new Error(`Drive kept an old version of ${name} (${gone.status})`);
+    if (!gone.ok) throw new Error(`Drive kept an old version of ${file.name} (${gone.status})`);
   }
 }
 
-/** Each file into the folder, replacing its namesake, in order: the README is last. */
+/**
+ * Each file into the folder, replacing its namesake, in order (the README is last). The folder
+ * and every file it will replace are checked first, so a check that fails writes nothing; a
+ * request that fails part-way leaves the files before it refreshed and the README older than
+ * them, and the next run completes it.
+ */
 export async function uploadExport(
   token: string,
   folderId: string,
   files: ExportFile[],
   isOutOfTime: () => boolean = () => false
 ): Promise<void> {
-  for (const f of files) {
+  await checkFolder(token, folderId);
+  const ids = plan(files, await folderFiles(token, folderId));
+  for (const [i, f] of files.entries()) {
     if (isOutOfTime()) throw new OutOfTime(`ran out of time before uploading ${f.name}`);
-    await driveUpload(token, folderId, f.name, f.body);
+    await driveUpload(token, folderId, f, ids[i]!);
   }
 }

@@ -14,15 +14,22 @@ import { join, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+/** The database's API as the real reader sees it: pages of rows, answered here. */
+const pages = vi.hoisted(() => ({ fetch: vi.fn() }));
+vi.mock("@features/admin/server/supabase", () => ({
+  POSTGREST_MAX_ROWS: 2,
+  supabaseFetch: (path: string) => pages.fetch(path),
+}));
+
 import {
   assertTeamOnly,
   buildExport,
   csvCell,
   driveQuoted,
-  fileToReplace,
   findTeamFolder,
   isExported,
   OutOfTime,
+  plan,
   readme,
   specsOf,
   toCsv,
@@ -285,12 +292,40 @@ describe("the team data export", () => {
     expect(text).toContain("ask Claude (Jarvis) to export all the data");
   });
 
-  it("replaces exactly one Drive file per table, and stops on two", () => {
-    expect(fileToReplace([], "app_user.csv")).toBeNull();
-    expect(fileToReplace([{ id: "a" }], "app_user.csv")).toBe("a");
-    expect(() => fileToReplace([{ id: "a" }, { id: "b" }], "app_user.csv")).toThrow(
-      /2 files are named app_user.csv/
-    );
+  it("replaces exactly one Drive file per table, ours and closed, and checks them all first", () => {
+    const team = [{ type: "user", emailAddress: "ec@loveiq.org" }];
+    const ours = (id: string, name: string) => ({ id, name, ownedByMe: true, permissions: team });
+    const files = [
+      { name: "app_user.csv", body: "" },
+      { name: "payment.csv", body: "" },
+      { name: "README.md", body: "" },
+    ];
+    expect(plan(files, [ours("a", "app_user.csv"), ours("x", "mine.csv")])).toEqual([
+      "a",
+      null,
+      null,
+    ]);
+    // Every problem in the folder is named at once, before anything is written.
+    const refused = () =>
+      plan(files, [
+        ours("a", "app_user.csv"),
+        ours("b", "app_user.csv"),
+        { ...ours("p", "payment.csv"), permissions: [{ type: "anyone" }] },
+        { ...ours("r", "README.md"), ownedByMe: false },
+      ]);
+    expect(refused).toThrow(/2 files are named app_user.csv/);
+    expect(refused).toThrow(/payment.csv: it is shared by anyone link/);
+    expect(refused).toThrow(/README.md belongs to someone other than ec@/);
+    expect(refused).toThrow(/Nothing written/);
+    // A file shared with one outside person, which the folder's sharing does not show.
+    expect(() =>
+      plan(files, [
+        {
+          ...ours("p", "payment.csv"),
+          permissions: [...team, { type: "user", emailAddress: "accountant@gmail.com" }],
+        },
+      ])
+    ).toThrow(/payment.csv: someone outside loveiq.org can open it/);
     expect(driveQuoted("it's")).toBe("'it\\'s'");
     expect(driveQuoted("a\\b")).toBe("'a\\\\b'");
   });
@@ -319,17 +354,21 @@ describe("the team's Drive folder", () => {
     permissions: [
       { type: "user", emailAddress: "ec@loveiq.org" },
       { type: "user", emailAddress: "MB@loveiq.org" },
-      { type: "group", emailAddress: "team@loveiq.org" },
     ],
   };
 
-  it("accepts a folder only the team can open", () => {
+  it("accepts a folder only loveiq.org people can open", () => {
     expect(() => assertTeamOnly(closed)).not.toThrow();
   });
 
   it.each([
     ["a link anyone can open", { permissions: [{ type: "anyone" }] }, /shared by anyone link/],
     ["the whole domain", { permissions: [{ type: "domain" }] }, /shared by domain link/],
+    [
+      "a group, even one of ours, whose members Drive does not list",
+      { permissions: [{ type: "group", emailAddress: "team@loveiq.org" }] },
+      /shared with a group whose members Drive does not list/,
+    ],
     [
       "someone outside the company",
       { permissions: [{ type: "user", emailAddress: "someone@gmail.com" }] },
@@ -358,6 +397,7 @@ describe("Drive, with requests answered here", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
   const answer = (body: unknown, init: { status?: number; location?: string } = {}) =>
@@ -371,20 +411,28 @@ describe("Drive, with requests answered here", () => {
       method: (init as RequestInit | undefined)?.method ?? "GET",
       body: (init as RequestInit | undefined)?.body,
     }));
+  const team = [
+    { type: "user", emailAddress: "ec@loveiq.org", displayName: "Eman Cickusic" },
+    { type: "user", emailAddress: "mb@loveiq.org", displayName: "Marcus Börner" },
+  ];
   const folderMeta = {
     mimeType: "application/vnd.google-apps.folder",
     trashed: false,
     ownedByMe: true,
     writersCanShare: false,
-    permissions: [{ type: "user", emailAddress: "ec@loveiq.org" }],
+    permissions: team,
   };
+  const query = (url: string) => decodeURIComponent(new URL(url).searchParams.get("q") ?? "");
 
-  it("finds the folder by its tag among the ones ec@ owns, and checks it before using it", async () => {
+  it("finds the folder by its tag among the ones ec@ owns, and says who can open it", async () => {
     fetchMock
       .mockResolvedValueOnce(answer({ files: [{ id: "F1" }] }))
       .mockResolvedValueOnce(answer(folderMeta));
-    await expect(findTeamFolder("tok")).resolves.toBe("F1");
-    const q = decodeURIComponent(new URL(calls()[0]!.url).searchParams.get("q")!);
+    await expect(findTeamFolder("tok")).resolves.toEqual({
+      id: "F1",
+      people: ["Eman Cickusic", "Marcus Börner"],
+    });
+    const q = query(calls()[0]!.url);
     // Owned, because anyone can share a tagged folder with ec@: this repository is public.
     expect(q).toContain("'me' in owners");
     expect(q).toContain("properties has { key='loveiq_team_export' and value='production' }");
@@ -406,15 +454,18 @@ describe("Drive, with requests answered here", () => {
     await expect(findTeamFolder("tok")).rejects.toThrow(/not team-only/);
   });
 
-  it("creates or replaces each file with sharing kept to the owner, README last", async () => {
-    // New file: search finds none, so it is created in the folder.
+  it("checks the folder and its files again right before writing, then creates or replaces each", async () => {
     fetchMock
-      .mockResolvedValueOnce(answer({ files: [] }))
+      // The folder, checked again, then every file in it, in one listing.
+      .mockResolvedValueOnce(answer(folderMeta))
+      .mockResolvedValueOnce(
+        answer({ files: [{ id: "OLD", name: "README.md", ownedByMe: true, permissions: team }] })
+      )
+      // New file: created in the folder.
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-1" }))
       .mockResolvedValueOnce(answer({ id: "NEW" }))
       .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }] }))
       // Existing file: replaced in place, and its older version deleted.
-      .mockResolvedValueOnce(answer({ files: [{ id: "OLD" }] }))
       .mockResolvedValueOnce(answer({}, { location: "https://upload/session-2" }))
       .mockResolvedValueOnce(answer({ id: "OLD" }))
       .mockResolvedValueOnce(answer({ revisions: [{ id: "r1" }, { id: "r2" }] }))
@@ -424,14 +475,17 @@ describe("Drive, with requests answered here", () => {
       { name: "README.md", body: "# readme" },
     ]);
     const c = calls();
-    expect(c[1]).toMatchObject({ method: "POST" });
-    expect(JSON.parse(String(c[1]!.body))).toEqual({
+    expect(c[0]!.url).toContain("/drive/v3/files/F1?fields=");
+    // The listing is of this folder only, and of files not in the bin.
+    expect(query(c[1]!.url)).toBe("'F1' in parents and trashed=false");
+    expect(c[2]).toMatchObject({ method: "POST" });
+    expect(JSON.parse(String(c[2]!.body))).toEqual({
       name: "app_user.csv",
       parents: ["F1"],
       writersCanShare: false,
     });
-    expect(c[2]).toMatchObject({ url: "https://upload/session-1", method: "PUT" });
-    expect(c[2]!.body).toBe("id\n1\n");
+    expect(c[3]).toMatchObject({ url: "https://upload/session-1", method: "PUT" });
+    expect(c[3]!.body).toBe("id\n1\n");
     expect(c[5]).toMatchObject({ method: "PATCH" });
     expect(c[5]!.url).toContain("/upload/drive/v3/files/OLD?uploadType=resumable");
     expect(JSON.parse(String(c[5]!.body))).toEqual({ writersCanShare: false });
@@ -442,10 +496,81 @@ describe("Drive, with requests answered here", () => {
     expect(c).toHaveLength(9);
   });
 
+  it("writes nothing when any file in the folder fails the check", async () => {
+    fetchMock.mockResolvedValueOnce(answer(folderMeta)).mockResolvedValueOnce(
+      answer({
+        files: [
+          { id: "P", name: "payment.csv", ownedByMe: true, permissions: [{ type: "anyone" }] },
+        ],
+      })
+    );
+    await expect(
+      uploadExport("tok", "F1", [
+        { name: "app_user.csv", body: "" },
+        { name: "payment.csv", body: "" },
+      ])
+    ).rejects.toThrow(/payment.csv: it is shared by anyone link/);
+    expect(calls().filter((c) => c.method !== "GET")).toHaveLength(0);
+  });
+
+  it("retries a passing Drive error, and never repeats a URL when a request fails", async () => {
+    vi.useFakeTimers();
+    fetchMock
+      .mockResolvedValueOnce(answer({}, { status: 503 }))
+      .mockResolvedValueOnce(answer(folderMeta));
+    const found = uploadExport("tok", "F1", []);
+    fetchMock.mockResolvedValueOnce(answer({ files: [] }));
+    await vi.runAllTimersAsync();
+    await expect(found).resolves.toBeUndefined();
+    expect(calls()[0]!.url).toBe(calls()[1]!.url);
+
+    vi.useRealTimers();
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(answer(folderMeta))
+      .mockResolvedValueOnce(answer({ files: [] }))
+      .mockResolvedValueOnce(answer({}, { location: "https://upload/SECRET-SESSION" }))
+      .mockRejectedValueOnce(
+        new Error("Request timeout after 90000ms: https://upload/SECRET-SESSION")
+      );
+    const failed = uploadExport("tok", "F1", [{ name: "a.csv", body: "x" }]);
+    await expect(failed).rejects.toThrow("Drive upload of a.csv timed out");
+    await expect(failed).rejects.not.toThrow(/SECRET-SESSION/);
+  });
+
   it("stops uploading at its deadline", async () => {
+    fetchMock
+      .mockResolvedValueOnce(answer(folderMeta))
+      .mockResolvedValueOnce(answer({ files: [] }));
     await expect(
       uploadExport("tok", "F1", [{ name: "a.csv", body: "" }], () => true)
     ).rejects.toBeInstanceOf(OutOfTime);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(calls().filter((c) => c.method !== "GET")).toHaveLength(0);
+  });
+});
+
+describe("reading the database", () => {
+  const page = (rows: unknown[]) => new Response(JSON.stringify(rows));
+  const spec = { name: "app_user", columns: ["id", "processing_restricted_at"], key: ["id"] };
+  beforeEach(() => pages.fetch.mockReset());
+
+  it("reads page after page by key, and checks the deadline before each page", async () => {
+    pages.fetch
+      .mockResolvedValueOnce(page([{ id: 1 }, { id: 2 }]))
+      .mockResolvedValueOnce(page([{ id: 3 }]));
+    const files = await buildExport([spec]);
+    expect(pages.fetch.mock.calls.map(([p]) => p)).toEqual([
+      "/rest/v1/app_user?select=*&order=id.asc&limit=2",
+      "/rest/v1/app_user?select=*&order=id.asc&limit=2&id=gt.2",
+    ]);
+    expect(files[0]!.body).toBe("id,processing_restricted_at\n1,\n2,\n3,\n");
+
+    pages.fetch.mockReset().mockResolvedValue(page([{ id: 1 }, { id: 2 }]));
+    let checks = 0;
+    await expect(buildExport([spec], undefined, () => ++checks > 1)).rejects.toBeInstanceOf(
+      OutOfTime
+    );
+    // One page read, then the deadline stopped the second: inside the table, not after it.
+    expect(pages.fetch).toHaveBeenCalledTimes(1);
   });
 });

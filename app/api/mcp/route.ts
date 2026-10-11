@@ -1339,28 +1339,37 @@ export const TOOLS = [
       // It replaces every file in the folder and deletes their old versions, on purpose: an
       // erased customer must not live on in last week's copy. Neither can be undone.
       destructiveHint: true,
-      // Asked again while one runs, or within ten minutes of one finishing, it reports that
-      // one instead of starting another.
-      idempotentHint: true,
+      // Each start after the last one finished makes another copy; only `check` changes nothing.
+      idempotentHint: false,
       openWorldHint: true,
     },
     description:
       "A fresh copy of ALL the data, as files: every customer and product table in the " +
       "database, one CSV per table (Excel opens them), nothing masked, written straight into " +
-      "the team's private Google Drive folder. Returns the folder's link. Use it whenever " +
-      "someone wants all the data, the raw data, a full copy, a dump, or an Excel file of " +
-      "everything or of a whole large table. Never page through query_product_data to build " +
-      "a copy: it returns 1,000 rows a call into this chat, and the whole database is far too " +
-      "big for a chat. This tool never puts the data in the chat, so its size does not " +
-      "matter.\n\n" +
-      "Only the LoveIQ team can open the folder (Eman, Marcus, Mark, Fatih, Sanjin and Ajna), " +
-      "so share the link, never the data. It runs on the server for about three minutes and " +
-      "replaces every file in the folder; call it again to see whether it has finished. A " +
-      "copy finished in the last ten minutes is reused rather than made again. Not in it: " +
-      "Jarvis's own index, job plumbing, and the log of people who asked us to delete their " +
-      "data. While anyone has asked us to restrict processing their data, it stops and " +
-      "writes nothing.",
-    inputSchema: { type: "object", properties: {} },
+      "the team's private Google Drive folder. Returns the folder's link and who can open it. " +
+      "Use it whenever someone wants all the data, the raw data, a full copy, a dump, or an " +
+      "Excel file of everything or of a whole large table. Never page through " +
+      "query_product_data to build a copy: it returns 1,000 rows a call into this chat, and " +
+      "the whole database is far too big for a chat. This tool never puts the data in the " +
+      "chat, so its size does not matter.\n\n" +
+      "Only the LoveIQ team can open the folder; share the link, never the data. A copy takes " +
+      "a few minutes on the server and then replaces every file in the folder. To see whether " +
+      "it has finished, or how the last one went, call it with `check: true`: that starts " +
+      "nothing, while a call without it starts another copy unless one is running. After a " +
+      "customer's data is deleted, start a copy the same day. Not in it: Jarvis's own index, " +
+      "job plumbing, and the log of people who asked us to delete their data. While anyone " +
+      "has asked us to restrict processing their data, it stops and writes nothing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        check: {
+          type: "boolean",
+          description:
+            "true: only say whether a copy is being made and how the last one went. Starts " +
+            "nothing.",
+        },
+      },
+    },
   },
   {
     name: "count_context",
@@ -5534,64 +5543,82 @@ async function callTool(
         true
       );
     }
+    const check = args.check === true;
     let res: Response;
     try {
-      // The work runs in its own function (app/api/cron/team-export): this one has a minute,
-      // and an export takes about three.
+      // The work runs in its own function: this one has a minute, and an export takes several.
+      // The production address itself, not NEXT_PUBLIC_SITE_URL: the apex form redirects, and a
+      // redirect would carry the secret to wherever it points.
       res = await fetchWithTimeout(
-        new URL("/api/cron/team-export", process.env.NEXT_PUBLIC_SITE_URL).toString(),
+        `https://www.loveiq.org/api/cron/team-export${check ? "?check=1" : ""}`,
         {
           headers: { Authorization: `Bearer ${process.env.CRON_SECRET ?? ""}` },
-          // A redirect would carry the secret to wherever it points: refuse one instead.
           redirect: "manual",
           timeoutMs: 45_000,
         }
       );
     } catch (err) {
-      logger.error({ err }, "brain: could not reach the team export");
+      logger.error({ err }, "brain: no answer from the team export");
       return textResult(
-        "Could not reach the export job, so nothing was started. Try again in a minute.",
+        "The export job did not answer in time, so it is not known whether a copy started. " +
+          "In a minute, call export_all_data with check: true to see.",
         true
       );
     }
-    const run = (await res.json().catch(() => ({}))) as {
+    const job = (await res.json().catch(() => ({}))) as {
+      running?: string | null;
       startedAt?: string;
-      finishedAt?: string;
       folderUrl?: string;
+      people?: string[];
       error?: string;
-      previous?: { status?: string; completed_at?: string; error_message?: string } | null;
+      last?: {
+        startedAt?: string;
+        finishedAt?: string;
+        status?: string;
+        error?: string;
+        folderUrl?: string;
+        people?: string[];
+      } | null;
     };
     stats.sourceCount = 1;
-    const at = (iso?: string) =>
+    const at = (iso?: string | null) =>
       iso ? `${iso.slice(0, 16).replace("T", " ")} UTC` : "an unknown time";
-    const folder = run.folderUrl ?? "the team's Drive folder";
-    if (res.status === 202) {
-      const prev = run.previous;
+    const last = job.last ?? null;
+    const folder = job.folderUrl ?? last?.folderUrl;
+    const where = folder
+      ? `\n${folder}\nOnly these people can open it: ${(job.people ?? last?.people ?? []).join(", ")}.`
+      : "";
+    const howLast = !last
+      ? "No copy has been made from Jarvis yet."
+      : !last.finishedAt
+        ? `The copy started at ${at(last.startedAt)} stopped without finishing (the server ended it).`
+        : last.status === "success"
+          ? `The last copy finished at ${at(last.finishedAt)}.`
+          : `The last attempt, at ${at(last.startedAt)}, failed: ${last.error ?? last.status}`;
+    const toCheck = "To see whether it has finished, call export_all_data with check: true.";
+    if (res.status === 200 && check) {
       return textResult(
-        `Started a fresh copy of all the data at ${at(run.startedAt)}. In about three minutes ` +
-          `every file in the team's folder is replaced:\n${folder}\n` +
-          "Only the team can open it (Eman, Marcus, Mark, Fatih, Sanjin and Ajna). One CSV per " +
-          "table; README.md lists them and says when the copy was made. In Excel: Data > From " +
-          "Text/CSV.\nCall export_all_data again to see whether it has finished." +
-          (prev && prev.status !== "success"
-            ? `\n\nThe previous attempt, at ${at(prev.completed_at)}, did not finish: ` +
-              `${prev.error_message ?? prev.status}`
-            : "")
+        job.running
+          ? `A copy of all the data has been in progress since ${at(job.running)}. ${toCheck}${where}`
+          : `No copy is being made now. ${howLast}${where}`
+      );
+    }
+    if (res.status === 202) {
+      return textResult(
+        `Started a fresh copy of all the data at ${at(job.startedAt)}. In a few minutes every ` +
+          `file in the team's folder is replaced:${where}\nOne CSV per table; README.md lists ` +
+          `them and says when the copy was made. In Excel: Data > From Text/CSV. ${toCheck}` +
+          (last && last.status !== "success" ? `\n\nBefore this: ${howLast}` : "")
       );
     }
     if (res.status === 409) {
       return textResult(
-        run.finishedAt
-          ? `The team's folder already holds a fresh copy of all the data, finished at ` +
-              `${at(run.finishedAt)}:\n${folder}\nA copy under ten minutes old is reused ` +
-              "rather than made again."
-          : `A fresh copy of all the data has been running since ${at(run.startedAt)}; it ` +
-              `takes about three minutes. Call export_all_data again to see whether it has ` +
-              `finished. The folder:\n${folder}`
+        `A copy of all the data is already being made, since ${at(job.running)}; it takes a ` +
+          `few minutes. ${toCheck}${where}`
       );
     }
     return textResult(
-      `The export did not start (${res.status}): ${run.error ?? "no reason given"}`,
+      `The export did not start (${res.status}): ${job.error ?? "no reason given"}`,
       true
     );
   }
@@ -6284,9 +6311,9 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   "ALL THE DATA, AS FILES: export_all_data puts a fresh copy of every customer and product " +
   "table (one CSV each, unmasked; Excel opens them) in the team's private Google Drive folder " +
-  "and returns its link. Use it whenever someone wants all the data, a full copy or a whole " +
-  "large table: query_product_data returns 1,000 rows a call into the chat, so never page " +
-  "through it to build a copy.\n\n" +
+  "and returns its link; with check: true it only says how the copy is going. Use it whenever " +
+  "someone wants all the data, a full copy or a whole large table: query_product_data returns " +
+  "1,000 rows a call into the chat, so never page through it to build a copy.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +

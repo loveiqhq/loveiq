@@ -44,19 +44,25 @@ it. "The team" is Eman, Marcus, Mark, Fatih, Sanjin and Ajna. Recorded as risk R
 
 **Ask Claude** ("export all the data", "refresh the team data"). Jarvis's `export_all_data`
 starts the export on the server (`/api/cron/team-export`, production only) and replies with the
-folder's link; nobody's laptop is needed, and the data goes from the database to Drive without
-passing through the chat.
+folder's link and who can open it; nobody's laptop is needed, and the data goes from the
+database to Drive without passing through the chat.
 
-- It takes about three minutes. Asking again says whether it is still running or finished.
-- One runs at a time, and a copy under ten minutes old is reused rather than made again.
-- A failed run alerts #prod-alerts and records `error` in `cron_run`; the next ask says why it
-  failed, and starts a new one.
+- It takes a few minutes. To see whether it has finished, or how the last one went, ask Claude
+  to check (`export_all_data` with `check: true`), which starts nothing.
+- One runs at a time on the server. Asking again after one has finished starts another copy, so
+  a refresh after a deletion request always runs.
+- Every run is recorded in Redis when it starts and when it ends, so a check reports a run the
+  server killed as one that never finished. A failed run alerts #prod-alerts and records
+  `error` or `timeout` in `cron_run`; a check, or the next start, says why it failed.
 - Anyone who can use Jarvis can start a refresh. That changes how fresh the copy is, not who can
   open it.
 
-Before writing anything, both ways check the folder is still team-only: owned by `ec@`, shared
-with loveiq.org people only, no link or whole-domain sharing, and editors unable to share it on.
-If any of that has changed, nothing is written and the error says what.
+Before writing anything, both ways check the folder and every file a run will replace: owned
+by `ec@`, open only to individual loveiq.org accounts (no link, whole-domain or group sharing,
+since Drive does not list a group's members), and the folder's editors unable to share it on.
+If any check fails, nothing is written and the error names the file and the reason. A request
+that fails part-way through the upload leaves the files before it refreshed and the README
+older than them; the next run completes it.
 
 **From a laptop**, run it from a checkout of `main` on a machine that has:
 
@@ -70,6 +76,7 @@ npx tsx --env-file=.env.local scripts/team-data-export.ts \
 rm -rf ~/team-data-export
 ```
 
+- It takes no lock: do not run it while the server's export runs (ask Claude to check first).
 - It refuses an `--out` inside any git repository, so the data cannot be committed by accident.
 - The local copy is readable only by you (folder 700, files 600). Delete it once uploaded.
 - Each CSV replaces the Drive file of the same name, so links to the files keep working. Files
