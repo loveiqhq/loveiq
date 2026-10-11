@@ -75,7 +75,10 @@ export async function GET(request: Request) {
   } catch (err) {
     status = "error";
     detail = err instanceof Error ? err.message : String(err);
-    logger.error({ err }, "brain-slack-media failed");
+    // The name only: this log is public (GitHub Actions on a public repository), and an error
+    // message can carry a database response with message text in it. The message itself is in
+    // cron_run, which is not public.
+    logger.error({ err: err instanceof Error ? err.name : "unknown" }, "brain-slack-media failed");
     return NextResponse.json({ ok: false, error: "Internal" }, { status: 500 });
   } finally {
     await checkSlow();

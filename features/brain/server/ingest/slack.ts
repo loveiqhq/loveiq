@@ -642,7 +642,7 @@ export async function ingestSlack(
   // survive in the corpus just because the denylist arrived after it did.
   await purgeDenylistedChannels();
 
-  const channels = (listed ?? []).filter(isIndexedChannel);
+  const channels = listed.filter(isIndexedChannel);
   // Membership is the boundary: the bot reads only channels somebody added it to,
   // and Slack enforces that regardless of scope.
   if (channels.length === 0) {

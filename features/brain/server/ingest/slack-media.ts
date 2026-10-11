@@ -715,7 +715,12 @@ async function describeFile(
   }
   const type = (file.filetype ?? "").toLowerCase();
   const saved = join(dir, `${kind}.${type}`);
-  writeFileSync(saved, got.bytes);
+  // A disk error (a full disk on a 50 MB recording) is this file's failure, not the run's.
+  try {
+    writeFileSync(saved, got.bytes);
+  } catch {
+    return fileFault("could not save the download");
+  }
 
   let prompt = `Describe the screenshot in ${saved}`;
   if (kind === "video") {
@@ -733,8 +738,13 @@ async function describeFile(
     // read error instead of the recording.
     const usable = frames.frames.filter((f) => existsSync(f.path) && statSync(f.path).size > 0);
     if (usable.length === 0) return fileFault("no frames");
-    // Only the frames stay where the model can read.
-    unlinkSync(saved);
+    // Only the frames stay where the model can read; if the recording cannot be removed,
+    // the file is not described rather than left beside them.
+    try {
+      unlinkSync(saved);
+    } catch {
+      return fileFault("could not remove the recording");
+    }
     prompt =
       `These ${usable.length} images are frames from one screen recording of ` +
       `${Math.round(frames.seconds)} seconds, in order, taken at ` +

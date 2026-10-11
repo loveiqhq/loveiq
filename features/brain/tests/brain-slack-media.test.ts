@@ -3,6 +3,20 @@ import { join } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Off unless a test turns it on: a full disk while a download is saved.
+const diskFull = vi.hoisted(() => ({ on: false }));
+vi.mock("node:fs", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...fs,
+    writeFileSync: (...a: Parameters<typeof fs.writeFileSync>) => {
+      if (diskFull.on && /\/(image|video)\.\w+$/.test(String(a[0]))) {
+        throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+      }
+      return fs.writeFileSync(...a);
+    },
+  };
+});
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -477,6 +491,29 @@ describe("describeSlackMedia", () => {
     const result = await describeSlackMedia(deps());
     expect(result).toMatchObject({ waiting: 0, described: 0, error: null });
     expect(downloaded).toEqual([]);
+  });
+
+  it("fails only the file a disk error hits, and goes on with the rest", async () => {
+    const a = png("FA", 2);
+    const b2 = png("FB", 1);
+    files = [a, b2];
+    share(a, "2.0");
+    share(b2, "1.0");
+    diskFull.on = true;
+    const result = await describeSlackMedia(
+      deps({
+        describe: async (dir: string, prompt: string) => {
+          prompts.push(prompt);
+          return described();
+        },
+      })
+    ).finally(() => {
+      diskFull.on = false;
+    });
+    // Both downloads were tried, neither could be saved, the model was never asked, and the
+    // run itself did not throw.
+    expect(result).toMatchObject({ described: 0, failed: 2 });
+    expect(prompts).toHaveLength(0);
   });
 
   it("leaves alone a message from another workspace, in a shared channel", async () => {
