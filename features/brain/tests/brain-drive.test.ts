@@ -19,12 +19,15 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 let delegatedToken: string | null = "delegated-token";
+/** A distinct token for the export's owner, when a test needs to tell logins apart. */
+let ownerToken: string | null = null;
 const delegatedFor: string[] = [];
 vi.mock("@shared/http/google-oauth", () => ({
   DRIVE_SCOPE: "drive",
   getGoogleAccessToken: vi.fn(async () => "test-token"),
   getDelegatedToken: vi.fn(async (subject: string) => {
     delegatedFor.push(subject);
+    if (ownerToken && subject === "ec@loveiq.org") return ownerToken;
     // A colleague whose token is refused is how the sweep gate gets exercised.
     if (refuseColleagueToken.has(subject)) return null;
     return delegatedToken;
@@ -102,6 +105,8 @@ let listOk = true;
 let teamFolders: Array<{ id: string }> = [];
 const folderChildren: Record<string, Array<{ id: string; mimeType?: string }>> = {};
 let teamFolderCheckFails = false;
+/** The login each team export lookup was made with. */
+const lookupAuth: string[] = [];
 /** The walk's own listing calls, not the team export check that runs before them. */
 const isWalkListing = (u: string) => {
   const q = decodeURIComponent(u);
@@ -141,7 +146,7 @@ let sheetValues: Array<{ values?: unknown[][] }> = [
 let sheetsApiFails = false;
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
-  fetchWithTimeout: vi.fn(async (url: string) => {
+  fetchWithTimeout: vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
     httpCalls.push(url);
     if (url.startsWith("https://sheets.googleapis.com/")) {
       if (sheetsApiFails) return { ok: false, status: 500, text: async () => "boom" };
@@ -159,6 +164,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       // never uses them up.
       const q = decodeURIComponent(url);
       if (q.includes("properties has")) {
+        lookupAuth.push(init?.headers?.Authorization ?? "");
         if (teamFolderCheckFails) return { ok: false, status: 403, text: async () => "denied" };
         return {
           ok: true,
@@ -407,6 +413,8 @@ describe("ingestDrive", () => {
     teamFolders = [];
     for (const k of Object.keys(folderChildren)) delete folderChildren[k];
     teamFolderCheckFails = false;
+    ownerToken = null;
+    lookupAuth.length = 0;
   });
 
   /**
@@ -442,6 +450,68 @@ describe("ingestDrive", () => {
     for (const id of ["ZZexportCsvZZ", "ZZmarcusAnalysisZZ"]) {
       expect(httpCalls.some((u) => u.includes(`/files/${id}`))).toBe(false);
     }
+  });
+
+  it("looks only at folders the export's owner holds, and skips an exported file anywhere", async () => {
+    // A file the export wrote, moved out of the folder: its own tag keeps it out.
+    files = [
+      FILE,
+      {
+        ...FILE,
+        id: "ZZmovedExportZZ",
+        name: "payment.csv",
+        mimeType: "text/csv",
+        properties: { loveiq_team_export_file: "production" },
+      },
+    ];
+    await ingestDrive(STAMP);
+    const lookup = decodeURIComponent(
+      httpCalls.find((u) => decodeURIComponent(u).includes("properties has"))!
+    );
+    // A stranger can share a tagged folder; nobody else can make one ec@ owns.
+    expect(lookup).toContain("'ec@loveiq.org' in owners");
+    expect(httpCalls.some((u) => u.includes("/files/ZZmovedExportZZ"))).toBe(false);
+    expect(httpCalls.some((u) => u.includes("/files/1AbCdEf"))).toBe(true);
+  });
+
+  it("stops the walk when the export folder is too deep to check, or the clock runs out", async () => {
+    teamFolders = [{ id: "ZZteamFolderZZ" }];
+    folderChildren.ZZteamFolderZZ = Array.from({ length: 60 }, (_, i) => ({
+      id: `ZZsub${i}ZZ`,
+      mimeType: "application/vnd.google-apps.folder",
+    }));
+    expect((await ingestDrive(STAMP)).skipped).toBe("team-export-check-failed");
+    let calls = 0;
+    expect((await ingestDrive(STAMP, () => ++calls > 2)).skipped).toMatch(
+      /team-export-check-failed|drive-time-budget/
+    );
+    expect(dbCalls.some((c) => c.method !== "GET" && c.path.includes("brain_chunk"))).toBe(false);
+  });
+
+  it("checks the export folder as its owner, so a colleague's file in it is covered too", async () => {
+    const before = process.env.GOOGLE_WORKSPACE_ADMIN;
+    process.env.GOOGLE_WORKSPACE_ADMIN = "admin@loveiq.org";
+    try {
+      ownerToken = "owner-token";
+      await ingestDrive(STAMP);
+      expect(delegatedFor).toContain("ec@loveiq.org");
+      expect(lookupAuth).toEqual(["Bearer owner-token"]);
+    } finally {
+      if (before === undefined) delete process.env.GOOGLE_WORKSPACE_ADMIN;
+      else process.env.GOOGLE_WORKSPACE_ADMIN = before;
+    }
+  });
+
+  it("still reaches the sweep when every listed file was the export's", async () => {
+    teamFolders = [{ id: "ZZteamFolderZZ" }];
+    folderChildren.ZZteamFolderZZ = [{ id: "ZZexportCsvZZ" }];
+    files = [{ ...FILE, id: "ZZexportCsvZZ", name: "user_profile.csv", mimeType: "text/csv" }];
+    const res = await ingestDrive(STAMP);
+    expect(res.skipped).toBeUndefined();
+    // The sweep is recorded before it runs; its own guards then decide what goes.
+    expect(dbCalls.some((c) => c.method !== "GET" && c.path.includes("brain_sweep_state"))).toBe(
+      true
+    );
   });
 
   it("stops the walk, indexing nothing, when the export folder cannot be checked", async () => {

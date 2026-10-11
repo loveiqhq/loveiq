@@ -8,7 +8,11 @@ import {
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { TEAM_FOLDER_TAG } from "@features/admin/server/team-export";
+import {
+  TEAM_EXPORT_OWNER,
+  TEAM_FILE_TAG,
+  TEAM_FOLDER_TAG,
+} from "@features/admin/server/team-export";
 import { splitBody } from "./notion";
 import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
 import { domainMailboxes } from "./gmail";
@@ -273,6 +277,7 @@ interface DriveFile {
   webViewLink?: string;
   owners?: Array<{ emailAddress?: string }>;
   shortcutDetails?: { targetId?: string; targetMimeType?: string };
+  properties?: Record<string, string>;
 }
 
 /**
@@ -361,7 +366,7 @@ async function listDocs(
     );
     const fields = encodeURIComponent(
       "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink," +
-        "owners(emailAddress),shortcutDetails(targetId,targetMimeType))"
+        "owners(emailAddress),shortcutDetails(targetId,targetMimeType),properties)"
     );
     const res = await driveGet(
       token,
@@ -503,7 +508,7 @@ export async function colleagueDocuments(
     );
     const fields = encodeURIComponent(
       "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink," +
-        "owners(emailAddress),shortcutDetails(targetId,targetMimeType))"
+        "owners(emailAddress),shortcutDetails(targetId,targetMimeType),properties)"
     );
     /**
      * PAGED, which the meeting-note version did not need to be. One colleague owns
@@ -615,7 +620,7 @@ async function resolveShortcuts(
     const res = await driveGet(
       token,
       `/files/${encodeURIComponent(targetId)}` +
-        `?fields=id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(emailAddress)` +
+        `?fields=id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(emailAddress),properties` +
         `&supportsAllDrives=true`
     );
     if (!res.ok) {
@@ -1241,18 +1246,27 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
  * search slowed under the extra rows.
  *
  * Skipped like SKIP_FILE_IDS, so the files look absent and the sweep removes what was
- * indexed. Null when the folder cannot be checked: the walk then stops, because indexing
- * the export by accident is worse than a missed hour.
+ * indexed. Only folders the export's owner holds: anyone can share a folder carrying the same
+ * tag (this repository is public), and following theirs would hand a stranger the walk's
+ * clock. Bounded in time and size. Null when the folder cannot be checked within those
+ * bounds: the walk then stops, because indexing the export by accident is worse than a
+ * missed hour. Read with the walk's own login: one that cannot see the folder cannot see
+ * its files either, and every exported file also carries TEAM_FILE_TAG for the rest.
  */
-export async function teamExportFileIds(token: string): Promise<Set<string> | null> {
+const MAX_EXPORT_FOLDERS = 50;
+export async function teamExportFileIds(
+  token: string,
+  isOutOfTime: () => boolean = () => false
+): Promise<Set<string> | null> {
   const list = async (q: string): Promise<DriveFile[] | null> => {
     const out: DriveFile[] = [];
     let pageToken: string | undefined;
-    do {
+    for (let page = 0; page < MAX_PAGES; page++) {
+      if (isOutOfTime()) return null;
       const res = await driveGet(
         token,
         `/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent("nextPageToken,files(id,mimeType)")}` +
-          `&pageSize=${PAGE_SIZE}&includeItemsFromAllDrives=true&supportsAllDrives=true` +
+          `&pageSize=${PAGE_SIZE}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!res.ok) return null;
@@ -1263,13 +1277,13 @@ export async function teamExportFileIds(token: string): Promise<Set<string> | nu
       if (!json) return null;
       out.push(...(json.files ?? []));
       pageToken = json.nextPageToken;
-    } while (pageToken);
-    return out;
+      if (!pageToken) return out;
+    }
+    return null;
   };
-  // Any owner: for leaving files OUT, a folder someone else tagged is no risk.
   const folders = await list(
     `properties has { key='${TEAM_FOLDER_TAG.key}' and value='${TEAM_FOLDER_TAG.value}' } ` +
-      `and mimeType='${FOLDER_MIME}' and trashed=false`
+      `and mimeType='${FOLDER_MIME}' and '${TEAM_EXPORT_OWNER}' in owners and trashed=false`
   );
   if (!folders) return null;
   const ids = new Set<string>();
@@ -1278,6 +1292,7 @@ export async function teamExportFileIds(token: string): Promise<Set<string> | nu
   while (queue.length) {
     const folder = queue.shift()!;
     if (seen.has(folder)) continue;
+    if (seen.size >= MAX_EXPORT_FOLDERS) return null;
     seen.add(folder);
     const children = await list(`'${folder.replace(/'/g, "\\'")}' in parents and trashed=false`);
     if (!children) return null;
@@ -1289,6 +1304,10 @@ export async function teamExportFileIds(token: string): Promise<Set<string> | nu
   }
   return ids;
 }
+
+/** A file the export wrote, wherever it is now: moved out of the folder, or the tag gone. */
+export const isTeamExportFile = (f: DriveFile) =>
+  f.properties?.[TEAM_FILE_TAG.key] === TEAM_FILE_TAG.value;
 
 async function driveToken(oidcToken?: string | null): Promise<string | null> {
   const admin = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim();
@@ -1396,7 +1415,13 @@ export async function ingestDrive(
   }
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
 
-  const teamExport = await teamExportFileIds(token);
+  // As the export's owner when that login can be made: the owner sees every file in the
+  // folder, whoever made it, so what the colleague walks list is covered too. Otherwise the
+  // walk's own login, which then cannot see the folder's files either.
+  const ownerToken = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim()
+    ? await getDelegatedToken(TEAM_EXPORT_OWNER, DRIVE_SCOPE, Date.now(), oidcToken)
+    : null;
+  const teamExport = await teamExportFileIds(ownerToken ?? token, isOutOfTime);
   if (!teamExport) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "team-export-check-failed" };
   }
@@ -1422,6 +1447,7 @@ export async function ingestDrive(
       (f) =>
         !SKIP_FILE_IDS.has(f.id ?? "") &&
         !teamExport.has(f.id ?? "") &&
+        !isTeamExportFile(f) &&
         !isVendorBilling(f.name, f.mimeType) &&
         !isJobApplication(f.name) &&
         !isLegalInstrument(f.name)
@@ -1455,7 +1481,9 @@ export async function ingestDrive(
   // account sees only what somebody shared with it, so an empty list on a fresh
   // setup is the expected state — reported as skipped so the ops alert does not
   // fire every night for a source nobody has enabled yet.
-  if (listed.items.length === 0) {
+  // Nothing LISTED, not nothing left after the exclusions: a walk whose every file was
+  // excluded must still reach the sweep, or what was indexed before stays forever.
+  if (resolved.docs.length === 0) {
     return {
       source: SOURCE,
       rows: 0,

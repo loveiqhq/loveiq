@@ -617,6 +617,13 @@ export async function buildExport(
 
 /** The Drive property the server finds the team's folder by, so renaming the folder is safe. */
 export const TEAM_FOLDER_TAG = { key: "loveiq_team_export", value: "production" } as const;
+/**
+ * The Drive property every exported file carries, so Jarvis's Drive walk can leave a file out
+ * wherever it ends up: moved out of the folder, or the folder's tag gone.
+ */
+export const TEAM_FILE_TAG = { key: "loveiq_team_export_file", value: "production" } as const;
+/** The account that owns the folder and writes the export. */
+export const TEAM_EXPORT_OWNER = "ec@loveiq.org";
 
 export function folderUrl(id: string): string {
   return `https://drive.google.com/drive/folders/${id}`;
@@ -852,8 +859,13 @@ async function driveUpload(
       headers: { ...auth, "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(
         existing
-          ? { writersCanShare: false }
-          : { name: file.name, parents: [folderId], writersCanShare: false }
+          ? { writersCanShare: false, properties: { [TEAM_FILE_TAG.key]: TEAM_FILE_TAG.value } }
+          : {
+              name: file.name,
+              parents: [folderId],
+              writersCanShare: false,
+              properties: { [TEAM_FILE_TAG.key]: TEAM_FILE_TAG.value },
+            }
       ),
       timeoutMs: 15_000,
     },

@@ -23,6 +23,12 @@ its older versions, so the first masked copy removes the unmasked one from Drive
   one and remove it from the old one, as `ec@`: a Drive `files.update` with
   `{"properties": {"loveiq_team_export": "production"}}` (or `null` to remove it). The server
   writes only to a tagged folder `ec@` owns, and stops if there is not exactly one.
+- Every exported file also carries its own Drive property, `loveiq_team_export_file=production`.
+- **Jarvis never indexes it.** Its Drive walk skips every file under the tagged folder at any
+  depth (whoever owns it) and any file carrying the per-file property, wherever it is moved.
+  If the folder cannot be checked, that hour's walk stops instead (`team-export-check-failed`).
+  From 10 to 11 Oct 2026 the walk did index the export (37,881 chunks); removing those from
+  the index awaits Eman's go, because Jarvis's own sweep will not delete most of a source.
 - To add or remove a person, the owner changes the folder's sharing. Nothing in code holds the
   list.
 - The README in the folder lists every file, its row count and when it was made.
