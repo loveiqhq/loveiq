@@ -885,7 +885,7 @@ async function driveUpload(
   const id = existing ?? ((await put.json()) as { id?: string }).id;
   if (!id) throw new Error(`Drive did not say which file ${file.name} became`);
   const meta = await drive(
-    `https://www.googleapis.com/drive/v3/files/${id}?fields=headRevisionId,md5Checksum`,
+    `https://www.googleapis.com/drive/v3/files/${id}?fields=${["headRevisionId", "md5Checksum"].join(",")}`,
     { headers: auth, timeoutMs: 15_000 },
     `read of ${file.name}`
   );
