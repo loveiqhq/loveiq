@@ -450,11 +450,14 @@ export async function checkNotionReach(
   // ---- @-mentions the stored text can only show as "Untitled" -----------------
   const untitled = (
     await pagedRows(
-      `/rest/v1/brain_chunk?select=source,source_id,title,body,period_end` +
+      `/rest/v1/brain_chunk?select=source,source_id,title,body,period_end,meta` +
         `&source=eq.notion&fts=fts(english).untitled&order=period_end.desc.nullslast,id.asc`,
       1000
     )
-  ).filter((r) => /\bUntitled\b/.test(r.body ?? ""));
+  )
+    // The same window as links: a finished task's mentions age like a message's.
+    .filter((r) => isLiving(r) || (r.period_end ?? "") >= since)
+    .filter((r) => /\bUntitled\b/.test(r.body ?? ""));
   const mentionPages = new Map<string, CorpusRow>();
   for (const row of untitled) {
     const id = pageIdOf(row.source_id);
@@ -495,7 +498,8 @@ export async function checkNotionReach(
       }
       const budget = { left: 40 };
       await attachChildren(token, blocks, 0, budget, mentionsOutOfTime);
-      if (cursor || budget.left <= 0) mentionsPartial = true;
+      // More blocks than read, the child budget spent, or the clock cut the walk short.
+      if (cursor || budget.left <= 0 || mentionsOutOfTime()) mentionsPartial = true;
       for (const id of notionIdsInBlocks(blocks)) {
         if (id !== pageId) note(id, null, { where: whereOf(row), day: row.period_end });
       }
@@ -651,8 +655,11 @@ export async function checkNotionReach(
     .slice(0, 3)
     .map((id) => gaps.get(id)?.hint ?? "untitled")
     .join(", ");
-  // Never "all readable" while some went unasked or unanswered.
-  const notChecked = unknown + unreached;
+  // Never "all readable" while some went unasked or unanswered (linked ones: a reported
+  // page nobody links any more is not "more").
+  const notChecked = [...referenced].filter(
+    (id) => reach.get(id) !== "missing" && reach.get(id) !== "visible"
+  ).length;
   const summary = listed.length
     ? `${plural(listed.length, "linked Notion page")} Jarvis cannot open (${names}${listed.length > 3 ? ", …" : ""})` +
       (notChecked ? `; ${notChecked} more could not be checked` : "")

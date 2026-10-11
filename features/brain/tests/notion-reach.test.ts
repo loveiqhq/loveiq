@@ -710,6 +710,37 @@ describe("checkNotionReach", () => {
     expect(recorded[0]!.detail).toContain("linked in KPI: Traffic");
   });
 
+  it("re-reads a living page's mentions but not a finished task's from months ago", async () => {
+    untitledRows = [
+      row({
+        source: "notion",
+        source_id: `task:${A}`,
+        body: "Owner: Untitled",
+        period_end: "2026-03-01",
+        meta: { state: "done" },
+      }),
+      row({
+        source: "notion",
+        source_id: `page:${F}`,
+        body: "See Untitled",
+        period_end: "2026-03-01",
+      }),
+    ];
+    const r = await checkNotionReach(NOW);
+    expect(notionPaths).not.toContain(`/pages/${A}`);
+    expect(notionPaths).toContain(`/pages/${F}`);
+    expect(r.mentionTotal).toBe(1);
+  });
+
+  it("does not count a reported page nobody links any more as one it could not check", async () => {
+    previousOpen = [C]; // aged out: nobody links it now
+    linkRows = [row({ body: `https://www.notion.so/${flat(A)}` })];
+    pageStatus = { [C]: 429 };
+    const r = await checkNotionReach(NOW);
+    expect(r.summary).toBe("the one linked Notion page is readable");
+    expect(r.problem).toBeNull();
+  });
+
   it("keeps a reported page referenced when its mentions could not be re-read today", async () => {
     // D was reported because page A mentions it. A cannot be read today: D must stay
     // "still", not silently drop off and come back as "new" tomorrow.
