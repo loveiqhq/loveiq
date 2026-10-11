@@ -805,6 +805,16 @@ describe("checkNotionReach", () => {
     expect(recorded[0]!.meta?.reach_open).toEqual([]);
   });
 
+  it("keeps Berlin days: 00:30 on a Berlin Monday is Monday, though UTC still says Sunday", async () => {
+    linkRows = [row({ body: `https://www.notion.so/Playbook-${flat(C)}` })];
+    pageStatus = { [C]: 404 };
+    previousOpen = [C];
+    previousSeen = { [C]: "2026-10-11" };
+    const r = await checkNotionReach(new Date("2026-10-11T22:30:00Z"));
+    expect(r.noticed).toBe(true); // the Monday reminder
+    expect(recorded[0]!.meta?.reach_seen).toEqual({ [C]: "2026-10-12" });
+  });
+
   it("records today as the day a page was seen linked", async () => {
     linkRows = [row({ body: `https://www.notion.so/${flat(C)}` })];
     pageStatus = { [C]: 404 };

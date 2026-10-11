@@ -36,6 +36,7 @@ vi.mock("@features/brain/server/notion-reach", () => ({
 }));
 
 import { GET } from "@/app/api/cron/brain-notion-reach/route";
+import { reportingDay } from "@shared/time/reporting-day";
 
 const call = (auth = "Bearer s") =>
   GET(
@@ -136,7 +137,7 @@ describe("GET /api/cron/brain-notion-reach", () => {
     await call();
     const [key, scope, day] = mockClaim.mock.calls[0] as unknown as [string, string, string];
     expect(key).toMatch(/^brain_notion_reach:[0-9a-f]{10}$/);
-    expect([scope, day]).toEqual(["day", new Date().toISOString().slice(0, 10)]);
+    expect([scope, day]).toEqual(["day", reportingDay(new Date())]);
     const post = mockSlack.mock.calls[0]![0] as { channel: string; text: string };
     expect(post.channel).toBe("brain");
     expect(post.text).toContain("*Jarvis cannot open 1 Notion page the team links to*");

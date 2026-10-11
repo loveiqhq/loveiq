@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import { isReportingMonday, reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { attachChildren, notionGet, notionPost } from "./ingest/notion";
 import { chunkPage, MAX_BODY_CHARS } from "./ingest/upsert";
 import { NOTICE_SOURCE, recordNotice, type NoticeInput } from "./notice";
@@ -368,6 +369,11 @@ function statusOf(err: unknown): number {
   return Number(/failed \((\d{3})\)/.exec(String(err))?.[1] ?? 0);
 }
 
+/** The reporting day `n` days before `day`; from noon, so a DST night cannot tip it. */
+function daysBefore(day: string, n: number): string {
+  return reportingDay(new Date(reportingDayStart(day).getTime() + 12 * 3_600_000 - n * 86_400_000));
+}
+
 /** A token Notion refuses outright is not a page problem: it fails the run, loudly. */
 function rethrowIfTokenRefused(err: unknown): void {
   if (statusOf(err) === 401) throw err;
@@ -439,12 +445,11 @@ export async function checkNotionReach(
 ): Promise<ReachResult> {
   const token = process.env.NOTION_TOKEN;
   if (!token) throw new Error("NOTION_TOKEN is unset");
-  const day = now.toISOString().slice(0, 10);
+  // Berlin days, like every dated record here (shared/time/reporting-day.ts).
+  const day = reportingDay(now);
   /** A per-day order: stable within a day, different the next, so a cap never skips the same ones. */
   const shuffle = (id: string) => createHash("sha1").update(`${day}:${id}`).digest("hex");
-  const since = new Date(now.getTime() - REACH_LOOKBACK_DAYS * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
+  const since = daysBefore(day, REACH_LOOKBACK_DAYS);
 
   // ---- who links to what --------------------------------------------------
   const gaps = new Map<string, Gap>();
@@ -677,7 +682,7 @@ export async function checkNotionReach(
    * was last seen linked: long enough for the per-day order to come back to its page,
    * short enough that a dead link still ages out. Held pages are not listed as linked.
    */
-  const holdFrom = new Date(now.getTime() - HOLD_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const holdFrom = daysBefore(day, HOLD_DAYS);
   const heldOver =
     mentionsPartial || listingPartial
       ? [...previous].filter(
@@ -696,7 +701,7 @@ export async function checkNotionReach(
   const linked = referenced.size;
   const listedOpen = [...referenced].filter((id) => databases.has(id)).length;
 
-  const due = fresh.length > 0 || fixed.length > 0 || (now.getUTCDay() === 1 && listed.length > 0);
+  const due = fresh.length > 0 || fixed.length > 0 || (isReportingMonday(now) && listed.length > 0);
   const notice = due
     ? buildReachNotice({
         gaps,

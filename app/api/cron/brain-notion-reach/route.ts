@@ -22,6 +22,7 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import logger from "@shared/observability/logger";
+import { reportingDay } from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
     if (result.notice) {
       // The post is what a person sees; the notice is the second sink beside it
       // (notice.ts). One post per finding per day, however often the cron is re-run.
-      const day = new Date(startedAtMs).toISOString().slice(0, 10);
+      const day = reportingDay(new Date(startedAtMs));
       const hash = createHash("sha1").update(result.notice.headline).digest("hex").slice(0, 10);
       const key = `brain_notion_reach:${hash}`;
       if (await tryClaimSlackAlert(key, "day", day)) {
