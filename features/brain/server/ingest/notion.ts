@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { DROPOFF_DATA_DATABASE_ID } from "@features/admin/server/dropoff-notion";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   chunkPage,
@@ -635,6 +636,23 @@ const ALWAYS_EXCLUDED = [
   "notion: hiring pipeline",
 ];
 
+/**
+ * Databases a job writes numbers into, not pages people write. The kpi-dropoff job keeps
+ * one row per week, question and segment in "Survey drop-off data", about 430 more a week.
+ * Indexing them would put hundreds of near-identical figures in front of every search
+ * about a survey question, and a table past MAX_PAGES x PAGE_SIZE rows marks every crawl
+ * incomplete, which stops the sweep for all of Notion. Their rows are never read; the
+ * database stays a WALKED scope with none, so anything stored from it is swept. The KPI
+ * page itself, with its summary, is indexed as usual.
+ */
+const GENERATED_DATABASES = new Set(
+  [DROPOFF_DATA_DATABASE_ID].map((id) => id.replace(/-/g, "").toLowerCase())
+);
+
+export function isGeneratedDatabase(dbId: string): boolean {
+  return GENERATED_DATABASES.has(dbId.replace(/-/g, "").toLowerCase());
+}
+
 /** Titles the team has chosen to keep out, lowercased, from NOTION_EXCLUDE_TITLES. */
 export function excludedTitles(): string[] {
   return [
@@ -696,6 +714,7 @@ export async function ingestNotion(
       crawlTruncated = true;
       break;
     }
+    if (isGeneratedDatabase(dbId)) continue;
     const rowResult = await databaseRows(token, dbId, isOutOfTime);
     if (!rowResult.complete) crawlTruncated = true;
     for (const raw of rowResult.items) candidates.push({ raw, dbTitle });
