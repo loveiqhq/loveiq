@@ -49,21 +49,49 @@ function headers(): Record<string, string> {
   };
 }
 
+/**
+ * Notion allows an average of three requests a second and answers 429 past it, before
+ * doing anything. A 409 ("Conflict occurred while saving") is a write that collided with
+ * another and was rolled back: seen 2026-10-12 when parallel rows added the same new
+ * select option. Both are safe to retry. A 5xx may come after the write happened, so only
+ * a caller whose request is idempotent asks for those to be retried.
+ */
+const RATE_LIMIT_RETRIES = 4;
+const SERVER_ERROR_RETRIES = 2;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function notion(
   path: string,
-  init: { method?: string; body?: unknown } = {}
+  init: { method?: string; body?: unknown; idempotent?: boolean } = {}
 ): Promise<Record<string, unknown>> {
-  const res = await fetchWithTimeout(`${NOTION_API}${path}`, {
-    method: init.method ?? "GET",
-    headers: headers(),
-    ...(init.body ? { body: JSON.stringify(init.body) } : {}),
-    timeoutMs: 15_000,
-  });
-  const json = (await res.json()) as Record<string, unknown>;
-  if (!res.ok) {
-    throw new Error(String(json.message ?? `notion_${res.status}`));
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchWithTimeout(`${NOTION_API}${path}`, {
+      method: init.method ?? "GET",
+      headers: headers(),
+      ...(init.body ? { body: JSON.stringify(init.body) } : {}),
+      timeoutMs: 15_000,
+    });
+    let json: Record<string, unknown> | null = null;
+    try {
+      json = (await res.json()) as Record<string, unknown>;
+    } catch {
+      // A gateway's HTML error page; the status still says what happened.
+    }
+    if (res.ok) {
+      if (!json) throw new Error(`notion_unreadable_${res.status}`);
+      return json;
+    }
+    const retry =
+      res.status === 429 || res.status === 409
+        ? attempt < RATE_LIMIT_RETRIES
+        : init.idempotent === true && res.status >= 500 && attempt < SERVER_ERROR_RETRIES;
+    if (!retry) throw new Error(String(json?.message ?? `notion_${res.status}`));
+    const after = Number(res.headers?.get?.("retry-after"));
+    await sleep(
+      Number.isFinite(after) && after > 0 ? Math.min(after, 30) * 1000 : 1000 * (attempt + 1)
+    );
   }
-  return json;
 }
 
 type RawProp = { type: string } & Record<string, { options?: Array<{ name: string }> }>;
@@ -378,22 +406,31 @@ export async function createNotionPage(input: {
   };
 }
 
-/** Every row of one database, a page of 100 at a time, as Notion returns them. */
+/**
+ * Every row of one database (or those a Notion `filter` keeps), a page of 100 at a time,
+ * as Notion returns them. More than `maxRows` is refused, never returned in part.
+ */
 export async function queryNotionDatabase(
-  databaseId: string
+  databaseId: string,
+  opts: { filter?: Record<string, unknown>; maxRows?: number } = {}
 ): Promise<Array<{ id: string; url?: string; properties: Record<string, unknown> }>> {
   const rows: Array<{ id: string; url?: string; properties: Record<string, unknown> }> = [];
   let cursor: string | undefined;
-  for (let page = 0; page < 50; page++) {
+  const pages = Math.ceil((opts.maxRows ?? 5000) / 100);
+  for (let page = 0; page < pages; page++) {
     const res = await notion(`/databases/${databaseId}/query`, {
       method: "POST",
-      body: { page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) },
+      body: {
+        page_size: 100,
+        ...(opts.filter ? { filter: opts.filter } : {}),
+        ...(cursor ? { start_cursor: cursor } : {}),
+      },
+      idempotent: true,
     });
     rows.push(...((res.results as typeof rows | undefined) ?? []));
     if (!res.has_more) return rows;
     cursor = String(res.next_cursor);
   }
-  // 5,000 rows is far past any database here; a partial read is refused, not returned.
   throw new Error(`notion_query_too_large:${databaseId}`);
 }
 
@@ -402,7 +439,24 @@ export async function updateNotionPage(
   pageId: string,
   properties: Record<string, unknown>
 ): Promise<void> {
-  await notion(`/pages/${pageId}`, { method: "PATCH", body: { properties } });
+  await notion(`/pages/${pageId}`, { method: "PATCH", body: { properties }, idempotent: true });
+}
+
+/** A new row in a database, its properties in Notion's own shape. Returns its id. */
+export async function createDatabaseRow(
+  databaseId: string,
+  properties: Record<string, unknown>
+): Promise<string> {
+  const page = await notion("/pages", {
+    method: "POST",
+    body: { parent: { database_id: databaseId }, properties },
+  });
+  return String(page.id ?? "");
+}
+
+/** Move a page to the trash; Notion keeps it there for 30 days. */
+export async function archiveNotionPage(pageId: string): Promise<void> {
+  await notion(`/pages/${pageId}`, { method: "PATCH", body: { archived: true }, idempotent: true });
 }
 
 /**
@@ -441,6 +495,78 @@ function plainCaption(block: Record<string, unknown>): string {
   return (image?.caption ?? []).map((t) => t.plain_text ?? "").join("");
 }
 
+function plainCalloutText(block: Record<string, unknown>): string {
+  const callout = block.callout as { rich_text?: Array<{ plain_text?: string }> } | undefined;
+  return (callout?.rich_text ?? []).map((t) => t.plain_text ?? "").join("");
+}
+
+/** The first top-level block of a page that `isMine` recognises. */
+async function findPageBlock(
+  pageId: string,
+  isMine: (block: Record<string, unknown>) => boolean
+): Promise<Record<string, unknown> | undefined> {
+  let cursor: string | undefined;
+  do {
+    const page = await notion(
+      `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`,
+      { idempotent: true }
+    );
+    const mine = ((page.results ?? []) as Array<Record<string, unknown>>).find(isMine);
+    if (mine) return mine;
+    cursor = page.has_more ? String(page.next_cursor) : undefined;
+  } while (cursor);
+  return undefined;
+}
+
+/** A run of text in a callout, styled the way Notion styles it. */
+export interface CalloutSpan {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+/**
+ * Put a callout on a page, REPLACING the text of the one this job put there before,
+ * found by a marker in its text, so the callout stays where people placed it. Lines
+ * are joined with line breaks inside the one callout. Every other block is left
+ * alone. The first run appends it at the end.
+ */
+export async function upsertMarkedCallout(
+  pageId: string,
+  opts: { marker: string; lines: CalloutSpan[][]; emoji: string }
+): Promise<"updated" | "created"> {
+  const richText = opts.lines.flatMap((line, i) => [
+    ...(i > 0 ? [{ type: "text", text: { content: "\n" } }] : []),
+    ...line.map((span) => ({
+      type: "text",
+      text: { content: span.text.slice(0, MAX_TEXT_PER_BLOCK) },
+      annotations: { bold: span.bold === true, italic: span.italic === true },
+    })),
+  ]);
+  if (!richText.some((t) => t.text.content.includes(opts.marker))) {
+    // Without the marker tomorrow's run cannot find this callout and adds another.
+    throw new Error("upsertMarkedCallout: the text must carry the marker");
+  }
+  const callout = { rich_text: richText, icon: { type: "emoji", emoji: opts.emoji } };
+  const mine = await findPageBlock(
+    pageId,
+    (b) => b.type === "callout" && plainCalloutText(b).includes(opts.marker)
+  );
+  if (mine) {
+    await notion(`/blocks/${String(mine.id)}`, {
+      method: "PATCH",
+      body: { callout },
+      idempotent: true,
+    });
+    return "updated";
+  }
+  await notion(`/blocks/${pageId}/children`, {
+    method: "PATCH",
+    body: { children: [{ object: "block", type: "callout", callout }] },
+  });
+  return "created";
+}
+
 /**
  * Put an uploaded image on a page, REPLACING the one this job put there before,
  * found by a marker in its caption. Every other block is left alone: people
@@ -450,16 +576,10 @@ export async function upsertMarkedImage(
   pageId: string,
   opts: { marker: string; caption: string; heading: string; fileUploadId: string }
 ): Promise<"updated" | "created"> {
-  let mine: Record<string, unknown> | undefined;
-  let cursor: string | undefined;
-  do {
-    const page = await notion(
-      `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`
-    );
-    const results = (page.results ?? []) as Array<Record<string, unknown>>;
-    mine = results.find((b) => b.type === "image" && plainCaption(b).includes(opts.marker));
-    cursor = page.has_more ? String(page.next_cursor) : undefined;
-  } while (!mine && cursor);
+  const mine = await findPageBlock(
+    pageId,
+    (b) => b.type === "image" && plainCaption(b).includes(opts.marker)
+  );
 
   const image = {
     file_upload: { id: opts.fileUploadId },

@@ -107,6 +107,9 @@
     "app/api/cron/brain-mine/route.ts": {
       "maxDuration": 300
     },
+    "app/api/cron/kpi-dropoff/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/stripe/webhook/route.ts": {
       "maxDuration": 60
     },

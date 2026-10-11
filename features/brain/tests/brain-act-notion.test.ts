@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -9,8 +9,10 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 }));
 
 import {
+  archiveNotionPage,
   buildProperties,
   clearNotionCache,
+  createDatabaseRow,
   createNotionPage,
   NotionTargetError,
   queryNotionDatabase,
@@ -18,6 +20,7 @@ import {
   toBlocks,
   updateNotionPage,
   uploadNotionPng,
+  upsertMarkedCallout,
   upsertMarkedImage,
 } from "@features/brain/server/act/notion";
 
@@ -431,5 +434,197 @@ describe("the KPI chart image", () => {
     expect(children.map((c: { type: string }) => c.type)).toEqual(["heading_3", "image"]);
     expect(children[1].image.file_upload).toEqual({ id: "up-3" });
     expect(children[1].image.type).toBe("file_upload");
+  });
+});
+
+describe("Notion's limits: 429 and 409 are retried, a 5xx only when it is safe", () => {
+  const reply = (body: unknown, status = 200, retryAfter: string | null = null) => ({
+    ok: status < 400,
+    status,
+    headers: { get: (k: string) => (k === "retry-after" ? retryAfter : null) },
+    json: async () => body,
+  });
+
+  beforeEach(() => {
+    process.env.NOTION_TOKEN = "secret_test";
+    mockFetch.mockReset();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("waits out a 429 for as long as Notion asks, then goes on", async () => {
+    mockFetch
+      .mockResolvedValueOnce(reply({ message: "rate limited" }, 429, "2"))
+      .mockResolvedValueOnce(reply({ id: "p1" }));
+    const done = createDatabaseRow("db1", { Name: { title: [] } });
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await done).toBe("p1");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a write that collided with another (409)", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        reply({ message: "Conflict occurred while saving. Please try again." }, 409)
+      )
+      .mockResolvedValueOnce(reply({ id: "p2" }));
+    const done = createDatabaseRow("db1", {});
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await done).toBe("p2");
+  });
+
+  it("retries a 502 on an update, but never on a create that may already have happened", async () => {
+    mockFetch.mockResolvedValueOnce(reply({}, 502)).mockResolvedValueOnce(reply({ id: "p1" }));
+    const updated = updateNotionPage("p1", {});
+    await vi.advanceTimersByTimeAsync(1000);
+    await updated;
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    mockFetch.mockReset().mockResolvedValueOnce(reply({ message: "bad gateway" }, 502));
+    await expect(createDatabaseRow("db1", {})).rejects.toThrow("bad gateway");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after four rate limits in a row", async () => {
+    mockFetch.mockResolvedValue(reply({ message: "rate limited" }, 429));
+    const failed = expect(createDatabaseRow("db1", {})).rejects.toThrow("rate limited");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await failed;
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+  });
+
+  it("reports a gateway's HTML error page by its status", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      headers: { get: () => null },
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    });
+    await expect(createDatabaseRow("db1", {})).rejects.toThrow("notion_400");
+  });
+});
+
+describe("rows of the KPI data table", () => {
+  beforeEach(() => {
+    process.env.NOTION_TOKEN = "secret_test";
+    mockFetch.mockReset();
+  });
+
+  it("queries with a filter, and refuses a read longer than it allows", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [{ id: "a", properties: {} }],
+        has_more: true,
+        next_cursor: "n",
+      }),
+    });
+    const filter = { property: "Week", date: { on_or_after: "2026-09-21" } };
+    await expect(queryNotionDatabase("db1", { filter, maxRows: 200 })).rejects.toThrow(
+      /notion_query_too_large/
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(String((mockFetch.mock.calls[1]![1] as { body: string }).body));
+    expect(body).toEqual({ page_size: 100, filter, start_cursor: "n" });
+  });
+
+  it("creates a row under the database and archives one by id", async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: "row-1" }) });
+    expect(await createDatabaseRow("db1", { Key: { rich_text: [] } })).toBe("row-1");
+    const [createUrl, create] = mockFetch.mock.calls[0] as [
+      string,
+      { method: string; body: string },
+    ];
+    expect(createUrl).toBe("https://api.notion.com/v1/pages");
+    expect(JSON.parse(create.body)).toEqual({
+      parent: { database_id: "db1" },
+      properties: { Key: { rich_text: [] } },
+    });
+    await archiveNotionPage("row-1");
+    const [archiveUrl, archive] = mockFetch.mock.calls[1] as [
+      string,
+      { method: string; body: string },
+    ];
+    expect(archiveUrl).toBe("https://api.notion.com/v1/pages/row-1");
+    expect(archive.method).toBe("PATCH");
+    expect(JSON.parse(archive.body)).toEqual({ archived: true });
+  });
+});
+
+describe("the KPI summary callout", () => {
+  type Call = [string, { method?: string; body?: unknown }];
+  const calls = () => mockFetch.mock.calls as Call[];
+  const json = (body: unknown) => ({ ok: true, json: async () => body });
+  const callout = (id: string, text: string) => ({
+    id,
+    type: "callout",
+    callout: { rich_text: [{ plain_text: text }] },
+  });
+  const lines = [
+    [{ text: "Last full week: ", bold: true }, { text: "314 people." }],
+    [{ text: "Refreshed by the kpi-dropoff job.", italic: true }],
+  ];
+
+  beforeEach(() => {
+    process.env.NOTION_TOKEN = "secret_test";
+    mockFetch.mockReset();
+  });
+
+  it("rewrites only the callout carrying its marker, where it stands", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        json({
+          results: [
+            callout("theirs", "A note Marcus wrote"),
+            callout("ours", "Old text, kpi-dropoff job"),
+          ],
+          has_more: false,
+        })
+      )
+      .mockResolvedValueOnce(json({ id: "ours" }));
+    expect(
+      await upsertMarkedCallout("page-1", { marker: "kpi-dropoff job", lines, emoji: "📉" })
+    ).toBe("updated");
+    const [url, init] = calls()[1]!;
+    expect(url).toBe("https://api.notion.com/v1/blocks/ours");
+    expect(init.method).toBe("PATCH");
+    const body = JSON.parse(String(init.body)).callout;
+    expect(body.icon).toEqual({ type: "emoji", emoji: "📉" });
+    expect(body.rich_text.map((t: { text: { content: string } }) => t.text.content)).toEqual([
+      "Last full week: ",
+      "314 people.",
+      "\n",
+      "Refreshed by the kpi-dropoff job.",
+    ]);
+    expect(body.rich_text[0].annotations).toEqual({ bold: true, italic: false });
+    expect(body.rich_text[3].annotations).toEqual({ bold: false, italic: true });
+    expect(calls().some(([u]) => u.includes("/blocks/theirs"))).toBe(false);
+  });
+
+  it("adds the callout at the end the first time", async () => {
+    mockFetch
+      .mockResolvedValueOnce(json({ results: [], has_more: false }))
+      .mockResolvedValueOnce(json({}));
+    expect(
+      await upsertMarkedCallout("page-1", { marker: "kpi-dropoff job", lines, emoji: "📉" })
+    ).toBe("created");
+    const [url, init] = calls()[1]!;
+    expect(url).toBe("https://api.notion.com/v1/blocks/page-1/children");
+    expect(JSON.parse(String(init.body)).children[0].type).toBe("callout");
+  });
+
+  it("refuses text without the marker, which tomorrow's run could not find again", async () => {
+    await expect(
+      upsertMarkedCallout("page-1", {
+        marker: "kpi-dropoff job",
+        lines: [[{ text: "no marker" }]],
+        emoji: "📉",
+      })
+    ).rejects.toThrow("marker");
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
