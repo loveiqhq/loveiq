@@ -1275,11 +1275,20 @@ export const trackDeadClick = (params: {
 }) => track("dead_click", params);
 
 /**
+ * What `cta_seen` names: a locked report chapter's unlock offer, or the landing hero's media
+ * in each arm of the landing test (the presenter video or question 1). The arm is not a
+ * param: it rides on `landing_variant`.
+ */
+export type CtaSeen = "locked_chapter" | "hero_video" | "hero_card";
+
+/**
  * A call to action came into view: half of it inside the viewport, the first time on this
  * page (features/analytics/useCtaSeen.ts). PostHog only. `locked_card_price_shown` cannot
  * answer "did they see it": it fires when a locked report loads, wherever the card sits.
+ * On the landing it is the denominator for "of the people who saw it": on a phone the hero
+ * media sits below the first screen, so a page view does not mean it was seen.
  */
-export const trackCtaSeen = (params: { cta: "locked_chapter" }) => track("cta_seen", params);
+export const trackCtaSeen = (params: { cta: CtaSeen }) => track("cta_seen", params);
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);

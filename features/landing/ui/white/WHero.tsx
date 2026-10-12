@@ -1,9 +1,10 @@
 "use client";
 
-import { useSyncExternalStore, type FC } from "react";
+import { useRef, useSyncExternalStore, type FC } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
+import { useCtaSeen } from "@features/analytics/useCtaSeen";
 import WHeroVideo from "./WHeroVideo";
 import WQuestionCard from "./WQuestionCard";
 
@@ -47,6 +48,10 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
     () => CONCURRENT_CLIENT,
     () => CONCURRENT_SSR
   );
+  // Question 1 in the hero slot, seen or not: on a phone it sits below the first screen.
+  // The video counts its own (WHeroVideo), and in its arm this ref stays empty.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useCtaSeen(cardRef, "hero_card", media);
 
   return (
     <section className="relative overflow-hidden bg-white pt-[64px]">
@@ -182,7 +187,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             </div>
           ) : (
             /* Right: live question 1 */
-            <div className="animate-on-load stagger-2 w-full lg:justify-self-end">
+            <div ref={cardRef} className="animate-on-load stagger-2 w-full lg:justify-self-end">
               <WQuestionCard size="hero" location="hero" />
             </div>
           )}

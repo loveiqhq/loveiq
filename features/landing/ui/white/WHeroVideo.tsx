@@ -10,6 +10,7 @@ import {
   trackHeroVideoProgress,
   trackHeroVideoResumed,
 } from "@features/analytics/client";
+import { useCtaSeen } from "@features/analytics/useCtaSeen";
 
 /**
  * Arm B's hero (Figma Report-3.0 `1503:12473`, "B- Landingpage_5.10.26"): the presenter
@@ -181,6 +182,11 @@ const WHeroVideo: FC = () => {
       preview?.pause();
     };
   }, [previewOn, syncPreview]);
+
+  // Whether it was on screen, loop or no loop: under reduced motion or Save-Data the poster
+  // and the button are what a visitor sees. On a phone the video sits below the first
+  // screen, so this, not the page view, is the denominator for the share who tapped play.
+  useCtaSeen(boxRef, "hero_video");
 
   /**
    * The full video as it was before the first tap: no source, nothing loading, no error.

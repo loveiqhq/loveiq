@@ -129,7 +129,11 @@ describe("hero above-the-fold reveal — the round-3 video slot", () => {
   const video = read("features/landing/ui/white/WHeroVideo.tsx");
 
   it("reveals the video slot exactly like the question slot", () => {
-    const slots = [...hero.matchAll(/<div className="([^"]*)">\s*<(WHeroVideo|WQuestionCard)\b/g)];
+    // Any other attribute may sit beside className (the card's slot carries the ref
+    // cta_seen observes); what must match is the reveal classes.
+    const slots = [
+      ...hero.matchAll(/<div\b[^>]*\bclassName="([^"]*)"[^>]*>\s*<(WHeroVideo|WQuestionCard)\b/g),
+    ];
     expect(slots.map(([, , el]) => el).sort()).toEqual(["WHeroVideo", "WQuestionCard"]);
     for (const [, classes, el] of slots) {
       expect(classes, `${el}'s slot lost its on-load reveal`).toContain(
