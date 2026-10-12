@@ -25,7 +25,8 @@
  * reach B. New values re-roll those cookies, and keep round 2's rows from pooling
  * into round 3's (Pricing 3.0 took new letters, A3/B3, for the same reason).
  * Its readouts restart at LANDING_TEST_START_DAY, when the phone hero was condensed
- * so the slot is on the first screen (both arms, same arms and cookies).
+ * so the slot is on the first screen and the page took the 12.10 copy (both arms, same
+ * arms and cookies).
  *
  * The variant flows through the funnel for attribution:
  *   - `LandingPageTracker` sets it as a GA4 user property and PostHog
@@ -64,21 +65,22 @@ export const LANDING_HERO_VIDEO_LAUNCH_DAY = "2026-10-07";
  * `1604:5505`), and where round 3's readouts restart. Until then, on a phone, the video
  * and question 1 sat below the first screen and about 6 in 10 phone visits never reached
  * either (Eman, 2026-10-11), so the days before it compare two things most visitors did
- * not see. Both arms changed alike; assignment and cookies did not. The axis trend and the
+ * not see. The same release puts the 12.10 copy (Figma `1604:8233`) on the whole page.
+ * Both arms changed alike; assignment and cookies did not. The axis trend and the
  * conversion digest's landing blocks and verdict start here, and the /admin readout at
  * LANDING_TEST_START_AT. The brain's experiments tool reads registry #6 from its own start
- * date, which moves to this day with it. Set for a production deploy on 2026-10-12: if the
- * hot fix reaches production later, move this to the first whole day after its deploy,
+ * date, which moves to this day with it. Set for a production deploy on 2026-10-13: if the
+ * release reaches production later, move this to the first whole day after its deploy,
  * and the moment below with it.
  */
-export const LANDING_TEST_START_DAY = "2026-10-13";
+export const LANDING_TEST_START_DAY = "2026-10-14";
 
 /**
  * The /admin readout's cut: the start of LANDING_TEST_START_DAY in Berlin. Not the deploy's
  * own moment, which is not known when this is written: a cut a few hours late loses a few
  * hours of readers, a cut too early would count readers of the old phone hero.
  */
-export const LANDING_TEST_START_AT = "2026-10-12T22:00:00Z";
+export const LANDING_TEST_START_AT = "2026-10-13T22:00:00Z";
 
 /**
  * Sticky assignment cookie. `__Host-` prefix in production (requires Secure +

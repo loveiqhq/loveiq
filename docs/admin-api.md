@@ -85,8 +85,8 @@ revenue is what was paid, not the quote's list price. The price test counts read
 finished from when its current lists went live (2026-10-08 15:23 UTC, when list B was
 lowered; set in `features/checkout/server/reportPurchase.ts`) and reads their arm from
 the A3/B3 quote only. The landing test (round 3) counts on `/api/admin/ab-overview` the
-readers who finished from its restart at the condensed phone hero (the start of
-2026-10-13 in Berlin; set in `shared/experiments/landingVariant.ts`); the brain's
+readers who finished from its restart at the condensed phone hero and the 12.10 copy (the
+start of 2026-10-14 in Berlin; set in `shared/experiments/landingVariant.ts`); the brain's
 `experiments` tool reads registry #6 from its own start date, which moves with it. The digest's funnel functions exclude staff the same way (migration
 `20261006230000`).
 
