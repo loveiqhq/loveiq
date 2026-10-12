@@ -8436,8 +8436,13 @@ describe("query_product_analytics — counting what visitors did, from PostHog",
     expect(r.content[0]!.text).not.toContain("a private survey answer");
   });
 
-  it("refuses to read people's names", async () => {
-    const r = await call({ query: "SELECT person.properties.first_name AS n FROM events" });
+  it.each([
+    ["by dot", "SELECT person.properties.first_name AS n FROM events"],
+    ["in brackets", "SELECT person.properties['first_name'] AS n FROM events"],
+    ["in backticks", "SELECT person.properties.`first_name` AS n FROM events"],
+    ["in double quotes", 'SELECT person.properties."last_name" AS n FROM events'],
+  ])("refuses to read people's names, %s", async (_how, query) => {
+    const r = await call({ query });
     expect(r.isError).toBe(true);
     expect(r.content[0]!.text).toContain("Names are not read here");
     expect(mockFetch).not.toHaveBeenCalled();

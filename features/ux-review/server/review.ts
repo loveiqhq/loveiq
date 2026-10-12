@@ -2217,8 +2217,10 @@ export async function hogqlTable(query: string, cap: number): Promise<HogqlTable
         `payments) is query_product_data, which masks what is private.`,
     };
   }
-  // A count never needs a person's name, and an alias would carry one past any mask.
-  if (/\b(first_name|last_name)\b/i.test(hogqlCodeOnly(query))) {
+  // A count never needs a person's name, and an alias would carry one past any mask. Read
+  // in the raw text on purpose: properties['first_name'] and `first_name` are quoted, and
+  // hogqlCodeOnly blanks quoted spans (CodeRabbit on #571).
+  if (/(first|last)_?name/i.test(query)) {
     return { ok: false, error: "Names are not read here: count people rather than naming them." };
   }
   if (setOperation) {
