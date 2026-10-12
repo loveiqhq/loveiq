@@ -31,7 +31,8 @@ export const DROPOFF_FLOOR = 20;
  */
 export const FIRST_TRACKED_MONDAY = "2026-09-21";
 
-const MAX_WEEKS = 8;
+/** Complete weeks the picture and the page's rows show. */
+export const MAX_WEEKS = 8;
 
 export interface DropoffWeek {
   /** Column header: the Monday, "21 Sep". */
@@ -57,16 +58,16 @@ export function shortDate(day: string): string {
 }
 
 /**
- * Up to eight complete Monday-to-Sunday weeks (Berlin days), oldest first, then
- * the week in progress through yesterday. Through yesterday, not now: someone
+ * Up to `completeWeeks` (eight) complete Monday-to-Sunday weeks (Berlin days), oldest
+ * first, then the week in progress through yesterday. Through yesterday, not now: someone
  * halfway through the survey at this minute would otherwise count as a quit.
  */
-export function dropoffWeeks(now: Date = new Date()): DropoffWeek[] {
+export function dropoffWeeks(now: Date = new Date(), completeWeeks = MAX_WEEKS): DropoffWeek[] {
   const today = reportingDay(now);
   const weekday = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
   const thisMonday = addDays(today, -weekday);
   const weeks: DropoffWeek[] = [];
-  for (let i = MAX_WEEKS; i >= 1; i--) {
+  for (let i = completeWeeks; i >= 1; i--) {
     const monday = addDays(thisMonday, -7 * i);
     if (monday < FIRST_TRACKED_MONDAY) continue;
     weeks.push({

@@ -495,6 +495,25 @@ describe("Notion's limits: 429 and 409 are retried, a 5xx only when it is safe",
     expect(mockFetch).toHaveBeenCalledTimes(5);
   });
 
+  it("never sleeps more than 30 seconds in all for one request", async () => {
+    // Notion asks for 30s, then 30s again: the second wait would pass the cap, so it stops.
+    mockFetch.mockResolvedValue(reply({ message: "rate limited" }, 429, "30"));
+    const failed = expect(createDatabaseRow("db1", {})).rejects.toThrow("rate limited");
+    await vi.advanceTimersByTimeAsync(30_000);
+    await failed;
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses a job's own token when given one, and NOTION_TOKEN otherwise", async () => {
+    mockFetch.mockResolvedValue(reply({ id: "p1" }));
+    await createDatabaseRow("db1", {}, "ntn_kpi");
+    await createDatabaseRow("db1", {});
+    const auth = (i: number) =>
+      (mockFetch.mock.calls[i]![1] as { headers: Record<string, string> }).headers.authorization;
+    expect(auth(0)).toBe("Bearer ntn_kpi");
+    expect(auth(1)).toBe("Bearer secret_test");
+  });
+
   it("reports a gateway's HTML error page by its status", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -530,6 +549,22 @@ describe("rows of the KPI data table", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const body = JSON.parse(String((mockFetch.mock.calls[1]![1] as { body: string }).body));
     expect(body).toEqual({ page_size: 100, filter, start_cursor: "n" });
+  });
+
+  it("refuses a read its caller's clock cut short, instead of returning part of it", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [{ id: "a", properties: {} }],
+        has_more: true,
+        next_cursor: "n",
+      }),
+    });
+    let reads = 0;
+    await expect(queryNotionDatabase("db1", { isOutOfTime: () => reads++ >= 2 })).rejects.toThrow(
+      /notion_query_out_of_time/
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it("creates a row under the database and archives one by id", async () => {

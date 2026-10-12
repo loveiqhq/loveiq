@@ -138,11 +138,17 @@ describe("readDropoffRows", () => {
     mockQuery.mockResolvedValue([
       { id: "p1", properties: asNotionReturnsIt(rowProperties(row())) },
     ]);
-    const rows = await readDropoffRows("db1", "2026-09-21");
+    const clock = () => false;
+    const rows = await readDropoffRows("db1", "2026-09-21", {
+      token: "ntn_kpi",
+      isOutOfTime: clock,
+    });
     expect(rows).toEqual([{ id: "p1", key: row().key, value: rowValue(row()) }]);
     expect(mockQuery).toHaveBeenCalledWith("db1", {
       filter: { property: "Week", date: { on_or_after: "2026-09-21" } },
       maxRows: 10_000,
+      token: "ntn_kpi",
+      isOutOfTime: clock,
     });
   });
 });
@@ -213,5 +219,24 @@ describe("applySync", () => {
     expect(result.failed).toBeLessThanOrEqual(7); // three workers may each be mid-write
     expect(result.firstError).toBe("validation_error");
     expect(result.pending).toBe(50 - result.failed);
+  });
+});
+
+describe("applySync writes with the connection it is given", () => {
+  beforeEach(() => {
+    for (const m of [mockCreate, mockUpdate, mockArchive])
+      m.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("passes the token to every create, update and archive", async () => {
+    await applySync(
+      "db1",
+      { create: [row()], update: [{ id: "u1", row: row() }], archive: ["a1"] },
+      () => false,
+      "ntn_kpi"
+    );
+    expect(mockCreate.mock.calls[0]![2]).toBe("ntn_kpi");
+    expect(mockUpdate.mock.calls[0]![2]).toBe("ntn_kpi");
+    expect(mockArchive.mock.calls[0]![1]).toBe("ntn_kpi");
   });
 });

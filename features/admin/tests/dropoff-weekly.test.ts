@@ -41,6 +41,12 @@ describe("dropoffWeeks", () => {
     expect(w.at(-1)!.partial).toBe(true);
   });
 
+  it("reads more complete weeks when asked, for the usual level of the oldest shown", () => {
+    const w = dropoffWeeks(new Date("2026-12-21T08:30:00Z"), 12);
+    expect(w.filter((x) => !x.partial)).toHaveLength(12);
+    expect(w[0]!.label).toBe("28 Sep");
+  });
+
   it("names a week by its Monday the same way on every ICU build", () => {
     expect(shortDate("2026-09-21")).toBe("21 Sep");
   });

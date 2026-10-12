@@ -1,7 +1,14 @@
 /**
- * The drop-off rows on the KPI page "Survey Drop-off Rate per Question %", kept in a
- * Notion database under the page. The page's charts, table and filters are views of it,
- * set up once in Notion; this file only keeps the rows true.
+ * The drop-off rows behind the KPI page "Survey Drop-off Rate per Question %", kept in a
+ * Notion database on the team page "KPI report data". The page's charts, table and
+ * filters are views of it, set up once in Notion; this file only keeps the rows true.
+ *
+ * WHY IT IS NOT UNDER THE KPI PAGE, AND WHY ITS OWN CONNECTION. The brain's Notion crawl
+ * lists every page its connection can see, 2,500 at most, and these rows were a third of
+ * that on day one (2,259 listed on 2026-10-12, 781 of them rows). So the table lives
+ * where the brain's connection ("Claude connection") is not, and the job writes with
+ * NOTION_KPI_TOKEN, the "LoveIQ KPI reports" connection, which sees only the KPI
+ * database and "KPI report data".
  *
  * Daily, for the weeks the job computes: a row that is missing is created, a row whose
  * numbers moved is updated, a row nobody computes any more (a question taken out of the
@@ -19,7 +26,7 @@ import {
 } from "@features/brain/server/act/notion";
 import type { DropoffRow } from "@features/admin/server/dropoff-report";
 
-/** 📊 KPI › Survey Drop-off Rate per Question % › Survey drop-off data. */
+/** 🗂️ KPI report data › Survey drop-off data. */
 export const DROPOFF_DATA_DATABASE_ID = "e233fb12-fff9-4485-a54a-d4c29e8b26ff";
 
 /** Notion refuses a comma in a select option. U+201A looks like one and is not. */
@@ -115,11 +122,14 @@ export function readExisting(page: {
 /** The rows of these weeks (Week on or after `fromWeek`) that Notion holds. */
 export async function readDropoffRows(
   databaseId: string,
-  fromWeek: string
+  fromWeek: string,
+  opts: { token?: string; isOutOfTime?: () => boolean } = {}
 ): Promise<ExistingRow[]> {
   const pages = await queryNotionDatabase(databaseId, {
     filter: { property: "Week", date: { on_or_after: fromWeek } },
     maxRows: 10_000,
+    token: opts.token,
+    isOutOfTime: opts.isOutOfTime,
   });
   return pages.map(readExisting);
 }
@@ -174,7 +184,8 @@ const MAX_FAILURES = 5;
 export async function applySync(
   databaseId: string,
   plan: SyncPlan,
-  isOutOfTime: () => boolean
+  isOutOfTime: () => boolean,
+  token?: string
 ): Promise<SyncResult> {
   type Task = {
     week: string;
@@ -185,19 +196,19 @@ export async function applySync(
     ...plan.update.map(({ id, row }) => ({
       week: row.week,
       kind: "updated" as const,
-      run: () => updateNotionPage(id, rowProperties(row)),
+      run: () => updateNotionPage(id, rowProperties(row), token),
     })),
     ...plan.create.map((row) => ({
       week: row.week,
       kind: "created" as const,
-      run: () => createDatabaseRow(databaseId, rowProperties(row)),
+      run: () => createDatabaseRow(databaseId, rowProperties(row), token),
     })),
   ].sort((a, b) => (a.week < b.week ? 1 : a.week > b.week ? -1 : 0));
   tasks.push(
     ...plan.archive.map((id) => ({
       week: "",
       kind: "archived" as const,
-      run: () => archiveNotionPage(id),
+      run: () => archiveNotionPage(id, token),
     }))
   );
 

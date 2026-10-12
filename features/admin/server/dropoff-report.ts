@@ -26,7 +26,7 @@ import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { assignEmailQuestionArm } from "@shared/experiments/emailQuestionArm";
 import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
-import { reportingDay } from "@shared/time/reporting-day";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { surveyQuestions } from "@/data/survey-data";
 
 /** One person's run through the survey in a window (get_survey_dropoff_runs). */
@@ -235,18 +235,22 @@ export function isWorseThanUsual(left: number, reached: number, usual: number | 
 }
 
 /**
- * Every row the page shows, for every week given: one per question asked today, per
- * slice, where at least one person in that slice reached it. `today` is the Berlin day
+ * Every row the page shows: one per question asked today, per slice, where at least one
+ * person in that slice reached it, for the weeks from `showFrom` on. The weeks before it
+ * only feed the usual level, so a week's usual does not change as the window moves on
+ * (otherwise every Monday would rewrite four weeks of rows). `today` is the Berlin day
  * the numbers run up to (exclusive).
  */
 export function buildDropoffRows(
   weeks: DropoffWeek[],
   tallies: Array<Map<Segment, Tally>>,
-  today: string
+  today: string,
+  showFrom = 0
 ): DropoffRow[] {
   const questions = askedQuestions(60);
   const rows: DropoffRow[] = [];
   weeks.forEach((week, i) => {
+    if (i < showFrom) return;
     const monday = reportingDay(week.since);
     const days = week.partial ? daysBetween(monday, today) : 7;
     const before = tallies.slice(Math.max(0, i - 4), i);
@@ -365,7 +369,8 @@ function readout(
   const base = control.people >= 50 && control.left > 0 ? control.left / control.people : null;
   const needed = base === null ? null : peoplePerArm(base, base * (2 / 3));
   const fewest = Math.min(control.people, variant.people);
-  const daysRun = Math.max(1, daysBetween(reportingDay(new Date(launch)), today));
+  // From the launch minute, not its day: a test launched in the evening has not had a day.
+  const daysRun = Math.max(0.5, (reportingDayStart(today).getTime() - launch) / 86_400_000);
   const pace = fewest / daysRun;
   const enoughBy =
     needed !== null && fewest < needed && pace > 0
@@ -409,11 +414,11 @@ export function readSurveyTests(runs: DropoffRun[], today: string): TestReadout[
     run.startedAt >= test.launch && (test.end === null || run.startedAt < test.end);
 
   const orderArms: [TestArmReadout, TestArmReadout] = [
-    { label: "today's order", people: 0, left: 0 },
+    { label: "the current order", people: 0, left: 0 },
     { label: "the new order", people: 0, left: 0 },
   ];
   const emailArms: [TestArmReadout, TestArmReadout] = [
-    { label: "today's question", people: 0, left: 0 },
+    { label: "the current question", people: 0, left: 0 },
     { label: "the anonymous one", people: 0, left: 0 },
   ];
   for (const run of runs) {
@@ -440,6 +445,9 @@ export function readSurveyTests(runs: DropoffRun[], today: string): TestReadout[
     ),
   ];
 }
+
+/** Worse-than-usual questions named in the summary; the rest are counted. */
+export const MAX_WORSE_LINES = 5;
 
 /** A run of text in the headline, as Notion styles it. */
 export interface Span {
@@ -508,13 +516,20 @@ export function buildHeadline(input: {
   );
   if (worse.length > 0) {
     lines.push([{ text: "Worse than usual:", bold: true }]);
-    for (const r of worse) {
+    // Notion takes at most 100 pieces of text in one callout; a bad day lists the worst five.
+    worse.sort((a, b) => b.rate! - a.rate! || a.n - b.n);
+    for (const r of worse.slice(0, MAX_WORSE_LINES)) {
       lines.push([
         { text: `•  Q${r.n} ${r.name}  ` },
         { text: pct(r.left, r.reached), bold: true },
         {
           text: ` against a usual ${((r.usual ?? 0) * 100).toFixed(1)}% (week of ${shortDate(r.week)}${r.days < 7 ? ", so far" : ""})`,
         },
+      ]);
+    }
+    if (worse.length > MAX_WORSE_LINES) {
+      lines.push([
+        { text: `•  and ${worse.length - MAX_WORSE_LINES} more, orange in the table below` },
       ]);
     }
   }

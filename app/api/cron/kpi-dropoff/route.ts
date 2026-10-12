@@ -9,12 +9,14 @@
  *  1. the summary callout at the top: last full week, where people left most, anything
  *     worse than usual, and the two survey tests;
  *  2. the picture "Drop-off per question, week by week";
- *  3. the rows of the page's data table, which its charts, table and filters read
- *     (`dropoff-notion.ts`): only rows whose numbers moved are written.
+ *  3. the rows of its data table on "KPI report data", which the page's charts, table and
+ *     filters read (`dropoff-notion.ts`): only rows whose numbers moved are written.
  *
- * Fails closed: if any week cannot be read, nothing is written and the page keeps
- * yesterday's numbers. After that each part is written on its own, so one failing part
- * does not hold back the others, and any failure marks the run as an error.
+ * Writes with NOTION_KPI_TOKEN, a Notion connection of its own that the brain's crawl
+ * cannot see (see dropoff-notion.ts). Fails closed: without it, or if any week cannot be
+ * read, nothing is written and the page keeps yesterday's numbers. After that each part
+ * is written on its own, so one failing part does not hold back the others, and any
+ * failure marks the run as an error.
  */
 import { NextResponse } from "next/server";
 import {
@@ -36,6 +38,7 @@ import {
   buildDropoffWeeklyPayload,
   DROPOFF_KPI_PAGE_ID,
   dropoffWeeks,
+  MAX_WEEKS,
   shortDate,
 } from "@features/admin/server/dropoff-weekly";
 import {
@@ -71,17 +74,28 @@ export async function GET(request: Request) {
   try {
     const base = process.env.NEXT_PUBLIC_SITE_URL;
     if (!base) throw new Error("NEXT_PUBLIC_SITE_URL is unset");
+    // The job's own Notion connection, which the brain's crawl cannot see (dropoff-notion.ts).
+    const token = process.env.NOTION_KPI_TOKEN?.trim();
+    if (!token) throw new Error("NOTION_KPI_TOKEN is unset");
     const now = new Date(startedAtMs);
     const today = reportingDay(now);
-    const weeks = dropoffWeeks(now);
+    /**
+     * Four more complete weeks are read than are shown, so the oldest week shown still has
+     * the four before it for its usual level, and that level holds still as weeks pass.
+     */
+    const weeks = dropoffWeeks(now, MAX_WEEKS + 4);
     if (weeks.length === 0) throw new Error("no fully tracked week yet");
+    const showFrom = Math.max(0, weeks.filter((w) => !w.partial).length - MAX_WEEKS);
+    const shown = weeks.slice(showFrom);
 
     /**
-     * Rows are written until four minutes in, then left for tomorrow: a normal day writes
-     * about one week of rows, well inside that, and the writes still in flight and the run
-     * record fit in the minute left under maxDuration.
+     * Rows are written until 170 seconds in, then left for tomorrow. A normal day writes
+     * about one week of rows in about a minute. One Notion call can take a little under two
+     * minutes at worst (five 15-second tries and 30 seconds of waiting between them), so a
+     * write started just before the line still ends, and the run is recorded, under the
+     * 300-second ceiling.
      */
-    const isOutOfTime = () => Date.now() - startedAtMs > 240_000;
+    const isOutOfTime = () => Date.now() - startedAtMs > 170_000;
 
     // Everything is read before anything is written.
     const firstLaunch = Math.min(...SURVEY_TESTS.map((t) => t.launch));
@@ -90,7 +104,8 @@ export async function GET(request: Request) {
       Promise.all(weeks.map((w) => fetchDropoffRuns(w.since, w.until))),
     ]);
     const tallies = runsByWeek.map(tallyRuns);
-    const rows = buildDropoffRows(weeks, tallies, today);
+    const shownTallies = tallies.slice(showFrom);
+    const rows = buildDropoffRows(weeks, tallies, today, showFrom);
 
     const problems: string[] = [];
     const part = async <T>(name: string, run: () => Promise<T>): Promise<T | null> => {
@@ -109,19 +124,20 @@ export async function GET(request: Request) {
         emoji: "📉",
         lines: buildHeadline({
           rows,
-          weeks,
-          tallies,
+          weeks: shown,
+          tallies: shownTallies,
           tests: readSurveyTests(testRuns, today),
           today,
           marker: CHART_MARKER,
         }),
+        token,
       })
     );
 
     const image = await part("picture", async () => {
       const payload = buildDropoffWeeklyPayload(
-        weeks,
-        tallies.map(allTrafficEnds),
+        shown,
+        shownTallies.map(allTrafficEnds),
         shortDate(today)
       );
       const { d, s } = await signImagePayload(payload);
@@ -132,22 +148,30 @@ export async function GET(request: Request) {
       if (!png) throw new Error("the chart did not render");
       const fileUploadId = await uploadNotionPng(
         Buffer.from(png, "base64"),
-        `dropoff-per-question-${today}.png`
+        `dropoff-per-question-${today}.png`,
+        token
       );
       return upsertMarkedImage(DROPOFF_KPI_PAGE_ID, {
         marker: CHART_MARKER,
         caption: `Updated ${shortDate(today)} by the ${CHART_MARKER}, every morning.`,
         heading: "Drop-off per question, week by week",
         fileUploadId,
+        token,
       });
     });
 
     const sync = await part("rows", async () => {
-      const existing = await readDropoffRows(DROPOFF_DATA_DATABASE_ID, rows[0]?.week ?? today);
+      // From the first week shown, so a stale row in it goes even when nothing replaces it.
+      const existing = await readDropoffRows(
+        DROPOFF_DATA_DATABASE_ID,
+        reportingDay(shown[0]!.since),
+        { token, isOutOfTime }
+      );
       const result = await applySync(
         DROPOFF_DATA_DATABASE_ID,
         planSync(rows, existing),
-        isOutOfTime
+        isOutOfTime,
+        token
       );
       if (result.failed > 0)
         throw new Error(`${result.failed} writes failed: ${result.firstError}`);
@@ -156,14 +180,14 @@ export async function GET(request: Request) {
     });
 
     detail =
-      `summary=${callout ?? "failed"} picture=${image ?? "failed"} weeks=${weeks.length} rows=${rows.length}` +
+      `summary=${callout ?? "failed"} picture=${image ?? "failed"} weeks=${shown.length} rows=${rows.length}` +
       (sync ? ` created=${sync.created} updated=${sync.updated} archived=${sync.archived}` : "") +
       (problems.length ? ` | ${problems.join(" | ")}` : "");
     if (problems.length > 0) {
       status = "error";
       return NextResponse.json({ ok: false, error: "Internal" }, { status: 500 });
     }
-    return NextResponse.json({ ok: true, weeks: weeks.length, rows: rows.length });
+    return NextResponse.json({ ok: true, weeks: shown.length, rows: rows.length });
   } catch (err) {
     status = "error";
     detail = err instanceof Error ? err.message : String(err);

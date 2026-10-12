@@ -39,8 +39,13 @@ export interface NotionDatabase {
   titleProperty: string;
 }
 
-function headers(): Record<string, string> {
-  const t = process.env.NOTION_TOKEN?.trim();
+/**
+ * `token` is for a job with its own Notion connection: the KPI reports write with
+ * NOTION_KPI_TOKEN, a connection the brain's crawl cannot see. Everything else uses
+ * NOTION_TOKEN.
+ */
+function headers(token?: string): Record<string, string> {
+  const t = token?.trim() || process.env.NOTION_TOKEN?.trim();
   if (!t) throw new Error("NOTION_TOKEN is unset");
   return {
     authorization: `Bearer ${t}`,
@@ -58,17 +63,20 @@ function headers(): Record<string, string> {
  */
 const RATE_LIMIT_RETRIES = 4;
 const SERVER_ERROR_RETRIES = 2;
+/** At most this long asleep between tries of one request, so a timed job can count on it. */
+const MAX_RETRY_SLEEP_MS = 30_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function notion(
   path: string,
-  init: { method?: string; body?: unknown; idempotent?: boolean } = {}
+  init: { method?: string; body?: unknown; idempotent?: boolean; token?: string } = {}
 ): Promise<Record<string, unknown>> {
+  let slept = 0;
   for (let attempt = 0; ; attempt++) {
     const res = await fetchWithTimeout(`${NOTION_API}${path}`, {
       method: init.method ?? "GET",
-      headers: headers(),
+      headers: headers(init.token),
       ...(init.body ? { body: JSON.stringify(init.body) } : {}),
       timeoutMs: 15_000,
     });
@@ -86,11 +94,14 @@ async function notion(
       res.status === 429 || res.status === 409
         ? attempt < RATE_LIMIT_RETRIES
         : init.idempotent === true && res.status >= 500 && attempt < SERVER_ERROR_RETRIES;
-    if (!retry) throw new Error(String(json?.message ?? `notion_${res.status}`));
     const after = Number(res.headers?.get?.("retry-after"));
-    await sleep(
-      Number.isFinite(after) && after > 0 ? Math.min(after, 30) * 1000 : 1000 * (attempt + 1)
-    );
+    const wait =
+      Number.isFinite(after) && after > 0 ? Math.min(after, 30) * 1000 : 1000 * (attempt + 1);
+    if (!retry || slept + wait > MAX_RETRY_SLEEP_MS) {
+      throw new Error(String(json?.message ?? `notion_${res.status}`));
+    }
+    slept += wait;
+    await sleep(wait);
   }
 }
 
@@ -412,12 +423,19 @@ export async function createNotionPage(input: {
  */
 export async function queryNotionDatabase(
   databaseId: string,
-  opts: { filter?: Record<string, unknown>; maxRows?: number } = {}
+  opts: {
+    filter?: Record<string, unknown>;
+    maxRows?: number;
+    token?: string;
+    /** A timed caller's clock: a read it cuts short is refused, never returned in part. */
+    isOutOfTime?: () => boolean;
+  } = {}
 ): Promise<Array<{ id: string; url?: string; properties: Record<string, unknown> }>> {
   const rows: Array<{ id: string; url?: string; properties: Record<string, unknown> }> = [];
   let cursor: string | undefined;
   const pages = Math.ceil((opts.maxRows ?? 5000) / 100);
   for (let page = 0; page < pages; page++) {
+    if (opts.isOutOfTime?.()) throw new Error(`notion_query_out_of_time:${databaseId}`);
     const res = await notion(`/databases/${databaseId}/query`, {
       method: "POST",
       body: {
@@ -426,6 +444,7 @@ export async function queryNotionDatabase(
         ...(cursor ? { start_cursor: cursor } : {}),
       },
       idempotent: true,
+      token: opts.token,
     });
     rows.push(...((res.results as typeof rows | undefined) ?? []));
     if (!res.has_more) return rows;
@@ -437,26 +456,39 @@ export async function queryNotionDatabase(
 /** Set properties on an existing page, in Notion's own shape. */
 export async function updateNotionPage(
   pageId: string,
-  properties: Record<string, unknown>
+  properties: Record<string, unknown>,
+  token?: string
 ): Promise<void> {
-  await notion(`/pages/${pageId}`, { method: "PATCH", body: { properties }, idempotent: true });
+  await notion(`/pages/${pageId}`, {
+    method: "PATCH",
+    body: { properties },
+    idempotent: true,
+    token,
+  });
 }
 
 /** A new row in a database, its properties in Notion's own shape. Returns its id. */
 export async function createDatabaseRow(
   databaseId: string,
-  properties: Record<string, unknown>
+  properties: Record<string, unknown>,
+  token?: string
 ): Promise<string> {
   const page = await notion("/pages", {
     method: "POST",
     body: { parent: { database_id: databaseId }, properties },
+    token,
   });
   return String(page.id ?? "");
 }
 
 /** Move a page to the trash; Notion keeps it there for 30 days. */
-export async function archiveNotionPage(pageId: string): Promise<void> {
-  await notion(`/pages/${pageId}`, { method: "PATCH", body: { archived: true }, idempotent: true });
+export async function archiveNotionPage(pageId: string, token?: string): Promise<void> {
+  await notion(`/pages/${pageId}`, {
+    method: "PATCH",
+    body: { archived: true },
+    idempotent: true,
+    token,
+  });
 }
 
 /**
@@ -467,16 +499,21 @@ export async function archiveNotionPage(pageId: string): Promise<void> {
  * several times that), and an external link would make the numbers public to
  * anyone holding it. An upload nobody attaches expires on its own after an hour.
  */
-export async function uploadNotionPng(bytes: Uint8Array, filename: string): Promise<string> {
+export async function uploadNotionPng(
+  bytes: Uint8Array,
+  filename: string,
+  token?: string
+): Promise<string> {
   const created = await notion("/file_uploads", {
     method: "POST",
     body: { filename, content_type: "image/png" },
+    token,
   });
   const id = String(created.id ?? "");
   if (!id) throw new Error("notion: file upload created without an id");
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(bytes)], { type: "image/png" }), filename);
-  const { "content-type": _json, ...auth } = headers();
+  const { "content-type": _json, ...auth } = headers(token);
   const res = await fetchWithTimeout(`${NOTION_API}/file_uploads/${id}/send`, {
     method: "POST",
     headers: auth, // fetch sets the multipart boundary itself
@@ -503,13 +540,14 @@ function plainCalloutText(block: Record<string, unknown>): string {
 /** The first top-level block of a page that `isMine` recognises. */
 async function findPageBlock(
   pageId: string,
-  isMine: (block: Record<string, unknown>) => boolean
+  isMine: (block: Record<string, unknown>) => boolean,
+  token?: string
 ): Promise<Record<string, unknown> | undefined> {
   let cursor: string | undefined;
   do {
     const page = await notion(
       `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`,
-      { idempotent: true }
+      { idempotent: true, token }
     );
     const mine = ((page.results ?? []) as Array<Record<string, unknown>>).find(isMine);
     if (mine) return mine;
@@ -533,7 +571,7 @@ export interface CalloutSpan {
  */
 export async function upsertMarkedCallout(
   pageId: string,
-  opts: { marker: string; lines: CalloutSpan[][]; emoji: string }
+  opts: { marker: string; lines: CalloutSpan[][]; emoji: string; token?: string }
 ): Promise<"updated" | "created"> {
   const richText = opts.lines.flatMap((line, i) => [
     ...(i > 0 ? [{ type: "text", text: { content: "\n" } }] : []),
@@ -550,19 +588,22 @@ export async function upsertMarkedCallout(
   const callout = { rich_text: richText, icon: { type: "emoji", emoji: opts.emoji } };
   const mine = await findPageBlock(
     pageId,
-    (b) => b.type === "callout" && plainCalloutText(b).includes(opts.marker)
+    (b) => b.type === "callout" && plainCalloutText(b).includes(opts.marker),
+    opts.token
   );
   if (mine) {
     await notion(`/blocks/${String(mine.id)}`, {
       method: "PATCH",
       body: { callout },
       idempotent: true,
+      token: opts.token,
     });
     return "updated";
   }
   await notion(`/blocks/${pageId}/children`, {
     method: "PATCH",
     body: { children: [{ object: "block", type: "callout", callout }] },
+    token: opts.token,
   });
   return "created";
 }
@@ -574,11 +615,12 @@ export async function upsertMarkedCallout(
  */
 export async function upsertMarkedImage(
   pageId: string,
-  opts: { marker: string; caption: string; heading: string; fileUploadId: string }
+  opts: { marker: string; caption: string; heading: string; fileUploadId: string; token?: string }
 ): Promise<"updated" | "created"> {
   const mine = await findPageBlock(
     pageId,
-    (b) => b.type === "image" && plainCaption(b).includes(opts.marker)
+    (b) => b.type === "image" && plainCaption(b).includes(opts.marker),
+    opts.token
   );
 
   const image = {
@@ -587,7 +629,11 @@ export async function upsertMarkedImage(
   };
   if (mine) {
     // Updating refuses `type` ("body.image.type should be not present"); creating needs it.
-    await notion(`/blocks/${String(mine.id)}`, { method: "PATCH", body: { image } });
+    await notion(`/blocks/${String(mine.id)}`, {
+      method: "PATCH",
+      body: { image },
+      token: opts.token,
+    });
     return "updated";
   }
   await notion(`/blocks/${pageId}/children`, {
@@ -602,6 +648,7 @@ export async function upsertMarkedImage(
         { object: "block", type: "image", image: { type: "file_upload", ...image } },
       ],
     },
+    token: opts.token,
   });
   return "created";
 }

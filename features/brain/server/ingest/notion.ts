@@ -639,11 +639,12 @@ const ALWAYS_EXCLUDED = [
 /**
  * Databases a job writes numbers into, not pages people write. The kpi-dropoff job keeps
  * one row per week, question and segment in "Survey drop-off data", about 430 more a week.
- * Indexing them would put hundreds of near-identical figures in front of every search
- * about a survey question, and a table past MAX_PAGES x PAGE_SIZE rows marks every crawl
- * incomplete, which stops the sweep for all of Notion. Their rows are never read; the
- * database stays a WALKED scope with none, so anything stored from it is swept. The KPI
- * page itself, with its summary, is indexed as usual.
+ * That table lives on "KPI report data", which this connection is NOT given, and the job
+ * writes with its own (NOTION_KPI_TOKEN): every page this connection can see is listed on
+ * each crawl, 2,500 at most, and these rows were a third of that on day one. This list is
+ * the safety net if it is ever shared here anyway: the rows are never read, so they never
+ * reach the index, and the database stays a WALKED scope with none, so anything stored
+ * from it is swept. Their listing still counts toward the 2,500, so do not share it.
  */
 const GENERATED_DATABASES = new Set(
   [DROPOFF_DATA_DATABASE_ID].map((id) => id.replace(/-/g, "").toLowerCase())

@@ -60,6 +60,7 @@ describe("GET /api/cron/kpi-dropoff", () => {
     vi.setSystemTime(new Date("2026-10-12T08:30:00Z")); // a Monday: three complete weeks
     process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
     process.env.STRATEGY_DIGEST_SIGNING_SECRET = "a-test-secret-of-some-length";
+    process.env.NOTION_KPI_TOKEN = "ntn_kpi_test";
     mockRecordCronRun.mockReset();
     mockProdHost.mockReturnValue(true);
     mockRuns.mockReset().mockResolvedValue(Array.from({ length: 30 }, () => someone));
@@ -125,9 +126,17 @@ describe("GET /api/cron/kpi-dropoff", () => {
     expect(image).toMatchObject({ marker: CHART_MARKER, fileUploadId: "upload-1" });
     expect(image.caption).toContain(CHART_MARKER); // or tomorrow's run cannot find it again
 
-    expect(mockReadRows).toHaveBeenCalledWith(DROPOFF_DATA_DATABASE_ID, "2026-09-21");
-    const [db, plan] = mockApply.mock.calls[0] as [string, SyncPlan];
+    expect(mockReadRows).toHaveBeenCalledWith(DROPOFF_DATA_DATABASE_ID, "2026-09-21", {
+      token: "ntn_kpi_test",
+      isOutOfTime: expect.any(Function),
+    });
+    const [db, plan, , token] = mockApply.mock.calls[0] as [string, SyncPlan, unknown, string];
     expect(db).toBe(DROPOFF_DATA_DATABASE_ID);
+    // Every Notion write goes through the KPI connection, never the brain's.
+    expect(token).toBe("ntn_kpi_test");
+    expect((mockCallout.mock.calls[0]![1] as { token: string }).token).toBe("ntn_kpi_test");
+    expect(mockUpload.mock.calls[0]![2]).toBe("ntn_kpi_test");
+    expect((mockImage.mock.calls[0]![1] as { token: string }).token).toBe("ntn_kpi_test");
     expect(plan.create.length).toBeGreaterThan(0);
     expect(plan.create.every((r) => r.week >= "2026-09-21")).toBe(true);
 
@@ -141,6 +150,31 @@ describe("GET /api/cron/kpi-dropoff", () => {
     expect(detail).toMatch(
       /^summary=updated picture=updated weeks=3 rows=\d+ created=\d+ updated=0 archived=0$/
     );
+  });
+
+  it("writes nothing without its own Notion connection", async () => {
+    delete process.env.NOTION_KPI_TOKEN;
+    expect((await call()).status).toBe(500);
+    expect(mockRuns).not.toHaveBeenCalled();
+    expect(mockCallout).not.toHaveBeenCalled();
+    expect(mockApply).not.toHaveBeenCalled();
+    expect(mockRecordCronRun.mock.calls[0]![3]).toBe("NOTION_KPI_TOKEN is unset");
+  });
+
+  it("reads four weeks before the eight it shows, and writes only the eight", async () => {
+    vi.setSystemTime(new Date("2026-12-21T08:30:00Z")); // a Monday: thirteen complete weeks
+    expect((await call()).status).toBe(200);
+    // Twelve complete weeks and the tests' window; 21 Sep is too old even for the usual.
+    expect(mockRuns).toHaveBeenCalledTimes(13);
+    const [, plan] = mockApply.mock.calls[0] as [string, SyncPlan];
+    const weeks = [...new Set(plan.create.map((r) => r.week))].sort();
+    expect(weeks).toHaveLength(8);
+    expect(weeks[0]).toBe("2026-10-26");
+    expect(mockReadRows.mock.calls[0]![1]).toBe("2026-10-26");
+    // The oldest week shown has its four weeks before it for the usual level.
+    expect(
+      plan.create.find((r) => r.week === "2026-10-26" && r.qId === "00000")?.usual
+    ).not.toBeNull();
   });
 
   it("writes nothing when any week cannot be read", async () => {

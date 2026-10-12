@@ -10,6 +10,7 @@ import {
   buildDropoffRows,
   buildHeadline,
   EMAIL_QID,
+  MAX_WORSE_LINES,
   fetchDropoffRuns,
   isWorseThanUsual,
   peoplePerArm,
@@ -279,6 +280,15 @@ describe("buildDropoffRows", () => {
     expect(r.flag).toBe("Normal");
   });
 
+  it("writes only the weeks from showFrom, with the usual still taken from the weeks before", () => {
+    const shownOnly = buildDropoffRows(weeks, tallies, "2026-10-13", 2);
+    expect(new Set(shownOnly.map((r) => r.week))).toEqual(new Set(["2026-10-05", "2026-10-12"]));
+    const r = shownOnly.find(
+      (x) => x.week === "2026-10-05" && x.segment === "All traffic" && x.qId === "00001"
+    )!;
+    expect(r.usual).toBe(0.05); // from 21 and 28 Sep, which are read but not written
+  });
+
   it("marks the three highest drop-offs of each week and segment", () => {
     const qs = askedQuestions(60)
       .slice(0, 5)
@@ -324,16 +334,34 @@ describe("readSurveyTests", () => {
     ];
     const [email, order] = readSurveyTests(runs, "2026-10-12");
     expect(email!.arms).toEqual([
-      { label: "today's question", people: 2, left: 1 },
+      { label: "the current question", people: 2, left: 1 },
       { label: "the anonymous one", people: 1, left: 0 },
     ]);
     expect(order!.arms).toEqual([
-      { label: "today's order", people: 3, left: 1 },
+      { label: "the current order", people: 3, left: 1 },
       { label: "the new order", people: 2, left: 0 },
     ]);
     expect(email!.since).toBe("8 Oct");
     expect(order!.since).toBe("6 Oct");
     expect(email!.needed).toBeNull(); // too few in control to size it
+  });
+
+  it("paces a test from its launch minute, not from the start of that day", () => {
+    // The email test launched 8 Oct at 09:12 UTC; to 12 Oct 00:00 Berlin is 3.37 days, not 4.
+    const many = (sessionId: string, n: number, left: number) =>
+      Array.from({ length: n }, (_, i) =>
+        run({ sessionId, reached: [EMAIL_QID], leftAt: i < left ? EMAIL_QID : null })
+      );
+    const t = readSurveyTests(
+      [...many(control, 337, 40), ...many(variant, 337, 30)],
+      "2026-10-12"
+    )[0]!;
+    const elapsed = (Date.parse("2026-10-11T22:00:00Z") - EMAIL_TEST!.launch) / 86_400_000;
+    const days =
+      (Date.parse(`${t.enoughBy}T12:00:00Z`) - Date.parse("2026-10-12T12:00:00Z")) / 86_400_000;
+    expect(days).toBe(Math.ceil((t.needed! - 337) / (337 / elapsed)));
+    // Counting the launch day whole would have said later.
+    expect(days).toBeLessThan(Math.ceil((t.needed! - 337) / (337 / 4)));
   });
 
   it("sizes the test and says when it can be called, then calls it", () => {
@@ -412,7 +440,7 @@ describe("buildHeadline", () => {
       since: "8 Oct",
       measure: "at the email question",
       arms: [
-        { label: "today's question", people: 90, left: 9 },
+        { label: "the current question", people: 90, left: 9 },
         { label: "the anonymous one", people: 88, left: 6 },
       ] as [
         { label: string; people: number; left: number },
@@ -430,7 +458,7 @@ describe("buildHeadline", () => {
       })
     );
     expect(t).toContain(
-      "Email question test, since 8 Oct: 10.0% left at the email question with today's question (9 of 90), 6.8% with the anonymous one (6 of 88)."
+      "Email question test, since 8 Oct: 10.0% left at the email question with the current question (9 of 90), 6.8% with the anonymous one (6 of 88)."
     );
     expect(t).toContain("Too early to call");
     expect(t).toContain("about 880 people per version, around 20 Nov at this pace.");
@@ -445,6 +473,30 @@ describe("buildHeadline", () => {
       })
     );
     expect(called).toContain("A clear difference, not chance.");
+  });
+
+  it("names at most a handful of worse-than-usual questions and counts the rest", () => {
+    const base = rows.find((r) => r.segment === "All traffic" && r.week === "2026-10-05")!;
+    const many = Array.from({ length: MAX_WORSE_LINES + 3 }, (_, i): DropoffRow => ({
+      ...base,
+      key: `${base.key}-${i}`,
+      n: i + 1,
+      rate: 0.5 - i / 100,
+      flag: "Worse than usual",
+      usual: 0.05,
+    }));
+    const lines = buildHeadline({
+      rows: [...rows, ...many],
+      weeks,
+      tallies,
+      tests: [],
+      today: "2026-10-12",
+      marker: "m",
+    });
+    expect(text(lines)).toContain("and 3 more, orange in the table below");
+    expect(text(lines).split("against a usual").length - 1).toBe(MAX_WORSE_LINES);
+    // Notion takes at most 100 pieces of text in one callout, line breaks included.
+    expect(lines.flat().length + lines.length - 1).toBeLessThan(100);
   });
 
   it("formats week ranges across months", () => {
