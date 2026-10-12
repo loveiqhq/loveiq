@@ -16,11 +16,13 @@ import { trackStartSurvey } from "@features/analytics/client";
 const WResultTeaser: FC = () => (
   <section className="bg-[#f5f4f8] py-16 lg:py-[92px]" aria-labelledby="w-result-heading">
     <div className="content-shell grid items-center gap-12 lg:grid-cols-2 lg:gap-14">
-      {/* Left: pitch. The heading keeps its 14px top margin, as the frame does. */}
+      {/* Left: pitch. The heading keeps its 14px top margin, as the frame does, and from
+          xl stays on one line as drawn: it is 575px against the 572px column, so it reaches
+          3px into the 56px gap rather than dropping "you" to a line of its own. */}
       <div className="flex flex-col">
         <h2
           id="w-result-heading"
-          className="animate-on-scroll stagger-1 mt-3.5 font-serif text-[clamp(2rem,5.5vw,2.875rem)] font-medium leading-[1.18] tracking-[-0.01em] text-[#161021]"
+          className="animate-on-scroll stagger-1 mt-3.5 font-serif text-[clamp(2rem,5.5vw,2.875rem)] font-medium leading-[1.18] tracking-[-0.01em] text-[#161021] xl:whitespace-nowrap"
         >
           Insights are{" "}
           <span className="bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] bg-clip-text italic text-transparent">
