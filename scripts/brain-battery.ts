@@ -2911,7 +2911,7 @@ async function mcpProbes(): Promise<McpProbe[]> {
       args: {
         query:
           "SELECT count() AS events FROM events WHERE timestamp > now() - INTERVAL 1 DAY " +
-          "AND properties.deploy_env = 'production'",
+          "AND properties.$host = 'www.loveiq.org'",
       },
       check: both(contains("1 row.", "Columns: events."), absent("did not run")),
     },

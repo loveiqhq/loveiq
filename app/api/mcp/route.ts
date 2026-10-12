@@ -4,7 +4,7 @@ import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
 import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
-import { hogqlTable } from "@features/ux-review/server/review";
+import { hogqlCodeOnly, hogqlTable } from "@features/ux-review/server/review";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
@@ -1677,9 +1677,9 @@ export const TOOLS = [
       "measure. Which survey questions move together (conditionality) is " +
       "rpc/get_answer_correlations with since_ts, until_ts (null for all time), min_people " +
       "and min_r: every pair of scale questions, correlated over the people who answered " +
-      "both. funnel_event is the server's daily visit count (see get_business_numbers), so " +
-      "it is never the bottom of a rate of something done on a page: that comes whole from " +
-      "query_product_analytics.",
+      "both. funnel_event's unique_visitor rows are the server's daily visit count (see " +
+      "get_business_numbers), so they are never the bottom of a rate of something done on a " +
+      "page: that comes whole from query_product_analytics.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1786,13 +1786,14 @@ export const TOOLS = [
       "USE IT FOR EVERY RATE OF SOMETHING DONE ON A PAGE (the share of visitors who played the " +
       "video, answered the card, reached an offer) and take BOTH halves of the rate from it: " +
       "the people who did it, out of the people who were on that page, counted the same way. " +
-      "Never divide a PostHog count by get_business_numbers' visitors or by funnel_event rows: " +
-      "those are the server's daily visit count (every public page, once per browser per day, " +
-      "plus visits where the page never ran its tracking, bots among them), a different and " +
-      "larger number, so the rate comes out too low. " +
-      "Count people with count(DISTINCT person_id). Production only: " +
-      "properties.deploy_env = 'production' (staging sends to the same project). Leave out our " +
-      "own tests: anyone whose person.properties.email ends '@loveiq.org', and anyone who ever " +
+      "Never divide a PostHog count by get_business_numbers' visitors or by funnel_event's " +
+      "unique_visitor rows: those are the server's daily visit count (every public page, once " +
+      "per browser per day, plus visits where the page never ran its tracking, bots among " +
+      "them), a different and larger number, so the rate comes out too low. " +
+      "Count people with count(DISTINCT person_id). The real site only: " +
+      "properties.$host = 'www.loveiq.org' (local builds and previews send to the same project " +
+      "under other hosts, and deploy_env is missing before 2026-08-27). Leave out our own " +
+      "tests: anyone whose person.properties.email ends '@loveiq.org', and anyone who ever " +
       "opened a page with 'variant=' in properties.$current_url (the team's arm override). " +
       "THE LANDING TEST: experiment_exposure with properties.experiment = " +
       "'landing-hero-video-ab' is a visitor shown an arm (properties.variant 'white_card' is " +
@@ -1803,9 +1804,14 @@ export const TOOLS = [
       "a visit before that has none, which is no data rather than 'not seen'. The video: " +
       "hero_video_play (a play with sound, counted when frames start), hero_video_progress " +
       "(properties.percent 25, 50, 75) and hero_video_complete. " +
-      "NEVER SELECT distinct_id OR AN EMAIL: for a reader who gave one, distinct_id IS their " +
-      "email address. Aggregate instead. A query with no LIMIT gets LIMIT 1000 and a bigger " +
-      "LIMIT is refused, so count and GROUP BY rather than listing rows. HogQL reads " +
+      "It reads PostHog's events, persons and sessions only: our own database's tables " +
+      "(survey answers, reports, payments) are query_product_data's, which masks what is " +
+      "private, and a query that reaches them here is refused. " +
+      "Emails come back masked as a #tag, and for a reader who gave one distinct_id IS their " +
+      "email, so count people rather than listing them. At most 1000 rows: a query with no " +
+      "LIMIT gets one, a bigger LIMIT is refused, and a longer result says so, so count and " +
+      "GROUP BY rather than listing rows. Wrap a UNION as SELECT * FROM (…): PostHog cuts " +
+      "every part of a bare one but the last at 100 rows, so it is refused. HogQL reads " +
       "x != '' as true when x is NULL; use notEmpty(x).",
     inputSchema: {
       type: "object",
@@ -1816,11 +1822,11 @@ export const TOOLS = [
             "One HogQL SELECT. For example, each landing arm's visitors and how many of them " +
             "played the video, our own tests left out: SELECT properties.variant AS arm, " +
             "count(DISTINCT person_id) AS visitors, count(DISTINCT if(person_id IN (SELECT " +
-            "person_id FROM events WHERE event = 'hero_video_play' AND properties.deploy_env = " +
-            "'production'), person_id, NULL)) AS played FROM events WHERE event = " +
+            "person_id FROM events WHERE event = 'hero_video_play' AND properties.$host = " +
+            "'www.loveiq.org'), person_id, NULL)) AS played FROM events WHERE event = " +
             "'experiment_exposure' AND properties.experiment = 'landing-hero-video-ab' AND " +
             "properties.variant IN ('white_card', 'white_video') AND " +
-            "properties.deploy_env = 'production' AND timestamp >= toDateTime('2026-10-07 " +
+            "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-07 " +
             "00:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
             "toDateTime('2026-10-07 00:00:00') AND (match(toString(properties.$current_url), " +
             "'[?&]variant=') OR toString(person.properties.email) LIKE '%@loveiq.org')) " +
@@ -3276,6 +3282,62 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
   };
   const out = rows.map((row) => walk(row, 0));
   return { rows: out, redacted: [...hit].sort() };
+}
+
+/** An email address anywhere in a value: for a reader who gave one, distinct_id IS it. */
+const EMAIL_VALUE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+/** An IPv4 address, whatever the column is called. */
+const IPV4_VALUE = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
+
+/**
+ * Rows from the product-analytics tool, masked the way query_external_service masks PostHog's
+ * events: a private column by its name (properties.$ip and person.properties.email are
+ * read as `ip` and `email`), an email or IPv4 address by its VALUE whatever the column is
+ * called, and URL secrets (report unlock links sit in $current_url) inside any string.
+ */
+export function maskAnalyticsRows(
+  columns: string[],
+  rows: unknown[][]
+): { columns: string[]; rows: unknown[][]; masked: string[] } {
+  const hit = new Set<string>();
+  const leaf = (name: string) => name.split(".").pop()!.replace(/^\$/, "");
+  const privateColumn = columns.map(
+    (c) => PRIVATE_COLUMN.test(leaf(c)) || PRIVATE_COLUMN.test(snakeCase(leaf(c)))
+  );
+  const value = (v: unknown, column: string): unknown => {
+    if (typeof v === "string") {
+      if (EMAIL_VALUE.test(v) || IPV4_VALUE.test(v)) {
+        hit.add(column);
+        return privateTag(v);
+      }
+      const clean = redactUrlSecrets(v);
+      if (clean !== v) hit.add(column);
+      return clean;
+    }
+    if (Array.isArray(v)) return v.map((x) => value(x, column));
+    if (v !== null && typeof v === "object") {
+      const {
+        rows: [inner],
+        redacted,
+      } = redactPrivateColumns([v]);
+      if (redacted.length > 0) hit.add(column);
+      return Object.fromEntries(
+        Object.entries(inner as Record<string, unknown>).map(([k, x]) => [k, value(x, column)])
+      );
+    }
+    return v;
+  };
+  const out = rows.map((row) =>
+    row.map((v, i) => {
+      const column = columns[i] ?? `column ${i + 1}`;
+      if (privateColumn[i] && v !== null && v !== undefined) {
+        hit.add(column);
+        return privateTag(v);
+      }
+      return value(v, column);
+    })
+  );
+  return { columns, rows: out, masked: [...hit].sort() };
 }
 
 /**
@@ -5282,7 +5344,8 @@ async function callTool(
     if (!query) {
       return textResult("Pass `query`: one HogQL SELECT over `events`.", true);
     }
-    if (!/^(SELECT|WITH)\b/i.test(query)) {
+    // Read past comments and an opening bracket: `(SELECT …)` and a commented query are fine.
+    if (!/^[\s(]*(SELECT|WITH)\b/i.test(hogqlCodeOnly(query))) {
       return textResult(
         "Only a SELECT runs here (WITH … SELECT too). HogQL reads, and so does this tool.",
         true
@@ -5290,26 +5353,64 @@ async function callTool(
     }
     const r = await hogqlTable(query, PRODUCT_ANALYTICS_ROW_CAP);
     if (!r.ok) return textResult(`PostHog did not run the query. ${r.error}`, true);
-    stats.sourceCount = r.rows.length;
-    const columns = `Columns: ${r.columns.join(", ") || "(none named)"}.`;
     if (r.rows.length === 0) {
+      stats.sourceCount = 0;
       return textResult(
-        `0 rows. ${columns} That is what this query selected, not what happened on the ` +
-          `site: check its filters (deploy_env, the dates, the event name) before ` +
-          `concluding nobody did it.`
+        `${UNTRUSTED_DATA_PREAMBLE}\n\n0 rows. Columns: ${r.columns.join(", ") || "(none named)"}. ` +
+          `That is what this query selected, not what happened on the site: check its ` +
+          `filters (the host, the dates, the event name) before concluding nobody did it.`
       );
     }
-    const { text: body, shown } = renderRowsForTest(r.rows, MAX_RESULT_CHARS - 600);
-    const notes = [
-      shown < r.rows.length
-        ? `${shown} of ${r.rows.length} rows shown, the rest did not fit: aggregate further`
-        : `${r.rows.length} row${r.rows.length === 1 ? "" : "s"}`,
-      r.atCap
-        ? `STOPPED AT THE LIMIT OF ${r.limit} ROWS, so the true result is longer: count or ` +
-          `GROUP BY in the query instead of listing`
-        : "",
-    ].filter(Boolean);
-    return textResult(`${notes.join(". ")}. ${columns}\n${body}`);
+    const masked = maskAnalyticsRows(r.columns, r.rows);
+    const notes: string[] = [];
+    if (r.cut === "cap") {
+      notes.push(
+        `MORE THAN ${PRODUCT_ANALYTICS_ROW_CAP} ROWS: only the first ${PRODUCT_ANALYTICS_ROW_CAP} ` +
+          `came back. Count or GROUP BY in the query rather than listing rows`
+      );
+    } else if (r.cut === "own_limit") {
+      notes.push(`Your LIMIT ${r.ownLimit} was filled, so there may be more rows`);
+    } else if (r.cut === "posthog") {
+      notes.push(
+        "CUT SHORT BY POSTHOG: it applied its own row limit, so this is not the whole result. " +
+          "End the query with LIMIT n, outside any brackets"
+      );
+    }
+    // A misspelt event or property is no match in HogQL, not an error, so it reads as a
+    // confident zero: the likeliest way back to a wrong rate.
+    const allZero = masked.columns.filter((_, i) =>
+      masked.rows.every((row) => row[i] === 0 || row[i] === "0" || row[i] === null)
+    );
+    if (allZero.length > 0) {
+      notes.push(
+        `${allZero.join(", ")} ${allZero.length === 1 ? "is" : "are"} 0 or empty in every row. ` +
+          `HogQL reads a misspelt event or property name as no match rather than an error, ` +
+          `so check the names before concluding nobody did it`
+      );
+    }
+    if (masked.masked.length > 0) {
+      notes.push(
+        `Masked as private, so the value is never pasted into a prompt: ` +
+          `${masked.masked.join(", ")}. An email or private field shows as a #tag, the same ` +
+          `value always the same tag; a secret inside a link shows as [redacted]`
+      );
+    }
+    const head = (shown: number) =>
+      `${UNTRUSTED_DATA_PREAMBLE}\n\n` +
+      `${shown < masked.rows.length ? `${shown} of ${masked.rows.length} rows shown, the rest did not fit: aggregate further` : `${masked.rows.length} row${masked.rows.length === 1 ? "" : "s"}`}. ` +
+      `Columns: ${masked.columns.join(", ") || "(none named)"}.` +
+      notes.map((n) => `\n${n}.`).join("") +
+      "\n";
+    const { text: body, shown } = renderRowsForTest(
+      masked.rows,
+      MAX_RESULT_CHARS - head(masked.rows.length).length - 100
+    );
+    stats.sourceCount = shown;
+    return textResult(
+      `${head(shown)}${body}`,
+      false,
+      "aggregate in the query (count, uniq, GROUP BY) or narrow its dates: this tool has no paging"
+    );
   }
 
   if (name === "query_external_service") {
