@@ -93,6 +93,44 @@ describe("POST /api/survey-tracking", () => {
     expect(rows.map((r: { time_spent_ms: number }) => r.time_spent_ms)).toEqual([0, 86_400_000]);
   });
 
+  it("records whether a step came from a phone or a computer, never the User-Agent", async () => {
+    const withAgent = (agent: string | null) =>
+      new Request("http://localhost/api/survey-tracking", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": "valid-token",
+          ...(agent ? { "user-agent": agent } : {}),
+        },
+        body: JSON.stringify({ events: [validEvent(), validEvent()] }),
+      });
+    const cases: Array<[string | null, string | null]> = [
+      [
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+        "iOS",
+      ],
+      [
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
+        "Android",
+      ],
+      [
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+        "Desktop",
+      ],
+      [null, null],
+    ];
+    for (const [agent, device] of cases) {
+      mockFetchWithTimeout.mockClear();
+      expect((await POST(withAgent(agent))).status).toBe(200);
+      const rows = JSON.parse(mockFetchWithTimeout.mock.calls[0]![1].body);
+      expect(rows.map((r: { device_type: string | null }) => r.device_type)).toEqual([
+        device,
+        device,
+      ]);
+      expect(JSON.stringify(rows)).not.toContain("Mozilla");
+    }
+  });
+
   it("returns 200 with valid batch of events", async () => {
     const res = await POST(makeRequest({ events: [validEvent()] }));
     expect(res.status).toBe(200);

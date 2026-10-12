@@ -5,6 +5,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
+import { getDeviceTypeFromUserAgent } from "@features/pricing/logic/reportPricing";
 
 const eventSchema = z.object({
   sessionId: z.string().uuid(),
@@ -74,6 +75,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  // Phone or computer for the drop-off KPI: only the class the price quote uses, never the
+  // User-Agent itself (migration 20261012093000).
+  const userAgent = request.headers.get("user-agent");
+  const deviceType = userAgent ? getDeviceTypeFromUserAgent(userAgent) : null;
   const rows = parsed.data.events.map((e) => ({
     session_id: e.sessionId,
     q_id: e.qId,
@@ -84,6 +89,7 @@ export async function POST(request: Request) {
     direction: e.direction,
     client_ip: ip,
     event_time: e.timestamp,
+    device_type: deviceType,
   }));
 
   try {
