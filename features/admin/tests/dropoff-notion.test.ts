@@ -129,6 +129,12 @@ describe("planSync", () => {
     expect(plan.update).toEqual([]);
     expect(plan.archive.sort()).toEqual(["pa2", "pg"]);
   });
+
+  it("never trashes a row because one read listed it twice", () => {
+    const a = row();
+    const plan = planSync([a], [existing(a, "pa"), existing(a, "pa")]);
+    expect(plan).toEqual({ create: [], update: [], archive: [] });
+  });
 });
 
 describe("readDropoffRows", () => {

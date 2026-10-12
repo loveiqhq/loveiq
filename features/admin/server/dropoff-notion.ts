@@ -144,7 +144,10 @@ export interface SyncPlan {
 export function planSync(desired: DropoffRow[], existing: ExistingRow[]): SyncPlan {
   const held = new Map<string, ExistingRow>();
   const archive: string[] = [];
+  const seen = new Set<string>();
   for (const e of existing) {
+    if (seen.has(e.id)) continue; // one row listed twice by a read, not a second copy
+    seen.add(e.id);
     if (held.has(e.key))
       archive.push(e.id); // a second copy of a row, from two runs at once
     else held.set(e.key, e);

@@ -182,6 +182,11 @@ describe("statistics", () => {
     expect(poissonAtLeast(0, 3)).toBe(1);
     expect(poissonAtLeast(1, 1)).toBeCloseTo(1 - Math.exp(-1), 10);
     expect(poissonAtLeast(4, 0.8)).toBeCloseTo(0.00908, 4);
+    // Past lambda ~745, exp(-lambda) is 0 in floating point; the tail must still be right.
+    expect(poissonAtLeast(800, 800)).toBeGreaterThan(0.49);
+    expect(poissonAtLeast(800, 800)).toBeLessThan(0.53);
+    expect(poissonAtLeast(900, 800)).toBeLessThan(0.001);
+    expect(poissonAtLeast(700, 800)).toBeGreaterThan(0.99);
   });
 
   it("twoProportionP", () => {
@@ -202,6 +207,8 @@ describe("isWorseThanUsual", () => {
   it("flags a real jump: double, 3 points up, and not chance", () => {
     // 32 of 277 (11.6%) against a usual 4.8%: the week of 28 Sep at question 1.
     expect(isWorseThanUsual(32, 277, 0.048)).toBe(true);
+    // The same at a traffic where the usual count passes 745 (0.4 x 2,000 = 800).
+    expect(isWorseThanUsual(1700, 2000, 0.4)).toBe(true);
   });
 
   it("does not flag small numbers, small rises or what chance explains", () => {

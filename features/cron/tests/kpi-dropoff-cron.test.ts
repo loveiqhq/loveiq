@@ -208,6 +208,19 @@ describe("GET /api/cron/kpi-dropoff", () => {
     expect(detail).toContain("picture: the chart did not render");
   });
 
+  it("leaves yesterday's picture when the summary used up the time", async () => {
+    mockCallout.mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 171_000);
+      return "updated";
+    });
+    expect((await call()).status).toBe(500);
+    expect(mockPng).not.toHaveBeenCalled();
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockRecordCronRun.mock.calls[0]![3]).toContain(
+      "picture: out of time, left for tomorrow"
+    );
+  });
+
   it("records rows left for tomorrow or failed writes as an error", async () => {
     mockApply.mockResolvedValueOnce({
       created: 10,

@@ -208,16 +208,20 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
 }
 
-/** P(X >= k) for X ~ Poisson(lambda). */
+/**
+ * P(X >= k) for X ~ Poisson(lambda). Summed in logs: exp(-lambda) is 0 in floating point
+ * once lambda passes about 745, and the tail would then always read 1.
+ */
 export function poissonAtLeast(k: number, lambda: number): number {
   if (k <= 0) return 1;
-  let term = Math.exp(-lambda);
-  let below = term;
+  let logTerm = -lambda;
+  let logBelow = logTerm;
   for (let i = 1; i < k; i++) {
-    term *= lambda / i;
-    below += term;
+    logTerm += Math.log(lambda / i);
+    const hi = Math.max(logBelow, logTerm);
+    logBelow = hi + Math.log1p(Math.exp(Math.min(logBelow, logTerm) - hi));
   }
-  return Math.max(0, 1 - below);
+  return Math.max(0, 1 - Math.exp(logBelow));
 }
 
 /**

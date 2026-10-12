@@ -135,6 +135,8 @@ export async function GET(request: Request) {
     );
 
     const image = await part("picture", async () => {
+      // After a slow summary, yesterday's picture stays rather than the run overrunning.
+      if (isOutOfTime()) throw new Error("out of time, left for tomorrow");
       const payload = buildDropoffWeeklyPayload(
         shown,
         shownTallies.map(allTrafficEnds),
