@@ -44,7 +44,7 @@ export interface DropoffWeek {
 }
 
 /** `YYYY-MM-DD` plus n days, on the calendar (no time zone involved). */
-function addDays(day: string, n: number): string {
+export function addDays(day: string, n: number): string {
   const [y = 1970, m = 1, d = 1] = day.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
@@ -58,18 +58,23 @@ export function shortDate(day: string): string {
 }
 
 /**
- * Up to `completeWeeks` (eight) complete Monday-to-Sunday weeks (Berlin days), oldest
- * first, then the week in progress through yesterday. Through yesterday, not now: someone
- * halfway through the survey at this minute would otherwise count as a quit.
+ * Up to `completeWeeks` (eight) complete Monday-to-Sunday weeks (Berlin days) from
+ * `firstMonday` on, oldest first, then the week in progress through yesterday. Through
+ * yesterday, not now: someone halfway through the survey at this minute would otherwise
+ * count as a quit.
  */
-export function dropoffWeeks(now: Date = new Date(), completeWeeks = MAX_WEEKS): DropoffWeek[] {
+export function dropoffWeeks(
+  now: Date = new Date(),
+  completeWeeks = MAX_WEEKS,
+  firstMonday = FIRST_TRACKED_MONDAY
+): DropoffWeek[] {
   const today = reportingDay(now);
   const weekday = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
   const thisMonday = addDays(today, -weekday);
   const weeks: DropoffWeek[] = [];
   for (let i = completeWeeks; i >= 1; i--) {
     const monday = addDays(thisMonday, -7 * i);
-    if (monday < FIRST_TRACKED_MONDAY) continue;
+    if (monday < firstMonday) continue;
     weeks.push({
       label: shortDate(monday),
       since: reportingDayStart(monday),
@@ -77,7 +82,7 @@ export function dropoffWeeks(now: Date = new Date(), completeWeeks = MAX_WEEKS):
       partial: false,
     });
   }
-  if (weekday > 0 && thisMonday >= FIRST_TRACKED_MONDAY) {
+  if (weekday > 0 && thisMonday >= firstMonday) {
     weeks.push({
       label: shortDate(thisMonday),
       since: reportingDayStart(thisMonday),

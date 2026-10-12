@@ -35,6 +35,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/kpi-weekly",
+      "schedule": "15 8 * * *"
+    },
+    {
       "path": "/api/cron/kpi-dropoff",
       "schedule": "30 8 * * *"
     },
@@ -105,6 +109,9 @@
   ],
   "functions": {
     "app/api/cron/brain-mine/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/kpi-weekly/route.ts": {
       "maxDuration": 300
     },
     "app/api/cron/kpi-dropoff/route.ts": {

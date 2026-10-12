@@ -18,13 +18,15 @@
  * ponytail: rows are never trashed for age, about 430 are added a week. Fine for a year;
  * when the table nears 20,000 rows, trash the weeks older than half a year here.
  */
-import {
-  archiveNotionPage,
-  createDatabaseRow,
-  queryNotionDatabase,
-  updateNotionPage,
-} from "@features/brain/server/act/notion";
+import { queryNotionDatabase } from "@features/brain/server/act/notion";
 import type { DropoffRow } from "@features/admin/server/dropoff-report";
+import {
+  applyRowSync,
+  planRowSync,
+  type ExistingRow,
+  type SyncPlan as RowSyncPlan,
+  type SyncResult,
+} from "@features/admin/server/notion-row-sync";
 
 /** 🗂️ KPI report data › Survey drop-off data. */
 export const DROPOFF_DATA_DATABASE_ID = "e233fb12-fff9-4485-a54a-d4c29e8b26ff";
@@ -86,12 +88,6 @@ const plain = (p: NotionProp, kind: "title" | "rich_text") =>
 const numberOf = (p: NotionProp) => (typeof p?.number === "number" ? p.number : null);
 const selectOf = (p: NotionProp) => (p?.select as { name?: string } | null | undefined)?.name ?? "";
 
-export interface ExistingRow {
-  id: string;
-  key: string;
-  value: string;
-}
-
 /** A row as Notion holds it, read back into `rowValue`'s form. */
 export function readExisting(page: {
   id: string;
@@ -134,51 +130,13 @@ export async function readDropoffRows(
   return pages.map(readExisting);
 }
 
-export interface SyncPlan {
-  create: DropoffRow[];
-  update: Array<{ id: string; row: DropoffRow }>;
-  archive: string[];
-}
+export type SyncPlan = RowSyncPlan<DropoffRow>;
+export type { ExistingRow, SyncResult };
 
 /** What to write so Notion holds exactly `desired` for the weeks read. */
 export function planSync(desired: DropoffRow[], existing: ExistingRow[]): SyncPlan {
-  const held = new Map<string, ExistingRow>();
-  const archive: string[] = [];
-  const seen = new Set<string>();
-  for (const e of existing) {
-    if (seen.has(e.id)) continue; // one row listed twice by a read, not a second copy
-    seen.add(e.id);
-    if (held.has(e.key))
-      archive.push(e.id); // a second copy of a row, from two runs at once
-    else held.set(e.key, e);
-  }
-  const create: DropoffRow[] = [];
-  const update: Array<{ id: string; row: DropoffRow }> = [];
-  const wanted = new Set<string>();
-  for (const row of desired) {
-    wanted.add(row.key);
-    const e = held.get(row.key);
-    if (!e) create.push(row);
-    else if (e.value !== rowValue(row)) update.push({ id: e.id, row });
-  }
-  for (const [key, e] of held) if (!wanted.has(key)) archive.push(e.id);
-  return { create, update, archive };
+  return planRowSync(desired, existing, rowValue);
 }
-
-export interface SyncResult {
-  created: number;
-  updated: number;
-  archived: number;
-  /** Writes not started before time ran out; the next run picks them up. */
-  pending: number;
-  failed: number;
-  firstError: string | null;
-}
-
-/** Notion's own pace: about three requests a second. */
-const CONCURRENCY = 3;
-/** After this many failed writes the rest are left for the next run, not hammered. */
-const MAX_FAILURES = 5;
 
 /**
  * Write the plan, the newest weeks first, so a run cut short by `isOutOfTime` leaves the
@@ -190,53 +148,5 @@ export async function applySync(
   isOutOfTime: () => boolean,
   token?: string
 ): Promise<SyncResult> {
-  type Task = {
-    week: string;
-    kind: "created" | "updated" | "archived";
-    run: () => Promise<unknown>;
-  };
-  const tasks: Task[] = [
-    ...plan.update.map(({ id, row }) => ({
-      week: row.week,
-      kind: "updated" as const,
-      run: () => updateNotionPage(id, rowProperties(row), token),
-    })),
-    ...plan.create.map((row) => ({
-      week: row.week,
-      kind: "created" as const,
-      run: () => createDatabaseRow(databaseId, rowProperties(row), token),
-    })),
-  ].sort((a, b) => (a.week < b.week ? 1 : a.week > b.week ? -1 : 0));
-  tasks.push(
-    ...plan.archive.map((id) => ({
-      week: "",
-      kind: "archived" as const,
-      run: () => archiveNotionPage(id, token),
-    }))
-  );
-
-  const result: SyncResult = {
-    created: 0,
-    updated: 0,
-    archived: 0,
-    pending: 0,
-    failed: 0,
-    firstError: null,
-  };
-  let next = 0;
-  const worker = async () => {
-    while (next < tasks.length && !isOutOfTime() && result.failed < MAX_FAILURES) {
-      const task = tasks[next++]!;
-      try {
-        await task.run();
-        result[task.kind] += 1;
-      } catch (err) {
-        result.failed += 1;
-        result.firstError ??= err instanceof Error ? err.message : String(err);
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-  result.pending = tasks.length - next;
-  return result;
+  return applyRowSync(databaseId, plan, isOutOfTime, rowProperties, token);
 }
