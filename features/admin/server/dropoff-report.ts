@@ -11,8 +11,9 @@
  * cost; the visits base belongs to the step before the survey and stays on its own KPI.
  *
  * The measure is get_survey_friction's, read per person (get_survey_dropoff_runs), so the
- * same numbers can be cut by traffic source and by the two survey tests. Summed, the "All
- * traffic" slice equals get_survey_friction exactly (migration 20261012003000).
+ * same numbers can be cut by traffic source, by phone or computer, and by the two survey
+ * tests. Summed, the "All traffic" slice equals get_survey_friction exactly (migration
+ * 20261012003000). Devices are recorded from 2026-10-12 on (migration 20261012093000).
  */
 import {
   askedQuestions,
@@ -39,14 +40,21 @@ export interface DropoffRun {
   /** Where they left, when their last step ever fell in the window and they never finished. */
   leftAt: string | null;
   source: "google_ads" | "other" | "unknown";
+  /** From their latest step's User-Agent, the price quote's classes; null before 12 Oct 2026. */
+  device: "iOS" | "Android" | "Desktop" | null;
 }
 
-/** The slices the page can filter to. Every person is in "All traffic" and one source. */
+/**
+ * The slices the page can filter to. Every person is in "All traffic" and one source, and
+ * in "Phone" or "Computer" when their device is known.
+ */
 export const SEGMENTS = [
   "All traffic",
   "Google Ads",
   "Other sources",
   "Unknown source",
+  "Phone",
+  "Computer",
   "Opening order: current",
   "Opening order: new",
   "Email question: current",
@@ -58,6 +66,13 @@ const SOURCE_SEGMENT: Record<DropoffRun["source"], Segment> = {
   google_ads: "Google Ads",
   other: "Other sources",
   unknown: "Unknown source",
+};
+
+/** iPhone and Android are phones (tablets with them; iPadOS Safari reads as Desktop). */
+const DEVICE_SEGMENT: Record<NonNullable<DropoffRun["device"]>, Segment> = {
+  iOS: "Phone",
+  Android: "Phone",
+  Desktop: "Computer",
 };
 
 /**
@@ -97,13 +112,15 @@ function parseRun(raw: unknown): DropoffRun {
   const r = (raw ?? {}) as Record<string, unknown>;
   const startedAt = typeof r.started_at === "string" ? Date.parse(r.started_at) : NaN;
   const source = r.source;
+  const device = r.device ?? null;
   if (
     typeof r.session_id !== "string" ||
     !Number.isFinite(startedAt) ||
     !Array.isArray(r.reached) ||
     !r.reached.every((q) => typeof q === "string") ||
     !(r.left_at === null || typeof r.left_at === "string") ||
-    !(source === "google_ads" || source === "other" || source === "unknown")
+    !(source === "google_ads" || source === "other" || source === "unknown") ||
+    !(device === null || device === "iOS" || device === "Android" || device === "Desktop")
   ) {
     throw new Error("get_survey_dropoff_runs: a row of an unexpected shape");
   }
@@ -113,6 +130,7 @@ function parseRun(raw: unknown): DropoffRun {
     reached: r.reached as string[],
     leftAt: (r.left_at as string | null) ?? null,
     source,
+    device,
   };
 }
 
@@ -132,6 +150,7 @@ export async function fetchDropoffRuns(since: Date, until: Date): Promise<Dropof
 /** The slices one person belongs to. */
 export function segmentsOf(run: DropoffRun): Segment[] {
   const out: Segment[] = ["All traffic", SOURCE_SEGMENT[run.source]];
+  if (run.device) out.push(DEVICE_SEGMENT[run.device]);
   for (const test of SURVEY_TESTS) {
     if (run.startedAt >= test.launch && (test.end === null || run.startedAt < test.end)) {
       out.push(test.segmentOf(run.sessionId));
@@ -462,6 +481,12 @@ export interface Span {
 
 const pct = (k: number, n: number) => `${n > 0 ? ((100 * k) / n).toFixed(1) : "0.0"}%`;
 
+/** People in one slice of one week, and how many of them left before the end. */
+function leftOfPeople(t: Tally | undefined): { people: number; left: number } {
+  const left = [...(t?.byQuestion.values() ?? [])].reduce((s, q) => s + q.left, 0);
+  return { people: t?.people ?? 0, left };
+}
+
 /** "5 to 11 Oct", "28 Sep to 4 Oct". */
 export function weekRange(monday: string): string {
   const [from, to] = [shortDate(monday), shortDate(addDays(monday, 6))];
@@ -488,9 +513,7 @@ export function buildHeadline(input: {
     .at(-1);
   if (lastFull) {
     const monday = reportingDay(lastFull.w.since);
-    const all = input.tallies[lastFull.i]?.get("All traffic");
-    const left = [...(all?.byQuestion.values() ?? [])].reduce((s, q) => s + q.left, 0);
-    const people = all?.people ?? 0;
+    const { people, left } = leftOfPeople(input.tallies[lastFull.i]?.get("All traffic"));
     lines.push([
       { text: `Last full week, ${weekRange(monday)}: `, bold: true },
       {
@@ -511,6 +534,28 @@ export function buildHeadline(input: {
         ]);
       }
     }
+  }
+  // Phone against computer: the last full week once both have enough people, else the week
+  // so far. Devices are recorded from 12 Oct 2026, so earlier weeks have neither.
+  const weekly = input.weeks.map((w, i) => ({ w, i }));
+  for (const c of [
+    weekly.filter(({ w }) => !w.partial).at(-1),
+    weekly.find(({ w }) => w.partial),
+  ]) {
+    if (!c) continue;
+    const phone = leftOfPeople(input.tallies[c.i]?.get("Phone"));
+    const computer = leftOfPeople(input.tallies[c.i]?.get("Computer"));
+    if (phone.people < DROPOFF_FLOOR || computer.people < DROPOFF_FLOOR) continue;
+    lines.push([
+      {
+        text: `Phone and computer, ${c.w.partial ? "this week so far" : "last full week"}: `,
+        bold: true,
+      },
+      {
+        text: `${pct(phone.left, phone.people)} left before the end on a phone (${phone.left} of ${phone.people}), ${pct(computer.left, computer.people)} on a computer (${computer.left} of ${computer.people}).`,
+      },
+    ]);
+    break;
   }
   const worse = input.rows.filter(
     (r) =>

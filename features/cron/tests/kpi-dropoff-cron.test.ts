@@ -57,6 +57,7 @@ const someone = {
   reached: ["00001", "00000"],
   leftAt: "00000",
   source: "google_ads" as const,
+  device: null,
 };
 
 describe("GET /api/cron/kpi-dropoff", () => {

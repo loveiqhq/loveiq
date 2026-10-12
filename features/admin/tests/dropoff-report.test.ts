@@ -50,6 +50,7 @@ const run = (over: Partial<DropoffRun>): DropoffRun => ({
   reached: ["00001"],
   leftAt: null,
   source: "google_ads",
+  device: null,
   ...over,
 });
 
@@ -79,6 +80,7 @@ describe("fetchDropoffRuns", () => {
         reached: ["00001", "01002"],
         leftAt: "01002",
         source: "other",
+        device: null,
       },
     ]);
     const [path, init] = mockSupabase.mock.calls[0] as [string, { body: string }];
@@ -115,9 +117,40 @@ describe("fetchDropoffRuns", () => {
     });
     await expect(fetchDropoffRuns(new Date(), new Date())).rejects.toThrow("unexpected shape");
   });
+
+  it("reads the device, and refuses one it does not know", async () => {
+    const raw = (device: unknown) => ({
+      ok: true,
+      json: async () => [
+        {
+          session_id: "s1",
+          started_at: "2026-10-12T10:00:00Z",
+          reached: ["00001"],
+          left_at: null,
+          source: "other",
+          device,
+        },
+      ],
+    });
+    for (const device of ["iOS", "Android", "Desktop", null]) {
+      mockSupabase.mockResolvedValue(raw(device));
+      expect((await fetchDropoffRuns(new Date(), new Date()))[0]!.device).toBe(device);
+    }
+    mockSupabase.mockResolvedValue(raw("Tablet"));
+    await expect(fetchDropoffRuns(new Date(), new Date())).rejects.toThrow("unexpected shape");
+  });
 });
 
 describe("segmentsOf", () => {
+  it("puts iPhone and Android in Phone, Desktop in Computer, and an unknown device in neither", () => {
+    const at = (device: DropoffRun["device"]) =>
+      segmentsOf(run({ device, startedAt: BEFORE_BOTH }));
+    expect(at("iOS")).toEqual(["All traffic", "Google Ads", "Phone"]);
+    expect(at("Android")).toEqual(["All traffic", "Google Ads", "Phone"]);
+    expect(at("Desktop")).toEqual(["All traffic", "Google Ads", "Computer"]);
+    expect(at(null)).toEqual(["All traffic", "Google Ads"]);
+  });
+
   it("puts everyone in all traffic and their source", () => {
     expect(segmentsOf(run({ source: "google_ads", startedAt: BEFORE_BOTH }))).toEqual([
       "All traffic",
@@ -426,6 +459,40 @@ describe("buildHeadline", () => {
     expect(t).toContain("kpi-dropoff job");
     expect(t).not.toContain("Worse than usual");
     expect(t).not.toContain("—");
+  });
+
+  it("compares phone and computer, last full week first, then the week so far", () => {
+    const devices = (phones: number, computers: number) =>
+      tallyRuns([
+        ...Array.from({ length: phones }, (_, i) =>
+          run({ device: "iOS", leftAt: i < phones / 2 ? "00001" : null, startedAt: BEFORE_BOTH })
+        ),
+        ...Array.from({ length: computers }, (_, i) =>
+          run({ device: "Desktop", leftAt: i < 5 ? "00001" : null, startedAt: BEFORE_BOTH })
+        ),
+      ]);
+    const line = (ts: typeof tallies, w = weeks) =>
+      text(
+        buildHeadline({ rows, weeks: w, tallies: ts, tests: [], today: "2026-10-12", marker: "m" })
+      )
+        .split("\n")
+        .find((l) => l.startsWith("Phone and computer"));
+
+    // Week of 5 Oct has both: 30 phones (15 left), 25 computers (5 left).
+    const withDevices = tallies.map((t, i) => (i === tallies.length - 1 ? devices(30, 25) : t));
+    expect(line(withDevices)).toBe(
+      "Phone and computer, last full week: 50.0% left before the end on a phone (15 of 30), 20.0% on a computer (5 of 25)."
+    );
+    // Too few computers: no line rather than a number on 19 people.
+    expect(line(tallies.map((t, i) => (i === tallies.length - 1 ? devices(30, 19) : t)))).toBe(
+      undefined
+    );
+    // A Tuesday: nothing in the last full week yet, so the week so far.
+    const tuesday = dropoffWeeks(new Date("2026-10-13T08:30:00Z"));
+    const soFar = [...tallies, devices(40, 20)];
+    expect(line(soFar, tuesday)).toBe(
+      "Phone and computer, this week so far: 50.0% left before the end on a phone (20 of 40), 25.0% on a computer (5 of 20)."
+    );
   });
 
   it("lists a question that got worse than usual", () => {
