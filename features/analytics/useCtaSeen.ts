@@ -15,7 +15,15 @@ const seen = new Set<string>();
  * action. Geometry only: a modal over it still counts, as it does for a person who closes
  * the modal and finds the card there.
  */
-export function useCtaSeen(ref: RefObject<Element | null>, cta: CtaSeen): void {
+export function useCtaSeen(
+  ref: RefObject<Element | null>,
+  cta: CtaSeen,
+  /**
+   * Observe again when this changes. The landing hero swaps its slot (card or video)
+   * without unmounting, so the card's ref can be attached after the first render.
+   */
+  attachedWhen?: unknown
+): void {
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
@@ -33,5 +41,5 @@ export function useCtaSeen(ref: RefObject<Element | null>, cta: CtaSeen): void {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref, cta]);
+  }, [ref, cta, attachedWhen]);
 }

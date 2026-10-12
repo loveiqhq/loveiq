@@ -85,6 +85,15 @@ describe("landing hero — whether its media was seen", () => {
     expect(seenEvents()).toEqual([["cta_seen", { cta: "hero_video" }]]);
   });
 
+  it("counts the card when the slot swaps from the video to it without unmounting", () => {
+    const { rerender } = render(<WHero media="video" />);
+    rerender(<WHero media="card" />);
+    const card = halfObservers().find((o) => o.el?.textContent?.includes("QUESTION 1 OF"));
+    expect(card).toBeDefined();
+    act(() => card!.show(1));
+    expect(seenEvents()).toEqual([["cta_seen", { cta: "hero_card" }]]);
+  });
+
   it("sends nothing while the media is below the screen", () => {
     render(<WHero media="card" />);
     render(<WHero media="video" />);

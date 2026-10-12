@@ -51,7 +51,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
   // Question 1 in the hero slot, seen or not: on a phone it sits below the first screen.
   // The video counts its own (WHeroVideo), and in its arm this ref stays empty.
   const cardRef = useRef<HTMLDivElement>(null);
-  useCtaSeen(cardRef, "hero_card");
+  useCtaSeen(cardRef, "hero_card", media);
 
   return (
     <section className="relative overflow-hidden bg-white pt-[64px]">
