@@ -300,10 +300,8 @@ export const KPIS: KpiDef[] = [
         ratio("Computer", k.computer.finished, k.computer.started, 20),
       ].filter((v) => (v.den ?? 0) > 0);
     },
-    note: (_w, c) =>
-      c.partial
-        ? "Followed per start week: people who started late in a week may still finish, so recent weeks can still rise."
-        : null,
+    note: () =>
+      "Followed per start week: people who started late in a week may still finish, so recent weeks can still rise.",
     rule: "5 points or more below the usual level",
     watch: (last, usual) =>
       pts(last, usual) <= -5

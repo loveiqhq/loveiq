@@ -310,6 +310,13 @@ describe("rows and summaries", () => {
     expect(text).not.toContain("—");
   });
 
+  it("tells on the page that a cohort KPI's recent weeks can still rise", () => {
+    for (const id of ["start_to_finish", "finish_to_paid"]) {
+      const s = summaries.find((x) => x.kpi.id === id)!;
+      expect(s.notes.join(" ")).toContain("can still rise");
+    }
+  });
+
   it("names what is missing instead of a blank", () => {
     const cppr = summaries.find((s) => s.kpi.id === "cppr")!;
     const none = { ...cppr, lastFull: null, before: null, soFar: null, trend: [] };

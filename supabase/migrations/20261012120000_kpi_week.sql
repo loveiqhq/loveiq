@@ -109,10 +109,15 @@ AS $function$
        AND p.created_date_time >= since_ts AND p.created_date_time < until_ts
        AND NOT EXISTS (SELECT 1 FROM staff WHERE staff.id = s.user_id)
   ),
+  -- A session whose first step fell in the window has a step in the window: only those
+  -- sessions are grouped, so a call does not scan the whole, never-cleared table.
   first_step AS (
     SELECT e.session_id
       FROM survey_behavior_event e
-     WHERE e.session_id IS NOT NULL
+     WHERE e.session_id IN (
+             SELECT w.session_id FROM survey_behavior_event w
+              WHERE w.created_at >= since_ts AND w.created_at < until_ts
+                AND w.session_id IS NOT NULL)
      GROUP BY e.session_id
     HAVING min(e.created_at) >= since_ts AND min(e.created_at) < until_ts
   ),
