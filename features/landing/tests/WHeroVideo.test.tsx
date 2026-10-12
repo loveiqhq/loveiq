@@ -10,6 +10,7 @@ const analytics = vi.hoisted(() => ({
   trackHeroVideoError: vi.fn(),
   trackHeroVideoPaused: vi.fn(),
   trackHeroVideoResumed: vi.fn(),
+  trackCtaSeen: vi.fn(),
 }));
 vi.mock("@features/analytics/client", () => analytics);
 
@@ -52,6 +53,13 @@ class FakeObserver {
     );
   }
 }
+
+/** The loop's observers (a quarter on screen rolls it), told apart from cta_seen's by threshold. */
+const loopObservers = () =>
+  FakeObserver.all.filter((o) => JSON.stringify(o.opts?.threshold) === "[0,0.25]");
+const loopIo = () => loopObservers()[0]!;
+/** cta_seen's observer: half of the box on screen (features/analytics/useCtaSeen.ts). */
+const seenIo = () => FakeObserver.all.find((o) => o.opts?.threshold === 0.5)!;
 
 let played: HTMLMediaElement[] = [];
 let paused: HTMLMediaElement[] = [];
@@ -169,8 +177,8 @@ describe("hero video — the silent loop", () => {
     expect(screen.getByTestId("hero-video").hasAttribute("data-ready")).toBe(true);
     const { preview } = media();
     expect(preview.getAttribute("src")).toBe(HERO_PREVIEW_SRC);
-    const [io] = FakeObserver.all;
-    expect(io!.opts?.threshold).toEqual([0, 0.25]);
+    expect(loopObservers()).toHaveLength(1);
+    const io = loopIo();
 
     act(() => io!.show(0.1));
     expect(played).not.toContain(preview);
@@ -187,7 +195,7 @@ describe("hero video — the silent loop", () => {
   it("stops in a hidden tab and rolls again when the tab comes back", () => {
     render(<WHeroVideo />);
     const { preview } = media();
-    act(() => FakeObserver.all[0]!.show(1));
+    act(() => loopIo().show(1));
     paused = [];
     played = [];
     act(() => setVisibility("hidden"));
@@ -206,7 +214,7 @@ describe("hero video — the silent loop", () => {
     render(<WHeroVideo />);
     const { preview } = media();
     expect(preview.getAttribute("src")).toBeNull();
-    expect(FakeObserver.all).toHaveLength(0);
+    expect(loopObservers()).toHaveLength(0);
     expect(screen.getByTestId("hero-video-play")).toBeTruthy();
   });
 
@@ -219,7 +227,7 @@ describe("hero video — the silent loop", () => {
   it("goes by the latest crossing when one callback carries several", () => {
     render(<WHeroVideo />);
     const { preview } = media();
-    const [io] = FakeObserver.all;
+    const io = loopIo();
     // Scrolled in and straight back out between two callbacks: off screen now.
     act(() => io!.showMany(0.6, 0));
     expect(played).not.toContain(preview);
@@ -231,7 +239,7 @@ describe("hero video — the silent loop", () => {
   it("says nothing when autoplay is refused: that is the poster doing its job", async () => {
     playResult = rejectWith("NotAllowedError");
     render(<WHeroVideo />);
-    await act(async () => FakeObserver.all[0]!.show(1));
+    await act(async () => loopIo().show(1));
     expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
     expect(screen.getByTestId("hero-video-play")).toBeTruthy();
   });
@@ -239,7 +247,7 @@ describe("hero video — the silent loop", () => {
   it("reports a loop that cannot play at all, once per page", async () => {
     playResult = rejectWith("NotSupportedError");
     render(<WHeroVideo />);
-    const [io] = FakeObserver.all;
+    const io = loopIo();
     await act(async () => io!.show(1));
     await act(async () => io!.show(0));
     await act(async () => io!.show(1));
@@ -583,5 +591,43 @@ describe("hero video — what it records", () => {
       fireEvent(full, new Event("playing"));
     });
     expect(analytics.trackHeroVideoPlay).toHaveBeenLastCalledWith({ replay: true });
+  });
+});
+
+describe("hero video — whether it was seen", () => {
+  // useCtaSeen remembers what was seen per page for the life of the module, so each test
+  // stands on a page of its own.
+  const onPage = (path: string) => window.history.replaceState(null, "", path);
+  afterEach(() => onPage("/"));
+
+  it("counts it once, when half of the video is on screen", () => {
+    onPage("/seen-half");
+    render(<WHeroVideo />);
+    const io = seenIo();
+    expect(io.el).toBe(screen.getByTestId("hero-video"));
+    act(() => io.show(0.4));
+    expect(analytics.trackCtaSeen).not.toHaveBeenCalled();
+    act(() => io.show(0.5));
+    expect(analytics.trackCtaSeen.mock.calls).toEqual([[{ cta: "hero_video" }]]);
+    act(() => io.show(0));
+    act(() => io.show(1));
+    expect(analytics.trackCtaSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts it with no loop too: under reduced motion the poster and the button are seen", () => {
+    onPage("/seen-reduced-motion");
+    setReducedMotion(true);
+    render(<WHeroVideo />);
+    expect(loopObservers()).toHaveLength(0);
+    act(() => seenIo().show(1));
+    expect(analytics.trackCtaSeen.mock.calls).toEqual([[{ cta: "hero_video" }]]);
+  });
+
+  it("is not a play: seeing it sends no play and no error", () => {
+    onPage("/seen-not-play");
+    render(<WHeroVideo />);
+    act(() => seenIo().show(1));
+    expect(analytics.trackHeroVideoPlay).not.toHaveBeenCalled();
+    expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
   });
 });
