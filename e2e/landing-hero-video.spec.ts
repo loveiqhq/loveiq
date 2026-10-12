@@ -97,3 +97,46 @@ test.describe("Landing arm B — the hero video", () => {
     if (vw >= 1024) expect(Math.abs(box!.y - 194)).toBeLessThanOrEqual(2);
   });
 });
+
+/**
+ * Marcus's condensed phone hero (Figma Report-3.0 `1604:5505`, 12.10), both arms alike.
+ * Below lg the slot sits right under the hero's button, so the video or question 1 is on
+ * the first screen (it used to start some 280px lower, under the eyebrow, the rating, the
+ * ticker and the privacy line, which are now desktop-only). From 1024 up nothing moved.
+ */
+test.describe("Landing hero — the slot right under the button on a phone", () => {
+  for (const [variant, slotId, gap] of [
+    // The grid's 40px gap; the video adds its own 11.25 (Figma `1503:12473`).
+    ["white_card", "hero-card", 40],
+    ["white_video", "hero-video", 51.25],
+  ] as const) {
+    test(`${variant}: the slot follows the button, and the desktop-only lines are hidden`, async ({
+      page,
+    }) => {
+      // The slot rises 24px into place on load; under reduced motion it starts there.
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(`/?variant=${variant}`);
+      const hero = page.locator("section", { has: page.locator("h1") }).first();
+      const desktopOnly = [
+        hero.getByText("Anonymous · ~9 minutes · No account"),
+        hero.getByText("4.9/5"),
+        hero.getByText("people are taking the test right now"),
+        hero.getByRole("link", { name: "Trust Center" }),
+      ];
+      const vw = page.viewportSize()!.width;
+      const vh = page.viewportSize()!.height;
+      if (vw >= 1024) {
+        for (const line of desktopOnly) await expect(line).toBeVisible();
+        return;
+      }
+      for (const line of desktopOnly) await expect(line).toBeHidden();
+      const cta = await page.getByRole("link", { name: "Start my free test - hero" }).boundingBox();
+      const slot = await page.getByTestId(slotId).boundingBox();
+      expect(cta).not.toBeNull();
+      expect(slot).not.toBeNull();
+      expect(Math.abs(slot!.y - (cta!.y + cta!.height) - gap)).toBeLessThanOrEqual(2);
+      // On the first screen of every phone project (iPhone 15 Pro's is 659px tall).
+      expect(slot!.y).toBeLessThan(vh - 100);
+    });
+  }
+});

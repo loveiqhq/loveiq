@@ -6,10 +6,12 @@
 
 **Hero video (arm B):** `WHeroVideo` shows a poster, rolls a muted 7.5-second preview while it is on screen, and plays the full video (`public/videos/white/`, 1:10, captions burned in) with sound on a tap; a start that fails (a rejection, a media error, or no frame within 12 s) brings the button back. It is imported statically, not with `next/dynamic`: that wrapper has no Suspense boundary, so arm B's whole page waited on the video's chunk to hydrate. Its play, progress, completion and error events are in `features/analytics/client`.
 
+**Phone hero (below lg, both arms, since 12.10):** Marcus's condensed frame (Figma Report-3.0 `1604:5505`) puts the slot right under the hero's button, so the video or question 1 is on the first screen: 20px under the nav, the headline, the paragraph as one run (no break after "research."), the button, then the slot. The eyebrow, the rating row, the "taking the test right now" ticker and the privacy line render from lg only, and the trust strip says "Science-backed" without "not a horoscope". Desktop is unchanged. `e2e/landing-hero-video.spec.ts` pins the slot under the button in both arms.
+
 **Entry points:**
 
 - `ui/white/LandingPageWhite.tsx` — composition root for both live arms; renders each `white/W*.tsx` section in order, wrapped in `ScrollAnimator`.
-- `ui/white/WHero.tsx` — the hero; its right-hand slot holds question 1 (arm A) or `WHeroVideo` (arm B).
+- `ui/white/WHero.tsx` — the hero; its right-hand slot holds question 1 (arm A) or `WHeroVideo` (arm B), and below lg sits right under the button.
 - `ui/white-v1/LandingPageWhiteV1.tsx` — round 2's retired arm (the pre-rebuild landing).
 - `ui/white/WNavSection.tsx` — white landing top nav.
 - `ui/FooterSection.tsx` — site footer (reused by legal pages, glossary, trust-zone, report, about, 404).

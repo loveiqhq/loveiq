@@ -48,7 +48,8 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
     () => CONCURRENT_CLIENT,
     () => CONCURRENT_SSR
   );
-  // Question 1 in the hero slot, seen or not: on a phone it sits below the first screen.
+  // Question 1 in the hero slot, seen or not. On a phone it sat below the first screen
+  // until the condensed hero (12.10); short screens can still cut it, so it is counted.
   // The video counts its own (WHeroVideo), and in its arm this ref stays empty.
   const cardRef = useRef<HTMLDivElement>(null);
   useCtaSeen(cardRef, "hero_card", media);
@@ -62,13 +63,19 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             // generates classes it can read whole. Arm B's track is Figma's 472, so the
             // video ends exactly on the content edge.
             media === "video"
-              ? "grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_472px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
-              : "grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_471px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
+              ? "grid items-center gap-10 pb-12 pt-5 lg:grid-cols-[minmax(0,1fr)_472px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
+              : "grid items-center gap-10 pb-12 pt-5 lg:grid-cols-[minmax(0,1fr)_471px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
           }
         >
-          {/* Left: copy */}
+          {/* Left: copy. Below lg (one column) the hero is Marcus's condensed phone frame
+              (Figma Report-3.0 1604:5505, 12.10): 20px under the nav, then the headline,
+              the paragraph and the button, and the slot right under it, so the video or
+              question 1 is on the first screen. The eyebrow, the rating, the ticker and
+              the privacy line are desktop-only; the trust strip below still says
+              "Anonymous by default". Both arms alike, so the test still compares only
+              what is in the slot. */}
           <div className="flex max-w-[38rem] flex-col">
-            <div className="animate-on-load flex items-center gap-2.5">
+            <div className="animate-on-load hidden items-center gap-2.5 lg:flex">
               <span className="animate-pulse-glow h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
               <span className="text-[11px] font-bold uppercase tracking-[0.88px] text-[#5f6675]">
                 Anonymous · ~9 minutes · No account
@@ -91,8 +98,10 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             </h1>
 
             <p className="animate-on-load stagger-2 mt-5 max-w-[470px] text-[16px] font-medium leading-[28px] text-[#5f6675]">
-              Grounded in state-of-the-art science &amp; research.
-              <br />
+              {/* One text node with its space, so the phone runs straight on (four lines, as
+                  drawn) and the desktop's break still lands after "research." */}
+              {"Grounded in state-of-the-art science & research. "}
+              <br className="hidden lg:inline" />
               <strong className="font-extrabold text-black">In just 9 minutes</strong>, decode your
               sexual personality and patterns, so you get clear, practical steps to improve
               intimacy.
@@ -120,7 +129,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             </div>
 
             {/* Social proof */}
-            <div className="animate-on-load stagger-4 mt-5 flex items-center gap-3">
+            <div className="animate-on-load stagger-4 mt-5 hidden items-center gap-3 lg:flex">
               <div className="flex items-center">
                 {RATING_AVATARS.map((src, i) => (
                   <div
@@ -146,7 +155,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
               </div>
             </div>
 
-            <div className="animate-on-load stagger-4 mt-3 flex items-center gap-2">
+            <div className="animate-on-load stagger-4 mt-3 hidden items-center gap-2 lg:flex">
               {/* Live-ish indicator: a static dot under the halo, so it still
                   reads as a dot when animation is off. */}
               <span className="relative flex h-[7px] w-[7px] shrink-0">
@@ -162,7 +171,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
               </p>
             </div>
 
-            <p className="animate-on-load stagger-5 mt-[18px] text-[16px] leading-[28px] text-black">
+            <p className="animate-on-load stagger-5 mt-[18px] hidden text-[16px] leading-[28px] text-black lg:block">
               <span className="font-light">Your </span>
               <strong className="font-extrabold">privacy &amp; anonymity</strong>
               <span className="font-light"> come first. Learn more in our </span>
@@ -187,7 +196,11 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             </div>
           ) : (
             /* Right: live question 1 */
-            <div ref={cardRef} className="animate-on-load stagger-2 w-full lg:justify-self-end">
+            <div
+              ref={cardRef}
+              data-testid="hero-card"
+              className="animate-on-load stagger-2 w-full lg:justify-self-end"
+            >
               <WQuestionCard size="hero" location="hero" />
             </div>
           )}
