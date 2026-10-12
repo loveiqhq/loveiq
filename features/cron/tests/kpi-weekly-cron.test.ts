@@ -70,6 +70,7 @@ const week = {
   starts: { all: 280, google_ads: 250, by_arm: { white_card: 80, white_video: 90 } },
   finished: { all: 140, google_ads: 125 },
   checkout: 6,
+  checkout_paid: 1,
   paywall: 90,
   sales: 1,
   sales_google_ads: 1,
@@ -104,7 +105,11 @@ describe("GET /api/cron/kpi-weekly", () => {
     mockProdHost.mockReturnValue(true);
     mockKpiWeek.mockReset().mockImplementation(async () => parseKpiWeek(week));
     mockRuns.mockReset().mockResolvedValue([]);
-    mockAdCost.mockReset().mockResolvedValue({ byDay: new Map(), from: null, to: null });
+    mockAdCost.mockReset().mockResolvedValue({
+      byDay: new Map([["2026-10-05", 40]]),
+      from: "2026-05-28",
+      to: "2026-10-11",
+    });
     mockPages.mockReset().mockResolvedValue(allPages());
     mockReadRows.mockReset().mockResolvedValue([]);
     mockCallout.mockResolvedValue("updated");
@@ -196,6 +201,22 @@ describe("GET /api/cron/kpi-weekly", () => {
     expect(mockCallout).not.toHaveBeenCalled();
     expect(mockApply).not.toHaveBeenCalled();
     expect(mockRecordCronRun.mock.calls[0]![3]).toBe("get_kpi_week 500");
+  });
+
+  it("writes nothing when the ad spend cannot be read, rather than trash the cost rows", async () => {
+    // What adCostByDay returns when its read fails.
+    mockAdCost.mockResolvedValue({ byDay: new Map(), from: null, to: null });
+    expect((await call()).status).toBe(500);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockCallout).not.toHaveBeenCalled();
+    expect(mockApply).not.toHaveBeenCalled();
+    const [, , status, detail] = mockRecordCronRun.mock.calls[0] as [
+      string,
+      number,
+      string,
+      string,
+    ];
+    expect([status, detail]).toEqual(["error", "Google Ads spend could not be read"]);
   });
 
   it("names a KPI that has gone from 📊 KPI, and still writes the rest", async () => {

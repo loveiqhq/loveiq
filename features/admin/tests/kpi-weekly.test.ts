@@ -30,6 +30,7 @@ const raw = (over: Record<string, unknown> = {}) => ({
   starts: { all: 288, google_ads: 265, by_arm: { white_card: 85, white_video: 105 } },
   finished: { all: 142, google_ads: 129 },
   checkout: 6,
+  checkout_paid: 1,
   paywall: 89,
   sales: 1,
   sales_google_ads: 1,
@@ -72,6 +73,7 @@ describe("parseKpiWeek", () => {
 
   it("refuses a wrong shape rather than writing zeros", () => {
     expect(() => parseKpiWeek(raw({ checkout: null }))).toThrow("checkout");
+    expect(() => parseKpiWeek(raw({ checkout_paid: undefined }))).toThrow("checkout_paid");
     expect(() => parseKpiWeek(raw({ visits: { all: 1 } }))).toThrow("visits.by_arm");
     expect(() => parseKpiWeek({})).toThrow();
   });
@@ -105,6 +107,22 @@ describe("the KPIs, from one week", () => {
     expect(v("sales_per_day")).toBeCloseTo(1 / 7, 6);
     expect(v("finished_per_day")).toBeCloseTo(142 / 7, 6);
     expect(v("survey_minutes")).toBe(15.3);
+  });
+
+  it("counts Checkout to Paid in people, so an upgrade's second payment cannot pass 100%", () => {
+    const upgrade = parseKpiWeek(raw({ checkout: 2, checkout_paid: 2, sales: 3 }));
+    expect(kpi("checkout_to_paid").values(upgrade, ctx())[0]).toMatchObject({
+      value: 1,
+      num: 2,
+      den: 2,
+    });
+  });
+
+  it("shows the P90 beside the median, as the two minutes KPIs are named", () => {
+    const rows = buildKpiRows([w], [ctx()]);
+    const shown = (id: string) => rows.find((r) => r.key === `${id} · 2026-10-05 · All traffic`)!;
+    expect(shown("survey_minutes")).toMatchObject({ value: 15.3, shown: "15.3 min (P90 28.3)" });
+    expect(shown("report_minutes")).toMatchObject({ value: 1.7, shown: "1.7 min (P90 15.4)" });
   });
 
   it("splits by the source and landing page Marcus asked for, and the slices add up", () => {
@@ -307,6 +325,7 @@ describe("rows and summaries", () => {
       "Watch: within its usual range. The rule: under half the usual finished surveys in a week."
     );
     expect(text).toContain("kpi-weekly job");
+    expect(text).toContain("the chart on this page shows every week"); // wherever the summary sits
     expect(text).not.toContain("—");
   });
 
@@ -317,10 +336,32 @@ describe("rows and summaries", () => {
     }
   });
 
-  it("names what is missing instead of a blank", () => {
-    const cppr = summaries.find((s) => s.kpi.id === "cppr")!;
-    const none = { ...cppr, lastFull: null, before: null, soFar: null, trend: [] };
-    expect(kpiColumns(none).lastFullWeek).toBe("no paid report from ads");
+  it("says the paywall and checkout counts side by side, not one as part of the other", () => {
+    const notes = summaries.find((x) => x.kpi.id === "checkouts")!.notes.join(" ");
+    expect(notes).toBe("89 people reached the paywall; 6 started checkout.");
+  });
+
+  it("names why the last full week has no number, for that week", () => {
+    const why = (id: string, over: Record<string, unknown>, c: Partial<WeekContext> = {}) => {
+      const data = [parseKpiWeek(raw(over))];
+      const contexts = [ctx(c)];
+      const s = summarize(buildKpiRows(data, contexts), data, contexts).find(
+        (x) => x.kpi.id === id
+      )!;
+      expect(s.lastFull).toBeNull();
+      expect(kpiColumns(s).lastFullWeek).toBe(s.empty);
+      return s.empty;
+    };
+    expect(why("cppr", {}, { adCost: null })).toBe("ad spend not in yet");
+    expect(why("cppr", { sales_google_ads: 0 })).toBe("no paid report from ads");
+    expect(why("cost_per_finished", {}, { adCost: null })).toBe("ad spend not in yet");
+    expect(why("cost_per_finished", { finished: { all: 13, google_ads: 0 } })).toBe(
+      "no finished survey from Google Ads"
+    );
+    expect(why("satisfaction", { thumbs: { up: 1, down: 1 } })).toBe(
+      "fewer than 5 chapter ratings"
+    );
+    expect(why("start_to_finish", {}, { stepsComplete: false })).toBe("not measured that week");
   });
 });
 

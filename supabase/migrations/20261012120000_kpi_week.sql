@@ -12,6 +12,9 @@
 --               a week older than that is undercounted; the cron keeps such weeks blank.
 --   finished    survey_submission completed in the window, staff out.
 --   checkout    readers whose checkout began in the window (report_price_quote).
+--   checkout_paid  of those readers, how many have paid with money since the window
+--               began: people over people, so it never passes 100%. (The sales count
+--               payments, and an upgrade is a second payment from the same reader.)
 --   paywall     get_funnel_cvr_sparklines.paygate: readers who reached the paywall.
 --   sales       the payment ledger (decided 19 Sep): succeeded, not a test, money taken;
 --   gifted      the same at EUR 0 (coupons), counted apart. revenue = money taken, gross.
@@ -109,8 +112,10 @@ AS $function$
        AND p.created_date_time >= since_ts AND p.created_date_time < until_ts
        AND NOT EXISTS (SELECT 1 FROM staff WHERE staff.id = s.user_id)
   ),
-  -- A session whose first step fell in the window has a step in the window: only those
-  -- sessions are grouped, so a call does not scan the whole, never-cleared table.
+  -- A session whose first step fell in the window has a step in the window, so only
+  -- those sessions are grouped, not every session the never-cleared table holds. The
+  -- table is still read once to find them: there is no index on created_at, and on
+  -- 12 Oct 2026 (171,500 rows) that read took about 30 ms.
   first_step AS (
     SELECT e.session_id
       FROM survey_behavior_event e
@@ -178,6 +183,11 @@ AS $function$
       'google_ads', (SELECT count(*) FROM subs WHERE google_ads)
     ),
     'checkout', (SELECT count(*) FROM checkout),
+    'checkout_paid', (SELECT count(*) FROM checkout c
+                       WHERE EXISTS (SELECT 1 FROM personal_report pr JOIN payment p ON p.personal_report_id = pr.id
+                                      WHERE pr.survey_submission_id = c.id
+                                        AND p.status = 'succeeded' AND NOT p.is_test AND p.amount > 0
+                                        AND p.created_date_time >= since_ts)),
     'paywall', (SELECT count(*) FROM paywall),
     'sales', (SELECT count(*) FROM money WHERE amount > 0),
     'sales_google_ads', (SELECT count(*) FROM money WHERE amount > 0 AND google_ads),

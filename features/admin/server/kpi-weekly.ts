@@ -44,6 +44,7 @@ const FREEZE_AFTER_DAYS = 14;
 
 export type KpiUnit = "count" | "percent" | "euro" | "minutes";
 
+/** Written into every row as its Segment: a rename needs that option renamed too (see title). */
 export const KPI_SEGMENTS = [
   "All traffic",
   "Google Ads",
@@ -67,6 +68,8 @@ export interface KpiWeekData {
   starts: { all: number; googleAds: number; byArm: Map<string, number> };
   finished: { all: number; googleAds: number };
   checkout: number;
+  /** Of the week's checkout readers, how many have paid since. */
+  checkoutPaid: number;
   paywall: number;
   sales: number;
   salesGoogleAds: number;
@@ -131,6 +134,7 @@ export function parseKpiWeek(raw: unknown): KpiWeekData {
     },
     finished: { all: n("finished.all"), googleAds: n("finished.google_ads") },
     checkout: n("checkout"),
+    checkoutPaid: n("checkout_paid"),
     paywall: n("paywall"),
     sales: n("sales"),
     salesGoogleAds: n("sales_google_ads"),
@@ -184,6 +188,8 @@ export interface KpiValue {
   value: number | null;
   num?: number;
   den?: number;
+  /** After the shown value, wherever it appears (" (P90 22.5)"). */
+  extra?: string;
 }
 
 export interface WeekContext {
@@ -200,12 +206,16 @@ export interface WeekContext {
 
 export interface KpiDef {
   id: string;
-  /** The row's title in 📊 KPI, exactly. */
+  /**
+   * The row's title in 📊 KPI, exactly. Every row of "KPI weekly numbers" carries it as
+   * its KPI, and a final week's rows are never rewritten: renaming it here also needs the
+   * KPI option renamed there (every row follows), or the charts lose the final weeks.
+   */
   title: string;
   unit: KpiUnit;
   high: boolean;
   values(w: KpiWeekData, c: WeekContext): KpiValue[];
-  /** One line under the numbers on the KPI's page, when there is something to add. */
+  /** One line under the numbers on a High KPI's page (only those have a summary). */
   note?(w: KpiWeekData, c: WeekContext): string | null;
   /**
    * The alert rule of the 8 Oct proposal on the KPI's page, against the usual level (the
@@ -216,8 +226,8 @@ export interface KpiDef {
   rule?: string;
   /** After a shown value, when the number alone would mislead ("thumbs up"). */
   suffix?: string;
-  /** Said instead of a number when the last full week has none. */
-  empty?: string;
+  /** Said instead of a number when the last full week has none: why, for that week. */
+  empty?(w: KpiWeekData, c: WeekContext): string;
 }
 
 const ratio = (segment: KpiSegment, n: number, d: number, floor = 1): KpiValue => ({
@@ -227,6 +237,15 @@ const ratio = (segment: KpiSegment, n: number, d: number, floor = 1): KpiValue =
   den: d,
 });
 const plain = (segment: KpiSegment, value: number | null): KpiValue => ({ segment, value });
+/** The median, with the 90th percentile beside it: the KPIs are "Median / P90". */
+const median = (m: Minutes): KpiValue => ({
+  segment: "All traffic",
+  value: m.n >= 5 ? m.median : null,
+  extra: m.p90 !== null ? ` (P90 ${m.p90.toFixed(1)})` : undefined,
+});
+/** Why a cost KPI has no number: the spend, or nothing to divide it by. */
+const noCost = (c: WeekContext, nothing: string) =>
+  c.adCost === null ? "ad spend not in yet" : nothing;
 
 /** The share of a rate's measure below or above its usual level, in points or percent. */
 const pts = (last: number, usual: number) => (last - usual) * 100;
@@ -327,7 +346,7 @@ export const KPIS: KpiDef[] = [
     title: "Cost per Survey Completed €",
     unit: "euro",
     high: true,
-    empty: "ad spend not in yet",
+    empty: (_w, c) => noCost(c, "no finished survey from Google Ads"),
     values: (w, c) => [
       {
         segment: "All traffic",
@@ -389,7 +408,7 @@ export const KPIS: KpiDef[] = [
     values: (w) => [plain("All traffic", w.checkout)],
     note: (w) =>
       w.paywall > 0
-        ? `${w.paywall} people reached the paywall; ${w.checkout} of them started checkout.`
+        ? `${w.paywall} people reached the paywall; ${w.checkout} started checkout.`
         : null,
     rule: "no checkout start in a week although 40 or more reached the paywall",
     watch: (last, _usual, w) =>
@@ -402,37 +421,34 @@ export const KPIS: KpiDef[] = [
     title: "Checkout Attempts → Paid Reports CVR %",
     unit: "percent",
     high: true,
-    values: (w) => [ratio("All traffic", w.sales, w.checkout)],
+    values: (w) => [ratio("All traffic", w.checkoutPaid, w.checkout)],
+    note: () =>
+      "Followed per checkout week: of the people who started checkout that week, how many have paid since.",
   },
   {
     id: "satisfaction",
     title: "Report Satisfaction Score (NPS) #",
     unit: "percent",
     high: false,
+    // A stand-in, as the row's "How we show it" says: there is no 0 to 10 question yet.
     suffix: " thumbs up",
-    empty: "fewer than 5 chapter ratings",
+    empty: () => "fewer than 5 chapter ratings",
     values: (w) => [ratio("All traffic", w.thumbs.up, w.thumbs.up + w.thumbs.down, 5)],
-    note: () =>
-      "A stand-in: the share of chapter ratings that were a thumbs up. There is no 0 to 10 score question yet.",
   },
   {
     id: "report_minutes",
     title: "Avg. Report Session Duration (Median / P90) in minutes",
     unit: "minutes",
     high: false,
-    empty: "fewer than 5 closed sessions",
-    values: (w) => [plain("All traffic", w.reportMinutes.n >= 5 ? w.reportMinutes.median : null)],
-    note: (w) =>
-      w.reportMinutes.p90 !== null
-        ? `Slowest 10%: ${w.reportMinutes.p90.toFixed(1)} min or more.`
-        : null,
+    empty: () => "fewer than 5 closed sessions",
+    values: (w) => [median(w.reportMinutes)],
   },
   {
     id: "cppr",
     title: "Cost per Paid Report (CPPR) €",
     unit: "euro",
     high: false,
-    empty: "no paid report from ads",
+    empty: (_w, c) => noCost(c, "no paid report from ads"),
     values: (w, c) => [
       {
         segment: "All traffic",
@@ -468,11 +484,8 @@ export const KPIS: KpiDef[] = [
     title: "Avg. Survey Time to Complete (Median / P90) in minutes",
     unit: "minutes",
     high: false,
-    values: (w) => [plain("All traffic", w.surveyMinutes.n >= 5 ? w.surveyMinutes.median : null)],
-    note: (w) =>
-      w.surveyMinutes.p90 !== null
-        ? `Slowest 10%: ${w.surveyMinutes.p90.toFixed(1)} min or more.`
-        : null,
+    empty: () => "fewer than 5 finished surveys",
+    values: (w) => [median(w.surveyMinutes)],
   },
 ];
 
@@ -585,7 +598,7 @@ export function buildKpiRows(data: KpiWeekData[], contexts: WeekContext[]): KpiR
           value: stored(kpi.unit, v.value),
           num: v.num ?? null,
           den: v.den ?? null,
-          shown: formatValue(kpi.unit, v.value),
+          shown: formatValue(kpi.unit, v.value) + (v.extra ?? ""),
         });
       }
     }
@@ -610,6 +623,8 @@ export interface KpiSummary {
   /** The alert rule's verdict: null when there is no rule or too little history. */
   watch: { ok: boolean; text: string } | null;
   notes: string[];
+  /** Why the last full week has no number, said instead of one. */
+  empty: string;
 }
 
 export function summarize(
@@ -653,6 +668,7 @@ export function summarize(
     }
     return {
       kpi,
+      empty: (last && w && kpi.empty?.(w, last.c)) || "not measured that week",
       lastFull: last && lastRow ? { monday: last.c.monday, row: lastRow } : null,
       before: prev ? all(prev.c.monday) : null,
       usual,
@@ -684,9 +700,7 @@ export function kpiColumns(s: KpiSummary): KpiColumns {
   const last = s.lastFull?.row ?? null;
   const shown = (r: KpiRow) => `${r.shown}${s.kpi.suffix ?? ""}`;
   return {
-    lastFullWeek: last
-      ? `${shown(last)} (${weekRange(last.week)})`
-      : (s.kpi.empty ?? "not measured that week"),
+    lastFullWeek: last ? `${shown(last)} (${weekRange(last.week)})` : s.empty,
     weekBefore: s.before ? shown(s.before) : "",
     change: last && s.before ? formatChange(unit, last.value, s.before.value) : "",
     lastWeeks: s.trend.some((v) => v !== null) ? sparkline(s.trend) : "",
@@ -755,10 +769,7 @@ export function kpiCallout(s: KpiSummary, today: string, marker: string): Span[]
       },
     ]);
   } else {
-    lines.push([
-      { text: "Last full week: ", bold: true },
-      { text: `${s.kpi.empty ?? "not measured"}.` },
-    ]);
+    lines.push([{ text: "Last full week: ", bold: true }, { text: `${s.empty}.` }]);
   }
   const split = splitLine(s);
   if (split) lines.push(split);
@@ -780,7 +791,7 @@ export function kpiCallout(s: KpiSummary, today: string, marker: string): Span[]
   for (const n of s.notes) lines.push([{ text: n }]);
   lines.push([
     {
-      text: `Refreshed every morning by the ${marker}, last on ${shortDate(today)}. Weeks run Monday to Sunday, Berlin days; the chart below shows every week.`,
+      text: `Refreshed every morning by the ${marker}, last on ${shortDate(today)}. Weeks run Monday to Sunday, Berlin days; the chart on this page shows every week.`,
       italic: true,
     },
   ]);

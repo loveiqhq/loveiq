@@ -13,8 +13,8 @@
  *     are created when missing and otherwise left alone.
  *
  * Writes with NOTION_KPI_TOKEN, the connection the brain's crawl cannot see. Fails closed:
- * without it, or if any week cannot be read, nothing is written and Notion keeps
- * yesterday's numbers. Any failed part marks the run as an error.
+ * without it, or if any week or the ad spend cannot be read, nothing is written and Notion
+ * keeps yesterday's numbers. Any failed part marks the run as an error.
  */
 import { NextResponse } from "next/server";
 import { fetchDropoffRuns, tallyRuns } from "@features/admin/server/dropoff-report";
@@ -97,6 +97,9 @@ export async function GET(request: Request) {
         )
       ),
     ]);
+    // adCostByDay reads failures as "no spend data": the cost rows would be trashed and the
+    // run recorded as a success.
+    if (ad.to === null) throw new Error("Google Ads spend could not be read");
     const contexts = weekContexts(weeks, ad, today);
     const rows = buildKpiRows(data, contexts);
     const summaries = summarize(rows, data, contexts);
