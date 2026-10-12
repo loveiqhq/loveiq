@@ -22,6 +22,7 @@ import {
   uploadNotionPng,
   upsertMarkedCallout,
   upsertMarkedImage,
+  withNotionDeadline,
 } from "@features/brain/server/act/notion";
 
 const prop = (type: string, options?: string[]) => ({
@@ -515,6 +516,41 @@ describe("Notion's limits: 429 and 409 are retried, a 5xx only when it is safe",
       .mockResolvedValueOnce(reply({ message: "unavailable" }, 503));
     await expect(upsertMarkedImage("page-1", opts)).rejects.toThrow("unavailable");
     expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts no call that could not end before the run's deadline", async () => {
+    mockFetch.mockResolvedValue(reply({ id: "p1" }));
+    // A call needs its 15-second timeout before the deadline.
+    await expect(
+      withNotionDeadline(Date.now() + 14_000, () => createDatabaseRow("db1", {}))
+    ).rejects.toThrow("notion_out_of_time:/pages");
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(await withNotionDeadline(Date.now() + 16_000, () => createDatabaseRow("db1", {}))).toBe(
+      "p1"
+    );
+    // Outside a run with a deadline, and beside one, nothing is refused.
+    const late = withNotionDeadline(Date.now() + 1_000, () => updateNotionPage("p1", {}));
+    const free = createDatabaseRow("db1", {});
+    await expect(late).rejects.toThrow("notion_out_of_time");
+    expect(await free).toBe("p1");
+  });
+
+  it("does not wait for a retry that would end past the deadline", async () => {
+    mockFetch.mockResolvedValue(reply({ message: "rate limited" }, 429, "10"));
+    // 10 seconds of waiting and a 15-second try do not fit in 20 seconds.
+    await expect(
+      withNotionDeadline(Date.now() + 20_000, () => createDatabaseRow("db1", {}))
+    ).rejects.toThrow("rate limited");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not send a picture that could not finish before the deadline", async () => {
+    mockFetch.mockResolvedValueOnce(reply({ id: "up-1", status: "pending" }));
+    // The upload is created (15 s fits in 20 s), but sending it can take 30 s.
+    await expect(
+      withNotionDeadline(Date.now() + 20_000, () => uploadNotionPng(new Uint8Array([1]), "c.png"))
+    ).rejects.toThrow("notion_out_of_time:/file_uploads/up-1/send");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it("gives up after four rate limits in a row", async () => {

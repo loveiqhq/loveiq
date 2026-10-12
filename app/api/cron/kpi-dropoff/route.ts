@@ -45,6 +45,7 @@ import {
   uploadNotionPng,
   upsertMarkedCallout,
   upsertMarkedImage,
+  withNotionDeadline,
 } from "@features/brain/server/act/notion";
 import { chartPng } from "@features/brain/server/chart";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -89,13 +90,14 @@ export async function GET(request: Request) {
     const shown = weeks.slice(showFrom);
 
     /**
-     * Rows are written until 170 seconds in, then left for tomorrow. A normal day writes
-     * about one week of rows in about a minute. One Notion call can take a little under two
-     * minutes at worst (five 15-second tries and 30 seconds of waiting between them), so a
-     * write started just before the line still ends, and the run is recorded, under the
-     * 300-second ceiling.
+     * Rows are written until 170 seconds in, then left for tomorrow: a normal day writes
+     * about one week of rows in about a minute. Past that line the picture is skipped too.
+     * The hard stop is the Notion deadline at 270 seconds: no Notion call starts, or waits
+     * to retry, unless it can end by then, so the run is recorded under the 300-second
+     * ceiling whatever Notion does.
      */
     const isOutOfTime = () => Date.now() - startedAtMs > 170_000;
+    const notionDeadline = startedAtMs + 270_000;
 
     // Everything is read before anything is written.
     const firstLaunch = Math.min(...SURVEY_TESTS.map((t) => t.launch));
@@ -110,7 +112,7 @@ export async function GET(request: Request) {
     const problems: string[] = [];
     const part = async <T>(name: string, run: () => Promise<T>): Promise<T | null> => {
       try {
-        return await run();
+        return await withNotionDeadline(notionDeadline, run);
       } catch (err) {
         logger.error({ err, part: name }, "kpi-dropoff part failed");
         problems.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);

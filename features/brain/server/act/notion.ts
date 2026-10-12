@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 /**
@@ -66,7 +67,27 @@ const SERVER_ERROR_RETRIES = 2;
 /** At most this long asleep between tries of one request, so a timed job can count on it. */
 const MAX_RETRY_SLEEP_MS = 30_000;
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * A timed job's deadline (epoch ms) for the Notion calls made inside `work`: a call that
+ * could not end before it, its own timeout included, is refused, and so is a retry whose
+ * wait would reach it. Kept per run, not in a module variable: a reused instance can serve
+ * two requests at once, and one would hand its deadline to the other.
+ */
+const deadlines = new AsyncLocalStorage<number>();
+
+export function withNotionDeadline<T>(deadline: number, work: () => Promise<T>): Promise<T> {
+  return deadlines.run(deadline, work);
+}
+
+/** Whether `ms` more would pass the deadline of the run this call is part of, if any. */
+function pastDeadline(ms: number): boolean {
+  const deadline = deadlines.getStore();
+  return deadline !== undefined && Date.now() + ms > deadline;
+}
 
 async function notion(
   path: string,
@@ -74,11 +95,12 @@ async function notion(
 ): Promise<Record<string, unknown>> {
   let slept = 0;
   for (let attempt = 0; ; attempt++) {
+    if (pastDeadline(REQUEST_TIMEOUT_MS)) throw new Error(`notion_out_of_time:${path}`);
     const res = await fetchWithTimeout(`${NOTION_API}${path}`, {
       method: init.method ?? "GET",
       headers: headers(init.token),
       ...(init.body ? { body: JSON.stringify(init.body) } : {}),
-      timeoutMs: 15_000,
+      timeoutMs: REQUEST_TIMEOUT_MS,
     });
     let json: Record<string, unknown> | null = null;
     try {
@@ -97,7 +119,7 @@ async function notion(
     const after = Number(res.headers?.get?.("retry-after"));
     const wait =
       Number.isFinite(after) && after > 0 ? Math.min(after, 30) * 1000 : 1000 * (attempt + 1);
-    if (!retry || slept + wait > MAX_RETRY_SLEEP_MS) {
+    if (!retry || slept + wait > MAX_RETRY_SLEEP_MS || pastDeadline(wait + REQUEST_TIMEOUT_MS)) {
       throw new Error(String(json?.message ?? `notion_${res.status}`));
     }
     slept += wait;
@@ -514,6 +536,7 @@ export async function uploadNotionPng(
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(bytes)], { type: "image/png" }), filename);
   const { "content-type": _json, ...auth } = headers(token);
+  if (pastDeadline(30_000)) throw new Error(`notion_out_of_time:/file_uploads/${id}/send`);
   const res = await fetchWithTimeout(`${NOTION_API}/file_uploads/${id}/send`, {
     method: "POST",
     headers: auth, // fetch sets the multipart boundary itself

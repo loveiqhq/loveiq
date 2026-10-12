@@ -33,10 +33,15 @@ vi.mock("@features/brain/server/chart", () => ({ chartPng: (...a: unknown[]) => 
 const mockUpload = vi.fn();
 const mockImage = vi.fn();
 const mockCallout = vi.fn();
+const mockDeadline = vi.fn();
 vi.mock("@features/brain/server/act/notion", () => ({
   uploadNotionPng: (...a: unknown[]) => mockUpload(...a),
   upsertMarkedImage: (...a: unknown[]) => mockImage(...a),
   upsertMarkedCallout: (...a: unknown[]) => mockCallout(...a),
+  withNotionDeadline: (deadline: number, work: () => Promise<unknown>) => {
+    mockDeadline(deadline);
+    return work();
+  },
 }));
 
 import { CHART_MARKER, GET } from "@/app/api/cron/kpi-dropoff/route";
@@ -62,6 +67,7 @@ describe("GET /api/cron/kpi-dropoff", () => {
     process.env.STRATEGY_DIGEST_SIGNING_SECRET = "a-test-secret-of-some-length";
     process.env.NOTION_KPI_TOKEN = "ntn_kpi_test";
     mockRecordCronRun.mockReset();
+    mockDeadline.mockReset();
     mockProdHost.mockReturnValue(true);
     mockRuns.mockReset().mockResolvedValue(Array.from({ length: 30 }, () => someone));
     mockPng.mockReset().mockResolvedValue(Buffer.from("PNGDATA").toString("base64"));
@@ -147,6 +153,10 @@ describe("GET /api/cron/kpi-dropoff", () => {
       string,
     ];
     expect([name, status]).toEqual(["kpi-dropoff", "success"]);
+    // All three parts write under one Notion deadline, 270 s after the start.
+    expect(mockDeadline.mock.calls).toEqual(
+      Array(3).fill([Date.parse("2026-10-12T08:30:00Z") + 270_000])
+    );
     expect(detail).toMatch(
       /^summary=updated picture=updated weeks=3 rows=\d+ created=\d+ updated=0 archived=0$/
     );
