@@ -621,17 +621,29 @@ describe("the team data export", () => {
   });
 
   it("refuses to write inside any git repository", () => {
-    const repo = resolve(__dirname, "../../..");
-    expect(() => assertOutsideRepo(repo)).toThrow(/inside a git repository/);
-    expect(() => assertOutsideRepo(join(repo, "exports"))).toThrow(/inside a git repository/);
-    // Another checkout entirely, as the main one is to a worktree.
-    const other = mkdtempSync(join(tmpdir(), "export-guard-repo-"));
-    spawnSync("git", ["init", "-q", other]);
-    expect(() => assertOutsideRepo(join(other, "not-yet-created", "out"))).toThrow(
-      /inside a git repository/
-    );
-    const plain = mkdtempSync(join(tmpdir(), "export-guard-plain-"));
-    expect(() => assertOutsideRepo(join(plain, "out"))).not.toThrow();
+    // Git exports GIT_DIR to the hooks it runs, an absolute path in a worktree. Inherited,
+    // it made every folder read as inside a repository, and the `git init` below
+    // re-initialised the hook's own repository instead of the temporary folder: run from a
+    // worktree's pre-push hook (2026-10-12), it set core.bare = true in the main checkout's
+    // config. The export runs from a terminal, so the folders are read as it reads them.
+    const gitEnv = Object.keys(process.env).filter((key) => key.startsWith("GIT_"));
+    const saved = Object.fromEntries(gitEnv.map((key) => [key, process.env[key]]));
+    for (const key of gitEnv) delete process.env[key];
+    try {
+      const repo = resolve(__dirname, "../../..");
+      expect(() => assertOutsideRepo(repo)).toThrow(/inside a git repository/);
+      expect(() => assertOutsideRepo(join(repo, "exports"))).toThrow(/inside a git repository/);
+      // Another checkout entirely, as the main one is to a worktree.
+      const other = mkdtempSync(join(tmpdir(), "export-guard-repo-"));
+      spawnSync("git", ["init", "-q", other]);
+      expect(() => assertOutsideRepo(join(other, "not-yet-created", "out"))).toThrow(
+        /inside a git repository/
+      );
+      const plain = mkdtempSync(join(tmpdir(), "export-guard-plain-"));
+      expect(() => assertOutsideRepo(join(plain, "out"))).not.toThrow();
+    } finally {
+      Object.assign(process.env, saved);
+    }
   });
 });
 
