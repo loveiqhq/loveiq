@@ -24,8 +24,10 @@ const steps: { icon: string; title: string; body: string }[] = [
   },
   {
     icon: "/images/white/foundation/step-3.svg",
-    title: "Matched to your nearest personality",
-    body: "The shape of your scores finds its closest match, with the distance to neighbouring types kept visible.",
+    title: "Matched to your nearest sexual personality",
+    // Figma's 12.10 copy (Report-3.0 1604:10647) reads "Discovery your closest match";
+    // the verb is what the sentence needs.
+    body: "Discover your closest match, with the distance to neighbouring types kept visible.",
   },
 ];
 
@@ -73,32 +75,21 @@ const spotlights: {
 const WFoundation: FC = () => (
   <section className="bg-white py-16 lg:py-[84px]" aria-labelledby="w-foundation-heading">
     <div className="content-shell">
-      {/* Centered intro */}
+      {/* Centered intro. Its "THE FOUNDATION" eyebrow, and the "HOW YOUR RESULT IS
+          DERIVED" label over the rail, went with the 12.10 copy (Figma Report-3.0
+          1604:8233); the rail keeps its 24px, as the frame does. */}
       <div className="mx-auto flex max-w-[640px] flex-col items-center gap-3.5 text-center">
-        <div className="animate-on-scroll flex items-center gap-2.5">
-          <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-          <span className="text-[12px] font-bold tracking-[1.68px] text-[#5f6675]">
-            THE FOUNDATION
-          </span>
-        </div>
         <h2
           id="w-foundation-heading"
           className="animate-on-scroll stagger-1 font-serif text-[clamp(1.6rem,4.5vw,2.125rem)] font-medium leading-[1.28] tracking-[-0.01em] text-[#161021]"
         >
-          Built by researchers, not by a personality quiz.
+          Built by researchers and on practical wisdom.
         </h2>
       </div>
 
       <div className="mt-11 grid gap-12 lg:grid-cols-2 lg:gap-14">
         {/* Left: derivation rail */}
         <div className="flex flex-col">
-          <div className="animate-on-scroll flex items-center gap-2.5">
-            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-            <span className="text-[12px] font-bold tracking-[1.68px] text-[#5f6675]">
-              HOW YOUR RESULT IS DERIVED
-            </span>
-          </div>
-
           <ol className="m-0 mt-6 list-none p-0">
             {steps.map((s, i) => (
               <li

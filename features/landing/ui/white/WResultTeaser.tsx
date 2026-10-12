@@ -6,7 +6,8 @@ import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
 
 /**
- * "Your result — it's already waiting for you" (Figma node 8947:7606).
+ * "Insights are waiting for you" (Figma node 8947:7606; the 12.10 copy, Figma
+ * Report-3.0 1604:8233, dropped its "Your result" eyebrow and renamed it).
  * The mock is the designer's own report screenshot from the Figma node
  * (public/images/white/report-figma.png), under the same neutral vignette
  * and blur they used, so it teases without giving anything away.
@@ -15,38 +16,30 @@ import { trackStartSurvey } from "@features/analytics/client";
 const WResultTeaser: FC = () => (
   <section className="bg-[#f5f4f8] py-16 lg:py-[92px]" aria-labelledby="w-result-heading">
     <div className="content-shell grid items-center gap-12 lg:grid-cols-2 lg:gap-14">
-      {/* Left: pitch */}
+      {/* Left: pitch. The heading keeps its 14px top margin, as the frame does. */}
       <div className="flex flex-col">
-        <div className="animate-on-scroll flex items-center gap-2.5">
-          <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-          <span className="text-[11px] font-bold tracking-[0.88px] text-[#5f6675]">
-            Your result
-          </span>
-        </div>
-
         <h2
           id="w-result-heading"
           className="animate-on-scroll stagger-1 mt-3.5 font-serif text-[clamp(2rem,5.5vw,2.875rem)] font-medium leading-[1.18] tracking-[-0.01em] text-[#161021]"
         >
-          It&apos;s already{" "}
+          Insights are{" "}
           <span className="bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] bg-clip-text italic text-transparent">
-            waiting for you.
+            waiting for you
           </span>
         </h2>
 
         <p className="animate-on-scroll stagger-2 mt-3.5 max-w-[34rem] text-[16px] leading-[28px] text-[#5f6675]">
           The moment you finish, your personality and your full 50+ page report can be unlocked.
-          Here&apos;s a peek at what lands.
         </p>
 
         <div className="animate-on-scroll stagger-3 mt-6">
           <Link
             href="/survey"
-            aria-label="Reveal my result - result section"
+            aria-label="Start test now - result section"
             onClick={() => trackStartSurvey("result_teaser")}
             className="focus-visible-ring group inline-flex items-center gap-2.5 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] px-[22px] py-3.5 text-[16px] font-semibold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)] transition duration-300 hover:shadow-[0_14px_30px_-10px_rgba(191,102,217,0.85)] motion-safe:hover:-translate-y-0.5"
           >
-            <span>Reveal my result</span>
+            <span>Start test now</span>
             <svg
               aria-hidden
               className="h-[17px] w-[17px] transition-transform duration-300 motion-safe:group-hover:translate-x-1"
@@ -92,7 +85,7 @@ const WResultTeaser: FC = () => (
             </svg>
           </span>
           <p className="max-w-[300px] text-center font-serif text-[20px] font-semibold leading-[1.25] text-[#161021] [text-shadow:0_1px_12px_rgba(255,255,255,0.95),0_0_28px_rgba(255,255,255,0.85)]">
-            Take the free test to reveal your result
+            Take the test to reveal your result
           </p>
         </div>
       </div>

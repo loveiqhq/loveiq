@@ -25,7 +25,7 @@ const items: { icon: ReactNode; title: string; body: string }[] = [
   },
   {
     title: "Words for what you crave",
-    body: "You can't ask for what you can't name. This gives you the vocabulary.",
+    body: "You can't ask for what you can't name. The report gives you the vocabulary.",
     icon: (
       <path d="M2.829 16.05a1.375 1.375 0 0 0-.086-1.07 9.167 9.167 0 1 1 4.379 4.326 1.375 1.375 0 0 0-1.008-.085l-3.128.915a.688.688 0 0 1-.851-.87l.694-3.216Z" />
     ),

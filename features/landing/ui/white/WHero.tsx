@@ -162,16 +162,11 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
               (Figma Report-3.0 1604:5505, 12.10): 20px under the nav, then the headline,
               the paragraph and the button, and the slot right under it, so the video or
               question 1 is on the first screen. The rating, the ticker and the privacy
-              line follow the slot there (HeroProof); the eyebrow is desktop-only. Both
-              arms alike, so the test still compares only what is in the slot. */}
+              line follow the slot there (HeroProof). Both arms alike, so the test still
+              compares only what is in the slot. The eyebrow above the headline went with
+              the 12.10 copy (1604:8233, "Deleted the top > noise"); the headline keeps its
+              14px, as the frame does. */}
           <div className="flex max-w-[38rem] flex-col">
-            <div className="animate-on-load hidden items-center gap-2.5 lg:flex">
-              <span className="animate-pulse-glow h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.88px] text-[#5f6675]">
-                Anonymous · ~9 minutes · No account
-              </span>
-            </div>
-
             <h1 className="animate-on-load stagger-1 mt-3.5 font-serif text-[clamp(2.6rem,8.5vw,3.67rem)] font-semibold leading-[1.12] tracking-[-0.01em] text-[#161021]">
               Determine
               <br />
@@ -183,7 +178,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
               </span>
               <br />
               <span className="bg-gradient-to-r from-[#c267c9] via-[#a871f4] via-[48%] to-[#9893f7] bg-clip-text font-medium italic text-transparent">
-                Personalities
+                Personality
               </span>
             </h1>
 
@@ -200,11 +195,11 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             <div className="animate-on-load stagger-3 mt-5">
               <Link
                 href="/survey"
-                aria-label="Start my free test - hero"
+                aria-label="Start my test now - hero"
                 onClick={() => trackStartSurvey("hero")}
                 className="focus-visible-ring group inline-flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] px-[22px] py-3.5 text-[16px] font-semibold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)] transition duration-300 hover:shadow-[0_14px_30px_-10px_rgba(191,102,217,0.85)] motion-safe:hover:-translate-y-0.5"
               >
-                <span>Start my free test</span>
+                <span>Start my test now</span>
                 <svg
                   aria-hidden
                   className="h-[17px] w-[17px] transition-transform duration-300 motion-safe:group-hover:translate-x-1"

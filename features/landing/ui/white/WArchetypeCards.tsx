@@ -190,7 +190,7 @@ const WArchetypeCards: FC = () => {
       <div className="content-shell">
         <div className="animate-on-scroll mx-auto max-w-2xl text-center">
           <h2 className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[40px]">
-            14 personalities.{" "}
+            14 sexual personalities.{" "}
             <span className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text text-transparent">
               You are more than just one of them.
             </span>

@@ -994,7 +994,7 @@ Two consequences worth keeping in view rather than rediscovering:
   ORIGINAL curated testimonial grid + "30,000+" stat when off ("how it used to
   be" — the landing A/B control arm), and swaps to Trustpilot only when the flag
   is on. (2) the **white** landing variant deliberately shows a curated
-  "Field reports" section (`white/WTestimonials.tsx`, the former on-site
+  testimonials section (`white/WTestimonials.tsx`, the former on-site
   testimonials, pixel-matched to Figma 7828:9430) instead of Trustpilot, and
   stays that way even after the flag flips — it's the A/B counterpart to the dark
   arm. (3) the report **pricing modal** (`ReportPricingModal`, the Pricing 3.0

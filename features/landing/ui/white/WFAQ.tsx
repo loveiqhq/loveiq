@@ -17,11 +17,9 @@ const WFAQ: FC = () => {
   return (
     <section className="bg-white py-16 lg:py-24" aria-labelledby="w-faq-heading">
       <div className="content-shell max-w-3xl">
+        {/* The "FAQ" eyebrow above the heading, and the "still unanswered" contact line
+            under the list, went with the 12.10 copy (Figma Report-3.0 1604:8233). */}
         <div className="animate-on-scroll mb-10 flex flex-col items-center gap-3 text-center">
-          <div className="flex items-center gap-2.5">
-            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-            <span className="text-[11px] font-bold tracking-wide text-[#6b6678]">FAQ</span>
-          </div>
           <h2
             id="w-faq-heading"
             className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[44px]"
@@ -88,19 +86,6 @@ const WFAQ: FC = () => {
             );
           })}
         </ul>
-
-        {/* "Still unanswered" contact block (Figma). */}
-        <p className="mt-10 text-center text-[15px] text-[#6b6678]">
-          If a question is still unanswered, write to us. Reach us at{" "}
-          <a href="mailto:hello@loveiq.org" className="font-medium text-[#c2410c]">
-            hello@loveiq.org
-          </a>
-          .
-          <br />
-          <span className="text-[#6f6a7a]">
-            We read every message, and we will get back to you.
-          </span>
-        </p>
       </div>
     </section>
   );

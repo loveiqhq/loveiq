@@ -77,7 +77,7 @@ test.describe("Landing arm B — the hero video", () => {
 
   test("keeps the hero's own call to action", async ({ page }) => {
     await page.goto("/?variant=white_video");
-    await page.getByRole("link", { name: "Start my free test - hero" }).click();
+    await page.getByRole("link", { name: "Start my test now - hero" }).click();
     await page.waitForURL(/\/survey/);
   });
 
@@ -125,20 +125,19 @@ test.describe("Landing hero — the slot right under the button on a phone", () 
         hero.getByRole("link", { name: "Trust Center" }).filter({ visible: true }),
       ];
       for (const row of rows) await expect(row).toHaveCount(1);
-      const eyebrow = hero.getByText("Anonymous · ~9 minutes · No account");
+      // The eyebrow above the headline went with the 12.10 copy (Figma `1604:8233`).
+      await expect(hero.getByText("Anonymous · ~9 minutes · No account")).toHaveCount(0);
       const vw = page.viewportSize()!.width;
       const vh = page.viewportSize()!.height;
       const slot = await page.getByTestId(slotId).boundingBox();
       expect(slot).not.toBeNull();
       const [rating, ticker, privacy] = await Promise.all(rows.map((r) => r.boundingBox()));
       if (vw >= 1024) {
-        await expect(eyebrow).toBeVisible();
         // In the copy column, left of the slot.
         expect(rating!.x + rating!.width).toBeLessThan(slot!.x);
         return;
       }
-      await expect(eyebrow).toBeHidden();
-      const cta = await page.getByRole("link", { name: "Start my free test - hero" }).boundingBox();
+      const cta = await page.getByRole("link", { name: "Start my test now - hero" }).boundingBox();
       expect(cta).not.toBeNull();
       expect(Math.abs(slot!.y - (cta!.y + cta!.height) - gap)).toBeLessThanOrEqual(2);
       // On the first screen of every phone project (iPhone 15 Pro's is 659px tall).

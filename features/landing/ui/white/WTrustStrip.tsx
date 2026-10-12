@@ -3,14 +3,11 @@ import type { FC, ReactNode } from "react";
 /**
  * Thin reassurance strip under the hero (Figma node 8947:7469). Four hairline
  * claims separated by middots; wraps to a two-line grid on small screens rather
- * than scrolling horizontally.
- *
- * Below lg, a claim's `phoneLabel` replaces its label: Marcus's condensed phone frame
- * (Figma Report-3.0 1604:5505, 12.10) says "Science-backed" without "not a horoscope".
- * Two whole labels rather than a hidden tail, so the desktop's text stays one text run.
+ * than scrolling horizontally. "Science-backed" lost its "not a horoscope" in the
+ * 12.10 copy (Figma Report-3.0 1604:8233 and 1604:5505).
  */
 
-const items: { icon: ReactNode; label: string; phoneLabel?: string }[] = [
+const items: { icon: ReactNode; label: string }[] = [
   {
     label: "Anonymous by default",
     icon: (
@@ -21,8 +18,7 @@ const items: { icon: ReactNode; label: string; phoneLabel?: string }[] = [
     ),
   },
   {
-    label: "Science-backed, not a horoscope",
-    phoneLabel: "Science-backed",
+    label: "Science-backed",
     icon: <path d="M8.125 1.25 2.5 8.75h4.375l-.625 5 5.625-7.5H7.5l.625-5Z" />,
   },
   {
@@ -69,14 +65,7 @@ const WTrustStrip: FC = () => (
               {it.icon}
             </svg>
             <span className="text-[12.5px] font-semibold text-[#3a3444] sm:text-[13.5px]">
-              {it.phoneLabel ? (
-                <>
-                  <span className="lg:hidden">{it.phoneLabel}</span>
-                  <span className="hidden lg:inline">{it.label}</span>
-                </>
-              ) : (
-                it.label
-              )}
+              {it.label}
             </span>
           </span>
         </div>

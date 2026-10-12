@@ -33,16 +33,16 @@ const WStickyBar: FC = () => {
         {/* Below ~360px the label and the CTA fight for the same row; the CTA
             alone carries the message there. */}
         <p className="hidden whitespace-nowrap text-[12.5px] font-bold text-[#161021] min-[360px]:block sm:text-[13.5px]">
-          Your result is waiting.
+          Your report is waiting.
         </p>
         <Link
           href="/survey"
           tabIndex={visible ? undefined : -1}
-          aria-label="Continue free test - sticky bar"
+          aria-label="Start test - sticky bar"
           onClick={() => trackStartSurvey("sticky")}
           className="focus-visible-ring group inline-flex shrink-0 items-center gap-2.5 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] px-[17px] py-2.5 text-[15px] font-semibold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)] transition duration-300 hover:shadow-[0_14px_30px_-10px_rgba(191,102,217,0.85)] sm:text-[16px]"
         >
-          <span>Continue free test</span>
+          <span>Start test</span>
           <svg
             aria-hidden
             className="h-[17px] w-[17px] transition-transform duration-300 motion-safe:group-hover:translate-x-1"
