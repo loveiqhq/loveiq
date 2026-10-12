@@ -101,42 +101,54 @@ test.describe("Landing arm B — the hero video", () => {
 /**
  * Marcus's condensed phone hero (Figma Report-3.0 `1604:5505`, 12.10), both arms alike.
  * Below lg the slot sits right under the hero's button, so the video or question 1 is on
- * the first screen (it used to start some 280px lower, under the eyebrow, the rating, the
- * ticker and the privacy line, which are now desktop-only). From 1024 up nothing moved.
+ * the first screen (it used to start some 280px lower). The rating, the "taking the test"
+ * ticker and the privacy line follow the slot there, as the groups laid over the frame
+ * draw them; from 1024 up they stay under the button, beside the slot.
  */
 test.describe("Landing hero — the slot right under the button on a phone", () => {
   for (const [variant, slotId, gap] of [
-    // The grid's 40px gap; the video adds its own 11.25 (Figma `1503:12473`).
+    // The grid's 40px gap; the video sits 12px into it (group `1637:616`: 28px).
     ["white_card", "hero-card", 40],
-    ["white_video", "hero-video", 51.25],
+    ["white_video", "hero-video", 28],
   ] as const) {
-    test(`${variant}: the slot follows the button, and the desktop-only lines are hidden`, async ({
+    test(`${variant}: the slot follows the button, and the rating, ticker and privacy line follow the slot`, async ({
       page,
     }) => {
       // The slot rises 24px into place on load; under reduced motion it starts there.
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.goto(`/?variant=${variant}`);
       const hero = page.locator("section", { has: page.locator("h1") }).first();
-      const desktopOnly = [
-        hero.getByText("Anonymous · ~9 minutes · No account"),
-        hero.getByText("4.9/5"),
-        hero.getByText("people are taking the test right now"),
-        hero.getByRole("link", { name: "Trust Center" }),
+      // Each row renders twice, once per breakpoint; exactly one of each is on screen.
+      const rows = [
+        hero.getByText("4.9/5").filter({ visible: true }),
+        hero.getByText("people are taking the test right now").filter({ visible: true }),
+        hero.getByRole("link", { name: "Trust Center" }).filter({ visible: true }),
       ];
+      for (const row of rows) await expect(row).toHaveCount(1);
+      const eyebrow = hero.getByText("Anonymous · ~9 minutes · No account");
       const vw = page.viewportSize()!.width;
       const vh = page.viewportSize()!.height;
+      const slot = await page.getByTestId(slotId).boundingBox();
+      expect(slot).not.toBeNull();
+      const [rating, ticker, privacy] = await Promise.all(rows.map((r) => r.boundingBox()));
       if (vw >= 1024) {
-        for (const line of desktopOnly) await expect(line).toBeVisible();
+        await expect(eyebrow).toBeVisible();
+        // In the copy column, left of the slot.
+        expect(rating!.x + rating!.width).toBeLessThan(slot!.x);
         return;
       }
-      for (const line of desktopOnly) await expect(line).toBeHidden();
+      await expect(eyebrow).toBeHidden();
       const cta = await page.getByRole("link", { name: "Start my free test - hero" }).boundingBox();
-      const slot = await page.getByTestId(slotId).boundingBox();
       expect(cta).not.toBeNull();
-      expect(slot).not.toBeNull();
       expect(Math.abs(slot!.y - (cta!.y + cta!.height) - gap)).toBeLessThanOrEqual(2);
       // On the first screen of every phone project (iPhone 15 Pro's is 659px tall).
       expect(slot!.y).toBeLessThan(vh - 100);
+      // Under the slot (the row starts 24px below it; its text line a little lower), in order.
+      const below = rating!.y - (slot!.y + slot!.height);
+      expect(below).toBeGreaterThanOrEqual(20);
+      expect(below).toBeLessThanOrEqual(60);
+      expect(ticker!.y).toBeGreaterThan(rating!.y);
+      expect(privacy!.y).toBeGreaterThan(ticker!.y);
     });
   }
 });
