@@ -632,6 +632,7 @@ export async function upsertMarkedImage(
     await notion(`/blocks/${String(mine.id)}`, {
       method: "PATCH",
       body: { image },
+      idempotent: true,
       token: opts.token,
     });
     return "updated";

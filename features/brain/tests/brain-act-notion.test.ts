@@ -487,6 +487,36 @@ describe("Notion's limits: 429 and 409 are retried, a 5xx only when it is safe",
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("retries a 503 when the picture is replaced, but not when it is first added", async () => {
+    const marked = {
+      id: "ours",
+      type: "image",
+      image: { caption: [{ plain_text: "Updated 11 Oct by the kpi-dropoff job" }] },
+    };
+    const opts = {
+      marker: "kpi-dropoff job",
+      caption: "Updated 12 Oct by the kpi-dropoff job",
+      heading: "Drop-off per question, week by week",
+      fileUploadId: "up-2",
+    };
+    mockFetch
+      .mockResolvedValueOnce(reply({ results: [marked], has_more: false }))
+      .mockResolvedValueOnce(reply({ message: "unavailable" }, 503))
+      .mockResolvedValueOnce(reply({ id: "ours" }));
+    const replaced = upsertMarkedImage("page-1", opts);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await replaced).toBe("updated");
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+
+    // Appending twice would put two pictures on the page.
+    mockFetch
+      .mockReset()
+      .mockResolvedValueOnce(reply({ results: [], has_more: false }))
+      .mockResolvedValueOnce(reply({ message: "unavailable" }, 503));
+    await expect(upsertMarkedImage("page-1", opts)).rejects.toThrow("unavailable");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("gives up after four rate limits in a row", async () => {
     mockFetch.mockResolvedValue(reply({ message: "rate limited" }, 429));
     const failed = expect(createDatabaseRow("db1", {})).rejects.toThrow("rate limited");
