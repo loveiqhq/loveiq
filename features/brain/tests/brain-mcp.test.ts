@@ -127,6 +127,7 @@ import { forgetSignIns } from "@features/brain/server/sign-in";
 import {
   outrankingHeldBack,
   POST,
+  PRODUCT_ANALYTICS_ROW_CAP,
   RELEVANCE_FLOOR,
   SOURCES_FOR_TEST,
   TOOLS,
@@ -1809,6 +1810,7 @@ describe("/api/mcp", () => {
         "list_product_tables",
         "query_product_data",
         "query_external_service",
+        "query_product_analytics",
         "related_context",
         "show_design",
         "design_changes",
@@ -1933,6 +1935,7 @@ describe("/api/mcp", () => {
         "file_call_notes",
         "post_to_slack",
         "query_external_service",
+        "query_product_analytics",
         "send_email",
         "show_design",
         "show_page",
@@ -8225,5 +8228,409 @@ describe("outrankingHeldBack — what the cap left out, when it was better", () 
         .filter((l) => l.startsWith("  •"))
         .every((l) => /^  • \S+\/\S+ @\d+\.\d{2} — outranks \d+ of the \d+ shown$/.test(l))
     ).toBe(true);
+  });
+});
+
+/**
+ * THE BOTTOM OF A RATE COMES FROM THE SAME PLACE AS ITS TOP.
+ *
+ * On 2026-10-11 Jarvis answered "what share of visitors watched the landing video" with
+ * 3 plays (PostHog) out of 382 visits (funnel_event, the server's daily visit count):
+ * 0.8%. The 382 counts every public page once per browser per day, plus visits that never
+ * ran the page's tracking, so it is the wrong bottom for a PostHog count; counted the same
+ * way as the plays it was 3 of 256, 1.2%. Jarvis could not have done better: its only
+ * PostHog door was GET, and a GET of the arm's exposures is 1.2 MB of raw events.
+ */
+describe("query_product_analytics — counting what visitors did, from PostHog", () => {
+  const POSTHOG_QUERY_URL = "https://eu.posthog.com/api/projects/244778/query/";
+  // A name, not the literal: __tests__/scripts/hogql-cap.test.ts looks for request bodies
+  // built by hand, and this only reads back the one hogqlTable built.
+  const HOGQL_KIND = "HogQLQuery";
+  const CAP = PRODUCT_ANALYTICS_ROW_CAP;
+
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "query_product_analytics", arguments: args },
+      })
+    );
+    return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+  }
+  const text = async (query: string) => (await call({ query })).content[0]!.text;
+
+  const answer = (payload: Record<string, unknown>, status = 200) => ({
+    ok: status < 300,
+    status,
+    json: async () => payload,
+    text: async () => JSON.stringify(payload),
+  });
+
+  /** The queries sent to PostHog, decoded. */
+  const sent = () =>
+    mockFetch.mock.calls
+      .filter(([url]) => url === POSTHOG_QUERY_URL)
+      .map(([, init]) => JSON.parse(String((init as { body: string }).body)).query.query as string);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    process.env.POSTHOG_API_KEY = "phx_test_key";
+    mockFetch.mockReset();
+  });
+  afterEach(() => {
+    delete process.env.POSTHOG_API_KEY;
+    vi.useRealTimers();
+  });
+
+  it("is offered as a read-only tool", () => {
+    const tool = TOOLS.find((t) => t.name === "query_product_analytics");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+  });
+
+  it("sends one HogQL query to our EU project, asking for one row past the cap", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [[3]] }));
+    await call({ query: "SELECT count() AS n FROM events" });
+    const [url, init] = mockFetch.mock.calls[0]! as [
+      string,
+      { method: string; headers: Record<string, string>; body: string },
+    ];
+    expect(url).toBe(POSTHOG_QUERY_URL);
+    expect(init.method).toBe("POST");
+    expect(init.headers.Authorization).toBe("Bearer phx_test_key");
+    expect(JSON.parse(init.body)).toEqual({
+      query: { kind: HOGQL_KIND, query: `SELECT count() AS n FROM events\nLIMIT ${CAP + 1}` },
+    });
+  });
+
+  it("says a result longer than the cap is longer, and shows only the cap", async () => {
+    const rows = Array.from({ length: CAP + 1 }, (_, i) => [i]);
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["i"], results: rows }));
+    const t = await text("SELECT 1 AS i FROM events");
+    expect(t).toContain(`MORE THAN ${CAP} ROWS`);
+    expect(t).not.toContain(`[${CAP}]`);
+  });
+
+  it("keeps a LIMIT the query states, and refuses one over the cap without asking PostHog", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["e"], results: [["x"]] }));
+    await call({ query: "SELECT event AS e FROM events LIMIT 5" });
+    expect(sent()).toEqual(["SELECT event AS e FROM events LIMIT 5"]);
+
+    mockFetch.mockReset();
+    const r = await call({ query: `SELECT event FROM events LIMIT ${CAP + 1}` });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toMatch(/over the 1000-row maximum/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "a subquery's LIMIT",
+      "SELECT a FROM (SELECT 1 AS a FROM events LIMIT 5) GROUP BY a",
+      "SELECT a FROM (SELECT 1 AS a FROM events LIMIT 5) GROUP BY a",
+    ],
+    // The comment goes with the cap: it ends the statement's last line.
+    [
+      "a LIMIT in a trailing comment",
+      "SELECT event FROM events -- LIMIT 500",
+      "SELECT event FROM events",
+    ],
+    [
+      "a LIMIT in a string",
+      "SELECT 'LIMIT 5' AS s FROM events",
+      "SELECT 'LIMIT 5' AS s FROM events",
+    ],
+  ])("does not take %s for the query's own", async (_what, query, body) => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["a"], results: [[1]] }));
+    await call({ query });
+    expect(sent()[0]).toBe(`${body}\nLIMIT ${CAP + 1}`);
+  });
+
+  it("keeps a string the query ends with, and caps after it", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [[1]] }));
+    await call({ query: "SELECT count() AS n FROM events WHERE event = '$pageview'" });
+    expect(sent()[0]).toBe(
+      `SELECT count() AS n FROM events WHERE event = '$pageview'\nLIMIT ${CAP + 1}`
+    );
+  });
+
+  it("drops a trailing semicolon instead of appending past it", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [[1]] }));
+    await call({ query: "SELECT count() AS n FROM events;" });
+    expect(sent()[0]).toBe(`SELECT count() AS n FROM events\nLIMIT ${CAP + 1}`);
+  });
+
+  it("refuses a bare UNION, which PostHog cuts at 100 rows a part, and runs a wrapped one", async () => {
+    const union = "SELECT 1 AS a FROM events UNION ALL SELECT 2 AS a FROM events";
+    const bare = await call({ query: union });
+    expect(bare.isError).toBe(true);
+    expect(bare.content[0]!.text).toMatch(/UNION at the top level is not run.*SELECT \* FROM/);
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["a"], results: [[1], [2]] }));
+    const wrapped = await call({ query: `SELECT * FROM (${union})` });
+    expect(wrapped.isError).toBeFalsy();
+    // Nor is the word in a string a UNION.
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["s"], results: [["x"]] }));
+    expect((await call({ query: "SELECT 'a UNION b' AS s FROM events" })).isError).toBeFalsy();
+  });
+
+  /**
+   * THE DATA WAREHOUSE IS NOT THIS TOOL'S. The same key reads PostHog's synced copies of
+   * our database (survey answers, reports and their unlock tokens, payments, the
+   * waitlist), Stripe, Resend and Google: measured 2026-10-12, a count() on
+   * postgres_survey_submission_answer ran. query_product_data masks those; this must not
+   * be the way round it.
+   */
+  it.each([
+    ["FROM", "SELECT count() FROM postgres_survey_submission_answer"],
+    ["a JOIN", "SELECT count() FROM events JOIN postgres_payment AS p ON p.id = events.uuid"],
+    ["a quoted name", "SELECT count() FROM `postgres_waitlist_user`"],
+    ["a comma", "SELECT count() FROM events e, stripe_charge"],
+    [
+      "a subquery",
+      "SELECT count() FROM events WHERE person_id IN (SELECT id FROM postgres_waitlist_user)",
+    ],
+  ])("refuses a warehouse table named in %s, without asking PostHog", async (_how, query) => {
+    const r = await call({ query });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toMatch(
+      /Only PostHog's own events, persons and sessions.*query_product_data/
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["events", "SELECT count() FROM events"],
+    ["persons", "SELECT count() FROM persons"],
+    ["sessions", "SELECT count() FROM sessions"],
+    ["a subquery", "SELECT count() FROM (SELECT event FROM events)"],
+    ["a WITH name", "WITH plays AS (SELECT person_id FROM events) SELECT count() FROM plays"],
+    [
+      "an alias then a JOIN",
+      "SELECT count() FROM events AS e JOIN persons AS p ON p.id = e.person_id",
+    ],
+  ])("runs a query over %s", async (_what, query) => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [[1]] }));
+    expect((await call({ query })).isError).toBeFalsy();
+  });
+
+  it("drops the rows of a query PostHog says read the warehouse", async () => {
+    mockFetch.mockResolvedValueOnce(
+      answer({
+        columns: ["answer"],
+        results: [["a private survey answer"]],
+        used_data_warehouse_sources: [
+          { source_type: "Postgres", table_name: "postgres.survey_submission_answer" },
+        ],
+      })
+    );
+    const r = await call({ query: "SELECT count() FROM events" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain(
+      "read the data warehouse (postgres.survey_submission_answer)"
+    );
+    expect(r.content[0]!.text).not.toContain("a private survey answer");
+  });
+
+  it.each([
+    ["by dot", "SELECT person.properties.first_name AS n FROM events"],
+    ["in brackets", "SELECT person.properties['first_name'] AS n FROM events"],
+    ["in backticks", "SELECT person.properties.`first_name` AS n FROM events"],
+    ["in double quotes", 'SELECT person.properties."last_name" AS n FROM events'],
+  ])("refuses to read people's names, %s", async (_how, query) => {
+    const r = await call({ query });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("Names are not read here");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an empty query", ""],
+    ["a write", "DELETE FROM events WHERE 1"],
+    ["anything but a SELECT", "DROP TABLE events"],
+  ])("refuses %s without asking PostHog", async (_what, query) => {
+    const r = await call({ query });
+    expect(r.isError).toBe(true);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("reads past an opening bracket and a comment to the SELECT", async () => {
+    mockFetch.mockResolvedValue(answer({ columns: ["n"], results: [[1]] }));
+    expect((await call({ query: "(SELECT 1 AS n)" })).isError).toBeFalsy();
+    expect((await call({ query: "-- plays per arm\nSELECT 1 AS n" })).isError).toBeFalsy();
+  });
+
+  it("returns the columns and the rows, framed as data rather than instructions", async () => {
+    mockFetch.mockResolvedValueOnce(
+      answer({
+        columns: ["arm", "visitors", "played"],
+        results: [
+          ["white_card", 206, 0],
+          ["white_video", 256, 3],
+        ],
+      })
+    );
+    const t = await text("SELECT 1");
+    expect(t).toMatch(/^UNTRUSTED DATA/);
+    expect(t).toContain("2 rows. Columns: arm, visitors, played.");
+    expect(t).toContain('["white_video",256,3]');
+    // 0 for the card arm and 3 for the video arm is a real answer, not a misspelling.
+    expect(t).not.toMatch(/0 or empty in every row/);
+  });
+
+  it("warns when a column is zero in every row, the shape a misspelt event name gives", async () => {
+    mockFetch.mockResolvedValueOnce(
+      answer({
+        columns: ["arm", "visitors", "played"],
+        results: [
+          ["white_card", 206, 0],
+          ["white_video", 256, 0],
+        ],
+      })
+    );
+    expect(await text("SELECT 1")).toMatch(/played is 0 or empty in every row.*misspelt/);
+  });
+
+  it("masks emails by value, private columns by name, and report links inside URLs", async () => {
+    mockFetch.mockResolvedValueOnce(
+      answer({
+        columns: ["who", "person.properties.email", "properties.$ip", "url", "n", "where_from"],
+        results: [
+          [
+            "reader@example.com",
+            "other@example.com",
+            "1.2.3.4",
+            "https://www.loveiq.org/report/rpt_abcdefghij0123456789",
+            2,
+            "203.0.113.9",
+          ],
+        ],
+      })
+    );
+    const t = await text("SELECT 1");
+    expect(t).not.toContain("reader@example.com");
+    expect(t).not.toContain("other@example.com");
+    expect(t).not.toContain("1.2.3.4");
+    expect(t).not.toContain("rpt_abcdefghij0123456789");
+    // An IP address by its value, whatever the column is called.
+    expect(t).not.toContain("203.0.113.9");
+    expect(t).toMatch(/\[private #[0-9a-f]{4}\]/);
+    expect(t).toContain("Masked as private");
+    expect(t).toMatch(/Masked as private[^\n]*email[^\n]*ip[^\n]*url[^\n]*who/);
+  });
+
+  it("says a filled LIMIT may hide more rows, but not for a deliberate LIMIT 1", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["e"], results: [["a"], ["b"], ["c"]] }));
+    expect(await text("SELECT event AS e FROM events LIMIT 3")).toContain(
+      "Your LIMIT 3 was filled, so there may be more rows"
+    );
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["e"], results: [["a"]] }));
+    const one = await text("SELECT event AS e FROM events LIMIT 1");
+    expect(one).not.toMatch(/filled|MORE THAN|CUT SHORT/);
+    expect(one).toContain("1 row.");
+  });
+
+  it("says so when PostHog cut the result itself", async () => {
+    mockFetch.mockResolvedValueOnce(
+      answer({ columns: ["e"], results: [["a"], ["b"]], hasMore: true })
+    );
+    expect(await text("SELECT event AS e FROM events")).toContain("CUT SHORT BY POSTHOG");
+  });
+
+  it("says an empty result is what the query selected, not what happened", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [] }));
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0]!.text).toMatch(/0 rows\..*not what happened on the site/);
+  });
+
+  it("calls an answer with no results a query that did not finish, not an empty one", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ query_status: { complete: false } }, 202));
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("without results, so the query did not finish");
+  });
+
+  it("calls a body that is not JSON what it is", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+      text: async () => "<html>",
+    });
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("with something that is not JSON");
+  });
+
+  it("passes on PostHog's own sentence when it refuses the query, and asks once", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () =>
+        '{"type":"validation_error","code":"hogql_query_error","detail":"Unable to resolve field: nope"}',
+    });
+    const r = await call({ query: "SELECT nope FROM events" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("PostHog answered 400: Unable to resolve field: nope");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a 200 that carries an error as the error it is", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ error: "Query exceeded the memory limit" }));
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("Query exceeded the memory limit");
+  });
+
+  it("asks once more, after a pause, when PostHog sheds load", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    mockFetch
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => "busy" })
+      .mockResolvedValueOnce(answer({ columns: ["n"], results: [[7]] }));
+    const pending = call({ query: "SELECT 7 AS n" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_500);
+    const r = await pending;
+    expect(r.isError).toBeFalsy();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("tells a timeout from a failure to connect, and says what to do about a timeout", async () => {
+    mockFetch.mockRejectedValue(new Error("Request timeout after 15000ms: x"));
+    const slow = await call({ query: "SELECT 1" });
+    expect(slow.content[0]!.text).toMatch(/did not answer within 15 seconds\. Narrow the dates/);
+    mockFetch.mockReset();
+    mockFetch.mockRejectedValue(new TypeError("fetch failed"));
+    const down = await call({ query: "SELECT 1" });
+    expect(down.isError).toBe(true);
+    expect(down.content[0]!.text).toContain("PostHog could not be reached: fetch failed");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("says so when the key is missing, and asks nothing", async () => {
+    delete process.env.POSTHOG_API_KEY;
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("POSTHOG_API_KEY is not set");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("is where the visitor counts that feed a rate send the caller", () => {
+    const desc = (name: string) => TOOLS.find((t) => t.name === name)!.description;
+    for (const name of ["get_business_numbers", "query_product_data"]) {
+      expect(desc(name), name).toContain("query_product_analytics");
+    }
+    expect(desc("get_business_numbers")).toContain("SERVER'S DAILY VISIT COUNT");
+    expect(desc("query_product_analytics")).toContain("BOTH halves of the rate");
+    // The filter that keeps local builds out and the days before deploy_env existed in.
+    expect(desc("query_product_analytics")).toContain("properties.$host = 'www.loveiq.org'");
   });
 });
