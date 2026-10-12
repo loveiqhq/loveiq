@@ -19,6 +19,7 @@ import {
 import { readStampedArms } from "@features/attribution/server/traffic";
 import { PRICE_TEST_START_AT } from "@features/checkout/server/reportPurchase";
 import { isStaffEmail } from "@shared/env/staff-email";
+import { LANDING_TEST_START_AT } from "@shared/experiments/landingVariant";
 import logger from "@shared/observability/logger";
 
 /** Hard ceiling per collection, paged 1000 at a time. */
@@ -405,7 +406,8 @@ export function armReader(
  * current lists started (list B lowered 2026-10-08). The landing test runs again since its round 3 (V2's question card
  * vs V3's hero video, 50/50 by cookie): its arms are new values, so `tallyAxis`
  * compares only them and every earlier landing stamp (`white`, `white_prev`,
- * `control`) reads as not attributable. Round 2 (V1 vs V2) stays in `concluded`
+ * `control`) reads as not attributable, as does a round-3 reader from before its
+ * restart at the condensed phone hero (`liveArmReader`). Round 2 (V1 vs V2) stays in `concluded`
  * below. Every other axis left on 2026-08-31. The forced paywall was REMOVED from
  * the product, so nothing stamps an arm at all. The 2.x price test was settled by
  * dropping the higher-priced arm; its A/B rows are retired arms, never pooled into
@@ -413,9 +415,30 @@ export function armReader(
  */
 export const LIVE_AXES: ExperimentAxis[] = ["pricing", "landing"];
 
+/**
+ * `armReader`, plus the landing test's restart at the condensed phone hero
+ * (LANDING_TEST_START_AT): a reader who finished before it came through a phone hero
+ * whose slot most visitors never reached, in either arm, so /admin reads them as not
+ * attributable, as it does pricing's re-priced readers. Here rather than in `armReader`
+ * because the brain's experiments tool reads a registered test from the registry's own
+ * start date (registry #6 moves to the restart day), and `armReader` is that read too.
+ */
+function liveArmReader(
+  axis: ExperimentAxis,
+  outcomes: ArmOutcomes
+): ((id: number, tracker: string | null) => string | null) | null {
+  const read = armReader(axis, outcomes);
+  if (axis !== "landing" || !read) return read;
+  const start = Date.parse(LANDING_TEST_START_AT);
+  const finishedAt = new Map(
+    outcomes.submissions.map((s) => [s.id, Date.parse(s.created_date_time ?? "")])
+  );
+  return (id, tracker) => ((finishedAt.get(id) ?? 0) >= start ? read(id, tracker) : null);
+}
+
 export function liveReadouts(outcomes: ArmOutcomes): ExperimentReadout[] {
   return LIVE_AXES.map((axis) =>
-    tallyAxis(outcomes, axis, armReader(axis, outcomes) ?? (() => null))
+    tallyAxis(outcomes, axis, liveArmReader(axis, outcomes) ?? (() => null))
   );
 }
 

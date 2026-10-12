@@ -9,7 +9,7 @@ import {
   type AxisFunnelRow,
 } from "@features/attribution/server/axis-trends";
 import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
-import { LANDING_HERO_VIDEO_LAUNCH_DAY } from "@shared/experiments/landingVariant";
+import { LANDING_TEST_START_DAY } from "@shared/experiments/landingVariant";
 
 /**
  * Most tests below read ROUND 2 of the landing test (V1 vs V2, from 21 Aug): a
@@ -46,10 +46,10 @@ describe("axis trend charts — which experiments may be drawn", () => {
      * must track production rather than a fixture — an axis quietly re-added here
      * without being randomised is a chart of a test nobody is running. Pricing 3.0
      * (A3 vs B3) is live, and the landing test is live again for round 3 (V2's card
-     * vs V3's video), cut at that round's own launch day.
+     * vs V3's video), cut at its restart with the condensed phone hero.
      */
     expect([...CHART_AXES]).toEqual(["pricing", "landing"]);
-    expect(AXIS_VALID_FROM.landing!.day).toBe(LANDING_HERO_VIDEO_LAUNCH_DAY);
+    expect(AXIS_VALID_FROM.landing!.day).toBe(LANDING_TEST_START_DAY);
     const trends = buildAxisTrends(
       [
         ...rows("landing", "white", {
@@ -372,8 +372,8 @@ describe("axis trend charts — which experiments may be drawn", () => {
   });
 
   it("clips each axis to its own like-for-like window", () => {
-    // Round 3: a day before its launch day is cut, whatever arm name it carries.
-    const launch = LANDING_HERO_VIDEO_LAUNCH_DAY;
+    // Round 3: a day before its restart is cut, whatever arm name it carries.
+    const launch = LANDING_TEST_START_DAY;
     const all = [
       ...rows("landing", "white_card", {
         days: 1,
@@ -418,7 +418,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
   });
 
   it("drops unattributable and retired arms rather than charting them as arms", () => {
-    const lastDay = plusDays(LANDING_HERO_VIDEO_LAUNCH_DAY, 4);
+    const lastDay = plusDays(LANDING_TEST_START_DAY, 4);
     const scoped = rowsForAxis(
       [
         ...rows("landing", "white_card", { days: 5, lastDay, completions: 10, checkouts: 1 }),

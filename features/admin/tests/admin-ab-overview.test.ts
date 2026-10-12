@@ -27,6 +27,11 @@ import {
   PRICE_TEST_START_AT,
   PRICE_TEST_START_DAY,
 } from "@features/checkout/server/reportPurchase";
+import {
+  LANDING_HERO_VIDEO_LAUNCH_DAY,
+  LANDING_TEST_START_AT,
+  LANDING_TEST_START_DAY,
+} from "@shared/experiments/landingVariant";
 import { reportingDayStart } from "@shared/time/reporting-day";
 
 function req(days = 90) {
@@ -395,6 +400,36 @@ describe("GET /api/admin/ab-overview", () => {
       revenue: 59.97,
     });
     expect(pricing.unattributed).toBe(25);
+  });
+
+  it("reads the landing test from readers who finished after its restart at the phone hero", async () => {
+    // The day cuts (axis trend, digest) start on LANDING_TEST_START_DAY; this readout cuts
+    // at that day's Berlin start, so no reader of the old phone hero slips in, and the
+    // day restarts round 3 rather than predating it.
+    expect(Date.parse(LANDING_TEST_START_AT)).toBe(
+      reportingDayStart(LANDING_TEST_START_DAY).getTime()
+    );
+    expect(LANDING_TEST_START_DAY > LANDING_HERO_VIDEO_LAUNCH_DAY).toBe(true);
+    const after = new Date(Date.parse(LANDING_TEST_START_AT) + 3_600_000).toISOString();
+    // An hour before: round 3's own arms, through the hero whose slot most phones missed.
+    const before = new Date(Date.parse(LANDING_TEST_START_AT) - 3_600_000).toISOString();
+    routeData(
+      [
+        ...Array.from({ length: 30 }, (_, i) => submission(i + 1, "white_card", null, after)),
+        ...Array.from({ length: 20 }, (_, i) => submission(i + 31, "white_video", null, after)),
+        ...Array.from({ length: 12 }, (_, i) => submission(i + 51, "white_video", null, before)),
+      ],
+      []
+    );
+    const body = await (await GET(req())).json();
+    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    expect(landing.arms.find((x: { arm: string }) => x.arm === "white_card")).toMatchObject({
+      n: 30,
+    });
+    expect(landing.arms.find((x: { arm: string }) => x.arm === "white_video")).toMatchObject({
+      n: 20,
+    });
+    expect(landing.unattributed).toBe(12);
   });
 
   it("leaves our own test runs out of every count", async () => {
