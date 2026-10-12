@@ -4,6 +4,7 @@ import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
 import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
+import { hogqlCodeOnly, hogqlTable } from "@features/ux-review/server/review";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
@@ -683,6 +684,13 @@ const NEVER_LIST = new Set([
   "admin_goals",
   "admin_action_item",
 ]);
+
+/**
+ * Rows the product-analytics tool may return. A query with no LIMIT gets this one, and a
+ * bigger LIMIT is refused: the answer lands in a chat, and a count that needs more rows
+ * than this is a count that should be aggregated in the query.
+ */
+export const PRODUCT_ANALYTICS_ROW_CAP = 1_000;
 
 export const TOOLS = [
   {
@@ -1558,7 +1566,12 @@ export const TOOLS = [
       "(the price test's arm), device, traffic source, country price tier, landing arm or " +
       "month, in one call. That is the way to answer 'revenue by plan', 'which price list " +
       "sells more' or 'sales by device': payment's plan, price and device sit in its " +
-      "metadata, which query_product_data cannot read.",
+      "metadata, which query_product_data cannot read. ITS VISITORS ARE THE SERVER'S DAILY " +
+      "VISIT COUNT: every public page, once per browser per day, including visits where the " +
+      "page never ran its tracking (bots among them). Never divide a count of something done " +
+      "ON a page (a video play, a tap, a scroll) by them: take both halves of that rate from " +
+      "query_product_analytics, which counts the people on the page the same way it counts " +
+      "what they did.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1664,7 +1677,9 @@ export const TOOLS = [
       "measure. Which survey questions move together (conditionality) is " +
       "rpc/get_answer_correlations with since_ts, until_ts (null for all time), min_people " +
       "and min_r: every pair of scale questions, correlated over the people who answered " +
-      "both.",
+      "both. funnel_event's unique_visitor rows are the server's daily visit count (see " +
+      "get_business_numbers), so they are never the bottom of a rate of something done on a " +
+      "page: that comes whole from query_product_analytics.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1757,6 +1772,68 @@ export const TOOLS = [
         },
       },
       required: ["service", "path"],
+    },
+  },
+  {
+    name: "query_product_analytics",
+    title: "Count what visitors did on the site",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "What visitors did on the site, counted from PostHog: page views, taps, video plays, " +
+      "scroll depth, the arms of a landing test, any event the site sends. Runs ONE read-only " +
+      "HogQL query (PostHog's SQL over `events`: event, timestamp, person_id, " +
+      "properties.<name>, person.properties.<name>) and returns its columns and rows. " +
+      "USE IT FOR EVERY RATE OF SOMETHING DONE ON A PAGE (the share of visitors who played the " +
+      "video, answered the card, reached an offer) and take BOTH halves of the rate from it: " +
+      "the people who did it, out of the people who were on that page, counted the same way. " +
+      "Never divide a PostHog count by get_business_numbers' visitors or by funnel_event's " +
+      "unique_visitor rows: those are the server's daily visit count (every public page, once " +
+      "per browser per day, plus visits where the page never ran its tracking, bots among " +
+      "them), a different and larger number, so the rate comes out too low. " +
+      "Count people with count(DISTINCT person_id). The real site only: " +
+      "properties.$host = 'www.loveiq.org' (local builds and previews send to the same project " +
+      "under other hosts, and deploy_env is missing before 2026-08-27). Leave out our own " +
+      "tests: anyone whose person.properties.email ends '@loveiq.org', and anyone who ever " +
+      "opened a page with 'variant=' in properties.$current_url (the team's arm override). " +
+      "THE LANDING TEST: experiment_exposure with properties.experiment = " +
+      "'landing-hero-video-ab' is a visitor shown an arm (properties.variant 'white_card' is " +
+      "question 1, 'white_video' the presenter video); events after it carry the arm as " +
+      "properties.landing_variant. On a phone the hero media sits below the first screen, so " +
+      "a page view does not mean it was seen: cta_seen with properties.cta 'hero_video' or " +
+      "'hero_card' is a visitor who had half of it on screen. It is sent since 2026-10-12, so " +
+      "a visit before that has none, which is no data rather than 'not seen'. The video: " +
+      "hero_video_play (a play with sound, counted when frames start), hero_video_progress " +
+      "(properties.percent 25, 50, 75) and hero_video_complete. " +
+      "It reads PostHog's events, persons and sessions only: our own database's tables " +
+      "(survey answers, reports, payments) are query_product_data's, which masks what is " +
+      "private, and a query that reaches them here is refused. " +
+      "Emails come back masked as a #tag, and for a reader who gave one distinct_id IS their " +
+      "email, so count people rather than listing them. At most 1000 rows: a query with no " +
+      "LIMIT gets one, a bigger LIMIT is refused, and a longer result says so, so count and " +
+      "GROUP BY rather than listing rows. Wrap a UNION as SELECT * FROM (…): PostHog cuts " +
+      "every part of a bare one but the last at 100 rows, so it is refused. HogQL reads " +
+      "x != '' as true when x is NULL; use notEmpty(x).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "One HogQL SELECT. For example, each landing arm's visitors and how many of them " +
+            "played the video, our own tests left out: SELECT properties.variant AS arm, " +
+            "count(DISTINCT person_id) AS visitors, count(DISTINCT if(person_id IN (SELECT " +
+            "person_id FROM events WHERE event = 'hero_video_play' AND properties.$host = " +
+            "'www.loveiq.org'), person_id, NULL)) AS played FROM events WHERE event = " +
+            "'experiment_exposure' AND properties.experiment = 'landing-hero-video-ab' AND " +
+            "properties.variant IN ('white_card', 'white_video') AND " +
+            "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-07 " +
+            "00:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
+            "toDateTime('2026-10-07 00:00:00') AND (match(toString(properties.$current_url), " +
+            "'[?&]variant=') OR toString(person.properties.email) LIKE '%@loveiq.org')) " +
+            "GROUP BY arm",
+        },
+      },
+      required: ["query"],
     },
   },
   {
@@ -2611,7 +2688,11 @@ export const EXTERNAL_SERVICES: Record<
     note:
       "Product analytics, feature flags, session recordings, saved insights, and the query " +
       "endpoint. Our project is 244778 on the EU host — the same key is rejected by the US " +
-      "host, and the error says authentication_failed rather than anything about the region.",
+      "host, and the error says authentication_failed rather than anything about the region. " +
+      "TO COUNT ANYTHING (people, plays, taps, a rate), use query_product_analytics, which " +
+      "runs a HogQL query on the server. GET /events here returns whole raw events, each with " +
+      "every property, so a count read that way overflows the answer long before it is " +
+      "complete.",
   },
 };
 
@@ -3201,6 +3282,62 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
   };
   const out = rows.map((row) => walk(row, 0));
   return { rows: out, redacted: [...hit].sort() };
+}
+
+/** An email address anywhere in a value: for a reader who gave one, distinct_id IS it. */
+const EMAIL_VALUE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+/** An IPv4 address, whatever the column is called. */
+const IPV4_VALUE = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
+
+/**
+ * Rows from the product-analytics tool, masked the way query_external_service masks PostHog's
+ * events: a private column by its name (properties.$ip and person.properties.email are
+ * read as `ip` and `email`), an email or IPv4 address by its VALUE whatever the column is
+ * called, and URL secrets (report unlock links sit in $current_url) inside any string.
+ */
+export function maskAnalyticsRows(
+  columns: string[],
+  rows: unknown[][]
+): { columns: string[]; rows: unknown[][]; masked: string[] } {
+  const hit = new Set<string>();
+  const leaf = (name: string) => name.split(".").pop()!.replace(/^\$/, "");
+  const privateColumn = columns.map(
+    (c) => PRIVATE_COLUMN.test(leaf(c)) || PRIVATE_COLUMN.test(snakeCase(leaf(c)))
+  );
+  const value = (v: unknown, column: string): unknown => {
+    if (typeof v === "string") {
+      if (EMAIL_VALUE.test(v) || IPV4_VALUE.test(v)) {
+        hit.add(column);
+        return privateTag(v);
+      }
+      const clean = redactUrlSecrets(v);
+      if (clean !== v) hit.add(column);
+      return clean;
+    }
+    if (Array.isArray(v)) return v.map((x) => value(x, column));
+    if (v !== null && typeof v === "object") {
+      const {
+        rows: [inner],
+        redacted,
+      } = redactPrivateColumns([v]);
+      if (redacted.length > 0) hit.add(column);
+      return Object.fromEntries(
+        Object.entries(inner as Record<string, unknown>).map(([k, x]) => [k, value(x, column)])
+      );
+    }
+    return v;
+  };
+  const out = rows.map((row) =>
+    row.map((v, i) => {
+      const column = columns[i] ?? `column ${i + 1}`;
+      if (privateColumn[i] && v !== null && v !== undefined) {
+        hit.add(column);
+        return privateTag(v);
+      }
+      return value(v, column);
+    })
+  );
+  return { columns, rows: out, masked: [...hit].sort() };
 }
 
 /**
@@ -5202,6 +5339,80 @@ async function callTool(
     return textResult(`${UNTRUSTED_DATA_PREAMBLE}\n\n${head}${bodyText}`);
   }
 
+  if (name === "query_product_analytics") {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) {
+      return textResult("Pass `query`: one HogQL SELECT over `events`.", true);
+    }
+    // Read past comments and an opening bracket: `(SELECT …)` and a commented query are fine.
+    if (!/^[\s(]*(SELECT|WITH)\b/i.test(hogqlCodeOnly(query))) {
+      return textResult(
+        "Only a SELECT runs here (WITH … SELECT too). HogQL reads, and so does this tool.",
+        true
+      );
+    }
+    const r = await hogqlTable(query, PRODUCT_ANALYTICS_ROW_CAP);
+    if (!r.ok) return textResult(`PostHog did not run the query. ${r.error}`, true);
+    if (r.rows.length === 0) {
+      stats.sourceCount = 0;
+      return textResult(
+        `${UNTRUSTED_DATA_PREAMBLE}\n\n0 rows. Columns: ${r.columns.join(", ") || "(none named)"}. ` +
+          `That is what this query selected, not what happened on the site: check its ` +
+          `filters (the host, the dates, the event name) before concluding nobody did it.`
+      );
+    }
+    const masked = maskAnalyticsRows(r.columns, r.rows);
+    const notes: string[] = [];
+    if (r.cut === "cap") {
+      notes.push(
+        `MORE THAN ${PRODUCT_ANALYTICS_ROW_CAP} ROWS: only the first ${PRODUCT_ANALYTICS_ROW_CAP} ` +
+          `came back. Count or GROUP BY in the query rather than listing rows`
+      );
+    } else if (r.cut === "own_limit") {
+      notes.push(`Your LIMIT ${r.ownLimit} was filled, so there may be more rows`);
+    } else if (r.cut === "posthog") {
+      notes.push(
+        "CUT SHORT BY POSTHOG: it applied its own row limit, so this is not the whole result. " +
+          "End the query with LIMIT n, outside any brackets"
+      );
+    }
+    // A misspelt event or property is no match in HogQL, not an error, so it reads as a
+    // confident zero: the likeliest way back to a wrong rate.
+    const allZero = masked.columns.filter((_, i) =>
+      masked.rows.every((row) => row[i] === 0 || row[i] === "0" || row[i] === null)
+    );
+    if (allZero.length > 0) {
+      notes.push(
+        `${allZero.join(", ")} ${allZero.length === 1 ? "is" : "are"} 0 or empty in every row. ` +
+          `HogQL reads a misspelt event or property name as no match rather than an error, ` +
+          `so check the names before concluding nobody did it`
+      );
+    }
+    if (masked.masked.length > 0) {
+      notes.push(
+        `Masked as private, so the value is never pasted into a prompt: ` +
+          `${masked.masked.join(", ")}. An email or private field shows as a #tag, the same ` +
+          `value always the same tag; a secret inside a link shows as [redacted]`
+      );
+    }
+    const head = (shown: number) =>
+      `${UNTRUSTED_DATA_PREAMBLE}\n\n` +
+      `${shown < masked.rows.length ? `${shown} of ${masked.rows.length} rows shown, the rest did not fit: aggregate further` : `${masked.rows.length} row${masked.rows.length === 1 ? "" : "s"}`}. ` +
+      `Columns: ${masked.columns.join(", ") || "(none named)"}.` +
+      notes.map((n) => `\n${n}.`).join("") +
+      "\n";
+    const { text: body, shown } = renderRowsForTest(
+      masked.rows,
+      MAX_RESULT_CHARS - head(masked.rows.length).length - 100
+    );
+    stats.sourceCount = shown;
+    return textResult(
+      `${head(shown)}${body}`,
+      false,
+      "aggregate in the query (count, uniq, GROUP BY) or narrow its dates: this tool has no paging"
+    );
+  }
+
   if (name === "query_external_service") {
     const key = typeof args.service === "string" ? args.service.toLowerCase().trim() : "";
     const svc = EXTERNAL_SERVICES[key];
@@ -6725,6 +6936,11 @@ export const MCP_INSTRUCTIONS =
   "unsubscribes, bounces) or answers (how a group answered one survey question).\n\n" +
   "UX SIGNALS: ux_signals measures Marcus's 22 behaviour signals on real visits, and shows a " +
   "signal's number only once its measure has been proven right on the nightly persona walks.\n\n" +
+  "WHAT VISITORS DID ON THE SITE: query_product_analytics counts it from PostHog with one " +
+  "read-only HogQL query: page views, video plays, taps, each landing arm, whether the hero " +
+  "media was seen. Take BOTH halves of any rate of something done on a page from it. " +
+  "get_business_numbers' visitors are the server's daily visit count and never the bottom " +
+  "of such a rate.\n\n" +
   "WHAT WE SPEND: cost_watch reads what we pay each month for tools and services from the " +
   "cost sheet, what moved, and which hand-typed lines may be stale.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +
