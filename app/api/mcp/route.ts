@@ -4,6 +4,7 @@ import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
 import { buildUxSignalsReport, renderUxSignals } from "@features/ux-signals/server/report";
+import { hogqlTable } from "@features/ux-review/server/review";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
@@ -683,6 +684,13 @@ const NEVER_LIST = new Set([
   "admin_goals",
   "admin_action_item",
 ]);
+
+/**
+ * Rows the product-analytics tool may return. A query with no LIMIT gets this one, and a
+ * bigger LIMIT is refused: the answer lands in a chat, and a count that needs more rows
+ * than this is a count that should be aggregated in the query.
+ */
+export const PRODUCT_ANALYTICS_ROW_CAP = 1_000;
 
 export const TOOLS = [
   {
@@ -1558,7 +1566,12 @@ export const TOOLS = [
       "(the price test's arm), device, traffic source, country price tier, landing arm or " +
       "month, in one call. That is the way to answer 'revenue by plan', 'which price list " +
       "sells more' or 'sales by device': payment's plan, price and device sit in its " +
-      "metadata, which query_product_data cannot read.",
+      "metadata, which query_product_data cannot read. ITS VISITORS ARE THE SERVER'S DAILY " +
+      "VISIT COUNT: every public page, once per browser per day, including visits where the " +
+      "page never ran its tracking (bots among them). Never divide a count of something done " +
+      "ON a page (a video play, a tap, a scroll) by them: take both halves of that rate from " +
+      "query_product_analytics, which counts the people on the page the same way it counts " +
+      "what they did.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1664,7 +1677,9 @@ export const TOOLS = [
       "measure. Which survey questions move together (conditionality) is " +
       "rpc/get_answer_correlations with since_ts, until_ts (null for all time), min_people " +
       "and min_r: every pair of scale questions, correlated over the people who answered " +
-      "both.",
+      "both. funnel_event is the server's daily visit count (see get_business_numbers), so " +
+      "it is never the bottom of a rate of something done on a page: that comes whole from " +
+      "query_product_analytics.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1757,6 +1772,62 @@ export const TOOLS = [
         },
       },
       required: ["service", "path"],
+    },
+  },
+  {
+    name: "query_product_analytics",
+    title: "Count what visitors did on the site",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "What visitors did on the site, counted from PostHog: page views, taps, video plays, " +
+      "scroll depth, the arms of a landing test, any event the site sends. Runs ONE read-only " +
+      "HogQL query (PostHog's SQL over `events`: event, timestamp, person_id, " +
+      "properties.<name>, person.properties.<name>) and returns its columns and rows. " +
+      "USE IT FOR EVERY RATE OF SOMETHING DONE ON A PAGE (the share of visitors who played the " +
+      "video, answered the card, reached an offer) and take BOTH halves of the rate from it: " +
+      "the people who did it, out of the people who were on that page, counted the same way. " +
+      "Never divide a PostHog count by get_business_numbers' visitors or by funnel_event rows: " +
+      "those are the server's daily visit count (every public page, once per browser per day, " +
+      "plus visits where the page never ran its tracking, bots among them), a different and " +
+      "larger number, so the rate comes out too low. " +
+      "Count people with count(DISTINCT person_id). Production only: " +
+      "properties.deploy_env = 'production' (staging sends to the same project). Leave out our " +
+      "own tests: anyone whose person.properties.email ends '@loveiq.org', and anyone who ever " +
+      "opened a page with 'variant=' in properties.$current_url (the team's arm override). " +
+      "THE LANDING TEST: experiment_exposure with properties.experiment = " +
+      "'landing-hero-video-ab' is a visitor shown an arm (properties.variant 'white_card' is " +
+      "question 1, 'white_video' the presenter video); events after it carry the arm as " +
+      "properties.landing_variant. On a phone the hero media sits below the first screen, so " +
+      "a page view does not mean it was seen: cta_seen with properties.cta 'hero_video' or " +
+      "'hero_card' is a visitor who had half of it on screen. It is sent since 2026-10-12, so " +
+      "a visit before that has none, which is no data rather than 'not seen'. The video: " +
+      "hero_video_play (a play with sound, counted when frames start), hero_video_progress " +
+      "(properties.percent 25, 50, 75) and hero_video_complete. " +
+      "NEVER SELECT distinct_id OR AN EMAIL: for a reader who gave one, distinct_id IS their " +
+      "email address. Aggregate instead. A query with no LIMIT gets LIMIT 1000 and a bigger " +
+      "LIMIT is refused, so count and GROUP BY rather than listing rows. HogQL reads " +
+      "x != '' as true when x is NULL; use notEmpty(x).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "One HogQL SELECT. For example, each landing arm's visitors and how many of them " +
+            "played the video, our own tests left out: SELECT properties.variant AS arm, " +
+            "count(DISTINCT person_id) AS visitors, count(DISTINCT if(person_id IN (SELECT " +
+            "person_id FROM events WHERE event = 'hero_video_play' AND properties.deploy_env = " +
+            "'production'), person_id, NULL)) AS played FROM events WHERE event = " +
+            "'experiment_exposure' AND properties.experiment = 'landing-hero-video-ab' AND " +
+            "properties.variant IN ('white_card', 'white_video') AND " +
+            "properties.deploy_env = 'production' AND timestamp >= toDateTime('2026-10-07 " +
+            "00:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
+            "toDateTime('2026-10-07 00:00:00') AND (match(toString(properties.$current_url), " +
+            "'[?&]variant=') OR toString(person.properties.email) LIKE '%@loveiq.org')) " +
+            "GROUP BY arm",
+        },
+      },
+      required: ["query"],
     },
   },
   {
@@ -2611,7 +2682,11 @@ export const EXTERNAL_SERVICES: Record<
     note:
       "Product analytics, feature flags, session recordings, saved insights, and the query " +
       "endpoint. Our project is 244778 on the EU host — the same key is rejected by the US " +
-      "host, and the error says authentication_failed rather than anything about the region.",
+      "host, and the error says authentication_failed rather than anything about the region. " +
+      "TO COUNT ANYTHING (people, plays, taps, a rate), use query_product_analytics, which " +
+      "runs a HogQL query on the server. GET /events here returns whole raw events, each with " +
+      "every property, so a count read that way overflows the answer long before it is " +
+      "complete.",
   },
 };
 
@@ -5202,6 +5277,41 @@ async function callTool(
     return textResult(`${UNTRUSTED_DATA_PREAMBLE}\n\n${head}${bodyText}`);
   }
 
+  if (name === "query_product_analytics") {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) {
+      return textResult("Pass `query`: one HogQL SELECT over `events`.", true);
+    }
+    if (!/^(SELECT|WITH)\b/i.test(query)) {
+      return textResult(
+        "Only a SELECT runs here (WITH … SELECT too). HogQL reads, and so does this tool.",
+        true
+      );
+    }
+    const r = await hogqlTable(query, PRODUCT_ANALYTICS_ROW_CAP);
+    if (!r.ok) return textResult(`PostHog did not run the query. ${r.error}`, true);
+    stats.sourceCount = r.rows.length;
+    const columns = `Columns: ${r.columns.join(", ") || "(none named)"}.`;
+    if (r.rows.length === 0) {
+      return textResult(
+        `0 rows. ${columns} That is what this query selected, not what happened on the ` +
+          `site: check its filters (deploy_env, the dates, the event name) before ` +
+          `concluding nobody did it.`
+      );
+    }
+    const { text: body, shown } = renderRowsForTest(r.rows, MAX_RESULT_CHARS - 600);
+    const notes = [
+      shown < r.rows.length
+        ? `${shown} of ${r.rows.length} rows shown, the rest did not fit: aggregate further`
+        : `${r.rows.length} row${r.rows.length === 1 ? "" : "s"}`,
+      r.atCap
+        ? `STOPPED AT THE LIMIT OF ${r.limit} ROWS, so the true result is longer: count or ` +
+          `GROUP BY in the query instead of listing`
+        : "",
+    ].filter(Boolean);
+    return textResult(`${notes.join(". ")}. ${columns}\n${body}`);
+  }
+
   if (name === "query_external_service") {
     const key = typeof args.service === "string" ? args.service.toLowerCase().trim() : "";
     const svc = EXTERNAL_SERVICES[key];
@@ -6725,6 +6835,11 @@ export const MCP_INSTRUCTIONS =
   "unsubscribes, bounces) or answers (how a group answered one survey question).\n\n" +
   "UX SIGNALS: ux_signals measures Marcus's 22 behaviour signals on real visits, and shows a " +
   "signal's number only once its measure has been proven right on the nightly persona walks.\n\n" +
+  "WHAT VISITORS DID ON THE SITE: query_product_analytics counts it from PostHog with one " +
+  "read-only HogQL query: page views, video plays, taps, each landing arm, whether the hero " +
+  "media was seen. Take BOTH halves of any rate of something done on a page from it. " +
+  "get_business_numbers' visitors are the server's daily visit count and never the bottom " +
+  "of such a rate.\n\n" +
   "WHAT WE SPEND: cost_watch reads what we pay each month for tools and services from the " +
   "cost sheet, what moved, and which hand-typed lines may be stale.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +

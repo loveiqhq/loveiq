@@ -2025,6 +2025,93 @@ export async function sessionQuery(query: string): Promise<unknown[][] | null> {
   return null;
 }
 
+/** PostHog's own load-shedding answers: worth one more try, unlike a bad query. */
+const HOG_RETRYABLE = new Set([429, 502, 503, 504]);
+
+/** The sentence PostHog wrote, out of the JSON it wraps around it, or the raw body. */
+function hogErrorText(body: string): string {
+  try {
+    const j = JSON.parse(body) as { detail?: unknown; error?: unknown };
+    return String(j.detail ?? j.error ?? body).slice(0, 500);
+  } catch {
+    return body.slice(0, 500);
+  }
+}
+
+/**
+ * A query someone else wrote: the brain's `query_product_analytics`. Columns and rows, or
+ * PostHog's own words when it refuses the query. sessionQuery flattens every failure to
+ * null, which suits a caller that wrote its own query; a caller that has to FIX its query
+ * needs the sentence that says what is wrong ("Unable to resolve field: x").
+ *
+ * Capped like sessionQuery, and harder: no LIMIT of its own gets `cap`, and a bigger one is
+ * refused rather than rewritten, because the answer lands in a chat. `atCap` says the result
+ * filled its limit, the one sign that it was cut short (a deliberate LIMIT 1 is not).
+ */
+export async function hogqlTable(
+  query: string,
+  cap: number
+): Promise<
+  | { ok: true; columns: string[]; rows: unknown[][]; limit: number; atCap: boolean }
+  | { ok: false; error: string }
+> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return { ok: false, error: "POSTHOG_API_KEY is not set on this deployment." };
+  const own = /\bLIMIT\s+(\d+)\s*$/i.exec(query.trim());
+  const limit = own ? Number(own[1]) : cap;
+  if (limit > cap) {
+    return {
+      ok: false,
+      error: `LIMIT ${limit} is over the ${cap}-row maximum. Aggregate in the query instead.`,
+    };
+  }
+  const sql = own ? query : `${query.trimEnd()}\nLIMIT ${cap}`;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ query: { kind: "HogQLQuery", query: sql } }),
+        timeoutMs: 15_000,
+      });
+    } catch (err) {
+      if (attempt === 0) continue;
+      // fetchWithTimeout turns its own abort into "Request timeout after …"; anything else
+      // is a failure to connect, and calling that a timeout would send the reader the
+      // wrong way.
+      const why = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: why.startsWith("Request timeout")
+          ? "PostHog did not answer within 15 seconds, twice."
+          : `PostHog could not be reached: ${why.slice(0, 200)}`,
+      };
+    }
+    if (!res.ok) {
+      if (attempt === 0 && HOG_RETRYABLE.has(res.status)) continue;
+      const body = await res.text().catch(() => "");
+      return { ok: false, error: `PostHog answered ${res.status}: ${hogErrorText(body)}` };
+    }
+    const payload = (await res.json()) as {
+      columns?: string[];
+      results?: unknown[][];
+      error?: unknown;
+    };
+    // 200-with-error is how PostHog reports some bad queries.
+    if (payload.error) return { ok: false, error: hogErrorText(String(payload.error)) };
+    const rows = payload.results ?? [];
+    return {
+      ok: true,
+      columns: payload.columns ?? [],
+      rows,
+      limit,
+      atCap: limit > 1 && rows.length >= limit,
+    };
+  }
+  return { ok: false, error: "PostHog is shedding load. Try again in a minute." };
+}
+
 /** The first row, or null. */
 async function sessionRow(query: string): Promise<unknown[] | null> {
   const rows = await sessionQuery(query);

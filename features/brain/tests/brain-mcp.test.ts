@@ -127,6 +127,7 @@ import { forgetSignIns } from "@features/brain/server/sign-in";
 import {
   outrankingHeldBack,
   POST,
+  PRODUCT_ANALYTICS_ROW_CAP,
   RELEVANCE_FLOOR,
   SOURCES_FOR_TEST,
   TOOLS,
@@ -1809,6 +1810,7 @@ describe("/api/mcp", () => {
         "list_product_tables",
         "query_product_data",
         "query_external_service",
+        "query_product_analytics",
         "related_context",
         "show_design",
         "design_changes",
@@ -1933,6 +1935,7 @@ describe("/api/mcp", () => {
         "file_call_notes",
         "post_to_slack",
         "query_external_service",
+        "query_product_analytics",
         "send_email",
         "show_design",
         "show_page",
@@ -8225,5 +8228,208 @@ describe("outrankingHeldBack — what the cap left out, when it was better", () 
         .filter((l) => l.startsWith("  •"))
         .every((l) => /^  • \S+\/\S+ @\d+\.\d{2} — outranks \d+ of the \d+ shown$/.test(l))
     ).toBe(true);
+  });
+});
+
+/**
+ * THE BOTTOM OF A RATE COMES FROM THE SAME PLACE AS ITS TOP.
+ *
+ * On 2026-10-11 Jarvis answered "what share of visitors watched the landing video" with
+ * 3 plays (PostHog) out of 382 visits (funnel_event, the server's daily visit count):
+ * 0.8%. The 382 counts every public page once per browser per day, plus visits that never
+ * ran the page's tracking, so it is the wrong bottom for a PostHog count; counted the same
+ * way as the plays it was 3 of 256, 1.2%. Jarvis could not have done better: its only
+ * PostHog door was GET, and a GET of the arm's exposures is 1.2 MB of raw events.
+ */
+describe("query_product_analytics — counting what visitors did, from PostHog", () => {
+  const POSTHOG_QUERY_URL = "https://eu.posthog.com/api/projects/244778/query/";
+  // A name, not the literal: __tests__/scripts/hogql-cap.test.ts looks for request bodies
+  // built by hand, and this only reads back the one hogqlTable built.
+  const HOGQL_KIND = "HogQLQuery";
+
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "query_product_analytics", arguments: args },
+      })
+    );
+    return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+  }
+
+  const answer = (payload: Record<string, unknown>) => ({
+    ok: true,
+    status: 200,
+    json: async () => payload,
+    text: async () => JSON.stringify(payload),
+  });
+
+  /** The queries sent to PostHog, decoded. */
+  const sent = () =>
+    mockFetch.mock.calls
+      .filter(([url]) => url === POSTHOG_QUERY_URL)
+      .map(([, init]) => JSON.parse(String((init as { body: string }).body)));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    process.env.POSTHOG_API_KEY = "phx_test_key";
+    mockFetch.mockReset();
+  });
+  afterEach(() => {
+    delete process.env.POSTHOG_API_KEY;
+  });
+
+  it("is offered as a read-only tool", () => {
+    const tool = TOOLS.find((t) => t.name === "query_product_analytics");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+  });
+
+  it("sends one HogQL query to our EU project, capped when it states no LIMIT", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [[3]] }));
+    await call({ query: "SELECT count() AS n FROM events" });
+    const [url, init] = mockFetch.mock.calls[0]! as [
+      string,
+      { method: string; headers: Record<string, string> },
+    ];
+    expect(url).toBe(POSTHOG_QUERY_URL);
+    expect(init.method).toBe("POST");
+    expect(init.headers.Authorization).toBe("Bearer phx_test_key");
+    expect(sent()).toEqual([
+      {
+        query: {
+          kind: HOGQL_KIND,
+          query: `SELECT count() AS n FROM events\nLIMIT ${PRODUCT_ANALYTICS_ROW_CAP}`,
+        },
+      },
+    ]);
+  });
+
+  it("keeps a LIMIT the query states, and refuses one over the cap without asking PostHog", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["e"], results: [["x"]] }));
+    await call({ query: "SELECT event AS e FROM events LIMIT 5" });
+    expect(sent()[0].query.query).toBe("SELECT event AS e FROM events LIMIT 5");
+
+    mockFetch.mockReset();
+    const r = await call({
+      query: `SELECT event FROM events LIMIT ${PRODUCT_ANALYTICS_ROW_CAP + 1}`,
+    });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toMatch(/over the 1000-row maximum/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("does not take a subquery's LIMIT for the query's own", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["a"], results: [[1]] }));
+    await call({ query: "SELECT a FROM (SELECT 1 AS a FROM events LIMIT 5) GROUP BY a" });
+    expect(sent()[0].query.query).toMatch(new RegExp(`\\nLIMIT ${PRODUCT_ANALYTICS_ROW_CAP}$`));
+  });
+
+  it.each([
+    ["an empty query", ""],
+    ["a write", "DELETE FROM events WHERE 1"],
+    ["anything but a SELECT", "DROP TABLE events"],
+  ])("refuses %s without asking PostHog", async (_what, query) => {
+    const r = await call({ query });
+    expect(r.isError).toBe(true);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns the columns and the rows", async () => {
+    mockFetch.mockResolvedValueOnce(
+      answer({
+        columns: ["arm", "visitors", "played"],
+        results: [
+          ["white_card", 206, 0],
+          ["white_video", 256, 3],
+        ],
+      })
+    );
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBeFalsy();
+    const text = r.content[0]!.text;
+    expect(text).toContain("2 rows. Columns: arm, visitors, played.");
+    expect(text).toContain('["white_video",256,3]');
+  });
+
+  it("says a result that filled its LIMIT was cut short", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["e"], results: [["a"], ["b"], ["c"]] }));
+    const r = await call({ query: "SELECT event AS e FROM events LIMIT 3" });
+    expect(r.content[0]!.text).toMatch(/STOPPED AT THE LIMIT OF 3 ROWS/);
+  });
+
+  it("does not cry wolf at a deliberate LIMIT 1", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["e"], results: [["a"]] }));
+    const r = await call({ query: "SELECT event AS e FROM events LIMIT 1" });
+    expect(r.content[0]!.text).not.toMatch(/STOPPED/);
+    expect(r.content[0]!.text).toContain("1 row.");
+  });
+
+  it("says an empty result is what the query selected, not what happened", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [] }));
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0]!.text).toMatch(/^0 rows\..*not what happened on the site/);
+  });
+
+  it("passes on PostHog's own sentence when it refuses the query", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () =>
+        '{"type":"validation_error","code":"hogql_query_error","detail":"Unable to resolve field: nope"}',
+    });
+    const r = await call({ query: "SELECT nope FROM events" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("PostHog answered 400: Unable to resolve field: nope");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a 200 that carries an error as the error it is", async () => {
+    mockFetch.mockResolvedValueOnce(answer({ error: "Query exceeded the memory limit" }));
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("Query exceeded the memory limit");
+  });
+
+  it("asks once more when PostHog sheds load, and not after a bad query", async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => "busy" })
+      .mockResolvedValueOnce(answer({ columns: ["n"], results: [[7]] }));
+    const r = await call({ query: "SELECT 7 AS n" });
+    expect(r.isError).toBeFalsy();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("tells a timeout from a failure to connect", async () => {
+    mockFetch.mockRejectedValue(new Error("Request timeout after 15000ms: x"));
+    const slow = await call({ query: "SELECT 1" });
+    expect(slow.content[0]!.text).toContain("did not answer within 15 seconds, twice");
+    mockFetch.mockReset();
+    mockFetch.mockRejectedValue(new TypeError("fetch failed"));
+    const down = await call({ query: "SELECT 1" });
+    expect(down.isError).toBe(true);
+    expect(down.content[0]!.text).toContain("PostHog could not be reached: fetch failed");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("says so when the key is missing, and asks nothing", async () => {
+    delete process.env.POSTHOG_API_KEY;
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("POSTHOG_API_KEY is not set");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("is where the visitor counts that feed a rate send the caller", () => {
+    const text = (name: string) => TOOLS.find((t) => t.name === name)!.description;
+    for (const name of ["get_business_numbers", "query_product_data"]) {
+      expect(text(name), name).toContain("query_product_analytics");
+    }
+    expect(text("get_business_numbers")).toContain("SERVER'S DAILY VISIT COUNT");
+    expect(text("query_product_analytics")).toContain("BOTH halves of the rate");
   });
 });

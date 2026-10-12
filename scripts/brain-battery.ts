@@ -2903,6 +2903,24 @@ async function mcpProbes(): Promise<McpProbe[]> {
    * coverage, not a live probe that leaves litter behind on every run.
    */
   return [
+    // PostHog, counted on the server: a real count comes back as a table, and anything but
+    // a SELECT is refused before PostHog is asked.
+    {
+      kind: "mcp-product-analytics-count",
+      tool: "query_product_analytics",
+      args: {
+        query:
+          "SELECT count() AS events FROM events WHERE timestamp > now() - INTERVAL 1 DAY " +
+          "AND properties.deploy_env = 'production'",
+      },
+      check: both(contains("1 row.", "Columns: events."), absent("did not run")),
+    },
+    {
+      kind: "mcp-product-analytics-read-only",
+      tool: "query_product_analytics",
+      args: { query: "DELETE FROM events WHERE 1" },
+      check: contains("Only a SELECT runs here"),
+    },
     // The roster, which did not exist this morning: "who is the CEO" returned forty
     // chunks about OTHER companies' chief executives, loudest a vendor welcome email.
     {
