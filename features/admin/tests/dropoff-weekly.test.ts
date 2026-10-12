@@ -1,15 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const mockSupabase = vi.fn();
-vi.mock("@features/admin/server/supabase", () => ({
-  supabaseFetch: (...a: unknown[]) => mockSupabase(...a),
-}));
+import { describe, expect, it } from "vitest";
 
 import {
+  askedQuestions,
   buildDropoffWeeklyPayload,
   DROPOFF_FLOOR,
   dropoffWeeks,
-  fetchQuestionEnds,
   shortDate,
   type QuestionEnds,
 } from "@features/admin/server/dropoff-weekly";
@@ -46,33 +41,27 @@ describe("dropoffWeeks", () => {
     expect(w.at(-1)!.partial).toBe(true);
   });
 
+  it("reads more complete weeks when asked, for the usual level of the oldest shown", () => {
+    const w = dropoffWeeks(new Date("2026-12-21T08:30:00Z"), 12);
+    expect(w.filter((x) => !x.partial)).toHaveLength(12);
+    expect(w[0]!.label).toBe("28 Sep");
+  });
+
   it("names a week by its Monday the same way on every ICU build", () => {
     expect(shortDate("2026-09-21")).toBe("21 Sep");
   });
 });
 
-describe("fetchQuestionEnds", () => {
-  beforeEach(() => mockSupabase.mockReset());
-
-  it("reads get_survey_friction's by_question for exactly the window asked", async () => {
-    mockSupabase.mockResolvedValue({
-      ok: true,
-      json: async () => ({ by_question: [{ q_id: "00000", sessions: 160, quits: 25 }] }),
-    });
-    const since = new Date("2026-09-27T22:00:00Z");
-    const until = new Date("2026-10-04T22:00:00Z");
-    const ends = await fetchQuestionEnds(since, until);
-    expect(ends.get("00000")).toEqual({ sessions: 160, quits: 25 });
-    const [path, init] = mockSupabase.mock.calls[0] as [string, { body: string }];
-    expect(path).toBe("/rest/v1/rpc/get_survey_friction");
-    expect(JSON.parse(init.body)).toEqual({ since_ts: iso(since), until_ts: iso(until) });
-  });
-
-  it("throws instead of returning a week of zeros", async () => {
-    mockSupabase.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
-    await expect(fetchQuestionEnds(new Date(), new Date())).rejects.toThrow("500");
-    mockSupabase.mockResolvedValue({ ok: true, json: async () => ({ questions: [] }) });
-    await expect(fetchQuestionEnds(new Date(), new Date())).rejects.toThrow("by_question");
+describe("askedQuestions", () => {
+  it("numbers today's asked questions in order and leaves the hidden ones out", () => {
+    const asked = orderAskedQuestions(surveyQuestions, "control").filter(
+      (q) => !HIDDEN_QIDS.has(q.qId)
+    );
+    const qs = askedQuestions(46);
+    expect(qs.map((q) => q.qId)).toEqual(asked.map((q) => q.qId));
+    expect(qs.map((q) => q.n)).toEqual(asked.map((_, i) => i + 1));
+    expect(qs.every((q) => q.name.length <= 46)).toBe(true);
+    expect(qs.find((q) => q.qId === "00000")?.name).toMatch(/email/i);
   });
 });
 

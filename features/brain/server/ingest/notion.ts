@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { DROPOFF_DATA_DATABASE_ID } from "@features/admin/server/dropoff-notion";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   chunkPage,
@@ -635,6 +636,24 @@ const ALWAYS_EXCLUDED = [
   "notion: hiring pipeline",
 ];
 
+/**
+ * Databases a job writes numbers into, not pages people write. The kpi-dropoff job keeps
+ * one row per week, question and segment in "Survey drop-off data", about 430 more a week.
+ * That table lives on "KPI report data", which this connection is NOT given, and the job
+ * writes with its own (NOTION_KPI_TOKEN): every page this connection can see is listed on
+ * each crawl, 2,500 at most, and these rows were a third of that on day one. This list is
+ * the safety net if it is ever shared here anyway: the rows are never read, so they never
+ * reach the index, and the database stays a WALKED scope with none, so anything stored
+ * from it is swept. Their listing still counts toward the 2,500, so do not share it.
+ */
+const GENERATED_DATABASES = new Set(
+  [DROPOFF_DATA_DATABASE_ID].map((id) => id.replace(/-/g, "").toLowerCase())
+);
+
+export function isGeneratedDatabase(dbId: string): boolean {
+  return GENERATED_DATABASES.has(dbId.replace(/-/g, "").toLowerCase());
+}
+
 /** Titles the team has chosen to keep out, lowercased, from NOTION_EXCLUDE_TITLES. */
 export function excludedTitles(): string[] {
   return [
@@ -696,6 +715,7 @@ export async function ingestNotion(
       crawlTruncated = true;
       break;
     }
+    if (isGeneratedDatabase(dbId)) continue;
     const rowResult = await databaseRows(token, dbId, isOutOfTime);
     if (!rowResult.complete) crawlTruncated = true;
     for (const raw of rowResult.items) candidates.push({ raw, dbTitle });

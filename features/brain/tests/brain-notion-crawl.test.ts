@@ -135,7 +135,13 @@ const PAGE_STANDALONE = {
   properties: { title: { type: "title", title: [{ plain_text: "Positioning" }] } },
 };
 
-import { NOTION_RETRY_MAX_S, ingestNotion, taskToRow } from "@features/brain/server/ingest/notion";
+import { DROPOFF_DATA_DATABASE_ID } from "@features/admin/server/dropoff-notion";
+import {
+  NOTION_RETRY_MAX_S,
+  ingestNotion,
+  isGeneratedDatabase,
+  taskToRow,
+} from "@features/brain/server/ingest/notion";
 
 const STAMP = "2026-08-28T12:00:00.000Z";
 
@@ -590,5 +596,69 @@ describe("one transient Notion answer must not fail the run", () => {
     databaseSearchAnswers = [answer(400)];
     await expect(ingestNotion(STAMP)).rejects.toThrow(/\/search failed \(400\)/);
     expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(1);
+  });
+});
+
+describe("a database a job writes numbers into is never read, and what came from it is swept", () => {
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    existingChunks = [];
+    blocksStatus = 200;
+    databaseSearchAnswers = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+    delete process.env.NOTION_EXCLUDE_TITLES;
+  });
+
+  it("knows the drop-off data table by id, however the id is written", () => {
+    expect(isGeneratedDatabase(DROPOFF_DATA_DATABASE_ID)).toBe(true);
+    expect(isGeneratedDatabase(DROPOFF_DATA_DATABASE_ID.replace(/-/g, "").toUpperCase())).toBe(
+      true
+    );
+    expect(isGeneratedDatabase("db-board")).toBe(false);
+  });
+
+  it("skips its rows but keeps it a walked scope, so a row stored from it is deleted", async () => {
+    databaseSearchAnswers = [
+      () =>
+        json({
+          results: [
+            { id: "db-lit", object: "database", title: [{ plain_text: "Literature" }] },
+            {
+              id: DROPOFF_DATA_DATABASE_ID,
+              object: "database",
+              title: [{ plain_text: "Survey drop-off data" }],
+            },
+          ],
+        }),
+    ];
+    // Two rows the crawl confirms, so deleting the third is not a "majority" sweep.
+    existingChunks = [
+      { source_id: "task:row-lit-1", meta: { edited: ROW_LIT.last_edited_time, v: CURRENT_V } },
+      {
+        source_id: "page:page-1",
+        meta: { edited: PAGE_STANDALONE.last_edited_time, v: CURRENT_V },
+      },
+      {
+        source_id: "task:dropoff-row-1",
+        meta: {
+          edited: "2026-10-12T00:00:00.000Z",
+          v: CURRENT_V,
+          database: "Survey drop-off data",
+        } as never,
+      },
+    ];
+    await ingestNotion(STAMP, () => false);
+    const bare = DROPOFF_DATA_DATABASE_ID.replace(/-/g, "");
+    expect(
+      notionCalls.some(
+        (u) =>
+          u.includes(`/databases/${DROPOFF_DATA_DATABASE_ID}/query`) ||
+          u.includes(`/databases/${bare}/query`)
+      )
+    ).toBe(false);
+    expect(notionCalls.some((u) => u.includes("/databases/db-lit/query"))).toBe(true);
+    const deletes = dbCalls.filter((c) => c.method === "DELETE");
+    expect(deletes.some((c) => c.path.includes("dropoff-row-1"))).toBe(true);
   });
 });

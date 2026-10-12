@@ -8,9 +8,10 @@
  * per question id. Of the people who reached a question, the share whose last
  * survey step EVER was on it and who never finished. Not abandon events (every
  * tab switch sends one) and not screen positions (they shift per person); see
- * the headers of migrations 20261004171500 and 20261004193000.
+ * the headers of migrations 20261004171500 and 20261004193000. Since 12 Oct the
+ * job reads it per person (`dropoff-report.ts`), the same numbers, so the page's
+ * filters can cut it by traffic source and by the survey tests.
  */
-import { supabaseFetch } from "@features/admin/server/supabase";
 import { surveyQuestionNames } from "@features/admin/server/friction-metrics";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
@@ -30,7 +31,8 @@ export const DROPOFF_FLOOR = 20;
  */
 export const FIRST_TRACKED_MONDAY = "2026-09-21";
 
-const MAX_WEEKS = 8;
+/** Complete weeks the picture and the page's rows show. */
+export const MAX_WEEKS = 8;
 
 export interface DropoffWeek {
   /** Column header: the Monday, "21 Sep". */
@@ -56,16 +58,16 @@ export function shortDate(day: string): string {
 }
 
 /**
- * Up to eight complete Monday-to-Sunday weeks (Berlin days), oldest first, then
- * the week in progress through yesterday. Through yesterday, not now: someone
+ * Up to `completeWeeks` (eight) complete Monday-to-Sunday weeks (Berlin days), oldest
+ * first, then the week in progress through yesterday. Through yesterday, not now: someone
  * halfway through the survey at this minute would otherwise count as a quit.
  */
-export function dropoffWeeks(now: Date = new Date()): DropoffWeek[] {
+export function dropoffWeeks(now: Date = new Date(), completeWeeks = MAX_WEEKS): DropoffWeek[] {
   const today = reportingDay(now);
   const weekday = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
   const thisMonday = addDays(today, -weekday);
   const weeks: DropoffWeek[] = [];
-  for (let i = MAX_WEEKS; i >= 1; i--) {
+  for (let i = completeWeeks; i >= 1; i--) {
     const monday = addDays(thisMonday, -7 * i);
     if (monday < FIRST_TRACKED_MONDAY) continue;
     weeks.push({
@@ -86,21 +88,21 @@ export function dropoffWeeks(now: Date = new Date()): DropoffWeek[] {
   return weeks;
 }
 
+/** Per question id: the people who reached it, and those of them who left there. */
 export type QuestionEnds = Map<string, { sessions: number; quits: number }>;
 
-/** One window of `get_survey_friction`, by question id. Throws rather than guess. */
-export async function fetchQuestionEnds(since: Date, until: Date): Promise<QuestionEnds> {
-  const res = await supabaseFetch("/rest/v1/rpc/get_survey_friction", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ since_ts: since.toISOString(), until_ts: until.toISOString() }),
-  });
-  if (!res.ok) throw new Error(`get_survey_friction ${res.status}`);
-  const json = (await res.json()) as {
-    by_question?: Array<{ q_id: string; sessions: number; quits: number }>;
-  };
-  if (!Array.isArray(json?.by_question)) throw new Error("get_survey_friction: no by_question");
-  return new Map(json.by_question.map((q) => [q.q_id, { sessions: q.sessions, quits: q.quits }]));
+/**
+ * The questions people are asked today, in the order they are asked (the control
+ * arm of the question-order test), numbered the way the survey counts them.
+ * Hidden questions are still defined but no longer asked, so they are left out.
+ */
+export function askedQuestions(
+  nameLength: number
+): Array<{ qId: string; n: number; name: string }> {
+  const names = surveyQuestionNames(nameLength);
+  return orderAskedQuestions(surveyQuestions, "control")
+    .filter((q) => q.qId && !HIDDEN_QIDS.has(q.qId))
+    .map((q, i) => ({ qId: q.qId, n: i + 1, name: names.get(q.qId) ?? q.qId }));
 }
 
 export interface DropoffWeeklyPayload {
@@ -114,26 +116,19 @@ export interface DropoffWeeklyPayload {
   updated: string;
 }
 
-/**
- * One row per question in the order people are asked them today (the control
- * arm of the question-order test), numbered the way the survey counts them.
- */
+/** One row per question asked today, in today's order (`askedQuestions`). */
 export function buildDropoffWeeklyPayload(
   weeks: DropoffWeek[],
   ends: QuestionEnds[],
   updated: string
 ): DropoffWeeklyPayload {
-  const names = surveyQuestionNames(46);
-  const asked = orderAskedQuestions(surveyQuestions, "control").filter(
-    (q) => q.qId && !HIDDEN_QIDS.has(q.qId)
-  );
   return {
     kind: "dropout-weekly",
     weeks: weeks.map((w) => w.label),
     partialLast: weeks.at(-1)?.partial ?? false,
-    rows: asked.map((q, i) => ({
-      n: i + 1,
-      q: names.get(q.qId) ?? q.qId,
+    rows: askedQuestions(46).map((q) => ({
+      n: q.n,
+      q: q.name,
       r: ends.map((week) => {
         const e = week.get(q.qId);
         return e && e.sessions >= DROPOFF_FLOOR

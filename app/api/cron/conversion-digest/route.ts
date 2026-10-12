@@ -868,8 +868,10 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     blocks.push(section(buildFrictionWatchList(input.friction, WINDOW_DAYS)));
   }
   // Every question's drop-off, week by week, lives on its KPI page in Notion
-  // (Eman, 2026-10-11), redrawn each morning by the kpi-dropoff cron.
-  blocks.push(context(`<${DROPOFF_KPI_URL}|Each question's drop-off, week by week (Notion)>`));
+  // (Eman, 2026-10-11), kept current each morning by the kpi-dropoff cron.
+  blocks.push(
+    context(`<${DROPOFF_KPI_URL}|Survey drop-off by question: charts, table and filters (Notion)>`)
+  );
 
   /**
    * Landing → survey, SITE-WIDE. The trend line, sitting with the funnel above
