@@ -3319,6 +3319,28 @@ describe("the landing test's verdict waits for a window wholly after its restart
     expect(await digestOn(28)).not.toContain("Worth acting on");
   });
 
+  it("waits for the comparison's own first day on a historical read, not the restart", async () => {
+    // Round 2 read back (V2 vs V1 from 21 Aug): its 30-day window is wholly after its own
+    // start on 19 Sep, long before round 3's restart, so the verdict is due.
+    const { blocks } = await buildConversionDigest({
+      dayKey: "2026-09-19",
+      funnel: null,
+      cohorts: [
+        { axis: "landing", arm: "white_prev", n: 500, conversions: 80 },
+        { axis: "landing", arm: "white", n: 500, conversions: 20 },
+      ],
+      liveAxesOverride: ["landing"],
+      landingArms: ["white_prev", "white"],
+      landingFrom: "2026-08-21",
+      midway: null,
+      paywall: null,
+      unitEconomics: null,
+      emailExperiments: null,
+      now: new Date("2026-09-19T09:05:00Z"),
+    });
+    expect(blockText(blocks)).toContain("Worth acting on");
+  });
+
   it("calls it once every reader in the window came through the condensed phone hero", async () => {
     const text = await digestOn(29);
     expect(text).toContain("Worth acting on");
