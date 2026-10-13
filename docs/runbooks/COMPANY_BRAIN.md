@@ -95,12 +95,15 @@ third again of the whole corpus and would drown every other source.
 
 The hiring inbox (`hr@`) is the exception, since 2026-10-13: there an application's
 CV, cover letter and task submission are each the point. Up to ten files a thread are
-read, each up to Gmail's own 25 MB limit and 20,000 characters, with no thread ceiling
-beyond that, and every file not read (a CV sent as phone photos, a scanned PDF, an
-eleventh file) is named in the thread with "open the email to see it", so an answer
-never reads as "there is no CV". In every mailbox, as each thread is next read, a file
-attached again in a reply is read once, and a file whose download failed is tried
-again on the next run instead of being stored as having no text.
+read, each up to Gmail's own 25 MB limit and 20,000 characters, and every file not read
+(a CV sent as phone photos, a scanned PDF, a file past the limits) is named in the
+thread with "open the email to see it", so an answer never reads as "there is no CV".
+Anyone can write to that inbox, so it still has bounds: 100,000 characters of files a
+thread, 150 MB of downloads a run (the rest waits for the next run), 20 seconds to parse
+a file, and it is walked last, so a flood there never delays colleagues' mail. In every
+mailbox, as each thread is next read, a file attached again in a reply is read once, and
+a file whose download failed is tried again on the next run instead of being stored as
+having no text.
 
 A part of a document that contains a credential is refused and replaced with a
 short note saying so, rather than vanishing — the surrounding parts still say
@@ -320,12 +323,14 @@ same thing is the failure this corpus has hit more than once:
   thread's title carries the applicant's name (from the sender, a forwarded message, or
   the addressee), because search keeps one Gmail result per title and applicants share
   subjects; `{"mailbox": "hr@loveiq.org"}` lists them all. Its Social and Promotions
-  tabs are read too, where a job board's mail can land, and no message there counts as
-  a stub. Still out of `hr@`: contracts and offers by subject, by file name in English,
+  tabs are read too, where a job board's mail can land, and a person's message there is
+  never a stub, however short (a machine's still is: the shared account receives login
+  codes). Still out of `hr@`: contracts and offers by subject, by file name in English,
   German and Bosnian (`HIRING_INSTRUMENT`) and by what a file says (`AGREEMENT_TEXT`),
-  and any message of ours that states pay, which the thread shows as left out. Everywhere
-  else the rule above still stands, so an application forwarded into a colleague's
-  mailbox or saved to Drive is not indexed a second time.
+  and every sentence that states pay, whoever wrote it, including an offer quoted back in
+  a reply; the thread shows it as left out. Everywhere else the rule above still stands,
+  so an application forwarded into a colleague's mailbox or saved to Drive is not
+  indexed a second time.
 
   Applicants' data goes no further than the mailbox lets it: what is deleted from `hr@`
   leaves the brain at the next complete daily sweep, and if `hr@` stops being walked

@@ -94,6 +94,9 @@ let stubThreadIds: string[] = [];
 let recruitingBodyIds: string[] = [];
 /** RAW gmail thread ids whose FETCH carries two readable text attachments. */
 let attachmentThreadIds: string[] = [];
+/** How many attachments those threads carry, and the size each declares, in bytes. */
+let attachmentFiles = 2;
+let attachmentBytes = 10;
 /** Every attachment download answers 503, as a download that failed. */
 let attachmentsFail = false;
 /** Threads the listing returns. */
@@ -152,11 +155,13 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
                         mimeType: "text/plain",
                         body: { data: Buffer.from(text).toString("base64") },
                       },
-                      ...["notes1.txt", "notes2.txt"].map((filename, i) => ({
-                        mimeType: "text/plain",
-                        filename,
-                        body: { attachmentId: `att${i}`, size: 10 },
-                      })),
+                      ...Array.from({ length: attachmentFiles }, (_, i) => `notes${i + 1}.txt`).map(
+                        (filename, i) => ({
+                          mimeType: "text/plain",
+                          filename,
+                          body: { attachmentId: `att${i}`, size: attachmentBytes },
+                        })
+                      ),
                     ]
                   : undefined,
               },
@@ -205,6 +210,8 @@ beforeEach(() => {
   stubThreadIds = [];
   recruitingBodyIds = [];
   attachmentThreadIds = [];
+  attachmentFiles = 2;
+  attachmentBytes = 10;
   attachmentsFail = false;
   upserted.length = 0;
   listedThreads = [];
@@ -869,6 +876,44 @@ describe("the hiring inbox is walked, with its applications", () => {
     await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
     expect(deletedIds).toContain("thread:cv-thread");
     expect(deletedIds).not.toContain("thread:departed");
+  });
+
+  it("walks the hiring inbox last, so a flood there cannot keep colleagues' mail waiting", async () => {
+    process.env.GMAIL_MAILBOXES = "hr@loveiq.org,me@loveiq.org";
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    const firstListing = (box: string) =>
+      fetchedUrls.findIndex((u) => u.includes(`/users/${encodeURIComponent(box)}/threads?`));
+    expect(firstListing("me@loveiq.org")).toBeGreaterThan(-1);
+    expect(firstListing("me@loveiq.org")).toBeLessThan(firstListing("hr@loveiq.org"));
+  });
+
+  it("downloads at most a run's share of the hiring inbox's files, and at least one thread", async () => {
+    process.env.GMAIL_MAILBOXES = "hr@loveiq.org";
+    listedThreads = ["h1", "h2", "h3", "h4", "h5"].map(listed);
+    attachmentThreadIds = ["h1", "h2", "h3", "h4", "h5"];
+    // Two files of 20 MB a thread: three threads fit in the 150 MB, the fourth does not.
+    attachmentBytes = 20_000_000;
+    const r = await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(upserted.map((u) => u.source_id)).toEqual(["thread:h1", "thread:h2", "thread:h3"]);
+    expect(r.detail).toMatch(/stopped=hiring-byte-budget@hr@loveiq\.org:p0/);
+    expect(r.complete).toBe(false);
+    // And a single thread past the budget on its own is still read, or it would never be.
+    upserted.length = 0;
+    listedThreads = [listed("big")];
+    attachmentThreadIds = ["big"];
+    attachmentFiles = 7;
+    attachmentBytes = 25_000_000;
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(upserted.map((u) => u.source_id)).toEqual(["thread:big"]);
+  });
+
+  it("stores the mailbox in lower case, so the readers that leave hr@ out still match", async () => {
+    process.env.GMAIL_MAILBOXES = "HR@LoveIQ.org";
+    listedThreads = [listed("h1")];
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(upserted.map((u) => (u.meta as { mailbox?: string }).mailbox)).toEqual([
+      "hr@loveiq.org",
+    ]);
   });
 
   it("keeps the hiring inbox's stored threads like any walked mailbox's", async () => {

@@ -618,6 +618,12 @@ export function isBulkMail(msgs: GmailMessage[]): boolean {
   return msgs.length > 0 && msgs.every(machineSent);
 }
 
+/** An address only a machine sends from, whatever its headers say. */
+const MACHINE_SENDER =
+  /(^|[\s<"])(no-?reply|do-?not-?reply|mailer-daemon|postmaster|notifications?|alerts?|security|verify|verification)@/i;
+const fromAPerson = (m: GmailMessage): boolean =>
+  !machineSent(m) && !MACHINE_SENDER.test(header(m, "From"));
+
 /**
  * The DOMAIN an address belongs to, lowercased: `"Marcus <m@loveiq.org>"` -> `loveiq.org`.
  *
@@ -721,10 +727,9 @@ function mentions(subject: string, who: string): boolean {
 }
 
 /**
- * A MESSAGE OF OURS THAT STATES PAY, in the hiring inbox: an offer's salary, a stipend,
- * probation terms with their amount. It is left out of the row, which still says who wrote
- * and when. Ours only: an applicant's own words about money are part of their application,
- * and their task submissions are full of grant amounts.
+ * PAY, in the hiring inbox: a pay word and an amount together. Measured on hr@ 2026-10-13:
+ * the only amounts outside the two contract threads were grant sums in task submissions,
+ * which carry no pay word.
  */
 const PAY_WORD =
   /(?<![\p{L}])(probation(ary)?|probezeit|trial period|probni rad|salar(y|ies)|gehalt|lohn|plat[aeu]|plać[aeu]|naknad\p{L}*|honorar\p{L}*|compensation|stipend|remuneration|wages?|per (month|hour)|a month|monthly|hourly|mjese[čc]no|monatlich|brutto|netto|bruto|neto|stundenlohn)(?![\p{L}])/iu;
@@ -733,7 +738,24 @@ const MONEY =
 export function isPayMessage(text: string): boolean {
   return PAY_WORD.test(text) && MONEY.test(text);
 }
-export const PAY_LEFT_OUT = "[a message about pay, left out of the brain]";
+export const PAY_LEFT_OUT = "[pay left out of the brain]";
+
+/**
+ * PAY, SENTENCE BY SENTENCE, out of the hiring inbox's messages: an offer's salary, a
+ * stipend, probation terms with their amount, and the reply that quotes them back (a phone
+ * quotes as plain text, not as "> " lines, so `stripQuoted` leaves it). Either side's: a
+ * figure an applicant names is a named person's pay too. Each sentence that states pay is
+ * replaced and the rest stays, the application included; a message whose pay is spread
+ * across sentences is replaced whole, so no message an hr@ row keeps states pay.
+ */
+export function withoutPay(text: string): string {
+  if (!isPayMessage(text)) return text;
+  const out = text
+    .split(/((?<=[.!?])[ \t]+|\n+)/)
+    .map((piece, i) => (i % 2 === 0 && isPayMessage(piece) ? PAY_LEFT_OUT : piece))
+    .join("");
+  return isPayMessage(out) ? PAY_LEFT_OUT : out;
+}
 
 /**
  * ATTACHMENTS ARE CONTENT, and until 2026-09-19 none of them were read.
@@ -766,6 +788,18 @@ export const MAX_HIRING_ATTACHMENT_BYTES = 25_000_000;
 export const MAX_ATTACHMENTS_PER_THREAD = 5;
 /** An application is a CV, a letter, a task and a portfolio, sometimes in two versions. */
 export const MAX_HIRING_ATTACHMENTS_PER_THREAD = 10;
+/**
+ * BOUNDS FOR AN INBOX ANYONE CAN WRITE TO. The hiring inbox reads more per thread than any
+ * other, and a stranger decides what arrives there, so a flood of large files must cost one
+ * run's share and no more: five files' worth of text a thread (the largest real application
+ * held 31,000 characters), and per run 150 MB of downloads (all 35 threads on 2026-10-13
+ * came to about 50 MB). The rest waits for the next run, and the hiring inbox is walked
+ * last, so colleagues' mail is never what waits.
+ */
+export const MAX_HIRING_ATTACHMENT_CHARS_PER_THREAD = 100_000;
+export const HIRING_RUN_BYTES = 150_000_000;
+/** One file's parse, past which it is a hostile or broken file rather than a slow one. */
+export const PARSE_TIMEOUT_MS = 20_000;
 /** One attachment must not be able to outweigh the conversation that carried it. */
 export const MAX_ATTACHMENT_CHARS = 20_000;
 /**
@@ -848,6 +882,34 @@ export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentR
   return out;
 }
 
+/** The text in a file, by type. */
+async function extract(mimeType: string, buf: Buffer): Promise<string> {
+  if (mimeType === "application/pdf") {
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const doc = await getDocumentProxy(new Uint8Array(buf));
+    const out = await extractText(doc, { mergePages: true });
+    return Array.isArray(out.text) ? out.text.join("\n") : out.text;
+  }
+  if (mimeType.endsWith("wordprocessingml.document")) {
+    const mammoth = await import("mammoth");
+    return (await mammoth.extractRawText({ buffer: buf })).value;
+  }
+  return buf.toString("utf8");
+}
+
+/**
+ * Rejects once `ms` pass, so one hostile or broken file cannot hold the whole walk. The
+ * parse itself is not stopped, and one that never yields would block the timer too; only a
+ * worker could stop that. ponytail: add one if a file ever does.
+ */
+export function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer in ${ms} ms`)), ms);
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Text out of one attachment; "" for a file with no text, NULL when it could not be
  * downloaded this run. Never throws.
@@ -879,18 +941,7 @@ async function attachmentText(
     const buf = Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
     if (buf.byteLength === 0) return "";
 
-    let text = "";
-    if (ref.mimeType === "application/pdf") {
-      const { extractText, getDocumentProxy } = await import("unpdf");
-      const doc = await getDocumentProxy(new Uint8Array(buf));
-      const out = await extractText(doc, { mergePages: true });
-      text = Array.isArray(out.text) ? out.text.join("\n") : out.text;
-    } else if (ref.mimeType.endsWith("wordprocessingml.document")) {
-      const mammoth = await import("mammoth");
-      text = (await mammoth.extractRawText({ buffer: buf })).value;
-    } else {
-      text = buf.toString("utf8");
-    }
+    const text = await withTimeout(extract(ref.mimeType, buf), PARSE_TIMEOUT_MS);
     const clean = text.replace(/\r\n/g, "\n").trim();
     return clean.length > MAX_ATTACHMENT_CHARS
       ? `${clean.slice(0, MAX_ATTACHMENT_CHARS)}\n[truncated: this attachment is longer than the brain indexes]`
@@ -973,11 +1024,13 @@ export async function threadAttachmentText(
   const parts: string[] = [];
   const unread = hiring ? unreadAttachmentNames(thread, refs) : [];
   let retry = false;
-  // The hiring inbox has no thread ceiling beyond the per-file one: a CV, a cover letter
-  // and a task submission are each the point, and its volume cannot drown the corpus.
-  let budget = hiring ? Infinity : MAX_ATTACHMENT_CHARS_PER_THREAD;
-  for (const ref of refs) {
-    if (budget <= 0) break;
+  let budget = hiring ? MAX_HIRING_ATTACHMENT_CHARS_PER_THREAD : MAX_ATTACHMENT_CHARS_PER_THREAD;
+  for (const [i, ref] of refs.entries()) {
+    if (budget <= 0) {
+      // Past the thread's ceiling, named rather than silently dropped.
+      if (hiring) unread.push(...refs.slice(i).map((r) => r.filename));
+      break;
+    }
     if (isOutOfTime()) return null;
     const text = await attachmentText(token, mailbox, ref);
     if (text === null) retry = true;
@@ -1053,15 +1106,17 @@ export function threadToRows(
     const stamp = date ? new Date(date).toISOString().slice(0, 10) : "";
     const said = tidyEmailText(stripQuoted(messageText(m.payload)));
     if (!said) continue;
-    const text =
-      hiring && fromTeam(header(m, "From"), byAlias) && isPayMessage(said) ? PAY_LEFT_OUT : said;
+    const text = hiring ? withoutPay(said) : said;
     lines.push(`${from}${stamp ? ` (${stamp})` : ""}: ${text}`);
   }
-  // In the hiring inbox nothing an applicant sends is a stub, however short, and a thread
-  // whose only content is its files is still an application.
-  if (lines.length === 0 && !(hiring && attachments.trim() !== "")) return [];
+  // In the hiring inbox nothing a person sends is a stub, however short, and a thread whose
+  // only content is its files is still an application. A machine's short mail there is a
+  // stub as anywhere: a login code or a sign-in link for the shared account.
+  const carried = hiring && attachments.trim() !== "";
+  if (lines.length === 0 && !carried) return [];
   const joined = lines.join(" ").replace(/\s+/g, " ").trim();
-  if (!hiring && lines.length === 1 && joined.length < MIN_STUB_CHARS) return [];
+  const keptShort = carried || (hiring && msgs.some(fromAPerson));
+  if (lines.length === 1 && joined.length < MIN_STUB_CHARS && !keptShort) return [];
   if (!hiring && isRecruitingThread(subject, joined)) return [];
 
   const participants = [
@@ -1284,9 +1339,14 @@ export async function ingestGmail(
    * would list no mailboxes, write nothing, and let the sweep delete the corpus.
    */
   const discovered = await domainMailboxes(oidcToken);
-  const boxes = excludeMailboxes(
-    discovered && discovered.length > 0 ? discovered : mailboxes()
-  ).filter((m) => !NEVER_INDEX_MAILBOXES.has(m.trim().toLowerCase()));
+  const boxes = excludeMailboxes(discovered && discovered.length > 0 ? discovered : mailboxes())
+    // Lower case everywhere, so the readers that leave the hiring inbox out by address
+    // (the brief, comment asks) match whatever case the configuration was written in.
+    .map((m) => m.trim().toLowerCase())
+    .filter((m) => !NEVER_INDEX_MAILBOXES.has(m))
+    // The hiring inbox last: a stranger decides what arrives there, so if a flood of it
+    // uses up a run, colleagues' mail has been read already.
+    .sort((a, b) => Number(isHiringMailbox(a)) - Number(isHiringMailbox(b)));
 
   const known = await knownThreads();
   const refusedBefore = await knownRefusals();
@@ -1331,6 +1391,8 @@ export async function ingestGmail(
   let attachmentsRead = 0;
   /** Threads stored with a file that failed to download, read again next run. */
   let retried = 0;
+  /** Attachment bytes the hiring inbox has downloaded this run: see HIRING_RUN_BYTES. */
+  let hiringBytes = 0;
 
   const failedMailboxes: string[] = [];
   /** Threads we listed but could not re-read this run. Protected from the sweep. */
@@ -1410,6 +1472,15 @@ export async function ingestGmail(
           continue;
         }
         fetched += 1;
+        if (hiring) {
+          const bytes = attachmentRefs(full, true).reduce((n, r) => n + r.size, 0);
+          // At least one thread a run, so one thread larger than the budget still moves.
+          if (hiringBytes > 0 && hiringBytes + bytes > HIRING_RUN_BYTES) {
+            stop(`hiring-byte-budget@${mailbox}:p${page}`);
+            break;
+          }
+          hiringBytes += bytes;
+        }
         const attached = await threadAttachmentText(token, mailbox, full, isOutOfTime);
         if (attached === null) {
           stop(`time-budget@${mailbox}:p${page}:attachments`);

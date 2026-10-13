@@ -17,6 +17,8 @@ import {
   standingExclusionsQuery,
   isHiringMailbox,
   isPayMessage,
+  withoutPay,
+  withTimeout,
   PAY_LEFT_OUT,
   MAX_ATTACHMENTS_PER_THREAD,
   MAX_ATTACHMENT_BYTES,
@@ -878,22 +880,34 @@ describe("the hiring inbox", () => {
   });
 
   /**
-   * A MESSAGE OF OURS THAT STATES PAY is left out of the row; the thread, and the
-   * application in it, stay. An applicant's own words about money stay too.
+   * PAY, SENTENCE BY SENTENCE, EITHER SIDE'S. The sentence that states it is replaced; the
+   * application around it stays. A phone's reply quotes our offer as plain text, which
+   * `stripQuoted` leaves, so the applicant's side is where an offer also arrives.
    */
-  it("leaves out a message of ours that states pay, and keeps the application", () => {
+  it("leaves pay out of every message, sentence by sentence, and keeps the rest", () => {
     const offer =
-      "We are happy to offer you the role: 1.000 EUR a month during the probation period.";
+      "We are happy to offer you the role. The salary is 1.000 EUR a month. Please confirm by Friday.";
     const [row] = threadToRows(
       app(msg(APPLICANT, LETTER), msg("HR <hr@loveiq.org>", offer)),
       HR,
       "s"
     );
     expect(row!.body).toContain("I decided to apply");
-    expect(row!.body).toContain(`HR (2026-08-28): ${PAY_LEFT_OUT}`);
+    expect(row!.body).toContain(
+      `We are happy to offer you the role. ${PAY_LEFT_OUT} Please confirm by Friday.`
+    );
     expect(row!.body).not.toContain("1.000 EUR");
-    const theirs = "My salary expectation is 800 KM a month, and I can start in November.";
-    expect(threadToRows(app(msg(APPLICANT, theirs)), HR, "s")[0]!.body).toContain("800 KM");
+    const quoted =
+      "I accept, thank you! Sent from my phone. On Monday HR wrote: The salary is 1.000 EUR a month.";
+    expect(withoutPay(quoted)).toBe(`I accept, thank you! Sent from my phone. ${PAY_LEFT_OUT}`);
+    const theirs = "I am applying for the internship.\nMy salary expectation is 800 KM a month.";
+    expect(withoutPay(theirs)).toBe(`I am applying for the internship.\n${PAY_LEFT_OUT}`);
+    // Spread across two lines, neither of which says it alone: the message goes whole.
+    expect(withoutPay("Your monthly stipend\n€300, paid at the end of each month")).toBe(
+      PAY_LEFT_OUT
+    );
+    // Elsewhere nothing is redacted this way; there the recruiting rules keep the thread out.
+    expect(withoutPay("Please send the task by Friday.")).toBe("Please send the task by Friday.");
   });
 
   it("knows pay in the team's three languages, and not a sum without it", () => {
@@ -912,6 +926,25 @@ describe("the hiring inbox", () => {
     ]) {
       expect(isPayMessage(t)).toBe(false);
     }
+  });
+
+  /**
+   * A MACHINE'S SHORT MAIL IS STILL A STUB HERE. hr@ is an account people sign in to, so its
+   * login codes and sign-in links land in it; a person's one line is an application.
+   */
+  it("still drops a login code sent to the inbox, and keeps a person's one line", () => {
+    const code = app(
+      msg("Service <no-reply@service.example>", "Your code is 482913.", { subject: "Code" })
+    );
+    expect(threadToRows(code, HR, "s")).toEqual([]);
+    const auto = app({
+      ...msg("Service <hello@service.example>", "Sign in: link inside.", { subject: "Sign in" }),
+    });
+    auto.messages[0]!.payload.headers.push({ name: "Auto-Submitted", value: "auto-generated" });
+    expect(threadToRows(auto, HR, "s")).toEqual([]);
+    expect(threadToRows(app(msg(APPLICANT, "Here is my portfolio.")), HR, "s")).toHaveLength(1);
+    // A machine's short mail that carries a CV is an application from a job board.
+    expect(threadToRows(code, HR, "s", null, "## Attachment: CV.pdf\nMSc")).toHaveLength(1);
   });
 
   it("keeps an application that is only a CV, and one with a single short line", () => {
@@ -1086,6 +1119,11 @@ describe("the hiring inbox", () => {
     expect(title.length).toBeLessThanOrEqual(
       "Email: Application for Chief of Staff Internship ()".length + 60
     );
+  });
+
+  it("gives up on work that takes too long, and passes on work that does not", async () => {
+    await expect(withTimeout(new Promise(() => {}), 5)).rejects.toThrow("no answer in 5 ms");
+    await expect(withTimeout(Promise.resolve("text"), 1000)).resolves.toBe("text");
   });
 
   it("adds the name unless the subject already has it as a word", () => {

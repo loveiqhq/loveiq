@@ -35,7 +35,14 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   }),
 }));
 
+/** A PDF whose parse never ends: what a hostile or broken file looks like to the reader. */
+vi.mock("unpdf", () => ({
+  getDocumentProxy: () => new Promise(() => {}),
+  extractText: vi.fn(),
+}));
+
 import {
+  PARSE_TIMEOUT_MS,
   threadAttachmentText,
   MAX_ATTACHMENT_CHARS,
   MAX_ATTACHMENT_CHARS_PER_THREAD,
@@ -235,6 +242,14 @@ describe("the hiring inbox's attachments", () => {
     expect(got!.text).toContain("open the email to see it): file0.txt");
   });
 
+  it("stops at five files' worth of text a thread, and names the files past it", async () => {
+    // A stranger decides what arrives here, so even this inbox has a ceiling.
+    size.chars = 20_000;
+    const text = await read("hr@loveiq.org", withFiles(8));
+    expect(text.match(/## Attachment: /g)).toHaveLength(5);
+    expect(text).toContain("open the email to see it): file5.txt, file6.txt, file7.txt");
+  });
+
   it("reads ten files, and names the eleventh rather than calling it unreadable", async () => {
     size.chars = 50;
     const text = await read("hr@loveiq.org", withFiles(11));
@@ -260,6 +275,27 @@ describe("the hiring inbox's attachments", () => {
     size.chars = 50;
     const elsewhere = await read("me@loveiq.org", withFiles(1, [photo("attachment")]));
     expect(elsewhere).not.toContain("open the email");
+  });
+
+  it("gives up on a file whose parse never ends, and names it", async () => {
+    vi.useFakeTimers();
+    try {
+      size.chars = 50;
+      const hostile = withFiles(1, [
+        {
+          mimeType: "application/pdf",
+          filename: "CV.pdf",
+          body: { attachmentId: "pdf", size: 9_000 },
+        },
+      ]);
+      const pending = threadAttachmentText("tok", "hr@loveiq.org", hostile as never);
+      await vi.advanceTimersByTimeAsync(PARSE_TIMEOUT_MS + 1);
+      const got = await pending;
+      expect(got!.text).toContain("## Attachment: file0.txt");
+      expect(got!.text).toContain("open the email to see it): CV.pdf");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("names a readable file that gave no text, such as a scanned CV", async () => {
