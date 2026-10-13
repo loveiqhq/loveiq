@@ -157,10 +157,11 @@ export default function LandingVariantTab({ days }: { days: number }) {
         <p className="mt-4 text-xs leading-relaxed text-text-muted">
           Attribution is the arm stamped on the buyer&apos;s own submission, so a row with no arm
           recorded is traffic that predates the stamping or never carried the cookie — it is shown
-          for completeness and is not one of the arms under test. Landing views are not stored
-          server-side, so completed surveys stand in for the top of the funnel — full visitor counts
-          live in GA4, segmented by the <span className="font-mono">landing_variant</span> user
-          property.
+          for completeness and is not one of the arms under test. The two live versions count from
+          14 Oct, when the landing test restarted with the condensed phone hero; earlier rounds
+          count over the whole window. Landing views are not stored server-side, so completed
+          surveys stand in for the top of the funnel — full visitor counts live in GA4, segmented by
+          the <span className="font-mono">landing_variant</span> user property.
         </p>
       </div>
     </div>
