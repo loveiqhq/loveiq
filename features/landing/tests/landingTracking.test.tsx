@@ -28,12 +28,14 @@ class FakeObserver {
   takeRecords() {
     return [];
   }
-  /** These elements now reach into the observed area (or leave it). */
-  show(els: Element[], isIntersecting = true) {
+  /** These elements are now `ratio` inside the observed area (0: outside it). */
+  show(els: Element[], ratio = 1) {
     const live = els.filter((el) => this.els.includes(el));
     if (live.length) {
       this.cb(
-        live.map((target) => ({ isIntersecting, target }) as never),
+        live.map(
+          (target) => ({ isIntersecting: ratio > 0, intersectionRatio: ratio, target }) as never
+        ),
         this as never
       );
     }
@@ -54,9 +56,27 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
+/** jsdom lays nothing out: every section starts below the fold unless a test says not. */
+const placeSections = (scrolledPast: string[] = []) =>
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement
+  ) {
+    const past = scrolledPast.includes(this.dataset.landingSection ?? "");
+    return { top: past ? -400 : 900, bottom: past ? -10 : 1300 } as DOMRect;
+  });
+
 describe("question 1's landing card", () => {
+  it("keeps PostHog's autocapture off the scale, whose tapped label is the answer", async () => {
+    const { default: WQuestionCard } = await import("@features/landing/ui/white/WQuestionCard");
+    render(<WQuestionCard location="hero" />);
+    expect(screen.getByRole("group", { name: /satisfied with my sex life/ })).toHaveClass(
+      "ph-no-capture"
+    );
+  });
+
   it("counts every tap on the scale by where and whether it changed a pick, never the answer", async () => {
     const { default: WQuestionCard } = await import("@features/landing/ui/white/WQuestionCard");
     render(<WQuestionCard location="hero" />);
@@ -138,6 +158,7 @@ describe("how far down the landing a visitor got", () => {
   };
 
   it("names every section of the page, in its order", async () => {
+    placeSections();
     const sections = await renderSections();
     expect(sections.map((s) => s.dataset.landingSection)).toEqual([
       "trust_strip",
@@ -156,10 +177,11 @@ describe("how far down the landing a visitor got", () => {
   });
 
   it("counts each section once, when it reaches the top half of the screen", async () => {
+    placeSections();
     const sections = await renderSections();
     const io = FakeObserver.all.find((o) => o.opts?.rootMargin === "0px 0px -50% 0px")!;
     expect(io.els).toHaveLength(12);
-    act(() => io.show(sections.slice(0, 3), false));
+    act(() => io.show(sections.slice(0, 3), 0));
     expect(events("section_seen")).toEqual([]);
     act(() => io.show(sections.slice(0, 2)));
     act(() => io.show(sections.slice(0, 3)));
@@ -168,5 +190,54 @@ describe("how far down the landing a visitor got", () => {
       ["section_seen", { section: "discover" }],
       ["section_seen", { section: "vocab" }],
     ]);
+  });
+
+  it("counts a short last section once all of it is on screen, as on a tall window", async () => {
+    // The footer is 402px under a 68px spacer: past a 940px-tall window it never reaches
+    // the top half before the page ends.
+    placeSections();
+    const sections = await renderSections();
+    const footer = sections.at(-1)!;
+    const whole = FakeObserver.all.find((o) => o.opts?.threshold === 0.99)!;
+    const half = FakeObserver.all.find((o) => o.opts?.rootMargin === "0px 0px -50% 0px")!;
+    act(() => whole.show([footer], 0.6));
+    expect(events("section_seen")).toEqual([]);
+    act(() => whole.show([footer], 1));
+    act(() => half.show([footer], 0.4));
+    expect(events("section_seen")).toEqual([["section_seen", { section: "footer" }]]);
+  });
+
+  it("counts the sections scrolled past before it ran, and no others", async () => {
+    // A slow phone shows the server's page first, and the reader scrolls it.
+    placeSections(["trust_strip", "discover"]);
+    await renderSections();
+    expect(events("section_seen")).toEqual([
+      ["section_seen", { section: "trust_strip" }],
+      ["section_seen", { section: "discover" }],
+    ]);
+    const half = FakeObserver.all.find((o) => o.opts?.rootMargin === "0px 0px -50% 0px")!;
+    expect(half.els).toHaveLength(10);
+  });
+
+  it("is mounted by the live page", async () => {
+    placeSections();
+    vi.doMock("next/dynamic", () => ({ default: () => () => null }));
+    const { default: LandingPageWhite } =
+      await import("@features/landing/ui/white/LandingPageWhite");
+    render(<LandingPageWhite variant="white_card" />);
+    const half = FakeObserver.all.find((o) => o.opts?.rootMargin === "0px 0px -50% 0px");
+    // The code-split sections (FAQ, closing CTA, footer) render nothing here.
+    expect(half?.els.map((el) => (el as HTMLElement).dataset.landingSection)).toEqual([
+      "trust_strip",
+      "discover",
+      "vocab",
+      "find_out",
+      "wow_stats",
+      "result_teaser",
+      "archetypes",
+      "testimonials",
+      "foundation",
+    ]);
+    vi.doUnmock("next/dynamic");
   });
 });

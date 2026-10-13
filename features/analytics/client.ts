@@ -1300,7 +1300,8 @@ export const trackCtaSeen = (params: { cta: CtaSeen }) => track("cta_seen", para
  * A tap on question 1's scale on a landing card (hero or closing), including a change of
  * mind. Without it a visitor who answers on the card and leaves is invisible: the answer is
  * only saved to the browser until the survey starts. NEVER the answer itself: question 1
- * rates the reader's sex life, special-category data that no analytics tool receives.
+ * rates the reader's sex life, special-category data. The scale is also ph-no-capture, so
+ * PostHog's autocapture does not record the tapped button's "N of 7" label either.
  * `changed`: a pick was already there (an earlier tap, or a saved draft).
  */
 export const trackLandingCardAnswer = (params: { location: "hero" | "footer"; changed: boolean }) =>
@@ -1323,8 +1324,9 @@ export type LandingSection =
 
 /**
  * How far down the landing a visitor got, section by section: once per section per page,
- * when part of it reaches the top half of the screen (LandingSectionsSeen). The hero has
- * none: every landing_page_view starts there.
+ * when part of it reaches the top half of the screen or all of it is on screen, or it was
+ * scrolled past before the page's script ran (LandingSectionsSeen). The hero has none:
+ * every landing_page_view starts there.
  */
 export const trackSectionSeen = (params: { section: LandingSection }) =>
   track("section_seen", params);

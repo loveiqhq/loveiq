@@ -2160,6 +2160,44 @@ describe("conversion-digest handler", () => {
       expect(text).not.toContain("no visits recorded");
     });
 
+    it("shows the numbers from the morning after the restart day", async () => {
+      // 15 Oct's digest reports 14 Oct, the restart day itself: counts, not the notice.
+      const day = LANDING_TEST_START_DAY;
+      const text = blockText(
+        (
+          await buildConversionDigest({
+            dayKey: day,
+            liveAxesOverride: ["landing"],
+            funnel: null,
+            cohorts,
+            startFunnel: {
+              daily: [
+                { day, arm: "white_card", visits: 200, starts: 14 },
+                { day, arm: "white_video", visits: 210, starts: 10 },
+              ],
+              totals: [
+                { arm: "white_card", visits: 200, starts: 14 },
+                { arm: "white_video", visits: 210, starts: 10 },
+              ],
+            },
+            startsPastFirst: { ...withFinished, daily: [] },
+            axisRows: [],
+            cvrDays: null,
+            midway: null,
+            paywall: null,
+            emailExperiments: null,
+            unitEconomics: null,
+            adSpend: null,
+            friction: null,
+            now: new Date(`${day}T22:05:00Z`),
+          } as Parameters<typeof buildConversionDigest>[0])
+        ).blocks
+      );
+      expect(text).not.toContain("restarts on");
+      expect(text).toContain("one day of data for each version");
+      expect(text).toContain(`${card}* — 200 visits → 14 started the survey`);
+    });
+
     it("says an arm has no visits rather than printing 0% beside it", async () => {
       const text = await build({ startFunnel: startFunnel(0) });
       expect(text).toContain(`${video} — no visits recorded yet`);

@@ -165,9 +165,11 @@ const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, classN
         </p>
       </div>
 
-      {/* 7-point scale */}
+      {/* 7-point scale. ph-no-capture: PostHog's autocapture would record the tapped
+          button's label ("6 of 7") beside this group's label, the question, which is the
+          answer. landing_card_answer counts the tap without it. */}
       <div
-        className={`relative ${large ? "mt-6" : "mt-5"}`}
+        className={`ph-no-capture relative ${large ? "mt-6" : "mt-5"}`}
         role="group"
         aria-label={QUESTION_TEXT}
       >

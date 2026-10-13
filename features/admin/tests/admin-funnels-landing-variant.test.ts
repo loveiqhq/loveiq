@@ -61,12 +61,17 @@ describe("GET /api/admin/funnels/landing-variant", () => {
       { variant: "white_video", completed: 38, paid: 0, revenue: 0 },
       { variant: "white", completed: 900, paid: 40, revenue: 1200 },
     ]);
-    // From the restart.
+    // From the restart. The RPC always returns round 2's arms too, at their own counts.
     rpcRows([
+      { variant: "control", completed: 0, paid: 0, revenue: 0 },
+      { variant: "white", completed: 31, paid: 1, revenue: 6.99 },
+      { variant: "white_prev", completed: 0, paid: 0, revenue: 0 },
       { variant: "white_card", completed: 9, paid: 0, revenue: 0 },
       { variant: "white_video", completed: 11, paid: 1, revenue: 6.99 },
     ]);
     const { rows } = await get();
+    // One row per arm: round 2's from the window read only, round 3's from the restart.
+    expect(rows.map((r) => r.variant).sort()).toEqual(["white", "white_card", "white_video"]);
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
     expect(JSON.parse(mockSupabaseFetch.mock.calls[1]![1].body)).toEqual({
       since_ts: LANDING_TEST_START_AT,

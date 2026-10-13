@@ -1799,7 +1799,8 @@ export const TOOLS = [
       "'landing-hero-video-ab' is a visitor shown an arm (properties.variant 'white_card' is " +
       "question 1, 'white_video' the presenter video); events after it carry the arm as " +
       "properties.landing_variant. Its readouts restart on 2026-10-14 (from " +
-      "toDateTime('2026-10-13 22:00:00'), Berlin midnight), when the phone hero was condensed " +
+      "toDateTime('2026-10-14 00:00:00'), read in the project's Berlin time), when the phone " +
+      "hero was condensed " +
       "so the media sits on most phones' first screen and the page took new copy: compare " +
       "the arms from then. A page view still does not mean it was seen: cta_seen with " +
       "properties.cta 'hero_video' or 'hero_card' is a visitor who had half of it on screen. " +
@@ -1830,12 +1831,13 @@ export const TOOLS = [
             "played the video, our own tests left out: SELECT properties.variant AS arm, " +
             "count(DISTINCT person_id) AS visitors, count(DISTINCT if(person_id IN (SELECT " +
             "person_id FROM events WHERE event = 'hero_video_play' AND properties.$host = " +
-            "'www.loveiq.org'), person_id, NULL)) AS played FROM events WHERE event = " +
+            "'www.loveiq.org' AND timestamp >= toDateTime('2026-10-14 00:00:00')), person_id, " +
+            "NULL)) AS played FROM events WHERE event = " +
             "'experiment_exposure' AND properties.experiment = 'landing-hero-video-ab' AND " +
             "properties.variant IN ('white_card', 'white_video') AND " +
-            "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-13 " +
-            "22:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
-            "toDateTime('2026-10-13 22:00:00') AND (match(toString(properties.$current_url), " +
+            "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-14 " +
+            "00:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
+            "toDateTime('2026-10-14 00:00:00') AND (match(toString(properties.$current_url), " +
             "'[?&]variant=') OR toString(person.properties.email) LIKE '%@loveiq.org')) " +
             "GROUP BY arm",
         },
