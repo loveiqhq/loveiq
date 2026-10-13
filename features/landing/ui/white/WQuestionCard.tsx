@@ -165,10 +165,7 @@ const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, classN
         </p>
       </div>
 
-      {/* 7-point scale. Its "N of 7" labels never reach PostHog: autocapture sends no
-          element text or attributes (instrumentation-client.ts), and landing_card_answer
-          counts the tap without the value. No ph-no-capture: that would also blank the card
-          out of session replays, which are kept whole by decision. */}
+      {/* 7-point scale */}
       <div
         className={`relative ${large ? "mt-6" : "mt-5"}`}
         role="group"

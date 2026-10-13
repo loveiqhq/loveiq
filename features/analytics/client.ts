@@ -1300,8 +1300,8 @@ export const trackCtaSeen = (params: { cta: CtaSeen }) => track("cta_seen", para
  * A tap on question 1's scale on a landing card (hero or closing), including a change of
  * mind. Without it a visitor who answers on the card and leaves is invisible: the answer is
  * only saved to the browser until the survey starts. NEVER the answer itself: question 1
- * rates the reader's sex life, special-category data. Nor does autocapture send the tapped
- * button's "N of 7" label: it masks every element's text and attributes (instrumentation-client).
+ * rates the reader's sex life, special-category data. PostHog's autocapture still records
+ * the tapped button and its "N of 7" label, by owner decision (DPIA §6, 2026-10-13).
  * `changed`: a pick was already there (an earlier tap, or a saved draft).
  */
 export const trackLandingCardAnswer = (params: { location: "hero" | "footer"; changed: boolean }) =>
