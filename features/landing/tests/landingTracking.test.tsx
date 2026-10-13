@@ -202,9 +202,13 @@ describe("how far down the landing a visitor got", () => {
     const half = FakeObserver.all.find((o) => o.opts?.rootMargin === "0px 0px -50% 0px")!;
     act(() => whole.show([footer], 0.6));
     expect(events("section_seen")).toEqual([]);
+    // Wholly on screen, never in the top half: counted by the second rule alone.
     act(() => whole.show([footer], 1));
-    act(() => half.show([footer], 0.4));
     expect(events("section_seen")).toEqual([["section_seen", { section: "footer" }]]);
+    // And not again once it is counted.
+    expect(half.els).not.toContain(footer);
+    act(() => whole.show([footer], 1));
+    expect(events("section_seen")).toHaveLength(1);
   });
 
   it("counts the sections scrolled past before it ran, and no others", async () => {
