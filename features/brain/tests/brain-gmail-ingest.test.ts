@@ -846,6 +846,17 @@ describe("the hiring inbox is walked, with its applications", () => {
     }
   });
 
+  /**
+   * hr@ forwards to part of the team, so each application also lands in their mailboxes,
+   * marked `Delivered-To: hr@loveiq.org`. Those copies are left out there; hr@ has it.
+   */
+  it("leaves hr@'s forwarded copies out of colleagues' mailboxes, and not out of hr@", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org,hr@loveiq.org";
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(listingFor("me@loveiq.org")).toContain("-deliveredto:hr@loveiq.org");
+    expect(listingFor("hr@loveiq.org")).not.toContain("deliveredto");
+  });
+
   it("keeps the inbox's Social and Promotions tabs, where a job board's mail can land", async () => {
     process.env.GMAIL_MAILBOXES = "me@loveiq.org,hr@loveiq.org";
     await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);

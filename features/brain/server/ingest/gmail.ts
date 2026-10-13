@@ -432,6 +432,19 @@ export const isHiringMailbox = (mailbox: string): boolean =>
 export const HIRING_MAILBOX_LIST = `(${[...HIRING_MAILBOXES].map((m) => `"${m}"`).join(",")})`;
 
 /**
+ * THE HIRING INBOX'S COPIES, left out of colleagues' mailboxes. Since 2026-10-13 hr@
+ * forwards what it receives to part of the team, by Gmail's own forwarding, so each
+ * application arrived four more times, carrying `Delivered-To: hr@loveiq.org`. Any whose
+ * subject the recruiting terms miss ("Design_intern") was indexed again: 11 copies in one
+ * evening, without their files and without the applicant's name. hr@ holds the original.
+ * Gmail lists a thread when any message in it matches, so a thread where a colleague
+ * replied is still listed and judged by the usual rules; only pure copies are left out,
+ * and the copies already stored leave with the next sweep.
+ */
+export const notHiringCopies = (): string =>
+  [...HIRING_MAILBOXES].map((m) => ` -deliveredto:${m}`).join("");
+
+/**
  * Subjects to keep out of the corpus entirely, as Gmail `-subject:` terms.
  *
  * The company runs more than one product, and a sibling project's issue tracker
@@ -1460,7 +1473,7 @@ export async function ingestGmail(
       const listed = await gmailGet(
         token,
         mailbox,
-        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent((hiring ? EXCLUDE_HIRING : EXCLUDE) + standingExclusionsQuery(hiring) + excludeSubjects())}` +
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent((hiring ? EXCLUDE_HIRING : EXCLUDE + notHiringCopies()) + standingExclusionsQuery(hiring) + excludeSubjects())}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {
