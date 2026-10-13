@@ -93,6 +93,20 @@ Bounded on purpose: at most five attachments per email thread and about ten
 chunks' worth of text per thread, because five 20,000-character attachments is a
 third again of the whole corpus and would drown every other source.
 
+The hiring inbox (`hr@`) is the exception, since 2026-10-13: there an application's
+CV, cover letter and task submission are each the point. Up to ten files a thread are
+read, a PDF up to Gmail's own 25 MB limit (a Word file is a zip a stranger can make
+expand to gigabytes, so it keeps 4 MB), and every file not read (a CV sent as phone
+photos, a scanned PDF, a file past the limits) is named in the thread with "open the
+email to see it", so an answer never reads as "there is no CV". Anyone can write to
+that inbox, so it still has bounds: 60 MB and 100,000 characters of files a thread,
+150 MB of downloads a run (the rest waits for the next run), and it is walked last, so
+a flood there never delays colleagues' mail. Any file in any mailbox gets 20 seconds to
+parse; a PDF past that is stopped, and in `hr@` the rest of its thread is left unread
+and named. In every mailbox, as each thread is next read, a file attached again in a
+reply is read once, and a file whose download failed is tried again on the next run
+instead of being stored as having no text.
+
 A part of a document that contains a credential is refused and replaced with a
 short note saying so, rather than vanishing — the surrounding parts still say
 "part 2 of 2", and a hole with no explanation reads exactly like a bug.
@@ -297,13 +311,36 @@ arrive by**, because excluding a document from one ingester while another indexe
 same thing is the failure this corpus has hit more than once:
 
 - **Job applicants** (decided 2026-09-20, widened 2026-09-23) — CVs, applicant lists,
-  interview notes and candidate calls, application mail and CV attachments, the
-  Candidates database and hiring pipeline in Notion, the `#hr` Slack channel, the `hr@`
-  mailbox, and interview events in the calendar. Material _about_ hiring — role
-  descriptions, the hiring guide — stays. One rule, `isJobApplication` in
+  interview notes and candidate calls, application mail and CV attachments in
+  colleagues' mailboxes, the Candidates database and hiring pipeline in Notion, the
+  `#hr` Slack channel, and interview events in the calendar. Material _about_ hiring —
+  role descriptions, the hiring guide — stays. One rule, `isJobApplication` in
   `features/brain/server/ingest/upsert.ts`, is shared by Drive, Gmail attachments,
   Slack uploads and calendar titles; Gmail also excludes recruiting subjects at the
   listing so an excluded thread is never fetched at all.
+
+  **Except the hiring inbox** (owner's decision, 2026-10-13): the `hr@` mailbox is read
+  in full — applications, CVs, cover letters, task submissions and the replies — so the
+  team can review candidates through Jarvis, in claude.ai and in Claude Code. Each
+  thread's title carries the applicant's name (from the sender, a forwarded message, or
+  the addressee), because search keeps one Gmail result per title and applicants share
+  subjects; `{"mailbox": "hr@loveiq.org"}` lists them all. Its Social and Promotions
+  tabs are read too, where a job board's mail can land, and a person's message there is
+  never a stub, however short (a machine's still is: the shared account receives login
+  codes). Still out of `hr@`: contracts and offers by subject, by file name in English,
+  German and Bosnian (`HIRING_INSTRUMENT`) and by what a file says (`AGREEMENT_TEXT`),
+  and every sentence that states pay, whoever wrote it, including an offer quoted back in
+  a reply; the thread shows it as left out. Everywhere else the rule above still stands,
+  so an application forwarded into a colleague's mailbox or saved to Drive is not
+  indexed a second time.
+
+  Applicants' data goes no further than the mailbox lets it: what is deleted from `hr@`
+  leaves the brain at the next complete daily sweep, and if `hr@` stops being walked
+  (suspended or excluded) its rows go too, unlike a departed colleague's mail, which is
+  kept as history. The daily brief and `comment_asks` never read it, so no applicant's
+  name is posted to Slack, and the weekly battery prints ids instead of titles in
+  GitHub's public Actions logs.
+
 - **Legal instruments and private legal matters** — contracts, the shareholders'
   agreement and similar, by name in Drive, as attachments in Gmail and Slack, and as
   email bodies by subject (the SHA draft thread, freelance-contract and
@@ -1738,9 +1775,14 @@ authorised, in the Admin console, to impersonate users in the domain. When the
 directory cannot be read, the walk falls back to the comma-separated
 `GMAIL_MAILBOXES` list rather than treating "no answer" as "nobody works here".
 
-Two mailboxes are never walked, whatever the directory says: `hr@` (job applications,
-with CVs attached) and `hello@` (what customers write to us privately; excluded
-2026-09-23). See `NEVER_INDEX_MAILBOXES` in `features/brain/server/ingest/gmail.ts`.
+One mailbox is never walked, whatever the directory says: `hello@` (what customers
+write to us privately; excluded 2026-09-23). See `NEVER_INDEX_MAILBOXES` in
+`features/brain/server/ingest/gmail.ts`. `hr@` was on that list from 2026-09-23 to
+2026-10-13 and is now the hiring inbox, read in full (`HIRING_MAILBOXES`, same file).
+
+A thread ID belongs to one mailbox: the same conversation in two colleagues' mailboxes
+has two IDs and is stored twice, once per mailbox (measured 2026-10-13: 0 IDs shared
+across 6,866 threads in 12 mailboxes). Search folds such copies together by subject.
 
 It was worth deciding deliberately. The corpus is undifferentiated, so anything
 indexed from anyone's mailbox becomes answerable to anyone who can ask the brain.
