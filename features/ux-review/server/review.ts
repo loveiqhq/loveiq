@@ -2234,7 +2234,7 @@ export async function hogqlTable(query: string, cap: number): Promise<HogqlTable
   if (
     /elements_chain|\$el_text|\$elements\b|attr__|\\[xu]/i.test(query) ||
     // A star straight from a table; SELECT * FROM (<subquery>) names its columns inside.
-    /(select\s+(distinct\s+)?|,\s*)\*\s*(,[^()]*)?\bfrom\s+(?!\()|\w\.\*/i.test(code) ||
+    /\*\s*from\s+(?!\()|(^|[\s,])\*\s*,|\w\.\*/i.test(code) ||
     // hogqlCodeOnly turns a quoted key into ~~~, so a literal key reads properties[~~~].
     /\bproperties\b(?!\s*(\.|\[\s*~*\s*\]))/i.test(code)
   ) {
