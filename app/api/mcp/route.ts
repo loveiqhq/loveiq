@@ -1798,12 +1798,20 @@ export const TOOLS = [
       "THE LANDING TEST: experiment_exposure with properties.experiment = " +
       "'landing-hero-video-ab' is a visitor shown an arm (properties.variant 'white_card' is " +
       "question 1, 'white_video' the presenter video); events after it carry the arm as " +
-      "properties.landing_variant. On a phone the hero media sits below the first screen, so " +
-      "a page view does not mean it was seen: cta_seen with properties.cta 'hero_video' or " +
-      "'hero_card' is a visitor who had half of it on screen. It is sent since 2026-10-12, so " +
-      "a visit before that has none, which is no data rather than 'not seen'. The video: " +
-      "hero_video_play (a play with sound, counted when frames start), hero_video_progress " +
-      "(properties.percent 25, 50, 75) and hero_video_complete. " +
+      "properties.landing_variant. Its readouts restart on 2026-10-14 (from " +
+      "toDateTime('2026-10-14 00:00:00'), read in the project's Berlin time), when the phone " +
+      "hero was condensed " +
+      "so the media sits on most phones' first screen and the page took new copy: compare " +
+      "the arms from then. A page view still does not mean it was seen: cta_seen with " +
+      "properties.cta 'hero_video' or 'hero_card' is a visitor who had half of it on screen. " +
+      "It is sent since 2026-10-12, so a visit before that has none, which is no data rather " +
+      "than 'not seen'. The video: hero_video_play (a play with sound, counted when frames " +
+      "start), hero_video_progress (properties.percent 25, 50, 75) and hero_video_complete. " +
+      "Added 2026-10-13: landing_card_answer (a tap on question 1's card, properties.location " +
+      "'hero' or 'footer', never the answer), cta_click with properties.element " +
+      "'question_card' (that card's Continue; without it, the button beside it), " +
+      "section_seen (properties.section, once per section per page: how far down a visitor " +
+      "got) and cta_seen 'sticky_bar'. " +
       "It reads PostHog's events, persons and sessions only: our own database's tables " +
       "(survey answers, reports, payments) are query_product_data's, which masks what is " +
       "private, and a query that reaches them here is refused. " +
@@ -1823,12 +1831,13 @@ export const TOOLS = [
             "played the video, our own tests left out: SELECT properties.variant AS arm, " +
             "count(DISTINCT person_id) AS visitors, count(DISTINCT if(person_id IN (SELECT " +
             "person_id FROM events WHERE event = 'hero_video_play' AND properties.$host = " +
-            "'www.loveiq.org'), person_id, NULL)) AS played FROM events WHERE event = " +
+            "'www.loveiq.org' AND timestamp >= toDateTime('2026-10-14 00:00:00')), person_id, " +
+            "NULL)) AS played FROM events WHERE event = " +
             "'experiment_exposure' AND properties.experiment = 'landing-hero-video-ab' AND " +
             "properties.variant IN ('white_card', 'white_video') AND " +
-            "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-07 " +
+            "properties.$host = 'www.loveiq.org' AND timestamp >= toDateTime('2026-10-14 " +
             "00:00:00') AND person_id NOT IN (SELECT person_id FROM events WHERE timestamp >= " +
-            "toDateTime('2026-10-07 00:00:00') AND (match(toString(properties.$current_url), " +
+            "toDateTime('2026-10-14 00:00:00') AND (match(toString(properties.$current_url), " +
             "'[?&]variant=') OR toString(person.properties.email) LIKE '%@loveiq.org')) " +
             "GROUP BY arm",
         },

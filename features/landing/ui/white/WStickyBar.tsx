@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import Link from "next/link";
-import { trackStartSurvey } from "@features/analytics/client";
+import { trackCtaSeen, trackStartSurvey } from "@features/analytics/client";
 
 /**
  * Persistent bottom CTA (Figma node 8947:8713). Slides in once the hero is out
@@ -12,9 +12,18 @@ const SHOW_AFTER_PX = 700;
 
 const WStickyBar: FC = () => {
   const [visible, setVisible] = useState(false);
+  // Counted the first time it slides in, so its clicks have a denominator.
+  const counted = useRef(false);
 
   useEffect(() => {
-    const onScroll = () => setVisible(window.scrollY > SHOW_AFTER_PX);
+    const onScroll = () => {
+      const show = window.scrollY > SHOW_AFTER_PX;
+      setVisible(show);
+      if (show && !counted.current) {
+        counted.current = true;
+        trackCtaSeen({ cta: "sticky_bar" });
+      }
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);

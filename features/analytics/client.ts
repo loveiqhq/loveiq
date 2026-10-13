@@ -521,9 +521,14 @@ export const trackStartSurvey = (
     | "vocab"
     | "find_out"
     | "result_teaser"
-    | "sticky"
+    | "sticky",
+  /**
+   * Set only for question 1's card (hero or closing), whose Continue shares its `location`
+   * with the button beside it ("hero", "footer"). Without it the two read as one CTA.
+   */
+  element?: "question_card"
 ) => {
-  track("cta_click", { cta: "start_survey", location });
+  track("cta_click", { cta: "start_survey", location, ...(element ? { element } : {}) });
 };
 
 export const trackSurveyStart = () => {
@@ -1275,20 +1280,56 @@ export const trackDeadClick = (params: {
 }) => track("dead_click", params);
 
 /**
- * What `cta_seen` names: a locked report chapter's unlock offer, or the landing hero's media
- * in each arm of the landing test (the presenter video or question 1). The arm is not a
- * param: it rides on `landing_variant`.
+ * What `cta_seen` names: a locked report chapter's unlock offer, the landing hero's media
+ * in each arm of the landing test (the presenter video or question 1), or the landing's
+ * sticky bar sliding in. The arm is not a param: it rides on `landing_variant`.
  */
-export type CtaSeen = "locked_chapter" | "hero_video" | "hero_card";
+export type CtaSeen = "locked_chapter" | "hero_video" | "hero_card" | "sticky_bar";
 
 /**
  * A call to action came into view: half of it inside the viewport, the first time on this
  * page (features/analytics/useCtaSeen.ts). PostHog only. `locked_card_price_shown` cannot
  * answer "did they see it": it fires when a locked report loads, wherever the card sits.
- * On the landing it is the denominator for "of the people who saw it": on a phone the hero
- * media sits below the first screen, so a page view does not mean it was seen.
+ * On the landing it is the denominator for "of the people who saw it": since the condensed
+ * phone hero (2026-10-14) the media is on most phones' first screen, not all, and a visitor
+ * can leave before it renders, so a page view still does not mean it was seen.
  */
 export const trackCtaSeen = (params: { cta: CtaSeen }) => track("cta_seen", params);
+
+/**
+ * A tap on question 1's scale on a landing card (hero or closing), including a change of
+ * mind. Without it a visitor who answers on the card and leaves is invisible: the answer is
+ * only saved to the browser until the survey starts. NEVER the answer itself: question 1
+ * rates the reader's sex life, special-category data. The scale is also ph-no-capture, so
+ * PostHog's autocapture does not record the tapped button's "N of 7" label either.
+ * `changed`: a pick was already there (an earlier tap, or a saved draft).
+ */
+export const trackLandingCardAnswer = (params: { location: "hero" | "footer"; changed: boolean }) =>
+  track("landing_card_answer", params);
+
+/** The live landing's sections, top to bottom (`data-landing-section` on each root). */
+export type LandingSection =
+  | "trust_strip"
+  | "discover"
+  | "vocab"
+  | "find_out"
+  | "wow_stats"
+  | "result_teaser"
+  | "archetypes"
+  | "testimonials"
+  | "foundation"
+  | "faq"
+  | "closing_cta"
+  | "footer";
+
+/**
+ * How far down the landing a visitor got, section by section: once per section per page,
+ * when part of it reaches the top half of the screen or all of it is on screen, or it was
+ * scrolled past before the page's script ran (LandingSectionsSeen). The hero has none:
+ * every landing_page_view starts there.
+ */
+export const trackSectionSeen = (params: { section: LandingSection }) =>
+  track("section_seen", params);
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);

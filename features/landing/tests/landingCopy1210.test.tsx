@@ -49,6 +49,13 @@ const renderPage = (media: "card" | "video") =>
     </>
   );
 
+/** An element's words, its decorative aria-hidden parts (the arrows) left out. */
+const visibleText = (el: Element) => {
+  const copy = el.cloneNode(true) as Element;
+  copy.querySelectorAll("[aria-hidden]").forEach((n) => n.remove());
+  return copy.textContent?.trim();
+};
+
 /**
  * The copy Marcus and Mark settled on 12.10 (Figma Report-3.0 `1604:8233`, "the source of
  * truth for the copy"), on both arms. The buttons' names are what the e2e specs, the
@@ -56,19 +63,28 @@ const renderPage = (media: "card" | "video") =>
  */
 describe.each(["card", "video"] as const)("the 12.10 landing copy, %s arm", (media) => {
   it("names each call to action as drawn, and none of them says free", () => {
-    renderPage(media);
-    for (const name of [
-      "Start my test now - hero",
-      "Start test now - the language section",
-      "Start the test - what you might find out",
-      "Start test now - result section",
-      "Continue test - closing CTA",
-      "Start test - sticky bar",
-    ]) {
+    const { container } = renderPage(media);
+    for (const [label, name] of [
+      ["Start my test now", "Start my test now - hero"],
+      ["Start test now", "Start test now - the language section"],
+      ["Start the test", "Start the test - what you might find out"],
+      ["Start test now", "Start test now - result section"],
+      ["Continue test", "Continue test - closing CTA"],
+      ["Start test", "Start test - sticky bar"],
+    ] as const) {
       // `hidden`: the sticky bar is aria-hidden until the page has scrolled.
-      expect(screen.getByRole("link", { name, hidden: true })).toHaveAttribute("href", "/survey");
+      const link = screen.getByRole("link", { name, hidden: true });
+      expect(link).toHaveAttribute("href", "/survey");
+      // What a visitor reads, which the aria-label alone never shows; and the name starts
+      // with it, so voice control finds the button by its words (WCAG 2.5.3).
+      expect(visibleText(link), name).toBe(label);
+      expect(name.startsWith(label)).toBe(true);
     }
     expect(screen.queryAllByRole("link", { name: /free/i, hidden: true })).toHaveLength(0);
+    const freeText = [...container.querySelectorAll("a")].filter((a) =>
+      /free/i.test(a.textContent ?? "")
+    );
+    expect(freeText.map((a) => a.textContent)).toEqual([]);
   });
 
   it("drops the labels, lines and card the review deleted", () => {

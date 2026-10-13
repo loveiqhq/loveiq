@@ -27,7 +27,11 @@ const chips: Chip[] = [
 ];
 
 const WVocab: FC = () => (
-  <section className="bg-[#f5f4f8] py-16 lg:py-[84px]" aria-labelledby="w-vocab-heading">
+  <section
+    className="bg-[#f5f4f8] py-16 lg:py-[84px]"
+    aria-labelledby="w-vocab-heading"
+    data-landing-section="vocab"
+  >
     <div className="content-shell grid items-center gap-12 lg:grid-cols-2 lg:gap-14">
       {/* Left */}
       <div className="flex flex-col">

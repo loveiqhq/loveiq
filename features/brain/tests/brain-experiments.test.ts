@@ -115,6 +115,34 @@ beforeEach(() => {
 afterEach(() => mockSupabaseFetch.mockClear());
 
 describe("experiments: the registry, read", () => {
+  it("times an unregistered landing test's pace from its restart, as /admin counts it", async () => {
+    // 70 readers per arm before the restart at the condensed phone hero and 70 after.
+    const at = (day: string, arm: string, i: number) => ({
+      id: i,
+      created_date_time: `${day}T10:00:00Z`,
+      utm_tracker: JSON.stringify({ landing_variant: arm }),
+    });
+    const submissions = (["2026-10-08", "2026-10-17"] as const).flatMap((day, d) =>
+      (["white_card", "white_video"] as const).flatMap((arm, a) =>
+        Array.from({ length: 70 }, (_, i) => at(day, arm, d * 1000 + a * 100 + i + 1))
+      )
+    );
+    const load = vi.fn(async (): Promise<ArmOutcomes> => ({
+      submissions,
+      bySubmission: new Map(
+        submissions.map((s) => [
+          s.id,
+          { pricing: null, purchased: false, startedCheckout: false, revenue: 0 },
+        ])
+      ),
+      truncated: false,
+    }));
+    const text = await listExperiments(Date.parse("2026-10-20T09:00:00Z"), load);
+    // 70 a side in the 2.96 days since 17 Oct; from 8 Oct's readers it would read 5.9.
+    expect(text).toContain("At 23.7 a day per arm");
+    expect(text).not.toContain("At 5.9 a day per arm");
+  });
+
   it("names Pricing 3.0 as running unregistered, lists the tests that ended before the registry, and how to start one", async () => {
     const load = vi.fn(async () => nobody());
     const text = await listExperiments(NOW, load);
@@ -144,7 +172,8 @@ describe("experiments: the registry, read", () => {
     ];
     const load = vi.fn(async () => outcomes(arms));
     const text = await listExperiments(NOW, load);
-    expect(load).toHaveBeenCalledWith("2026-09-20T00:00:00Z");
+    // From its first day's Berlin midnight, as /admin cuts (CEST: 22:00 UTC the day before).
+    expect(load).toHaveBeenCalledWith("2026-09-19T22:00:00.000Z");
     expect(text).toContain(
       "- #3 Guarantee badge on the paywall (active, Landing page design, 2026-09-20 onwards). " +
         "Hypothesis: A money-back badge makes more report openers pay. Decided by: share of report openers who pay. Expected: +1 point"

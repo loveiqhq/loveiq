@@ -95,7 +95,11 @@ const stats: { graphic: ReactNode; value: string; body: string }[] = [
 ];
 
 const WWowStats: FC = () => (
-  <section className="bg-white py-16 lg:py-[92px]" aria-labelledby="w-wowstats-heading">
+  <section
+    className="bg-white py-16 lg:py-[92px]"
+    aria-labelledby="w-wowstats-heading"
+    data-landing-section="wow_stats"
+  >
     <div className="content-shell flex flex-col items-center">
       <div className="animate-on-scroll flex items-center gap-2.5">
         <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />

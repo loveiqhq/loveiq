@@ -43,7 +43,11 @@ const items: { icon: ReactNode; title: string; body: string }[] = [
 ];
 
 const WDiscover: FC = () => (
-  <section className="bg-white py-16 lg:py-[92px]" aria-labelledby="w-discover-heading">
+  <section
+    className="bg-white py-16 lg:py-[92px]"
+    aria-labelledby="w-discover-heading"
+    data-landing-section="discover"
+  >
     <div className="content-shell">
       <div className="animate-on-scroll flex items-center gap-2.5">
         <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />

@@ -129,6 +129,13 @@ test.describe("Landing hero — the slot right under the button on a phone", () 
       await expect(hero.getByText("Anonymous · ~9 minutes · No account")).toHaveCount(0);
       const vw = page.viewportSize()!.width;
       const vh = page.viewportSize()!.height;
+      // The paragraph runs on below lg, as the phone frame draws it; the break after
+      // "research." is the desktop's alone.
+      const br = hero.locator("h1 + p br");
+      await expect(br).toHaveCount(1);
+      expect(await br.evaluate((el) => getComputedStyle(el).display)).toBe(
+        vw >= 1024 ? "inline" : "none"
+      );
       const slot = await page.getByTestId(slotId).boundingBox();
       expect(slot).not.toBeNull();
       const [rating, ticker, privacy] = await Promise.all(rows.map((r) => r.boundingBox()));

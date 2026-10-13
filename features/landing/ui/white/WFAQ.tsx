@@ -15,7 +15,11 @@ const WFAQ: FC = () => {
   const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <section className="bg-white py-16 lg:py-24" aria-labelledby="w-faq-heading">
+    <section
+      className="bg-white py-16 lg:py-24"
+      aria-labelledby="w-faq-heading"
+      data-landing-section="faq"
+    >
       <div className="content-shell max-w-3xl">
         {/* The "FAQ" eyebrow above the heading, and the "still unanswered" contact line
             under the list, went with the 12.10 copy (Figma Report-3.0 1604:8233). */}

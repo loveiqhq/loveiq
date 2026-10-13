@@ -166,7 +166,11 @@ const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
  * meanwhile, cut to the first whole day of its lists (PRICE_TEST_START_DAY). The landing
  * test waits the same way for its restart at the condensed phone hero.
  */
-function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[] {
+function verdictAxesFor(
+  dayKey: string,
+  axes: ExperimentAxis[],
+  landingFrom: string
+): ExperimentAxis[] {
   const windowStartDay = new Date(
     Date.parse(`${dayKey}T00:00:00Z`) - (WINDOW_DAYS - 1) * 86_400_000
   )
@@ -175,7 +179,7 @@ function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[
   return axes.filter(
     (axis) =>
       (axis !== "pricing" || windowStartDay >= PRICE_TEST_START_DAY) &&
-      (axis !== "landing" || windowStartDay >= LANDING_TEST_START_DAY)
+      (axis !== "landing" || windowStartDay >= landingFrom)
   );
 }
 
@@ -632,7 +636,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
-    for (const axis of verdictAxesFor(dayKey, verdictAxes)) {
+    for (const axis of verdictAxesFor(dayKey, verdictAxes, landingFrom)) {
       const rows = cohorts
         .filter((c) => c.axis === axis && c.arm !== "unknown")
         .map((c) => ({ arm: c.arm, n: c.n, conversions: c.conversions }));
@@ -1238,6 +1242,21 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           )
         );
       }
+    } else if (dayKey < landingFrom) {
+      // The day this digest reports is before the comparison restarts, so its per-arm
+      // counts are empty by design. Say so: "no visits" under a funnel full of them reads
+      // as a broken test.
+      const label = (day: string) => {
+        const at = new Date(`${day}T00:00:00Z`);
+        return `${at.getUTCDate()} ${at.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
+      };
+      const firstDigest = new Date(`${landingFrom}T00:00:00Z`);
+      firstDigest.setUTCDate(firstDigest.getUTCDate() + 1);
+      landingStartBlocks.push(
+        section(
+          `*Landing page → survey* — the landing test restarts on ${label(landingFrom)}, with the condensed phone hero; its first numbers arrive in the ${label(firstDigest.toISOString().slice(0, 10))} digest.`
+        )
+      );
     } else if (!hasVisits(liveArms[0]) && !hasVisits(liveArms[1])) {
       /**
        * Nothing for EITHER live arm. ONE line — four lines of "no visits recorded

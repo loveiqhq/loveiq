@@ -54,7 +54,11 @@ const LockIcon: FC = () => (
 );
 
 const WFindOut: FC = () => (
-  <section className="bg-white py-16 lg:py-[92px]" aria-labelledby="w-findout-heading">
+  <section
+    className="bg-white py-16 lg:py-[92px]"
+    aria-labelledby="w-findout-heading"
+    data-landing-section="find_out"
+  >
     <div className="content-shell">
       {/* Centered intro */}
       <div className="mx-auto flex max-w-[700px] flex-col items-center gap-3.5 text-center">
