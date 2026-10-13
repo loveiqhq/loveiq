@@ -2542,7 +2542,9 @@ function adversarialProbes(): RetrievalProbe[] {
      */
     P(
       "hiring-inbox-open",
-      "applications for the internship with a CV",
+      // Words a CV holds rather than the email around it: search returns each document's
+      // best part, and for "applications with a CV" that is the covering message.
+      "university degree work experience skills",
       (h) => {
         // The count alone proves little: at least one hit must carry a file's text, which is
         // the half the change exists for. The mailbox is checked too, in case the filter is not.

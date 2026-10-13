@@ -943,6 +943,8 @@ describe("the hiring inbox", () => {
     auto.messages[0]!.payload.headers.push({ name: "Auto-Submitted", value: "auto-generated" });
     expect(threadToRows(auto, HR, "s")).toEqual([]);
     expect(threadToRows(app(msg(APPLICANT, "Here is my portfolio.")), HR, "s")).toHaveLength(1);
+    // A colleague's one word to the inbox is a stub, as it is anywhere.
+    expect(threadToRows(app(msg("Eman <ec@loveiq.org>", "test")), HR, "s")).toEqual([]);
     // A machine's short mail that carries a CV is an application from a job board.
     expect(threadToRows(code, HR, "s", null, "## Attachment: CV.pdf\nMSc")).toHaveLength(1);
   });

@@ -1138,13 +1138,15 @@ export function threadToRows(
     const text = hiring ? withoutPay(said) : said;
     lines.push(`${from}${stamp ? ` (${stamp})` : ""}: ${text}`);
   }
-  // In the hiring inbox nothing a person sends is a stub, however short, and a thread whose
-  // only content is its files is still an application. A machine's short mail there is a
-  // stub as anywhere: a login code or a sign-in link for the shared account.
+  // In the hiring inbox nothing an applicant sends is a stub, however short, and a thread
+  // whose only content is its files is still an application. A machine's short mail there
+  // is a stub as anywhere (a login code or a sign-in link for the shared account), and so
+  // is a colleague's: the one such thread on 2026-10-13 was a one-word "test".
   const carried = hiring && attachments.trim() !== "";
   if (lines.length === 0 && !carried) return [];
   const joined = lines.join(" ").replace(/\s+/g, " ").trim();
-  const keptShort = carried || (hiring && msgs.some(fromAPerson));
+  const applicantWrote = msgs.some((m) => fromAPerson(m) && !fromTeam(header(m, "From"), byAlias));
+  const keptShort = carried || (hiring && applicantWrote);
   if (lines.length === 1 && joined.length < MIN_STUB_CHARS && !keptShort) return [];
   if (!hiring && isRecruitingThread(subject, joined)) return [];
 
