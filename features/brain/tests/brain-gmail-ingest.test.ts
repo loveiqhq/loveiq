@@ -94,6 +94,8 @@ let stubThreadIds: string[] = [];
 let recruitingBodyIds: string[] = [];
 /** RAW gmail thread ids whose FETCH carries two readable text attachments. */
 let attachmentThreadIds: string[] = [];
+/** Every attachment download answers 503, as a download that failed. */
+let attachmentsFail = false;
 /** Threads the listing returns. */
 let listedThreads: Array<{ id: string; historyId: string }> = [];
 /** source_id -> whether touchChunks was asked to confirm it. */
@@ -109,6 +111,9 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     // which is the real-world state this test exists for.
     if (url.includes("admin/directory")) {
       return { ok: false, status: 403, text: async () => "not delegated" };
+    }
+    if (url.includes("/attachments/") && attachmentsFail) {
+      return { ok: false, status: 503, text: async () => "busy" };
     }
     // A single thread FETCH: /threads/<id>?format=full
     const one = /\/threads\/([^?]+)\?format=full/.exec(url);
@@ -200,6 +205,7 @@ beforeEach(() => {
   stubThreadIds = [];
   recruitingBodyIds = [];
   attachmentThreadIds = [];
+  attachmentsFail = false;
   upserted.length = 0;
   listedThreads = [];
   touchedIds = [];
@@ -848,6 +854,23 @@ describe("the hiring inbox is walked, with its applications", () => {
     expect(refusalWrites.map((r) => r.source_id)).toEqual(["thread:app"]);
   });
 
+  /**
+   * APPLICANTS' CVS STAY ONLY AS LONG AS THE MAILBOX HOLDS THEM. A colleague's mailbox that
+   * stops being walked is history and kept; a hiring inbox that does is not.
+   */
+  it("sweeps the hiring inbox's rows once it is no longer walked", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org";
+    listedThreads = ["k1", "k2", "k3", "k4"].map(listed);
+    existing = [
+      ...["k1", "k2", "k3", "k4"].map((id) => row(id, "me@loveiq.org")),
+      row("cv-thread", "hr@loveiq.org"),
+      row("departed", "philipp.leonhard@loveiq.org"),
+    ];
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(deletedIds).toContain("thread:cv-thread");
+    expect(deletedIds).not.toContain("thread:departed");
+  });
+
   it("keeps the hiring inbox's stored threads like any walked mailbox's", async () => {
     process.env.GMAIL_MAILBOXES = "hr@loveiq.org";
     listedThreads = ["h1", "h2", "h3", "h4"].map(listed);
@@ -872,6 +895,25 @@ describe("attachments the run ran out of time for", () => {
     expect(upserted).toEqual([]);
     expect(r.complete).toBe(false);
     expect(r.detail).toMatch(/stopped=time-budget@me@loveiq\.org:p0:attachments/);
+  });
+
+  /**
+   * A FAILED DOWNLOAD IS TRIED AGAIN. Stored with its historyId, the thread would match the
+   * listing from then on and the file would never be read.
+   */
+  it("stores a thread whose file failed to download without the historyId, so it is read again", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org";
+    listedThreads = [{ id: "t1", historyId: "9" }];
+    attachmentThreadIds = ["t1"];
+    attachmentsFail = true;
+    const r = await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(upserted.map((u) => (u.meta as { historyId?: unknown }).historyId)).toEqual([null]);
+    expect(r.detail).toContain("attachment_retries=1");
+    // The control: a download that worked keeps the historyId that lets the next run skip it.
+    upserted.length = 0;
+    attachmentsFail = false;
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(upserted.map((u) => (u.meta as { historyId?: unknown }).historyId)).toEqual(["9"]);
   });
 
   it("writes it when the attachments were all read in time", async () => {

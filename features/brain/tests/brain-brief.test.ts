@@ -74,6 +74,18 @@ describe("chunksForDay", () => {
     expect(dbPaths[0]).not.toContain("updated_at");
   });
 
+  /**
+   * NOT THE HIRING INBOX (2026-10-13). The brief posts every title it read to Slack and keeps
+   * them in a notice, and a hiring-inbox title names an applicant: in Slack it would outlive
+   * the mailbox that holds the CV. Rows with no mailbox at all, every other source's, stay.
+   */
+  it("leaves the hiring inbox out, and keeps every source that has no mailbox", async () => {
+    await chunksForDay("2026-08-29");
+    expect(decodeURIComponent(dbPaths[0]!)).toContain(
+      'or=(meta->>mailbox.is.null,meta->>mailbox.not.in.("hr@loveiq.org"))'
+    );
+  });
+
   it("caps each source, so one noisy day of email cannot crowd out the one commit", async () => {
     rows = [...Array(30)].map((_, i) => chunk("gmail", i)).concat([chunk("commit", 99)]);
     const out = await chunksForDay("2026-08-29");

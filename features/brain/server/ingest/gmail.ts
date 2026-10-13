@@ -410,19 +410,26 @@ export const NEVER_INDEX_MAILBOXES = new Set(["hello@loveiq.org"]);
  * listed, application bodies are kept, and CVs, cover letters and task submissions are
  * read whatever they are called, up to Gmail's own attachment limit. Measured 2026-10-13:
  * 35 threads, 29 of them applications, which those rules left at 6 indexable threads with
- * no CV among them. An application is often a CV with a line of text or none, so a thread
- * whose attachments say something is kept however short its message. Each title carries
- * the applicant's name, because search keeps one Gmail result per title and applicants
- * share subjects ("Application for Chief of Staff Internship").
+ * no CV among them. An application is often a CV with a line of text or none, so no thread
+ * here is a stub. Each title carries the applicant's name, because search keeps one Gmail
+ * result per title and applicants share subjects ("Application for Chief of Staff
+ * Internship").
  *
- * Still out, here as everywhere: contracts (CONTRACT_SUBJECT_TERMS and the
- * legal-instrument rule; two signed freelance agreements sit in this inbox) and a named
- * person's probation pay. Elsewhere the recruiting rules stand, so an application
+ * Still out: contracts and offers, by subject (CONTRACT_SUBJECT_TERMS; two signed
+ * freelance agreements sit in this inbox), by file name in the team's three languages
+ * (HIRING_INSTRUMENT) and by what a file says (AGREEMENT_TEXT), and a message of ours that
+ * states pay (isPayMessage). Elsewhere the recruiting rules stand, so an application
  * forwarded into a colleague's mailbox is not indexed a second time.
  */
 export const HIRING_MAILBOXES = new Set(["hr@loveiq.org"]);
 export const isHiringMailbox = (mailbox: string): boolean =>
   HIRING_MAILBOXES.has(mailbox.trim().toLowerCase());
+/**
+ * The hiring inboxes as a PostgREST list, `("hr@loveiq.org")`, for the readers that must
+ * leave applicants out: the daily brief posts the titles it reads to Slack and keeps them
+ * in a notice, which would outlive the mailbox, and comment asks are a person's.
+ */
+export const HIRING_MAILBOX_LIST = `(${[...HIRING_MAILBOXES].map((m) => `"${m}"`).join(",")})`;
 
 /**
  * Subjects to keep out of the corpus entirely, as Gmail `-subject:` terms.
@@ -663,22 +670,36 @@ export function person(addr: string): string {
   return addr.replace(/[<>]/g, "").trim();
 }
 
+/** Long enough for any real name; a display name is the sender's to write, so no more. */
+const MAX_NAME_CHARS = 60;
+
 /**
- * Who a hiring thread is about: the first sender from outside the team, or failing that
- * the first outside addressee, for a thread the hiring inbox started itself. A mail client
- * that writes the address into the name ("Jane Doe(jane@uni.edu)") has it taken out.
+ * Who a hiring thread is about: the first sender from outside the team; failing that the
+ * sender of a message a colleague forwarded in; failing that the first outside addressee,
+ * for a thread the hiring inbox started itself. The name is the sender's own text, so it is
+ * cut to a name's length, and a mail client that writes the address into it ("Jane
+ * Doe(jane@uni.edu)") has the address taken out.
  */
 function outsider(
   msgs: GmailMessage[],
   byAlias: Map<string, { canonical: string }> | null
 ): string | null {
-  const name = (addr: string) =>
-    person(addr)
+  const name = (addr: string): string | null => {
+    const n = person(addr)
       .replace(/\s*\([^()]*@[^()]*\)\s*/g, " ")
-      .trim() || null;
+      .replace(/[\p{Cc}\p{Cf}<>]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return n ? n.slice(0, MAX_NAME_CHARS).trim() : null;
+  };
   for (const m of msgs) {
     const from = header(m, "From");
     if (from && !fromTeam(from, byAlias)) return name(from);
+  }
+  for (const m of msgs) {
+    for (const f of messageText(m.payload).matchAll(/^[>*\s]*From:\*?[ \t]*(.+)$/gim)) {
+      if (!fromTeam(f[1]!, byAlias)) return name(f[1]!);
+    }
   }
   for (const m of msgs) {
     // Split on commas outside quotes: "Doe, Jane" <j@x.com> is one addressee.
@@ -688,6 +709,31 @@ function outsider(
   }
   return null;
 }
+
+/**
+ * Whether `subject` already names `who`, as a whole word and with or without its accents:
+ * "Ana" is not in "Analyst", and "Kristina Krunić" is in "Design Internship Kristina Krunic".
+ */
+function mentions(subject: string, who: string): boolean {
+  const plain = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "");
+  const word = plain(who).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${word}(?![\\p{L}\\p{N}])`, "iu").test(plain(subject));
+}
+
+/**
+ * A MESSAGE OF OURS THAT STATES PAY, in the hiring inbox: an offer's salary, a stipend,
+ * probation terms with their amount. It is left out of the row, which still says who wrote
+ * and when. Ours only: an applicant's own words about money are part of their application,
+ * and their task submissions are full of grant amounts.
+ */
+const PAY_WORD =
+  /(?<![\p{L}])(probation(ary)?|probezeit|trial period|probni rad|salar(y|ies)|gehalt|lohn|plat[aeu]|plać[aeu]|naknad\p{L}*|honorar\p{L}*|compensation|stipend|remuneration|wages?|per (month|hour)|a month|monthly|hourly|mjese[čc]no|monatlich|brutto|netto|bruto|neto|stundenlohn)(?![\p{L}])/iu;
+const MONEY =
+  /\d[\d.,]*\s?(€|\$|eur(os?)?|km|bam|usd|chf)(?![\p{L}])|(€|\$)\s?\d|(?<![\p{L}])(eur|usd|bam|km|chf)\s?\d/iu;
+export function isPayMessage(text: string): boolean {
+  return PAY_WORD.test(text) && MONEY.test(text);
+}
+export const PAY_LEFT_OUT = "[a message about pay, left out of the brain]";
 
 /**
  * ATTACHMENTS ARE CONTENT, and until 2026-09-19 none of them were read.
@@ -718,6 +764,8 @@ export const MAX_ATTACHMENT_BYTES = 4_000_000;
  */
 export const MAX_HIRING_ATTACHMENT_BYTES = 25_000_000;
 export const MAX_ATTACHMENTS_PER_THREAD = 5;
+/** An application is a CV, a letter, a task and a portfolio, sometimes in two versions. */
+export const MAX_HIRING_ATTACHMENTS_PER_THREAD = 10;
 /** One attachment must not be able to outweigh the conversation that carried it. */
 export const MAX_ATTACHMENT_CHARS = 20_000;
 /**
@@ -740,6 +788,22 @@ export interface AttachmentRef {
 }
 
 /**
+ * A CONTRACT OR AN OFFER BY ITS NAME, in the hiring inbox: the legal-instrument rule knows
+ * English instruments ("Freelancer Agreement …") but not "Praktikumsvertrag", "Ugovor o
+ * radu", "Vereinbarung", "NDA" or an offer letter, the shapes a hire's papers take here.
+ * Elsewhere those words are left to that rule, which was measured against every document
+ * it touches; in hr@ an applicant's file never carries them.
+ */
+const HIRING_INSTRUMENT =
+  /contract|agreement|vertrag|vereinbarung|ugovor|(?<![\p{L}])nda(?![\p{L}])|offer|angebot|ponud/iu;
+
+/** Files kept out of the corpus by decision, so neither read nor named. */
+function keptOut(filename: string, hiring: boolean): boolean {
+  if (isLegalInstrument(filename)) return true;
+  return hiring ? HIRING_INSTRUMENT.test(filename) : isJobApplication(filename);
+}
+
+/**
  * Every readable attachment in a thread. Pure, so the choosing is testable offline.
  *
  * Each file once: a reply or a forward carries the same CV again, and measured 2026-10-13
@@ -749,8 +813,9 @@ export interface AttachmentRef {
 export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentRef[] {
   const out: AttachmentRef[] = [];
   const taken = new Set<string>();
+  const cap = hiring ? MAX_HIRING_ATTACHMENTS_PER_THREAD : MAX_ATTACHMENTS_PER_THREAD;
   const walk = (messageId: string, part?: GmailPart): void => {
-    if (!part || out.length >= MAX_ATTACHMENTS_PER_THREAD) return;
+    if (!part || out.length >= cap) return;
     const filename = (part.filename ?? "").trim();
     const attachmentId = part.body?.attachmentId;
     const mimeType = (part.mimeType ?? "").split(";")[0]!.trim();
@@ -767,8 +832,7 @@ export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentR
       // "Welcome to the Team" and to a forward of it. The covering message stays —
       // that Mark sent Eman a contract on 2026-09-09 is a real thing to remember; the
       // instrument itself does not come with it.
-      !isLegalInstrument(filename) &&
-      (hiring || !isJobApplication(filename)) &&
+      !keptOut(filename, hiring) &&
       !taken.has(key)
     ) {
       taken.add(key);
@@ -784,15 +848,33 @@ export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentR
   return out;
 }
 
-/** Text out of one attachment. Returns "" for anything it cannot read, never throws. */
-async function attachmentText(token: string, mailbox: string, ref: AttachmentRef): Promise<string> {
+/**
+ * Text out of one attachment; "" for a file with no text, NULL when it could not be
+ * downloaded this run. Never throws.
+ *
+ * The two used to be one answer, and a failed download is not a fact about the file: the
+ * thread was stored without it, its historyId matched from then on, and the file was never
+ * tried again.
+ */
+async function attachmentText(
+  token: string,
+  mailbox: string,
+  ref: AttachmentRef
+): Promise<string | null> {
+  let res: Record<string, unknown> | null;
   try {
-    const res = await gmailGet(
+    res = await gmailGet(
       token,
       mailbox,
       `/messages/${encodeURIComponent(ref.messageId)}/attachments/${encodeURIComponent(ref.attachmentId)}`
     );
-    const data = typeof res?.data === "string" ? res.data : "";
+  } catch (err) {
+    logger.warn({ err, mime: ref.mimeType }, "brain-ingest gmail: attachment download failed");
+    return null;
+  }
+  if (!res) return null;
+  try {
+    const data = typeof res.data === "string" ? res.data : "";
     if (!data) return "";
     const buf = Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
     if (buf.byteLength === 0) return "";
@@ -824,11 +906,22 @@ async function attachmentText(token: string, mailbox: string, ref: AttachmentRef
 }
 
 /**
+ * A CONTRACT OR AN OFFER BY WHAT IT SAYS, for a hiring-inbox file whose name gave nothing
+ * away. Applicants' CVs, letters and tasks do not speak of "the parties" or offer anyone
+ * employment; a hire's papers do.
+ */
+const AGREEMENT_TEXT =
+  /(?<![\p{L}])(the parties|hereinafter|this (freelance |employment |internship |service )?(agreement|contract)|vertragsparteien|nachfolgend|ugovorne strane|ugovor o (radu|djelu)|we are (pleased|happy|delighted) to offer you|offer of employment)(?![\p{L}])/iu;
+
+/** Below this an inline image is a signature logo or an icon, not something sent. */
+const INLINE_IMAGE_BYTES = 50_000;
+
+/**
  * Files in a hiring thread that give the brain no text, named so that an answer says "open
  * the email" rather than "there is no CV": measured 2026-10-13, one applicant sent their CV
- * as phone photos. Attachments only; an inline part is a signature logo or a picture in
- * the message, not something the applicant sent. A contract stays unnamed, as it stays
- * unread.
+ * as phone photos. A small inline picture is a signature logo, not something the applicant
+ * sent; a large one is, since some mail apps put photos inline. A contract stays unnamed,
+ * as it stays unread.
  */
 export function unreadAttachmentNames(thread: GmailThread, read: AttachmentRef[]): string[] {
   const picked = new Set(read.map((r) => `${r.filename}\n${r.size}`));
@@ -836,15 +929,16 @@ export function unreadAttachmentNames(thread: GmailThread, read: AttachmentRef[]
   const walk = (part?: GmailPart): void => {
     if (!part) return;
     const filename = (part.filename ?? "").trim();
+    const size = part.body?.size ?? 0;
     const disposition =
       (part.headers ?? []).find((h) => h.name?.toLowerCase() === "content-disposition")?.value ??
       "";
     if (
       filename &&
       part.body?.attachmentId &&
-      !/^\s*inline\b/i.test(disposition) &&
-      !isLegalInstrument(filename) &&
-      !picked.has(`${filename}\n${part.body.size ?? 0}`)
+      !(/^\s*inline\b/i.test(disposition) && size < INLINE_IMAGE_BYTES) &&
+      !keptOut(filename, true) &&
+      !picked.has(`${filename}\n${size}`)
     ) {
       out.add(filename);
     }
@@ -852,6 +946,13 @@ export function unreadAttachmentNames(thread: GmailThread, read: AttachmentRef[]
   };
   for (const m of thread.messages ?? []) walk(m.payload);
   return [...out];
+}
+
+export interface ThreadAttachments {
+  /** The files' text, and in the hiring inbox a line naming every file not read. */
+  text: string;
+  /** A download failed: store what was read, and read the thread again next run. */
+  retry: boolean;
 }
 
 /**
@@ -866,11 +967,12 @@ export async function threadAttachmentText(
   mailbox: string,
   thread: GmailThread,
   isOutOfTime: () => boolean = () => false
-): Promise<string | null> {
+): Promise<ThreadAttachments | null> {
   const hiring = isHiringMailbox(mailbox);
   const refs = attachmentRefs(thread, hiring);
   const parts: string[] = [];
   const unread = hiring ? unreadAttachmentNames(thread, refs) : [];
+  let retry = false;
   // The hiring inbox has no thread ceiling beyond the per-file one: a CV, a cover letter
   // and a task submission are each the point, and its volume cannot drown the corpus.
   let budget = hiring ? Infinity : MAX_ATTACHMENT_CHARS_PER_THREAD;
@@ -878,6 +980,13 @@ export async function threadAttachmentText(
     if (budget <= 0) break;
     if (isOutOfTime()) return null;
     const text = await attachmentText(token, mailbox, ref);
+    if (text === null) retry = true;
+    // A hire's contract or offer under a name that did not say so is not read. It is still
+    // named: a generic name gives nothing away, and a CV wrongly caught stays visible.
+    if (text && hiring && AGREEMENT_TEXT.test(text.slice(0, 4000))) {
+      unread.push(ref.filename);
+      continue;
+    }
     if (!text) {
       if (hiring) unread.push(ref.filename);
       continue;
@@ -891,10 +1000,10 @@ export async function threadAttachmentText(
   }
   if (unread.length > 0) {
     parts.push(
-      `Also attached, with no text the brain can read (open the email to see it): ${unread.join(", ")}`
+      `Also attached, not read by the brain (open the email to see it): ${unread.join(", ")}`
     );
   }
-  return parts.join("\n\n");
+  return { text: parts.join("\n\n"), retry };
 }
 
 /**
@@ -936,23 +1045,24 @@ export function threadToRows(
   const when = Number(last.internalDate ?? first.internalDate ?? 0);
   const day = when ? new Date(when).toISOString().slice(0, 10) : null;
 
+  const hiring = isHiringMailbox(mailbox);
   const lines: string[] = [];
   for (const m of msgs) {
     const from = person(header(m, "From"));
     const date = Number(m.internalDate ?? 0);
     const stamp = date ? new Date(date).toISOString().slice(0, 10) : "";
-    const text = tidyEmailText(stripQuoted(messageText(m.payload)));
-    if (!text) continue;
+    const said = tidyEmailText(stripQuoted(messageText(m.payload)));
+    if (!said) continue;
+    const text =
+      hiring && fromTeam(header(m, "From"), byAlias) && isPayMessage(said) ? PAY_LEFT_OUT : said;
     lines.push(`${from}${stamp ? ` (${stamp})` : ""}: ${text}`);
   }
-  const hiring = isHiringMailbox(mailbox);
-  // In the hiring inbox an application is often a CV with a line of text or none, so a
-  // thread whose attachments say something is not a stub there.
-  const carried = hiring && attachments.trim() !== "";
-  if (lines.length === 0 && !carried) return [];
+  // In the hiring inbox nothing an applicant sends is a stub, however short, and a thread
+  // whose only content is its files is still an application.
+  if (lines.length === 0 && !(hiring && attachments.trim() !== "")) return [];
   const joined = lines.join(" ").replace(/\s+/g, " ").trim();
-  if (lines.length === 1 && joined.length < MIN_STUB_CHARS && !carried) return [];
-  if (hiring ? isPayTermsThread(subject, joined) : isRecruitingThread(subject, joined)) return [];
+  if (!hiring && lines.length === 1 && joined.length < MIN_STUB_CHARS) return [];
+  if (!hiring && isRecruitingThread(subject, joined)) return [];
 
   const participants = [
     ...new Set(
@@ -961,8 +1071,7 @@ export function threadToRows(
   ].slice(0, 8);
 
   const applicant = hiring ? outsider(msgs, byAlias) : null;
-  const named =
-    applicant && !subject.toLowerCase().includes(applicant.toLowerCase()) ? ` (${applicant})` : "";
+  const named = applicant && !mentions(subject, applicant) ? ` (${applicant})` : "";
   const title = trustpilotReviewTitle(subject, joined, day) ?? `Email: ${subject}${named}`;
   const base: BrainRow = {
     source: SOURCE,
@@ -1220,6 +1329,8 @@ export async function ingestGmail(
   let fetched = 0;
   /** Threads whose attachments contributed text, reported so the gap stays visible. */
   let attachmentsRead = 0;
+  /** Threads stored with a file that failed to download, read again next run. */
+  let retried = 0;
 
   const failedMailboxes: string[] = [];
   /** Threads we listed but could not re-read this run. Protected from the sweep. */
@@ -1304,8 +1415,14 @@ export async function ingestGmail(
           stop(`time-budget@${mailbox}:p${page}:attachments`);
           break;
         }
-        if (attached) attachmentsRead += 1;
-        const built = threadToRows(full, mailbox, stampedAt, people, attached);
+        if (attached.text) attachmentsRead += 1;
+        const built = threadToRows(full, mailbox, stampedAt, people, attached.text);
+        // A file that failed to download: what was read is stored, without the historyId
+        // that would let the next run skip the thread, so the file is tried again.
+        if (attached.retry) {
+          retried += 1;
+          for (const r of built) r.meta = { ...r.meta, historyId: null };
+        }
         if (built.length === 0) {
           refusedThreads.add(id);
           if (t.historyId) newlyRefused.set(id, t.historyId);
@@ -1383,8 +1500,13 @@ export async function ingestGmail(
          * An unattributable row (no mailbox in `meta`) is kept for the same
          * reason — absence of evidence is not evidence of deletion.
          */
-        // Never-index mailboxes are not history, they are a decision: not kept.
+        // Never-index mailboxes are not history, they are a decision: not kept. Nor is a
+        // hiring inbox this walk did not cover: applicants' CVs stay only as long as the
+        // mailbox holds them, so a suspended or excluded hr@ takes its rows with it.
         if (have.mailbox && NEVER_INDEX_MAILBOXES.has(have.mailbox.toLowerCase())) return false;
+        if (have.mailbox && isHiringMailbox(have.mailbox) && !walked.has(have.mailbox)) {
+          return false;
+        }
         if (!have.mailbox || !walked.has(have.mailbox)) return true;
         // Never confirm a stale-version row FROM A MAILBOX WE DID WALK. It was
         // either dropped from the source or is no longer something we would index
@@ -1440,6 +1562,7 @@ export async function ingestGmail(
     `listed=${seen.size} fetched=${fetched} written=${written} kept=${touched} ` +
     (refusedUnchanged > 0 ? `refused_unchanged=${refusedUnchanged} ` : "") +
     (attachmentsRead > 0 ? `attachments=${attachmentsRead} ` : "") +
+    (retried > 0 ? `attachment_retries=${retried} ` : "") +
     `swept=${swept} complete=${complete}` +
     (stopReason ? ` stopped=${stopReason}` : "") +
     (failedMailboxes.length ? ` unreachable=${failedMailboxes.join(",")}` : "");

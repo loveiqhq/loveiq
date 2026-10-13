@@ -15,6 +15,7 @@ import { buildPrompt } from "./answer";
 import { complete, isLlmConfigured } from "./llm";
 import type { BrainChunk } from "./retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { HIRING_MAILBOX_LIST } from "@features/brain/server/ingest/gmail";
 import logger from "@shared/observability/logger";
 
 /**
@@ -62,6 +63,8 @@ export interface DailyBrief {
 export async function chunksForDay(day: string): Promise<BrainChunk[]> {
   const res = await supabaseFetch(
     `/rest/v1/brain_chunk?select=source,source_id,title,url,body,meta&period_end=eq.${day}` +
+      // Not the hiring inbox: the brief posts its titles to Slack, and they name applicants.
+      `&or=(meta->>mailbox.is.null,meta->>mailbox.not.in.${HIRING_MAILBOX_LIST})` +
       `&order=source.asc&limit=400`
   );
   if (!res.ok) {

@@ -398,8 +398,16 @@ interface RetrievalProbe {
 /** Sources written BY the company about itself, as opposed to mail it received. */
 const FIRST_PARTY = new Set(["doc", "notion", "slack", "whatsapp", "drive"]);
 
+/**
+ * A hit as one line of the report. IN GITHUB ACTIONS, BY ID, NOT BY TITLE: this repository
+ * is public and so are its Actions logs, where the Monday `brain-health` job prints the top
+ * hits of every probe. A title is a private email's subject, a document's name, and since
+ * 2026-10-13 a job applicant's name. The id is enough to `fetch_document` it.
+ */
 const describe = (h: BrainChunk): string =>
-  `${h.source}${h.meta?.section ? `/${String(h.meta.section)}` : ""} "${(h.title ?? "").slice(0, 55)}" @${h.score.toFixed(2)}`;
+  `${h.source}${h.meta?.section ? `/${String(h.meta.section)}` : ""} ` +
+  (process.env.GITHUB_ACTIONS === "true" ? h.sourceId : `"${(h.title ?? "").slice(0, 55)}"`) +
+  ` @${h.score.toFixed(2)}`;
 
 /**
  * A COUNT OF REAL ACTIVITY MUST NOT BE ANSWERED BY A WRITTEN PAGE.
@@ -2536,10 +2544,15 @@ function adversarialProbes(): RetrievalProbe[] {
       "hiring-inbox-open",
       "applications for the internship with a CV",
       (h) => {
-        const hr = h.filter((x) => x.source === "gmail" && x.meta?.mailbox === "hr@loveiq.org");
-        return hr.length >= 3
+        // The count alone proves little: at least one hit must carry a file's text, which is
+        // the half the change exists for. The mailbox is checked too, in case the filter is not.
+        const hr = h.filter((x) => x.meta?.mailbox === "hr@loveiq.org");
+        const read = hr.filter((x) => x.body.includes("## Attachment:"));
+        return hr.length >= 3 && read.length > 0
           ? []
-          : [`expected applications from the hiring inbox, got ${hr.length} of ${h.length}`];
+          : [
+              `expected applications with their files, got ${hr.length}, ${read.length} with a file`,
+            ];
       },
       { sources: ["gmail"], meta: { mailbox: "hr@loveiq.org" } },
       10
