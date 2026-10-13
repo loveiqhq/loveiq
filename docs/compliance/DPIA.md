@@ -162,7 +162,8 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
   person (`distinct_id` = email once they submit): 207,633 such taps from 2,102 people between
   2026-08-24 and 2026-10-13. Masking them at the source (#578) shipped and was reverted the
   same evening at the owner's request; the data stays in PostHog (EU, processor under the DPA),
-  as with the replays above.
+  as with the replays above. The landing card's own `landing_card_answer` event carries the
+  value picked on question 1 (1-7) as well, to PostHog only, never to GA4 (also 2026-10-13).
 - **No two-admin rule on destructive ops** (R-17 deferred). Acceptable for a 1–2 admin team.
 - **No DSAR E2E test against branch DB** (R-29 deferred).
 
