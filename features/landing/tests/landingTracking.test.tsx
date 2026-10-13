@@ -69,14 +69,6 @@ const placeSections = (scrolledPast: string[] = []) =>
   });
 
 describe("question 1's landing card", () => {
-  it("keeps PostHog's autocapture off the scale, whose tapped label is the answer", async () => {
-    const { default: WQuestionCard } = await import("@features/landing/ui/white/WQuestionCard");
-    render(<WQuestionCard location="hero" />);
-    expect(screen.getByRole("group", { name: /satisfied with my sex life/ })).toHaveClass(
-      "ph-no-capture"
-    );
-  });
-
   it("counts every tap on the scale by where and whether it changed a pick, never the answer", async () => {
     const { default: WQuestionCard } = await import("@features/landing/ui/white/WQuestionCard");
     render(<WQuestionCard location="hero" />);

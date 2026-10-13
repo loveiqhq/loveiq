@@ -1817,6 +1817,9 @@ export const TOOLS = [
       "'question_card' (that card's Continue; without it, the button beside it), " +
       "section_seen (properties.section, once per section per page: how far down a visitor " +
       "got) and cta_seen 'sticky_bar'. " +
+      "Autocapture ($autocapture, $rageclick, $dead_click) carries no element text or " +
+      "attributes since 2026-10-13, and a query that reads them (elements_chain, $el_text, " +
+      "attr__) is refused: before that they held survey answers. " +
       "It reads PostHog's events, persons and sessions only: our own database's tables " +
       "(survey answers, reports, payments) are query_product_data's, which masks what is " +
       "private, and a query that reaches them here is refused. " +
@@ -5373,6 +5376,21 @@ async function callTool(
         `${UNTRUSTED_DATA_PREAMBLE}\n\n0 rows. Columns: ${r.columns.join(", ") || "(none named)"}. ` +
           `That is what this query selected, not what happened on the site: check its ` +
           `filters (the host, the dates, the event name) before concluding nobody did it.`
+      );
+    }
+    // Whatever the query looked like: a cell shaped like an element chain is what a tap was
+    // on, which held survey answers before 2026-10-13 (hogqlTable refuses the ways to ask).
+    if (
+      r.rows.some((row) =>
+        row.some(
+          (v) => typeof v === "string" && /nth-child="|nth-of-type="|attr__|\$el_text/.test(v)
+        )
+      )
+    ) {
+      return textResult(
+        "The result holds what taps were on (an element chain), which is not read here: " +
+          "before 2026-10-13 it held survey answers. Count the taps instead.",
+        true
       );
     }
     const masked = maskAnalyticsRows(r.columns, r.rows);

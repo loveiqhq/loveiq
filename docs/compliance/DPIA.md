@@ -156,6 +156,19 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
   these hosts were still contacted pre-consent: `www.googletagmanager.com`,
   `www.google-analytics.com`, `pagead2.googlesyndication.com`. Closing this means
   moving those tags to the same `type="text/plain"` treatment.
+- **PostHog autocapture stored survey answers as event properties — CLOSED AT THE SOURCE
+  2026-10-13; historical events still held.** Measured on 7 days of `/survey`: 19,813 taps
+  whose `$el_text` was the option picked ("Woman", "In one exclusive relationship", …) and
+  7,069 whose `aria-label` was the scale's "6 of 7" beside the question, each tied to the
+  person (whose `distinct_id` is the lowercased email once they submit). Unlike the replays
+  above, these were structured, queryable, kept beyond 30 days and readable through Jarvis's
+  `query_product_analytics`. Since 2026-10-13 `instrumentation-client.ts` sets
+  `mask_all_text` and `mask_all_element_attributes`: every tap still arrives (time, tag,
+  classes, position) with no element text or attributes, rage and dead clicks included, and
+  Jarvis refuses to read element fields. Session replays are unchanged by this (owner
+  decision above). **Open:** the events captured 2026-08-09 → 2026-10-13 remain in PostHog;
+  removing them means per-person deletion (irreversible, takes their whole PostHog history)
+  or a deletion request to PostHog — the controller's decision.
 - **No two-admin rule on destructive ops** (R-17 deferred). Acceptable for a 1–2 admin team.
 - **No DSAR E2E test against branch DB** (R-29 deferred).
 
