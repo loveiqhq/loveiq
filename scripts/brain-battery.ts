@@ -2526,6 +2526,24 @@ function adversarialProbes(): RetrievalProbe[] {
       4
     ),
     P("comp-reachable", "what was discussed about equity and the CTO role", nonEmpty(1)),
+    /**
+     * AND ONE OPENED, 2026-10-13: the hiring inbox, read in full so the team can review
+     * applicants through Jarvis. Asked as a reviewer would, it must return applications
+     * from `hr@`. Generic words, so no applicant's name has to be written into this
+     * public file.
+     */
+    P(
+      "hiring-inbox-open",
+      "applications for the internship with a CV",
+      (h) => {
+        const hr = h.filter((x) => x.source === "gmail" && x.meta?.mailbox === "hr@loveiq.org");
+        return hr.length >= 3
+          ? []
+          : [`expected applications from the hiring inbox, got ${hr.length} of ${h.length}`];
+      },
+      { sources: ["gmail"], meta: { mailbox: "hr@loveiq.org" } },
+      10
+    ),
 
     // ── MULTI-HOP AND SYNTHESIS ──────────────────────────────────────────────
     P(

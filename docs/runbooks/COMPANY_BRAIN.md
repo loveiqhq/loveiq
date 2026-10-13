@@ -93,6 +93,13 @@ Bounded on purpose: at most five attachments per email thread and about ten
 chunks' worth of text per thread, because five 20,000-character attachments is a
 third again of the whole corpus and would drown every other source.
 
+The hiring inbox (`hr@`) is the exception, since 2026-10-13: there an application's
+CV, cover letter and task submission are each the point. Files up to Gmail's own
+25 MB limit are read, with no thread ceiling beyond 20,000 characters a file, and
+a file the brain gets no text from (a CV sent as phone photos, a scanned PDF) is
+named in the thread with "open the email to see it", so an answer never reads as
+"there is no CV". A file attached again in a reply is read once, in every mailbox.
+
 A part of a document that contains a credential is refused and replaced with a
 short note saying so, rather than vanishing — the surrounding parts still say
 "part 2 of 2", and a hole with no explanation reads exactly like a bug.
@@ -297,13 +304,24 @@ arrive by**, because excluding a document from one ingester while another indexe
 same thing is the failure this corpus has hit more than once:
 
 - **Job applicants** (decided 2026-09-20, widened 2026-09-23) — CVs, applicant lists,
-  interview notes and candidate calls, application mail and CV attachments, the
-  Candidates database and hiring pipeline in Notion, the `#hr` Slack channel, the `hr@`
-  mailbox, and interview events in the calendar. Material _about_ hiring — role
-  descriptions, the hiring guide — stays. One rule, `isJobApplication` in
+  interview notes and candidate calls, application mail and CV attachments in
+  colleagues' mailboxes, the Candidates database and hiring pipeline in Notion, the
+  `#hr` Slack channel, and interview events in the calendar. Material _about_ hiring —
+  role descriptions, the hiring guide — stays. One rule, `isJobApplication` in
   `features/brain/server/ingest/upsert.ts`, is shared by Drive, Gmail attachments,
   Slack uploads and calendar titles; Gmail also excludes recruiting subjects at the
   listing so an excluded thread is never fetched at all.
+
+  **Except the hiring inbox** (owner's decision, 2026-10-13): the `hr@` mailbox is read
+  in full — applications, CVs, cover letters, task submissions and the replies — so the
+  team can review candidates through Jarvis, in claude.ai and in Claude Code. Each
+  thread's title carries the applicant's name, because search keeps one Gmail result
+  per title and applicants share subjects; `{"mailbox": "hr@loveiq.org"}` lists them
+  all. Everywhere else the rule above still stands, so an application forwarded into a
+  colleague's mailbox or saved to Drive is not indexed a second time, and contracts and
+  a named person's probation pay stay out of `hr@` too. What is deleted from `hr@` leaves
+  the brain at the next daily sweep, so the mailbox's retention is the brain's.
+
 - **Legal instruments and private legal matters** — contracts, the shareholders'
   agreement and similar, by name in Drive, as attachments in Gmail and Slack, and as
   email bodies by subject (the SHA draft thread, freelance-contract and
@@ -1738,9 +1756,14 @@ authorised, in the Admin console, to impersonate users in the domain. When the
 directory cannot be read, the walk falls back to the comma-separated
 `GMAIL_MAILBOXES` list rather than treating "no answer" as "nobody works here".
 
-Two mailboxes are never walked, whatever the directory says: `hr@` (job applications,
-with CVs attached) and `hello@` (what customers write to us privately; excluded
-2026-09-23). See `NEVER_INDEX_MAILBOXES` in `features/brain/server/ingest/gmail.ts`.
+One mailbox is never walked, whatever the directory says: `hello@` (what customers
+write to us privately; excluded 2026-09-23). See `NEVER_INDEX_MAILBOXES` in
+`features/brain/server/ingest/gmail.ts`. `hr@` was on that list from 2026-09-23 to
+2026-10-13 and is now the hiring inbox, read in full (`HIRING_MAILBOXES`, same file).
+
+A thread ID belongs to one mailbox: the same conversation in two colleagues' mailboxes
+has two IDs and is stored twice, once per mailbox (measured 2026-10-13: 0 IDs shared
+across 6,866 threads in 12 mailboxes). Search folds such copies together by subject.
 
 It was worth deciding deliberately. The corpus is undifferentiated, so anything
 indexed from anyone's mailbox becomes answerable to anyone who can ask the brain.

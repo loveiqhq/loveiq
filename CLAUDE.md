@@ -929,6 +929,10 @@ does not inherit them:
   becomes readable by anyone who can ask the brain. The workspace holds
   "Performance management", onboarding pages and job posts naming real people.
   Indexed anyway, deliberately.
+- **The hiring inbox** (`hr@`) is read in full since 2026-10-13, CVs included, so the
+  team can review applicants through Jarvis: anyone who can ask the brain can read an
+  applicant's CV. Every other path still keeps applicants' data out ("Job applicants"
+  in `docs/runbooks/COMPANY_BRAIN.md`).
 - **The repo is public**, so docs and commits were already world-readable.
 - **Business numbers** — revenue, ad spend, cost per customer — are in the corpus
   and therefore answerable by anyone in the Slack workspace and by anyone whose

@@ -18,6 +18,8 @@ let touchedCount = 0;
 let refusalRows: Array<{ source_id: string; version: string }> = [];
 let refusalLogOk = true;
 const refusalWrites: Array<Record<string, unknown>> = [];
+/** Every row the walk upserted, so a test can see what reached the corpus and from where. */
+const upserted: Array<Record<string, unknown>> = [];
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
@@ -71,6 +73,9 @@ vi.mock("@features/admin/server/supabase", () => ({
         json: async () => [],
       };
     }
+    if (method === "POST" && path.includes("/brain_chunk")) {
+      upserted.push(...(JSON.parse(String(init?.body ?? "[]")) as Array<Record<string, unknown>>));
+    }
     return {
       ok: true,
       status: 201,
@@ -87,6 +92,8 @@ let failingThreadIds: string[] = [];
 let stubThreadIds: string[] = [];
 /** RAW gmail thread ids whose FETCH returns a candidate's application task. */
 let recruitingBodyIds: string[] = [];
+/** RAW gmail thread ids whose FETCH carries two readable text attachments. */
+let attachmentThreadIds: string[] = [];
 /** Threads the listing returns. */
 let listedThreads: Array<{ id: string; historyId: string }> = [];
 /** source_id -> whether touchChunks was asked to confirm it. */
@@ -130,8 +137,23 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
                   { name: "Subject", value: `Thread ${id}` },
                   { name: "From", value: "Marcus <marcus@loveiq.org>" },
                 ],
-                mimeType: "text/plain",
-                body: { data: Buffer.from(text).toString("base64") },
+                mimeType: attachmentThreadIds.includes(id) ? "multipart/mixed" : "text/plain",
+                body: attachmentThreadIds.includes(id)
+                  ? {}
+                  : { data: Buffer.from(text).toString("base64") },
+                parts: attachmentThreadIds.includes(id)
+                  ? [
+                      {
+                        mimeType: "text/plain",
+                        body: { data: Buffer.from(text).toString("base64") },
+                      },
+                      ...["notes1.txt", "notes2.txt"].map((filename, i) => ({
+                        mimeType: "text/plain",
+                        filename,
+                        body: { attachmentId: `att${i}`, size: 10 },
+                      })),
+                    ]
+                  : undefined,
               },
             },
           ],
@@ -177,6 +199,8 @@ beforeEach(() => {
   failingThreadIds = [];
   stubThreadIds = [];
   recruitingBodyIds = [];
+  attachmentThreadIds = [];
+  upserted.length = 0;
   listedThreads = [];
   touchedIds = [];
   deletedIds.length = 0;
@@ -758,28 +782,98 @@ describe("a never-index mailbox is neither walked nor kept", () => {
     ).toBe(true);
   });
 
-  it("never lists threads from it, even when it is configured", async () => {
-    process.env.GMAIL_MAILBOXES = "me@loveiq.org,hr@loveiq.org";
-    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
-    expect(
-      fetchedUrls.some(
-        (u) => u.includes(encodeURIComponent("hr@loveiq.org")) || u.includes("/users/hr@")
-      )
-    ).toBe(false);
-  });
-
   it("sweeps what it already stored, unlike a mailbox that merely stopped being walked", async () => {
     process.env.GMAIL_MAILBOXES = "me@loveiq.org";
     listedThreads = ["k1", "k2", "k3", "k4"].map(listed);
     existing = [
       ...["k1", "k2", "k3", "k4"].map((id) => row(id, "me@loveiq.org")),
-      row("cv-thread", "hr@loveiq.org"),
+      row("customer-thread", "hello@loveiq.org"),
       row("departed", "philipp.leonhard@loveiq.org"),
     ];
     await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
-    expect(deletedIds).toContain("thread:cv-thread");
+    expect(deletedIds).toContain("thread:customer-thread");
     // The control: history from an offboarded colleague is still kept.
     expect(deletedIds).not.toContain("thread:departed");
+  });
+});
+
+/**
+ * THE HIRING INBOX, READ IN FULL (owner's decision, 2026-10-13): hr@ was never walked from
+ * 2026-09-23, and the team now reviews applications through Jarvis.
+ */
+describe("the hiring inbox is walked, with its applications", () => {
+  const listed = (id: string) => ({ id, historyId: "9" });
+  const row = (id: string, mailbox: string) => ({
+    source_id: `thread:${id}`,
+    meta: { v: GMAIL_BUILDER_VERSION, mailbox, historyId: "9" },
+  });
+  const listingFor = (box: string): string => {
+    const url = fetchedUrls.find((u) =>
+      u.includes(`/users/${encodeURIComponent(box)}/threads?maxResults`)
+    );
+    if (!url) throw new Error(`the walk never listed ${box}`);
+    return decodeURIComponent(/[?&]q=([^&]*)/.exec(url)?.[1] ?? "");
+  };
+
+  it("lists application subjects there, and only there; contracts stay out of both", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org,hr@loveiq.org";
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    const hr = listingFor("hr@loveiq.org");
+    const me = listingFor("me@loveiq.org");
+    expect(hr).not.toContain("-subject:application");
+    expect(hr).not.toContain("-subject:cv");
+    expect(me).toContain("-subject:application");
+    expect(me).toContain("-subject:cv");
+    for (const q of [hr, me]) {
+      expect(q).toContain('-subject:"freelance contract"');
+      expect(q).toContain("-subject:sha");
+    }
+  });
+
+  it("indexes an application from the hiring inbox that a colleague's mailbox refuses", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org,hr@loveiq.org";
+    listedThreads = [{ id: "app", historyId: "9" }];
+    recruitingBodyIds = ["app"];
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    const boxes = upserted.map((r) => (r.meta as { mailbox?: string }).mailbox);
+    expect(boxes).toEqual(["hr@loveiq.org"]);
+    expect(refusalWrites.map((r) => r.source_id)).toEqual(["thread:app"]);
+  });
+
+  it("keeps the hiring inbox's stored threads like any walked mailbox's", async () => {
+    process.env.GMAIL_MAILBOXES = "hr@loveiq.org";
+    listedThreads = ["h1", "h2", "h3", "h4"].map(listed);
+    existing = ["h1", "h2", "h3", "h4"].map((id) => row(id, "hr@loveiq.org"));
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(deletedIds).toEqual([]);
+  });
+});
+
+/**
+ * A THREAD CUT SHORT BY THE CLOCK IS LEFT WHOLE. Stored with the attachments read so far,
+ * its historyId would match from then on and the rest would never be read.
+ */
+describe("attachments the run ran out of time for", () => {
+  it("writes nothing for that thread and says why the walk stopped", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org";
+    listedThreads = [{ id: "t1", historyId: "9" }];
+    attachmentThreadIds = ["t1"];
+    let calls = 0;
+    // Entry, page, thread, first attachment: then the clock runs out at the second.
+    const r = await ingestGmail("2026-10-13T00:00:00.000Z", () => ++calls > 4, null);
+    expect(upserted).toEqual([]);
+    expect(r.complete).toBe(false);
+    expect(r.detail).toMatch(/stopped=time-budget@me@loveiq\.org:p0:attachments/);
+  });
+
+  it("writes it when the attachments were all read in time", async () => {
+    // The control: the same thread with time to spare reaches the corpus.
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org";
+    listedThreads = [{ id: "t1", historyId: "9" }];
+    attachmentThreadIds = ["t1"];
+    const r = await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(upserted.map((u) => u.source_id)).toEqual(["thread:t1"]);
+    expect(r.complete).toBe(true);
   });
 });
 

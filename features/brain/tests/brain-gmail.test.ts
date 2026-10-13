@@ -13,8 +13,12 @@ import {
   stripQuoted,
   threadToRows,
   attachmentRefs,
+  unreadAttachmentNames,
+  standingExclusionsQuery,
+  isHiringMailbox,
   MAX_ATTACHMENTS_PER_THREAD,
   MAX_ATTACHMENT_BYTES,
+  MAX_HIRING_ATTACHMENT_BYTES,
   isBulkMail,
   excludeSubjects,
   trustpilotReviewTitle,
@@ -811,5 +815,191 @@ describe("attachmentRefs — attachments are content, and none were read", () =>
     const [plain] = threadToRows(thread as never, "me", "stamp");
     const [same] = threadToRows(thread as never, "me", "stamp", null, "");
     expect(same.body).toBe(plain.body);
+  });
+});
+
+/**
+ * THE HIRING INBOX, READ IN FULL (owner's decision, 2026-10-13). Applications come to hr@
+ * and the team reviews them through Jarvis, so there, and only there, the recruiting rules
+ * do not apply. Every case below has its control: the same input in a colleague's mailbox,
+ * where those rules still stand.
+ */
+describe("the hiring inbox", () => {
+  const HR = "hr@loveiq.org";
+  const ME = "me@loveiq.org";
+  const b = (s: string) => Buffer.from(s, "utf8").toString("base64url");
+  const msg = (
+    from: string,
+    text: string,
+    extra: { to?: string; subject?: string; parts?: unknown[] } = {}
+  ) => ({
+    id: `m-${from.length}-${text.length}`,
+    internalDate: "1787900000000",
+    payload: {
+      headers: [
+        { name: "Subject", value: extra.subject ?? "Application for Chief of Staff Internship" },
+        { name: "From", value: from },
+        ...(extra.to ? [{ name: "To", value: extra.to }] : []),
+      ],
+      mimeType: text ? "text/plain" : "multipart/mixed",
+      body: text ? { data: b(text) } : {},
+      ...(extra.parts ? { parts: extra.parts } : {}),
+    },
+  });
+  const app = (...messages: unknown[]) => ({ id: "app1", historyId: "7", messages });
+  const APPLICANT = "Jane Doe <jane.doe@example.com>";
+  const LETTER =
+    "Dear team, I decided to apply for the Chief of Staff internship. Attached is my CV.";
+  const pdf = (filename: string, size = 1000, attachmentId = filename) => ({
+    mimeType: "application/pdf",
+    filename,
+    body: { attachmentId, size },
+  });
+
+  it("is hr@, by address, whatever the case", () => {
+    expect(isHiringMailbox("HR@loveiq.org ")).toBe(true);
+    expect(isHiringMailbox(ME)).toBe(false);
+    expect(isHiringMailbox("hello@loveiq.org")).toBe(false);
+  });
+
+  it("lists application subjects but never contract ones", () => {
+    expect(standingExclusionsQuery(true)).not.toContain("-subject:application");
+    expect(standingExclusionsQuery(true)).toContain('-subject:"freelance contract"');
+    expect(standingExclusionsQuery()).toContain("-subject:application");
+  });
+
+  it("keeps an application, which a colleague's mailbox refuses", () => {
+    const rows = threadToRows(app(msg(APPLICANT, LETTER)), HR, "s");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.body).toContain("I decided to apply");
+    expect(threadToRows(app(msg(APPLICANT, LETTER)), ME, "s")).toEqual([]);
+  });
+
+  it("still refuses a named person's probation pay", () => {
+    const offer =
+      "We are happy to offer you the role: 1.000 EUR a month during the probation period.";
+    expect(threadToRows(app(msg("HR <hr@loveiq.org>", offer)), HR, "s")).toEqual([]);
+  });
+
+  it("keeps an application that is only a CV, and one with a single short line", () => {
+    const cv = "## Attachment: Jane_Doe_CV.pdf\nEducation: MSc Psychology";
+    const bare = app(msg(APPLICANT, "", { parts: [pdf("Jane_Doe_CV.pdf")] }));
+    const short = app(msg(APPLICANT, "My CV, thanks!"));
+    expect(threadToRows(bare, HR, "s", null, cv)[0]!.body).toContain("MSc Psychology");
+    expect(threadToRows(short, HR, "s", null, cv)[0]!.body).toContain("MSc Psychology");
+    // Controls: with nothing attached it is still a stub, and elsewhere it is a stub either way.
+    expect(threadToRows(short, HR, "s", null, "")).toEqual([]);
+    expect(threadToRows(bare, ME, "s", null, cv)).toEqual([]);
+    expect(threadToRows(short, ME, "s", null, cv)).toEqual([]);
+  });
+
+  /**
+   * Search keeps one Gmail result per title, and applicants share subjects: measured
+   * 2026-10-13, "Application for Chief of Staff Internship" and "Design Internship" each
+   * came from more than one person. Without the name, all but one applicant per subject
+   * could never be found.
+   */
+  it("titles a thread with the applicant's name, so applicants sharing a subject stay apart", () => {
+    const [row] = threadToRows(app(msg(APPLICANT, LETTER)), HR, "s");
+    expect(row!.title).toBe("Email: Application for Chief of Staff Internship (Jane Doe)");
+    const other = threadToRows(app(msg("Ana Roe <ana@example.com>", LETTER)), HR, "s")[0]!;
+    expect(other.title).not.toBe(row!.title);
+    // Measured: one mail client writes the address into the name.
+    const doubled = app(msg("Jane Doe(jane.doe@uni.example) <jane.doe@uni.example>", LETTER));
+    expect(threadToRows(doubled, HR, "s")[0]!.title).toBe(row!.title);
+    // Elsewhere titles are unchanged.
+    const call = app(
+      msg(APPLICANT, "Thanks for the call today, see you next week then.", { subject: "Call" })
+    );
+    expect(threadToRows(call, HR, "s")[0]!.title).toBe("Email: Call (Jane Doe)");
+    expect(threadToRows(call, ME, "s")[0]!.title).toBe("Email: Call");
+  });
+
+  it("names the outside addressee of a thread the hiring inbox started, and nobody twice", () => {
+    const started = app(
+      msg(
+        "HR <hr@loveiq.org>",
+        "Hi Jane, thank you for applying. Here is the task for the next step.",
+        {
+          to: '"Doe, Jane" <jane.doe@example.com>, Mark <mo@loveiq.org>',
+          subject: "Task for the next step",
+        }
+      )
+    );
+    expect(threadToRows(started, HR, "s")[0]!.title).toBe(
+      "Email: Task for the next step (Doe, Jane)"
+    );
+    const named = app(msg(APPLICANT, LETTER, { subject: "Application - Jane Doe" }));
+    expect(threadToRows(named, HR, "s")[0]!.title).toBe("Email: Application - Jane Doe");
+    const internal = app(
+      msg("HR <hr@loveiq.org>", "Forwarding the shortlist for the design internship review.", {
+        to: "Mark <mo@loveiq.org>",
+        subject: "Shortlist",
+      })
+    );
+    expect(threadToRows(internal, HR, "s")[0]!.title).toBe("Email: Shortlist");
+  });
+
+  it("links to the thread in the mailbox it is in, not whichever account is first", () => {
+    expect(threadToRows(app(msg(APPLICANT, LETTER)), HR, "s")[0]!.url).toBe(
+      "https://mail.google.com/mail/u/hr@loveiq.org/#all/app1"
+    );
+    expect(threadToRows(thread, "me", "s")[0]!.url).toBe(
+      "https://mail.google.com/mail/u/0/#all/t123"
+    );
+  });
+
+  it("reads a CV and a file too large elsewhere; a contract and an oversized file stay out", () => {
+    const parts = [
+      pdf("Jane_Doe_CV.pdf"),
+      pdf("Portfolio.pdf", MAX_ATTACHMENT_BYTES + 1),
+      pdf("Freelancer Agreement Jane Doe.pdf"),
+      pdf("Huge.pdf", MAX_HIRING_ATTACHMENT_BYTES + 1),
+    ];
+    const t = app(msg(APPLICANT, LETTER, { parts }));
+    expect(attachmentRefs(t as never, true).map((r) => r.filename)).toEqual([
+      "Jane_Doe_CV.pdf",
+      "Portfolio.pdf",
+    ]);
+    expect(attachmentRefs(t as never).map((r) => r.filename)).toEqual([]);
+  });
+
+  it("reads a file attached again in a reply once, everywhere", () => {
+    const again = app(
+      msg(APPLICANT, LETTER, { parts: [pdf("Cover letter.pdf", 1000, "a1")] }),
+      msg("HR <hr@loveiq.org>", "Thanks, received.", {
+        parts: [pdf("Cover letter.pdf", 1000, "a2")],
+      })
+    );
+    expect(attachmentRefs(again as never, true)).toHaveLength(1);
+    expect(attachmentRefs(again as never)).toHaveLength(1);
+    // A new version under the same name is a different file.
+    const revised = app(
+      msg(APPLICANT, LETTER, { parts: [pdf("Task.pdf", 1000, "a1")] }),
+      msg(APPLICANT, "Revised.", { parts: [pdf("Task.pdf", 2000, "a2")] })
+    );
+    expect(attachmentRefs(revised as never, true)).toHaveLength(2);
+  });
+
+  it("names what it cannot read, and not a contract or a picture in the message", () => {
+    const image = (filename: string, disposition: string) => ({
+      mimeType: "image/jpeg",
+      filename,
+      headers: [{ name: "Content-Disposition", value: disposition }],
+      body: { attachmentId: filename, size: 300_000 },
+    });
+    const t = app(
+      msg(APPLICANT, "My CV is in the photos.", {
+        parts: [
+          image("IMG_3282.jpeg", 'attachment; filename="IMG_3282.jpeg"'),
+          image("logo.jpeg", "inline; filename=logo.jpeg"),
+          pdf("Freelancer Agreement Jane Doe.pdf"),
+          pdf("Jane_Doe_CV.pdf"),
+          pdf("Jane_Doe_CV.pdf", 1000, "copy"),
+        ],
+      })
+    );
+    const read = attachmentRefs(t as never, true);
+    expect(unreadAttachmentNames(t as never, read)).toEqual(["IMG_3282.jpeg"]);
   });
 });

@@ -293,9 +293,12 @@ export const CONTRACT_SUBJECT_TERMS = [
   "salary contract",
 ];
 
-/** Every standing listing exclusion, as Gmail `-subject:` terms. */
-export function standingExclusionsQuery(): string {
-  return [...RECRUITING_SUBJECT_TERMS, ...CONTRACT_SUBJECT_TERMS]
+/**
+ * Every standing listing exclusion, as Gmail `-subject:` terms. The hiring inbox keeps its
+ * application subjects (see HIRING_MAILBOXES); contracts are excluded everywhere.
+ */
+export function standingExclusionsQuery(hiring = false): string {
+  return [...(hiring ? [] : RECRUITING_SUBJECT_TERMS), ...CONTRACT_SUBJECT_TERMS]
     .map((t) => (t.includes(" ") ? ` -subject:"${t}"` : ` -subject:${t}`))
     .join("");
 }
@@ -320,11 +323,20 @@ export function standingExclusionsQuery(): string {
  *
  * No trailing word boundary: in a JavaScript regex without the u flag "é" is not a word
  * character, so `résumé\b` can never match "résumé " and the clause would be dead.
+ *
+ * The probation clause is held apart because it is not about applicants: it is a named
+ * person's pay, which stays out of the hiring inbox too (see HIRING_MAILBOXES).
  */
 const RECRUITING_BODY =
-  /\b(application ta(sk|ks)|applicant task|candidate task|fill a (long-term |full-time |part-time )?(position|role)|probation(ary)? (time|period)|attached (is )?my (cv|resume|résumé)|my (cv|resume|résumé) (is )?attached|(see|find) (on|in) my (cv|resume|résumé)|decided to apply|recruitment assessment)/i;
+  /\b(application ta(sk|ks)|applicant task|candidate task|fill a (long-term |full-time |part-time )?(position|role)|attached (is )?my (cv|resume|résumé)|my (cv|resume|résumé) (is )?attached|(see|find) (on|in) my (cv|resume|résumé)|decided to apply|recruitment assessment)/i;
+const PAY_TERMS_BODY = /\bprobation(ary)? (time|period)/i;
+export function isPayTermsThread(subject: string, text: string): boolean {
+  return PAY_TERMS_BODY.test(subject) || PAY_TERMS_BODY.test(text);
+}
 export function isRecruitingThread(subject: string, text: string): boolean {
-  return RECRUITING_BODY.test(subject) || RECRUITING_BODY.test(text);
+  return (
+    RECRUITING_BODY.test(subject) || RECRUITING_BODY.test(text) || isPayTermsThread(subject, text)
+  );
 }
 
 /**
@@ -372,16 +384,39 @@ export function trustpilotReviewTitle(
  * stops reading a mailbox but keeps its history — a mailbox here is also removed from the
  * corpus.
  *
- * - `hr@` held 16 threads, 15 of them job applications with CVs attached.
- * - `hello@` is the address customers write to. The line this system does not move
- *   (CLAUDE.md, "Who can see what"; the `#email-inbox` note in slack.ts) is that what a
- *   customer writes to us privately is not indexed — and `#email-inbox` was excluded on
- *   2026-09-14 precisely because it forwards this address, while the mailbox itself went
- *   on being walked. Measured 2026-09-23: cancellations and revocations, a contract
- *   dispute naming a minor, a debt claim, feedback, replies to report emails, contact-form
- *   submissions, and vendor cold pitches — nothing a teammate needs from the brain.
+ * `hello@` is the address customers write to. The line this system does not move
+ * (CLAUDE.md, "Who can see what"; the `#email-inbox` note in slack.ts) is that what a
+ * customer writes to us privately is not indexed — and `#email-inbox` was excluded on
+ * 2026-09-14 precisely because it forwards this address, while the mailbox itself went on
+ * being walked. Measured 2026-09-23: cancellations and revocations, a contract dispute
+ * naming a minor, a debt claim, feedback, replies to report emails, contact-form
+ * submissions, and vendor cold pitches — nothing a teammate needs from the brain.
+ *
+ * `hr@` was here from 2026-09-23 to 2026-10-13; it is the hiring inbox now, below.
  */
-export const NEVER_INDEX_MAILBOXES = new Set(["hr@loveiq.org", "hello@loveiq.org"]);
+export const NEVER_INDEX_MAILBOXES = new Set(["hello@loveiq.org"]);
+
+/**
+ * THE HIRING INBOX, READ IN FULL (owner's decision, 2026-10-13): applications come to
+ * `hr@`, and the team reviews them through Jarvis, in claude.ai and in Claude Code.
+ *
+ * So here, and only here, the recruiting rules do not apply: application subjects are
+ * listed, application bodies are kept, and CVs, cover letters and task submissions are
+ * read whatever they are called, up to Gmail's own attachment limit. Measured 2026-10-13:
+ * 35 threads, 29 of them applications, which those rules left at 6 indexable threads with
+ * no CV among them. An application is often a CV with a line of text or none, so a thread
+ * whose attachments say something is kept however short its message. Each title carries
+ * the applicant's name, because search keeps one Gmail result per title and applicants
+ * share subjects ("Application for Chief of Staff Internship").
+ *
+ * Still out, here as everywhere: contracts (CONTRACT_SUBJECT_TERMS and the
+ * legal-instrument rule; two signed freelance agreements sit in this inbox) and a named
+ * person's probation pay. Elsewhere the recruiting rules stand, so an application
+ * forwarded into a colleague's mailbox is not indexed a second time.
+ */
+export const HIRING_MAILBOXES = new Set(["hr@loveiq.org"]);
+export const isHiringMailbox = (mailbox: string): boolean =>
+  HIRING_MAILBOXES.has(mailbox.trim().toLowerCase());
 
 /**
  * Subjects to keep out of the corpus entirely, as Gmail `-subject:` terms.
@@ -427,6 +462,7 @@ interface GmailHeader {
 interface GmailPart {
   mimeType?: string;
   filename?: string;
+  headers?: GmailHeader[];
   body?: { data?: string; size?: number; attachmentId?: string };
   parts?: GmailPart[];
 }
@@ -622,6 +658,32 @@ export function person(addr: string): string {
 }
 
 /**
+ * Who a hiring thread is about: the first sender from outside the team, or failing that
+ * the first outside addressee, for a thread the hiring inbox started itself. A mail client
+ * that writes the address into the name ("Jane Doe(jane@uni.edu)") has it taken out.
+ */
+function outsider(
+  msgs: GmailMessage[],
+  byAlias: Map<string, { canonical: string }> | null
+): string | null {
+  const name = (addr: string) =>
+    person(addr)
+      .replace(/\s*\([^()]*@[^()]*\)\s*/g, " ")
+      .trim() || null;
+  for (const m of msgs) {
+    const from = header(m, "From");
+    if (from && !fromTeam(from, byAlias)) return name(from);
+  }
+  for (const m of msgs) {
+    // Split on commas outside quotes: "Doe, Jane" <j@x.com> is one addressee.
+    for (const to of header(m, "To").match(/("[^"]*"|[^,])+/g) ?? []) {
+      if (to.trim() && !fromTeam(to, byAlias)) return name(to);
+    }
+  }
+  return null;
+}
+
+/**
  * ATTACHMENTS ARE CONTENT, and until 2026-09-19 none of them were read.
  *
  * The walk indexed every message BODY and nothing hanging off it, so a proposal
@@ -643,6 +705,12 @@ const ATTACHMENT_MIMES = new Set([
 ]);
 /** Past this a file is data, not prose, and the reader is the wrong tool for it. */
 export const MAX_ATTACHMENT_BYTES = 4_000_000;
+/**
+ * Gmail's own attachment limit, for the hiring inbox: there a large file is a portfolio
+ * or a CV inside one ("CV i portfolio.pdf", 5.3 MB). Measured 2026-10-13: the largest,
+ * 18 MB and 24 pages, downloaded in 5.6 s from a laptop and parsed in 0.15 s.
+ */
+export const MAX_HIRING_ATTACHMENT_BYTES = 25_000_000;
 export const MAX_ATTACHMENTS_PER_THREAD = 5;
 /** One attachment must not be able to outweigh the conversation that carried it. */
 export const MAX_ATTACHMENT_CHARS = 20_000;
@@ -665,20 +733,28 @@ export interface AttachmentRef {
   size: number;
 }
 
-/** Every readable attachment in a thread. Pure, so the choosing is testable offline. */
-export function attachmentRefs(thread: GmailThread): AttachmentRef[] {
+/**
+ * Every readable attachment in a thread. Pure, so the choosing is testable offline.
+ *
+ * Each file once: a reply or a forward carries the same CV again, and measured 2026-10-13
+ * most application threads in the hiring inbox held every file two or three times, each
+ * copy taking a place under the cap that a candidate's later task submission needed.
+ */
+export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentRef[] {
   const out: AttachmentRef[] = [];
+  const taken = new Set<string>();
   const walk = (messageId: string, part?: GmailPart): void => {
     if (!part || out.length >= MAX_ATTACHMENTS_PER_THREAD) return;
     const filename = (part.filename ?? "").trim();
     const attachmentId = part.body?.attachmentId;
     const mimeType = (part.mimeType ?? "").split(";")[0]!.trim();
     const size = part.body?.size ?? 0;
+    const key = `${filename}\n${size}`;
     if (
       filename &&
       attachmentId &&
       ATTACHMENT_MIMES.has(mimeType) &&
-      size <= MAX_ATTACHMENT_BYTES &&
+      size <= (hiring ? MAX_HIRING_ATTACHMENT_BYTES : MAX_ATTACHMENT_BYTES) &&
       // The same rule the Drive walk applies, because the same contract arrives both
       // ways. Excluding it from Drive alone left 58 chunks of the freelance contract
       // and the shareholders agreement readable through the mailbox, attached to
@@ -686,8 +762,10 @@ export function attachmentRefs(thread: GmailThread): AttachmentRef[] {
       // that Mark sent Eman a contract on 2026-09-09 is a real thing to remember; the
       // instrument itself does not come with it.
       !isLegalInstrument(filename) &&
-      !isJobApplication(filename)
+      (hiring || !isJobApplication(filename)) &&
+      !taken.has(key)
     ) {
+      taken.add(key);
       out.push({ messageId, attachmentId, filename, mimeType, size });
     }
     for (const p of part.parts ?? []) walk(messageId, p);
@@ -739,25 +817,76 @@ async function attachmentText(token: string, mailbox: string, ref: AttachmentRef
   }
 }
 
-/** Reads every readable attachment of a thread, newest-first budget permitting. */
+/**
+ * Files in a hiring thread that give the brain no text, named so that an answer says "open
+ * the email" rather than "there is no CV": measured 2026-10-13, one applicant sent their CV
+ * as phone photos. Attachments only; an inline part is a signature logo or a picture in
+ * the message, not something the applicant sent. A contract stays unnamed, as it stays
+ * unread.
+ */
+export function unreadAttachmentNames(thread: GmailThread, read: AttachmentRef[]): string[] {
+  const picked = new Set(read.map((r) => `${r.filename}\n${r.size}`));
+  const out = new Set<string>();
+  const walk = (part?: GmailPart): void => {
+    if (!part) return;
+    const filename = (part.filename ?? "").trim();
+    const disposition =
+      (part.headers ?? []).find((h) => h.name?.toLowerCase() === "content-disposition")?.value ??
+      "";
+    if (
+      filename &&
+      part.body?.attachmentId &&
+      !/^\s*inline\b/i.test(disposition) &&
+      !isLegalInstrument(filename) &&
+      !picked.has(`${filename}\n${part.body.size ?? 0}`)
+    ) {
+      out.add(filename);
+    }
+    for (const p of part.parts ?? []) walk(p);
+  };
+  for (const m of thread.messages ?? []) walk(m.payload);
+  return [...out];
+}
+
+/**
+ * Reads every readable attachment of a thread, newest-first budget permitting.
+ *
+ * NULL WHEN THE RUN'S TIME RAN OUT FIRST. The thread must then be left whole for the next
+ * run: stored now, it would keep only the files read so far, and its historyId would match
+ * from then on, so the rest would never be read.
+ */
 export async function threadAttachmentText(
   token: string,
   mailbox: string,
   thread: GmailThread,
   isOutOfTime: () => boolean = () => false
-): Promise<string> {
+): Promise<string | null> {
+  const hiring = isHiringMailbox(mailbox);
+  const refs = attachmentRefs(thread, hiring);
   const parts: string[] = [];
-  let budget = MAX_ATTACHMENT_CHARS_PER_THREAD;
-  for (const ref of attachmentRefs(thread)) {
-    if (isOutOfTime() || budget <= 0) break;
+  const unread = hiring ? unreadAttachmentNames(thread, refs) : [];
+  // The hiring inbox has no thread ceiling beyond the per-file one: a CV, a cover letter
+  // and a task submission are each the point, and its volume cannot drown the corpus.
+  let budget = hiring ? Infinity : MAX_ATTACHMENT_CHARS_PER_THREAD;
+  for (const ref of refs) {
+    if (budget <= 0) break;
+    if (isOutOfTime()) return null;
     const text = await attachmentText(token, mailbox, ref);
-    if (!text) continue;
+    if (!text) {
+      if (hiring) unread.push(ref.filename);
+      continue;
+    }
     const kept =
       text.length > budget
         ? `${text.slice(0, budget)}\n[truncated: the rest of this thread's attachments exceed what the brain indexes]`
         : text;
     budget -= text.length;
     parts.push(`## Attachment: ${ref.filename}\n${kept}`);
+  }
+  if (unread.length > 0) {
+    parts.push(
+      `Also attached, with no text the brain can read (open the email to see it): ${unread.join(", ")}`
+    );
   }
   return parts.join("\n\n");
 }
@@ -810,10 +939,14 @@ export function threadToRows(
     if (!text) continue;
     lines.push(`${from}${stamp ? ` (${stamp})` : ""}: ${text}`);
   }
-  if (lines.length === 0) return [];
+  const hiring = isHiringMailbox(mailbox);
+  // In the hiring inbox an application is often a CV with a line of text or none, so a
+  // thread whose attachments say something is not a stub there.
+  const carried = hiring && attachments.trim() !== "";
+  if (lines.length === 0 && !carried) return [];
   const joined = lines.join(" ").replace(/\s+/g, " ").trim();
-  if (lines.length === 1 && joined.length < MIN_STUB_CHARS) return [];
-  if (isRecruitingThread(subject, joined)) return [];
+  if (lines.length === 1 && joined.length < MIN_STUB_CHARS && !carried) return [];
+  if (hiring ? isPayTermsThread(subject, joined) : isRecruitingThread(subject, joined)) return [];
 
   const participants = [
     ...new Set(
@@ -821,12 +954,17 @@ export function threadToRows(
     ),
   ].slice(0, 8);
 
-  const title = trustpilotReviewTitle(subject, joined, day) ?? `Email: ${subject}`;
+  const applicant = hiring ? outsider(msgs, byAlias) : null;
+  const named =
+    applicant && !subject.toLowerCase().includes(applicant.toLowerCase()) ? ` (${applicant})` : "";
+  const title = trustpilotReviewTitle(subject, joined, day) ?? `Email: ${subject}${named}`;
   const base: BrainRow = {
     source: SOURCE,
     source_id: `thread:${thread.id}`,
     title,
-    url: `https://mail.google.com/mail/u/0/#all/${thread.id}`,
+    // The mailbox by address rather than `u/0`, which is whichever account the reader
+    // signed into first; the hiring inbox is a second account for everyone who reads it.
+    url: `https://mail.google.com/mail/u/${mailbox === "me" ? "0" : mailbox}/#all/${thread.id}`,
     body: [
       title,
       `Between: ${participants.join(", ")}`,
@@ -1111,7 +1249,7 @@ export async function ingestGmail(
       const listed = await gmailGet(
         token,
         mailbox,
-        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + standingExclusionsQuery() + excludeSubjects())}` +
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + standingExclusionsQuery(isHiringMailbox(mailbox)) + excludeSubjects())}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {
@@ -1155,6 +1293,10 @@ export async function ingestGmail(
         }
         fetched += 1;
         const attached = await threadAttachmentText(token, mailbox, full, isOutOfTime);
+        if (attached === null) {
+          stop(`time-budget@${mailbox}:p${page}:attachments`);
+          break;
+        }
         if (attached) attachmentsRead += 1;
         const built = threadToRows(full, mailbox, stampedAt, people, attached);
         if (built.length === 0) {
