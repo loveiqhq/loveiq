@@ -144,7 +144,8 @@ describe("experiments: the registry, read", () => {
     ];
     const load = vi.fn(async () => outcomes(arms));
     const text = await listExperiments(NOW, load);
-    expect(load).toHaveBeenCalledWith("2026-09-20T00:00:00Z");
+    // From its first day's Berlin midnight, as /admin cuts (CEST: 22:00 UTC the day before).
+    expect(load).toHaveBeenCalledWith("2026-09-19T22:00:00.000Z");
     expect(text).toContain(
       "- #3 Guarantee badge on the paywall (active, Landing page design, 2026-09-20 onwards). " +
         "Hypothesis: A money-back badge makes more report openers pay. Decided by: share of report openers who pay. Expected: +1 point"

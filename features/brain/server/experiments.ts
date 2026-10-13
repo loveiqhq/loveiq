@@ -15,6 +15,7 @@ import {
   CONCLUDED,
   LIVE_AXES,
   armReader,
+  liveArmReader,
   liveReadouts,
   loadArmOutcomes,
   tallyAxis,
@@ -24,7 +25,7 @@ import {
 } from "@features/admin/server/experiment-readouts";
 import { MIN_CELL_COUNT } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { reportingDay } from "@shared/time/reporting-day";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
 import { loadPeople } from "@features/brain/server/people";
 
@@ -206,7 +207,11 @@ async function liveLine(
   if (!e.axis) {
     return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was entered in /admin.";
   }
-  const outcomes = await load(`${e.start_date ?? isoDay(now - 30 * DAY_MS)}T00:00:00Z`);
+  // From the start of its first day in Berlin, as the registry and /admin read a day: the
+  // landing test's restart (LANDING_TEST_START_AT) is 22:00 UTC the evening before.
+  const outcomes = await load(
+    reportingDayStart(e.start_date ?? isoDay(now - 30 * DAY_MS)).toISOString()
+  );
   const read = armReader(e.axis, outcomes);
   if (!read) {
     return `  Nothing stamps an arm for ${AXIS_TITLES[e.axis]} any more, so there is nothing live to read.`;
@@ -233,7 +238,8 @@ export async function listExperiments(
   if (unregistered.length) {
     const outcomes = await load(`${isoDay(now - 30 * DAY_MS)}T00:00:00Z`);
     for (const r of liveReadouts(outcomes).filter((x) => !covered.has(x.axis))) {
-      const read = armReader(r.axis, outcomes);
+      // The cut liveReadouts tallied with, so the pace counts the same readers.
+      const read = liveArmReader(r.axis, outcomes);
       const needed = read ? sampleLine(r, firstCounted(outcomes, read, r), now) : "";
       out.push(
         `- ${r.title}: being randomised with no hypothesis on record; register it with ` +

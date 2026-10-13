@@ -422,8 +422,9 @@ export const LIVE_AXES: ExperimentAxis[] = ["pricing", "landing"];
  * attributable, as it does pricing's re-priced readers. Here rather than in `armReader`
  * because the brain's experiments tool reads a registered test from the registry's own
  * start date (registry #6 moves to the restart day), and `armReader` is that read too.
+ * Exported for the brain's unregistered-test line, which pairs with liveReadouts.
  */
-function liveArmReader(
+export function liveArmReader(
   axis: ExperimentAxis,
   outcomes: ArmOutcomes
 ): ((id: number, tracker: string | null) => string | null) | null {
