@@ -113,8 +113,8 @@ const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, classN
   const answer = (value: number) => {
     saveLandingPrefill(LANDING_PREFILL_QID, value);
     pickListeners.forEach((listener) => listener());
-    // Where and whether it changed a pick, never the value (trackLandingCardAnswer).
-    trackLandingCardAnswer({ location, changed: selected !== null });
+    // The value goes to PostHog only (trackLandingCardAnswer).
+    trackLandingCardAnswer({ location, changed: selected !== null, value });
   };
 
   return (

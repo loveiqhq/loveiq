@@ -411,7 +411,12 @@ export const setEmailQuestionArm = (arm: EmailQuestionArm) => {
   }
 };
 
-export const track = (name: string, params?: Record<string, unknown>) => {
+export const track = (
+  name: string,
+  params?: Record<string, unknown>,
+  /** Sent to PostHog only, never to GA4 or the dataLayer (an answer, say). */
+  postHogOnly?: Record<string, unknown>
+) => {
   if (typeof window === "undefined") return;
   // PostHog gets every event, and deliberately BEFORE the two GA4 gates below.
   // PostHog is not consent-gated on this site (same owner decision as Microsoft
@@ -424,12 +429,13 @@ export const track = (name: string, params?: Record<string, unknown>) => {
   // A persona walk listens on the same call, so the behaviour signals it checks are
   // measured from exactly what PostHog is sent (features/ux-signals). Guarded: a listener
   // must never be able to stop the event reaching PostHog.
+  const toPostHog = postHogOnly ? { ...params, ...postHogOnly } : params;
   try {
-    window.__loveiqEventTap?.(name, params ?? {});
+    window.__loveiqEventTap?.(name, toPostHog ?? {});
   } catch {
     // The walk loses one event; the visitor loses nothing.
   }
-  posthog.capture(name, params);
+  posthog.capture(name, toPostHog);
 
   /**
    * Production gate is BUILD-TIME, not the `__loveiqAnalyticsEnabled` window flag
@@ -1299,13 +1305,19 @@ export const trackCtaSeen = (params: { cta: CtaSeen }) => track("cta_seen", para
 /**
  * A tap on question 1's scale on a landing card (hero or closing), including a change of
  * mind. Without it a visitor who answers on the card and leaves is invisible: the answer is
- * only saved to the browser until the survey starts. NEVER the answer itself: question 1
- * rates the reader's sex life, special-category data. PostHog's autocapture still records
- * the tapped button and its "N of 7" label, by owner decision (DPIA §6, 2026-10-13).
- * `changed`: a pick was already there (an earlier tap, or a saved draft).
+ * only saved to the browser until the survey starts. `value` is the point picked (1-7), sent
+ * to PostHog only, by owner decision (DPIA §6, 2026-10-13): question 1 rates the reader's sex
+ * life, special-category data, which GA4 is not given. `changed`: a pick was already there
+ * (an earlier tap, or a saved draft).
  */
-export const trackLandingCardAnswer = (params: { location: "hero" | "footer"; changed: boolean }) =>
-  track("landing_card_answer", params);
+export const trackLandingCardAnswer = ({
+  value,
+  ...params
+}: {
+  location: "hero" | "footer";
+  changed: boolean;
+  value: number;
+}) => track("landing_card_answer", params, { value });
 
 /** The live landing's sections, top to bottom (`data-landing-section` on each root). */
 export type LandingSection =

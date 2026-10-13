@@ -69,17 +69,15 @@ const placeSections = (scrolledPast: string[] = []) =>
   });
 
 describe("question 1's landing card", () => {
-  it("counts every tap on the scale by where and whether it changed a pick, never the answer", async () => {
+  it("counts every tap on the scale with the point picked, for PostHog", async () => {
     const { default: WQuestionCard } = await import("@features/landing/ui/white/WQuestionCard");
     render(<WQuestionCard location="hero" />);
     fireEvent.click(screen.getByRole("button", { name: /^6 of 7/ }));
     fireEvent.click(screen.getByRole("button", { name: /^2 of 7/ }));
     expect(events("landing_card_answer")).toEqual([
-      ["landing_card_answer", { location: "hero", changed: false }],
-      ["landing_card_answer", { location: "hero", changed: true }],
+      ["landing_card_answer", { location: "hero", changed: false, value: 6 }],
+      ["landing_card_answer", { location: "hero", changed: true, value: 2 }],
     ]);
-    // Question 1 rates the reader's sex life: the picked value goes to no analytics tool.
-    expect(JSON.stringify(ph.capture.mock.calls)).not.toMatch(/"value"|:\s*[26]\b/);
   });
 
   it("tells its Continue apart from the button beside it", async () => {

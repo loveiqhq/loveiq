@@ -1813,7 +1813,7 @@ export const TOOLS = [
       "than 'not seen'. The video: hero_video_play (a play with sound, counted when frames " +
       "start), hero_video_progress (properties.percent 25, 50, 75) and hero_video_complete. " +
       "Added 2026-10-13: landing_card_answer (a tap on question 1's card, properties.location " +
-      "'hero' or 'footer', never the answer), cta_click with properties.element " +
+      "'hero' or 'footer', properties.value the point picked, 1 to 7), cta_click with properties.element " +
       "'question_card' (that card's Continue; without it, the button beside it), " +
       "section_seen (properties.section, once per section per page: how far down a visitor " +
       "got) and cta_seen 'sticky_bar'. " +
