@@ -2225,15 +2225,27 @@ export async function hogqlTable(query: string, cap: number): Promise<HogqlTable
   }
   // What a tap was on is not read either. Until 2026-10-13 autocapture kept each tapped
   // element's text and attributes, and on /survey those were the answers ("6 of 7" beside the
-  // question, the option picked): Article-9 data that query_product_data would mask. Raw text,
-  // like the names rule, so a quoted properties['$el_text'] is caught too.
-  if (/elements_chain|\$el_text|\$elements\b|attr__/i.test(query)) {
+  // question, the option picked): Article-9 data that query_product_data would mask. Named
+  // fields in the raw text (a quoted properties['$el_text'] too) and escaped key names; then,
+  // in the code, everything that would carry them without naming them: the whole row, the
+  // whole properties map, and a key built at query time. A guard against reading it by
+  // accident, not a boundary: deleting those events is what removes them.
+  const code = hogqlCodeOnly(query);
+  if (
+    /elements_chain|\$el_text|\$elements\b|attr__|\\[xu]/i.test(query) ||
+    // A star straight from a table; SELECT * FROM (<subquery>) names its columns inside.
+    /(select\s+(distinct\s+)?|,\s*)\*\s*(,[^()]*)?\bfrom\s+(?!\()|\w\.\*/i.test(code) ||
+    // hogqlCodeOnly turns a quoted key into ~~~, so a literal key reads properties[~~~].
+    /\bproperties\b(?!\s*(\.|\[\s*~*\s*\]))/i.test(code)
+  ) {
     return {
       ok: false,
       error:
-        "What a tap was on (elements_chain, $el_text, $elements, attr__*) is not read here: " +
-        "before 2026-10-13 it held survey answers. Count the taps, or use the site's own " +
-        "events, which name what was tapped (cta_click, landing_card_answer, survey_answer).",
+        "What a tap was on (elements_chain, $el_text, $elements, attr__*) is not read here, " +
+        "nor the whole row or properties map that carries it: before 2026-10-13 it held " +
+        "survey answers. Name the properties you need (properties.$pathname, " +
+        "properties['$current_url']), and count taps or use the site's own events, which " +
+        "name what was tapped (cta_click, landing_card_answer, survey_answer).",
     };
   }
   if (setOperation) {

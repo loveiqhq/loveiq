@@ -5373,6 +5373,21 @@ async function callTool(
           `filters (the host, the dates, the event name) before concluding nobody did it.`
       );
     }
+    // Whatever the query looked like: a cell shaped like an element chain is what a tap was
+    // on, which held survey answers before 2026-10-13 (hogqlTable refuses the ways to ask).
+    if (
+      r.rows.some((row) =>
+        row.some(
+          (v) => typeof v === "string" && /nth-child="|nth-of-type="|attr__|\$el_text/.test(v)
+        )
+      )
+    ) {
+      return textResult(
+        "The result holds what taps were on (an element chain), which is not read here: " +
+          "before 2026-10-13 it held survey answers. Count the taps instead.",
+        true
+      );
+    }
     const masked = maskAnalyticsRows(r.columns, r.rows);
     const notes: string[] = [];
     if (r.cut === "cap") {

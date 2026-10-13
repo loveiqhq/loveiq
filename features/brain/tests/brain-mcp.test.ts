@@ -8454,12 +8454,50 @@ describe("query_product_analytics — counting what visitors did, from PostHog",
     ["the tapped text, quoted", "SELECT properties['$el_text'] AS t FROM events"],
     ["the element list", "SELECT properties.$elements FROM events"],
     ["an element attribute", "SELECT count() FROM events WHERE properties.attr__aria_label != ''"],
+    ["the whole row", "SELECT * FROM events WHERE event = '$autocapture' LIMIT 5"],
+    ["the whole row, beside a count", "SELECT count(), * FROM events LIMIT 5"],
+    ["the whole row, by alias", "SELECT e.* FROM events e LIMIT 5"],
+    ["the whole properties map", "SELECT toString(properties) FROM events LIMIT 5"],
+    ["a key read through JSON", "SELECT JSONExtractString(properties, 'x') FROM events"],
+    ["a key built at query time", "SELECT properties[concat('$el', '_text')] FROM events"],
+    ["an escaped key", "SELECT properties['\\x24el_text'] FROM events"],
   ])("refuses to read what a tap was on (it held survey answers), %s", async (_how, query) => {
     const r = await call({ query });
     expect(r.isError).toBe(true);
-    expect(r.content[0]!.text).toContain(
-      "is not read here: before 2026-10-13 it held survey answers"
+    expect(r.content[0]!.text).toContain("is not read here");
+    expect(r.content[0]!.text).toContain("before 2026-10-13 it held survey answers");
+    expect(sent()).toEqual([]);
+  });
+
+  it.each([
+    ["a count", "SELECT count(*) FROM events WHERE properties.$pathname = '/survey'"],
+    ["a quoted key", "SELECT properties['$current_url'] AS u, count() FROM events GROUP BY u"],
+    [
+      "a person property",
+      "SELECT count(DISTINCT person_id) FROM events WHERE person.properties.email LIKE '%x'",
+    ],
+    [
+      "the UNION wrapping this tool asks for",
+      "SELECT * FROM (SELECT 1 AS n UNION ALL SELECT 2 AS n) LIMIT 5",
+    ],
+  ])("still runs %s", async (_how, query) => {
+    mockFetch.mockResolvedValueOnce(answer({ columns: ["n"], results: [[3]] }));
+    const r = await call({ query });
+    expect(r.content[0]!.text).not.toContain("is not read here");
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("refuses a result shaped like an element chain, however the query asked", async () => {
+    mockFetch.mockResolvedValueOnce(
+      answer({
+        columns: ["x"],
+        results: [['button:attr__aria-label="6 of 7 — in between"nth-child="6"nth-of-type="6"']],
+      })
     );
+    const r = await call({ query: "SELECT anything FROM events LIMIT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("holds what taps were on");
+    expect(r.content[0]!.text).not.toContain("6 of 7");
   });
 
   it("still counts the taps themselves", async () => {
