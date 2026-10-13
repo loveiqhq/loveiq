@@ -35,10 +35,14 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   }),
 }));
 
-/** A PDF whose parse never ends: what a hostile or broken file looks like to the reader. */
+/**
+ * A PDF whose parse never ends: what a hostile or broken file looks like to the reader. The
+ * document opens, and reading its text never finishes until the document is destroyed.
+ */
+const destroyed = vi.fn(async () => undefined);
 vi.mock("unpdf", () => ({
-  getDocumentProxy: () => new Promise(() => {}),
-  extractText: vi.fn(),
+  getDocumentProxy: async () => ({ loadingTask: { destroy: destroyed } }),
+  extractText: () => new Promise(() => {}),
 }));
 
 import {
@@ -277,22 +281,51 @@ describe("the hiring inbox's attachments", () => {
     expect(elsewhere).not.toContain("open the email");
   });
 
-  it("gives up on a file whose parse never ends, and names it", async () => {
+  /**
+   * A FILE THAT WILL NOT FINISH ENDS ITS THREAD'S READING, and its parse is stopped rather
+   * than left running beside the walk: a stranger's ten such files cost one limit, not ten.
+   */
+  it("gives up on a file whose parse never ends, stops it, and reads no further", async () => {
     vi.useFakeTimers();
     try {
       size.chars = 50;
-      const hostile = withFiles(1, [
-        {
-          mimeType: "application/pdf",
-          filename: "CV.pdf",
-          body: { attachmentId: "pdf", size: 9_000 },
-        },
-      ]);
+      destroyed.mockClear();
+      const pdfPart = (name: string, id: string) => ({
+        mimeType: "application/pdf",
+        filename: name,
+        body: { attachmentId: id, size: 9_000 },
+      });
+      const hostile = {
+        id: "t1",
+        messages: [
+          {
+            id: "m1",
+            payload: {
+              parts: [
+                {
+                  mimeType: "text/plain",
+                  filename: "first.txt",
+                  body: { attachmentId: "f", size: 10 },
+                },
+                pdfPart("CV.pdf", "pdf1"),
+                pdfPart("Task.pdf", "pdf2"),
+                {
+                  mimeType: "text/plain",
+                  filename: "last.txt",
+                  body: { attachmentId: "l", size: 10 },
+                },
+              ],
+            },
+          },
+        ],
+      };
       const pending = threadAttachmentText("tok", "hr@loveiq.org", hostile as never);
       await vi.advanceTimersByTimeAsync(PARSE_TIMEOUT_MS + 1);
       const got = await pending;
-      expect(got!.text).toContain("## Attachment: file0.txt");
-      expect(got!.text).toContain("open the email to see it): CV.pdf");
+      expect(got!.text).toContain("## Attachment: first.txt");
+      expect(got!.text).not.toContain("## Attachment: last.txt");
+      expect(got!.text).toContain("open the email to see it): CV.pdf, Task.pdf, last.txt");
+      expect(destroyed).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }

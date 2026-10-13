@@ -1016,6 +1016,33 @@ describe("the hiring inbox", () => {
     );
   });
 
+  /**
+   * A stranger decides what arrives here. A PDF may be as large as Gmail allows, but a Word
+   * file is a zip that can expand to gigabytes, so it keeps the 4 MB limit; and one thread's
+   * files stop at 60 MB together, the rest named for the reader.
+   */
+  it("bounds what one thread may cost: Word files at 4 MB, 60 MB of files together", () => {
+    const docx = (name: string, size: number, id = name) => ({
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      filename: name,
+      body: { attachmentId: id, size },
+    });
+    const t = app(
+      msg(APPLICANT, LETTER, {
+        parts: [
+          docx("Letter.docx", MAX_ATTACHMENT_BYTES + 1),
+          pdf("Portfolio 1.pdf", 24_000_000),
+          pdf("Portfolio 2.pdf", 24_000_000),
+          pdf("Portfolio 3.pdf", 24_000_000),
+          pdf("CV.pdf", 200_000),
+        ],
+      })
+    );
+    const read = attachmentRefs(t as never, true);
+    expect(read.map((r) => r.filename)).toEqual(["Portfolio 1.pdf", "Portfolio 2.pdf", "CV.pdf"]);
+    expect(unreadAttachmentNames(t as never, read)).toEqual(["Letter.docx", "Portfolio 3.pdf"]);
+  });
+
   it("reads a CV and a file too large elsewhere; a contract and an oversized file stay out", () => {
     const parts = [
       pdf("Jane_Doe_CV.pdf"),

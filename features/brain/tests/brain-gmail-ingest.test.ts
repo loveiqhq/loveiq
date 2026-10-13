@@ -94,8 +94,9 @@ let stubThreadIds: string[] = [];
 let recruitingBodyIds: string[] = [];
 /** RAW gmail thread ids whose FETCH carries two readable text attachments. */
 let attachmentThreadIds: string[] = [];
-/** How many attachments those threads carry, and the size each declares, in bytes. */
+/** How many attachments those threads carry, their type, and the size each declares. */
 let attachmentFiles = 2;
+let attachmentMime = "text/plain";
 let attachmentBytes = 10;
 /** Every attachment download answers 503, as a download that failed. */
 let attachmentsFail = false;
@@ -157,7 +158,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
                       },
                       ...Array.from({ length: attachmentFiles }, (_, i) => `notes${i + 1}.txt`).map(
                         (filename, i) => ({
-                          mimeType: "text/plain",
+                          mimeType: attachmentMime,
                           filename,
                           body: { attachmentId: `att${i}`, size: attachmentBytes },
                         })
@@ -211,6 +212,7 @@ beforeEach(() => {
   recruitingBodyIds = [];
   attachmentThreadIds = [];
   attachmentFiles = 2;
+  attachmentMime = "text/plain";
   attachmentBytes = 10;
   attachmentsFail = false;
   upserted.length = 0;
@@ -887,24 +889,17 @@ describe("the hiring inbox is walked, with its applications", () => {
     expect(firstListing("me@loveiq.org")).toBeLessThan(firstListing("hr@loveiq.org"));
   });
 
-  it("downloads at most a run's share of the hiring inbox's files, and at least one thread", async () => {
+  it("downloads at most a run's share of the hiring inbox's files", async () => {
     process.env.GMAIL_MAILBOXES = "hr@loveiq.org";
     listedThreads = ["h1", "h2", "h3", "h4", "h5"].map(listed);
     attachmentThreadIds = ["h1", "h2", "h3", "h4", "h5"];
-    // Two files of 20 MB a thread: three threads fit in the 150 MB, the fourth does not.
+    // Two PDFs of 20 MB a thread: three threads fit in the 150 MB, the fourth does not.
+    attachmentMime = "application/pdf";
     attachmentBytes = 20_000_000;
     const r = await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
     expect(upserted.map((u) => u.source_id)).toEqual(["thread:h1", "thread:h2", "thread:h3"]);
     expect(r.detail).toMatch(/stopped=hiring-byte-budget@hr@loveiq\.org:p0/);
     expect(r.complete).toBe(false);
-    // And a single thread past the budget on its own is still read, or it would never be.
-    upserted.length = 0;
-    listedThreads = [listed("big")];
-    attachmentThreadIds = ["big"];
-    attachmentFiles = 7;
-    attachmentBytes = 25_000_000;
-    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
-    expect(upserted.map((u) => u.source_id)).toEqual(["thread:big"]);
   });
 
   it("stores the mailbox in lower case, so the readers that leave hr@ out still match", async () => {

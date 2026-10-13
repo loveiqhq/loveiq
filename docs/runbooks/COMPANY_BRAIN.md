@@ -95,15 +95,17 @@ third again of the whole corpus and would drown every other source.
 
 The hiring inbox (`hr@`) is the exception, since 2026-10-13: there an application's
 CV, cover letter and task submission are each the point. Up to ten files a thread are
-read, each up to Gmail's own 25 MB limit and 20,000 characters, and every file not read
-(a CV sent as phone photos, a scanned PDF, a file past the limits) is named in the
-thread with "open the email to see it", so an answer never reads as "there is no CV".
-Anyone can write to that inbox, so it still has bounds: 100,000 characters of files a
-thread, 150 MB of downloads a run (the rest waits for the next run), 20 seconds to parse
-a file, and it is walked last, so a flood there never delays colleagues' mail. In every
-mailbox, as each thread is next read, a file attached again in a reply is read once, and
-a file whose download failed is tried again on the next run instead of being stored as
-having no text.
+read, a PDF up to Gmail's own 25 MB limit (a Word file is a zip a stranger can make
+expand to gigabytes, so it keeps 4 MB), and every file not read (a CV sent as phone
+photos, a scanned PDF, a file past the limits) is named in the thread with "open the
+email to see it", so an answer never reads as "there is no CV". Anyone can write to
+that inbox, so it still has bounds: 60 MB and 100,000 characters of files a thread,
+150 MB of downloads a run (the rest waits for the next run), and it is walked last, so
+a flood there never delays colleagues' mail. Any file in any mailbox gets 20 seconds to
+parse; a PDF past that is stopped, and in `hr@` the rest of its thread is left unread
+and named. In every mailbox, as each thread is next read, a file attached again in a
+reply is read once, and a file whose download failed is tried again on the next run
+instead of being stored as having no text.
 
 A part of a document that contains a credential is refused and replaced with a
 short note saying so, rather than vanishing — the surrounding parts still say

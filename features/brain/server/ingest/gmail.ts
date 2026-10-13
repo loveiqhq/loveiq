@@ -780,11 +780,15 @@ const ATTACHMENT_MIMES = new Set([
 /** Past this a file is data, not prose, and the reader is the wrong tool for it. */
 export const MAX_ATTACHMENT_BYTES = 4_000_000;
 /**
- * Gmail's own attachment limit, for the hiring inbox: there a large file is a portfolio
- * or a CV inside one ("CV i portfolio.pdf", 5.3 MB). Measured 2026-10-13: the largest,
- * 18 MB and 24 pages, downloaded in 5.6 s from a laptop and parsed in 0.15 s.
+ * Gmail's own attachment limit, for a PDF in the hiring inbox: there a large file is a
+ * portfolio or a CV inside one ("CV i portfolio.pdf", 5.3 MB). Measured 2026-10-13: the
+ * largest, 18 MB and 24 pages, downloaded in 5.6 s from a laptop and parsed in 0.15 s.
+ * PDFs only: a Word file is a zip, which a stranger can make expand to gigabytes in
+ * memory, and a CV in Word is never large, so it keeps the 4 MB limit everywhere.
  */
 export const MAX_HIRING_ATTACHMENT_BYTES = 25_000_000;
+/** And all of one hiring thread's files together: the run budget below still moves a thread. */
+export const MAX_HIRING_THREAD_BYTES = 60_000_000;
 export const MAX_ATTACHMENTS_PER_THREAD = 5;
 /** An application is a CV, a letter, a task and a portfolio, sometimes in two versions. */
 export const MAX_HIRING_ATTACHMENTS_PER_THREAD = 10;
@@ -848,6 +852,7 @@ export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentR
   const out: AttachmentRef[] = [];
   const taken = new Set<string>();
   const cap = hiring ? MAX_HIRING_ATTACHMENTS_PER_THREAD : MAX_ATTACHMENTS_PER_THREAD;
+  let bytes = 0;
   const walk = (messageId: string, part?: GmailPart): void => {
     if (!part || out.length >= cap) return;
     const filename = (part.filename ?? "").trim();
@@ -855,11 +860,13 @@ export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentR
     const mimeType = (part.mimeType ?? "").split(";")[0]!.trim();
     const size = part.body?.size ?? 0;
     const key = `${filename}\n${size}`;
+    const largePdf = hiring && mimeType === "application/pdf";
     if (
       filename &&
       attachmentId &&
       ATTACHMENT_MIMES.has(mimeType) &&
-      size <= (hiring ? MAX_HIRING_ATTACHMENT_BYTES : MAX_ATTACHMENT_BYTES) &&
+      size <= (largePdf ? MAX_HIRING_ATTACHMENT_BYTES : MAX_ATTACHMENT_BYTES) &&
+      (!hiring || bytes + size <= MAX_HIRING_THREAD_BYTES) &&
       // The same rule the Drive walk applies, because the same contract arrives both
       // ways. Excluding it from Drive alone left 58 chunks of the freelance contract
       // and the shareholders agreement readable through the mailbox, attached to
@@ -870,6 +877,7 @@ export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentR
       !taken.has(key)
     ) {
       taken.add(key);
+      bytes += size;
       out.push({ messageId, attachmentId, filename, mimeType, size });
     }
     for (const p of part.parts ?? []) walk(messageId, p);
@@ -882,47 +890,64 @@ export function attachmentRefs(thread: GmailThread, hiring = false): AttachmentR
   return out;
 }
 
-/** The text in a file, by type. */
-async function extract(mimeType: string, buf: Buffer): Promise<string> {
-  if (mimeType === "application/pdf") {
-    const { extractText, getDocumentProxy } = await import("unpdf");
-    const doc = await getDocumentProxy(new Uint8Array(buf));
-    const out = await extractText(doc, { mergePages: true });
-    return Array.isArray(out.text) ? out.text.join("\n") : out.text;
-  }
-  if (mimeType.endsWith("wordprocessingml.document")) {
-    const mammoth = await import("mammoth");
-    return (await mammoth.extractRawText({ buffer: buf })).value;
-  }
-  return buf.toString("utf8");
-}
+/** Not a file without text: a parse that ran out of time, which ends the thread's reading. */
+export class ParseTimeout extends Error {}
 
 /**
- * Rejects once `ms` pass, so one hostile or broken file cannot hold the whole walk. The
- * parse itself is not stopped, and one that never yields would block the timer too; only a
- * worker could stop that. ponytail: add one if a file ever does.
+ * The text in a file, by type, within `ms`. Past it the PDF is destroyed, which ends its
+ * parse at the next step instead of leaving it running beside the rest of the walk. A Word
+ * file cannot be stopped that way, which is one reason it never gets the large limit.
  */
+async function extract(mimeType: string, buf: Buffer, ms: number): Promise<string> {
+  let doc: { destroy: () => Promise<void> } | undefined;
+  const work = (async () => {
+    if (mimeType === "application/pdf") {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      const proxy = await getDocumentProxy(new Uint8Array(buf));
+      doc = proxy.loadingTask;
+      const out = await extractText(proxy, { mergePages: true });
+      return Array.isArray(out.text) ? out.text.join("\n") : out.text;
+    }
+    if (mimeType.endsWith("wordprocessingml.document")) {
+      const mammoth = await import("mammoth");
+      return (await mammoth.extractRawText({ buffer: buf })).value;
+    }
+    return buf.toString("utf8");
+  })();
+  try {
+    return await withTimeout(work, ms);
+  } catch (err) {
+    if (!(err instanceof ParseTimeout)) throw err;
+    // The parse's own rejection when the destroy lands is already handled: the race
+    // subscribed to it.
+    void doc?.destroy().catch(() => undefined);
+    throw err;
+  }
+}
+
+/** Rejects with ParseTimeout once `ms` pass, so one hostile or broken file cannot hold the walk. */
 export function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`no answer in ${ms} ms`)), ms);
+    timer = setTimeout(() => reject(new ParseTimeout(`no answer in ${ms} ms`)), ms);
   });
   return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
 
 /**
  * Text out of one attachment; "" for a file with no text, NULL when it could not be
- * downloaded this run. Never throws.
+ * downloaded this run, PARSE_TIMED_OUT when it took too long to read. Never throws.
  *
  * The two used to be one answer, and a failed download is not a fact about the file: the
  * thread was stored without it, its historyId matched from then on, and the file was never
  * tried again.
  */
+export const PARSE_TIMED_OUT = Symbol("parse timed out");
 async function attachmentText(
   token: string,
   mailbox: string,
   ref: AttachmentRef
-): Promise<string | null> {
+): Promise<string | null | typeof PARSE_TIMED_OUT> {
   let res: Record<string, unknown> | null;
   try {
     res = await gmailGet(
@@ -938,21 +963,19 @@ async function attachmentText(
   try {
     const data = typeof res.data === "string" ? res.data : "";
     if (!data) return "";
-    const buf = Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    // Straight from base64url: two rewritten copies of a 34 MB string were the waste.
+    const buf = Buffer.from(data, "base64url");
     if (buf.byteLength === 0) return "";
 
-    const text = await withTimeout(extract(ref.mimeType, buf), PARSE_TIMEOUT_MS);
+    const text = await extract(ref.mimeType, buf, PARSE_TIMEOUT_MS);
     const clean = text.replace(/\r\n/g, "\n").trim();
     return clean.length > MAX_ATTACHMENT_CHARS
       ? `${clean.slice(0, MAX_ATTACHMENT_CHARS)}\n[truncated: this attachment is longer than the brain indexes]`
       : clean;
   } catch (err) {
     // One unreadable attachment must not cost the thread, let alone the walk.
-    logger.warn(
-      { err, file: ref.filename, mime: ref.mimeType },
-      "brain-ingest gmail: attachment unreadable"
-    );
-    return "";
+    logger.warn({ err, mime: ref.mimeType }, "brain-ingest gmail: attachment unreadable");
+    return err instanceof ParseTimeout ? PARSE_TIMED_OUT : "";
   }
 }
 
@@ -1033,6 +1056,12 @@ export async function threadAttachmentText(
     }
     if (isOutOfTime()) return null;
     const text = await attachmentText(token, mailbox, ref);
+    if (text === PARSE_TIMED_OUT) {
+      // A file that would not finish is hostile or broken: its thread reads no further, so
+      // a stranger's ten of them cost one parse limit, not ten.
+      if (hiring) unread.push(...refs.slice(i).map((r) => r.filename));
+      break;
+    }
     if (text === null) retry = true;
     // A hire's contract or offer under a name that did not say so is not read. It is still
     // named: a generic name gives nothing away, and a CV wrongly caught stays visible.
@@ -1473,9 +1502,10 @@ export async function ingestGmail(
         }
         fetched += 1;
         if (hiring) {
+          // A thread's files stop at MAX_HIRING_THREAD_BYTES, well inside a run's budget, so
+          // the first thread of a run always fits and the walk always moves.
           const bytes = attachmentRefs(full, true).reduce((n, r) => n + r.size, 0);
-          // At least one thread a run, so one thread larger than the budget still moves.
-          if (hiringBytes > 0 && hiringBytes + bytes > HIRING_RUN_BYTES) {
+          if (hiringBytes + bytes > HIRING_RUN_BYTES) {
             stop(`hiring-byte-budget@${mailbox}:p${page}`);
             break;
           }
