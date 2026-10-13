@@ -76,20 +76,6 @@ if (!projectToken || !host) {
     ui_host: POSTHOG_UI_HOST,
     defaults: "2026-01-30",
     capture_exceptions: true,
-    /**
-     * Autocapture keeps every tap (its time, tag, CSS classes and position) but sends NO
-     * element text and NO element attributes, on every page. Measured 2026-10-13 on 7 days of
-     * /survey: 19,813 taps whose `$el_text` was the answer picked ("Woman", "In one exclusive
-     * relationship", ...) and 7,069 whose `aria-label` was the scale's "6 of 7" beside the
-     * question, tied to the person (whose distinct_id is their email once they submit).
-     * Sex-life answers are Article-9 data; as queryable event properties they outlive the
-     * 30-day replays and reached anyone with PostHog or Jarvis. What a tap MEANS is sent by
-     * name instead (features/analytics/client). Rage and dead clicks are masked the same way.
-     * Session replays are NOT changed by this: they read `session_recording` (owner decision,
-     * docs/compliance/DPIA.md §6).
-     */
-    mask_all_text: true,
-    mask_all_element_attributes: true,
     debug: process.env.NODE_ENV === "development",
     /**
      * Do not ship the surveys bundle. PostHog loads `surveys.js` (26 KiB, measured in
