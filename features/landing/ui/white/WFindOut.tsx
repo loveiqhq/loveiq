@@ -5,23 +5,22 @@ import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
 
 /**
- * "What you might find out" — free-vs-locked teaser (Figma node 8982:3208).
- * Three free headline findings, then a sample insight-map card next to the
- * locked depth the paid report adds.
+ * "What you might find out" — included-vs-locked teaser (Figma node 8982:3208).
+ * Three headline findings every result includes, then a sample insight-map card next
+ * to the locked depth the full report adds. The 12.10 copy (Figma Report-3.0
+ * 1604:8233) tags them "Included" rather than "FREE", drops the card's
+ * "YOUR INSIGHT MAP · AROUSAL" label and the fourth locked row, and rewrites the first.
  */
 
-const freeCards: { kicker: string; title: string }[] = [
+const includedCards: { kicker: string; title: string }[] = [
   { kicker: "DESIRE ACCELERATORS", title: "Your strongest turn-on, named" },
   { kicker: "DESIRE BRAKES", title: "What quietly kills the mood for you" },
   { kicker: "CORE PERSONALITY", title: "Your personality type, out of 14" },
 ];
 
 const lockedRows: ReactNode[] = [
-  <>
-    The{" "}
-    <strong className="font-bold text-[#161021]">conditions your desire needs to flourish</strong>,
-    and the ones that quietly kill it
-  </>,
+  // Mark's wording, drawn without a bold phrase (Figma Report-3.0 1604:8478).
+  "The conditions under which your desire flourishes and quietly dies.",
   <>
     The{" "}
     <strong className="font-bold text-[#161021]">patterns you keep landing in with partners</strong>
@@ -30,15 +29,11 @@ const lockedRows: ReactNode[] = [
   <>
     How to <strong className="font-bold text-[#161021]">reignite desire when it has faded</strong>
   </>,
-  <>
-    Your <strong className="font-bold text-[#161021]">Power Orientation and Arousal Style</strong>,
-    and the conditions each one needs met
-  </>,
 ];
 
-const FreeTag: FC<{ label?: string }> = ({ label = "FREE" }) => (
+const IncludedTag: FC = () => (
   <span className="shrink-0 rounded-full border border-[rgba(40,184,119,0.3)] bg-[rgba(40,184,119,0.1)] px-2.5 py-1 text-[10px] font-bold tracking-[0.8px] text-[#137a4b]">
-    {label}
+    Included
   </span>
 );
 
@@ -80,9 +75,9 @@ const WFindOut: FC = () => (
         </h2>
       </div>
 
-      {/* Three free findings */}
+      {/* Three included findings */}
       <ul className="m-0 mt-11 grid list-none gap-3.5 p-0 sm:grid-cols-3">
-        {freeCards.map((c, i) => (
+        {includedCards.map((c, i) => (
           <li
             key={c.kicker}
             className={`animate-on-scroll stagger-${i + 1} flex flex-col gap-2.5 rounded-2xl border border-[#e9e6ee] bg-white px-5 pb-[22px] pt-6 transition duration-300 hover:border-[#d6d0e3] motion-safe:hover:-translate-y-1`}
@@ -91,7 +86,7 @@ const WFindOut: FC = () => (
               <span className="flex-1 text-[11px] font-bold tracking-[1.1px] text-[#c2410c]">
                 {c.kicker}
               </span>
-              <FreeTag />
+              <IncludedTag />
             </div>
             <p className="font-serif text-[19px] font-medium leading-[25px] text-[#161021]">
               {c.title}
@@ -104,19 +99,13 @@ const WFindOut: FC = () => (
       <div className="mt-11 grid items-center gap-11 lg:grid-cols-2">
         <div className="animate-on-scroll flex flex-col gap-2.5 overflow-hidden rounded-3xl border border-[rgba(157,138,215,0.3)] bg-gradient-to-b from-[#faf7fe] to-white px-6 pt-7 shadow-[0_30px_60px_-40px_rgba(60,30,110,0.4)] sm:px-8">
           <div className="flex justify-end">
-            <FreeTag label="FREE IN YOUR RESULT" />
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#795fc8]" />
-            <span className="text-[11px] font-bold tracking-[1.1px] text-[#795fc8]">
-              YOUR INSIGHT MAP · AROUSAL
-            </span>
+            <IncludedTag />
           </div>
           <p className="font-serif text-[21px] font-medium leading-[28px] text-[#161021]">
             Your desire is responsive, not spontaneous
           </p>
           <p className="text-[13.5px] leading-[21px] text-[#5f6675]">
-            It doesn&apos;t switch on. It warms up, and the conditions are the ignition.
+            It doesn&apos;t always switch on. It warms up, and you can learn how.
           </p>
           {/* Arousal curve. `preserveAspectRatio="none"` lets the line stretch to
               the card width; the marker is an HTML dot so it stays circular. */}
@@ -186,11 +175,11 @@ const WFindOut: FC = () => (
           <div className="animate-on-scroll mt-[22px]">
             <Link
               href="/survey"
-              aria-label="Start the free test - what you might find out"
+              aria-label="Start the test - what you might find out"
               onClick={() => trackStartSurvey("find_out")}
               className="focus-visible-ring group inline-flex items-center gap-2.5 w-btn-gradient-border px-[22px] py-3.5 text-[15px] font-bold text-white motion-safe:hover:-translate-y-0.5"
             >
-              <span>Start the free test</span>
+              <span>Start the test</span>
               <span
                 aria-hidden
                 className="transition-transform duration-300 motion-safe:group-hover:translate-x-1"

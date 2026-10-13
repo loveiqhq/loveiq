@@ -10,7 +10,8 @@ vi.mock("node:fs", async (importOriginal) => {
   return {
     ...fs,
     writeFileSync: (...a: Parameters<typeof fs.writeFileSync>) => {
-      if (diskFull.on && /\/(image|video)\.\w+$/.test(String(a[0]))) {
+      // Either separator: on Windows the saved file's path is joined with backslashes.
+      if (diskFull.on && /[\\/](image|video)\.\w+$/.test(String(a[0]))) {
         throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
       }
       return fs.writeFileSync(...a);

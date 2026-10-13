@@ -2,10 +2,11 @@ import Image from "next/image";
 import type { FC, ReactNode } from "react";
 
 /**
- * White-variant "Field reports" social proof — a left-aligned 10,000+ stat with
- * a rating cluster, above a full-bleed auto-scrolling carousel of curated review
- * cards. Pixel-matched to Figma node 7828:9430 (light theme). Photos + copy are
- * the curated set in /public/testimonials (the dark landing's former testimonials).
+ * White-variant social proof — a left-aligned 10,000+ stat with a rating cluster,
+ * above a full-bleed auto-scrolling carousel of curated review cards. Pixel-matched
+ * to Figma node 7828:9430 (light theme); its "Field reports" eyebrow went with the
+ * 12.10 copy (Figma Report-3.0 1604:8233). Photos + copy are the curated set in
+ * /public/testimonials (the dark landing's former testimonials).
  * Trustpilot is intentionally NOT used here yet — see the Trustpilot kill switch
  * in shared/ui/trustpilot/config.ts (re-enable once enough reviews land).
  */
@@ -122,14 +123,8 @@ const WTestimonials: FC = () => {
     <section className="overflow-hidden bg-white py-16 lg:py-24">
       <div className="content-shell">
         <div className="animate-on-scroll mb-12 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-          {/* Left: eyebrow + 10,000+ stat + subtitle */}
+          {/* Left: 10,000+ stat + subtitle */}
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-              <span className="text-[11px] font-bold tracking-wide text-[#6b6678]">
-                Field reports
-              </span>
-            </div>
             <p className="bg-gradient-to-r from-[#fe6839] via-[#bf66d9] to-[#958ef6] bg-clip-text font-serif text-[64px] font-normal leading-none text-transparent md:text-[84px]">
               10,000+
             </p>

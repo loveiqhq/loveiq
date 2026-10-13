@@ -104,6 +104,7 @@ import {
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
 import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
+import { LANDING_TEST_START_DAY } from "@shared/experiments/landingVariant";
 
 /** Two arms, 30 days, shaped like the real RPC response. */
 function makeFunnel(overrides: Partial<{ visitorArms: Record<string, number> }> = {}) {
@@ -1135,10 +1136,15 @@ describe("conversion-digest handler", () => {
     );
     mockFetchMidwayProgress.mockResolvedValue({
       overall: { sessions: 1000, reached: 620 },
-      daily: days.flatMap((day) => [
-        { day, arm: "white_prev", sessions: 30, reached: 16 },
-        { day, arm: "white", sessions: 34, reached: 21 },
-      ]),
+      // Totals are the sums of the daily rows, as the function builds them; the
+      // per-page lines rebuild them from the days they keep (midwaySince).
+      daily: [
+        ...days.flatMap((day) => [
+          { day, arm: "white_prev", sessions: 30, reached: 16 },
+          { day, arm: "white", sessions: 34, reached: 21 },
+        ]),
+        { day: days[0]!, arm: "unknown", sessions: 104, reached: 61 },
+      ],
       totals: [
         { arm: "white", sessions: 476, reached: 294 },
         { arm: "white_prev", sessions: 420, reached: 224 },
@@ -1860,9 +1866,15 @@ describe("conversion-digest handler", () => {
    * wrong arms, or dropped a half of the count, shows up as a wrong number.
    */
   describe("survey starts per visit, round 3's deciding number", () => {
+    // From the restart at the condensed phone hero: the per-arm counts start there.
     const days = Array.from({ length: 14 }, (_, i) =>
-      new Date(Date.UTC(2026, 9, 6) + i * 86_400_000).toISOString().slice(0, 10)
+      new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) + i * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
     );
+    /** Daily rows behind a midway read's totals, all on the first day. */
+    const onFirstDay = <T extends { arm: string }>(totals: T[]) =>
+      totals.map((t) => ({ day: days[0]!, ...t }));
     const startFunnel = (videoVisitsPerDay = 22) => ({
       daily: days.flatMap((day) => [
         { day, arm: "white_card", visits: 20, starts: 2 },
@@ -1879,14 +1891,15 @@ describe("conversion-digest handler", () => {
         { arm: "white", visits: 1386, starts: 126 },
       ],
     });
+    const pastFirstTotals = [
+      { arm: "white_card", sessions: 60, reached: 20 },
+      { arm: "white_video", sessions: 70, reached: 25 },
+      { arm: "white", sessions: 170, reached: 75 },
+    ];
     const startsPastFirst = {
       overall: { sessions: 300, reached: 120 },
-      daily: [],
-      totals: [
-        { arm: "white_card", sessions: 60, reached: 20 },
-        { arm: "white_video", sessions: 70, reached: 25 },
-        { arm: "white", sessions: 170, reached: 75 },
-      ],
+      daily: onFirstDay(pastFirstTotals),
+      totals: pastFirstTotals,
       midwayIndex: 1,
       firstArmDay: "2026-10-06",
     };
@@ -1896,7 +1909,7 @@ describe("conversion-digest handler", () => {
       { axis: "landing" as const, arm: "white", n: 50, conversions: 3 },
     ];
     const build = async (over: Record<string, unknown> = {}) => {
-      vi.setSystemTime(new Date("2026-10-20T09:05:00.000Z"));
+      vi.setSystemTime(new Date("2026-10-27T09:05:00.000Z"));
       const now = new Date();
       const dayKey = reportingDay(new Date(reportingDayStart(reportingDay(now)).getTime() - 1));
       return blockText(
@@ -1949,14 +1962,16 @@ describe("conversion-digest handler", () => {
      * then the whole count, and adding the cohort's finishers again would count them
      * twice. Same numbers as above, so the line must not move.
      */
+    const withFinishedTotals = [
+      { arm: "white_card", sessions: 64, reached: 24, finished: 4 },
+      { arm: "white_video", sessions: 76, reached: 31, finished: 6 },
+      { arm: "white", sessions: 170, reached: 75, finished: 0 },
+    ];
     const withFinished = {
       ...startsPastFirst,
       overall: { sessions: 310, reached: 130, finished: 10 },
-      totals: [
-        { arm: "white_card", sessions: 64, reached: 24, finished: 4 },
-        { arm: "white_video", sessions: 76, reached: 31, finished: 6 },
-        { arm: "white", sessions: 170, reached: 75, finished: 0 },
-      ],
+      daily: onFirstDay(withFinishedTotals),
+      totals: withFinishedTotals,
     };
 
     it("reads finished surveys from the migrated function once, not twice", async () => {
@@ -1978,6 +1993,45 @@ describe("conversion-digest handler", () => {
       expect(otherCohorts).toContain(
         `${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`
       );
+    });
+
+    it("counts each landing page from the restart, not over the whole window", async () => {
+      // Five days of round 3 before the condensed phone hero, under the same arm names:
+      // in the window and in the functions' totals, and in none of the counts.
+      const early = Array.from({ length: 5 }, (_, i) =>
+        new Date(Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) - (5 - i) * 86_400_000)
+          .toISOString()
+          .slice(0, 10)
+      );
+      const base = startFunnel();
+      const text = await build({
+        startFunnel: {
+          daily: [
+            ...early.flatMap((day) => [
+              { day, arm: "white_card", visits: 50, starts: 9 },
+              { day, arm: "white_video", visits: 50, starts: 9 },
+            ]),
+            ...base.daily,
+          ],
+          totals: base.totals.map((t) =>
+            t.arm === "white" ? t : { ...t, visits: t.visits + 250, starts: t.starts + 45 }
+          ),
+        },
+        startsPastFirst: {
+          ...startsPastFirst,
+          daily: [
+            ...early.map((day) => ({ day, arm: "white_card", sessions: 9, reached: 9 })),
+            ...startsPastFirst.daily,
+          ],
+          totals: startsPastFirst.totals.map((t) =>
+            t.arm === "white_card"
+              ? { ...t, sessions: t.sessions + 45, reached: t.reached + 45 }
+              : t
+          ),
+        },
+      });
+      expect(text).toContain(`${card} 24 of 280 visits (8.6%: 20 past question one, 4 finished)`);
+      expect(text).toContain(`${video} 31 of 308 visits (10.1%: 25 past question one, 6 finished)`);
     });
 
     it("says an arm has no visits rather than printing 0% beside it", async () => {
@@ -3107,6 +3161,42 @@ describe("the price test's verdict waits for a window wholly after its lists sta
     const text = await digestOn(29);
     expect(text).toContain("Worth acting on");
     expect(text).toContain("Pricing 3.0 higher");
+  });
+});
+
+describe("the landing test's verdict waits for a window wholly after its restart", () => {
+  // Decisive again; the restart at the condensed phone hero is the only thing in the way.
+  const cohorts = [
+    { axis: "landing", arm: "white_card", n: 500, conversions: 80 },
+    { axis: "landing", arm: "white_video", n: 500, conversions: 20 },
+  ];
+  const digestOn = async (daysAfterRestart: number) => {
+    const day = new Date(
+      Date.parse(`${LANDING_TEST_START_DAY}T00:00:00Z`) + daysAfterRestart * 86_400_000
+    )
+      .toISOString()
+      .slice(0, 10);
+    const { blocks } = await buildConversionDigest({
+      dayKey: day,
+      funnel: null,
+      cohorts,
+      midway: null,
+      paywall: null,
+      unitEconomics: null,
+      emailExperiments: null,
+      now: new Date(`${day}T09:05:00Z`),
+    });
+    return blockText(blocks);
+  };
+
+  it("stays silent while the 30-day cohorts still hold readers of the old phone hero", async () => {
+    expect(await digestOn(28)).not.toContain("Worth acting on");
+  });
+
+  it("calls it once every reader in the window came through the condensed phone hero", async () => {
+    const text = await digestOn(29);
+    expect(text).toContain("Worth acting on");
+    expect(text).toContain(armLabel("landing", "white_card").short);
   });
 });
 

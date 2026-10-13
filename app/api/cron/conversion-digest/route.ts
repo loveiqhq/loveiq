@@ -96,10 +96,7 @@ import {
   PRICE_TEST_START_AT,
   PRICE_TEST_START_DAY,
 } from "@features/checkout/server/reportPurchase";
-import {
-  LANDING_HERO_VIDEO_LAUNCH_DAY,
-  LANDING_VARIANT_ARMS,
-} from "@shared/experiments/landingVariant";
+import { LANDING_TEST_START_DAY, LANDING_VARIANT_ARMS } from "@shared/experiments/landingVariant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -154,9 +151,10 @@ export const STARTED_QUESTION_INDEX = 1;
  * mistake the /admin dashboard made before it was corrected. A verdict on a test
  * nobody is running is not a verdict. `pricing` is the Pricing 3.0 test (A3 vs B3),
  * but only once the whole window lies after its current lists started (`verdictAxesFor`).
- * `landing` is live again for its round 3 (V2's question card vs V3's hero video);
- * its arms are new values, so its verdict can only ever count round-3 readers and
- * needs no launch cut of its own.
+ * `landing` is live again for its round 3 (V2's question card vs V3's hero video). Its
+ * arms are new values, so its verdict can only ever count round-3 readers, but it waits
+ * like pricing for a window wholly after LANDING_TEST_START_DAY: before the condensed
+ * phone hero most phone visitors never reached either arm's slot.
  */
 const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
 
@@ -165,7 +163,8 @@ const VERDICT_AXES: ExperimentAxis[] = ["pricing", "landing"];
  * inside the current price lists they include readers who finished under earlier
  * prices and were re-priced (the 2.x lists, list B's first prices), and a verdict pooled
  * over them would call that a result. The price test is still in *The tests*
- * meanwhile, cut to the first whole day of its lists (PRICE_TEST_START_DAY).
+ * meanwhile, cut to the first whole day of its lists (PRICE_TEST_START_DAY). The landing
+ * test waits the same way for its restart at the condensed phone hero.
  */
 function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[] {
   const windowStartDay = new Date(
@@ -173,7 +172,11 @@ function verdictAxesFor(dayKey: string, axes: ExperimentAxis[]): ExperimentAxis[
   )
     .toISOString()
     .slice(0, 10);
-  return axes.filter((axis) => axis !== "pricing" || windowStartDay >= PRICE_TEST_START_DAY);
+  return axes.filter(
+    (axis) =>
+      (axis !== "pricing" || windowStartDay >= PRICE_TEST_START_DAY) &&
+      (axis !== "landing" || windowStartDay >= LANDING_TEST_START_DAY)
+  );
 }
 
 /**
@@ -397,6 +400,47 @@ export function buildSiteStartSeries(
  * starts on a low-traffic day swings a daily rate wildly.
  */
 /**
+ * A landing read cut to the days from `from` on, its totals rebuilt from the days kept.
+ *
+ * get_landing_start_funnel_daily and get_midway_progress_daily both SUM their per-arm
+ * totals from their own daily rows, so these are exactly the totals a read starting at
+ * `from` returns. Every per-landing-page line reads them: a restart of the landing test
+ * (LANDING_TEST_START_DAY, the condensed phone hero) moved the charts' first day but the
+ * per-arm counts and the deciding number still pooled the days before it under the same
+ * arm names. The site-wide lines keep reading the uncut window.
+ */
+export function landingStartSince(funnel: LandingStartFunnel, from: string): LandingStartFunnel {
+  const daily = funnel.daily.filter((r) => r.day >= from);
+  const byArm = new Map<string, { arm: string; visits: number; starts: number }>();
+  for (const r of daily) {
+    const t = byArm.get(r.arm) ?? { arm: r.arm, visits: 0, starts: 0 };
+    t.visits += r.visits;
+    t.starts += r.starts;
+    byArm.set(r.arm, t);
+  }
+  return { daily, totals: [...byArm.values()] };
+}
+
+/** The same cut for a midway read; `finished` stays absent when the function sent none. */
+export function midwaySince(midway: MidwayProgress, from: string): MidwayProgress {
+  const daily = midway.daily.filter((r) => r.day >= from);
+  const byArm = new Map<string, MidwayProgress["totals"][number]>();
+  for (const r of daily) {
+    const t = byArm.get(r.arm) ?? {
+      arm: r.arm,
+      sessions: 0,
+      reached: 0,
+      ...(r.finished === undefined ? {} : { finished: 0 }),
+    };
+    t.sessions += r.sessions;
+    t.reached += r.reached;
+    if (r.finished !== undefined) t.finished = (t.finished ?? 0) + r.finished;
+    byArm.set(r.arm, t);
+  }
+  return { ...midway, daily, totals: [...byArm.values()] };
+}
+
+/**
  * Midway daily rows in the shape `buildStartSeries` already understands.
  *
  * sessions -> visits, reached -> starts. Mapping rather than duplicating keeps
@@ -487,7 +531,7 @@ interface DigestInput {
   /**
    * The landing pair the per-arm blocks compare, in reading order, and the day that
    * comparison starts. Production omits both and gets round 3's live arms (V2's
-   * question card, then V3's video) from LANDING_HERO_VIDEO_LAUNCH_DAY. A read of
+   * question card, then V3's video) from LANDING_TEST_START_DAY. A read of
    * round 2 passes ["white_prev", "white"] and 2026-08-21.
    *
    * The day matters even with new arm values: the per-arm series take their x-axis
@@ -581,7 +625,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const axisRows = input.axisRows ?? [];
   const verdictAxes = input.liveAxesOverride ?? VERDICT_AXES;
   const landingArms: readonly [string, string] = input.landingArms ?? LANDING_VARIANT_ARMS;
-  const landingFrom = input.landingFrom ?? LANDING_HERO_VIDEO_LAUNCH_DAY;
+  const landingFrom = input.landingFrom ?? LANDING_TEST_START_DAY;
   // An overridden axis is being declared live, so its arms are live too.
   const includeRetired = input.liveAxesOverride !== undefined;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
@@ -1019,7 +1063,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   const landingIsLive = verdictAxes.includes("landing");
   if (midway && midwayRowShown && landingIsLive) {
-    const armTotal = (arm: string) => midway.totals.find((t) => t.arm === arm);
+    // Per landing page, so from the comparison's own first day (midwaySince).
+    const byPage = midwaySince(midway, landingFrom);
+    const armTotal = (arm: string) => byPage.totals.find((t) => t.arm === arm);
     const named = landingArms.filter((a) => (armTotal(a)?.sessions ?? 0) > 0);
 
     if (named.length > 0) {
@@ -1046,10 +1092,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           : "";
       midwayBlocks.push(section(`*Midway progress, by landing page*\n${line}${unattributed}`));
 
-      const series = buildMidwaySeries(
-        { ...midway, daily: midway.daily.filter((r) => r.day >= landingFrom) },
-        [landingArms[0], landingArms[1]]
-      );
+      const series = buildMidwaySeries(byPage, [landingArms[0], landingArms[1]]);
       const hasReal = series.first.some((v) => v != null) || series.last.some((v) => v != null);
       if (hasReal && series.labels.length > 1) {
         const url = await signedChartUrl({
@@ -1108,11 +1151,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // `landingIsLive` gates this comparison (see the midway block above). The
     // site-wide "Visits that reach the survey" chart is unaffected — it never
     // split by arm. The series starts at the comparison's own first day.
-    const series = buildStartSeries(
-      { ...startFunnel, daily: startFunnel.daily.filter((r) => r.day >= landingFrom) },
-      [liveArms[0], liveArms[1]]
-    );
-    const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
+    const byPage = landingStartSince(startFunnel, landingFrom);
+    const series = buildStartSeries(byPage, [liveArms[0], liveArms[1]]);
+    const totalFor = (arm: string) => byPage.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
     const armLine = (arm: string) => {
       const label = armLabel("landing", arm).short;
@@ -1234,7 +1275,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
        * is half-open and ends yesterday: a day only enters the series in the
        * following run.
        */
-      const lastDay = [...new Set(startFunnel.daily.map((r) => r.day))].sort().at(-1)!;
+      const lastDay = [...new Set(byPage.daily.map((r) => r.day))].sort().at(-1)!;
       const readyOn = new Date(`${lastDay}T00:00:00Z`);
       readyOn.setUTCDate(readyOn.getUTCDate() + (7 - days) + 1);
       const readyLabel = `${readyOn.getUTCDate()} ${readyOn.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
@@ -1285,7 +1326,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         )
       );
     } else if (landingIsLive && input.startsPastFirst) {
-      const pastFirst = input.startsPastFirst;
+      const pastFirst = midwaySince(input.startsPastFirst, landingFrom);
       const perArm = liveArms.map((arm) => {
         // An arm with no survey past question one has no row, so zero is the true count.
         const row = pastFirst.totals.find((t) => t.arm === arm);

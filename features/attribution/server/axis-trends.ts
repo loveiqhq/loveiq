@@ -28,7 +28,7 @@
 
 import { computeRate } from "@features/admin/server/digest-metrics";
 import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
-import { LANDING_HERO_VIDEO_LAUNCH_DAY } from "@shared/experiments/landingVariant";
+import { LANDING_TEST_START_DAY } from "@shared/experiments/landingVariant";
 import {
   armLabel,
   AXIS_TITLES,
@@ -86,11 +86,12 @@ export interface AxisFunnelRow {
 export const AXIS_VALID_FROM: Partial<Record<ChartAxis, { day: string; why: string } | null>> = {
   // Round 3 of the landing test: question 1 in the hero (V2) vs the presenter video
   // (V3). Its arms are new values, so earlier rows cannot pool into them; the cut is
-  // for the chart's own window, which must not count days the test was not running.
+  // for the chart's own window. It starts at the condensed phone hero, not the launch:
+  // before it most phone visitors never reached the slot, in either arm.
   // Round 2 (V2 vs V1, from 2026-08-21) is read with the `validFrom` option instead.
   landing: {
-    day: LANDING_HERO_VIDEO_LAUNCH_DAY,
-    why: "the question card and the hero video only started running against each other on its launch day",
+    day: LANDING_TEST_START_DAY,
+    why: "the video and the question card only reached a phone's first screen on its first day",
   },
   // Pricing 3.0. A3/B3 are new arm names, but the launch re-priced every reader who
   // had not bought yet, so readers who finished before it carry a 3.0 arm too; and list

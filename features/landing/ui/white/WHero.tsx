@@ -39,6 +39,97 @@ const CONCURRENT_CLIENT =
 
 const subscribeNoop = () => () => {};
 
+/**
+ * The rating row, the "taking the test right now" ticker and the privacy line. On a
+ * desktop they sit under the button; below lg, under the video or question 1, as the
+ * groups Marcus laid over his phone frame draw them (Figma Report-3.0 1637:625, 1637:648
+ * and 1637:643 on 1604:5505, 12.10): 24px under the media, then 12 and 18 as here. Both
+ * places render, one per breakpoint, so the slot follows the button on a phone.
+ */
+const HeroProof: FC<{ concurrent: number; where: "phone" | "desktop" }> = ({
+  concurrent,
+  where,
+}) => {
+  const phone = where === "phone";
+  return (
+    <>
+      <div
+        className={
+          phone
+            ? "animate-on-load stagger-4 mt-6 flex items-center gap-3 lg:hidden"
+            : "animate-on-load stagger-4 mt-5 hidden items-center gap-3 lg:flex"
+        }
+      >
+        <div className="flex items-center">
+          {RATING_AVATARS.map((src, i) => (
+            <div
+              key={src}
+              className="relative h-[34px] w-[34px] overflow-hidden rounded-full border-2 border-white"
+              style={{
+                marginRight: i < RATING_AVATARS.length - 1 ? "-9px" : "0",
+                zIndex: RATING_AVATARS.length - i,
+              }}
+            >
+              <Image src={src} alt="" fill sizes="34px" className="object-cover" />
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-0.5 text-[13px]">
+          <span aria-hidden className="tracking-[1px] text-accent-orange-ink">
+            ★★★★★
+          </span>
+          <p className="font-semibold text-[#5f6675]">
+            <strong className="font-bold text-[#161021]">10,000+ people</strong> · 4.9/5 rating
+          </p>
+        </div>
+      </div>
+
+      <div
+        className={
+          phone
+            ? "animate-on-load stagger-4 mt-3 flex items-center gap-2 lg:hidden"
+            : "animate-on-load stagger-4 mt-3 hidden items-center gap-2 lg:flex"
+        }
+      >
+        {/* Live-ish indicator: a static dot under the halo, so it still
+            reads as a dot when animation is off. */}
+        <span className="relative flex h-[7px] w-[7px] shrink-0">
+          <span
+            aria-hidden
+            className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-orange opacity-75 motion-reduce:hidden"
+          />
+          <span className="relative inline-flex h-[7px] w-[7px] rounded-full bg-accent-orange" />
+        </span>
+        <p className="text-[13px] text-[#5f6675]">
+          <strong className="font-bold text-[#161021]">{concurrent}</strong> people are taking the
+          test right now
+        </p>
+      </div>
+
+      <p
+        className={
+          phone
+            ? "animate-on-load stagger-5 mt-[18px] block text-[16px] leading-[28px] text-black lg:hidden"
+            : "animate-on-load stagger-5 mt-[18px] hidden text-[16px] leading-[28px] text-black lg:block"
+        }
+      >
+        <span className="font-light">Your </span>
+        <strong className="font-extrabold">privacy &amp; anonymity</strong>
+        <span className="font-light"> come first. Learn more in our </span>
+        <Link
+          href="/trust-zone"
+          className="focus-visible-ring whitespace-nowrap font-bold text-[#c2410c] hover:underline"
+        >
+          <span aria-hidden className="text-[20px] font-extrabold leading-none">
+            ›
+          </span>{" "}
+          Trust Center
+        </Link>
+      </p>
+    </>
+  );
+};
+
 const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
   // Same pattern the deleted /checkout page used: the server renders a fixed number (so
   // hydration matches) and the client swaps in the randomised one — without a
@@ -48,7 +139,8 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
     () => CONCURRENT_CLIENT,
     () => CONCURRENT_SSR
   );
-  // Question 1 in the hero slot, seen or not: on a phone it sits below the first screen.
+  // Question 1 in the hero slot, seen or not. On a phone it sat below the first screen
+  // until the condensed hero (12.10); short screens can still cut it, so it is counted.
   // The video counts its own (WHeroVideo), and in its arm this ref stays empty.
   const cardRef = useRef<HTMLDivElement>(null);
   useCtaSeen(cardRef, "hero_card", media);
@@ -62,19 +154,19 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             // generates classes it can read whole. Arm B's track is Figma's 472, so the
             // video ends exactly on the content edge.
             media === "video"
-              ? "grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_472px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
-              : "grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_471px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
+              ? "grid items-center gap-10 pb-12 pt-5 lg:grid-cols-[minmax(0,1fr)_472px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
+              : "grid items-center gap-10 pb-12 pt-5 lg:grid-cols-[minmax(0,1fr)_471px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]"
           }
         >
-          {/* Left: copy */}
+          {/* Left: copy. Below lg (one column) the hero is Marcus's condensed phone frame
+              (Figma Report-3.0 1604:5505, 12.10): 20px under the nav, then the headline,
+              the paragraph and the button, and the slot right under it, so the video or
+              question 1 is on the first screen. The rating, the ticker and the privacy
+              line follow the slot there (HeroProof). Both arms alike, so the test still
+              compares only what is in the slot. The eyebrow above the headline went with
+              the 12.10 copy (1604:8233, "Deleted the top > noise"); the headline keeps its
+              14px, as the frame does. */}
           <div className="flex max-w-[38rem] flex-col">
-            <div className="animate-on-load flex items-center gap-2.5">
-              <span className="animate-pulse-glow h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.88px] text-[#5f6675]">
-                Anonymous · ~9 minutes · No account
-              </span>
-            </div>
-
             <h1 className="animate-on-load stagger-1 mt-3.5 font-serif text-[clamp(2.6rem,8.5vw,3.67rem)] font-semibold leading-[1.12] tracking-[-0.01em] text-[#161021]">
               Determine
               <br />
@@ -86,13 +178,15 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
               </span>
               <br />
               <span className="bg-gradient-to-r from-[#c267c9] via-[#a871f4] via-[48%] to-[#9893f7] bg-clip-text font-medium italic text-transparent">
-                Personalities
+                Personality
               </span>
             </h1>
 
             <p className="animate-on-load stagger-2 mt-5 max-w-[470px] text-[16px] font-medium leading-[28px] text-[#5f6675]">
-              Grounded in state-of-the-art science &amp; research.
-              <br />
+              {/* One text node with its space, so the phone runs straight on (four lines, as
+                  drawn) and the desktop's break still lands after "research." */}
+              {"Grounded in state-of-the-art science & research. "}
+              <br className="hidden lg:inline" />
               <strong className="font-extrabold text-black">In just 9 minutes</strong>, decode your
               sexual personality and patterns, so you get clear, practical steps to improve
               intimacy.
@@ -101,11 +195,11 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
             <div className="animate-on-load stagger-3 mt-5">
               <Link
                 href="/survey"
-                aria-label="Start my free test - hero"
+                aria-label="Start my test now - hero"
                 onClick={() => trackStartSurvey("hero")}
                 className="focus-visible-ring group inline-flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] px-[22px] py-3.5 text-[16px] font-semibold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)] transition duration-300 hover:shadow-[0_14px_30px_-10px_rgba(191,102,217,0.85)] motion-safe:hover:-translate-y-0.5"
               >
-                <span>Start my free test</span>
+                <span>Start my test now</span>
                 <svg
                   aria-hidden
                   className="h-[17px] w-[17px] transition-transform duration-300 motion-safe:group-hover:translate-x-1"
@@ -119,76 +213,27 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
               </Link>
             </div>
 
-            {/* Social proof */}
-            <div className="animate-on-load stagger-4 mt-5 flex items-center gap-3">
-              <div className="flex items-center">
-                {RATING_AVATARS.map((src, i) => (
-                  <div
-                    key={src}
-                    className="relative h-[34px] w-[34px] overflow-hidden rounded-full border-2 border-white"
-                    style={{
-                      marginRight: i < RATING_AVATARS.length - 1 ? "-9px" : "0",
-                      zIndex: RATING_AVATARS.length - i,
-                    }}
-                  >
-                    <Image src={src} alt="" fill sizes="34px" className="object-cover" />
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-col gap-0.5 text-[13px]">
-                <span aria-hidden className="tracking-[1px] text-accent-orange-ink">
-                  ★★★★★
-                </span>
-                <p className="font-semibold text-[#5f6675]">
-                  <strong className="font-bold text-[#161021]">10,000+ people</strong> · 4.9/5
-                  rating
-                </p>
-              </div>
-            </div>
-
-            <div className="animate-on-load stagger-4 mt-3 flex items-center gap-2">
-              {/* Live-ish indicator: a static dot under the halo, so it still
-                  reads as a dot when animation is off. */}
-              <span className="relative flex h-[7px] w-[7px] shrink-0">
-                <span
-                  aria-hidden
-                  className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-orange opacity-75 motion-reduce:hidden"
-                />
-                <span className="relative inline-flex h-[7px] w-[7px] rounded-full bg-accent-orange" />
-              </span>
-              <p className="text-[13px] text-[#5f6675]">
-                <strong className="font-bold text-[#161021]">{concurrent}</strong> people are taking
-                the test right now
-              </p>
-            </div>
-
-            <p className="animate-on-load stagger-5 mt-[18px] text-[16px] leading-[28px] text-black">
-              <span className="font-light">Your </span>
-              <strong className="font-extrabold">privacy &amp; anonymity</strong>
-              <span className="font-light"> come first. Learn more in our </span>
-              <Link
-                href="/trust-zone"
-                className="focus-visible-ring whitespace-nowrap font-bold text-[#c2410c] hover:underline"
-              >
-                <span aria-hidden className="text-[20px] font-extrabold leading-none">
-                  ›
-                </span>{" "}
-                Trust Center
-              </Link>
-            </p>
+            <HeroProof concurrent={concurrent} where="desktop" />
           </div>
 
           {media === "video" ? (
-            /* Right, arm B: the presenter video (Figma Report-3.0 1503:12473). Figma's
-               spacing: on a phone 51.25px below the copy (the grid's 40 plus 11.25), on
-               a desktop its top 60px into the row, i.e. 194px from the top of the page. */
-            <div className="animate-on-load stagger-2 mt-[11.25px] w-full lg:mt-[60px] lg:self-start">
-              <WHeroVideo />
+            /* Right, arm B: the presenter video (Figma Report-3.0 1503:12473). On a phone
+               it sits 28px under the button, where the 1604:5505 frame's group 1637:616
+               puts it (the grid's 40 less 12); on a desktop its top 60px into the row,
+               i.e. 194px from the top of the page. */
+            <div className="-mt-3 w-full lg:mt-[60px] lg:self-start">
+              <div className="animate-on-load stagger-2">
+                <WHeroVideo />
+              </div>
+              <HeroProof concurrent={concurrent} where="phone" />
             </div>
           ) : (
             /* Right: live question 1 */
-            <div ref={cardRef} className="animate-on-load stagger-2 w-full lg:justify-self-end">
-              <WQuestionCard size="hero" location="hero" />
+            <div className="w-full lg:justify-self-end">
+              <div ref={cardRef} data-testid="hero-card" className="animate-on-load stagger-2">
+                <WQuestionCard size="hero" location="hero" />
+              </div>
+              <HeroProof concurrent={concurrent} where="phone" />
             </div>
           )}
         </div>

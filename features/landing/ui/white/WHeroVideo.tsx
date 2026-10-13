@@ -184,8 +184,9 @@ const WHeroVideo: FC = () => {
   }, [previewOn, syncPreview]);
 
   // Whether it was on screen, loop or no loop: under reduced motion or Save-Data the poster
-  // and the button are what a visitor sees. On a phone the video sits below the first
-  // screen, so this, not the page view, is the denominator for the share who tapped play.
+  // and the button are what a visitor sees. Since the condensed phone hero (12.10) it sits
+  // on the first screen of most phones, not all, and a visitor can leave before it loads,
+  // so this, not the page view, is the denominator for the share who tapped play.
   useCtaSeen(boxRef, "hero_video");
 
   /**
