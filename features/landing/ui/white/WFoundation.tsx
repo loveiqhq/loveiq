@@ -73,7 +73,11 @@ const spotlights: {
 ];
 
 const WFoundation: FC = () => (
-  <section className="bg-white py-16 lg:py-[84px]" aria-labelledby="w-foundation-heading">
+  <section
+    className="bg-white py-16 lg:py-[84px]"
+    aria-labelledby="w-foundation-heading"
+    data-landing-section="foundation"
+  >
     <div className="content-shell">
       {/* Centered intro. Its "THE FOUNDATION" eyebrow, and the "HOW YOUR RESULT IS
           DERIVED" label over the rail, went with the 12.10 copy (Figma Report-3.0

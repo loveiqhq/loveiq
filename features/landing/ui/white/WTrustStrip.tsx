@@ -42,7 +42,7 @@ const items: { icon: ReactNode; label: string }[] = [
 ];
 
 const WTrustStrip: FC = () => (
-  <div className="border-y border-[#efedf3] bg-[#f5f4f8]">
+  <div className="border-y border-[#efedf3] bg-[#f5f4f8]" data-landing-section="trust_strip">
     <div className="content-shell flex flex-wrap items-center justify-center gap-x-4 gap-y-2.5 py-[15px] sm:gap-x-5">
       {items.map((it, i) => (
         <div key={it.label} className="flex items-center gap-4 sm:gap-5">

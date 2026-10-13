@@ -11,7 +11,11 @@ import WQuestionCard from "./WQuestionCard";
  */
 const WCTA: FC = () => {
   return (
-    <section className="bg-white py-16 lg:py-[70px]" aria-labelledby="w-cta-heading">
+    <section
+      className="bg-white py-16 lg:py-[70px]"
+      aria-labelledby="w-cta-heading"
+      data-landing-section="closing_cta"
+    >
       <div className="content-shell flex flex-col items-center">
         <h2
           id="w-cta-heading"

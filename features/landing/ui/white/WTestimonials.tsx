@@ -120,7 +120,10 @@ const ReviewCard: FC<{ t: Testimonial; ariaHidden?: boolean }> = ({ t, ariaHidde
 
 const WTestimonials: FC = () => {
   return (
-    <section className="overflow-hidden bg-white py-16 lg:py-24">
+    <section
+      className="overflow-hidden bg-white py-16 lg:py-24"
+      data-landing-section="testimonials"
+    >
       <div className="content-shell">
         <div className="animate-on-scroll mb-12 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           {/* Left: 10,000+ stat + subtitle */}

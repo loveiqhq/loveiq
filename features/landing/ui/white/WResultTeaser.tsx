@@ -14,7 +14,11 @@ import { trackStartSurvey } from "@features/analytics/client";
  */
 
 const WResultTeaser: FC = () => (
-  <section className="bg-[#f5f4f8] py-16 lg:py-[92px]" aria-labelledby="w-result-heading">
+  <section
+    className="bg-[#f5f4f8] py-16 lg:py-[92px]"
+    aria-labelledby="w-result-heading"
+    data-landing-section="result_teaser"
+  >
     <div className="content-shell grid items-center gap-12 lg:grid-cols-2 lg:gap-14">
       {/* Left: pitch. The heading keeps its 14px top margin, as the frame does, and from
           xl stays on one line as drawn: it is 575px against the 572px column, so it reaches
