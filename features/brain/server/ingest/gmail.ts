@@ -246,6 +246,12 @@ export async function domainMailboxes(oidcToken?: string | null): Promise<string
  */
 const EXCLUDE =
   "-in:spam -in:trash -in:chats -category:promotions -category:social -category:forums";
+/**
+ * The hiring inbox keeps Google's noise buckets: a job board or LinkedIn can send an
+ * application that Gmail files under Social or Promotions, where it would be skipped
+ * without a trace. None was there on 2026-10-13: all 35 threads passed the filter above.
+ */
+const EXCLUDE_HIRING = "-in:spam -in:trash -in:chats";
 
 /**
  * RECRUITING MAIL, kept out at the LISTING (owner's decision, 2026-09-23).
@@ -1240,6 +1246,7 @@ export async function ingestGmail(
       degraded = true; // a mailbox we cannot reach will not fix itself
       continue;
     }
+    const hiring = isHiringMailbox(mailbox);
     let pageToken = "";
     for (let page = 0; page < MAX_PAGES; page++) {
       if (isOutOfTime()) {
@@ -1249,7 +1256,7 @@ export async function ingestGmail(
       const listed = await gmailGet(
         token,
         mailbox,
-        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + standingExclusionsQuery(isHiringMailbox(mailbox)) + excludeSubjects())}` +
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent((hiring ? EXCLUDE_HIRING : EXCLUDE) + standingExclusionsQuery(hiring) + excludeSubjects())}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {

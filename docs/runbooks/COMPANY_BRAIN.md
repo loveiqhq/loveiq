@@ -317,7 +317,8 @@ same thing is the failure this corpus has hit more than once:
   team can review candidates through Jarvis, in claude.ai and in Claude Code. Each
   thread's title carries the applicant's name, because search keeps one Gmail result
   per title and applicants share subjects; `{"mailbox": "hr@loveiq.org"}` lists them
-  all. Everywhere else the rule above still stands, so an application forwarded into a
+  all. Its Social and Promotions tabs are read too, where a job board's mail can land.
+  Everywhere else the rule above still stands, so an application forwarded into a
   colleague's mailbox or saved to Drive is not indexed a second time, and contracts and
   a named person's probation pay stay out of `hr@` too. What is deleted from `hr@` leaves
   the brain at the next daily sweep, so the mailbox's retention is the brain's.

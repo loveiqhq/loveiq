@@ -827,7 +827,15 @@ describe("the hiring inbox is walked, with its applications", () => {
     for (const q of [hr, me]) {
       expect(q).toContain('-subject:"freelance contract"');
       expect(q).toContain("-subject:sha");
+      expect(q).toContain("-in:spam");
     }
+  });
+
+  it("keeps the inbox's Social and Promotions tabs, where a job board's mail can land", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org,hr@loveiq.org";
+    await ingestGmail("2026-10-13T00:00:00.000Z", () => false, null);
+    expect(listingFor("hr@loveiq.org")).not.toContain("-category:");
+    expect(listingFor("me@loveiq.org")).toContain("-category:social");
   });
 
   it("indexes an application from the hiring inbox that a colleague's mailbox refuses", async () => {
