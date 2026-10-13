@@ -2223,6 +2223,19 @@ export async function hogqlTable(query: string, cap: number): Promise<HogqlTable
   if (/(first|last)_?name/i.test(query)) {
     return { ok: false, error: "Names are not read here: count people rather than naming them." };
   }
+  // What a tap was on is not read either. Until 2026-10-13 autocapture kept each tapped
+  // element's text and attributes, and on /survey those were the answers ("6 of 7" beside the
+  // question, the option picked): Article-9 data that query_product_data would mask. Raw text,
+  // like the names rule, so a quoted properties['$el_text'] is caught too.
+  if (/elements_chain|\$el_text|\$elements\b|attr__/i.test(query)) {
+    return {
+      ok: false,
+      error:
+        "What a tap was on (elements_chain, $el_text, $elements, attr__*) is not read here: " +
+        "before 2026-10-13 it held survey answers. Count the taps, or use the site's own " +
+        "events, which name what was tapped (cta_click, landing_card_answer, survey_answer).",
+    };
+  }
   if (setOperation) {
     return {
       ok: false,

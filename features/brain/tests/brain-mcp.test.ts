@@ -8449,6 +8449,28 @@ describe("query_product_analytics — counting what visitors did, from PostHog",
   });
 
   it.each([
+    ["the element chain", "SELECT count() FROM events WHERE match(elements_chain, 'of 7')"],
+    ["the tapped text", "SELECT properties.$el_text AS t, count() FROM events GROUP BY t"],
+    ["the tapped text, quoted", "SELECT properties['$el_text'] AS t FROM events"],
+    ["the element list", "SELECT properties.$elements FROM events"],
+    ["an element attribute", "SELECT count() FROM events WHERE properties.attr__aria_label != ''"],
+  ])("refuses to read what a tap was on (it held survey answers), %s", async (_how, query) => {
+    const r = await call({ query });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain(
+      "is not read here: before 2026-10-13 it held survey answers"
+    );
+  });
+
+  it("still counts the taps themselves", async () => {
+    const r = await call({
+      query:
+        "SELECT count() FROM events WHERE event = '$autocapture' AND properties.$pathname = '/survey'",
+    });
+    expect(r.content[0]!.text).not.toContain("is not read here");
+  });
+
+  it.each([
     ["an empty query", ""],
     ["a write", "DELETE FROM events WHERE 1"],
     ["anything but a SELECT", "DROP TABLE events"],

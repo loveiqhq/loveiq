@@ -1812,6 +1812,9 @@ export const TOOLS = [
       "'question_card' (that card's Continue; without it, the button beside it), " +
       "section_seen (properties.section, once per section per page: how far down a visitor " +
       "got) and cta_seen 'sticky_bar'. " +
+      "Autocapture ($autocapture, $rageclick, $dead_click) carries no element text or " +
+      "attributes since 2026-10-13, and a query that reads them (elements_chain, $el_text, " +
+      "attr__) is refused: before that they held survey answers. " +
       "It reads PostHog's events, persons and sessions only: our own database's tables " +
       "(survey answers, reports, payments) are query_product_data's, which masks what is " +
       "private, and a query that reaches them here is refused. " +
