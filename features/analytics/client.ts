@@ -1,4 +1,4 @@
-import posthog from "posthog-js";
+import posthog, { type CaptureOptions } from "posthog-js";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
@@ -415,7 +415,9 @@ export const track = (
   name: string,
   params?: Record<string, unknown>,
   /** Sent to PostHog only, never to GA4 or the dataLayer (an answer, say). */
-  postHogOnly?: Record<string, unknown>
+  postHogOnly?: Record<string, unknown>,
+  /** PostHog's own capture options (a beacon, say), passed on only when given. */
+  options?: CaptureOptions
 ) => {
   if (typeof window === "undefined") return;
   // PostHog gets every event, and deliberately BEFORE the two GA4 gates below.
@@ -435,7 +437,8 @@ export const track = (
   } catch {
     // The walk loses one event; the visitor loses nothing.
   }
-  posthog.capture(name, toPostHog);
+  if (options) posthog.capture(name, toPostHog, options);
+  else posthog.capture(name, toPostHog);
 
   /**
    * Production gate is BUILD-TIME, not the `__loveiqAnalyticsEnabled` window flag
@@ -1342,6 +1345,15 @@ export type LandingSection =
  */
 export const trackSectionSeen = (params: { section: LandingSection }) =>
   track("section_seen", params);
+
+/**
+ * How long a landing section was in view (LandingSectionsSeen): at least half of it on screen,
+ * or across the middle of the screen, while the tab showed. `visible_ms` is only the time not
+ * sent before, so a page's events add up to its time. A beacon, because it is often sent as
+ * the page goes, after PostHog has emptied its own queue.
+ */
+export const trackSectionTime = (params: { section: LandingSection; visible_ms: number }) =>
+  track("section_time", params, undefined, { transport: "sendBeacon" });
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);
