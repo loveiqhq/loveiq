@@ -686,11 +686,22 @@ const SlideScreen: FC<{
   const slide = (slides[slideIndex] ?? slides[0])!;
   const Icon = slideIcons[slide.icon] ?? SparkleIcon;
 
+  // The Continue or Back under way. Cleared when the slides go (Skip Intro jumps to the
+  // consent): its 200ms timer would otherwise still move a step on from there, onto the
+  // questions with the consent never agreed.
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (pending.current) clearTimeout(pending.current);
+    },
+    []
+  );
+
   const handleNext = useCallback(() => {
     if (isLeaving) return;
     setIsLeaving(true);
     setIsLeavingForward(true);
-    setTimeout(() => {
+    pending.current = setTimeout(() => {
       setIsLeaving(false);
       setIsLeavingForward(false);
       onContinue();
@@ -702,7 +713,7 @@ const SlideScreen: FC<{
     // The Back button, the left arrow or a swipe. Slide 1 has none (only the browser's Back).
     if (slideIndex > 0) pingFunnelEvent(`intro_back_${slideIndex + 1}`);
     setIsLeaving(true);
-    setTimeout(() => {
+    pending.current = setTimeout(() => {
       setIsLeaving(false);
       onBack();
     }, 200);
@@ -711,6 +722,14 @@ const SlideScreen: FC<{
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLeaving) return;
+      // A focused button or link acts on Enter itself (Skip Intro, Back): moving on here too
+      // would take a second step.
+      if (
+        e.key === "Enter" &&
+        e.target instanceof Element &&
+        e.target.closest("button, a, input, textarea, select")
+      )
+        return;
       if (e.key === "ArrowRight" || e.key === "Enter") handleNext();
       if (e.key === "ArrowLeft" && slideIndex > 0) handlePrev();
     };
@@ -718,11 +737,8 @@ const SlideScreen: FC<{
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleNext, handlePrev, slideIndex, isLeaving]);
 
-  // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide). Slide 1 also
-  // sends the intro's own view if the intro could not: the visitor cookie exists only once the
-  // cookie banner is accepted, which can happen while the intro is on screen.
+  // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide).
   useEffect(() => {
-    if (slideIndex === 0) pingFunnelEvent("intro_view");
     pingFunnelEvent(`intro_slide_${slideIndex + 1}`);
   }, [slideIndex]);
 

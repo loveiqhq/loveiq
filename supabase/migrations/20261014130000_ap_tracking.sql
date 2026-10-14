@@ -295,12 +295,7 @@ AS $function$
   intro AS (
     SELECT f.day, f.event_type AS step, count(*) AS n,
            coalesce(array_agg(round(extract(epoch FROM coalesce(nx.first_seen, q4.first_seen) - f.first_seen) * 1000)::bigint)
-                      FILTER (WHERE coalesce(nx.first_seen, q4.first_seen) > f.first_seen AND s4.visitor_id IS NULL
-                                -- A cookie banner accepted on the intro makes slide 1 send the intro's
-                                -- view with its own, milliseconds apart: no time on the intro then (a
-                                -- real one needs a tap on Continue).
-                                AND NOT (f.event_type = 'intro_view'
-                                         AND coalesce(nx.first_seen, q4.first_seen) - f.first_seen < interval '1 second')), '{}') AS ms,
+                      FILTER (WHERE coalesce(nx.first_seen, q4.first_seen) > f.first_seen AND s4.visitor_id IS NULL), '{}') AS ms,
            count(*) FILTER (WHERE nx.visitor_id IS NULL AND q1.visitor_id IS NOT NULL) AS skipped,
            -- Skip Intro on slide 4 also lands on the consent: that is a skip, not going on.
            count(coalesce(nx.visitor_id, q4.visitor_id)) FILTER (WHERE s4.visitor_id IS NULL) AS went_on,

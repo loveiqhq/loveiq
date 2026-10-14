@@ -56,12 +56,6 @@ describe("AP readers' SQL", () => {
     expect(SQL).toMatch(/'full', coalesce\(x\.full_paid, false\)/);
   });
 
-  it("takes no time on the intro from the view slide 1 sends late with its own", () => {
-    expect(SQL).toMatch(
-      /AND NOT \(f\.event_type = 'intro_view'\s+AND coalesce\(nx\.first_seen, q4\.first_seen\) - f\.first_seen < interval '1 second'\)\)/
-    );
-  });
-
   it("reads a report as opened from its first sign, so no later step outnumbers the opens", () => {
     expect(SQL).toMatch(
       /coalesce\(r\.opened_at, least\(q\.paywall_at, c\.at, q\.checkout_at, p\.paid_at\)\) AS opened_at/
@@ -72,8 +66,7 @@ describe("AP readers' SQL", () => {
 
   it("leaves a Skip Intro on slide 4 out of going on and of the slide's time", () => {
     expect(SQL).toMatch(/FILTER \(WHERE s4\.visitor_id IS NULL\) AS went_on/);
-    // The slide's time: only those who did not skip from it (more conditions may follow).
-    expect(SQL).toMatch(/> f\.first_seen AND s4\.visitor_id IS NULL\s/);
+    expect(SQL).toMatch(/> f\.first_seen AND s4\.visitor_id IS NULL\), '\{\}'\) AS ms/);
     expect(SQL).toMatch(/s4\.event_type = 'intro_skip_4'/);
   });
 
