@@ -96,6 +96,10 @@ export default function PrivacyPolicyPage() {
                 <li>Time and date of access</li>
                 <li>Interaction logs</li>
                 <li>Whether our emails were opened and their links clicked</li>
+                <li>
+                  Where your visit came from: the campaign details in the link you clicked, the
+                  ad&apos;s click ID and the name of the website that sent you to us
+                </li>
               </ul>
 
               <h3 className="text-gray-900 font-medium mb-2">3.4 Payment Data</h3>

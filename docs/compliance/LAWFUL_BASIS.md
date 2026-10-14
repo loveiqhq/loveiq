@@ -34,7 +34,7 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A2 — Survey submission
 
-- **Data**: email, first_name, ~60 question answers including sensitive-by-context data, IP, session_id, duration, UTM
+- **Data**: email, first_name, ~60 question answers including sensitive-by-context data, IP, session_id, duration, UTM context (campaign tags; ad click ids: Google `gclid`/`gbraid`/`wbraid`, and from 2026-10-14 Meta `fbclid`; from 2026-10-14 the referring site's hostname, never its full address)
 - **Basis**: (a) consent — survey landing page + intro screen make the purpose explicit
 - **Retention**: until DSAR deletion. Partial saves >30d are auto-purged (F-02).
 - **Withdraw**: DSAR delete (F-01)
@@ -76,8 +76,8 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A8 — Engagement analytics
 
-- **Data**: analytics_event rows (event_type + metadata), scroll depth, time-on-section, click telemetry; client-side: GA4 + Microsoft Clarity
-- **Basis**: (a) consent — CookieYes "analytics" category. Visitor ID cookie (`__liq_vid`) only set after consent (T-02). Persisted analytics_event writes gated on `hasCookieYesConsent("analytics")` in client.ts.
+- **Data**: analytics_event rows (event_type + metadata; from 2026-10-14 also `report_chapter_stats`, how long each report chapter was read and which of its actions were used, and `wizard_skipped`, the pre-report slides skipped), survey_behavior_event rows (from 2026-10-14 with `is_tablet`), invite_event rows, scroll depth, time-on-section, click telemetry; funnel_event rows (unique visitor, survey start and, from 2026-10-14, each survey intro card seen and its Back and Skip); client-side: GA4, Microsoft Clarity, PostHog (from 2026-10-14 with the time spent on each landing section, also sent to GA4 with consent)
+- **Basis**: our own tables (analytics_event, survey_behavior_event, invite_event): (f) legitimate interest since 2026-09-18 (commit `60924b5ab`, privacy policy §7.4): no cookie set or read, nothing sent to a third party, so these writes no longer check the cookie choice. funnel_event: keyed by the visitor ID cookie (`__liq_vid`), which is set only after consent to the CookieYes "analytics" category (T-02), so it covers consenting visitors only. GA4: (a) consent, `hasCookieYesConsent("analytics")` in client.ts. Microsoft Clarity and PostHog load on every visit (owner decisions, ROPA #9 note).
 - **Retention**: 180 days (F-02 purge)
 
 ### A9 — Advertising tracking (Facebook Pixel, TikTok Analytics, Google Ads)
@@ -124,13 +124,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 For activities under basis (a):
 
-| Activity       | Withdraw mechanism                                    | Effect                                                                                                              |
-| -------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| A1 waitlist    | DSAR delete (`/api/admin/data-subject` action=delete) | All waitlist + suppression + invite rows removed                                                                    |
-| A2 survey      | DSAR delete                                           | Full cascade across 12 PII tables, plus the Resend marketing contact                                                |
-| A6 marketing   | One-click unsubscribe in every email                  | Adds to suppression_list + marks the Resend contact unsubscribed (R-05)                                             |
-| A8 analytics   | CookieYes preference centre                           | `__liq_vid` cookie not set; `hasCookieYesConsent("analytics")` returns false; persisted analytics_event writes skip |
-| A9 advertising | CookieYes preference centre                           | Vendor tags blocked by category attribute                                                                           |
+| Activity       | Withdraw mechanism                                                                                      | Effect                                                                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1 waitlist    | DSAR delete (`/api/admin/data-subject` action=delete)                                                   | All waitlist + suppression + invite rows removed                                                                                                                                         |
+| A2 survey      | DSAR delete                                                                                             | Full cascade across 12 PII tables, plus the Resend marketing contact                                                                                                                     |
+| A6 marketing   | One-click unsubscribe in every email                                                                    | Adds to suppression_list + marks the Resend contact unsubscribed (R-05)                                                                                                                  |
+| A8 analytics   | Art. 21 objection (privacy policy §1, §7.4); CookieYes preference centre for GA4 and the visitor cookie | Declining: `__liq_vid` is not set, so no funnel_event rows, and nothing goes to GA4. Our own analytics_event, survey_behavior_event and invite_event rows continue (legitimate interest) |
+| A9 advertising | CookieYes preference centre                                                                             | Vendor tags blocked by category attribute                                                                                                                                                |
 
 ## Outstanding work
 

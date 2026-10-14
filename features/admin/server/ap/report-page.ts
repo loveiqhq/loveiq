@@ -804,7 +804,6 @@ export function buildReportPage(input: {
   };
 }
 
-/** The day after the first (partial) day of recording: the first whole day, or null. */
 /**
  * The note under the campaigns: what opens and clicks are out of, and since when. Clicks count
  * from the first event of any kind, so they never start after opens.
