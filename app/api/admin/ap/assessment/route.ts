@@ -29,8 +29,9 @@ export async function GET(request: Request) {
   const cmp = comparisonRange(filters);
 
   try {
-    const [facts, previous, ad, newReturning, sessions] = await Promise.all([
-      fetchFactsFor(filters.from, filters.to, filters),
+    const factsNow = fetchFactsFor(filters.from, filters.to, filters);
+    const [facts, previous, ad, newReturning, sessions, visitorGroups] = await Promise.all([
+      factsNow,
       cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       adCostByDay(),
       // PostHog is a side panel: its failure shows there, it never fails the page.
@@ -38,13 +39,16 @@ export async function GET(request: Request) {
       splitBlocked(filters)
         ? Promise.resolve(null)
         : fetchSessionSources(filters.from, filters.to).catch(postHogFailed),
+      // The New & returning panel's € per visit: each payment with its payer's visitor group,
+      // asked as soon as the payments are read, beside the other PostHog reads.
+      factsNow.then((f) =>
+        fetchVisitorGroups(
+          filters.from,
+          filters.to,
+          f.money.map((m) => m.ph)
+        ).catch(postHogFailed)
+      ),
     ]);
-    // The New & returning panel's € per visit: each payment with its payer's visitor group.
-    const visitorGroups = await fetchVisitorGroups(
-      filters.from,
-      filters.to,
-      facts.money.map((m) => m.ph)
-    ).catch(postHogFailed);
     return NextResponse.json(
       buildDashboard({
         facts,
