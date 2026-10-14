@@ -40,8 +40,11 @@ export const SUBMIT_OUTCOME_UNKNOWN = "submit_survey_outcome_unknown";
  *
  * Format: ISO date of the copy change. To bump, change the constant AND
  * update `data/survey-source.csv` in the same commit.
+ *
+ * 2026-10-14: the guide line adds that we see whether our emails are opened
+ * and which links are clicked.
  */
-export const MARKETING_OPT_IN_TERMS_VERSION = "2026-05-21";
+export const MARKETING_OPT_IN_TERMS_VERSION = "2026-10-14";
 
 /**
  * Audit M2: GDPR Art. 5(2)/9(2)(a) accountability. Version of the consent terms

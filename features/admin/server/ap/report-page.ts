@@ -690,15 +690,20 @@ function wholeDayAfter(day: string | null): string | null {
   return day === null ? null : addDays(day, 1);
 }
 
-/** The note under the campaigns: since when opens and clicks are counted. */
+/**
+ * The note under the campaigns: since when opens and clicks are counted. Clicks count from the
+ * first event of any kind, so they never start after opens.
+ */
 function emailEventsNote(opens: string | null, clicks: string | null): string {
-  const from = (d: string) => `from ${shortDate(d)} ${d.slice(0, 4)}`;
-  if (!opens && !clicks) return "Opens and clicks are not recorded yet.";
-  const said =
-    opens === clicks
-      ? `Opens and clicks counted ${from(opens!)}`
-      : `${clicks ? `Clicks counted ${from(clicks)}` : "Clicks not recorded yet"}, ${opens ? `opens ${from(opens)}` : "opens not recorded yet"}`;
-  return `${said}: a range that starts earlier shows —.`;
+  const day = (d: string) => `${shortDate(d)} ${d.slice(0, 4)}`;
+  const earlier = "a range that starts earlier shows —";
+  if (!clicks) return "Opens and clicks are not recorded yet.";
+  if (!opens) {
+    return `Clicks count from ${day(clicks)}, the first whole day recorded (${earlier}); opens are not recorded yet.`;
+  }
+  return opens === clicks
+    ? `Opens and clicks count from ${day(clicks)}, the first whole day recorded; ${earlier}.`
+    : `Clicks count from ${day(clicks)} and opens from ${day(opens)}, the first whole days recorded; ${earlier}.`;
 }
 
 function pct(v: number | null): string {

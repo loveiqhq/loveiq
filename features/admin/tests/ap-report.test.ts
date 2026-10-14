@@ -43,6 +43,8 @@ const extras: ReportExtras = {
   feedback: [],
   votes_total: 0,
   emails: [],
+  email_events_from: null,
+  email_opens_from: null,
 };
 const day = (d: string) => ({ day: d, at: `${d}T10:00:00Z`, openedAt: `${d}T10:05:00Z` });
 /** Readers from before 18 Sep 2026, when the report's events still needed cookie consent. */
@@ -260,15 +262,83 @@ describe("report page", () => {
         },
       }).returns.campaigns;
     const c = campaigns([
-      { stage: "72h_no_unlock", sent: 40, returned: 10, bought: 2, revenue: 7 },
+      {
+        stage: "72h_no_unlock",
+        sent: 40,
+        opened: null,
+        clicked: null,
+        returned: 10,
+        bought: 2,
+        revenue: 7,
+      },
     ]);
     expect(c.map((x) => x.stage)).toEqual(["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"]);
     expect(c[0]).toMatchObject({ sent: 40, returned: 10, returnRate: 0.25, purchased: 2 });
     expect(c[1]).toMatchObject({ sent: 0, returned: 0, returnRate: null });
     // An older database function has no returns: blank, not zero.
     expect(
-      campaigns([{ stage: "72h_no_unlock", sent: 40, returned: null, bought: 2, revenue: 7 }])[0]
+      campaigns([
+        {
+          stage: "72h_no_unlock",
+          sent: 40,
+          opened: null,
+          clicked: null,
+          returned: null,
+          bought: 2,
+          revenue: 7,
+        },
+      ])[0]
     ).toMatchObject({ returned: null, returnRate: null });
+  });
+
+  it("opens and clicks count, with their share of sent, from the first whole day each was kept", () => {
+    const row = {
+      stage: "72h_no_unlock",
+      sent: 40,
+      opened: 20,
+      clicked: 5,
+      returned: 10,
+      bought: 2,
+      revenue: 7,
+    };
+    // The fixture's range starts on 1 Oct.
+    const returns = (events: string | null, opens: string | null) =>
+      page({
+        extras: { ...extras, emails: [row], email_events_from: events, email_opens_from: opens },
+      }).returns;
+
+    const both = returns("2026-09-29", "2026-09-29");
+    expect(both.campaigns[0]).toMatchObject({
+      opened: 20,
+      openRate: 0.5,
+      clicked: 5,
+      clickRate: 0.125,
+    });
+    // A retired stage sent nothing: none opened, and no share of nothing.
+    expect(both.campaigns[1]).toMatchObject({ opened: 0, openRate: null, clicked: 0 });
+    expect(both.emailEvents).toBe(
+      "Opens and clicks count from 30 Sep 2026, the first whole day recorded; a range that starts earlier shows —."
+    );
+
+    // Opens are switched on later than the rest: until one is kept, opens stay blank.
+    const clicksOnly = returns("2026-09-30", null);
+    expect(clicksOnly.campaigns[0]).toMatchObject({ opened: null, openRate: null, clicked: 5 });
+    expect(clicksOnly.emailEvents).toBe(
+      "Clicks count from 1 Oct 2026, the first whole day recorded (a range that starts earlier shows —); opens are not recorded yet."
+    );
+    expect(returns("2026-09-20", "2026-09-27").emailEvents).toBe(
+      "Clicks count from 21 Sep 2026 and opens from 28 Sep 2026, the first whole days recorded; a range that starts earlier shows —."
+    );
+
+    // The first day kept is partial (sends before the deploy carried no tags): a range
+    // starting on it is not counted, nor one before anything was kept.
+    expect(returns("2026-10-01", "2026-10-01").campaigns[0]).toMatchObject({
+      opened: null,
+      clicked: null,
+    });
+    const none = returns(null, null);
+    expect(none.campaigns[0]).toMatchObject({ opened: null, clicked: null });
+    expect(none.emailEvents).toBe("Opens and clicks are not recorded yet.");
   });
 });
 
@@ -285,18 +355,35 @@ describe("fetchReportExtras", () => {
     });
     const old = await fetchReportExtras("2026-10-01", "2026-10-07");
     expect(old.map_steppers).toBeNull();
-    expect(old.emails[0]).toMatchObject({ sent: 4, returned: null });
+    expect(old.emails[0]).toMatchObject({ sent: 4, returned: null, opened: null, clicked: null });
+    expect(old.email_events_from).toBeNull();
+    expect(old.email_opens_from).toBeNull();
 
     answer({
       wizard: [],
       map_steppers: [3, "4"],
       chapters: [],
       feedback: [],
-      emails: [{ stage: "72h_no_unlock", sent: 4, returned: 1, bought: 0, revenue: 0 }],
+      emails: [
+        {
+          stage: "72h_no_unlock",
+          sent: 4,
+          returned: 1,
+          delivered: 4,
+          opened: 3,
+          clicked: 1,
+          bought: 0,
+          revenue: 0,
+        },
+      ],
+      email_events_from: "2026-10-15",
+      email_opens_from: null,
     });
     const latest = await fetchReportExtras("2026-10-01", "2026-10-07");
     expect(latest.map_steppers).toEqual([3, 4]);
-    expect(latest.emails[0]!.returned).toBe(1);
+    expect(latest.emails[0]).toMatchObject({ returned: 1, opened: 3, clicked: 1 });
+    expect(latest.email_events_from).toBe("2026-10-15");
+    expect(latest.email_opens_from).toBeNull();
   });
 });
 
@@ -341,7 +428,19 @@ describe("report page, on screen", () => {
         },
       ],
       votes_total: 2,
-      emails: [{ stage: "72h_no_unlock", sent: 8, returned: 2, bought: 1, revenue: 3.49 }],
+      emails: [
+        {
+          stage: "72h_no_unlock",
+          sent: 8,
+          opened: 4,
+          clicked: 1,
+          returned: 2,
+          bought: 1,
+          revenue: 3.49,
+        },
+      ],
+      email_events_from: "2026-09-20",
+      email_opens_from: "2026-09-25",
     },
   });
   /** The data rows of a table, top to bottom, by their first column's text. */
@@ -369,7 +468,52 @@ describe("report page, on screen", () => {
     ]);
     const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
     expect(campaigns.getByText("25.0%")).toBeInTheDocument();
-    expect(campaigns.getAllByText("not recorded")).toHaveLength(6);
+    // Opened and Clicked: the count, its share of sent under it.
+    expect(campaigns.getByText("50.0%")).toBeInTheDocument();
+    expect(campaigns.getByText("12.5%")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Clicks count from 21 Sep 2026 and opens from 26 Sep 2026/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Opens are inflated by Apple Mail/)).toBeInTheDocument();
+    // Both sort: the second press turns low to high, so the one opened email goes last.
+    const live = expect.stringContaining("72 hours on, not unlocked");
+    fireEvent.click(campaigns.getByRole("button", { name: "Sort by Opened" }));
+    expect(rowNames("Email campaigns")[0]).toEqual(live);
+    fireEvent.click(campaigns.getByRole("button", { name: "Sort by Opened" }));
+    expect(rowNames("Email campaigns")[2]).toEqual(live);
+    fireEvent.click(campaigns.getByRole("button", { name: "Sort by Clicked" }));
+    expect(rowNames("Email campaigns")[0]).toEqual(live);
+  });
+
+  it("shows — for opens and clicks in a range that starts before they were counted", () => {
+    screenData.payload = page({
+      extras: {
+        ...extras,
+        emails: [
+          {
+            stage: "72h_no_unlock",
+            sent: 8,
+            opened: 4,
+            clicked: 1,
+            returned: 2,
+            bought: 1,
+            revenue: 3.49,
+          },
+        ],
+      },
+    });
+    render(createElement(ApReport));
+    const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
+    const rows = campaigns.getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      // Status and Sent, then Opened and Clicked.
+      const cells = within(row)
+        .getAllByRole("cell")
+        .map((c) => c.textContent);
+      expect(cells.slice(2, 4)).toEqual(["—", "—"]);
+    }
+    expect(screen.getByText(/Opens and clicks are not recorded yet\./)).toBeInTheDocument();
   });
 
   it("filters the feedback log from its headers' funnels", () => {

@@ -61,6 +61,19 @@ the old dashboard secret.
 
 ## Resend domain tracking (T-13 / T-14)
 
+**Decision, 14 Oct 2026 (owner): keep click tracking and turn open tracking
+on, for the whole sending domain, with the disclosure.** Click tracking had
+stayed on (84 `email.clicked` webhooks in the 30 days before, no
+`email.opened`). The disclosure is privacy policy §7.3 and the Q16015 guide
+line (T-11 version `2026-10-14`); the owner switches **Open tracking** on in
+the Resend dashboard once it is live. Every nurture email is kept per reader,
+whatever the Q16015 answer: the send tags it `stage` + `sub`, and the webhook
+keeps its delivery, opens and clicks in `email_message_event` (ids and a time
+only, never the address, IP, user agent or link) for the admin Report page.
+Transactional emails carry the image and wrapped links too, because tracking
+is per domain; for them we keep only the daily totals. The problems below are
+what the decision accepts; the turn-off steps further down still work.
+
 Resend enables open-tracking pixels and click-link wrapping by DEFAULT on
 every verified domain. With tracking on:
 
@@ -72,9 +85,8 @@ every verified domain. With tracking on:
 
 Both behaviours have three problems for us:
 
-1. **Privacy disclosure gap** — our privacy policy does not list Resend as
-   a click/open tracking processor. Disclosure work is more effort than
-   simply disabling.
+1. **Privacy disclosure gap** — our privacy policy did not list Resend as
+   a click/open tracking processor. Closed 2026-10-14 (privacy policy §7.3).
 2. **Brand** — `resend-links.com` in hover-preview erodes trust on
    transactional emails (purchase confirms, share links, magic links).
 3. **Compliance** — the open pixel is a tracking technology that requires
@@ -110,11 +122,14 @@ manually) and inspect the raw HTML in the recipient inbox:
 
 ### Re-enabling
 
-If a future product decision requires open/click metrics, the cleanest path is:
+The path, as taken on 2026-10-14:
 
-1. Update the privacy policy to disclose Resend as a click/open processor.
-2. Re-enable in the Resend dashboard.
-3. Add the disclosure to the marketing-email opt-in copy at Q16015 (consent versioning via T-11 captures the new text).
+1. Update the privacy policy to disclose Resend as a click/open processor
+   (done: §7.3).
+2. Add the disclosure to the marketing-email opt-in copy at Q16015 (done:
+   the guide line; T-11 version `2026-10-14`).
+3. Re-enable in the Resend dashboard (clicks were on; the owner turns opens
+   on after step 1 is deployed).
 
 **Rotation checklist:**
 
