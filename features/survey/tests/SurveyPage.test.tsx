@@ -702,6 +702,18 @@ describe("SurveyPage — the intro's own records", () => {
     expect(sent()).toEqual(["consent_view", "consent_back", "intro_slide_4"]);
   });
 
+  it("records no Back from slide 1's hidden button, which a keyboard can still reach", async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem(SURVEY_STEP_KEY, "1");
+    render(<SurveyPage />);
+    await screen.findByRole("heading", { name: /quality in/i });
+    await user.click(screen.getByRole("button", { name: /go to previous slide/i }));
+    await new Promise((r) => setTimeout(r, 250));
+
+    expect(screen.getByRole("heading", { name: /quality in/i })).toBeInTheDocument();
+    expect(sent()).toEqual(["intro_slide_1"]);
+  });
+
   it("records nothing without the visitor cookie (cookies not accepted)", async () => {
     document.cookie = "__liq_vid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
     render(<SurveyPage />);

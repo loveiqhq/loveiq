@@ -263,7 +263,10 @@ describe("AP totals", () => {
   });
 
   it("splits by tablet only from the tracking day, and by the referrer the tracker kept", () => {
-    expect(totals(factsFixture(), { ...ALL, device: "tablet" }).starts).toBeNull();
+    // 13 to 14 Oct: steps carry the device, but tablets are not told apart until the 15th.
+    const oct13 = factsFixture({ from: "2026-10-13", to: "2026-10-14" });
+    expect(totals(oct13, { ...ALL, device: "tablet" }).starts).toBeNull();
+    expect(totals(oct13, { ...ALL, device: "phone" }).starts).not.toBeNull();
     const later = factsFixture({
       from: "2026-10-15",
       to: "2026-10-16",
