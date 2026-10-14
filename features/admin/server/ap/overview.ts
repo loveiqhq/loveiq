@@ -25,8 +25,10 @@ import { fmt, type GoodWhen, type Unit } from "./format";
 import { POSTHOG_FROM, type PostHogResult, type SessionTags } from "./posthog";
 import {
   EVENTS_COMPLETE_FROM,
+  LATE_SOURCES,
   STEP_DEVICE_FROM,
   draftsKeptFrom,
+  lateSourceNote,
   launched,
   mean,
   median,
@@ -205,6 +207,15 @@ export function visitorSplit(
   };
 }
 
+/** How each of LATE_SOURCES read before SURVEY_TRACKING_FROM, for the note under a filter. */
+const LATE_SOURCE_BEFORE: Partial<Record<Source, string>> = {
+  organic_search:
+    "an untagged visit from a search engine counts as Direct / untagged, so those days read low",
+  direct:
+    "Direct / untagged also holds untagged visits from search engines and Meta links without tags, so those days read high",
+  social: "a Meta link without tags counts as Direct / untagged, so those days read low",
+};
+
 export function head(f: ApFilters, today: string, now: Date): PageHead {
   const cmp = comparisonRange(f);
   const notes: string[] = [];
@@ -266,6 +277,18 @@ export function head(f: ApFilters, today: string, now: Date): PageHead {
     notes.push(
       `Tablets are told apart from ${tracking}, but the comparison period starts before then: in it, tablets count as Mobile, or as Desktop for newer iPads, which present themselves as Macs, so part of the change comes from that.`
     );
+  }
+  // A source the tracker tells apart only from that day, filtered on.
+  const before = f.source !== "all" ? LATE_SOURCE_BEFORE[f.source] : undefined;
+  if (before) {
+    const label = SOURCES.find((s) => s.value === f.source)?.label ?? f.source;
+    if (f.from < SURVEY_TRACKING_FROM) {
+      notes.push(`${label} is told apart from ${tracking}: before, ${before}.`);
+    } else if (cmp && !beforeData(cmp) && cmp.from < SURVEY_TRACKING_FROM) {
+      notes.push(
+        `${label} is told apart from ${tracking}, but the comparison period starts before then: in it, ${before}, so part of the change comes from that.`
+      );
+    }
   }
   return {
     range: { from: f.from, to: f.to, label: rangeLabel(f.from, f.to) },
@@ -467,6 +490,10 @@ export function buildOverview(input: {
   }));
   const split = visitorSplit(f, t.visits, input.sessions ?? null);
   const visitorsOf = (s: Source) => split.bySource.get(s)?.visitors ?? null;
+  // What a source's people are divided by: none for a late source in a range before its day.
+  const late = split.ok ? lateSourceNote(f.from) : null;
+  const perVisitorOf = (s: Source) => (late && LATE_SOURCES.has(s) ? null : visitorsOf(s));
+  const lateNote = late ? ` ${late}` : "";
 
   const trafficByAssessment: Table = {
     columns: [
@@ -514,10 +541,10 @@ export function buildOverview(input: {
       values: [
         visitorsOf(s.value),
         split.bySource.get(s.value)?.share ?? null,
-        ratio(s.t.starts, visitorsOf(s.value)),
+        ratio(s.t.starts, perVisitorOf(s.value)),
       ],
     })),
-    note: `${split.note} Start CVR: survey starts ÷ visitors.${startsNote}`,
+    note: `${split.note} Start CVR: survey starts ÷ visitors.${lateNote}${startsNote}`,
   };
 
   const funnelValues: Array<[string, number | null]> = [
@@ -569,7 +596,7 @@ export function buildOverview(input: {
           s.t.starts,
           s.t.subs,
           ratio(s.t.startsFinished, s.t.starts),
-          ratio(s.t.subs, visitorsOf(s.value)),
+          ratio(s.t.subs, perVisitorOf(s.value)),
         ],
       })),
       ...(unknownRow
@@ -584,7 +611,7 @@ export function buildOverview(input: {
           ]
         : []),
     ],
-    note: `Completion: of the people who started in the range, how many finished. Submission CVR: submissions ÷ the source's estimated visitors.${split.ok ? "" : ` ${split.note}`}${
+    note: `Completion: of the people who started in the range, how many finished. Submission CVR: submissions ÷ the source's estimated visitors.${split.ok ? lateNote : ` ${split.note}`}${
       unknownRow
         ? " Unknown source: starts with no saved draft or submission to say where they came from."
         : ""

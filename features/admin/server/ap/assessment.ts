@@ -12,6 +12,8 @@ import { shortDate } from "./days";
 import type { GoodWhen, Unit } from "./format";
 import {
   launched,
+  LATE_SOURCES,
+  lateSourceNote,
   ratio,
   spend,
   spendBlocked,
@@ -459,6 +461,10 @@ export function buildDashboard(input: {
     visitors: split.bySource.get(s.value)?.visitors ?? null,
   }));
   const maxVisitors = Math.max(0, ...bySource.map((s) => s.visitors ?? 0));
+  // What a source's people are divided by: none for a late source in a range before its day.
+  const late = split.ok ? lateSourceNote(f.from) : null;
+  const perVisitor = (s: (typeof bySource)[number]) =>
+    late && LATE_SOURCES.has(s.value) ? null : s.visitors;
   const sources: Table = {
     sample: split.ok,
     barLabel: "Share of visits",
@@ -476,19 +482,19 @@ export function buildDashboard(input: {
         s.visitors,
         split.bySource.get(s.value)?.share ?? null,
         s.x.subs,
-        ratio(s.x.subs, s.visitors),
-        ratio(s.x.revenue, s.visitors),
+        ratio(s.x.subs, perVisitor(s)),
+        ratio(s.x.revenue, perVisitor(s)),
       ],
       // No bars while the visitors are blank: an empty track would read as none.
       ...(split.ok ? { bar: maxVisitors ? (s.visitors ?? 0) / maxVisitors : 0 } : {}),
     })),
-    note: `${split.note} Survey CVR: submissions ÷ visitors. Submissions and payments carry the source the survey recorded; revenue by payment day.`,
+    note: `${split.note} Survey CVR: submissions ÷ visitors. Submissions and payments carry the source the survey recorded; revenue by payment day.${late ? ` ${late}` : ""}`,
   };
 
   const performance = bySource.map((s) => ({
     label: s.label,
-    surveyCvr: ratio(s.x.subs, s.visitors),
-    perVisit: ratio(s.x.revenue, s.visitors),
+    surveyCvr: ratio(s.x.subs, perVisitor(s)),
+    perVisit: ratio(s.x.revenue, perVisitor(s)),
   }));
 
   // € per visit for each of PostHog's visitor groups: the range's payments, each with the

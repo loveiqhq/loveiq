@@ -237,6 +237,23 @@ export function spend(ad: AdCost, scope: Scope, from: string, to: string): Spend
 }
 
 /**
+ * The sources the survey's tracker tells apart only from SURVEY_TRACKING_FROM, when it began
+ * keeping the referrer and Meta's click id: before, an untagged visit from a search engine and
+ * a Meta link without tags are Direct / untagged in our records, while PostHog's split of the
+ * visitors tells them apart.
+ */
+export const LATE_SOURCES: ReadonlySet<Source> = new Set(["organic_search", "direct", "social"]);
+
+/**
+ * Why a late source's people can't be divided by its estimated visitors in a range starting
+ * on `from`, or null: the two would sort the same visits differently.
+ */
+export function lateSourceNote(from: string): string | null {
+  if (from >= SURVEY_TRACKING_FROM) return null;
+  return `Organic search, Direct and Social rates are blank for ranges starting before ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}: until then the survey kept no referrer or Meta click id, so its search and Meta visitors are under Direct / untagged, while PostHog's visitor split tells them apart.`;
+}
+
+/**
  * Each source's share of the visits PostHog saw (fetchSessionSources), sorted by our own
  * rules; our probes are left out, as they are of the visit total. Null when it saw none.
  */

@@ -678,7 +678,9 @@ describe("visitors per source: a sample split, the totals live", () => {
     expect(traffic.columns[2]).toMatchObject({ unit: "pct", digits: 0 });
     expect(traffic.rows.map((r) => r.label)).toEqual(SOURCE_ROWS.map((s) => s.label));
     expect(values(traffic, "Google Ads")).toEqual([66, 0.3, 10 / 66]);
-    expect(values(traffic, "Direct / untagged")).toEqual([110, 0.5, 0]);
+    // Direct's starts can't be set against PostHog's direct visitors before the tracking day
+    // (the next test): visitors and share, no rate.
+    expect(values(traffic, "Direct / untagged")).toEqual([110, 0.5, null]);
     expect(values(traffic, "Meta Ads")).toEqual([22, 0.1, 0]);
     // Nobody from a source: a zero row, not a missing one, and no rate out of nothing.
     expect(values(traffic, "Email")).toEqual([0, 0, null]);
@@ -694,6 +696,88 @@ describe("visitors per source: a sample split, the totals live", () => {
     expect(subs.sample).toBe(true);
     // Engagement holds no estimate: no sample mark.
     expect(p.engagement.bySource.sample).toBeUndefined();
+  });
+
+  it("late sources: no rate over PostHog's visitors before the tracking day, said why; from it, rates", () => {
+    const late = ["Organic search", "Direct / untagged", "Social"];
+    const rates = (p: ReturnType<typeof overview>) =>
+      Object.fromEntries(
+        p.traffic.bySource.rows.map((r) => [
+          r.label,
+          [r.values[2], values(p.submissions.bySource, r.label)?.[3]],
+        ])
+      );
+    const before = overview();
+    for (const label of late) expect(rates(before)[label]).toEqual([null, null]);
+    expect(rates(before)["Google Ads"]).toEqual([10 / 66, 2 / 66]);
+    expect(before.traffic.bySource.note).toContain(
+      "Organic search, Direct and Social rates are blank for ranges starting before 15 Oct 2026"
+    );
+    expect(before.submissions.bySource.note).toContain("rates are blank for ranges starting");
+    const d = buildDashboard({
+      facts,
+      previous: null,
+      ad,
+      filters,
+      today: TODAY,
+      now,
+      newReturning: null,
+      sessions,
+    });
+    for (const label of late) {
+      expect(d.sources.rows.find((r) => r.label === label)!.values.slice(3)).toEqual([null, null]);
+      expect(d.performance.find((r) => r.label === label)).toMatchObject({
+        surveyCvr: null,
+        perVisit: null,
+      });
+    }
+    expect(d.sources.note).toContain("rates are blank for ranges starting before 15 Oct 2026");
+
+    // A range from the tracking day: every source's rate, and no such note.
+    const after = parseFilters(
+      { period: "custom", from: "2026-10-15", to: "2026-10-21" },
+      "2026-10-22"
+    );
+    const p = overview({
+      filters: after,
+      today: "2026-10-22",
+      now: new Date("2026-10-22T10:00:00Z"),
+      facts: factsFixture({
+        from: after.from,
+        to: after.to,
+        visits: [{ day: "2026-10-16", arm: "white_card", src: null, n: 100 }],
+      }),
+    });
+    // 100 visits: 50 direct and 10 organic by PostHog's shares, with no starts from either.
+    expect(rates(p)["Direct / untagged"]).toEqual([0, 0]);
+    expect(rates(p)["Organic search"]).toEqual([0, 0]);
+    expect(p.traffic.bySource.note).not.toContain("rates are blank");
+  });
+
+  it("late sources: a filter on one says how its days before the tracking day read", () => {
+    const notes = (f: typeof filters) =>
+      buildOverview({ facts, previous: null, ad, filters: f, today: TODAY, now }).notes.join(" ");
+    expect(notes({ ...filters, source: "organic_search" })).toContain(
+      "Organic search is told apart from 15 Oct 2026: before, an untagged visit from a search engine counts as Direct / untagged, so those days read low."
+    );
+    expect(notes({ ...filters, source: "direct" })).toContain("so those days read high");
+    expect(notes({ ...filters, source: "social" })).toContain("a Meta link without tags");
+    expect(notes({ ...filters, source: "google_ads" })).not.toContain("is told apart from");
+    // After the day, compared with a period before it: part of the change is the sorting.
+    const after = parseFilters(
+      { period: "custom", from: "2026-10-15", to: "2026-10-21", source: "organic_search" },
+      "2026-10-22"
+    );
+    expect(
+      buildOverview({
+        facts: factsFixture({ from: after.from, to: after.to }),
+        previous: null,
+        ad,
+        filters: after,
+        today: "2026-10-22",
+        now: new Date("2026-10-22T10:00:00Z"),
+      }).notes.join(" ")
+    ).toContain("but the comparison period starts before then: in it, an untagged visit");
   });
 
   it("overview: blank with its reason under a narrowing filter, before PostHog, or when it fails", () => {
