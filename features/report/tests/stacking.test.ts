@@ -21,4 +21,15 @@ describe("what sits on top of what on the report", () => {
     expect(drawer).toBeGreaterThan(zIndex(css, ".report-sticky-unlock"));
     expect(drawer).toBeLessThan(zIndex(css, ".report-pricing-modal"));
   });
+
+  it("puts the leave offer over the bar and the chapter list, under share and the hand-off", () => {
+    const offer = zIndex(
+      readFileSync("features/booking/ui/founderCallDialog.css", "utf8"),
+      ".report-leave-offer"
+    );
+    expect(offer).toBeGreaterThan(zIndex(css, ".report-sticky-unlock"));
+    expect(offer).toBeGreaterThan(zIndex(css, ".report-chapter-drawer-root"));
+    expect(offer).toBeLessThan(zIndex(css, ".report-share-modal"));
+    expect(offer).toBeLessThan(zIndex(css, ".report-checkout-handoff"));
+  });
 });
