@@ -26,7 +26,7 @@ function Dot({ health }: { health: Health }) {
   return <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${tone}`} />;
 }
 
-/** GA4 syncs nightly: a last day more than two days back means a sync was missed. */
+/** GA4 syncs every 15 minutes: a last day more than two days back means syncs have stopped. */
 function ga4Health(lastDay: string | null | undefined, today: string): Health {
   if (lastDay === undefined) return null;
   if (lastDay === null) return "down";
@@ -195,7 +195,7 @@ export default function ApSidebar({ onNavigate }: { onNavigate?: () => void }) {
           GA4 ·{" "}
           {status
             ? status.ga4.lastDay
-              ? `synced nightly, to ${shortDate(status.ga4.lastDay)}`
+              ? `synced every 15 minutes, to ${shortDate(status.ga4.lastDay)}`
               : "no data"
             : statusError
               ? "unknown"

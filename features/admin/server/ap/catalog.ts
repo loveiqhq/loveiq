@@ -13,14 +13,17 @@ import { columnPrivacy, isExported, unclassifiedColumns } from "@features/admin/
 import { DRAFTS } from "./field-drafts";
 import { POSTHOG_FROM } from "./posthog";
 
-/** The brain's nightly Google Analytics days (Google Ads spend rides on them). */
+/**
+ * The brain's Google Analytics days, refreshed every 15 minutes: the channel table rides on them
+ * (`meta.channels`), and so do Google Ads' spend and campaigns (`meta.ads_campaigns`).
+ */
 // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
 export const GA4_DAYS = "/rest/v1/brain_chunk?source=eq.ga4&meta->>grain=eq.day";
 
-/** The last day the brain's nightly Google Analytics copy holds, with or without ad data. */
+/** The last day the brain's Google Analytics copy holds, or the last with Google Ads campaigns. */
 export async function lastGaDay(ads: boolean): Promise<string | null> {
   const res = await supabaseFetch(
-    `${GA4_DAYS}${ads ? "&meta->>ad_cost=not.is.null" : ""}&select=period_end&order=period_end.desc&limit=1`
+    `${GA4_DAYS}${ads ? "&meta->>ads_campaigns=not.is.null" : ""}&select=period_end&order=period_end.desc&limit=1`
   );
   if (!res.ok) return null;
   const rows = (await res.json()) as Array<{ period_end: string }>;
@@ -338,29 +341,55 @@ const OUTSIDE: Array<
   },
   {
     source: "ga4",
-    name: "ga4_daily",
+    name: "sessions_daily",
     group: "Traffic",
     description:
-      "Google Analytics per day, as the company brain stores it each night: sessions and users. Counts only visitors who accepted cookies, so it reads below our own visit log.",
-    key: ["day"],
+      "Google Analytics per day and channel, as the company brain copies it every 15 minutes. Counts only visitors who accepted cookies, so it reads below our own visit log.",
+    key: ["date", "channel"],
     fields: [
-      { name: "day", type: "date", description: "The day." },
+      { name: "date", type: "date", description: "The day." },
+      {
+        name: "channel",
+        type: "text",
+        description:
+          "Google Analytics' default channel group: Paid Search, Direct, Organic Search and so on.",
+      },
       { name: "sessions", type: "int", description: "Sessions started." },
-      { name: "users", type: "int", description: "Active users." },
+      { name: "users", type: "int", description: "Users (Google Analytics' total users)." },
+      { name: "new_users", type: "int", description: "Users on their first visit." },
+      {
+        name: "engaged_sessions",
+        type: "int",
+        description:
+          "Sessions that lasted over 10 seconds, viewed 2 or more pages or had a conversion.",
+      },
+      {
+        name: "avg_engagement_time",
+        type: "numeric",
+        description: "Average seconds the site was in the foreground, per session.",
+      },
     ],
   },
   {
     source: "ads",
-    name: "ads_daily",
+    name: "campaign_daily",
     group: "Spend",
     description:
-      "Google Ads, daily totals only, through Google Analytics' link to the Ads account (from 24 Apr 2026): what the pages use as ad spend.",
-    key: ["day"],
+      "Google Ads per day and campaign, read from the Ads account every 15 minutes. Only campaigns that showed, were clicked or cost something that day.",
+    key: ["date", "campaign_id"],
     fields: [
-      { name: "day", type: "date", description: "The day." },
-      { name: "cost_eur", type: "numeric", description: "Spend in euros." },
-      { name: "clicks", type: "int", description: "Ad clicks." },
+      { name: "date", type: "date", description: "The day." },
+      { name: "campaign_id", type: "text", description: "Google Ads' id for the campaign." },
+      { name: "campaign_name", type: "text", description: "The campaign's name in Google Ads." },
       { name: "impressions", type: "int", description: "Ad impressions." },
+      { name: "clicks", type: "int", description: "Ad clicks." },
+      { name: "cost_eur", type: "numeric", description: "Spend in euros." },
+      {
+        name: "conversions",
+        type: "numeric",
+        description:
+          "Conversions Google attributes to the campaign, counted on the day of the ad click, so recent days can still rise.",
+      },
     ],
   },
 ];
