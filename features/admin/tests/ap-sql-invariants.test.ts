@@ -56,6 +56,14 @@ describe("AP readers' SQL", () => {
     expect(SQL).toMatch(/'full', coalesce\(x\.full_paid, false\)/);
   });
 
+  it("reads a report as opened from its first sign, so no later step outnumbers the opens", () => {
+    expect(SQL).toMatch(
+      /coalesce\(r\.opened_at, least\(q\.paywall_at, c\.at, q\.checkout_at, p\.paid_at\)\) AS opened_at/
+    );
+    // The prices table counts people at every step, sales too.
+    expect(SQL).toMatch(/count\(DISTINCT qu\.sid\) FILTER \(WHERE qs\.sales > 0\) AS sales/);
+  });
+
   it("leaves a Skip Intro on slide 4 out of going on and of the slide's time", () => {
     expect(SQL).toMatch(/FILTER \(WHERE s4\.visitor_id IS NULL\) AS went_on/);
     expect(SQL).toMatch(/> f\.first_seen AND s4\.visitor_id IS NULL\), '\{\}'\) AS ms/);

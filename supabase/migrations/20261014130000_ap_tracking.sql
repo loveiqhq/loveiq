@@ -217,7 +217,12 @@ AS $function$
   sub_rows AS (
     SELECT s.id, s.created_date_time, s.start_date_time, s.duration_ms, s.j, s.ph,
            (s.created_date_time AT TIME ZONE 'Europe/Berlin')::date AS day,
-           r.opened_at, r.visits, r.returned_at, r.read_ms, r.closed,
+           -- Opened: the report's first session or, where none was recorded (before 18 Sep 2026
+           -- only with cookie consent), the first sign it was open: the paywall seen, a paywall
+           -- click, a checkout or a payment. Never later than those, so no step after "opened"
+           -- outnumbers it. A price quote is no such sign: one is made at submission.
+           coalesce(r.opened_at, least(q.paywall_at, c.at, q.checkout_at, p.paid_at)) AS opened_at,
+           r.visits, r.returned_at, r.read_ms, r.closed,
            q.paywall_at, c.at AS clicked_at, q.checkout_at,
            CASE WHEN sd.tablet THEN 'Tablet' ELSE coalesce(q.device, sd.device) END AS device, q.tier, q.price_arm,
            p.paid_at, p.sales, p.revenue, p.gifted, p.plan, p.full_paid,
@@ -409,7 +414,9 @@ AS $function$
                  qu.device, qu.tier,
                  count(DISTINCT qu.sid) AS quoted,
                  count(DISTINCT qu.sid) FILTER (WHERE qu.checkout_started_at IS NOT NULL) AS checkouts,
-                 coalesce(sum(qs.sales), 0) AS sales,
+                 -- People, as quoted and checkouts are: one person paying twice is one sale here,
+                 -- so the payment CVR (sales ÷ quoted) stays a share of people.
+                 count(DISTINCT qu.sid) FILTER (WHERE qs.sales > 0) AS sales,
                  coalesce(sum(qs.revenue), 0) AS revenue
             FROM quotes qu
             LEFT JOIN quote_sales qs ON qs.id = qu.id
