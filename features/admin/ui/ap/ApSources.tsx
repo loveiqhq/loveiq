@@ -14,7 +14,6 @@ import { berlinTime } from "@features/admin/server/ap/explorer-spec";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
-import { exportTables } from "./csv";
 import { AP_BASE } from "./nav";
 import { Failed, FilterIcon, HeaderFilter, Loading, PageHeader, SortIcon } from "./kit";
 import { useApRole, useApStatus, type ApStatus } from "./status";
@@ -441,6 +440,10 @@ export default function ApSources() {
   const { source, tables, table, q, set } = useCatalogState(data);
   const [search, setSearch] = useState(q);
   const { status: live, error: liveError } = useApStatus();
+  const router = useRouter();
+  const { isAdmin } = useApRole();
+  // As on the explorer: exports are for admins, said on the button once the role is known.
+  const exportDenied = isAdmin ? null : live ? "Admins only" : "";
 
   const save = async (
     t: CatalogTable,
@@ -469,7 +472,8 @@ export default function ApSources() {
         title="Data sources"
         description="Every source, its tables and what each field means. Open any table as raw data with date and field filters."
         actions={
-          <label className="flex w-full min-w-0 flex-col gap-1 text-xs font-bold text-ap-muted sm:w-[340px]">
+          // A set width, not the header's leftover room, so a phone shows the whole example too.
+          <label className="flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-1 text-xs font-bold text-ap-muted">
             Search tables and fields
             <input
               type="search"
@@ -607,50 +611,39 @@ export default function ApSources() {
                       <p className="m-0 text-xs font-semibold text-ap-plum">{table.closed}</p>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {!table.closed ? (
+                  {!table.closed && (
+                    <div className="flex flex-wrap gap-2">
                       <a
                         href={`${AP_BASE}/explorer?source=${table.source}&table=${table.name}`}
                         className="inline-flex min-h-11 items-center rounded-full bg-black px-[18px] text-sm font-bold text-white no-underline"
                       >
                         Open raw data
                       </a>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="min-h-11 cursor-pointer rounded-full border border-ap-line bg-white px-[18px] font-sans text-sm font-semibold text-ap-ink"
-                      onClick={() =>
-                        exportTables(`ap-catalog-${table.source}-${table.name}`, [
-                          {
-                            name: `${table.name} (${current?.name})`,
-                            table: {
-                              columns: [
-                                { label: "Field", unit: "text" },
-                                { label: "Type", unit: "text" },
-                                { label: "Description", unit: "text" },
-                                { label: "Privacy", unit: "text" },
-                              ],
-                              rows: table.fields.map((f) => ({
-                                label: f.name,
-                                values: [
-                                  f.type,
-                                  f.description,
-                                  f.privacy ? PRIVACY_TAG[f.privacy].label : "",
-                                ],
-                              })),
-                            },
-                          },
-                        ])
-                      }
-                    >
-                      Export field list
-                    </button>
-                  </div>
+                      {/* The table's rows: the explorer opens on them and runs its own export,
+                          admin-only, capped and logged. */}
+                      <button
+                        type="button"
+                        disabled={exportDenied !== null}
+                        onClick={() =>
+                          router.push(
+                            `${AP_BASE}/explorer?source=${table.source}&table=${table.name}&export=1`
+                          )
+                        }
+                        className="min-h-11 cursor-pointer rounded-full border border-ap-line bg-white px-[18px] font-sans text-sm font-semibold text-ap-ink disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Export CSV
+                        {exportDenied && (
+                          <span className="text-xs font-medium">{` · ${exportDenied}`}</span>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {[
                     ["Key", table.key.join(" + ") || "none"],
-                    ["Joins", table.joins.join(", ") || "none"],
+                    // Dropped when the table points to none, as the design does.
+                    ...(table.joins.length ? [["Joins", table.joins.join(", ")]] : []),
                     ["Fields", String(table.fields.length)],
                   ].map(([k, v]) => (
                     <span key={k} className={FACT}>

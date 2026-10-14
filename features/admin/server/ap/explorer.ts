@@ -502,6 +502,7 @@ const hogText = (v: string) => `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")
 
 /** The catalog's PostHog event fields as HogQL reads them. */
 const HOG_FIELDS: Record<string, string> = {
+  uuid: "uuid",
   timestamp: "timestamp",
   event: "event",
   distinct_id: "distinct_id",
@@ -510,6 +511,7 @@ const HOG_FIELDS: Record<string, string> = {
   "properties.$device_type": "properties.$device_type",
   "properties.utm_source": "properties.utm_source",
   "properties.landing_variant": "properties.landing_variant",
+  properties: "properties",
   elements_chain: "elements_chain",
 };
 
@@ -726,5 +728,6 @@ export async function dailyRows(table: CatalogTable, q: ExplorerQuery): Promise<
     total,
     masked: false,
     sql: readableSql(table, q, false),
+    synced: all.length > 0,
   };
 }

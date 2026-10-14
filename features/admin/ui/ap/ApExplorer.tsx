@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { CatalogPayload, CatalogTable, SourceKey } from "@features/admin/server/ap/catalog";
 import {
   berlinTime,
+  defaultColumns,
+  headerFilters,
   isDateType,
+  isIdColumn,
   isNumeric,
   isTextLike,
   MASKED_TEXT_OPS,
+  msDuration,
   OPS,
   PAGE_SIZES,
   type ExplorerResult,
@@ -85,10 +89,14 @@ function cellText(v: unknown): string {
   return String(v);
 }
 
-/** A cell as the page shows it, days and times in Berlin. The CSV keeps what is stored. */
-function shownText(v: unknown, type: string | undefined): string {
+/**
+ * A cell as the page shows it: days and times in Berlin, a duration_ms as "8m 41s". The CSV
+ * keeps what is stored.
+ */
+function shownText(v: unknown, type: string | undefined, column: string): string {
   if (v === null || v === undefined) return EMPTY;
   if (typeof v === "string" && type && isDateType(type)) return berlinTime(v) ?? v;
+  if (column === "duration_ms" && typeof v === "number") return msDuration(v);
   return cellText(v);
 }
 
@@ -404,7 +412,7 @@ export default function ApExplorer() {
     const chosen = (params.get("cols") ?? "")
       .split(",")
       .filter((c) => table.fields.some((f) => f.name === c));
-    return chosen.length ? chosen : table.fields.slice(0, 10).map((f) => f.name);
+    return chosen.length ? chosen : defaultColumns(table);
   }, [params, table]);
   const size = Number(params.get("size") ?? 12);
   const page = Math.max(1, Number(params.get("page") ?? 1));
@@ -524,7 +532,7 @@ export default function ApExplorer() {
 
   const [exporting, setExporting] = useState(false);
   /** Fetched, not navigated to: a refusal (the role, the limit) shows here, not as a raw page. */
-  const exportCsv = async () => {
+  const exportCsv = useCallback(async () => {
     if (!query) return;
     const qs = new URLSearchParams({ ...query, format: "csv" });
     qs.delete("page");
@@ -554,7 +562,34 @@ export default function ApExplorer() {
     } finally {
       setExporting(false);
     }
-  };
+  }, [query]);
+
+  // "Export CSV" on the Data sources page opens the table here and, once its first page has
+  // loaded, runs this page's own export of it: once, and off the address, so a reload or a
+  // shared link does not export again.
+  const exportOnOpen = params.get("export") === "1";
+  const exportStarted = useRef(false);
+  useEffect(() => {
+    if (!exportOnOpen || exportStarted.current || result.loading || adminDenied === "") return;
+    if (!result.data && !result.error) return;
+    exportStarted.current = true;
+    const next = new URLSearchParams(params.toString());
+    next.delete("export");
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    if (!result.data) return;
+    if (adminDenied === null) void exportCsv();
+    else setNotice(`Export CSV: ${adminDenied.toLowerCase()}.`);
+  }, [
+    exportOnOpen,
+    result.loading,
+    result.data,
+    result.error,
+    adminDenied,
+    params,
+    router,
+    pathname,
+    exportCsv,
+  ]);
 
   const data = result.data;
   const total = data?.total ?? null;
@@ -563,12 +598,23 @@ export default function ApExplorer() {
   const masked = data?.masked ?? masks;
   const keys = new Set(table?.key);
   const types = new Map(table?.fields.map((f) => [f.name, f.type] as const));
-  // Amounts sit right; ids (the key, links to other tables) stay left, as the design's do.
+  // Amounts sit right; ids (the key, links to other tables, *_id) stay left, as the design's do.
   const amounts = new Set(
-    table?.fields
-      .filter((f) => isNumeric(f.type) && !keys.has(f.name) && !f.joins)
-      .map((f) => f.name)
+    table?.fields.filter((f) => isNumeric(f.type) && !f.pk && !isIdColumn(f)).map((f) => f.name)
   );
+  // Why a page holds no rows, as far as the query can tell.
+  const noRows =
+    !data || data.rows.length
+      ? null
+      : data.synced === false
+        ? `Not synced yet: ${SOURCE_NAMES[source]} rows appear here after its first sync.`
+        : total
+          ? "No rows on this page: go back a page."
+          : filters.length
+            ? `No rows for these filters${dateField ? " in these dates" : ""}.`
+            : dateField
+              ? "No rows in these dates."
+              : "This table has no rows.";
 
   const sourcePicker = (
     <label className={fieldLabel}>
@@ -908,7 +954,7 @@ export default function ApExplorer() {
                 {data && result.loading ? "Updating… " : ""}
                 {data
                   ? data.rows.length === 0
-                    ? "No rows match"
+                    ? "No rows"
                     : posthog
                       ? `Showing ${data.rows.length.toLocaleString("en-US")} of ${total?.toLocaleString("en-US") ?? "?"} events, ${dir === "asc" && sort ? "oldest" : "newest"} first`
                       : `Showing ${first.toLocaleString("en-US")}–${last.toLocaleString("en-US")}${total !== null ? ` of ${total.toLocaleString("en-US")}` : ""} rows`
@@ -946,8 +992,10 @@ export default function ApExplorer() {
                       {data.columns.map((c) => {
                         const f = table.fields.find((x) => x.name === c);
                         // While masked, a personal field neither filters nor sorts (the server
-                        // refuses both): no funnel and no arrows on it.
+                        // refuses both): no funnel and no arrows on it. A funnel only where the
+                        // design puts one: words and yes or no, not ids, times or amounts.
                         const usable = !(masked && f?.privacy);
+                        const filterable = usable && Boolean(f && headerFilters(f));
                         const sortable =
                           usable &&
                           (!posthog || c === "timestamp") &&
@@ -965,7 +1013,7 @@ export default function ApExplorer() {
                             className={`whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-bold text-ap-muted ${amounts.has(c) ? "text-right" : "text-left"}`}
                           >
                             {c}
-                            {usable && (
+                            {filterable && (
                               <button
                                 type="button"
                                 aria-label={`Filter ${c}`}
@@ -1004,7 +1052,7 @@ export default function ApExplorer() {
                           const type = types.get(c);
                           const empty = r[c] === null || r[c] === undefined;
                           const raw = cellText(r[c]);
-                          const text = shownText(r[c], type);
+                          const text = shownText(r[c], type, c);
                           const tone =
                             text === "[masked]"
                               ? "text-ap-pii"
@@ -1040,6 +1088,16 @@ export default function ApExplorer() {
                         })}
                       </tr>
                     ))}
+                    {noRows && (
+                      <tr className="border-t border-ap-line">
+                        <td
+                          colSpan={data.columns.length}
+                          className="px-3 py-8 text-center text-sm text-ap-muted"
+                        >
+                          {noRows}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
