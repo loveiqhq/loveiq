@@ -48,9 +48,13 @@ describe("AP filters", () => {
 
   it("falls back to the defaults on anything malformed", () => {
     const f = parseFilters(
-      { period: "nope", source: "x", device: "tablet", tier: "tier_9", compare: "?" },
+      { period: "nope", source: "x", device: "watch", tier: "tier_9", compare: "?" },
       TODAY
     );
+    expect(parseFilters({ device: "tablet", source: "organic_search" }, TODAY)).toMatchObject({
+      device: "tablet",
+      source: "organic_search",
+    });
     expect(f).toMatchObject({
       period: "30d",
       from: "2026-09-13",
@@ -187,7 +191,7 @@ describe("AP source classes", () => {
   it("reads a click id or google/cpc as Google Ads, and our probes as tests", () => {
     expect(classifySource(t(null, null, true))).toBe("google_ads");
     expect(classifySource(t("google", "cpc"))).toBe("google_ads");
-    expect(classifySource(t("google", "organic"))).toBe("referral");
+    expect(classifySource(t("google", "organic"))).toBe("organic_search");
     expect(classifySource(t("chatgpt.com"))).toBe("ai");
     expect(classifySource(t("email"))).toBe("email");
     expect(classifySource(t("x", "nurture"))).toBe("email");
@@ -198,7 +202,47 @@ describe("AP source classes", () => {
     expect(classifySource(t("google"), false)).toBe("unknown");
     expect(deviceClass("iOS")).toBe("phone");
     expect(deviceClass("Desktop")).toBe("computer");
+    expect(deviceClass("Tablet")).toBe("tablet");
     expect(deviceClass(null)).toBeNull();
+  });
+
+  it("reads Meta Ads only when tagged paid, and organic search by tag or by referrer", () => {
+    const t = (
+      src: string | null,
+      med: string | null = null,
+      more: { ref?: string; fb?: boolean; ads?: boolean } = {}
+    ) => ({ src, med, ads: false, ...more });
+    expect(classifySource(t("facebook", "paid"))).toBe("meta_ads");
+    expect(classifySource(t("ig", "paid_social"))).toBe("meta_ads");
+    expect(classifySource(t("an", "cpm"))).toBe("meta_ads");
+    // Meta adds its click id to ordinary link clicks too: alone it is Social.
+    expect(classifySource(t("facebook", null, { fb: true }))).toBe("social");
+    expect(classifySource(t(null, null, { fb: true }))).toBe("social");
+    expect(classifySource(t(null, null, { fb: true, ref: "l.facebook.com" }))).toBe("social");
+    expect(classifySource(t("bing", "organic"))).toBe("organic_search");
+    for (const ref of [
+      "www.google.com",
+      "www.google.de",
+      "www.google.co.uk",
+      "google.com.br",
+      "com.google.android.googlequicksearchbox",
+      "www.bing.com",
+      "duckduckgo.com",
+      "de.search.yahoo.com",
+      "www.ecosia.org",
+      "yandex.ru",
+      "search.brave.com",
+    ]) {
+      expect(classifySource(t(null, null, { ref })), ref).toBe("organic_search");
+    }
+    // Not a search: Gmail's own page, another site, or a visit that carries tags.
+    expect(classifySource(t(null, null, { ref: "mail.google.com" }))).toBe("direct");
+    expect(classifySource(t(null, null, { ref: "www.reddit.com" }))).toBe("direct");
+    expect(classifySource(t("newsletter", "email", { ref: "www.google.com" }))).toBe("email");
+    expect(classifySource(t("google", "cpc", { ref: "www.google.com" }))).toBe("google_ads");
+    expect(classifySource(t("google", "organic", { fb: true }))).toBe("social");
+    // Our own probes are never counted, whatever click id they carry.
+    expect(classifySource(t("anything", "probe", { ads: true }))).toBe("test");
   });
 });
 
@@ -251,6 +295,52 @@ describe("AP totals", () => {
     expect(totals(factsFixture(), { ...ALL, source: "google_ads" }).starts).toBe(10);
   });
 
+  it("splits by tablet only from the tracking day, and by the referrer the tracker kept", () => {
+    // 13 to 14 Oct: steps carry the device, but tablets are not told apart until the 15th.
+    const oct13 = factsFixture({ from: "2026-10-13", to: "2026-10-14" });
+    expect(totals(oct13, { ...ALL, device: "tablet" }).starts).toBeNull();
+    expect(totals(oct13, { ...ALL, device: "phone" }).starts).not.toBeNull();
+    const later = factsFixture({
+      from: "2026-10-15",
+      to: "2026-10-16",
+      starts: [
+        {
+          day: "2026-10-15",
+          known: true,
+          src: null,
+          med: null,
+          ads: false,
+          ref: "www.google.com",
+          arm: null,
+          device: "Tablet",
+          finished: true,
+          n: 2,
+        },
+      ],
+      subs: [sub({ day: "2026-10-15", src: null, med: null, ads: false, ref: "www.google.com" })],
+      money: [],
+    });
+    expect(totals(later, { ...ALL, device: "tablet" })).toMatchObject({ starts: 2, subs: 0 });
+    expect(totals(later, { ...ALL, device: "phone" })).toMatchObject({ starts: 0, subs: 1 });
+    expect(totals(later, { ...ALL, source: "organic_search" })).toMatchObject({
+      starts: 2,
+      subs: 1,
+    });
+    const raw = {
+      visits: [],
+      starts: [{ day: "2026-10-15", known: true, ref: "www.bing.com", fb: true, n: 1 }],
+      subs: [],
+      money: [],
+      intro: [],
+      invites: [],
+      quotes: [],
+    };
+    expect(parseFacts(raw, "2026-10-15", "2026-10-15").starts[0]).toMatchObject({
+      ref: "www.bing.com",
+      fb: true,
+    });
+  });
+
   it("reads the facts as PostgREST and a SQL client both return them", () => {
     const raw = {
       visits: [{ day: "2026-10-01", arm: "white", src: null, n: "3" }],
@@ -273,15 +363,40 @@ describe("AP totals", () => {
       subs: [],
       money: [],
       intro: [
-        { day: "2026-10-01", step: "intro_slide_1", n: "3", ms: [4100, "5200"], skipped: "1" },
+        {
+          day: "2026-10-01",
+          step: "intro_slide_1",
+          n: "3",
+          ms: [4100, "5200"],
+          skipped: "1",
+          wentOn: "2",
+          left: 1,
+        },
         { day: "2026-10-01", step: "intro_slide_2", n: 2 },
       ],
       invites: [],
       quotes: [],
     };
     expect(parseFacts(raw, "2026-10-01", "2026-10-01").intro).toEqual([
-      { day: "2026-10-01", step: "intro_slide_1", n: 3, ms: [4100, 5200], skipped: 1 },
-      { day: "2026-10-01", step: "intro_slide_2", n: 2, ms: [], skipped: 0 },
+      {
+        day: "2026-10-01",
+        step: "intro_slide_1",
+        n: 3,
+        ms: [4100, 5200],
+        skipped: 1,
+        wentOn: 2,
+        left: 1,
+      },
+      // Without them: unknown, never a zero continue or exit.
+      {
+        day: "2026-10-01",
+        step: "intro_slide_2",
+        n: 2,
+        ms: [],
+        skipped: 0,
+        wentOn: null,
+        left: null,
+      },
     ]);
   });
 });

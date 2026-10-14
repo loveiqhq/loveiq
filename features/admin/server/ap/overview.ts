@@ -17,6 +17,7 @@ import {
   DATA_START,
   periodRange,
   rangeLabel,
+  SURVEY_TRACKING_FROM,
   type ApFilters,
   type Source,
 } from "./filters";
@@ -189,6 +190,11 @@ export function head(f: ApFilters, today: string, now: Date): PageHead {
   if (f.visitor !== "all") {
     notes.push(
       `New or returning comes from PostHog (from ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}), which saw almost every finisher's visit: one it didn't see is in neither group. Visits, survey starts, ad spend and prices can't be split this way.`
+    );
+  }
+  if (f.device !== "all" && f.from < SURVEY_TRACKING_FROM) {
+    notes.push(
+      `Tablets are told apart from ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}: before, they count as Mobile, or as Desktop for newer iPads, which present themselves as Macs.`
     );
   }
   return {

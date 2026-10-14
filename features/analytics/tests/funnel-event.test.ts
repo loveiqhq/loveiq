@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@shared/http/csrf", () => ({
@@ -115,6 +116,37 @@ describe("POST /api/funnel-event", () => {
     const body = JSON.parse((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body);
     expect(body.event_type).toBe("survey_engine_mount");
     expect(body.utm_source).toBe("google");
+  });
+
+  it("accepts the intro cards' own steps (20261014120200), and nothing beside them", async () => {
+    // The table's CHECK must allow every step the route accepts, or the rows are lost silently.
+    const check = readFileSync(
+      "supabase/migrations/20261014120200_funnel_event_intro_steps.sql",
+      "utf8"
+    ).split("ADD CONSTRAINT")[1]!;
+    mockSupabaseFetch.mockResolvedValue({ ok: true });
+    for (const event of [
+      "intro_view",
+      "consent_view",
+      "intro_back_1",
+      "intro_back_2",
+      "intro_back_3",
+      "intro_back_4",
+      "intro_skip_1",
+      "intro_skip_2",
+      "intro_skip_3",
+      "intro_skip_4",
+      "consent_back",
+    ]) {
+      expect(check).toContain(`'${event}'`);
+      mockSupabaseFetch.mockClear();
+      expect((await POST(makeRequest({ event, visitor_id: VALID_UUID }))).status).toBe(204);
+      const body = JSON.parse((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body);
+      expect(body.event_type).toBe(event);
+    }
+    for (const event of ["intro_back_5", "intro_skip_0", "consent_skip"]) {
+      expect((await POST(makeRequest({ event, visitor_id: VALID_UUID }))).status).toBe(400);
+    }
   });
 
   it("returns 204 even when the insert fails (best-effort)", async () => {

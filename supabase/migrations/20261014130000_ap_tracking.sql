@@ -33,11 +33,14 @@ AS $function$
     SELECT s.session_id FROM survey_submission s, b
      WHERE s.start_date_time >= b.since_ts AND s.start_date_time < b.until_ts AND s.session_id IS NOT NULL
   ),
+  -- A session the steps flag as a tablet (is_tablet, 20261014120100) is a Tablet: only these
+  -- readers say so; device_type stays the price quote's class everywhere else.
   ev AS (
     SELECT e.session_id, min(e.created_at) AS first_at,
            (bool_or(e.answered IS TRUE) OR bool_or(e.direction = 'complete')) AS answered,
-           (array_agg(e.device_type ORDER BY e.created_at DESC, e.id DESC)
-              FILTER (WHERE e.device_type IS NOT NULL))[1] AS device
+           CASE WHEN bool_or(e.is_tablet) THEN 'Tablet'
+                ELSE (array_agg(e.device_type ORDER BY e.created_at DESC, e.id DESC)
+                        FILTER (WHERE e.device_type IS NOT NULL))[1] END AS device
       FROM survey_behavior_event e
      WHERE e.session_id IN (SELECT session_id FROM cand)
      GROUP BY e.session_id
@@ -138,7 +141,7 @@ AS $function$
   -- The device the survey itself recorded (survey steps, from 12 Oct 2026), for readers with no
   -- price quote yet: a quote is made only when the report is opened.
   step_device AS (
-    SELECT DISTINCT ON (s.id) s.id AS sid, e.device_type AS device
+    SELECT DISTINCT ON (s.id) s.id AS sid, e.device_type AS device, e.is_tablet AS tablet
       FROM survey_submission s
       JOIN survey_behavior_event e ON e.session_id = s.session_id
      WHERE s.id IN (SELECT id FROM subs) AND e.device_type IS NOT NULL
@@ -209,7 +212,8 @@ AS $function$
     SELECT s.id, s.created_date_time, s.start_date_time, s.duration_ms, s.j, s.ph,
            (s.created_date_time AT TIME ZONE 'Europe/Berlin')::date AS day,
            r.opened_at, r.visits, r.returned_at, r.read_ms, r.closed,
-           q.paywall_at, c.at AS clicked_at, q.checkout_at, coalesce(q.device, sd.device) AS device, q.tier, q.price_arm,
+           q.paywall_at, c.at AS clicked_at, q.checkout_at,
+           CASE WHEN sd.tablet THEN 'Tablet' ELSE coalesce(q.device, sd.device) END AS device, q.tier, q.price_arm,
            p.paid_at, p.sales, p.revenue, p.gifted, p.plan,
            (sh.sid IS NOT NULL) AS shared, sh.at AS shared_at, coalesce(v.n, 0) AS votes, v.at AS voted_at,
            (iv.sid IS NOT NULL) AS invited, iv.at AS invited_at,
@@ -234,7 +238,8 @@ AS $function$
            CASE WHEN s.utm_tracker IS NOT NULL AND pg_input_is_valid(s.utm_tracker, 'jsonb')
                      AND jsonb_typeof(s.utm_tracker::jsonb) = 'object'
                 THEN s.utm_tracker::jsonb END AS j,
-           (SELECT q2.device_type FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.device_type IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1) AS device,
+           CASE WHEN EXISTS (SELECT 1 FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.is_tablet) THEN 'Tablet'
+                ELSE (SELECT q2.device_type FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.device_type IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1) END AS device,
            (SELECT q2.country_tier FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.country_tier IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1) AS tier
       FROM payment p
       JOIN personal_report pr ON pr.id = p.personal_report_id
@@ -245,7 +250,9 @@ AS $function$
   ),
   quotes AS (
     SELECT q.id, q.survey_submission_id AS sid, q.plan, q.experiment_group AS price_arm,
-           coalesce(q.initial_price, q.current_price) AS price, q.checkout_started_at, q.device_type AS device,
+           coalesce(q.initial_price, q.current_price) AS price, q.checkout_started_at,
+           CASE WHEN EXISTS (SELECT 1 FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.is_tablet) THEN 'Tablet'
+                ELSE q.device_type END AS device,
            q.country_tier AS tier,
            CASE WHEN s.utm_tracker IS NOT NULL AND pg_input_is_valid(s.utm_tracker, 'jsonb')
                      AND jsonb_typeof(s.utm_tracker::jsonb) = 'object'
@@ -255,27 +262,57 @@ AS $function$
      WHERE q.created_date_time >= b.since_ts AND q.created_date_time < b.until_ts
        AND NOT EXISTS (SELECT 1 FROM staff WHERE staff.id = s.user_id)
   ),
-  -- The primary key (visitor_id, day, event_type) keeps both joins to one row at most, so
-  -- count(*) is still one per visitor.
+  -- The cards before question 1, in order; the intro's and the consent's, and the Back and
+  -- Skip steps, exist from 20261014120200. Per visitor and day, the furthest card reached is
+  -- where they left, unless it is question 1.
+  intro_cards (step, card) AS (
+    VALUES ('intro_view', 1), ('intro_slide_1', 2), ('intro_slide_2', 3), ('intro_slide_3', 4),
+           ('intro_slide_4', 5), ('consent_view', 6), ('survey_engine_mount', 7)
+  ),
+  intro_last AS (
+    SELECT f.visitor_id, f.day, max(c.card) AS card
+      FROM funnel_event f
+      JOIN intro_cards c ON c.step = f.event_type
+     WHERE f.day >= p_from AND f.day <= p_to
+     GROUP BY 1, 2
+  ),
+  -- Per step and day: visitors, each one's time to the next card, those who went on to it (any
+  -- time that day), those who skipped from slides 1 to 3 straight to question 1, and those who
+  -- left there. Back and Skip are steps of their own, counted in n. The primary key
+  -- (visitor_id, day, event_type) keeps every join to one row at most, so count(*) is still one
+  -- per visitor.
   intro AS (
     SELECT f.day, f.event_type AS step, count(*) AS n,
-           coalesce(array_agg(round(extract(epoch FROM nx.first_seen - f.first_seen) * 1000)::bigint)
-                      FILTER (WHERE nx.first_seen > f.first_seen), '{}') AS ms,
-           count(*) FILTER (WHERE nx.visitor_id IS NULL AND q1.visitor_id IS NOT NULL) AS skipped
+           coalesce(array_agg(round(extract(epoch FROM coalesce(nx.first_seen, q4.first_seen) - f.first_seen) * 1000)::bigint)
+                      FILTER (WHERE coalesce(nx.first_seen, q4.first_seen) > f.first_seen), '{}') AS ms,
+           count(*) FILTER (WHERE nx.visitor_id IS NULL AND q1.visitor_id IS NOT NULL) AS skipped,
+           count(coalesce(nx.visitor_id, q4.visitor_id)) AS went_on,
+           count(*) FILTER (WHERE l.card = c.card) AS exited
       FROM funnel_event f
+      LEFT JOIN intro_cards c ON c.step = f.event_type
       LEFT JOIN funnel_event nx
         ON nx.visitor_id = f.visitor_id AND nx.day = f.day
        AND nx.event_type = CASE f.event_type
+                             WHEN 'intro_view' THEN 'intro_slide_1'
                              WHEN 'intro_slide_1' THEN 'intro_slide_2'
                              WHEN 'intro_slide_2' THEN 'intro_slide_3'
                              WHEN 'intro_slide_3' THEN 'intro_slide_4'
-                             WHEN 'intro_slide_4' THEN 'survey_engine_mount'
+                             WHEN 'intro_slide_4' THEN 'consent_view'
+                             WHEN 'consent_view' THEN 'survey_engine_mount'
                            END
+      -- Slide 4 went on to question 1 where the consent left no row (before it recorded one).
+      LEFT JOIN funnel_event q4
+        ON f.event_type = 'intro_slide_4' AND nx.visitor_id IS NULL
+       AND q4.visitor_id = f.visitor_id AND q4.day = f.day AND q4.event_type = 'survey_engine_mount'
       LEFT JOIN funnel_event q1
         ON q1.visitor_id = f.visitor_id AND q1.day = f.day
        AND q1.event_type = 'survey_engine_mount' AND q1.first_seen > f.first_seen
        AND f.event_type IN ('intro_slide_1', 'intro_slide_2', 'intro_slide_3')
-     WHERE f.event_type IN ('survey_engine_mount', 'intro_slide_1', 'intro_slide_2', 'intro_slide_3', 'intro_slide_4')
+      LEFT JOIN intro_last l ON l.visitor_id = f.visitor_id AND l.day = f.day
+     WHERE f.event_type IN ('survey_engine_mount', 'intro_view', 'intro_slide_1', 'intro_slide_2',
+                            'intro_slide_3', 'intro_slide_4', 'consent_view',
+                            'intro_back_1', 'intro_back_2', 'intro_back_3', 'intro_back_4',
+                            'intro_skip_1', 'intro_skip_2', 'intro_skip_3', 'intro_skip_4', 'consent_back')
        AND f.day >= p_from AND f.day <= p_to
      GROUP BY 1, 2
   ),
@@ -298,13 +335,15 @@ AS $function$
     'starts', (
       SELECT coalesce(json_agg(json_build_object(
                'day', g.day, 'known', g.known, 'src', g.src, 'med', g.med, 'ads', g.ads, 'arm', g.arm,
+               'ref', g.ref, 'fb', g.fb,
                'device', g.device, 'finished', g.finished, 'n', g.n)), '[]'::json)
         FROM (
           SELECT sr.day, sr.known, sr.j->>'utm_source' AS src, sr.j->>'utm_medium' AS med,
                  (coalesce(sr.j->>'gclid', '') <> '' OR coalesce(sr.j->>'gbraid', '') <> '' OR coalesce(sr.j->>'wbraid', '') <> '') AS ads,
+                 sr.j->>'referrer_host' AS ref, coalesce(sr.j->>'fbclid', '') <> '' AS fb,
                  sr.j->>'landing_variant' AS arm, sr.device, sr.finished, count(*) AS n
             FROM start_rows sr
-           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
         ) g
     ),
     'subs', (
@@ -312,6 +351,7 @@ AS $function$
                'id', x.id, 'day', x.day, 'at', x.created_date_time, 'startAt', x.start_date_time,
                'durationMs', x.duration_ms,
                'src', x.j->>'utm_source', 'med', x.j->>'utm_medium',
+               'ref', x.j->>'referrer_host', 'fb', coalesce(x.j->>'fbclid', '') <> '',
                'ads', (coalesce(x.j->>'gclid', '') <> '' OR coalesce(x.j->>'gbraid', '') <> '' OR coalesce(x.j->>'wbraid', '') <> ''),
                'arm', x.j->>'landing_variant',
                'device', x.device, 'tier', x.tier, 'priceArm', x.price_arm,
@@ -332,20 +372,24 @@ AS $function$
       SELECT coalesce(json_agg(json_build_object(
                'day', m.day, 'sid', m.sid, 'amount', m.amount, 'plan', m.plan,
                'src', m.j->>'utm_source', 'med', m.j->>'utm_medium',
+               'ref', m.j->>'referrer_host', 'fb', coalesce(m.j->>'fbclid', '') <> '',
                'ads', (coalesce(m.j->>'gclid', '') <> '' OR coalesce(m.j->>'gbraid', '') <> '' OR coalesce(m.j->>'wbraid', '') <> ''),
                'arm', m.j->>'landing_variant', 'device', m.device, 'tier', m.tier, 'ph', m.ph)), '[]'::json)
         FROM money m
     ),
-    'intro', (SELECT coalesce(json_agg(json_build_object('day', x.day, 'step', x.step, 'n', x.n, 'ms', x.ms, 'skipped', x.skipped)), '[]'::json) FROM intro x),
+    'intro', (SELECT coalesce(json_agg(json_build_object('day', x.day, 'step', x.step, 'n', x.n, 'ms', x.ms, 'skipped', x.skipped,
+                                                         'wentOn', x.went_on, 'left', x.exited)), '[]'::json) FROM intro x),
     'invites', (SELECT coalesce(json_agg(json_build_object('day', x.day, 'n', x.n)), '[]'::json) FROM invites x),
     'quotes', (
       SELECT coalesce(json_agg(json_build_object(
                'plan', g.plan, 'priceArm', g.price_arm, 'price', g.price, 'src', g.src, 'med', g.med, 'ads', g.ads,
+               'ref', g.ref, 'fb', g.fb,
                'device', g.device, 'tier', g.tier, 'quoted', g.quoted, 'checkouts', g.checkouts,
                'sales', g.sales, 'revenue', g.revenue)), '[]'::json)
         FROM (
           SELECT qu.plan, qu.price_arm, qu.price, qu.j->>'utm_source' AS src, qu.j->>'utm_medium' AS med,
                  (coalesce(qu.j->>'gclid', '') <> '' OR coalesce(qu.j->>'gbraid', '') <> '' OR coalesce(qu.j->>'wbraid', '') <> '') AS ads,
+                 qu.j->>'referrer_host' AS ref, coalesce(qu.j->>'fbclid', '') <> '' AS fb,
                  qu.device, qu.tier,
                  count(DISTINCT qu.sid) AS quoted,
                  count(DISTINCT qu.sid) FILTER (WHERE qu.checkout_started_at IS NOT NULL) AS checkouts,
@@ -353,7 +397,7 @@ AS $function$
                  coalesce(sum(qs.revenue), 0) AS revenue
             FROM quotes qu
             LEFT JOIN quote_sales qs ON qs.id = qu.id
-           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
         ) g
     )
   );
@@ -624,11 +668,15 @@ AS $function$
                'other', other.vals,
                'src', t.j->>'utm_source', 'med', t.j->>'utm_medium',
                'ads', (coalesce(t.j->>'gclid', '') <> '' OR coalesce(t.j->>'gbraid', '') <> '' OR coalesce(t.j->>'wbraid', '') <> ''),
+               -- As ap_facts: the site a visit came from and Meta's click id (from 15 Oct 2026).
+               'ref', t.j->>'referrer_host', 'fb', coalesce(t.j->>'fbclid', '') <> '',
                'gender', up.gender, 'relationship', up.relationship_status,
-               -- As ap_facts: the pricing quote's device, else the survey steps' (from 12 Oct 2026).
-               'device', coalesce(
-                 (SELECT q2.device_type FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.device_type IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1),
-                 (SELECT e.device_type FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.device_type IS NOT NULL ORDER BY e.created_at DESC LIMIT 1)),
+               -- As ap_facts: a tablet the survey steps flagged, else the pricing quote's device,
+               -- else the survey steps' (from 12 Oct 2026).
+               'device', CASE WHEN EXISTS (SELECT 1 FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.is_tablet) THEN 'Tablet'
+                 ELSE coalesce(
+                   (SELECT q2.device_type FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.device_type IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1),
+                   (SELECT e.device_type FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.device_type IS NOT NULL ORDER BY e.created_at DESC LIMIT 1)) END,
                'tier', (SELECT q2.country_tier FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.country_tier IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1),
                -- As ap_facts: the visit the survey was finished in, for the new/returning filter.
                'ph', s.posthog_session_id

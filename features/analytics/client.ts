@@ -490,19 +490,24 @@ export const trackLandingPageView = () => {
   track("landing_page_view");
 };
 
+const sentFunnelEvents = new Set<string>();
+
 /**
  * Durable top-of-funnel ping to `funnel_event` (keyed by visitor_id + day, NOT a
- * survey_submission), mirroring the survey_engine_mount / intro_slide pings. It
+ * survey_submission): the survey intro's cards and their Back and Skip. It
  * fires regardless of analytics consent — first-party funnel measurement with no
  * third-party sharing — so pre-payment drop-off is never lost. No-op without a
- * visitor cookie or CSRF token. PK (visitor_id, day, event_type) dedupes server-side.
+ * visitor cookie or CSRF token. PK (visitor_id, day, event_type) dedupes server-side,
+ * so each event is sent once per page: a card seen again after Back would only spend
+ * the route's rate limit.
  */
-const pingFunnelEvent = (event: string) => {
-  if (typeof window === "undefined") return;
+export const pingFunnelEvent = (event: string) => {
+  if (typeof window === "undefined" || sentFunnelEvents.has(event)) return;
   const visitorId = getCookieValue("__Host-liq_vid") || getCookieValue("__liq_vid");
   if (!visitorId) return;
   const csrf = getCsrfToken();
   if (!csrf) return;
+  sentFunnelEvents.add(event);
   const url = "/api/funnel-event";
   const payload = JSON.stringify({ event, visitor_id: visitorId, _csrf: csrf });
   // Beacon survives the page navigation to Stripe; header-CSRF fallback otherwise.
@@ -519,6 +524,9 @@ const pingFunnelEvent = (event: string) => {
     /* best-effort */
   });
 };
+
+/** For tests: forget what this page has sent. */
+export const __resetFunnelPingsForTests = () => sentFunnelEvents.clear();
 
 export const trackStartSurvey = (
   location:

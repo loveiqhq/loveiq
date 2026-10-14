@@ -7,11 +7,11 @@
  * Strict gates:
  *   - CSRF token required (double-submit cookie; body fallback for beacon)
  *   - IP rate-limited at 30/min
- *   - Only the two allowed event types are accepted
+ *   - Only the event types in ALLOWED_EVENTS are accepted
  *   - PK (visitor_id, day, event_type) makes duplicates a silent no-op
  *
  * Body: {
- *   event: "unique_visitor" | "survey_engine_mount",
+ *   event: one of ALLOWED_EVENTS,
  *   visitor_id: uuid,
  *   utm_source?: string,
  *   _csrf?: string,  // sendBeacon fallback
@@ -33,6 +33,7 @@ import logger from "@shared/observability/logger";
 // constraint (which must list the same set):
 //   • unique_visitor / survey_engine_mount      — original
 //   • intro_slide_1..4                           — 2026-05-29 longitudinal digest
+//   • the intro cards' own steps (view, back, skip) — 20261014120200, applied first
 const ALLOWED_EVENTS = [
   "unique_visitor",
   "survey_engine_mount",
@@ -40,6 +41,17 @@ const ALLOWED_EVENTS = [
   "intro_slide_2",
   "intro_slide_3",
   "intro_slide_4",
+  "intro_view",
+  "consent_view",
+  "intro_back_1",
+  "intro_back_2",
+  "intro_back_3",
+  "intro_back_4",
+  "intro_skip_1",
+  "intro_skip_2",
+  "intro_skip_3",
+  "intro_skip_4",
+  "consent_back",
 ] as const;
 
 const schema = z.object({

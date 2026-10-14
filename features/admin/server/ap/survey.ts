@@ -89,6 +89,12 @@ export function questionSegment(
       blocked: "Survey steps tell Google Ads apart from everything else, not finer sources.",
     };
   }
+  if (f.device === "tablet") {
+    return {
+      segment: "All traffic",
+      blocked: "Survey steps tell phones from computers here, not tablets.",
+    };
+  }
   if (f.device === "phone") return { segment: "Phone", blocked: null };
   if (f.device === "computer") return { segment: "Computer", blocked: null };
   return { segment: "All traffic", blocked: null };

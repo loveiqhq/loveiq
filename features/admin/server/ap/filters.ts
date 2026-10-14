@@ -35,26 +35,41 @@ export const ASSESSMENTS = [
 export type AssessmentFilter = (typeof ASSESSMENTS)[number]["value"];
 
 /**
+ * The day the survey's new tracking went live: the intro cards' own steps (the intro, the
+ * consent, Back and Skip), tablets, and the referrer and Meta's click id in the tracker.
+ * A placeholder until the deploy: set it to the day those shipped.
+ */
+export const SURVEY_TRACKING_FROM = "2026-10-15";
+
+/**
  * Where a person came from, read off the survey's tracker (the first page they landed on).
- * Google Ads is a click id or google/cpc; the rest is utm_source as the links set it.
+ * Google Ads is a click id or google/cpc, Meta Ads a Meta source with a paid medium, organic
+ * search a search engine tagged organic or, untagged, the referrer (from SURVEY_TRACKING_FROM);
+ * the rest is utm_source as the links set it (classifySource).
  */
 export const SOURCES = [
   { value: "all", label: "All sources" },
   { value: "google_ads", label: "Google Ads" },
-  { value: "ai", label: "AI assistants" },
-  { value: "email", label: "Email" },
-  { value: "social", label: "Social" },
-  { value: "referral", label: "Referral" },
+  { value: "meta_ads", label: "Meta Ads" },
+  { value: "organic_search", label: "Organic search" },
   { value: "direct", label: "Direct / untagged" },
+  { value: "email", label: "Email" },
+  { value: "referral", label: "Referral" },
+  { value: "social", label: "Social" },
+  { value: "ai", label: "AI assistants" },
 ] as const;
 export type SourceFilter = (typeof SOURCES)[number]["value"];
 export type Source = Exclude<SourceFilter, "all">;
 
-/** iOS and Android are mobile; the pricing code reads tablets as one or the other. */
+/**
+ * iOS and Android are mobile. Tablets are told apart from SURVEY_TRACKING_FROM (the survey's
+ * own steps): before, they count as mobile, or as desktop for an iPad sending a Mac User-Agent.
+ */
 export const DEVICES = [
   { value: "all", label: "All devices" },
   { value: "phone", label: "Mobile" },
   { value: "computer", label: "Desktop" },
+  { value: "tablet", label: "Tablet" },
 ] as const;
 export type DeviceFilter = (typeof DEVICES)[number]["value"];
 

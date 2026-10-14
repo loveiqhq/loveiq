@@ -24,6 +24,10 @@ interface Tagged {
   med: string | null;
   /** A Google Ads click id (gclid, gbraid or wbraid) in the tracker. */
   ads: boolean;
+  /** The referring site's hostname (from SURVEY_TRACKING_FROM). */
+  ref?: string | null;
+  /** Meta's click id (fbclid) in the tracker (from SURVEY_TRACKING_FROM). */
+  fb?: boolean;
 }
 
 export interface StartFact extends Tagged {
@@ -102,6 +106,13 @@ export interface IntroFact {
   ms: number[];
   /** Slides 1 to 3: visitors who went on to question 1 without the next slide (a skip). */
   skipped: number;
+  /**
+   * Visitors who reached the next card that day (slide 4's is the consent, question 1 before
+   * the consent recorded itself). Null from a reader without it.
+   */
+  wentOn: number | null;
+  /** Visitors whose furthest card that day was this one: they left here. */
+  left: number | null;
 }
 
 export interface QuoteFact extends Tagged {
@@ -159,6 +170,8 @@ export function parseFacts(
     src: str(r.src),
     med: str(r.med),
     ads: r.ads === true,
+    ref: str(r.ref),
+    fb: r.fb === true,
   });
   return {
     from,
@@ -234,6 +247,8 @@ export function parseFacts(
       // Absent until the function carries them: no time and no skip, never a zero time.
       ms: Array.isArray(r.ms) ? r.ms.map(num) : [],
       skipped: num(r.skipped),
+      wentOn: numOrNull(r.wentOn),
+      left: numOrNull(r.left),
     })),
     invites: rows(o.invites, "invites").map((r) => ({ day: String(r.day), n: num(r.n) })),
     quotes: rows(o.quotes, "quotes").map((r) => ({
@@ -288,20 +303,66 @@ const SOCIAL_SOURCES = new Set([
   "threads",
 ]);
 const PAID_MEDIA = new Set(["cpc", "ppc", "paid", "ads"]);
+/** Meta's names for itself, its {{site_source_name}} values (fb, ig, msg, an) among them. */
+const META_SOURCES = new Set([
+  "facebook",
+  "instagram",
+  "meta",
+  "fb",
+  "ig",
+  "messenger",
+  "msg",
+  "an",
+  "audience_network",
+  "audiencenetwork",
+  "audience-network",
+]);
+const META_PAID_MEDIA = new Set([...PAID_MEDIA, "paid_social", "paidsocial", "cpm"]);
+const SEARCH_SOURCES = new Set([
+  "google",
+  "bing",
+  "duckduckgo",
+  "yahoo",
+  "ecosia",
+  "yandex",
+  "brave",
+]);
+/**
+ * Search engines as a referrer: Google in every country and its Android app, Bing,
+ * DuckDuckGo, Yahoo search, Ecosia, Yandex and Brave Search. Gmail on the web opens links
+ * through google.com, so an untagged click in an email read there looks like organic search.
+ */
+const SEARCH_HOSTS = [
+  /^(www\.)?google\.(com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})$/,
+  /^com\.google\.android\.googlequicksearchbox$/,
+  /(^|\.)(bing\.com|duckduckgo\.com|ecosia\.org|ya\.ru|yandex\.[a-z.]+)$/,
+  /(^|\.)search\.yahoo\.(com|co\.jp|[a-z]{2})$/,
+  /^search\.brave\.com$/,
+];
 
 export type SourceClass = Source | "unknown" | "test";
 
 /**
- * Where a person came from, by the tracker their first page set. Google Ads is a click id,
- * or google with a paid medium; our own probes are "test" and are never counted.
+ * Where a person came from, by the tracker their first page set, in this order: our own
+ * probes ("test", never counted); Google Ads (a click id, or google with a paid medium); Meta
+ * Ads (a Meta source with a paid medium: Meta's click id alone is not one, as Meta adds it to
+ * ordinary clicks too, and reads as Social); organic search (no click id, and a search engine
+ * tagged organic, or no tags and a search engine as the referrer); then the rest.
  */
 export function classifySource(t: Tagged, known = true): SourceClass {
   if (!known) return "unknown";
-  if (t.ads) return "google_ads";
   const s = (t.src ?? "").trim().toLowerCase();
   const m = (t.med ?? "").trim().toLowerCase();
+  const ref = (t.ref ?? "").trim().toLowerCase();
   if (m === "probe" || TEST_SOURCES.has(s)) return "test";
-  if (s === "google" && PAID_MEDIA.has(m)) return "google_ads";
+  if (t.ads || (s === "google" && PAID_MEDIA.has(m))) return "google_ads";
+  if (META_SOURCES.has(s) && META_PAID_MEDIA.has(m)) return "meta_ads";
+  if (
+    !t.fb &&
+    (m === "organic" ? SEARCH_SOURCES.has(s) : !s && !m && SEARCH_HOSTS.some((re) => re.test(ref)))
+  ) {
+    return "organic_search";
+  }
   if (AI_SOURCES.has(s)) return "ai";
   if (
     ["email", "newsletter", "nurture", "resend"].includes(s) ||
@@ -309,15 +370,19 @@ export function classifySource(t: Tagged, known = true): SourceClass {
   ) {
     return "email";
   }
-  if (SOCIAL_SOURCES.has(s) || m === "social" || m === "paid_social") return "social";
+  if (SOCIAL_SOURCES.has(s) || m === "social" || m === "paid_social" || t.fb) return "social";
   if (!s && !m) return "direct";
   return "referral";
 }
 
-/** Phone or computer, from the device the pricing code or the survey recorded. */
+/**
+ * Mobile, desktop or tablet, from the device the pricing code or the survey recorded. Only the
+ * AP readers say "Tablet" (from the survey's steps, SURVEY_TRACKING_FROM on).
+ */
 export function deviceClass(device: string | null): Exclude<DeviceFilter, "all"> | null {
   if (device === "iOS" || device === "Android") return "phone";
   if (device === "Desktop") return "computer";
+  if (device === "Tablet") return "tablet";
   return null;
 }
 

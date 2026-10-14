@@ -193,8 +193,10 @@ export async function GET(request: Request) {
         `/rest/v1/survey_partial_save?select=session_id,current_index,utm_tracker&saved_at=gte.${since}`,
         range
       ),
+      // Only the steps band A draws: the table holds more kinds every release, and every row
+      // read counts against the database's row cap.
       supabaseFetch(
-        `/rest/v1/funnel_event?select=visitor_id,event_type,utm_source&day=gte.${sinceDay}`,
+        `/rest/v1/funnel_event?select=visitor_id,event_type,utm_source&event_type=in.(${INTRO_EVENTS.join(",")})&day=gte.${sinceDay}`,
         range
       ),
       supabaseFetch(

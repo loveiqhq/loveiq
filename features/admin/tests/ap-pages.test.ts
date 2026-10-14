@@ -274,10 +274,118 @@ describe("page builders", () => {
         ],
       }),
     });
-    // One day's median would be 6.5 s; over the range it is 5 s.
-    expect(p.intro.slides.map((s) => s.medianMs)).toEqual([5000, 8000, null, 40_000]);
+    // One day's median would be 6.5 s; over the range it is 5 s. The intro and the consent
+    // record themselves only from SURVEY_TRACKING_FROM, after this range.
+    expect(p.intro.cards.map((s) => s.medianMs)).toEqual([null, 5000, 8000, null, 40_000, null]);
+    expect(p.intro.cards.map((s) => s.reached)).toEqual([null, 4, 4, 0, 2, null]);
     expect(p.intro.mostSkipped).toBe(2);
+    expect(p.intro.recordedFrom).toBe("15 Oct 2026");
+    // Skip, Back and Exit say when they start rather than read zero.
+    expect(p.intro.cards.every((c) => c.skip === null && c.back === null && c.exit === null)).toBe(
+      true
+    );
     expect(surveyPage({}).intro.mostSkipped).toBeNull();
+  });
+
+  it("survey: from the tracking day, every card's continue, skip, back and exit", () => {
+    const row = (step: string, n: number, wentOn: number | null = 0, left: number | null = 0) => ({
+      day: "2026-10-15",
+      step,
+      n,
+      ms: [],
+      skipped: 0,
+      wentOn,
+      left,
+    });
+    const page = (intro: Array<ReturnType<typeof row>>) =>
+      buildSurveyPage({
+        facts: factsFixture({ from: "2026-10-15", to: "2026-10-16", intro }),
+        previous: null,
+        benchmark: facts,
+        benchmarkKind: "all",
+        filters: parseFilters(
+          { period: "custom", from: "2026-10-15", to: "2026-10-16" },
+          "2026-10-17"
+        ),
+        today: "2026-10-17",
+        now: new Date("2026-10-17T10:00:00Z"),
+        questions: null,
+        questionsError: null,
+        introClicks: null,
+      });
+    const p = page([
+      row("intro_view", 10, 8, 2),
+      row("intro_slide_1", 8, 6, 1),
+      row("intro_skip_1", 1),
+      row("intro_slide_2", 6, 5, 0),
+      row("intro_back_2", 1),
+      row("intro_slide_3", 5, 5, 0),
+      row("intro_slide_4", 5, 4, 1),
+      row("consent_view", 5, 3, 2),
+      row("consent_back", 1),
+      row("survey_engine_mount", 3, 0, 3),
+    ]);
+    const card = (step: string) => p.intro.cards.find((c) => c.step === step)!;
+    expect(p.intro.recordedFrom).toBeNull();
+    expect(card("intro_view")).toMatchObject({
+      reached: 10,
+      reachedShare: 1,
+      cont: 0.8,
+      skip: null,
+      back: null,
+      exit: 0.2,
+    });
+    expect(card("intro_slide_1")).toMatchObject({ reachedShare: 0.8, cont: 0.75, skip: 0.125 });
+    expect(card("intro_slide_2")).toMatchObject({ back: 1 / 6, skip: 0 });
+    expect(card("consent_view")).toMatchObject({ cont: 0.6, back: 0.2, exit: 0.4, skip: null });
+    // A reader without the new figures leaves them unknown, never 0%.
+    expect(page([row("intro_view", 4, null, null)]).intro.cards[0]).toMatchObject({
+      reached: 4,
+      cont: null,
+      exit: null,
+    });
+  });
+
+  it("survey: the device card shows Mobile, Desktop and Tablet, and when tablets start", () => {
+    const device = (f: typeof facts, benchmark = f) =>
+      buildSurveyPage({
+        facts: f,
+        previous: null,
+        benchmark,
+        benchmarkKind: "same",
+        filters,
+        today: TODAY,
+        now,
+        questions: null,
+        questionsError: null,
+        introClicks: null,
+      }).demographics.cards.find((c) => c.title === "Device")!;
+    // Before the tracking day: no tablet figure, the row says when it starts.
+    const before = device(facts);
+    expect(before.rows.map((r) => r.label)).toEqual(["Mobile", "Desktop", "Tablet"]);
+    expect(before.rows[0]).toMatchObject({ share: 1, bench: 1 });
+    expect(before.rows[2]).toMatchObject({ bench: null, pending: "Recorded from 15 Oct 2026" });
+    // The iPhone and Android split of Mobile stays in the note.
+    expect(before.note).toContain("here 100% iPhone, 0% Android");
+    const after = factsFixture({
+      from: "2026-10-15",
+      to: "2026-10-16",
+      subs: [
+        sub({ id: 1, day: "2026-10-15", device: "Tablet" }),
+        sub({ id: 2, day: "2026-10-15", device: "Android" }),
+        sub({ id: 3, day: "2026-10-15", device: "Desktop" }),
+        sub({ id: 4, day: "2026-10-15", device: null }),
+      ],
+    });
+    const now15 = device(after, facts);
+    expect(now15.rows.map((r) => [r.label, r.share, r.bench])).toEqual([
+      ["Mobile", 0.25, 1],
+      ["Desktop", 0.25, 0],
+      // The benchmark starts before tablets were recorded: no tablet figure to compare with.
+      ["Tablet", 0.25, null],
+      ["Unknown", 0.25, 0],
+    ]);
+    expect(now15.rows[2]?.pending).toBeUndefined();
   });
 
   it("report: compares returns at the same age, and not with a period before 18 Sep", () => {
@@ -462,5 +570,10 @@ describe("page builders", () => {
     );
     expect(notes(fromOct12)).not.toContain("the device is known only");
     expect(notes(filters)).not.toContain("known only for people");
+    // Tablets: told apart only from the tracking day.
+    expect(notes({ ...filters, device: "tablet" })).toContain(
+      "Tablets are told apart from 15 Oct 2026"
+    );
+    expect(notes(filters)).not.toContain("Tablets are told apart");
   });
 });

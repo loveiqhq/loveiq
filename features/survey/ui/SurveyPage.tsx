@@ -18,38 +18,14 @@ import {
   copySurveySessionToReportSession,
   forgetCompletedReport,
 } from "./hooks/surveySession";
-import { getCsrfToken } from "@shared/http/csrf-client";
-import { readCookie } from "@shared/observability/cookie";
+import { pingFunnelEvent } from "@features/analytics/client";
 
-/**
- * One-shot per-visitor-day ping that lands a `intro_slide_<N>` row in
- * `funnel_event`. Powers the longitudinal pre-survey intro retention chart in
- * the daily Slack digest. Mirrors the survey_engine_mount pattern in
- * SurveyEngine.tsx — funnel_event PK (visitor_id, day, event_type) makes
- * duplicate POSTs a server-side no-op so we can fire on every slide mount
- * without rate-limiting concerns. Best-effort; failures silently drop.
+/*
+ * The intro's cards record themselves in `funnel_event`, one row per visitor, day and step
+ * (cookie-accepting visitors only; see pingFunnelEvent): intro_view, intro_slide_1..4 and
+ * consent_view when shown, intro_back_N / consent_back on going back, intro_skip_N on Skip
+ * Intro. Leaving is not sent: AP-Analytics takes each visitor's furthest card that day.
  */
-function pingIntroSlide(slideIndex: number) {
-  if (typeof window === "undefined") return;
-  if (slideIndex < 0 || slideIndex > 3) return;
-  const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
-  if (!visitorId) return;
-  const csrf = getCsrfToken();
-  if (!csrf) return;
-  // Slides are 1-indexed in the funnel-event allowlist (intro_slide_1..4).
-  const event = `intro_slide_${slideIndex + 1}` as const;
-  fetch("/api/funnel-event", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-csrf-token": csrf,
-    },
-    body: JSON.stringify({ event, visitor_id: visitorId }),
-    keepalive: true,
-  }).catch(() => {
-    /* best-effort — at worst today's count is short by one for this visitor */
-  });
-}
 
 /* ------------------------------------------------------------------ */
 /*  Shared icons                                                       */
@@ -535,6 +511,10 @@ const IntroScreen: FC<{
   transitioning: boolean;
 }> = ({ onContinue, transitioning }) => {
   useEffect(() => {
+    pingFunnelEvent("intro_view");
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter" && !transitioning) onContinue();
     };
@@ -719,12 +699,14 @@ const SlideScreen: FC<{
 
   const handlePrev = useCallback(() => {
     if (isLeaving) return;
+    // The Back button, the left arrow or a swipe. Slide 1 has none (only the browser's Back).
+    if (slideIndex > 0) pingFunnelEvent(`intro_back_${slideIndex + 1}`);
     setIsLeaving(true);
     setTimeout(() => {
       setIsLeaving(false);
       onBack();
     }, 200);
-  }, [onBack, isLeaving]);
+  }, [onBack, isLeaving, slideIndex]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -738,7 +720,7 @@ const SlideScreen: FC<{
 
   // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide).
   useEffect(() => {
-    pingIntroSlide(slideIndex);
+    pingFunnelEvent(`intro_slide_${slideIndex + 1}`);
   }, [slideIndex]);
 
   // Swipe gesture support for mobile
@@ -959,6 +941,10 @@ const ConsentScreen: FC<{
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const canProceed = ageConfirmed && termsAccepted;
+
+  useEffect(() => {
+    pingFunnelEvent("consent_view");
+  }, []);
 
   const handleAgreeClick = useCallback(() => {
     setIsLeaving(true);
@@ -1335,6 +1321,11 @@ const SurveyPage: FC = () => {
       const saved = prevStep !== undefined ? prevStep : 0;
       // Never onto the questions without consent for this run (see loadInitialStep).
       const next = saved === TOTAL_STEPS + 2 && !hasSurveyConsent() ? TOTAL_STEPS + 1 : saved;
+      // The browser's Back from a slide or the consent (the only Back slide 1 and it have).
+      const from = stepRef.current;
+      if (next < from && from >= 1 && from <= TOTAL_STEPS + 1) {
+        pingFunnelEvent(from > TOTAL_STEPS ? "consent_back" : `intro_back_${from}`);
+      }
       // Only a real entry: a second history entry for the survey, which a reload on it
       // pushes, lands on step 6 FROM step 6, and must not retire the run just finished.
       if (next === TOTAL_STEPS + 2 && stepRef.current !== TOTAL_STEPS + 2) {
@@ -1366,6 +1357,7 @@ const SurveyPage: FC = () => {
   }, []);
 
   const handleSkip = useCallback(() => {
+    pingFunnelEvent(`intro_skip_${stepRef.current}`); // the slide (1 to 4) it was pressed on
     setStep(TOTAL_STEPS + 1); // jump to consent
   }, []);
 
