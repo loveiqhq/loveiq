@@ -419,7 +419,10 @@ function EngagementCard({ data }: { data: LandingPayload }) {
               { label: "Bounce", value: fmt("pct", e.value.bounce, 1) },
               {
                 label: "Avg. time",
-                value: fmt("mmss", e.value.meanSeconds === null ? null : e.value.meanSeconds * 1000),
+                value: fmt(
+                  "mmss",
+                  e.value.meanSeconds === null ? null : e.value.meanSeconds * 1000
+                ),
               },
               { label: "CTA clicks", value: fmt("pct", e.value.cta, 1) },
             ].map((s) => (
@@ -552,7 +555,7 @@ function SectionTime({ data }: { data: LandingPayload }) {
           <p className="m-0 text-xs leading-relaxed text-ap-muted">
             {fmt("count", view.sessions)} PostHog visits, {rangeLabel(view.from, view.to)}.{" "}
             {time
-              ? "In view: at least half of the section on screen, or it fills half the screen, while the tab is open; a visit counts up to 10 minutes per section. Reach: part of it came into the top half of the screen, or it was in view."
+              ? "In view: at least half of the section on screen, or the section filling half the screen, while the page is showing; a visit counts up to 10 minutes per section. Reach: part of it came into the top half of the screen, or it was in view."
               : "Reach: part of it came into the top half of the screen."}{" "}
             The hero is where every visit starts.
           </p>
@@ -652,8 +655,20 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
       },
     });
   }
-  const t = data.sectionTime;
   const s = data.sections;
+  if (s && s.ok && s.value) {
+    out.push({
+      name: "Section reach (PostHog)",
+      table: {
+        columns: [
+          { label: "Section", unit: "text" },
+          { label: "Reach", unit: "pct" },
+        ],
+        rows: s.value.rows.map((r) => ({ label: r.name, values: [r.reach] })),
+      },
+    });
+  }
+  const t = data.sectionTime;
   if (t && t.ok && t.value) {
     out.push({
       name: "Section time (PostHog)",
@@ -667,17 +682,6 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
           label: r.name,
           values: [r.seconds === null ? null : r.seconds * 1000, r.reach],
         })),
-      },
-    });
-  } else if (s && s.ok && s.value) {
-    out.push({
-      name: "Section reach (PostHog)",
-      table: {
-        columns: [
-          { label: "Section", unit: "text" },
-          { label: "Reach", unit: "pct" },
-        ],
-        rows: s.value.rows.map((r) => ({ label: r.name, values: [r.reach] })),
       },
     });
   }

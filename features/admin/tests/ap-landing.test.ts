@@ -13,7 +13,12 @@ vi.mock("@shared/observability/logger", () => ({
 // The screen test draws a payload the builder made, without the network or the URL.
 const screenData = vi.hoisted(() => ({ payload: null as unknown }));
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
-  useAdminFetch: () => ({ data: screenData.payload, loading: false, error: null, refetch: () => {} }),
+  useAdminFetch: () => ({
+    data: screenData.payload,
+    loading: false,
+    error: null,
+    refetch: () => {},
+  }),
 }));
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
@@ -415,7 +420,11 @@ describe("landing time", () => {
 });
 
 describe("PostHog's landing readers", () => {
-  beforeEach(() => mockHogql.mockReset());
+  // A block, not an arrow's value: a function returned from beforeEach is run as a teardown,
+  // and mockReset() returns the mock.
+  beforeEach(() => {
+    mockHogql.mockReset();
+  });
   const answer = (rows: unknown[][]) => ({ ok: true, cut: null, rows });
   const query = (has: string) =>
     String(mockHogql.mock.calls.map(([q]) => String(q)).find((q) => q.includes(has)));
