@@ -61,7 +61,7 @@ export interface CatalogTable {
   editedAt: string | null;
   key: string[];
   fields: CatalogField[];
-  /** Tables it joins, either way: those its fields point to and those whose fields point to it. */
+  /** The tables its own fields point to, as the design lists them: no admin tables, three at most. */
   joins: string[];
   /** Date fields a range can filter on, the default first. */
   dateFields: string[];
@@ -177,7 +177,7 @@ const GROUPS: Array<[RegExp, string]> = [
   ],
   [/^(survey|survey_.*|answer_option|scoring_result)$/, "Survey"],
   [/^(report|report_.*|personal_report.*)$/, "Report"],
-  [/^(funnel_event|analytics_event|user_interactions)$/, "Traffic & events"],
+  [/^(funnel_event|analytics_event|user_interactions)$/, "Traffic"],
   [
     /^(app_user|user_profile|waitlist_.*|invite_event|booking_event|email_.*|resend_webhook_event)$/,
     "People & email",
@@ -189,16 +189,17 @@ export function groupOf(table: string): string {
   return GROUPS.find(([re]) => re.test(table))?.[1] ?? "Admin & tools";
 }
 
-/** The order groups are listed in: the funnel first, the admin's own tables last. */
-const GROUP_ORDER = [
-  "Survey",
-  "Report",
-  "Revenue",
-  "Traffic & events",
-  "People & email",
-  "Spend",
-  "Admin & tools",
+/** The tables the "Data sources" design lists, first and in its order; the rest by name. */
+const MAIN_TABLES = [
+  "survey_submission",
+  "survey_submission_answer",
+  "funnel_event",
+  "payment",
+  "report_price_quote",
+  "report_section_feedback",
 ];
+const placeOf = (table: string) =>
+  MAIN_TABLES.includes(table) ? MAIN_TABLES.indexOf(table) : MAIN_TABLES.length;
 
 const DATE_PREFERENCE = [
   "created_date_time",
@@ -269,6 +270,7 @@ const OUTSIDE: Array<
     description: `Every event PostHog captured on www.loveiq.org since ${POSTHOG_FROM}: page views, clicks (autocapture) and our own events. PostHog sees part of the visitors (blockers, bots it drops). Read through HogQL.`,
     key: ["uuid"],
     fields: [
+      { name: "uuid", type: "uuid", description: "Event id." },
       { name: "timestamp", type: "timestamptz", description: "When it happened." },
       {
         name: "event",
@@ -296,6 +298,13 @@ const OUTSIDE: Array<
         name: "properties.landing_variant",
         type: "text",
         description: "The landing arm (reliable from 7 Oct 2026).",
+      },
+      {
+        name: "properties",
+        type: "jsonb",
+        description:
+          "All of the event's properties as JSON: $current_url, $device_type, utm_* and the rest. Masked unless unlocked: it can hold a reader's email address and first name (sent when the survey is submitted) and report links.",
+        privacy: "masked",
       },
       {
         name: "elements_chain",
@@ -415,17 +424,6 @@ const CLOSED: Record<string, string> = {
 /** Every table of every source, with the team's notes applied. */
 export function buildCatalog(schema: SchemaTable[], notes: FieldNote[]): CatalogTable[] {
   const note = new Map(notes.map((n) => [`${n.source}|${n.relation}|${n.field}`, n]));
-  // Each foreign key links two tables, so it counts for both.
-  const linked = new Map<string, Set<string>>();
-  const link = (a: string, b: string) => linked.set(a, (linked.get(a) ?? new Set()).add(b));
-  for (const t of schema)
-    for (const f of t.fields) {
-      const target = f.joins?.split(".")[0];
-      if (target && target !== t.name) {
-        link(t.name, target);
-        link(target, t.name);
-      }
-    }
   const production: CatalogTable[] = schema.map((t) => {
     const draft = DRAFTS[t.name];
     const fields: CatalogField[] = t.fields.map((f) => ({
@@ -442,7 +440,14 @@ export function buildCatalog(schema: SchemaTable[], notes: FieldNote[]): Catalog
       group: groupOf(t.name),
       key: t.fields.filter((f) => f.pk).map((f) => f.name),
       fields,
-      joins: [...(linked.get(t.name) ?? [])].sort(),
+      // Its own foreign keys in field order, not the tables pointing back at it.
+      joins: [
+        ...new Set(
+          t.fields
+            .map((f) => f.joins?.split(".")[0])
+            .filter((x): x is string => !!x && x !== t.name && !x.startsWith("admin_"))
+        ),
+      ].slice(0, 3),
       dateFields: dateFieldsOf(fields),
       ...(CLOSED[t.name] ? { closed: CLOSED[t.name] } : {}),
       ...describe(note.get(`production|${t.name}|`), draft?.table, t.comment),
@@ -471,9 +476,6 @@ export function buildCatalog(schema: SchemaTable[], notes: FieldNote[]): Catalog
       ...describe(note.get(`${t.source}|${t.name}|`), t.description, ""),
     };
   });
-  production.sort(
-    (a, b) =>
-      GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group) || a.name.localeCompare(b.name)
-  );
+  production.sort((a, b) => placeOf(a.name) - placeOf(b.name) || a.name.localeCompare(b.name));
   return [...production, ...outside];
 }

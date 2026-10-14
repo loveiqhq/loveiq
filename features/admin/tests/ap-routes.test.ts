@@ -337,7 +337,7 @@ describe("GET /api/admin/ap/explorer", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { rows: unknown[]; total: number; masked: boolean };
-    expect(body).toMatchObject({ total: 3, masked: false });
+    expect(body).toMatchObject({ total: 3, masked: false, synced: true });
     expect(body.rows).toEqual([
       {
         date: "2026-10-04",
@@ -380,6 +380,18 @@ describe("GET /api/admin/ap/explorer", () => {
       format: "csv",
     });
     expect(await csv.text()).toContain("2026-10-04,Direct,0,\n");
+  });
+
+  it("says a Google table has not synced yet until it holds a day, and not after", async () => {
+    database();
+    vi.mocked(fetchAllRows).mockResolvedValue([]);
+    const cols = "date,campaign_id,campaign_name,impressions,clicks,cost_eur,conversions";
+    const before = await google({ source: "ads", table: "campaign_daily", cols });
+    expect(await before.json()).toMatchObject({ rows: [], total: 0, synced: false });
+    // Synced, with no row in these dates: an empty page, not "not synced".
+    vi.mocked(fetchAllRows).mockResolvedValue(CAMPAIGN_DAYS.slice(3));
+    const after = await google({ source: "ads", table: "campaign_daily", cols });
+    expect(await after.json()).toMatchObject({ rows: [], total: 0, synced: true });
   });
 
   it("filters campaign_daily by campaign, within the range", async () => {
