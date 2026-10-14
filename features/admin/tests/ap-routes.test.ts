@@ -32,7 +32,7 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { PUT as putNote } from "@/app/api/admin/ap/catalog/route";
+import { GET as catalogGet, PUT as putNote } from "@/app/api/admin/ap/catalog/route";
 import { GET as rowsGet } from "@/app/api/admin/ap/catalog/rows/route";
 import { GET as explorerGet } from "@/app/api/admin/ap/explorer/route";
 import { POST as unlockPost } from "@/app/api/admin/ap/explorer/unlock/route";
@@ -279,30 +279,201 @@ describe("GET /api/admin/ap/explorer", () => {
     expect(await refused.text()).not.toContain("ana@example.com");
   });
 
+  /** The brain's GA4 days as the Google tables read them: each day's one breakdown. */
+  const CHANNEL_DAYS = [
+    {
+      date: "2026-10-02",
+      breakdown: {
+        "Paid Search": {
+          sessions: 40,
+          users: 38,
+          new_users: 35,
+          engaged_sessions: 20,
+          engagement_s: 2000,
+        },
+        Direct: { sessions: 3, users: 3, new_users: 1, engaged_sessions: 1, engagement_s: 10 },
+      },
+    },
+    // A day the breakdown was never read for: no rows, not zero rows of zeros.
+    { date: "2026-10-03", breakdown: null },
+    {
+      date: "2026-10-04",
+      breakdown: {
+        Direct: { sessions: 0, users: 2, new_users: 0, engaged_sessions: 0, engagement_s: 12 },
+      },
+    },
+  ];
+  const CAMPAIGN_DAYS = [
+    {
+      date: "2026-10-02",
+      breakdown: {
+        "111": { name: "Brand", impressions: 90, clicks: 3, cost: 12.35, conversions: 1.5 },
+        "222": { name: "Generic", impressions: 40, clicks: 1, cost: 2, conversions: 0 },
+      },
+    },
+    { date: "2026-10-03", breakdown: null },
+    {
+      date: "2026-10-04",
+      breakdown: {
+        "111": { name: "Brand", impressions: 70, clicks: 2, cost: 8, conversions: 2 },
+      },
+    },
+    // Outside the range asked for.
+    {
+      date: "2026-10-20",
+      breakdown: { "111": { name: "Brand", impressions: 1, clicks: 1, cost: 1, conversions: 0 } },
+    },
+  ];
+  const google = (extra: Record<string, string>) =>
+    explorerGet(new Request(explorerUrl({ date: "date", ...extra })));
+
+  it("opens sessions_daily as a row per day and channel, newest day first", async () => {
+    database();
+    vi.mocked(fetchAllRows).mockResolvedValue(CHANNEL_DAYS);
+    const res = await google({
+      source: "ga4",
+      table: "sessions_daily",
+      cols: "date,channel,sessions,users,new_users,engaged_sessions,avg_engagement_time",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { rows: unknown[]; total: number; masked: boolean };
+    expect(body).toMatchObject({ total: 3, masked: false });
+    expect(body.rows).toEqual([
+      {
+        date: "2026-10-04",
+        channel: "Direct",
+        sessions: 0,
+        users: 2,
+        new_users: 0,
+        engaged_sessions: 0,
+        // No session to share the time out over.
+        avg_engagement_time: null,
+      },
+      {
+        date: "2026-10-02",
+        channel: "Direct",
+        sessions: 3,
+        users: 3,
+        new_users: 1,
+        engaged_sessions: 1,
+        avg_engagement_time: 3.3,
+      },
+      {
+        date: "2026-10-02",
+        channel: "Paid Search",
+        sessions: 40,
+        users: 38,
+        new_users: 35,
+        engaged_sessions: 20,
+        avg_engagement_time: 50,
+      },
+    ]);
+    // Only the channel breakdown is read, and only for the days that hold one.
+    expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toContain(
+      "meta->>channels=not.is.null&select=date:meta->>day,breakdown:meta->channels"
+    );
+    // In a file too: an empty cell, not NaN or Infinity.
+    const csv = await google({
+      source: "ga4",
+      table: "sessions_daily",
+      cols: "date,channel,sessions,avg_engagement_time",
+      format: "csv",
+    });
+    expect(await csv.text()).toContain("2026-10-04,Direct,0,\n");
+  });
+
+  it("filters campaign_daily by campaign, within the range", async () => {
+    database();
+    vi.mocked(fetchAllRows).mockResolvedValue(CAMPAIGN_DAYS);
+    const res = await google({
+      source: "ads",
+      table: "campaign_daily",
+      cols: "date,campaign_id,campaign_name,impressions,clicks,cost_eur,conversions",
+      filters: JSON.stringify([["campaign_name", "eq", "Brand"]]),
+      sort: "cost_eur",
+      dir: "asc",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { rows: unknown[]; total: number };
+    expect(body.total).toBe(2);
+    expect(body.rows).toEqual([
+      {
+        date: "2026-10-04",
+        campaign_id: "111",
+        campaign_name: "Brand",
+        impressions: 70,
+        clicks: 2,
+        cost_eur: 8,
+        conversions: 2,
+      },
+      {
+        date: "2026-10-02",
+        campaign_id: "111",
+        campaign_name: "Brand",
+        impressions: 90,
+        clicks: 3,
+        cost_eur: 12.35,
+        conversions: 1.5,
+      },
+    ]);
+    expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toContain(
+      "meta->>ads_campaigns=not.is.null&select=date:meta->>day,breakdown:meta->ads_campaigns"
+    );
+    // The old daily-totals table is gone.
+    expect((await google({ source: "ads", table: "ads_daily", cols: "date" })).status).toBe(400);
+  });
+
   it("names and logs a Google Analytics or Ads file as what it is: no one's details", async () => {
     database();
-    vi.mocked(fetchAllRows).mockResolvedValue([
-      { meta: { day: "2026-10-02", ad_cost: 12.345, ad_clicks: 3, ad_impressions: 90 } },
-    ]);
-    const res = await explorerGet(
-      new Request(
-        explorerUrl({
-          source: "ads",
-          table: "ads_daily",
-          date: "day",
-          cols: "day,cost_eur",
-          format: "csv",
-        })
-      )
-    );
+    vi.mocked(fetchAllRows).mockResolvedValue(CAMPAIGN_DAYS);
+    const res = await google({
+      source: "ads",
+      table: "campaign_daily",
+      cols: "date,campaign_name,cost_eur,conversions",
+      format: "csv",
+    });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toContain(
-      'filename="ads-ads_daily-2026-10-01-2026-10-12.csv"'
+      'filename="ads-campaign_daily-2026-10-01-2026-10-12.csv"'
     );
-    expect(await res.text()).toContain("2026-10-02,12.35");
+    const text = await res.text();
+    expect(text).toContain("2026-10-02,Brand,12.35,1.5");
+    expect(text).toContain("2026-10-02,Generic,2,0");
+    expect(text).not.toContain("2026-10-20");
     expect(mockLogAdminAction).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "ap_explorer_export", resource_id: "ads.ads_daily" })
+      expect.objectContaining({
+        action: "ap_explorer_export",
+        resource_id: "ads.campaign_daily",
+        metadata: expect.objectContaining({ rows: 3 }),
+      })
     );
+  });
+
+  it("exports every row of a Google table, past one page of 1,000", async () => {
+    database();
+    // 400 days of three channels: more rows than the page sizes allow.
+    vi.mocked(fetchAllRows).mockResolvedValue(
+      Array.from({ length: 400 }, (_, i) => ({
+        date: new Date(Date.UTC(2025, 8, 1 + i)).toISOString().slice(0, 10),
+        breakdown: Object.fromEntries(
+          ["Direct", "Paid Search", "Referral"].map((c) => [
+            c,
+            { sessions: 1, users: 1, new_users: 0, engaged_sessions: 0, engagement_s: 1 },
+          ])
+        ),
+      }))
+    );
+    const res = await google({
+      source: "ga4",
+      table: "sessions_daily",
+      cols: "date,channel",
+      from: "2025-09-01",
+      to: "2026-10-12",
+      format: "csv",
+    });
+    expect(res.status).toBe(200);
+    // Header plus 1,200 rows.
+    expect((await res.text()).trim().split("\n")).toHaveLength(1201);
   });
 
   it("exports CSV to admins only, and logs every export", async () => {
@@ -556,6 +727,39 @@ describe("POST /api/admin/ap/saved-filters", () => {
   });
 });
 
+describe("GET /api/admin/ap/catalog", () => {
+  it("lists the design's Google tables, refreshed every 15 minutes, Ads by its campaigns", async () => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/") return json(SCHEMA);
+      if (path.startsWith("/rest/v1/admin_field_note")) return json([]);
+      if (path.includes("ads_campaigns"))
+        return json([{ period_end: "2026-10-13T23:59:59+00:00" }]);
+      return json([{ period_end: "2026-10-14T23:59:59+00:00" }]);
+    });
+    const res = await catalogGet(new Request("http://localhost/api/admin/ap/catalog"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      sources: Array<{ key: string; fresh: string; description: string }>;
+      tables: Array<{ source: string; name: string; key: string[]; group: string }>;
+    };
+    const source = (k: string) => body.sources.find((x) => x.key === k)!;
+    expect(source("ga4").fresh).toBe("Every 15 minutes, last day 14 Oct 2026");
+    expect(source("ads").fresh).toBe("Every 15 minutes, last day 13 Oct 2026");
+    expect(source("ads").description).toMatch(/conversions by day and campaign/);
+    // The Ads card dates itself by the campaign table, not by GA4's spend.
+    expect(
+      mockSupabaseFetch.mock.calls.some(([p]) =>
+        String(p).includes("meta->>ads_campaigns=not.is.null")
+      )
+    ).toBe(true);
+    const google = body.tables.filter((t) => t.source === "ga4" || t.source === "ads");
+    expect(google.map(({ source: s, name, key, group }) => ({ s, name, key, group }))).toEqual([
+      { s: "ga4", name: "sessions_daily", key: ["date", "channel"], group: "Traffic" },
+      { s: "ads", name: "campaign_daily", key: ["date", "campaign_id"], group: "Spend" },
+    ]);
+  });
+});
+
 describe("PUT /api/admin/ap/catalog", () => {
   const put = (body: unknown) =>
     putNote(
@@ -662,7 +866,7 @@ describe("GET /api/admin/ap/catalog/rows", () => {
     ).toBe(false);
   });
 
-  it("reads PostHog's newest event with its count, and the last Google Ads day", async () => {
+  it("reads PostHog's newest event with its count", async () => {
     mockHogql.mockResolvedValue({
       ok: true,
       cut: null,
@@ -673,10 +877,39 @@ describe("GET /api/admin/ap/catalog/rows", () => {
       newest: "2026-10-14T08:52:00.500Z",
     });
     expect(mockHogql.mock.calls[0]![0]).toContain("max(timestamp)");
+  });
 
-    mockSupabaseFetch.mockResolvedValue(json([{ period_end: "2026-10-13T23:59:59+00:00" }]));
-    vi.mocked(countRows).mockResolvedValue(170);
-    expect(await rows("ads", "ads_daily")).toEqual({ rows: 170, newest: "2026-10-13" });
+  it("counts a Google table's rows, a row per channel or campaign per day", async () => {
+    vi.mocked(fetchAllRows).mockResolvedValue([
+      {
+        date: "2026-10-12",
+        breakdown: { "111": { name: "Brand" }, "222": { name: "Generic" } },
+      },
+      { date: "2026-10-13", breakdown: { "111": { name: "Brand" } } },
+    ]);
+    expect(await rows("ads", "campaign_daily")).toEqual({ rows: 3, newest: "2026-10-13" });
+    expect(vi.mocked(fetchAllRows).mock.calls[0]![0]).toContain("meta->>ads_campaigns=not.is.null");
+
+    vi.mocked(fetchAllRows).mockResolvedValue([
+      { date: "2026-10-14", breakdown: { Direct: { sessions: 4 } } },
+    ]);
+    expect(await rows("ga4", "sessions_daily")).toEqual({ rows: 1, newest: "2026-10-14" });
+    expect(vi.mocked(fetchAllRows).mock.calls[1]![0]).toContain("meta->>channels=not.is.null");
+
+    // Nothing read yet: no rows and no newest day.
+    vi.mocked(fetchAllRows).mockResolvedValue([]);
+    expect(await rows("ga4", "sessions_daily")).toEqual({ rows: 0, newest: null });
+
+    // A table the source does not have, or the old daily totals.
+    for (const [source, table] of [
+      ["ga4", "campaign_daily"],
+      ["ads", "ads_daily"],
+    ]) {
+      const res = await rowsGet(
+        new Request(`http://localhost/api/admin/ap/catalog/rows?source=${source}&table=${table}`)
+      );
+      expect(res.status).toBe(400);
+    }
   });
 });
 

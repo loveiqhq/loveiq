@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  buildCatalog,
-  GA4_DAYS,
-  lastGaDay,
-  productionSchema,
-} from "@features/admin/server/ap/catalog";
+import { buildCatalog, productionSchema } from "@features/admin/server/ap/catalog";
+import { googleRows } from "@features/admin/server/ap/explorer";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { countRows, supabaseFetch } from "@features/admin/server/supabase";
 import { hogqlTable } from "@features/ux-review/server/review";
@@ -76,10 +72,12 @@ export async function GET(request: Request) {
         newest = rows ? instant(r.rows[0]?.[1]) : null;
       }
     } else if (source === "ga4" || source === "ads") {
-      [rows, newest] = await Promise.all([
-        countRows(`${GA4_DAYS}${source === "ads" ? "&meta->>ad_cost=not.is.null" : ""}&select=id`),
-        lastGaDay(source === "ads"),
-      ]);
+      // A row per channel or campaign per day, so counted from the rows the explorer reads.
+      const known = buildCatalog([], []).find((t) => t.source === source && t.name === table);
+      const all = known ? await googleRows(known.name) : null;
+      if (!all) return NextResponse.json({ error: "No such table." }, { status: 400 });
+      rows = all.length;
+      newest = instant(all[all.length - 1]?.date);
     }
     return NextResponse.json({ rows, newest }, { headers: NO_STORE });
   } catch (err) {

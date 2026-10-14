@@ -654,7 +654,7 @@ export function buildOverview(input: {
         ),
         ...laterAssessments(3),
       ],
-      note: `Google Ads is the only paid channel; its spend comes from Google Analytics, refreshed nightly.${spendNote ? ` For this range: ${spendNote}.` : ""}`,
+      note: `Google Ads is the only paid channel; its spend comes from Google Analytics, refreshed every 15 minutes.${spendNote ? ` For this range: ${spendNote}.` : ""}`,
     },
   };
 
