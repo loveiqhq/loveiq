@@ -201,6 +201,23 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       entity_type: "experiment",
       metadata: { to: "pricing", forced_paywall_arm: "treatment" },
     },
+    // The report's leave offer: paywall events, so they sit with the paywall's
+    // in the timeline and the funnel.
+    {
+      event_type: "leave_offer_shown",
+      entity_type: "paywall",
+      metadata: { variant: "founder_call", trigger: "idle", armed_ms: 31000 },
+    },
+    {
+      event_type: "leave_offer_clicked",
+      entity_type: "paywall",
+      metadata: { variant: "founder_call", trigger: "idle", view_duration_ms: 4000 },
+    },
+    {
+      event_type: "leave_offer_dismissed",
+      entity_type: "paywall",
+      metadata: { variant: "founder_call", trigger: "idle", source: "not_now" },
+    },
   ];
 
   it.each(cases)(
