@@ -12,6 +12,7 @@ import type {
 } from "@features/admin/server/ap/landing";
 import type { Table } from "@features/admin/server/ap/overview";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { getTrustpilotConfig } from "@shared/ui/trustpilot/config";
 
 import ApFilterBar from "./ApFilterBar";
 import { RangeLine } from "./ApOverview";
@@ -472,14 +473,42 @@ function EngagementCard({ data }: { data: LandingPayload }) {
 function ReviewsCard({ data }: { data: LandingPayload }) {
   const s = data.sections;
   const t = s && s.ok && s.value ? s.value.testimonials : null;
+  // The site's own Trustpilot numbers, shown only when both are set (never made up).
+  const tp = getTrustpilotConfig();
+  const rating = tp.score && tp.reviewCount ? tp : null;
   return (
     <Card labelledBy="h-reviews">
       <SectionHead id="h-reviews" title="Reviews" level={3} />
-      <NotTracked>No reviews collected yet</NotTracked>
-      <p className="m-0 text-sm leading-relaxed text-ap-body">
-        Trustpilot is switched off on the site until enough customers have reviewed us (decision of
-        13 Jun 2026), so there is no rating to show. The page shows curated field reports instead.
-      </p>
+      {rating ? (
+        <div className="flex flex-wrap items-baseline gap-2.5">
+          <span className="font-serif text-[40px] font-semibold leading-none">{rating.score}</span>
+          <span className="text-[13px] text-ap-muted">
+            out of 5 · {rating.reviewCount} reviews on Trustpilot
+            {rating.profileUrl && (
+              <>
+                {" · "}
+                <a
+                  href={rating.profileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-ap-plum hover:text-ap-violet"
+                >
+                  Open the profile
+                </a>
+              </>
+            )}
+          </span>
+        </div>
+      ) : (
+        <>
+          <NotTracked>No reviews collected yet</NotTracked>
+          <p className="m-0 text-sm leading-relaxed text-ap-body">
+            Trustpilot is switched off on the site until enough customers have reviewed us (decision
+            of 13 Jun 2026), so there is no rating to show. The page shows curated field reports
+            instead.
+          </p>
+        </>
+      )}
       <div className="flex flex-col gap-1.5 border-t border-ap-line pt-3">
         <span className="text-[13px] font-bold text-ap-ink">Field reports block on the page</span>
         {t ? (
