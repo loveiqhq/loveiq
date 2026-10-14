@@ -16,6 +16,7 @@ vi.mock("next/image", () => ({
 const analytics = vi.hoisted(() => ({
   trackWizardSlideAdvanced: vi.fn(),
   trackWizardMapStep: vi.fn(),
+  trackWizardSkipped: vi.fn(),
 }));
 vi.mock("@features/analytics/client", () => analytics);
 
@@ -80,5 +81,6 @@ describe("/wizard-preview", () => {
     expect(heading()).toBe("A note before you explore your report.");
     expect(analytics.trackWizardSlideAdvanced).not.toHaveBeenCalled();
     expect(analytics.trackWizardMapStep).not.toHaveBeenCalled();
+    expect(analytics.trackWizardSkipped).not.toHaveBeenCalled();
   });
 });

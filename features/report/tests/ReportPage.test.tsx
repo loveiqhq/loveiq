@@ -92,6 +92,8 @@ vi.mock("@features/analytics/client", () => ({
   trackLockedCardPriceShown: vi.fn(),
   trackLockedChaptersShown: vi.fn(),
   trackExperimentExposure: vi.fn(),
+  // Report 3.0's reading per chapter, saved when the page goes (chapterStats).
+  persistReportChapterStats: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
@@ -1472,6 +1474,17 @@ describe("ReportPage", () => {
     const precedes = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
+    /** Paywall clicks by chapter, over every save of the reading per chapter. */
+    const savedPaywallClicks = () => {
+      const clicks: Record<string, number> = {};
+      for (const [m] of vi.mocked(analytics.persistReportChapterStats).mock.calls) {
+        for (const [chapter, tally] of Object.entries(m.chapters)) {
+          if (tally.pw_click) clicks[chapter] = (clicks[chapter] ?? 0) + tally.pw_click;
+        }
+      }
+      return clicks;
+    };
+
     it("renders it once, under the Part 5 heading and above Attachment Style", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -1496,7 +1509,7 @@ describe("ReportPage", () => {
       (response.data as Record<string, unknown>).partnershipCopy = LOCKED_PARTNERSHIP;
       mockUseReportData.mockReturnValue(response);
 
-      const { container } = render(<ReportPage />);
+      const { container, unmount } = render(<ReportPage />);
       const chapter = container.querySelector<HTMLElement>("#challenges_in_partnership")!;
       // The plans pop-up opens by itself for a locked reader and hides the report
       // from the accessibility tree, so the chapter toggle is found by its class.
@@ -1507,6 +1520,9 @@ describe("ReportPage", () => {
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
       );
+      // The reading per chapter counts the click for the chapter it was made in.
+      unmount();
+      expect(savedPaywallClicks()).toEqual({ challenges_in_partnership: 1 });
     });
 
     it("leaves ?v3=1 with it after Curiosity", () => {
@@ -1565,12 +1581,15 @@ describe("ReportPage", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(withChapter(true));
 
-      const { container } = render(<ReportPage />);
+      const { container, unmount } = render(<ReportPage />);
       await user.click(container.querySelector<HTMLElement>(".rv4-cip__gate")!);
 
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
       );
+      // Curiosity grants it, but the click was made in Challenges in Partnerships.
+      unmount();
+      expect(savedPaywallClicks()).toEqual({ challenges_in_partnership: 1 });
     });
 
     it("keeps V2's section for an archetype with no Report 3.0 chapter", () => {

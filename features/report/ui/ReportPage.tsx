@@ -179,6 +179,7 @@ import {
   trackReportShareOpened,
   trackReportViewed,
 } from "@features/analytics/client";
+import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import {
@@ -756,6 +757,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowInvite(true);
   }, [shouldAutoOpenInvite]);
+  // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only.
+  useChapterStats({
+    enabled: isV4 && viewMode === "owner",
+    chapters: navIds,
+    active: activeSection,
+    archetype: viewArchetype || null,
+    paused: isPricingModalOpen || isShareModalOpen || showInvite,
+  });
   const clickLockUntilRef = useRef(0);
 
   const handleSectionClick = (sectionId: string) => {
@@ -766,11 +775,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // Lock-icon click intent — fired BEFORE the modal opens so funnel can
   // measure pre-paywall intent vs modal-view conversion. A recipient's click is
   // not counted: only the owner can pay, so it is nobody's intent to.
+  // `sectionId` is the section that grants access; `chapterId` the chapter clicked in,
+  // where a chapter borrows another's gate (Challenges in Partnerships). Optional rather
+  // than defaulted: a default value here makes the React hooks lint skip this component.
   const trackLockClick = (
     sectionId: string,
-    planNeeded: "essentials" | "full_report" | "all_reports"
+    planNeeded: "essentials" | "full_report" | "all_reports",
+    chapterId?: string
   ) => {
     if (viewMode === "shared") return;
+    recordPaywallClick(chapterId ?? sectionId);
     trackLockIconClicked({
       section_id: sectionId,
       archetype: viewArchetype || null,
@@ -786,14 +800,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     });
   };
 
-  const unlockSection = (section: DisplayReportSection) => {
+  const unlockSection = (section: DisplayReportSection, chapterId?: string) => {
     // `plan_needed` mirrors the locked section's accessTier (free tier is always
     // unlocked so it shouldn't reach this handler).
     trackLockClick(
       section.id,
       section.accessTier === "essentials" || section.accessTier === "full_report"
         ? section.accessTier
-        : "full_report"
+        : "full_report",
+      chapterId
     );
     // Scope the upgrade modal to the archetype the user is currently viewing,
     // not the primary. Otherwise a buyer who already owns essentials/full on
@@ -2424,7 +2439,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <V4Partnership
                           view={partnership}
-                          onUnlock={() => unlockSection(partnershipGate)}
+                          onUnlock={() =>
+                            unlockSection(partnershipGate, "challenges_in_partnership")
+                          }
                         />
                       </V4Chapter>
                     </Fragment>
@@ -2459,7 +2476,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             ? partnershipLoop
                             : null
                         }
-                        onUnlock={() => unlockSection(partnershipGate)}
+                        onUnlock={() => unlockSection(partnershipGate, "challenges_in_partnership")}
                         quote={fullReportQuote}
                         sectionTitle={
                           isV4 ? "Challenges in Partnerships" : "Challenges in Partnership"
@@ -2561,7 +2578,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     unlock: (id: string) => {
       const item = REPORT_V3_NAV_PARTS.flatMap((part) => part.items).find((i) => i.id === id);
       const section = resolvedSections.find((s) => s.id === (item?.gateId ?? id));
-      if (section) unlockSection(section);
+      if (section) unlockSection(section, id);
     },
   };
   return (

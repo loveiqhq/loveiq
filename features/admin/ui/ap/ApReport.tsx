@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
+import { rangeLabel } from "@features/admin/server/ap/filters";
 import { delta, fmt } from "@features/admin/server/ap/format";
 import type { ReportPayload } from "@features/admin/server/ap/report-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
@@ -216,14 +217,25 @@ export default function ApReport() {
                           { label: "Slide", unit: "text" },
                           { label: "Reached", unit: "count" },
                           { label: "Continue", unit: "pct" },
+                          { label: "Skip intro", unit: "pct" },
                           { label: "Back", unit: "count" },
                           { label: "Back, of the slide's readers", unit: "pct" },
+                          { label: "Exit", unit: "pct" },
                           { label: "Median time", unit: "mmss" },
                           { label: "Stepped through the deep dives", unit: "pct" },
                         ],
                         rows: data.wizard.slides.map((s) => ({
                           label: `${s.n} · ${s.name}`,
-                          values: [s.reached, s.cont, s.back, s.backShare, s.medianMs, s.engaged],
+                          values: [
+                            s.reached,
+                            s.cont,
+                            s.skip,
+                            s.back,
+                            s.backShare,
+                            s.exit,
+                            s.medianMs,
+                            s.engaged,
+                          ],
                         })),
                       },
                     },
@@ -232,13 +244,33 @@ export default function ApReport() {
                       table: {
                         columns: [
                           { label: "Chapter", unit: "text" },
+                          { label: "Reach", unit: "pct" },
+                          { label: "Avg. time", unit: "mmss" },
                           { label: "Good votes", unit: "count" },
                           { label: "Bad votes", unit: "count" },
+                          { label: "Show more CTR", unit: "pct" },
+                          { label: "Paywall CTR", unit: "pct" },
+                          { label: "Saw the paywall (readers)", unit: "count" },
+                          { label: "Clicked it (readers)", unit: "count" },
+                          { label: "Learn more CTR", unit: "pct" },
+                          { label: "Exercise CTR", unit: "pct" },
                           { label: "Paywall clicks (readers)", unit: "count" },
                         ],
                         rows: data.chapters.map((c) => ({
                           label: `${c.n} · ${c.name} (${c.id})`,
-                          values: [c.up, c.down, c.paywallReaders],
+                          values: [
+                            c.reach,
+                            c.avgMs,
+                            c.up,
+                            c.down,
+                            c.showMore,
+                            c.paywall,
+                            c.paywallSeen,
+                            c.paywallClicked,
+                            c.learnMore,
+                            c.exercise,
+                            c.paywallReaders,
+                          ],
                         })),
                       },
                     },
@@ -409,7 +441,7 @@ export default function ApReport() {
   );
 }
 
-type WizardKey = "time" | "reached" | "cont" | "back" | "exit";
+type WizardKey = "time" | "reached" | "cont" | "skip" | "back" | "exit";
 
 function WizardSection({ data }: { data: ReportPayload }) {
   const w = data.wizard;
@@ -422,11 +454,15 @@ function WizardSection({ data }: { data: ReportPayload }) {
         ? s.reached
         : k === "cont"
           ? s.cont
-          : k === "back"
-            ? (s.backShare ?? s.back)
-            : s.exit
+          : k === "skip"
+            ? s.skip
+            : k === "back"
+              ? (s.backShare ?? s.back)
+              : s.exit
   );
-  const gtc = "44px minmax(220px,2.2fr) 74px minmax(110px,1fr) 80px 80px 70px minmax(150px,1.3fr)";
+  const skipsFrom = w.skipsFrom ? rangeLabel(w.skipsFrom, w.skipsFrom) : null;
+  const gtc =
+    "44px minmax(220px,2.2fr) 74px minmax(110px,1fr) 80px 80px 80px 70px minmax(150px,1.3fr)";
   const head = { sort, onSort };
   return (
     <Card id="wizard" labelledBy="h-rwiz">
@@ -441,13 +477,14 @@ function WizardSection({ data }: { data: ReportPayload }) {
         ))}
       </TileGrid>
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Intro wizard slides" style={{ minWidth: 900 }}>
+        <div role="table" aria-label="Intro wizard slides" style={{ minWidth: 980 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
             <Th label="#" />
             <Th label="Slide" />
             <Th label="Time" col="time" right {...head} />
             <Th label="Reached" col="reached" {...head} />
             <Th label="Continue" col="cont" right {...head} />
+            <Th label="Skip intro" col="skip" right {...head} />
             <Th label="Back" col="back" right {...head} />
             <Th label="Exit" col="exit" right {...head} />
             <Th label="Engagement on slide" />
@@ -483,6 +520,9 @@ function WizardSection({ data }: { data: ReportPayload }) {
                 {fmt("pct", s.cont, 1)}
               </span>
               <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+                {fmt("pct", s.skip, 1)}
+              </span>
+              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
                 {s.n === 1
                   ? "—"
                   : s.backShare === null
@@ -508,10 +548,13 @@ function WizardSection({ data }: { data: ReportPayload }) {
         </div>
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Reached, Continue, Exit and Engagement follow the filters; Back and Time are all traffic, as
-        the slides&rsquo; own events carry no source or device. Continue on slide 6 = opened the
-        report. Exit = did not go on (closed, skipped, or still on it). Back = went back from the
-        slide, of those who reached it
+        Reached, Continue, Skip intro, Exit and Engagement follow the filters; Back and Time are all
+        traffic, as the slides&rsquo; own events carry no source or device. Continue on slide 6 =
+        opened the report.{" "}
+        {skipsFrom
+          ? `Skip intro = pressed Skip Intro on the slide, of its readers who finished from ${skipsFrom}, when it began to be recorded. Exit = did not go on and did not skip (closed, or still on it); before ${skipsFrom} a skip counts as an exit.`
+          : "Skip intro is not recorded yet. Exit = did not go on (closed, skipped, or still on it)."}{" "}
+        Back = went back from the slide, of those who reached it
         {data.narrowed ? "; with a filter on it is a count, since back clicks carry no source" : ""}
         . Time: median from arriving on a slide to going on; none on slide 6, as there is no end
         time on the last slide. Engagement: on slide 2, readers who stepped through the deep dives
@@ -923,20 +966,52 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
   );
 }
 
-type ChapterKey = "name" | "votes" | "paywall";
+type ChapterKey =
+  "name" | "reach" | "time" | "votes" | "showMore" | "paywall" | "learnMore" | "exercise";
+type ChapterRow = ReportPayload["chapters"][number];
+
+/** The design's "Sort chapters by", after Report order. */
+const CHAPTER_SORTS: Array<{ value: Exclude<ChapterKey, "name">; label: string }> = [
+  { value: "reach", label: "Reach" },
+  { value: "time", label: "Time" },
+  { value: "votes", label: "Feedback" },
+  { value: "showMore", label: "Show more" },
+  { value: "paywall", label: "Paywall" },
+  { value: "learnMore", label: "Learn more" },
+  { value: "exercise", label: "Exercise" },
+];
 
 function ChaptersSection({ data }: { data: ReportPayload }) {
+  const reading = data.chapterReading;
   const [sort, setSort] = useState<Sort<ChapterKey>>(null);
   const filters = useColumnFilters(data.chapters, { name: "Chapter" }, (c) => c.name);
+  // A range with no reading per chapter shows the readers who clicked a paywall, as before.
+  const paywallOf = (c: ChapterRow) => (reading.recorded ? c.paywall : c.paywallReaders || null);
   const rows = sortRows(filters.matches, sort, (c, k) =>
-    k === "name" ? c.name : k === "votes" ? c.up + c.down : c.paywallReaders
+    k === "name"
+      ? c.name
+      : k === "reach"
+        ? c.reach
+        : k === "time"
+          ? c.avgMs
+          : k === "votes"
+            ? c.up + c.down
+            : k === "showMore"
+              ? c.showMore
+              : k === "paywall"
+                ? paywallOf(c)
+                : k === "learnMore"
+                  ? c.learnMore
+                  : c.exercise
   );
   const head = {
     sort,
     onSort: (k: ChapterKey) => setSort((s) => nextSort(s, k, k === "name" ? 1 : -1)),
   };
   const maxVotes = Math.max(1, ...data.chapters.map((c) => c.up + c.down));
-  const gtc = "40px minmax(240px,2.4fr) minmax(200px,1.6fr) minmax(120px,0.8fr)";
+  const gtc =
+    "40px minmax(220px,2fr) minmax(120px,1fr) 80px minmax(190px,1.5fr) repeat(4, minmax(96px,0.7fr))";
+  const from = reading.from ? rangeLabel(reading.from, reading.from) : null;
   return (
     <Card id="chapters" labelledBy="h-ch">
       <SectionHead
@@ -945,33 +1020,43 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
         right={
           <Pills<"order" | ChapterKey>
             label="Sort chapters by"
-            options={[
-              { value: "order", label: "Report order" },
-              { value: "votes", label: "Feedback" },
-              { value: "paywall", label: "Paywall clicks" },
-            ]}
+            options={[{ value: "order", label: "Report order" }, ...CHAPTER_SORTS]}
             value={sort?.key ?? "order"}
             onChange={(v) => setSort(v === "order" ? null : { key: v, dir: -1 })}
           />
         }
       />
       <AllTraffic note={data.narrowed} />
+      <NotTracked>{from ? `Recorded from ${from}` : "Not recorded yet"}</NotTracked>
       <p className="m-0 text-[13px] leading-relaxed text-ap-muted">
         All {data.chapters.length} chapters, in the live report&rsquo;s order, then chapters of
-        earlier report versions that were voted on. Feedback: votes given in the range; the bar is
-        relative to the most-voted chapter, green good and red bad. Paywall clicks: readers of the
-        range who clicked a paywall or lock button in the chapter. It is a count, not a rate:
-        nothing records who saw each chapter&rsquo;s paywall. Reach, time and the Show more / Learn
-        more / Exercise clicks per chapter are not recorded yet.
+        earlier report versions that were voted on. Reach: of the range&rsquo;s{" "}
+        {fmt("count", reading.readers)} readers whose reading per chapter was recorded (those who
+        finished from {from ?? "the day it starts"}), the ones who spent a second or more in the
+        chapter or used anything in it. Avg. time: their mean time with it as the chapter on screen,
+        up to 30 minutes each. Show more, Learn more and Exercise CTR: of those readers, the share
+        who opened its Show all, Learn More &amp; Go Deeper or Try This &amp; See What Shifts; a
+        dash where nobody did or the chapter has none. Paywall CTR: of the readers who saw a paywall
+        in the chapter, the share who clicked one (under it, how many clicked of how many saw).
+        Feedback: votes given in the range; the bar is relative to the most-voted chapter, green
+        good and red bad.
+        {reading.recorded
+          ? ""
+          : " With no reading recorded in this range, Paywall shows the readers who clicked a paywall or lock button in the chapter, as a count."}
       </p>
       {filters.choice}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Chapters" style={{ minWidth: 720 }}>
+        <div role="table" aria-label="Chapters" style={{ minWidth: 1150 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
             <Th label="#" />
             <Th label="Chapter" col="name" filter={filters.funnel("name")} {...head} />
+            <Th label="Reach" col="reach" {...head} />
+            <Th label="Avg. time" col="time" right {...head} />
             <Th label="Feedback · good / bad" col="votes" {...head} />
-            <Th label="Paywall clicks" col="paywall" right {...head} />
+            <Th label="Show more CTR" col="showMore" right {...head} />
+            <Th label="Paywall CTR" col="paywall" right {...head} />
+            <Th label="Learn more CTR" col="learnMore" right {...head} />
+            <Th label="Exercise CTR" col="exercise" right {...head} />
           </div>
           {rows.map((c) => (
             <div
@@ -988,6 +1073,17 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                 <span className="font-mono text-[11px] text-ap-muted">
                   {c.part} · {c.id}
                 </span>
+              </span>
+              <span role="cell" className="flex items-center gap-2 px-3 py-2">
+                <span className="flex-1">
+                  <Bar pct={c.reach} height={8} />
+                </span>
+                <span className="min-w-[34px] text-right text-xs font-bold tabular-nums">
+                  {fmt("pct", c.reach, 0)}
+                </span>
+              </span>
+              <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+                {fmt("mmss", c.avgMs)}
               </span>
               <span role="cell" className="flex items-center gap-2 px-3 py-2">
                 <span className="flex h-2.5 flex-1 overflow-hidden rounded-full bg-ap-track">
@@ -1015,7 +1111,29 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                 )}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                {c.paywallReaders ? fmt("count", c.paywallReaders) : "—"}
+                {fmt("pct", c.showMore, 1)}
+              </span>
+              <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+                {reading.recorded ? (
+                  <>
+                    {fmt("pct", c.paywall, 1)}
+                    {c.paywallSeen > 0 && (
+                      <span className="block text-[11px] text-ap-muted">
+                        {fmt("count", c.paywallClicked)} of {fmt("count", c.paywallSeen)}
+                      </span>
+                    )}
+                  </>
+                ) : c.paywallReaders ? (
+                  `${fmt("count", c.paywallReaders)} clicked`
+                ) : (
+                  "—"
+                )}
+              </span>
+              <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+                {fmt("pct", c.learnMore, 1)}
+              </span>
+              <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+                {fmt("pct", c.exercise, 1)}
               </span>
             </div>
           ))}

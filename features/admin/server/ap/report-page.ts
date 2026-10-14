@@ -8,7 +8,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 
 import { assessmentScope } from "./assessment";
 import { type Facts, type SubFact } from "./facts";
-import { activeNarrowing, bucketCaption, type ApFilters } from "./filters";
+import { activeNarrowing, bucketCaption, rangeLabel, type ApFilters } from "./filters";
 import {
   EVENTS_COMPLETE_FROM,
   launched,
@@ -38,6 +38,30 @@ export interface ReportExtras {
   map_steppers: number[] | null;
   chapters: Array<{ section: string; up: number; down: number }>;
   paywall_clicks: Array<{ section: string; readers: number }>;
+  /**
+   * Reading per chapter (report_chapter_stats), over the range's readers who finished from
+   * `chapter_stats_from`: readers who reached each chapter, their mean time in it, and how
+   * many of them used each control. `pw_click` counts only readers who also saw a paywall.
+   */
+  chapter_stats: Array<{
+    section: string;
+    reached: number;
+    ms_avg: number | null;
+    opened: number;
+    show_all: number;
+    learn_more: number;
+    try_this: number;
+    pw_seen: number;
+    pw_click: number;
+  }>;
+  /** Those readers who reached any chapter: Reach's denominator. */
+  chapter_readers: number;
+  /** The first day (Berlin) any chapter reading was recorded; null before the first. */
+  chapter_stats_from: string | null;
+  /** The range's finishers who pressed Skip Intro, by the slide (0-5) they pressed it on. */
+  wizard_skips: Array<{ slide: number; n: number; sids: number[] }>;
+  /** The first day (Berlin) any Skip Intro was recorded; null before the first. */
+  wizard_skips_from: string | null;
   issues: Array<{ issue: string; n: number }>;
   feedback: Array<{
     at: string;
@@ -81,6 +105,19 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
     map_steppers: Array.isArray(raw.map_steppers) ? raw.map_steppers.map(Number) : null,
     chapters: raw.chapters,
     paywall_clicks: raw.paywall_clicks ?? [],
+    // Missing from an ap_report_extras older than per-chapter reading and Skip Intro: not
+    // recorded, which the page says, never zeros.
+    chapter_stats: Array.isArray(raw.chapter_stats) ? raw.chapter_stats : [],
+    chapter_readers: Number(raw.chapter_readers) || 0,
+    chapter_stats_from: raw.chapter_stats_from ?? null,
+    wizard_skips: Array.isArray(raw.wizard_skips)
+      ? raw.wizard_skips.map((k) => ({
+          slide: Number(k.slide),
+          n: Number(k.n) || 0,
+          sids: Array.isArray(k.sids) ? k.sids.map(Number) : [],
+        }))
+      : [],
+    wizard_skips_from: raw.wizard_skips_from ?? null,
     issues: raw.issues ?? [],
     feedback: raw.feedback,
     votes_total: Number(raw.votes_total) || 0,
@@ -123,14 +160,18 @@ const ISSUES: Record<string, string> = {
   other: "Other",
 };
 
+/** The live report's chapters: what its per-chapter reading is recorded under. */
+const LIVE_CHAPTERS: ReadonlySet<string> = new Set(
+  WIZARD_DRAWER.flatMap((p) => p.rows.map((r) => r.id))
+);
+
 /** The live report's chapters in its own order (its nav), then any older chapter id voted on. */
 export function chapterList(seen: string[]): Array<{ id: string; name: string; part: string }> {
   const live = WIZARD_DRAWER.flatMap((p) =>
     p.rows.map((r) => ({ id: r.id, name: r.label, part: `${p.part} · ${p.label}` }))
   );
-  const ids = new Set(live.map((c) => c.id));
   const older = [...new Set(seen)]
-    .filter((id) => !ids.has(id))
+    .filter((id) => !LIVE_CHAPTERS.has(id))
     .sort()
     .map((id) => ({ id, name: prettyId(id), part: "Earlier report versions" }));
   return [...live, ...older];
@@ -154,6 +195,11 @@ export interface ReportPayload extends PageHead {
       reached: number;
       reachedShare: number | null;
       cont: number | null;
+      /**
+       * Pressed Skip Intro on the slide, of its readers who finished once that was
+       * recorded (`skipsFrom`); null with none of them.
+       */
+      skip: number | null;
       back: number;
       /** Back ÷ reached; null while a source, device or tier filter is on (back has none). */
       backShare: number | null;
@@ -162,6 +208,8 @@ export interface ReportPayload extends PageHead {
       /** Slide 2 only: of its readers since MAP_STEPS_FROM, those who stepped through the map. */
       engaged: number | null;
     }>;
+    /** The first day Skip Intro was recorded per slide; null before it was. */
+    skipsFrom: string | null;
   };
   time: {
     readers: number;
@@ -201,8 +249,22 @@ export interface ReportPayload extends PageHead {
     part: string;
     up: number;
     down: number;
+    /** Readers who clicked a paywall or lock button, by the section granting access. */
     paywallReaders: number;
+    /** The rest from per-chapter reading; null where the range has none recorded. */
+    reach: number | null;
+    avgMs: number | null;
+    /** Of the chapter's readers (those who reached it); null where none did it. */
+    showMore: number | null;
+    learnMore: number | null;
+    exercise: number | null;
+    /** Clicked ÷ saw the chapter's paywall; null where nobody saw it. */
+    paywall: number | null;
+    paywallSeen: number;
+    paywallClicked: number;
   }>;
+  /** Per-chapter reading: from when, its readers in this range, and whether it has any days. */
+  chapterReading: { from: string | null; readers: number; recorded: boolean };
   feedback: {
     good: number;
     bad: number;
@@ -433,11 +495,24 @@ export function buildReportPage(input: {
   // The map's steppers come as submissions, so unlike Back this share follows the filters.
   const steppers = extras.map_steppers ? new Set(extras.map_steppers) : null;
   const mapReaders = subs.filter((s) => s.day >= MAP_STEPS_FROM && (s.wizardSlide ?? 0) >= 1);
+  // Skip Intro per slide, recorded from `skipsFrom`. Its pressers come as submissions too, so
+  // it follows the filters; before `skipsFrom` nobody's skip is known.
+  const skipsFrom = extras.wizard_skips_from;
+  const skippedOn = new Map(extras.wizard_skips.map((k) => [k.slide, new Set(k.sids)]));
+  const skippers = new Set(extras.wizard_skips.flatMap((k) => k.sids));
   const slides = SLIDES.map((s, i) => {
     const w = extras.wizard.find((x) => x.slide === i);
     const reached = reach[i]!;
     const wentOn = i < 5 ? reach[i + 1]! : openedAfter;
     const back = w?.went_back ?? 0;
+    const readersHere = subs.filter((x) => i === 0 || (x.wizardSlide ?? 0) >= i);
+    const skipped = skippedOn.get(i) ?? new Set<number>();
+    // Stopped here but pressed Skip Intro, here or on a slide they went back to: they
+    // skipped, they did not leave.
+    const skippedOnly = readersHere.filter(
+      (x) => skippers.has(x.id) && !(i < 5 ? (x.wizardSlide ?? 0) > i : x.openedAt)
+    ).length;
+    const recordedHere = skipsFrom === null ? [] : readersHere.filter((x) => x.day >= skipsFrom);
     return {
       n: i + 1,
       name: s.name,
@@ -445,10 +520,11 @@ export function buildReportPage(input: {
       reached,
       reachedShare: ratio(reached, started),
       cont: ratio(wentOn, reached),
+      skip: ratio(recordedHere.filter((x) => skipped.has(x.id)).length, recordedHere.length),
       back,
       // Slide 1 has no Back button: nothing to share out.
       backShare: narrowed || i === 0 ? null : ratio(back, reached),
-      exit: reached ? Math.max(0, 1 - wentOn / reached) : null,
+      exit: reached ? Math.max(0, reached - wentOn - skippedOnly) / reached : null,
       medianMs: w && w.timed > 0 && w.median_ms !== null ? Number(w.median_ms) : null,
       engaged:
         i === 1 && steppers
@@ -456,7 +532,19 @@ export function buildReportPage(input: {
           : null,
     };
   });
-  const skips = input.returns && input.returns.ok ? input.returns.value.wizardSkips : null;
+  // Skip Intro from our own records when every day of the range has them (they follow the
+  // filters); otherwise PostHog's count of the sessions it saw press it, as before.
+  const ownSkips = skipsFrom !== null && f.from >= skipsFrom;
+  const skips = ownSkips
+    ? subs.filter((x) => skippers.has(x.id)).length
+    : input.returns && input.returns.ok
+      ? input.returns.value.wizardSkips
+      : null;
+  const skipsFoot = ownSkips
+    ? "pressed Skip Intro"
+    : `clicked Skip Intro, as PostHog saw it${narrowed ? " · all traffic" : ""}${
+        skipsFrom ? ` · our own count from ${rangeLabel(skipsFrom, skipsFrom)}` : ""
+      }`;
   const completedShare = (l: SubFact[]) =>
     ratio(l.filter((s) => (s.wizardSlide ?? 0) >= 5).length, l.length);
   // Finishers whose report was never opened (so far): they left during the intro.
@@ -488,9 +576,9 @@ export function buildReportPage(input: {
         "count",
         skips,
         null,
-        `clicked Skip Intro, as PostHog saw it${narrowed ? " · all traffic" : ""}`,
+        skipsFoot,
         [],
-        input.returns && !input.returns.ok ? input.returns.error : null
+        !ownSkips && input.returns && !input.returns.ok ? input.returns.error : null
       ),
       goodWhen: "down",
       trend: "",
@@ -570,20 +658,42 @@ export function buildReportPage(input: {
 
   const votesBy = new Map(extras.chapters.map((c) => [c.section, c]));
   const clicksBy = new Map(extras.paywall_clicks.map((c) => [c.section, c.readers]));
-  const chapters = chapterList(extras.chapters.map((c) => c.section)).map((c, i) => ({
-    n: i + 1,
-    ...c,
-    up: votesBy.get(c.id)?.up ?? 0,
-    down: votesBy.get(c.id)?.down ?? 0,
-    paywallReaders: clicksBy.get(c.id) ?? 0,
-  }));
+  // Reading per chapter, for the live report's chapters on days it was recorded: all
+  // traffic, like the votes, as its rows are summed per chapter in the database.
+  const readingFrom = extras.chapter_stats_from;
+  const readingRecorded = readingFrom !== null && readingFrom <= f.to;
+  const statsBy = new Map(extras.chapter_stats.map((c) => [c.section, c]));
+  const chapters = chapterList(extras.chapters.map((c) => c.section)).map((c, i) => {
+    const live = readingRecorded && LIVE_CHAPTERS.has(c.id);
+    const st = live ? statsBy.get(c.id) : undefined;
+    const reached = Number(st?.reached) || 0;
+    // A share of the chapter's readers; blank where nobody used it (or it has no such control).
+    const used = (n: number | undefined) => (Number(n) > 0 ? ratio(Number(n), reached) : null);
+    const seen = Number(st?.pw_seen) || 0;
+    const clicked = Number(st?.pw_click) || 0;
+    return {
+      n: i + 1,
+      ...c,
+      up: votesBy.get(c.id)?.up ?? 0,
+      down: votesBy.get(c.id)?.down ?? 0,
+      paywallReaders: clicksBy.get(c.id) ?? 0,
+      reach: live ? ratio(reached, extras.chapter_readers) : null,
+      avgMs: st && st.ms_avg !== null ? Number(st.ms_avg) : null,
+      showMore: used(st?.show_all),
+      learnMore: used(st?.learn_more),
+      exercise: used(st?.try_this),
+      paywall: ratio(clicked, seen),
+      paywallSeen: seen,
+      paywallClicked: clicked,
+    };
+  });
   const names = new Map(chapters.map((c) => [c.id, c.name]));
 
   return {
     ...head(f, today, now),
     launched: launched(scope),
     tiles,
-    wizard: { tiles: wizardTiles, slides },
+    wizard: { tiles: wizardTiles, slides, skipsFrom },
     time: {
       readers: readers.length,
       recorded: rec.length,
@@ -623,6 +733,11 @@ export function buildReportPage(input: {
       campaigns,
     },
     chapters,
+    chapterReading: {
+      from: readingFrom,
+      readers: extras.chapter_readers,
+      recorded: readingRecorded,
+    },
     feedback: {
       good: extras.chapters.reduce((a, c) => a + c.up, 0),
       bad: extras.chapters.reduce((a, c) => a + c.down, 0),

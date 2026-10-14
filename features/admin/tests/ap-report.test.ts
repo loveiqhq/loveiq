@@ -39,6 +39,11 @@ const extras: ReportExtras = {
   map_steppers: [],
   chapters: [],
   paywall_clicks: [],
+  chapter_stats: [],
+  chapter_readers: 0,
+  chapter_stats_from: null,
+  wizard_skips: [],
+  wizard_skips_from: null,
   issues: [],
   feedback: [],
   votes_total: 0,
@@ -206,6 +211,146 @@ describe("report page", () => {
     expect(slide1.backShare).toBeNull();
   });
 
+  it("Skip intro: of the slide's readers since it was recorded; a skip is no exit, by the filters", () => {
+    const skipFacts = factsFixture({
+      subs: [
+        // Before Skip Intro was recorded (5 Oct): a skip there still reads as an exit.
+        sub({ id: 1, ...day("2026-10-03"), wizardSlide: 1 }),
+        sub({ id: 2, ...day("2026-10-05"), wizardSlide: 1 }),
+        sub({ id: 3, ...day("2026-10-05"), wizardSlide: 1 }),
+        sub({ id: 4, ...day("2026-10-05"), wizardSlide: 2 }),
+        sub({ id: 5, ...day("2026-10-06"), wizardSlide: 5 }),
+        // Skipped on the last slide and opened the report: went on, counted once.
+        sub({ id: 6, ...day("2026-10-06"), wizardSlide: 5, src: "ig", med: null, ads: false }),
+        // Went back from slide 4 and skipped on slide 2: no exit on slide 4.
+        sub({ id: 7, ...day("2026-10-06"), wizardSlide: 3 }),
+      ],
+    });
+    const wizard = (
+      source: "all" | "google_ads",
+      skips: ReportExtras["wizard_skips"],
+      from: string | null
+    ) =>
+      page({
+        facts: skipFacts,
+        benchmark: skipFacts,
+        extras: { ...extras, wizard_skips: skips, wizard_skips_from: from },
+        filters: { ...filters, source },
+      }).wizard.slides;
+    const skips = [
+      { slide: 1, n: 2, sids: [2, 7] },
+      { slide: 5, n: 1, sids: [6] },
+    ];
+    const all = wizard("all", skips, "2026-10-05");
+    expect(all[1]).toMatchObject({ reached: 7, cont: 4 / 7, skip: 2 / 6, exit: 2 / 7 });
+    expect(all[3]).toMatchObject({ reached: 3, skip: 0, exit: 0 });
+    expect(all[5]).toMatchObject({ reached: 2, cont: 1, skip: 0.5, exit: 0 });
+    expect(all[0]!.skip).toBe(0);
+    const ads = wizard("google_ads", skips, "2026-10-05");
+    expect(ads[1]).toMatchObject({ reached: 6, skip: 0.4, exit: 2 / 6 });
+    expect(ads[5]).toMatchObject({ reached: 1, skip: 0, exit: 0 });
+    // Not recorded yet: no Skip intro, and Exit as it always was.
+    const none = wizard("all", [], null);
+    expect(none.map((s) => s.skip)).toEqual(Array(6).fill(null));
+    expect(none[1]!.exit).toBe(3 / 7);
+    expect(none[3]!.exit).toBe(1 / 3);
+  });
+
+  it("Skipped intro counts our own records once the whole range has them, PostHog's before", () => {
+    const skipFacts = factsFixture({
+      subs: [
+        sub({ id: 1, wizardSlide: 1 }),
+        sub({ id: 2, wizardSlide: 3, src: "ig", med: null, ads: false }),
+        sub({ id: 3, wizardSlide: 5 }),
+      ],
+    });
+    const tile = (from: string | null, over: Partial<Parameters<typeof buildReportPage>[0]> = {}) =>
+      page({
+        facts: skipFacts,
+        benchmark: skipFacts,
+        extras: {
+          ...extras,
+          wizard_skips: [
+            { slide: 1, n: 1, sids: [1] },
+            { slide: 3, n: 1, sids: [2] },
+          ],
+          wizard_skips_from: from,
+        },
+        returns: posthog(),
+        ...over,
+      }).wizard.tiles.find((t) => t.key === "skipped")!;
+    expect(tile("2026-10-01")).toMatchObject({ value: 2, foot: "pressed Skip Intro" });
+    // Ours follow the filters, and need no PostHog.
+    expect(
+      tile("2026-10-01", {
+        filters: { ...filters, source: "google_ads" },
+        returns: { ok: false, error: "PostHog could not be read just now." },
+      })
+    ).toMatchObject({ value: 1, blocked: null });
+    expect(tile("2026-10-04")).toMatchObject({
+      value: 7,
+      foot: "clicked Skip Intro, as PostHog saw it · our own count from 4 Oct 2026",
+    });
+  });
+
+  it("chapters: reach, time and click rates from the reading per chapter, on the days recorded", () => {
+    const stat = (section: string, over: Partial<ReportExtras["chapter_stats"][number]> = {}) => ({
+      section,
+      reached: 8,
+      ms_avg: 95_000,
+      opened: 6,
+      show_all: 0,
+      learn_more: 2,
+      try_this: 4,
+      pw_seen: 5,
+      pw_click: 1,
+      ...over,
+    });
+    const reading = (from: string | null) =>
+      page({
+        extras: {
+          ...extras,
+          // The Summary's votes list it among earlier versions; its reading counts elsewhere.
+          chapters: [{ section: "summary", up: 1, down: 0 }],
+          chapter_stats: [
+            stat("typical_beliefs"),
+            stat("core_archetype", { reached: 10, ms_avg: 30_000, show_all: 3, pw_seen: 0 }),
+            stat("summary"),
+          ],
+          chapter_readers: 10,
+          chapter_stats_from: from,
+        },
+      });
+    const p = reading("2026-10-03");
+    const row = (id: string) => p.chapters.find((c) => c.id === id)!;
+    expect(row("typical_beliefs")).toMatchObject({
+      reach: 0.8,
+      avgMs: 95_000,
+      showMore: null,
+      learnMore: 0.25,
+      exercise: 0.5,
+      paywall: 0.2,
+      paywallSeen: 5,
+      paywallClicked: 1,
+    });
+    expect(row("core_archetype")).toMatchObject({ reach: 1, showMore: 0.3, paywall: null });
+    // A live chapter nobody reached is 0%; an earlier version's has no reading at all.
+    expect(row("love_language")).toMatchObject({ reach: 0, avgMs: null, learnMore: null });
+    expect(row("summary")).toMatchObject({ reach: null, avgMs: null, paywall: null });
+    expect(p.chapterReading).toEqual({ from: "2026-10-03", readers: 10, recorded: true });
+    // A range before the first recorded day, or none yet: blank, never 0.
+    for (const from of ["2026-10-08", null]) {
+      const q = reading(from);
+      expect(q.chapters.find((c) => c.id === "typical_beliefs")).toMatchObject({
+        reach: null,
+        avgMs: null,
+        learnMore: null,
+        paywall: null,
+      });
+      expect(q.chapterReading.recorded).toBe(false);
+    }
+  });
+
   it("average reading time has the benchmark readers' average beside it", () => {
     const bench = factsFixture({
       from: "2026-08-01",
@@ -286,6 +431,14 @@ describe("fetchReportExtras", () => {
     const old = await fetchReportExtras("2026-10-01", "2026-10-07");
     expect(old.map_steppers).toBeNull();
     expect(old.emails[0]).toMatchObject({ sent: 4, returned: null });
+    // No reading per chapter or Skip Intro yet: not recorded, which the page says.
+    expect(old).toMatchObject({
+      chapter_stats: [],
+      chapter_readers: 0,
+      chapter_stats_from: null,
+      wizard_skips: [],
+      wizard_skips_from: null,
+    });
 
     answer({
       wizard: [],
@@ -297,6 +450,26 @@ describe("fetchReportExtras", () => {
     const latest = await fetchReportExtras("2026-10-01", "2026-10-07");
     expect(latest.map_steppers).toEqual([3, 4]);
     expect(latest.emails[0]!.returned).toBe(1);
+
+    answer({
+      wizard: [],
+      chapters: [],
+      feedback: [],
+      emails: [],
+      chapter_stats: [{ section: "typical_beliefs", reached: 2, ms_avg: 61000 }],
+      chapter_readers: 3,
+      chapter_stats_from: "2026-10-15",
+      wizard_skips: [{ slide: 1, n: 2, sids: [7, "8"] }],
+      wizard_skips_from: "2026-10-15",
+    });
+    const tracked = await fetchReportExtras("2026-10-15", "2026-10-21");
+    expect(tracked).toMatchObject({
+      chapter_stats: [{ section: "typical_beliefs", reached: 2, ms_avg: 61000 }],
+      chapter_readers: 3,
+      chapter_stats_from: "2026-10-15",
+      wizard_skips: [{ slide: 1, n: 2, sids: [7, 8] }],
+      wizard_skips_from: "2026-10-15",
+    });
   });
 });
 
@@ -427,6 +600,125 @@ describe("report page, on screen", () => {
       { target: { value: payload.chapters[0]!.name } }
     );
     expect(chapters.getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("draws Skip intro between Continue and Back, sorts by it, and says what Exit leaves out", () => {
+    screenData.payload = page({
+      facts: screenFacts,
+      benchmark: screenFacts,
+      extras: {
+        ...extras,
+        wizard_skips: [{ slide: 1, n: 1, sids: [3] }],
+        wizard_skips_from: "2026-10-06",
+      },
+    });
+    render(createElement(ApReport));
+    const table = within(screen.getByRole("table", { name: "Intro wizard slides" }));
+    expect(table.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "#",
+      "Slide",
+      "Time",
+      "Reached",
+      "Continue",
+      "Skip intro",
+      "Back",
+      "Exit",
+      "Engagement on slide",
+    ]);
+    fireEvent.click(table.getByRole("button", { name: "Sort by Skip intro" }));
+    expect(rowNames("Intro wizard slides")[0]).toContain("Report parts & chapters");
+    expect(table.getByText("33.3%")).toBeInTheDocument();
+    expect(
+      screen.getByText(/before 6 Oct 2026 a skip counts as an exit/, { exact: false })
+    ).toBeInTheDocument();
+  });
+
+  it("draws each chapter's reading, sorts by the design's eight pills, and says from when", () => {
+    const stat = (
+      section: string,
+      over: Partial<ReportExtras["chapter_stats"][number]>
+    ): ReportExtras["chapter_stats"][number] => ({
+      section,
+      reached: 0,
+      ms_avg: null,
+      opened: 0,
+      show_all: 0,
+      learn_more: 0,
+      try_this: 0,
+      pw_seen: 0,
+      pw_click: 0,
+      ...over,
+    });
+    screenData.payload = page({
+      facts: screenFacts,
+      benchmark: screenFacts,
+      extras: {
+        ...extras,
+        chapter_stats: [
+          stat("typical_beliefs", {
+            reached: 3,
+            ms_avg: 125_000,
+            learn_more: 1,
+            try_this: 2,
+            pw_seen: 2,
+            pw_click: 1,
+          }),
+          stat("core_archetype", { reached: 4, ms_avg: 40_000, show_all: 2 }),
+          stat("love_language", { reached: 1, ms_avg: 8_000, pw_seen: 1, pw_click: 1 }),
+        ],
+        chapter_readers: 4,
+        chapter_stats_from: "2026-10-05",
+      },
+    });
+    render(createElement(ApReport));
+    const section = within(document.getElementById("chapters")!);
+    expect(section.getByText("Recorded from 5 Oct 2026")).toBeInTheDocument();
+    const pills = within(section.getByRole("group", { name: "Sort chapters by" }));
+    expect(pills.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Report order",
+      "Reach",
+      "Time",
+      "Feedback",
+      "Show more",
+      "Paywall",
+      "Learn more",
+      "Exercise",
+    ]);
+    const table = within(screen.getByRole("table", { name: "Chapters" }));
+    for (const column of ["Reach", "Avg. time", "Show more CTR", "Paywall CTR"]) {
+      expect(table.getByRole("button", { name: `Sort by ${column}` })).toBeInTheDocument();
+    }
+    expect(table.getByText("2:05")).toBeInTheDocument();
+    // The paywall rate, with how many clicked of how many saw it under it.
+    expect(table.getByText("1 of 2")).toBeInTheDocument();
+    fireEvent.click(pills.getByRole("button", { name: "Paywall" }));
+    expect(rowNames("Chapters").slice(0, 2)).toEqual([
+      expect.stringContaining("Love Language"),
+      expect.stringContaining("Typical Beliefs"),
+    ]);
+    fireEvent.click(table.getByRole("button", { name: "Sort by Reach" }));
+    expect(rowNames("Chapters").slice(0, 3)).toEqual([
+      expect.stringContaining("Core Archetype"),
+      expect.stringContaining("Typical Beliefs"),
+      expect.stringContaining("Love Language"),
+    ]);
+    fireEvent.click(pills.getByRole("button", { name: "Exercise" }));
+    expect(rowNames("Chapters")[0]).toContain("Typical Beliefs");
+    fireEvent.click(pills.getByRole("button", { name: "Report order" }));
+    expect(rowNames("Chapters")[0]).toContain("Introduction");
+  });
+
+  it("before any reading per chapter, says so and keeps the paywall clicks as counts", () => {
+    screenData.payload = page({
+      facts: screenFacts,
+      benchmark: screenFacts,
+      extras: { ...extras, paywall_clicks: [{ section: "typical_beliefs", readers: 2 }] },
+    });
+    render(createElement(ApReport));
+    const section = within(document.getElementById("chapters")!);
+    expect(section.getByText("Not recorded yet")).toBeInTheDocument();
+    expect(section.getByText("2 clicked")).toBeInTheDocument();
+    expect(section.getByText(/Paywall shows the readers who clicked/)).toBeInTheDocument();
   });
 
   it("marks the section in view in the section nav", () => {
