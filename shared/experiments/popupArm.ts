@@ -31,6 +31,9 @@
  *  - Judge on exits in the 30s after the point and on the median time read after
  *    it. Sales are the safety check, not the verdict: at 2 sales in 5 weeks, a
  *    doubling takes over two years of readers to show.
+ *  - The founder-call leave offer (features/report/logic/leaveIntent.ts) stays out
+ *    of the 30s after the point in both arms, but can show later. Split the time
+ *    read after the point by `leave_offer_shown`, which carries `popup_arm`.
  *
  * NO SUBMISSION ID MEANS NOT IN THE TEST. Such a reader gets the pop-up as built
  * and logs no exposure, so they fall out of both arms rather than into one.
