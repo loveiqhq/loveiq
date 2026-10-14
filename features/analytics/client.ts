@@ -1,5 +1,10 @@
 import posthog from "posthog-js";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
+import type {
+  LeaveDismissSource,
+  LeaveOffer,
+  LeaveTrigger,
+} from "@features/report/logic/leaveIntent";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import {
@@ -93,6 +98,10 @@ const PERSISTED_EVENTS = new Set([
   "experiment_card_flipped",
   // Locked-chapter-card paywall surface (inline price)
   "locked_card_price_shown",
+  // The report's leave offer: the full report free for a call with the founders
+  "leave_offer_shown",
+  "leave_offer_clicked",
+  "leave_offer_dismissed",
 ]);
 
 /**
@@ -958,6 +967,58 @@ export const trackScrollPaywallDismissed = (params: {
   };
   track("scroll_paywall_dismissed", payload);
   persistAnalyticsEvent("scroll_paywall_dismissed", payload, payload.view_duration_ms);
+};
+
+/**
+ * The report's leave offer (features/report/logic/leaveIntent.ts). Stored against the
+ * submission, so the admin timeline shows a reader opening the booking page, which is
+ * how the founders match a booking to a report before granting its coupon. `popup_arm`
+ * lets the pay pop-up test's readout set aside the readers who saw this offer.
+ */
+export const trackLeaveOfferShown = (params: {
+  variant: LeaveOffer;
+  trigger: LeaveTrigger;
+  popup_arm: string | null;
+  armed_ms: number;
+}) => {
+  const payload = {
+    variant: params.variant,
+    trigger: params.trigger,
+    ...(params.popup_arm ? { popup_arm: params.popup_arm } : {}),
+    armed_ms: Math.max(0, Math.round(params.armed_ms)),
+  };
+  track("leave_offer_shown", payload);
+  persistAnalyticsEvent("leave_offer_shown", payload);
+};
+
+export const trackLeaveOfferClicked = (params: {
+  variant: LeaveOffer;
+  trigger: LeaveTrigger;
+  view_duration_ms: number;
+}) => {
+  const payload = {
+    variant: params.variant,
+    trigger: params.trigger,
+    view_duration_ms: Math.max(0, Math.round(params.view_duration_ms)),
+  };
+  track("leave_offer_clicked", payload);
+  persistAnalyticsEvent("leave_offer_clicked", payload, payload.view_duration_ms);
+};
+
+export const trackLeaveOfferDismissed = (params: {
+  variant: LeaveOffer;
+  trigger: LeaveTrigger;
+  source: LeaveDismissSource;
+  view_duration_ms: number;
+}) => {
+  const payload = {
+    variant: params.variant,
+    trigger: params.trigger,
+    source: params.source,
+    view_duration_ms: Math.max(0, Math.round(params.view_duration_ms)),
+  };
+  track("leave_offer_dismissed", payload);
+  persistAnalyticsEvent("leave_offer_dismissed", payload, payload.view_duration_ms);
 };
 
 /**
