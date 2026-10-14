@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
 import { delta, fmt } from "@features/admin/server/ap/format";
-import type { ReportPayload } from "@features/admin/server/ap/report-page";
+import type { ReportPayload, ReportTile } from "@features/admin/server/ap/report-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
@@ -16,6 +16,7 @@ import {
   BlackButton,
   Busy,
   Card,
+  Eyebrow,
   Failed,
   FilterIcon,
   KpiTile,
@@ -25,11 +26,46 @@ import {
   Pills,
   SectionHead,
   SortIcon,
+  Spark,
   StatBox,
   TileGrid,
   useHashScroll,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
+
+/** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
+const wholePct = (v: number | null) =>
+  v !== null && v > 0 && v < 0.005 ? "<1%" : fmt("pct", v, 0);
+
+/** At least `pct` percent as the whole percentage shows it: the design's highlights. */
+const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 100) >= pct;
+
+/** "1 vote", "74 votes". */
+const votes = (n: number) => `${fmt("count", n)} vote${n === 1 ? "" : "s"}`;
+
+/**
+ * KpiTile's "md" layout for a tile whose change the payload writes as the design does ("1 share",
+ * "10 users", "+1"); every other tile is KpiTile itself.
+ */
+function ReportKpiTile({ tile }: { tile: ReportTile }) {
+  const c = tile.change;
+  if (!c || tile.blocked) return <KpiTile tile={tile} size="md" />;
+  const tone =
+    c.tone === "good" ? "text-ap-good" : c.tone === "bad" ? "text-ap-bad" : "text-ap-muted";
+  return (
+    <div className="flex flex-col gap-2 rounded-[20px] border border-ap-line bg-white px-[18px] py-4 text-ap-ink shadow-ap">
+      <Eyebrow>{tile.label}</Eyebrow>
+      <span className="font-serif text-[28px] font-semibold leading-none tabular-nums text-ap-ink">
+        {fmt(tile.unit, tile.value)}
+      </span>
+      <span className="text-xs leading-normal text-ap-muted">
+        <strong className={tone}>{c.text}</strong> {tile.foot}
+      </span>
+      <Spark values={tile.spark} />
+      {tile.trend && <span className="text-[11px] text-ap-muted">{tile.trend}</span>}
+    </div>
+  );
+}
 
 const SECTIONS = [
   { id: "wizard", label: "Wizard" },
@@ -434,7 +470,7 @@ export default function ApReport() {
           <RangeLine data={data} sources="Production database and PostHog" />
           <TileGrid min={180}>
             {data.tiles.map((t) => (
-              <KpiTile key={t.key} tile={t} size="md" />
+              <ReportKpiTile key={t.key} tile={t} />
             ))}
           </TileGrid>
           <WizardSection data={data} />
@@ -530,23 +566,26 @@ function WizardSection({ data }: { data: ReportPayload }) {
                 </span>
               </span>
               <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-                {fmt("pct", s.cont, 1)}
+                {wholePct(s.cont)}
               </span>
-              <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-                {fmt("pct", s.skip, 1)}
+              <span
+                role="cell"
+                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.skip, 11) ? "font-bold text-ap-bad" : ""}`}
+              >
+                {wholePct(s.skip)}
               </span>
               <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
                 {s.n === 1
                   ? "—"
                   : s.backShare === null
                     ? fmt("count", s.back)
-                    : fmt("pct", s.backShare, 1)}
+                    : wholePct(s.backShare)}
               </span>
               <span
                 role="cell"
-                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${(s.exit ?? 0) >= 0.05 ? "font-bold text-ap-bad" : ""}`}
+                className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${atLeast(s.exit, 5) ? "font-bold text-ap-bad" : ""}`}
               >
-                {fmt("pct", s.exit, 1)}
+                {wholePct(s.exit)}
               </span>
               <span
                 role="cell"
@@ -572,7 +611,7 @@ function WizardSection({ data }: { data: ReportPayload }) {
         . Time: median from arriving on a slide to going on; none on slide 6, as there is no end
         time on the last slide. Engagement: on slide 2, readers who stepped through the deep dives
         with its arrows, of those who reached it since 6 Oct 2026 (opening the deep dives does not
-        count); no other slide records any.
+        count); no other slide records any. In red: Skip intro from 11%, Exit from 5%.
       </p>
     </Card>
   );
@@ -631,7 +670,7 @@ function TimeSection({ data }: { data: ReportPayload }) {
             label: "Avg. per session",
             unit: "mmss",
             value: t.perSessionMs,
-            note: "closed sessions under 4 hours",
+            note: "closed sessions under 4 hours, each up to 30 min",
           }}
         />
         <StatBox
@@ -649,11 +688,11 @@ function TimeSection({ data }: { data: ReportPayload }) {
       <div className="flex flex-wrap gap-4 text-xs text-ap-body">
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="h-3 w-3 rounded-[3px] bg-ap-purple" />
-          This range
+          This report
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="h-0 w-4 border-t-2 border-dashed border-ap-ink" />
-          Benchmark · all readers since 18 Sep 2026
+          Benchmark · all reports
         </span>
       </div>
       <div className="flex h-[150px] items-end gap-2.5 border-b border-ap-line">
@@ -694,8 +733,10 @@ function TimeSection({ data }: { data: ReportPayload }) {
       </div>
       <span className="text-xs leading-relaxed text-ap-muted">
         Reading time counts sessions whose end was recorded (saved since 18 Sep 2026, for about half
-        of the sessions), each under 4 hours. Bars: this range · tick: the benchmark for the same
-        group · right: the difference. Gender from question 15010, age from 15003.
+        of the sessions) and under 4 hours, each counted up to 30 minutes. All reports: every reader
+        since 18 Sep 2026 whose reading was recorded, whatever the filters. Bars: this report ·
+        tick: all reports for the same group · right: the difference; “—” where a group has no
+        reader. Gender from question 15010, age from 15003 (55+ is its 55–64 and 65+).
       </span>
     </Card>
   );
@@ -708,12 +749,11 @@ function TimeSplit({
   title: string;
   rows: Array<{ label: string; ms: number | null; benchMs: number | null }>;
 }) {
-  const shown = rows.filter((r) => r.ms !== null || r.benchMs !== null);
-  const max = Math.max(1, ...shown.map((r) => Math.max(r.ms ?? 0, r.benchMs ?? 0)));
+  const max = Math.max(1, ...rows.map((r) => Math.max(r.ms ?? 0, r.benchMs ?? 0)));
   return (
     <div className="flex flex-col gap-2.5">
       <span className="text-[13px] font-bold text-ap-body">Avg. total time by {title}</span>
-      {shown.map((r) => {
+      {rows.map((r) => {
         const d = r.ms !== null && r.benchMs !== null ? r.ms - r.benchMs : null;
         return (
           <div
@@ -750,9 +790,9 @@ function TimeSplit({
 
 /** The design's colours for the ways back; bookmarks and direct visits keep the purple. */
 const SOURCE_COLOURS: Record<string, string> = {
-  "Email link": "#fe6839",
+  "Email campaign": "#fe6839",
   "Share link from a friend": "#9d8ad7",
-  "Another tagged link": "#d6cff0",
+  Other: "#d6cff0",
 };
 
 type CampaignKey = "sent" | "opened" | "clicked" | "returned" | "rate" | "purchased";
@@ -761,15 +801,8 @@ type CampaignRow = ReportPayload["returns"]["campaigns"][number];
 
 const CAMPAIGN_FILTERS: Record<CampaignFilter, string> = { campaign: "Campaign", status: "Status" };
 
-/** "72h_no_unlock" reads "72 hours on, not unlocked". */
-const campaignName = (stage: string) =>
-  stage
-    .replace(
-      /^(\d+)h_no_(view|unlock)$/,
-      (_m, h: string, w: string) =>
-        `${h} hours on, ${w === "view" ? "report not opened" : "not unlocked"}`
-    )
-    .replace(/_/g, " ");
+/** "72h_no_unlock" reads "72h no unlock", as the design names it. */
+const campaignName = (stage: string) => stage.replace(/_/g, " ");
 const campaignValue = (c: CampaignRow, k: CampaignFilter) =>
   k === "campaign" ? campaignName(c.stage) : c.status;
 
@@ -992,7 +1025,8 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
           their report from the email&rsquo;s link after it was sent, as the report records every
           such arrival since 18 Sep 2026. It replaces PostHog&rsquo;s count, which saw only about a
           quarter of visits. Return rate = returned ÷ sent. Purchased: sales in the range that used
-          the email&rsquo;s code.
+          the email&rsquo;s code. A retired campaign that sent and sold nothing in the range reads
+          &ldquo;—&rdquo;.
         </span>
       </div>
     </Card>
@@ -1072,7 +1106,8 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
         dash where nobody did or the chapter has none. Paywall CTR: of the readers who saw a paywall
         in the chapter, the share who clicked one (under it, how many clicked of how many saw).
         Feedback: votes given in the range; the bar is relative to the most-voted chapter, green
-        good and red bad.
+        good and red bad. Green: Show more 18% or more, Paywall 5% or more; red: Show more 4% or
+        less.
         {reading.recorded
           ? ""
           : " With no reading recorded in this range, Paywall shows the readers who clicked a paywall or lock button in the chapter, as a count."}
@@ -1143,13 +1178,30 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                   <span className="min-w-[74px] text-right text-xs text-ap-muted">no votes</span>
                 )}
               </span>
-              <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
+              <span
+                role="cell"
+                className={`px-3 py-2 text-right text-[13px] tabular-nums ${
+                  c.showMore === null
+                    ? ""
+                    : c.showMore >= 0.18
+                      ? "font-bold text-ap-good-ink"
+                      : c.showMore <= 0.04
+                        ? "text-ap-bad-ink"
+                        : ""
+                }`}
+              >
                 {fmt("pct", c.showMore, 1)}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
                 {reading.recorded ? (
                   <>
-                    {fmt("pct", c.paywall, 1)}
+                    <span
+                      className={
+                        c.paywall !== null && c.paywall >= 0.05 ? "font-bold text-ap-good-ink" : ""
+                      }
+                    >
+                      {fmt("pct", c.paywall, 1)}
+                    </span>
                     {c.paywallSeen > 0 && (
                       <span className="block text-[11px] text-ap-muted">
                         {fmt("count", c.paywallClicked)} of {fmt("count", c.paywallSeen)}
@@ -1246,7 +1298,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
               {fmt("pct", goodShare, 0)}
             </span>
             <span className="text-[13px] text-ap-muted">
-              good · {fb.good} good / {fb.bad} bad · {fb.total} votes
+              good · {fb.good} good / {fb.bad} bad · {votes(fb.total)}
             </span>
           </div>
           <div className="flex h-3.5 overflow-hidden rounded-full bg-ap-track" aria-hidden="true">
@@ -1279,12 +1331,13 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
           <span className="text-[13px] font-bold text-ap-body">
             Feedback log · {shown.length} of {matches.length}
           </span>
+          {/* The range's totals: the log holds only the latest votes (see the note under it). */}
           <Pills
             label="Filter feedback"
             options={[
-              { value: "", label: `All · ${fb.log.length}` },
-              { value: "Good", label: `Good · ${fb.log.filter((r) => r.vote === "Good").length}` },
-              { value: "Bad", label: `Bad · ${fb.log.filter((r) => r.vote === "Bad").length}` },
+              { value: "", label: `All · ${fmt("count", fb.total)}` },
+              { value: "Good", label: `Good · ${fmt("count", fb.good)}` },
+              { value: "Bad", label: `Bad · ${fmt("count", fb.bad)}` },
             ]}
             value={picked.vote}
             onChange={(v) => pick("vote", v)}
@@ -1369,6 +1422,9 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
           </button>
         )}
         <span className="text-xs text-ap-muted">
+          {fb.log.length < fb.total
+            ? `Latest ${fmt("count", fb.log.length)} of ${votes(fb.total)}. `
+            : ""}
           The comment text stays in the explorer and the submission&rsquo;s own page; this log shows
           whether one was left.
         </span>

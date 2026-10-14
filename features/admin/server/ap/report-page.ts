@@ -10,6 +10,7 @@ import { assessmentScope } from "./assessment";
 import { shortDate } from "./days";
 import { type Facts, type SubFact } from "./facts";
 import { activeNarrowing, bucketCaption, rangeLabel, type ApFilters } from "./filters";
+import { delta, type Delta } from "./format";
 import {
   EVENTS_COMPLETE_FROM,
   launched,
@@ -25,7 +26,7 @@ import {
 } from "./metrics";
 import { head, readFoot, type PageHead, type Tile } from "./overview";
 import type { PostHogResult, ReportReturns } from "./posthog";
-import { genderLabel } from "./survey-page";
+import { AGE_BANDS, ageBand, genderLabel } from "./survey-page";
 
 export interface ReportExtras {
   wizard: Array<{
@@ -151,14 +152,21 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
 const SLIDES = [
   {
     name: "A note before you explore your report",
-    purpose: "Thanks the reader; the research behind the report (papers, clinical models, books)",
+    purpose:
+      "Thanks the reader; shows the research behind the report (papers, clinical models, books)",
   },
   {
     name: "Report parts & chapters",
-    purpose: "The chapter map: free chapters, the four deep dives, locked insights",
+    purpose: "Shows the chapter list: free chapters, featured chapters, locked insights",
   },
-  { name: "Unlocking your report is fully risk free", purpose: "14-day money-back guarantee" },
-  { name: "Take only what resonates", purpose: "Perspectives, not fixed definitions" },
+  {
+    name: "Unlocking your report is fully risk free",
+    purpose: "14-day money-back guarantee, no questions asked",
+  },
+  {
+    name: "Take only what resonates",
+    purpose: "Perspectives, not fixed definitions; keep what is meaningful",
+  },
   { name: "Rate each report section", purpose: "Asks readers to rate every section as they read" },
   { name: "Invite your friends to grow", purpose: "Invite friends to take the survey too" },
 ];
@@ -166,13 +174,23 @@ const SLIDES = [
 /** The map's own steps (wizard_map_step) are recorded from this day. */
 const MAP_STEPS_FROM = "2026-10-06";
 
-/** The four ways back to a report PostHog tells apart (posthog.ts), in the design's order. */
-const RETURN_SOURCES = [
-  "Bookmark or direct",
-  "Email link",
-  "Share link from a friend",
-  "Another tagged link",
+/**
+ * The four ways back to a report PostHog tells apart (posthog.ts), in the design's order, each
+ * with the design's name for it.
+ */
+const RETURN_SOURCES: Array<[posthog: string, label: string]> = [
+  ["Bookmark or direct", "Bookmark or direct"],
+  ["Email link", "Email campaign"],
+  ["Share link from a friend", "Share link from a friend"],
+  ["Another tagged link", "Other"],
 ];
+
+/** The plans the Full unlock rate counts: Full and Full All. */
+const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_reports"]);
+
+/** "1 share", "12 shares". */
+const plural = (n: number, one: string) =>
+  `${n.toLocaleString("en-US")} ${n === 1 ? one : `${one}s`}`;
 
 const ISSUES: Record<string, string> = {
   inaccurate: "Feels inaccurate",
@@ -205,11 +223,17 @@ export function prettyId(id: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/**
+ * A headline tile whose change is written as the design writes it (a count of sharers or
+ * raters, the difference in inviters) rather than worked out from `prev`.
+ */
+export type ReportTile = Tile & { change?: Delta };
+
 export interface ReportPayload extends PageHead {
   launched: boolean;
-  tiles: Tile[];
+  tiles: ReportTile[];
   wizard: {
-    /** Intro started, completed all 6, skipped (PostHog) and left the report. */
+    /** Intro started, completed all 6, skipped and left the report. */
     tiles: Tile[];
     slides: Array<{
       n: number;
@@ -256,7 +280,8 @@ export interface ReportPayload extends PageHead {
     campaigns: Array<{
       stage: string;
       status: "Live" | "Retired";
-      sent: number;
+      /** Null with every figure below for a retired stage that sent and sold nothing in the range. */
+      sent: number | null;
       /** Of those sent, readers whose email was opened; null when the range is not all counted. */
       opened: number | null;
       /** opened ÷ sent. */
@@ -269,7 +294,7 @@ export interface ReportPayload extends PageHead {
       returned: number | null;
       /** returned ÷ sent. */
       returnRate: number | null;
-      purchased: number;
+      purchased: number | null;
       revenue: number;
     }>;
     /** Since when opens and clicks are counted, for the note under the campaigns. */
@@ -359,6 +384,11 @@ export function buildReportPage(input: {
   previous: Facts | null;
   benchmark: Facts;
   extras: ReportExtras;
+  /**
+   * The comparison period's Skip Intro presses (its own ap_report_extras), for the Skipped intro
+   * tile's change; without them that tile is not compared.
+   */
+  previousExtras?: Pick<ReportExtras, "wizard_skips"> | null;
   returns: PostHogResult<ReportReturns> | null;
   filters: ApFilters;
   today: string;
@@ -389,7 +419,10 @@ export function buildReportPage(input: {
   const inviteRate = (list: SubFact[]) =>
     per((l) => l.filter((s) => s.openedAt && s.invited).length, list);
   const unlockRate = (list: SubFact[]) =>
-    per((l) => l.filter((s) => s.openedAt && s.paidAt).length, list);
+    per(
+      (l) => l.filter((s) => s.openedAt && s.paidAt && FULL_PLANS.has(s.plan ?? "")).length,
+      list
+    );
   const spark = (pick: (x: SubFact[]) => number | null) =>
     trend(facts, scope, (_x, from, to) => pick(subsIn(facts, scope, from, to)));
   // Paywall clicks, share-method invites and the wizard's slides were recorded only with
@@ -428,7 +461,13 @@ export function buildReportPage(input: {
   // banner explains the gap, so a foot only says the comparison is withheld.
   const prevComparable = previous ? previous.from >= EVENTS_COMPLETE_FROM : false;
   const withheld = previous && !prevComparable ? " · not compared: before 18 Sep" : "";
-  const tiles: Tile[] = [
+  const sharers = readers.filter((s) => s.shared).length;
+  const raters = readers.filter((s) => s.votes > 0).length;
+  const inviters = readers.filter((s) => s.invited).length;
+  const prevInviters = prevComparable
+    ? prevSubs.filter((s) => s.openedAt && s.invited).length
+    : null;
+  const tiles: ReportTile[] = [
     tile(
       "opened",
       "Reports opened",
@@ -465,36 +504,52 @@ export function buildReportPage(input: {
       "pct",
       initiated(subs),
       prevComparable ? initiated(prevSubs) : null,
-      `of report openers actively clicked a paywall button${withheld}`,
+      `of report openers actively clicked a paywall CTA${withheld}`,
       sparkFull(initiated)
     ),
-    tile(
-      "share",
-      "Share rate",
-      "pct",
-      shareRate(subs),
-      previous ? shareRate(prevSubs) : null,
-      `of report openers shared their report (${n(readers.filter((s) => s.shared).length)} of ${n(readers.length)})`,
-      spark(shareRate)
-    ),
-    tile(
-      "rating",
-      "Rating rate",
-      "pct",
-      rateRate(subs),
-      previous ? rateRate(prevSubs) : null,
-      `of report openers rated at least one chapter (${n(readers.filter((s) => s.votes > 0).length)} of ${n(readers.length)} · ${n(readers.reduce((a, s) => a + s.votes, 0))} votes)`,
-      spark(rateRate)
-    ),
-    tile(
-      "invite",
-      "Invite rate",
-      "pct",
-      inviteRate(subs),
-      prevComparable ? inviteRate(prevSubs) : null,
-      `of report openers invited a friend (${n(readers.filter((s) => s.invited).length)} of ${n(readers.length)})${withheld}`,
-      sparkFull(inviteRate)
-    ),
+    // The design's change lines here: how many shared and rated (grey), and the inviters'
+    // difference from the earlier period.
+    {
+      ...tile(
+        "share",
+        "Share rate",
+        "pct",
+        shareRate(subs),
+        previous ? shareRate(prevSubs) : null,
+        `of report openers shared their report (${n(sharers)} of ${n(readers.length)})`,
+        spark(shareRate)
+      ),
+      change: { text: plural(sharers, "share"), tone: "flat" },
+    },
+    {
+      ...tile(
+        "rating",
+        "Rating rate",
+        "pct",
+        rateRate(subs),
+        previous ? rateRate(prevSubs) : null,
+        `of report openers rated at least one chapter (${n(raters)} of ${n(readers.length)} · ${plural(
+          readers.reduce((a, s) => a + s.votes, 0),
+          "vote"
+        )})`,
+        spark(rateRate)
+      ),
+      change: { text: plural(raters, "user"), tone: "flat" },
+    },
+    {
+      ...tile(
+        "invite",
+        "Invite rate",
+        "pct",
+        inviteRate(subs),
+        prevComparable ? inviteRate(prevSubs) : null,
+        `of report openers invited a friend to the test (${n(inviters)} of ${n(readers.length)}${
+          prevInviters === null ? "" : ` · prev. ${n(prevInviters)}`
+        })${withheld}`,
+        sparkFull(inviteRate)
+      ),
+      change: delta("count", inviters, prevInviters, "up", "abs") ?? undefined,
+    },
     tile(
       "initial",
       "Initial unlock rate",
@@ -511,7 +566,7 @@ export function buildReportPage(input: {
       "pct",
       unlockRate(subs),
       previous ? unlockRate(prevSubs) : null,
-      "any paid plan ÷ report openers (so far)",
+      "Full & Full All plans purchases ÷ report openers",
       spark(unlockRate)
     ),
   ];
@@ -565,21 +620,57 @@ export function buildReportPage(input: {
           : null,
     };
   });
-  // Skip Intro from our own records when every day of the range has them (they follow the
-  // filters); otherwise PostHog's count of the sessions it saw press it, as before.
+  // Skipped intro from our own records when every day of the range has them: a share of the
+  // intro's starters, by the filters, compared when the earlier period has them all too.
+  // Before, PostHog's count of the sessions it saw press it: it sees part of the readers, so
+  // that stays a count, never a share of our finishers.
   const ownSkips = skipsFrom !== null && f.from >= skipsFrom;
-  const skips = ownSkips
-    ? subs.filter((x) => skippers.has(x.id)).length
-    : input.returns && input.returns.ok
-      ? input.returns.value.wizardSkips
-      : null;
-  const skipsFoot = ownSkips
-    ? "pressed Skip Intro"
-    : `clicked Skip Intro, as PostHog saw it${narrowed ? " · all traffic" : ""}${
-        skipsFrom ? ` · our own count from ${rangeLabel(skipsFrom, skipsFrom)}` : ""
-      }`;
+  const skipShare = (l: SubFact[], who: ReadonlySet<number>) =>
+    ratio(l.filter((x) => who.has(x.id)).length, l.length);
+  const prevSkippers = input.previousExtras
+    ? new Set(input.previousExtras.wizard_skips.flatMap((k) => k.sids))
+    : null;
+  // The slide most of the range's starters pressed it on. The presses come by slide, so a tie
+  // goes to the earlier one.
+  let topSkip: { slide: number; n: number } | null = null;
+  for (const [slide, who] of skippedOn) {
+    const k = subs.filter((x) => who.has(x.id)).length;
+    if (k > (topSkip?.n ?? 0)) topSkip = { slide, n: k };
+  }
+  const skippedTile: Tile = ownSkips
+    ? {
+        ...tile(
+          "skipped",
+          "Skipped intro",
+          "pct",
+          skipShare(subs, skippers),
+          prevSkippers && previous && previous.from >= skipsFrom
+            ? skipShare(prevSubs, prevSkippers)
+            : null,
+          topSkip ? `most skips on slide ${topSkip.slide + 1}` : "nobody pressed Skip Intro",
+          spark((l) => skipShare(l, skippers))
+        ),
+        goodWhen: "down",
+      }
+    : {
+        ...tile(
+          "skipped",
+          "Skipped intro",
+          "count",
+          input.returns && input.returns.ok ? input.returns.value.wizardSkips : null,
+          null,
+          `sessions PostHog saw press Skip Intro${narrowed ? " · all traffic" : ""}${
+            skipsFrom ? ` · our own share from ${rangeLabel(skipsFrom, skipsFrom)}` : ""
+          }`,
+          [],
+          input.returns && !input.returns.ok ? input.returns.error : null
+        ),
+        goodWhen: "down",
+        trend: "",
+      };
+  // Continued through slide 6: reached it, then opened the report (its Continue).
   const completedShare = (l: SubFact[]) =>
-    ratio(l.filter((s) => (s.wizardSlide ?? 0) >= 5).length, l.length);
+    ratio(l.filter((s) => s.openedAt && (s.wizardSlide ?? 0) >= 5).length, l.length);
   // Finishers whose report was never opened (so far): they left during the intro.
   const leftShare = (l: SubFact[]) => ratio(l.filter((s) => !s.openedAt).length, l.length);
   const wizardTiles: Tile[] = [
@@ -598,24 +689,10 @@ export function buildReportPage(input: {
       "pct",
       completedShare(subs),
       prevComparable ? completedShare(prevSubs) : null,
-      `reached the last slide${withheld}`,
+      `continued through slide 6${withheld}`,
       sparkFull(completedShare)
     ),
-    // A count: PostHog sees part of the readers, so its skips over our finishers is no rate.
-    {
-      ...tile(
-        "skipped",
-        "Skipped intro",
-        "count",
-        skips,
-        null,
-        skipsFoot,
-        [],
-        !ownSkips && input.returns && !input.returns.ok ? input.returns.error : null
-      ),
-      goodWhen: "down",
-      trend: "",
-    },
+    skippedTile,
     {
       ...tile(
         "left",
@@ -637,8 +714,9 @@ export function buildReportPage(input: {
   const benchBuckets = timeShares(benchRec);
   const groupMean = (list: SubFact[], key: (s: SubFact) => string, label: string) =>
     mean(list.filter((s) => key(s) === label).map((s) => s.readMs));
-  const genders = ["Women", "Men", "Non-binary", "Other", "Prefer not to say"];
-  const ages = ["18–24", "25–34", "35–44", "45–54", "55–64", "65+"];
+  // Every group, an empty one with no figure: the design draws them all.
+  const genders = ["Women", "Men", "Non-binary", "Other", "Prefer not to say", "Not stated"];
+  const ages = [...AGE_BANDS, "Not stated"];
 
   const returners = readers.filter((s) => s.visits > 1 && s.returnedAt);
   const gaps = returners.map((s) => berlinDays(s.openedAt!, s.returnedAt!));
@@ -661,11 +739,11 @@ export function buildReportPage(input: {
   if (input.returns) {
     if (input.returns.ok) {
       const by = new Map(input.returns.value.sources.map((s) => [s.source, s.sessions]));
-      const total = RETURN_SOURCES.reduce((a, s) => a + (by.get(s) ?? 0), 0);
+      const total = RETURN_SOURCES.reduce((a, [s]) => a + (by.get(s) ?? 0), 0);
       sources = {
         ok: true,
-        value: RETURN_SOURCES.map((source) => {
-          const sessions = by.get(source) ?? 0;
+        value: RETURN_SOURCES.map(([key, source]) => {
+          const sessions = by.get(key) ?? 0;
           return { source, sessions, share: total ? sessions / total : 0 };
         }),
       };
@@ -681,14 +759,17 @@ export function buildReportPage(input: {
   const clicksFrom = extras.email_events_from;
   const campaigns = ["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"].map((stage) => {
     const e = extras.emails.find((x) => x.stage === stage);
+    const status = stage === "72h_no_unlock" ? ("Live" as const) : ("Retired" as const);
+    // A retired stage that sent and sold nothing in the range has no figures: "—", not 0.
+    const idle = status === "Retired" && !e?.sent && !e?.bought;
     // No row: nothing was sent (or bought) for the stage, so nobody came back from it.
-    const returned = e ? e.returned : 0;
-    const sent = e?.sent ?? 0;
-    const opened = opensFrom ? (e ? e.opened : 0) : null;
-    const clicked = clicksFrom ? (e ? e.clicked : 0) : null;
+    const returned = idle ? null : e ? e.returned : 0;
+    const sent = idle ? null : (e?.sent ?? 0);
+    const opened = idle || !opensFrom ? null : e ? e.opened : 0;
+    const clicked = idle || !clicksFrom ? null : e ? e.clicked : 0;
     return {
       stage,
-      status: stage === "72h_no_unlock" ? ("Live" as const) : ("Retired" as const),
+      status,
       sent,
       opened,
       openRate: ratio(opened, e?.delivered_opens ?? null),
@@ -696,7 +777,7 @@ export function buildReportPage(input: {
       clickRate: ratio(clicked, e?.delivered ?? null),
       returned,
       returnRate: ratio(returned, sent),
-      purchased: e?.bought ?? 0,
+      purchased: idle ? null : (e?.bought ?? 0),
       revenue: e?.revenue ?? 0,
     };
   });
@@ -761,8 +842,8 @@ export function buildReportPage(input: {
       })),
       byAge: ages.map((a) => ({
         label: a,
-        ms: groupMean(rec, (s) => s.age ?? "", a),
-        benchMs: groupMean(benchRec, (s) => s.age ?? "", a),
+        ms: groupMean(rec, (s) => ageBand(s.age), a),
+        benchMs: groupMean(benchRec, (s) => ageBand(s.age), a),
       })),
     },
     returns: {

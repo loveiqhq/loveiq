@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { AnswerSplit } from "@features/admin/server/ap/answers";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { buildSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage } from "@features/admin/server/ap/survey-page";
@@ -63,9 +64,17 @@ const payload = buildSurveyPage({
   },
 });
 
+/** What the page fetches: the payload above unless a test swaps it, and no answers. */
+const view: { payload: typeof payload; answers: AnswerSplit | null } = { payload, answers: null };
+
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (url: string) => ({
-    data: url === "/api/admin/ap/survey" ? payload : null,
+    data:
+      url === "/api/admin/ap/survey"
+        ? view.payload
+        : url === "/api/admin/ap/survey/answers"
+          ? view.answers
+          : null,
     loading: false,
     error: null,
     refetch: () => {},
@@ -77,7 +86,11 @@ vi.mock("@features/admin/ui/ap/ApOverview", () => ({ RangeLine: () => null }));
 
 import ApSurvey from "@features/admin/ui/ap/ApSurvey";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  view.payload = payload;
+  view.answers = null;
+});
 
 const table = (name: string) => screen.getByRole("table", { name });
 const rows = (name: string) => within(table(name)).getAllByRole("row").slice(1);
@@ -121,10 +134,104 @@ describe("the Survey page as drawn", () => {
     expect(
       screen.getByText(/recorded from 15 Oct 2026: pick a range from that day on/)
     ).toBeTruthy();
-    // Before the consent recorded itself, its continue is PostHog's: 60 agreed of 100 sessions.
-    expect(column(intro, 3)[5]).toBe("60.0%");
+    // Before the consent recorded itself, its continue is PostHog's: 60 agreed of 100 sessions,
+    // in whole percentages as drawn.
+    expect(column(intro, 3)[5]).toBe("60%");
     // The device card: tablets are recorded from the same day.
     expect(screen.getByText("Recorded from 15 Oct 2026")).toBeTruthy();
+  });
+
+  it("intro from the tracking day: our own first two boxes, kept when PostHog fails, and the reds", () => {
+    const row = (step: string, n: number, wentOn: number, left: number, direct = 0) => ({
+      day: "2026-10-15",
+      step,
+      n,
+      ms: [],
+      skipped: 0,
+      wentOn,
+      left,
+      direct,
+    });
+    view.payload = buildSurveyPage({
+      facts: factsFixture({
+        from: "2026-10-15",
+        to: "2026-10-16",
+        intro: [
+          row("intro_view", 10, 8, 2),
+          row("intro_slide_1", 8, 6, 0),
+          row("intro_skip_1", 2, 0, 0),
+          row("intro_slide_2", 6, 5, 0),
+          row("intro_slide_3", 5, 5, 0),
+          row("intro_slide_4", 5, 4, 1),
+          // Two of its six came straight from the landing page's question card.
+          row("consent_view", 6, 4, 2, 2),
+        ],
+      }),
+      previous: null,
+      benchmark: factsFixture(),
+      benchmarkKind: "all",
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-15", to: "2026-10-16" },
+        "2026-10-17"
+      ),
+      today: "2026-10-17",
+      now: new Date("2026-10-17T10:00:00Z"),
+      questions,
+      questionsError: null,
+      introClicks: { ok: false, error: "PostHog could not be read just now." },
+    });
+    render(<ApSurvey />);
+    expect(screen.getByText("Saw the intro").nextSibling!.textContent).toBe("10");
+    expect(screen.getByText("visitors on the intro card")).toBeTruthy();
+    // 4 agreed and went on, of the 12 who began on the intro or the consent.
+    expect(screen.getByText("Agreed to consent").nextSibling!.textContent).toBe("33.3%");
+    expect(screen.getByText("went on to question 1")).toBeTruthy();
+    // PostHog's boxes give way to its one sentence; ours stay.
+    expect(screen.queryByText("Skipped slides")).toBeNull();
+    expect(screen.getByText("PostHog could not be read just now.")).toBeTruthy();
+
+    const intro = "Intro wizard cards";
+    expect(column(intro, 4)).toEqual(["—", "25%", "0%", "0%", "0%", "—"]);
+    expect(column(intro, 6)).toEqual(["20%", "0%", "0%", "0%", "20%", "33%"]);
+    // The consent's share leaves out the two from the landing page: 4 of the intro's 10.
+    expect(column(intro, 2)[5]).toBe("40%6");
+    const cell = (r: number, c: number) => within(rows(intro)[r]!).getAllByRole("cell")[c]!;
+    // The design's red: Skip intro from 15%, Exit from 8%.
+    expect(cell(1, 4).className).toContain("font-bold text-ap-bad");
+    expect(cell(2, 4).className).not.toContain("text-ap-bad");
+    expect(cell(5, 6).className).toContain("font-bold text-ap-bad");
+    expect(cell(1, 6).className).not.toContain("text-ap-bad");
+  });
+
+  it("reads as drawn: the page's line, completed counts, the detail's step and its answers", () => {
+    view.answers = {
+      qid: "01002",
+      question: "Right now, I feel satisfied with my sex life.",
+      type: "scale",
+      multiple: false,
+      segments: [{ name: "All submissions", n: 10 }],
+      answers: [{ label: "Strongly agree", shares: [0.5] }],
+      gap: null,
+      respondents: 10,
+      finished: 12,
+    };
+    render(<ApSurvey />);
+    expect(
+      screen.getByText(
+        "Where people slow down, engage or leave: wizard cards first, then every question."
+      )
+    ).toBeTruthy();
+    expect(screen.getByText("This survey · 2 completed")).toBeTruthy();
+    expect(screen.getByText("Benchmark · 2 completed")).toBeTruthy();
+    expect(screen.getByText(/^Survey · Question detail · \d{5} · Step \d+ of \d+$/)).toBeTruthy();
+    // A 140px label column leaves the bars room on a phone.
+    expect(
+      (screen.getByText("Strongly agree").parentElement as HTMLElement).style.gridTemplateColumns
+    ).toBe("140px minmax(0,1fr)");
+    expect(screen.getByRole("button", { name: "Show first 10 only" })).toBeTruthy();
+    expect(screen.getByText(/our own finished test runs left out/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Survey Question Funnel" })).toBeTruthy();
+    expect(screen.getByText("Reached last step")).toBeTruthy();
   });
 
   it("funnel: no orange for a question first asked in the range; sorts; shares the search", () => {

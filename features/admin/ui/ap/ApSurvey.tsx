@@ -41,6 +41,13 @@ import { useApFilters } from "./useApFilters";
 
 const SEGMENT_COLORS = ["#4000b6", "#fe6839", "#9d8ad7", "#2e7d5b"];
 
+/** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
+const wholePct = (v: number | null) =>
+  v !== null && v > 0 && v < 0.005 ? "<1%" : fmt("pct", v, 0);
+
+/** At least `pct` percent as the whole percentage shows it: the design's highlights. */
+const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 100) >= pct;
+
 /** A question matches a search by its Q-id or its text. */
 const matches = (r: QuestionRow, term: string) =>
   !term || r.id.includes(term) || r.text.toLowerCase().includes(term);
@@ -72,7 +79,7 @@ export default function ApSurvey() {
       <PageHeader
         crumbs={["Assessments", "Assessment A", "Survey"]}
         title="Survey"
-        description="Where people slow down, engage or leave: the intro first, then every question."
+        description="Where people slow down, engage or leave: wizard cards first, then every question."
         actions={
           <BlackButton
             disabled={!data}
@@ -183,11 +190,11 @@ export default function ApSurvey() {
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-ap-body">
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="h-2.5 w-3.5 rounded-[3px] bg-ap-purple" />
-                This survey · {fmt("count", data.demographics.n)} finished
+                This survey · {fmt("count", data.demographics.n)} completed
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden="true" className="h-3.5 w-[3px] rounded-sm bg-ap-ink" />
-                Benchmark · {fmt("count", data.demographics.benchN)} finished
+                Benchmark · {fmt("count", data.demographics.benchN)} completed
               </span>
             </div>
             <div
@@ -298,6 +305,7 @@ function IntroSection({ data }: { data: SurveyPayload }) {
     useState<Sort<"time" | "reached" | "cont" | "skip" | "back" | "exit">>(null);
   const c = data.intro.clicks;
   const ok = c && c.ok ? c.value : null;
+  const own = data.intro.own;
   const share = (n: number) => (ok && ok.opened ? n / ok.opened : null);
   // Whole percentages, as drawn, but a tenth under 10%: 7 of 1,483 must not read "0%".
   const pct = (n: number) => {
@@ -333,37 +341,62 @@ function IntroSection({ data }: { data: SurveyPayload }) {
         description="The screens before question 1: the intro, four slides and the consent."
       />
       <AllTraffic note={data.narrowed} />
-      {ok ? (
+      {(own || ok) && (
         <div
           className="grid gap-3"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))" }}
         >
-          <Figure
-            label="Saw the intro"
-            value={fmt("count", ok.opened)}
-            note="sessions on the survey page"
-          />
-          <Figure
-            label="Agreed to consent"
-            value={fmt("pct", share(ok.agreed))}
-            note={`${fmt("count", ok.agreed)} clicked “I agree”`}
-          />
-          <Figure
-            label="Skipped slides"
-            value={fmt("pct", share(ok.skipped))}
-            note={
-              ok.skipped && data.intro.mostSkipped
-                ? `most skips on slide ${data.intro.mostSkipped}`
-                : `${fmt("count", ok.skipped)} clicked “Skip Intro”`
-            }
-          />
-          <Figure
-            label="Left before Q1"
-            value={fmt("pct", answered === null ? null : 1 - answered)}
-            note={`incl. ${fmt("count", ok.returned)} Return to site`}
-          />
+          {/* The first two from our own records once the range has them, else PostHog's. */}
+          {own ? (
+            <>
+              <Figure
+                label="Saw the intro"
+                value={fmt("count", own.saw)}
+                note="visitors on the intro card"
+              />
+              <Figure
+                label="Agreed to consent"
+                value={fmt("pct", own.agreed)}
+                note="went on to question 1"
+              />
+            </>
+          ) : (
+            ok && (
+              <>
+                <Figure
+                  label="Saw the intro"
+                  value={fmt("count", ok.opened)}
+                  note="sessions on the survey page"
+                />
+                <Figure
+                  label="Agreed to consent"
+                  value={fmt("pct", share(ok.agreed))}
+                  note={`${fmt("count", ok.agreed)} clicked “I agree”`}
+                />
+              </>
+            )
+          )}
+          {ok && (
+            <>
+              <Figure
+                label="Skipped slides"
+                value={fmt("pct", share(ok.skipped))}
+                note={
+                  ok.skipped && data.intro.mostSkipped
+                    ? `most skips on slide ${data.intro.mostSkipped}`
+                    : `${fmt("count", ok.skipped)} clicked “Skip Intro”`
+                }
+              />
+              <Figure
+                label="Left before Q1"
+                value={fmt("pct", answered === null ? null : 1 - answered)}
+                note={`incl. ${fmt("count", ok.returned)} Return to site`}
+              />
+            </>
+          )}
         </div>
-      ) : (
+      )}
+      {!ok && (
         <p className="m-0 text-sm text-ap-muted">
           {c && !c.ok ? c.error : "PostHog could not be read just now. Try again in a minute."}
         </p>
@@ -394,14 +427,21 @@ function IntroSection({ data }: { data: SurveyPayload }) {
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
         The cards: our own records, which the cards send only for visitors who accepted cookies, so
-        they describe those visitors only. Time: the median from a card to the next one (before{" "}
-        {SURVEY_TRACKING_DAY}, slide 4’s ran to question 1, past the consent). Continue: reached the
-        next card that day. Skip intro: pressed it on that slide. Back: the Back button, the arrow
-        key, a swipe or the browser’s Back (slide 1 and the consent have only the browser’s). Exit:
-        the furthest card that visitor reached that day. Most skips: the slide most of those
-        visitors left for question 1 without the next slide. The boxes and the engagement column:
-        clicks PostHog recorded on the survey page, as a share of its sessions there (it sees most
-        survey sessions), as is the consent’s continue before {SURVEY_TRACKING_DAY}.
+        they describe those visitors only. Reached: of the visitors on the intro card (on slide 1
+        for a range before {SURVEY_TRACKING_DAY}). People who start from the landing page’s question
+        card skip the intro and land on the consent, so they are left out of the consent’s Reached
+        share. Time: the median from a card to the next one (before {SURVEY_TRACKING_DAY}, slide 4’s
+        ran to question 1, past the consent). Continue: reached the next card that day. Skip intro:
+        pressed it on that slide. Back: the Back button, the arrow key, a swipe or the browser’s
+        Back (slide 1 and the consent have only the browser’s). Exit: the furthest card that visitor
+        reached that day. In red: Skip intro from 15%, Exit from 8%. Most skips: the slide most of
+        those visitors left for question 1 without the next slide. For a range from{" "}
+        {SURVEY_TRACKING_DAY} on, the first two boxes are our own records too: visitors on the intro
+        card, and of everyone who began (on the intro card, or on the consent from the landing
+        page’s card) the share who agreed and went on to question 1. The other boxes and the
+        engagement column: clicks PostHog recorded on the survey page, as a share of its sessions
+        there (it sees most survey sessions), as are the first two boxes and the consent’s continue
+        for an earlier range.
       </p>
     </Card>
   );
@@ -443,9 +483,21 @@ function IntroRow({ card }: { card: IntroRowData }) {
           </>
         )}
       </span>
-      {[card.cont, card.skip, card.back, card.exit].map((v, i) => (
-        <span key={i} role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-          {fmt("pct", v, 1)}
+      {/* Whole percentages; the design's red from 15% skipping and 8% leaving. */}
+      {(
+        [
+          [card.cont, false],
+          [card.skip, atLeast(card.skip, 15)],
+          [card.back, false],
+          [card.exit, atLeast(card.exit, 8)],
+        ] as const
+      ).map(([v, red], i) => (
+        <span
+          key={i}
+          role="cell"
+          className={`px-3 py-2.5 text-right text-[13px] tabular-nums ${red ? "font-bold text-ap-bad" : ""}`}
+        >
+          {wholePct(v)}
         </span>
       ))}
       <span role="cell" className="px-3 py-2.5 text-xs leading-snug text-ap-body">
@@ -564,8 +616,8 @@ function QuestionsSection({
         </div>
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Reached and exits: every survey run, our own test runs included. Time, back and skipped: all
-        traffic, staff left out. Google Ads here means a visit with an ad click id.
+        Reached and exits: every survey run, our own finished test runs left out. Time, back and
+        skipped: all traffic, staff left out. Google Ads here means a visit with an ad click id.
       </p>
       {term && found.length === 0 && (
         <p className="m-0 text-sm text-ap-muted">No question matches “{search}”.</p>
@@ -577,7 +629,7 @@ function QuestionsSection({
           aria-expanded={all}
           className="min-h-11 cursor-pointer self-center rounded-full border border-ap-line bg-white px-[22px] text-sm font-bold text-ap-ink"
         >
-          {all ? "Show the first 10 only" : `See all ${rows.length} questions`}
+          {all ? "Show first 10 only" : `See all ${rows.length} questions`}
         </button>
       )}
     </Card>
@@ -618,7 +670,7 @@ function QuestionDetail({
     >
       <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ap-plum">
         Survey · Question detail · {q.id}
-        {q.n ? ` · Question ${q.n} of ${total}` : " · not asked now"}
+        {q.n ? ` · Step ${q.n} of ${total}` : " · not asked now"}
       </span>
       <h2 id="h-qd" className="m-0 font-serif text-2xl font-semibold leading-snug">
         {q.text}
@@ -721,7 +773,7 @@ function QuestionDetail({
                     <div
                       key={a.label}
                       className="grid items-center gap-3 text-[13px]"
-                      style={{ gridTemplateColumns: "minmax(120px, 220px) minmax(0,1fr)" }}
+                      style={{ gridTemplateColumns: "140px minmax(0,1fr)" }}
                     >
                       <span className="font-semibold leading-snug">{a.label}</span>
                       <div className="flex flex-col gap-[3px]">
@@ -812,13 +864,13 @@ function FunnelSection({
     <Card id="funnel" labelledBy="h-funnel">
       <SectionHead
         id="h-funnel"
-        title="Survey question funnel"
+        title="Survey Question Funnel"
         description="People who reached each question, in today's order. Rows in orange lose more than 5% of the step before."
         align="end"
         right={
           last ? (
             <div className="flex flex-col gap-0.5 rounded-[14px] bg-ap-ground px-3.5 py-2.5">
-              <span className="text-[11px] text-ap-muted">Reached the last question</span>
+              <span className="text-[11px] text-ap-muted">Reached last step</span>
               <span className="font-serif text-xl font-semibold">
                 {fmt("pct", top ? last.reached / top : null, 1)} · {fmt("count", last.reached)}
               </span>
@@ -914,7 +966,7 @@ function FunnelSection({
         some of them (the opening-order and email-question tests). A question first asked during the
         range is not shaded: it was asked for only part of it. The end of the flow may differ
         between survey versions, so the last rows may not be drop-outs: check before reading them
-        that way. Same people as the Notion drop-off page.
+        that way. Same people as the Notion drop-off page, less our own finished test runs.
       </p>
     </Card>
   );

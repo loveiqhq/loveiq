@@ -290,10 +290,59 @@ describe("page builders", () => {
       true
     );
     expect(surveyPage({}).intro.mostSkipped).toBeNull();
+    // Before the tracking day the boxes stay PostHog's.
+    expect(p.intro.own).toBeNull();
+  });
+
+  it("survey: completion names the earlier rate; demographics as drawn", () => {
+    const start = (finished: boolean, n: number) => ({
+      day: "2026-09-25",
+      known: true,
+      src: "google",
+      med: "cpc",
+      ads: true,
+      arm: "white",
+      device: null,
+      finished,
+      n,
+    });
+    const week = factsFixture({
+      ...lastWeek,
+      starts: [start(true, 4), start(false, 4)],
+    });
+    const completion = surveyPage({ previous: week }).tiles.find((t) => t.key === "completion")!;
+    expect(completion).toMatchObject({
+      prev: 0.5,
+      foot: "of the starts, finished (so far) · vs 50.0%",
+    });
+
+    const people = factsFixture({
+      subs: ["US", "US", "GB", "CA", "AU", "DE", "FR"].map((country, i) =>
+        sub({ id: i + 1, country, age: ["55–64", "65+", "25–34"][i % 3] })
+      ),
+    });
+    const d = surveyPage({ facts: people }).demographics;
+    const card = (title: string) => d.cards.find((c) => c.title === title)!;
+    // The design's four countries by name, then the rest as Other.
+    expect(card("Country").rows.map((r) => r.label)).toEqual(["US", "GB", "CA", "AU", "Other"]);
+    expect(card("Country").rows.at(-1)!.share).toBeCloseTo(2 / 7);
+    // 55–64 and 65+ read as 55+ (the benchmark's finishers stated no age).
+    expect(card("Age").rows.map((r) => [r.label, r.share])).toEqual([
+      ["25–34", 2 / 7],
+      ["55+", 5 / 7],
+      ["Not stated", 0],
+    ]);
+    expect(d.note).toMatch(/^This range: 7 completed surveys\. Benchmark: all completed surveys/);
   });
 
   it("survey: from the tracking day, every card's continue, skip, back and exit", () => {
-    const row = (step: string, n: number, wentOn: number | null = 0, left: number | null = 0) => ({
+    const row = (
+      step: string,
+      n: number,
+      wentOn: number | null = 0,
+      left: number | null = 0,
+      direct = 0
+    ) => ({
       day: "2026-10-15",
       step,
       n,
@@ -301,6 +350,7 @@ describe("page builders", () => {
       skipped: 0,
       wentOn,
       left,
+      direct,
     });
     const page = (intro: Array<ReturnType<typeof row>>) =>
       buildSurveyPage({
@@ -326,12 +376,17 @@ describe("page builders", () => {
       row("intro_back_2", 1),
       row("intro_slide_3", 5, 5, 0),
       row("intro_slide_4", 5, 4, 1),
-      row("consent_view", 5, 3, 2),
+      // One of the five came from the landing page's question card, with no intro.
+      row("consent_view", 5, 3, 2, 1),
       row("consent_back", 1),
       row("survey_engine_mount", 3, 0, 3),
     ]);
     const card = (step: string) => p.intro.cards.find((c) => c.step === step)!;
     expect(p.intro.recordedFrom).toBeNull();
+    // Their consent's share leaves that visitor out: 4 of the intro's 10, never over 100%.
+    expect(card("consent_view")).toMatchObject({ reached: 5, reachedShare: 0.4 });
+    // The first two boxes from our own records: 3 agreed and went on, of the 11 who began.
+    expect(p.intro.own).toEqual({ saw: 10, agreed: 3 / 11 });
     expect(card("intro_view")).toMatchObject({
       reached: 10,
       reachedShare: 1,
