@@ -409,7 +409,7 @@ function EngagementCard({ data }: { data: LandingPayload }) {
       {!e ? (
         <NotTracked>PostHog starts on 23 Aug 2026</NotTracked>
       ) : !e.ok ? (
-        <p className="m-0 text-sm text-ap-bad-ink">PostHog could not be read: {e.error}</p>
+        <p className="m-0 text-sm text-ap-bad-ink">{e.error}</p>
       ) : (
         <>
           <div
@@ -526,7 +526,7 @@ function ReviewsCard({ data }: { data: LandingPayload }) {
             </span>
           </>
         ) : s && !s.ok ? (
-          <span className="text-[13px] text-ap-bad-ink">PostHog could not be read: {s.error}</span>
+          <span className="text-[13px] text-ap-bad-ink">{s.error}</span>
         ) : (
           <span className="text-[13px] text-ap-muted">
             Recorded from 14 Oct 2026: from then on the page reports which sections are seen.
@@ -557,7 +557,7 @@ function SectionTime({ data }: { data: LandingPayload }) {
         level={3}
         description="Avg. seconds in view · share of visitors who reach the section"
       />
-      {failed && <p className="m-0 text-sm text-ap-bad-ink">PostHog could not be read: {failed}</p>}
+      {failed && <p className="m-0 text-sm text-ap-bad-ink">{failed}</p>}
       {view ? (
         <>
           {!time && !failed && (

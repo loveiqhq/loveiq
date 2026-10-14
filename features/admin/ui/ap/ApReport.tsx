@@ -896,7 +896,9 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
           </span>
           {r.sources === null || !r.sources.ok ? (
             <p className="m-0 text-sm text-ap-muted">
-              PostHog could not be read{r.sources && !r.sources.ok ? `: ${r.sources.error}` : ""}.
+              {r.sources && !r.sources.ok
+                ? r.sources.error
+                : "PostHog could not be read just now. Try again in a minute."}
             </p>
           ) : (
             r.sources.value.map((s) => (

@@ -319,7 +319,7 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
       <>
         <h3 className="m-0 font-serif text-lg font-semibold">New &amp; returning visitors</h3>
         <p className="m-0 text-sm text-ap-muted">
-          PostHog could not be read: {nr && !nr.ok ? nr.error : "no answer"}
+          {nr && !nr.ok ? nr.error : "PostHog could not be read just now. Try again in a minute."}
         </p>
       </>
     );

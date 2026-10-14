@@ -365,7 +365,7 @@ function IntroSection({ data }: { data: SurveyPayload }) {
         </div>
       ) : (
         <p className="m-0 text-sm text-ap-muted">
-          PostHog could not be read{c && !c.ok ? `: ${c.error}` : ""}.
+          {c && !c.ok ? c.error : "PostHog could not be read just now. Try again in a minute."}
         </p>
       )}
       {data.intro.recordedFrom && (
