@@ -2723,6 +2723,39 @@ describe("ReportPage", () => {
       expect(shown()).not.toHaveBeenCalled();
     });
 
+    // Final review, 14.10: a purchase that lands mid-session (a 409 "already owned" from
+    // another tab, then "Back to your report" reloads the data) turns the offer off while
+    // it is armed. Closing the plans window afterwards must not open an offer that is no
+    // longer mounted, which would leave the page blurred and inert with nothing on it.
+    it("stays shut once the reader's purchase lands, with the page left usable", () => {
+      leaveV4("&popup=off");
+      const { container, rerender } = render(<ReportPage token={LEAVE_TOKEN} />);
+      // Past the pay test's window (which would drop the signal for its own reason), with
+      // a scroll so that idle does not open the offer first.
+      advance(20_000);
+      fireEvent.scroll(window);
+      advance(15_000);
+      fireEvent.click(stickyCta());
+
+      const paid = buildSuccessResponse();
+      mockUseReportData.mockReturnValue({
+        ...paid,
+        data: {
+          ...paid.data,
+          accessPlan: "full_report",
+          submissionId: 2063,
+          reportDate: new Date(Date.now() - 5 * 60_000).toISOString(),
+        },
+      });
+      rerender(<ReportPage token={LEAVE_TOKEN} />);
+      closePlans();
+      advance(60_000);
+
+      expect(offer()).toBeNull();
+      expect(shown()).not.toHaveBeenCalled();
+      expect(container.querySelector(".report-page__shell-wrap--obscured")).toBeNull();
+    });
+
     it("opens at once in a preview with ?leave=show, with no submission behind it", () => {
       mockCompletedReportToken.mockReturnValue(null);
       leaveV4("&popup=off&preview=1&leave=show", { submissionId: null, userEmail: null });
