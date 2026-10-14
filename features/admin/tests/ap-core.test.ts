@@ -389,6 +389,7 @@ describe("AP totals", () => {
         skipped: 1,
         wentOn: 2,
         left: 1,
+        direct: 0,
       },
       // Without them: unknown, never a zero continue or exit.
       {
@@ -399,6 +400,7 @@ describe("AP totals", () => {
         skipped: 0,
         wentOn: null,
         left: null,
+        direct: 0,
       },
     ]);
   });

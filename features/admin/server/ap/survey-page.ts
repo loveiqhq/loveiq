@@ -48,7 +48,11 @@ export interface IntroCard {
   step: string;
   name: string;
   purpose: string;
-  /** Visitors who reached it (cookie-accepting visitors), and as a share of the first card. */
+  /**
+   * Visitors who reached it (cookie-accepting visitors), and as a share of the first card. The
+   * consent's share leaves out its visitors who saw no intro (they started from the landing
+   * page's card), so it never passes the intro's reach.
+   */
   reached: number | null;
   reachedShare: number | null;
   /** Of those who reached it, went on to the next card that day. */
@@ -79,6 +83,12 @@ export interface SurveyPayload extends PageHead {
     clicks: PostHogResult<IntroClicks> | null;
     /** The day Skip, Back, Exit and the intro's and consent's cards start, when the range starts earlier. */
     recordedFrom: string | null;
+    /**
+     * The first two boxes from our own records, once the range has them: visitors on the intro
+     * card, and of everyone who began (on the intro, or on the consent from the landing page's
+     * card), the share who agreed and went on to question 1. Null before: PostHog's boxes.
+     */
+    own: { saw: number; agreed: number | null } | null;
   };
   questions: SurveyQuestions | null;
   questionsError: string | null;
@@ -90,7 +100,13 @@ const GENDER: Record<string, string> = {
   Nonbinary: "Non-binary",
   Other: "Other",
 };
-const AGE_ORDER = ["18–24", "25–34", "35–44", "45–54", "55–64", "65+"];
+/** The design's age bands: the survey's 55–64 and 65+ read as one. */
+export const AGE_BANDS = ["18–24", "25–34", "35–44", "45–54", "55+"];
+
+export function ageBand(a: string | null): string {
+  if (!a) return "Not stated";
+  return a === "55–64" || a === "65+" ? "55+" : a;
+}
 
 export function genderLabel(g: string | null): string {
   if (!g) return "Not stated";
@@ -200,8 +216,8 @@ const CARDS: Array<{ step: string; name: string; purpose: string; back?: string;
   [
     {
       step: "intro_view",
-      name: "Intro · Let’s prepare you",
-      purpose: "Start with Continue or a tap on the silhouette",
+      name: "Intro · Let’s prepare you to discover your sexual archetypes",
+      purpose: "Short guide; start with Continue or a tap on the silhouette",
     },
     {
       step: "intro_slide_1",
@@ -220,14 +236,14 @@ const CARDS: Array<{ step: string; name: string; purpose: string; back?: string;
     {
       step: "intro_slide_3",
       name: "Slide 3 · Your Privacy Matters",
-      purpose: "Encryption, alias email, a link to the Trust Zone",
+      purpose: "Encryption, alias email, link to the Trust Zone",
       back: "intro_back_3",
       skip: "intro_skip_3",
     },
     {
       step: "intro_slide_4",
       name: "Slide 4 · How the Test Works",
-      purpose: "About 15 minutes, one question at a time",
+      purpose: "~15 min, one question at a time, Dynamic Guidance",
       back: "intro_back_4",
       skip: "intro_skip_4",
     },
@@ -260,6 +276,7 @@ export function buildSurveyPage(input: {
   const stB = startsBlocked(scope, facts.from, today);
   const noCmp =
     p && p.starts === null && t.starts !== null ? "no comparison: earlier starts incomplete" : null;
+  const prevCompletion = p ? ratio(p.startsFinished, p.starts) : null;
   const tiles: Tile[] = [
     {
       key: "starts",
@@ -296,12 +313,14 @@ export function buildSurveyPage(input: {
       label: "Completion",
       unit: "pct",
       value: ratio(t.startsFinished, t.starts),
-      prev: p ? ratio(p.startsFinished, p.starts) : null,
+      prev: prevCompletion,
       goodWhen: "up",
       spark: trend(facts, scope, (x, from) =>
         startsComplete(from, today, scope) ? ratio(x.startsFinished, x.starts) : null
       ),
-      foot: noCmp ?? "of the starts, finished (so far)",
+      foot:
+        noCmp ??
+        `of the starts, finished (so far)${prevCompletion === null ? "" : ` · vs ${fmt("pct", prevCompletion)}`}`,
       blocked: stB,
       trend: caption,
     },
@@ -317,7 +336,7 @@ export function buildSurveyPage(input: {
   });
   const benchNote =
     input.benchmarkKind === "all"
-      ? "all finished surveys since launch"
+      ? "all completed surveys since launch"
       : input.benchmarkKind === "prev"
         ? `all surveys in the previous period, ${rangeLabel(input.benchmark.from, input.benchmark.to)}`
         : "all surveys in the same period";
@@ -326,11 +345,14 @@ export function buildSurveyPage(input: {
     n: mine.length,
     benchN: bench.length,
     cards: [
+      // The design's four countries by name, then Other.
       demoCard(
         "Country",
         mine.map((s) => s.country ?? "Not stated"),
         bench.map((s) => s.country ?? "Not stated"),
-        "From the country question (15001)."
+        "From the country question (15001).",
+        undefined,
+        5
       ),
       demoCard(
         "Gender",
@@ -341,14 +363,14 @@ export function buildSurveyPage(input: {
       ),
       demoCard(
         "Age",
-        mine.map((s) => s.age ?? "Not stated"),
-        bench.map((s) => s.age ?? "Not stated"),
-        "From the age question (15003).",
-        [...AGE_ORDER, "Not stated"]
+        mine.map((s) => ageBand(s.age)),
+        bench.map((s) => ageBand(s.age)),
+        "From the age question (15003); 55+ is its 55–64 and 65+.",
+        [...AGE_BANDS, "Not stated"]
       ),
       deviceCard(mine, bench, facts.from, input.benchmark.from),
     ],
-    note: `This range: ${mine.length.toLocaleString("en-US")} finished surveys. Benchmark: ${benchNote} (${bench.length.toLocaleString("en-US")}). While only Assessment A is live, "all surveys" is this survey.`,
+    note: `This range: ${mine.length.toLocaleString("en-US")} completed surveys. Benchmark: ${benchNote} (${bench.length.toLocaleString("en-US")}). While only Assessment A is live, "all surveys" is this survey.`,
   };
 
   const on = launched(scope);
@@ -363,6 +385,8 @@ export function buildSurveyPage(input: {
     return v.every((n): n is number => typeof n === "number") ? v.reduce((a, n) => a + n, 0) : null;
   };
   const first = count(tracked ? "intro_view" : "intro_slide_1");
+  // The consent's visitors who saw no intro that day: they started from the landing page's card.
+  const direct = rowsOf("consent_view").reduce((n, x) => n + x.direct, 0);
   const cards: IntroCard[] = CARDS.map((c) => {
     const known = on && (tracked || c.step.startsWith("intro_slide_"));
     const reached = count(c.step);
@@ -373,7 +397,9 @@ export function buildSurveyPage(input: {
       name: c.name,
       purpose: c.purpose,
       reached: known ? reached : null,
-      reachedShare: known ? ratio(reached, first) : null,
+      reachedShare: known
+        ? ratio(c.step === "consent_view" ? reached - direct : reached, first)
+        : null,
       cont: of(sum(c.step, (x) => x.wentOn)),
       medianMs: known ? median(rowsOf(c.step).flatMap((x) => x.ms)) : null,
       skip: c.skip ? later(count(c.skip)) : null,
@@ -394,6 +420,16 @@ export function buildSurveyPage(input: {
       mostSkipped: most > 0 ? skips.indexOf(most) + 1 : null,
       clicks: input.introClicks,
       recordedFrom: on && !tracked ? rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM) : null,
+      own:
+        on && tracked
+          ? {
+              saw: first,
+              agreed: ratio(
+                sum("consent_view", (x) => x.wentOn),
+                first + direct
+              ),
+            }
+          : null,
     },
     questions: input.questions,
     questionsError: input.questionsError,

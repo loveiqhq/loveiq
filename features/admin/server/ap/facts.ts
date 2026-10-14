@@ -113,6 +113,8 @@ export interface IntroFact {
   wentOn: number | null;
   /** Visitors whose furthest card that day was this one: they left here. */
   left: number | null;
+  /** The consent: its visitors who saw no intro that day (they started from the landing page's card). */
+  direct: number;
 }
 
 export interface QuoteFact extends Tagged {
@@ -249,6 +251,7 @@ export function parseFacts(
       skipped: num(r.skipped),
       wentOn: numOrNull(r.wentOn),
       left: numOrNull(r.left),
+      direct: num(r.direct),
     })),
     invites: rows(o.invites, "invites").map((r) => ({ day: String(r.day), n: num(r.n) })),
     quotes: rows(o.quotes, "quotes").map((r) => ({
