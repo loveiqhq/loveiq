@@ -196,6 +196,37 @@ describe("the raw data explorer as drawn", () => {
     expect(cell.className).toContain("text-right");
   });
 
+  it("fits the nine columns at 1440px: a tight header puts its buttons under its name", () => {
+    render(<ApExplorer />);
+    // Kept to one line, the nine columns needed about 1,115px of the 1,068 there are at 1440px.
+    const heads = screen.getAllByRole("columnheader");
+    expect(heads).toHaveLength(9);
+    for (const h of heads) expect(h).not.toHaveClass("whitespace-nowrap");
+    // More columns still scroll sideways.
+    expect(screen.getByRole("table").parentElement).toHaveClass("overflow-x-auto");
+  });
+
+  it("ends the quick ranges yesterday, This month too; on the 1st, this month is today", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const pick = (now: string, label: string) => {
+        vi.setSystemTime(new Date(now));
+        render(<ApExplorer />);
+        fireEvent.click(screen.getByRole("button", { name: label }));
+        cleanup();
+        const url = new URL(String(router.replace.mock.calls.at(-1)![0]), "http://x");
+        return [url.searchParams.get("from"), url.searchParams.get("to")];
+      };
+      // 14 Oct in Berlin.
+      expect(pick("2026-10-14T10:00:00Z", "This month")).toEqual(["2026-10-01", "2026-10-13"]);
+      expect(pick("2026-10-14T10:00:00Z", "7 days")).toEqual(["2026-10-07", "2026-10-13"]);
+      // 1 Nov: no whole day of November yet.
+      expect(pick("2026-11-01T10:00:00Z", "This month")).toEqual(["2026-11-01", "2026-11-01"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says why a page is empty", () => {
     const empty = (search: string, over: Partial<ExplorerResult> = {}) => {
       state.search = search;
