@@ -18,6 +18,7 @@ import {
   median,
   ratio,
   subsIn,
+  tabletBlocked,
   totals,
   trend,
   type Totals,
@@ -402,8 +403,13 @@ export function buildReportPage(input: {
   today: string;
   now: Date;
 }): ReportPayload {
-  const { facts, previous, extras, filters: f, today, now } = input;
+  const { facts, extras, filters: f, today, now } = input;
   const scope = assessmentScope(f);
+  // The tablet filter before tablets were told apart: nobody counts as one, so every tile is
+  // blank with the reason, and an earlier period from before then is not compared.
+  const tablet = tabletBlocked(scope, facts.from);
+  const previous =
+    input.previous && !tabletBlocked(scope, input.previous.from) ? input.previous : null;
   const t = totals(facts, scope);
   // The earlier period at the same age as this one: its readers had no longer to act.
   const prevAged = previous ? ageMatched(previous, sameAge(facts, previous, now)) : null;
@@ -459,7 +465,7 @@ export function buildReportPage(input: {
     goodWhen: "up",
     spark: sp,
     foot,
-    blocked,
+    blocked: blocked ?? tablet,
     trend: caption,
   });
 

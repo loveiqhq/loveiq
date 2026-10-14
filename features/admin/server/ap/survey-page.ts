@@ -15,6 +15,7 @@ import {
   startsBlocked,
   startsComplete,
   subsIn,
+  tabletBlocked,
   totals,
   trend,
   type Totals,
@@ -267,8 +268,12 @@ export function buildSurveyPage(input: {
   questionsError: string | null;
   introClicks: PostHogResult<IntroClicks> | null;
 }): SurveyPayload {
-  const { facts, previous, filters: f, today, now } = input;
+  const { facts, filters: f, today, now } = input;
   const scope = assessmentScope(f);
+  // Under the tablet filter, an earlier period from before tablets were told apart is not
+  // compared: nobody in it counts as one.
+  const previous =
+    input.previous && !tabletBlocked(scope, input.previous.from) ? input.previous : null;
   const t = totals(facts, scope);
   const pRaw = previous ? totals(previous, scope) : null;
   const p: Totals | null = comparableStarts(pRaw, facts.from, previous?.from ?? null, today, scope);
@@ -305,7 +310,7 @@ export function buildSurveyPage(input: {
       goodWhen: "up",
       spark: trend(facts, scope, (x) => x.subs),
       foot: p ? `vs ${p.subs.toLocaleString("en-US")}` : "finished surveys",
-      blocked: null,
+      blocked: tabletBlocked(scope, facts.from),
       trend: caption,
     },
     {

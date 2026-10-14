@@ -1232,3 +1232,58 @@ describe("blanks say why, and notes say what the numbers are", () => {
     expect(d.pricesBlocked).toBeNull();
   });
 });
+
+describe("the tablet filter before tablets were told apart: survey and report", () => {
+  // Tablets are told apart from SURVEY_TRACKING_FROM: before, nobody counts as one.
+  const tablet = { ...filters, device: "tablet" as const };
+  const reason = /^Tablets are told apart from .*: pick a range from that day on\.$/;
+
+  it("survey: submissions blank with the reason, no comparison with such a period", () => {
+    const s = buildSurveyPage({
+      facts,
+      previous: lastWeek,
+      benchmark: facts,
+      benchmarkKind: "all",
+      filters: tablet,
+      today: TODAY,
+      now,
+      questions: null,
+      questionsError: null,
+      introClicks: null,
+    });
+    for (const key of ["starts", "subs", "completion"])
+      expect(s.tiles.find((t) => t.key === key)?.blocked).toMatch(reason);
+    expect(s.tiles.find((t) => t.key === "subs")?.prev).toBeNull();
+  });
+
+  it("report: every tile blank with the reason, and no earlier period compared", () => {
+    const r = buildReportPage({
+      facts,
+      previous: lastWeek,
+      benchmark: facts,
+      extras,
+      returns: null,
+      filters: tablet,
+      today: TODAY,
+      now,
+    });
+    // Blank, each with a reason: the tablet one unless a tile has its own (no Initial plan sold).
+    for (const t of [...r.tiles, ...r.wizard.tiles]) expect(t.blocked).toBeTruthy();
+    expect(r.tiles.find((t) => t.key === "opened")?.blocked).toMatch(reason);
+    expect(r.wizard.tiles.find((t) => t.key === "skipped")?.blocked).toMatch(reason);
+    expect(r.tiles.every((t) => t.prev === null)).toBe(true);
+    // Every device: no reason, and the earlier week compared.
+    const all = buildReportPage({
+      facts,
+      previous: lastWeek,
+      benchmark: facts,
+      extras,
+      returns: null,
+      filters,
+      today: TODAY,
+      now,
+    });
+    expect(all.tiles.find((t) => t.key === "opened")?.blocked ?? null).toBeNull();
+    expect(all.tiles.some((t) => t.prev !== null)).toBe(true);
+  });
+});
