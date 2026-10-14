@@ -85,11 +85,12 @@ export const MASKED = "[masked]";
 /** An address, also with its @ written as %40, as it travels inside a link. */
 const EMAIL = /[A-Za-z0-9._%+-]+(?:@|%40)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gi;
 /**
- * A report's access token, in a link's path or in `?token=`: both carry the `rpt_` form. Also
+ * A report's access token (`rpt_`), a share link's (`rpts_`) or a prepaid one's (`rpp_`), in a
+ * link's path or in `?token=`. Also
  * `rpt_<redacted>`, the stand-in an earlier fix left in old analytics rows, so a check for
  * `rpt_` finds nothing at all.
  */
-const REPORT_TOKEN = /rpt_[A-Za-z0-9_<>-]*/g;
+const REPORT_TOKEN = /rp(?:ts?|p)_[A-Za-z0-9_<>-]*/g;
 /** Masked in every table that has a column of this name. */
 const PERSONAL_COLUMNS = new Set([
   "first_name",
@@ -238,6 +239,29 @@ const NOT_PERSONAL_IN: Record<string, string[]> = {
   // The country someone lives in (82 values), as the country answer the copy keeps.
   user_profile: ["location_primary"],
 };
+
+/**
+ * How a column reads in the masked copy: `masked` (every value), `partly` (the email, name and
+ * postcode answers, or keys inside a draft's answers), or null (kept as it is, with any email
+ * address or report token inside text masked). The admin's data catalog shows it per field.
+ */
+export function columnPrivacy(table: string, column: string): "masked" | "partly" | null {
+  if (
+    PERSONAL_COLUMNS.has(column) ||
+    (PERSONAL_IN[table] ?? []).includes(column) ||
+    isEmailColumn(column)
+  ) {
+    return "masked";
+  }
+  if (
+    (table === "survey_submission_answer" &&
+      (column === "answer_text" || column === "normalized_value")) ||
+    (table === "survey_partial_save" && column === "answers")
+  ) {
+    return "partly";
+  }
+  return null;
+}
 
 /** Columns whose names suggest personal data that are neither masked nor known to be safe. */
 export function unclassifiedColumns(specs: TableSpec[]): string[] {

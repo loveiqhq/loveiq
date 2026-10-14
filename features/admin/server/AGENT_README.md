@@ -30,3 +30,4 @@ Subdirectories: `emails/` (admin magic-link template), `intelligence/`, and `str
 - `auth.ts`: session verification gate used by nearly every admin API route
 - `os.ts`: main command-center snapshot builder
 - `statistics.ts`: shared stats primitives used by the stats dashboard and comparison flows
+- `ap/`: AP-Analytics (`/admin/ap`): `facts.ts` reads `ap_facts`, `metrics.ts` and `filters.ts` count and slice it, one builder per page (`overview.ts`, `assessment.ts`, `landing.ts`, `survey-page.ts`, `report-page.ts`), `posthog.ts` for what only PostHog sees, `catalog.ts` and `explorer.ts` for the data catalog and the masked raw data explorer

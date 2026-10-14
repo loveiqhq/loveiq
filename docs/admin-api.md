@@ -225,3 +225,33 @@ start of 2026-10-14 in Berlin; set in `shared/experiments/landingVariant.ts`); t
 | `/api/admin/tech-intelligence`             | `GET`        | `viewer+`      | [`app/api/admin/tech-intelligence/route.ts`](../app/api/admin/tech-intelligence/route.ts)                                                                                     |
 | `/api/admin/what-changed`                  | `GET`        | `viewer+`      | [`app/api/admin/what-changed/route.ts`](../app/api/admin/what-changed/route.ts)                                                                                               |
 | `/api/admin/workspace-maturity`            | `GET`        | `viewer+`      | [`app/api/admin/workspace-maturity/route.ts`](../app/api/admin/workspace-maturity/route.ts)                                                                                   |
+
+### AP-Analytics (`/admin/ap`)
+
+The analytics admin from Marcus's 12 Oct 2026 design: its own light shell
+(`app/admin/ap/`, `features/admin/ui/ap/`), its figures from `ap_facts` and three companion
+SQL functions (`supabase/migrations/20261013120000_ap_facts.sql` onward), shaped in
+`features/admin/server/ap/`. Every route goes through `apGuard`
+([`route-guard.ts`](../features/admin/server/ap/route-guard.ts)): CSRF for writes, then the
+session and role, then the rate limit.
+
+The raw data explorer masks every row as the team's data copy does
+([`team-export.ts`](../features/admin/server/team-export.ts) `maskRow`). An admin can unlock
+one table for 15 minutes with a reason, written to `admin_audit_log` before the unlock is
+issued; unmasked rows then include full email addresses, as the admin CSV export
+(`/api/admin/export`) already does. Every explorer CSV export is logged too.
+
+| Route                           | Methods             | Minimum access                                         | Source                                                                                      |
+| ------------------------------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `/api/admin/ap/overview`        | `GET`               | `viewer+`                                              | [`app/api/admin/ap/overview/route.ts`](../app/api/admin/ap/overview/route.ts)               |
+| `/api/admin/ap/assessment`      | `GET`               | `viewer+`                                              | [`app/api/admin/ap/assessment/route.ts`](../app/api/admin/ap/assessment/route.ts)           |
+| `/api/admin/ap/landing`         | `GET`               | `viewer+`                                              | [`app/api/admin/ap/landing/route.ts`](../app/api/admin/ap/landing/route.ts)                 |
+| `/api/admin/ap/survey`          | `GET`               | `viewer+`                                              | [`app/api/admin/ap/survey/route.ts`](../app/api/admin/ap/survey/route.ts)                   |
+| `/api/admin/ap/survey/answers`  | `GET`               | `viewer+`                                              | [`app/api/admin/ap/survey/answers/route.ts`](../app/api/admin/ap/survey/answers/route.ts)   |
+| `/api/admin/ap/report`          | `GET`               | `viewer+`                                              | [`app/api/admin/ap/report/route.ts`](../app/api/admin/ap/report/route.ts)                   |
+| `/api/admin/ap/status`          | `GET`               | `viewer+`                                              | [`app/api/admin/ap/status/route.ts`](../app/api/admin/ap/status/route.ts)                   |
+| `/api/admin/ap/saved-filters`   | `GET, POST, DELETE` | `GET viewer+`, `POST`/`DELETE editor+` (own rows only) | [`app/api/admin/ap/saved-filters/route.ts`](../app/api/admin/ap/saved-filters/route.ts)     |
+| `/api/admin/ap/catalog`         | `GET, PUT`          | `GET viewer+`, `PUT editor+`                           | [`app/api/admin/ap/catalog/route.ts`](../app/api/admin/ap/catalog/route.ts)                 |
+| `/api/admin/ap/catalog/rows`    | `GET`               | `viewer+`                                              | [`app/api/admin/ap/catalog/rows/route.ts`](../app/api/admin/ap/catalog/rows/route.ts)       |
+| `/api/admin/ap/explorer`        | `GET`               | `viewer+` (masked rows), `admin` for `format=csv`      | [`app/api/admin/ap/explorer/route.ts`](../app/api/admin/ap/explorer/route.ts)               |
+| `/api/admin/ap/explorer/unlock` | `POST`              | `admin`, with a reason (logged)                        | [`app/api/admin/ap/explorer/unlock/route.ts`](../app/api/admin/ap/explorer/unlock/route.ts) |

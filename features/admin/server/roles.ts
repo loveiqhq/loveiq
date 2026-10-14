@@ -108,4 +108,9 @@ export const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "POST:/api/admin/analytics/marketing-spend": "admin",
   "DELETE:/api/admin/analytics/marketing-spend": "admin",
   "GET:/api/admin/analytics/export": "admin",
+  // AP-Analytics (/admin/ap): reads are viewer, unless named here
+  "POST:/api/admin/ap/saved-filters": "editor",
+  "DELETE:/api/admin/ap/saved-filters": "editor",
+  "PUT:/api/admin/ap/catalog": "editor",
+  "POST:/api/admin/ap/explorer/unlock": "admin",
 };

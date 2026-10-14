@@ -32,7 +32,7 @@ function erf(x: number) {
   return sign * y;
 }
 
-function normalCdf(z: number) {
+export function normalCdf(z: number) {
   return 0.5 * (1 + erf(z / Math.SQRT2));
 }
 

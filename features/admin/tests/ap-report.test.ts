@@ -1,0 +1,428 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const mockSupabaseFetch = vi.fn();
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
+}));
+// The screen test draws a payload the builder made, without the network or the URL.
+const screenData = vi.hoisted(() => ({ payload: null as unknown }));
+vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
+  useAdminFetch: () => ({
+    data: screenData.payload,
+    loading: false,
+    error: null,
+    refetch: () => {},
+  }),
+}));
+vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
+vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
+
+import { parseFilters } from "@features/admin/server/ap/filters";
+import {
+  buildReportPage,
+  fetchReportExtras,
+  type ReportExtras,
+} from "@features/admin/server/ap/report-page";
+import ApReport from "@features/admin/ui/ap/ApReport";
+
+import { factsFixture, sub } from "./ap-fixtures";
+
+const TODAY = "2026-10-13";
+const now = new Date("2026-10-13T10:00:00Z");
+const filters = parseFilters({ period: "custom", from: "2026-10-01", to: "2026-10-07" }, TODAY);
+const facts = factsFixture();
+const extras: ReportExtras = {
+  wizard: [],
+  map_steppers: [],
+  chapters: [],
+  paywall_clicks: [],
+  issues: [],
+  feedback: [],
+  votes_total: 0,
+  emails: [],
+};
+const day = (d: string) => ({ day: d, at: `${d}T10:00:00Z`, openedAt: `${d}T10:05:00Z` });
+/** Readers from before 18 Sep 2026, when the report's events still needed cookie consent. */
+const early = factsFixture({
+  from: "2026-09-10",
+  to: "2026-09-16",
+  visits: [],
+  starts: [],
+  money: [],
+  subs: [sub({ id: 21, ...day("2026-09-11") })],
+});
+const posthog = (over: { sources?: Array<{ source: string; sessions: number }> } = {}) => ({
+  ok: true as const,
+  value: { sources: [], campaigns: [], wizardSkips: 7, ...over },
+});
+
+/** The page for the fixture's week; anything else as given. */
+const page = (over: Partial<Parameters<typeof buildReportPage>[0]> = {}) =>
+  buildReportPage({
+    facts,
+    previous: null,
+    benchmark: facts,
+    extras,
+    returns: null,
+    filters,
+    today: TODAY,
+    now,
+    ...over,
+  });
+
+describe("report page", () => {
+  it("tile feet leave the 18 Sep gap to the banner and say only why a comparison is withheld", () => {
+    const p = page({ previous: early });
+    const foot = (k: string) => p.tiles.find((t) => t.key === k)!.foot;
+    expect(foot("returned")).toBe("opened again later · not compared: before 18 Sep");
+    expect(foot("initiated")).toBe(
+      "of report openers actively clicked a paywall button · not compared: before 18 Sep"
+    );
+    expect(foot("invite")).toMatch(/\(0 of 2\) · not compared: before 18 Sep$/);
+    expect(foot("read")).toMatch(
+      /^median per reader, recorded for \d+ of \d+ · not compared: earlier readers' later visits count too$/
+    );
+    expect(p.wizard.tiles.find((t) => t.key === "completed")).toMatchObject({
+      prev: null,
+      foot: "reached the last slide · not compared: before 18 Sep",
+    });
+
+    // A range before 18 Sep: the banner says what is missing, the feet do not repeat it.
+    const q = page({
+      facts: early,
+      benchmark: early,
+      filters: parseFilters({ period: "custom", from: "2026-09-10", to: "2026-09-16" }, TODAY),
+    });
+    expect(q.notes.join(" ")).toContain("Before 18 Sep 2026");
+    for (const t of [...q.tiles, ...q.wizard.tiles]) expect(t.foot).not.toMatch(/18 Sep|cookies/);
+    expect(q.tiles.find((t) => t.key === "read")!.foot).toMatch(
+      /^median per reader, recorded for \d+ of \d+$/
+    );
+  });
+
+  it("the wizard's four tiles compare like the others, and fewer leaving reads as better", () => {
+    const cur = factsFixture({
+      subs: [sub({ id: 1, wizardSlide: 5 }), sub({ id: 2, wizardSlide: 2, openedAt: null })],
+    });
+    const prev = factsFixture({
+      from: "2026-09-24",
+      to: "2026-09-30",
+      visits: [],
+      starts: [],
+      money: [],
+      subs: [
+        sub({ id: 11, ...day("2026-09-24"), wizardSlide: 5 }),
+        sub({ id: 12, ...day("2026-09-25"), openedAt: null, wizardSlide: 1 }),
+        sub({ id: 13, ...day("2026-09-25"), openedAt: null }),
+      ],
+    });
+    const p = page({ facts: cur, previous: prev, benchmark: cur, returns: posthog() });
+    const tile = (k: string) => p.wizard.tiles.find((t) => t.key === k)!;
+    expect(p.wizard.tiles.map((t) => t.label)).toEqual([
+      "Intro started",
+      "Completed all 6",
+      "Skipped intro",
+      "Left the report",
+    ]);
+    expect(tile("intro")).toMatchObject({
+      value: 2,
+      prev: 3,
+      foot: "vs 3 · everyone who finished the survey",
+    });
+    expect(tile("completed")).toMatchObject({ value: 0.5, prev: 1 / 3 });
+    expect(tile("skipped")).toMatchObject({ value: 7, prev: null, spark: [] });
+    expect(tile("left")).toMatchObject({
+      value: 0.5,
+      prev: 2 / 3,
+      goodWhen: "down",
+      foot: "closed during the intro",
+    });
+    expect(tile("left").spark.length).toBeGreaterThan(0);
+  });
+
+  it("Skipped intro says when PostHog failed, and that it ignores a filter", () => {
+    const failed = page({ returns: { ok: false, error: "PostHog could not be read just now." } });
+    expect(failed.wizard.tiles.find((t) => t.key === "skipped")).toMatchObject({
+      value: null,
+      blocked: "PostHog could not be read just now.",
+    });
+    const narrowed = page({ returns: posthog(), filters: { ...filters, device: "phone" } });
+    expect(narrowed.wizard.tiles.find((t) => t.key === "skipped")!.foot).toBe(
+      "clicked Skip Intro, as PostHog saw it · all traffic"
+    );
+  });
+
+  it("slide 2's engagement: its readers since 6 Oct who stepped through the map, by the filters", () => {
+    const mapFacts = factsFixture({
+      subs: [
+        sub({ id: 1, ...day("2026-10-06"), wizardSlide: 3 }),
+        sub({ id: 2, ...day("2026-10-06"), wizardSlide: 1 }),
+        sub({ id: 3, ...day("2026-10-07") }),
+        sub({ id: 4, ...day("2026-10-07"), wizardSlide: 2, src: "ig", med: null, ads: false }),
+        // Before the map's steps were recorded: not a reader of it here.
+        sub({ id: 5, ...day("2026-10-05"), wizardSlide: 4 }),
+      ],
+    });
+    const engaged = (source: "all" | "google_ads", steppers: number[] | null) =>
+      page({
+        facts: mapFacts,
+        benchmark: mapFacts,
+        extras: { ...extras, map_steppers: steppers },
+        filters: { ...filters, source },
+      }).wizard.slides.map((s) => s.engaged);
+    expect(engaged("all", [1, 4, 5])).toEqual([null, 2 / 3, null, null, null, null]);
+    expect(engaged("google_ads", [1, 4, 5])).toEqual([null, 1 / 2, null, null, null, null]);
+    expect(engaged("all", null)).toEqual(Array(6).fill(null));
+    // Readers of the map only before 6 Oct: blank, not 0%.
+    const before = factsFixture({ subs: [sub({ id: 1, wizardSlide: 2 })] });
+    expect(page({ facts: before, benchmark: before }).wizard.slides[1]!.engaged).toBeNull();
+  });
+
+  it("Back is a share of the slide's readers, and a count once a filter is on", () => {
+    const backFacts = factsFixture({
+      subs: [
+        sub({ id: 1, wizardSlide: 5 }),
+        sub({ id: 2, wizardSlide: 3 }),
+        sub({ id: 3, wizardSlide: 1 }),
+        sub({ id: 4, wizardSlide: 1, src: "ig", med: null, ads: false }),
+      ],
+    });
+    const wizard = [{ slide: 1, went_on: 2, went_back: 1, median_ms: null, timed: 0 }];
+    const slide2 = (source: "all" | "google_ads") =>
+      page({
+        facts: backFacts,
+        benchmark: backFacts,
+        extras: { ...extras, wizard },
+        filters: { ...filters, source },
+      }).wizard.slides[1]!;
+    expect(slide2("all")).toMatchObject({ reached: 4, back: 1, backShare: 0.25 });
+    expect(slide2("google_ads")).toMatchObject({ reached: 3, back: 1, backShare: null });
+    // Slide 1 has no Back button: no share, as the design draws it.
+    const slide1 = page({ facts: backFacts, benchmark: backFacts, extras, filters }).wizard
+      .slides[0]!;
+    expect(slide1.backShare).toBeNull();
+  });
+
+  it("average reading time has the benchmark readers' average beside it", () => {
+    const bench = factsFixture({
+      from: "2026-08-01",
+      to: "2026-10-12",
+      subs: [
+        sub({ id: 31, day: "2026-09-20", readMs: 300_000, closed: 1 }),
+        sub({ id: 32, day: "2026-09-21", readMs: 500_000, closed: 2, src: "ig", ads: false }),
+        // Before 18 Sep, and a reader whose reading was not recorded: neither counts.
+        sub({ id: 33, day: "2026-09-10", readMs: 900_000, closed: 1 }),
+        sub({ id: 34, day: "2026-09-22" }),
+      ],
+    });
+    expect(page({ benchmark: bench }).time.benchAvgMs).toBe(400_000);
+    // The benchmark is every reader, whatever the filters.
+    const narrowed = page({ benchmark: bench, filters: { ...filters, source: "google_ads" } });
+    expect(narrowed.time.benchAvgMs).toBe(400_000);
+  });
+
+  it("what brought readers back: PostHog's four ways in a fixed order, empty ones at 0%", () => {
+    const p = page({
+      returns: posthog({
+        sources: [
+          { source: "Email link", sessions: 3 },
+          { source: "Bookmark or direct", sessions: 1 },
+        ],
+      }),
+    });
+    expect(p.returns.sources).toEqual({
+      ok: true,
+      value: [
+        { source: "Bookmark or direct", sessions: 1, share: 0.25 },
+        { source: "Email link", sessions: 3, share: 0.75 },
+        { source: "Share link from a friend", sessions: 0, share: 0 },
+        { source: "Another tagged link", sessions: 0, share: 0 },
+      ],
+    });
+    expect(p.returns.viaEmail).toBe(0.75);
+  });
+
+  it("an email's return rate is its returners over its sends, from our own records", () => {
+    const campaigns = (emails: ReportExtras["emails"]) =>
+      page({
+        extras: { ...extras, emails },
+        // PostHog's own count of people from the link no longer feeds the table.
+        returns: {
+          ok: true,
+          value: {
+            sources: [],
+            campaigns: [{ campaign: "72h_no_unlock", people: 99 }],
+            wizardSkips: 0,
+          },
+        },
+      }).returns.campaigns;
+    const c = campaigns([
+      { stage: "72h_no_unlock", sent: 40, returned: 10, bought: 2, revenue: 7 },
+    ]);
+    expect(c.map((x) => x.stage)).toEqual(["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"]);
+    expect(c[0]).toMatchObject({ sent: 40, returned: 10, returnRate: 0.25, purchased: 2 });
+    expect(c[1]).toMatchObject({ sent: 0, returned: 0, returnRate: null });
+    // An older database function has no returns: blank, not zero.
+    expect(
+      campaigns([{ stage: "72h_no_unlock", sent: 40, returned: null, bought: 2, revenue: 7 }])[0]
+    ).toMatchObject({ returned: null, returnRate: null });
+  });
+});
+
+describe("fetchReportExtras", () => {
+  const answer = (body: unknown) =>
+    mockSupabaseFetch.mockResolvedValue({ ok: true, status: 200, json: async () => body });
+
+  it("reads the parts an older function lacks as blank, never as zero", async () => {
+    answer({
+      wizard: [],
+      chapters: [],
+      feedback: [],
+      emails: [{ stage: "72h_no_unlock", sent: 4, bought: 0, revenue: 0 }],
+    });
+    const old = await fetchReportExtras("2026-10-01", "2026-10-07");
+    expect(old.map_steppers).toBeNull();
+    expect(old.emails[0]).toMatchObject({ sent: 4, returned: null });
+
+    answer({
+      wizard: [],
+      map_steppers: [3, "4"],
+      chapters: [],
+      feedback: [],
+      emails: [{ stage: "72h_no_unlock", sent: 4, returned: 1, bought: 0, revenue: 0 }],
+    });
+    const latest = await fetchReportExtras("2026-10-01", "2026-10-07");
+    expect(latest.map_steppers).toEqual([3, 4]);
+    expect(latest.emails[0]!.returned).toBe(1);
+  });
+});
+
+describe("report page, on screen", () => {
+  const screenFacts = factsFixture({
+    subs: [
+      sub({ id: 1, ...day("2026-10-06"), wizardSlide: 5 }),
+      sub({ id: 2, ...day("2026-10-06"), wizardSlide: 3 }),
+      sub({ id: 3, ...day("2026-10-07"), wizardSlide: 1, openedAt: null }),
+    ],
+  });
+  const payload = page({
+    facts: screenFacts,
+    benchmark: screenFacts,
+    extras: {
+      ...extras,
+      wizard: [
+        { slide: 1, went_on: 2, went_back: 1, median_ms: 19_000, timed: 2 },
+        { slide: 2, went_on: 1, went_back: 2, median_ms: 8_000, timed: 1 },
+      ],
+      map_steppers: [1],
+      chapters: [
+        { section: "core_archetype", up: 3, down: 1 },
+        { section: "summary", up: 1, down: 0 },
+      ],
+      feedback: [
+        {
+          at: "2026-10-07T21:15:00Z",
+          submission: 2,
+          section: "core_archetype",
+          vote: "down",
+          issue: "unclear",
+          commented: true,
+        },
+        {
+          at: "2026-10-06T12:00:00Z",
+          submission: 1,
+          section: "summary",
+          vote: "up",
+          issue: null,
+          commented: false,
+        },
+      ],
+      votes_total: 2,
+      emails: [{ stage: "72h_no_unlock", sent: 8, returned: 2, bought: 1, revenue: 3.49 }],
+    },
+  });
+  /** The data rows of a table, top to bottom, by their first column's text. */
+  const rowNames = (table: string) =>
+    within(screen.getByRole("table", { name: table }))
+      .getAllByRole("rowheader")
+      .map((h) => h.textContent ?? "");
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("draws the wizard's tiles, its Back and map columns, and sorts by a header", () => {
+    screenData.payload = payload;
+    render(createElement(ApReport));
+    expect(screen.getByText("Left the report")).toBeInTheDocument();
+    expect(screen.getByText("33% stepped through the deep dives")).toBeInTheDocument();
+    expect(rowNames("Intro wizard slides")[0]).toContain("A note before you explore");
+    // Back: slide 2 lost 1 of its 3 readers, slide 3 both of its 2.
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Back" }));
+    expect(rowNames("Intro wizard slides").slice(0, 2)).toEqual([
+      expect.stringContaining("Unlocking your report is fully risk free"),
+      expect.stringContaining("Report parts & chapters"),
+    ]);
+    const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
+    expect(campaigns.getByText("25.0%")).toBeInTheDocument();
+    expect(campaigns.getAllByText("not recorded")).toHaveLength(6);
+  });
+
+  it("filters the feedback log from its headers' funnels", () => {
+    screenData.payload = payload;
+    render(createElement(ApReport));
+    expect(screen.getByText("Feedback log · 2 of 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filter Vote" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter vote" }), {
+      target: { value: "Bad" },
+    });
+    expect(screen.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
+    expect(screen.getByText("left a comment").className).toContain("font-serif italic");
+    // The filters add up: the bad vote's reason, then the chapter that had only a good vote.
+    fireEvent.click(screen.getByRole("button", { name: "Filter Issue" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter issue" }), {
+      target: { value: "Unclear" },
+    });
+    expect(screen.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filter Chapter" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter chapter" }), {
+      target: { value: payload.feedback.log[1]!.chapter },
+    });
+    expect(screen.getByText("No votes match the filters.")).toBeInTheDocument();
+  });
+
+  it("marks the section in view in the section nav", () => {
+    let seen: IntersectionObserverCallback = () => {};
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(cb: IntersectionObserverCallback) {
+          seen = cb;
+        }
+        observe() {}
+        disconnect() {}
+      }
+    );
+    screenData.payload = payload;
+    render(createElement(ApReport));
+    const nav = within(screen.getByRole("navigation", { name: "Report sections" }));
+    expect(nav.getByRole("link", { name: "Wizard" })).toHaveAttribute("aria-current", "true");
+    act(() =>
+      seen(
+        [
+          {
+            isIntersecting: true,
+            target: document.getElementById("chapters")!,
+          } as unknown as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver
+      )
+    );
+    expect(nav.getByRole("link", { name: "Chapters" })).toHaveAttribute("aria-current", "true");
+    expect(nav.getByRole("link", { name: "Wizard" })).not.toHaveAttribute("aria-current");
+  });
+});
