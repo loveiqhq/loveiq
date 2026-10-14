@@ -144,6 +144,7 @@ import { canonicalPeople } from "@features/brain/server/people";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { reportingDateTime } from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1510,11 +1511,14 @@ export const TOOLS = [
         order: {
           type: "string",
           description:
-            "`newest` (default) or `oldest`, by the date each record DESCRIBES — so " +
-            "SCHEDULED MEETINGS THAT HAVE NOT HAPPENED YET LEAD A `newest` LIST. Undated " +
-            "records — repository documentation — sort last either way. " +
-            "`recently_learned` instead orders by when the brain first saw each record, " +
-            "which is what 'what is new' actually means.",
+            "`newest` (default) or `oldest`, by the date each record DESCRIBES and, within " +
+            "a day, by its time: when a meeting starts, a chat or email thread was last " +
+            "written to, a document or Notion task last changed. Times are shown in Berlin " +
+            "time. Within its day, a record with no time of day (a Slack day, a decision) " +
+            "counts as the end of the day. SCHEDULED MEETINGS THAT HAVE NOT HAPPENED YET " +
+            "LEAD A `newest` LIST. Undated records — repository documentation — sort last " +
+            "either way. `recently_learned` instead orders by when the brain first saw each " +
+            "record, which is what 'what is new' actually means.",
         },
         learned_since: {
           type: "string",
@@ -1541,7 +1545,9 @@ export const TOOLS = [
           type: "string",
           description:
             "YYYY-MM-DD. Filters on the date a record DESCRIBES, not when it was indexed. " +
-            "Any date range excludes repository documentation, which carries no date.",
+            "Any date range excludes repository documentation, which carries no date. For " +
+            "most sources that day is the UTC day, so something written between midnight and " +
+            "2 a.m. Berlin time counts toward the day before.",
         },
         until: {
           type: "string",
@@ -4584,18 +4590,25 @@ async function callTool(
     // Two text fields, not `meta`: enough to say on the line that a decision was replaced.
     qs.set(
       "select",
-      "source,source_id,title,period_end,first_seen_at," +
+      "source,source_id,title,period_end,first_seen_at,at:meta->>at," +
         "superseded_by:meta->>superseded_by,superseded_on:meta->>superseded_on"
     );
-    // NULLS LAST both ways: repository documentation carries no date, and letting it
-    // head an "oldest first" listing buries everything the caller asked for.
+    /**
+     * NULLS LAST both ways: repository documentation carries no date, and letting it
+     * head an "oldest first" listing buries everything the caller asked for.
+     *
+     * THEN THE TIME, THEN THE ROW. `period_end` is a day, so one day's records came back
+     * in whatever order Postgres found them, and a day spread over two pages could show
+     * a record twice and skip another. `meta.at` (see `momentOf`) orders the day; a record
+     * without one counts as the day's end in both directions; `id` makes paging stable.
+     */
     qs.set(
       "order",
       byLearned
-        ? "first_seen_at.desc"
+        ? "first_seen_at.desc,id.desc"
         : oldest
-          ? "period_end.asc.nullslast"
-          : "period_end.desc.nullslast"
+          ? "period_end.asc.nullslast,meta->>at.asc.nullslast,id.asc"
+          : "period_end.desc.nullslast,meta->>at.desc.nullsfirst,id.desc"
     );
     qs.set("limit", String(limit));
     if (offset > 0) qs.set("offset", String(offset));
@@ -4693,12 +4706,16 @@ async function callTool(
     stats.sourceCount = rows.length;
     const lines = rows
       .map((r) => {
-        // Show the date the ordering used, or the list reads as unsorted.
+        // Show the date the ordering used, or the list reads as unsorted. In Berlin time,
+        // because a UTC time shown bare reads as local and is two hours off in summer.
+        const when = (v: unknown) =>
+          typeof v === "string" && !Number.isNaN(Date.parse(v))
+            ? reportingDateTime(new Date(v))
+            : null;
         const date = byLearned
-          ? `learned ${String(r.first_seen_at ?? "").slice(0, 10)}`
-          : typeof r.period_end === "string"
-            ? r.period_end
-            : "no date";
+          ? `learned ${when(r.first_seen_at) ?? "at an unknown time"}`
+          : (when(r.at) ??
+            (typeof r.period_end === "string" ? r.period_end.padEnd(16) : "no date".padEnd(16)));
         // `<source>/<source_id>`, the form `fetch_document` accepts and the form
         // `search_company_context` prints. Printing the bare source_id here — as this did
         // — hands the reader an id that the very next tool refuses.
@@ -4717,7 +4734,7 @@ async function callTool(
     return textResult(
       `${UNTRUSTED_SOURCES_PREAMBLE}\n\n` +
         `${total >= 0 ? `${total} records match` : "Records matching"} (${applied}). ` +
-        `Showing ${offset + 1}-${shownTo}${byLearned ? ", most recently learned first" : oldest ? ", oldest first" : ", newest first"}.\n\n` +
+        `Showing ${offset + 1}-${shownTo}${byLearned ? ", most recently learned first" : oldest ? ", oldest first" : ", newest first"}, times in Berlin time.\n\n` +
         `${lines}\n\n` +
         (total > shownTo
           ? `${total - shownTo} more — call again with offset=${shownTo}.\n`

@@ -5,6 +5,7 @@ import {
   REPORTING_TIME_ZONE,
   isReportingMonday,
   isoWeekKey,
+  reportingDateTime,
   reportingDay,
   reportingDayStart,
   reportingHour,
@@ -161,5 +162,21 @@ describe("isoWeekKey", () => {
 
   it("is shaped so a claim key sorts and reads", () => {
     expect(isoWeekKey(new Date("2026-09-21T08:00:00Z"))).toMatch(/^\d{4}-W\d{2}$/);
+  });
+});
+
+/** A time of day as the team reads it: a UTC time shown bare reads as local and is wrong. */
+describe("reportingDateTime", () => {
+  it("shows a summer UTC moment two hours ahead, on the Berlin day", () => {
+    expect(reportingDateTime(new Date("2026-10-13T06:52:10Z"))).toBe("2026-10-13 08:52");
+    expect(reportingDateTime(new Date("2026-10-13T22:30:00Z"))).toBe("2026-10-14 00:30");
+  });
+
+  it("shows a winter UTC moment one hour ahead", () => {
+    expect(reportingDateTime(new Date("2026-01-15T23:05:00Z"))).toBe("2026-01-16 00:05");
+  });
+
+  it("writes midnight as 00, not 24", () => {
+    expect(reportingDateTime(new Date("2026-07-01T22:00:00Z"))).toBe("2026-07-02 00:00");
   });
 });

@@ -3814,6 +3814,65 @@ describe("/api/mcp", () => {
       ).toContain("period_end.desc.nullslast");
     });
 
+    /**
+     * ONE DAY, IN THE ORDER IT HAPPENED. `period_end` is a day, so "what did we agree
+     * today, oldest first" listed the day's meetings, chats and mail in whatever order
+     * Postgres found them, and a day spread over two pages could repeat one record and
+     * skip another. Within the day the time orders it, an untimed record counts as the
+     * day's end in both directions, and the row id settles every tie.
+     */
+    it("orders within a day by time, then by row, in both directions", async () => {
+      const sent = () =>
+        decodeURIComponent(
+          String(mockSupabaseFetch.mock.calls.find(([p]) => String(p).includes("brain_chunk"))![0])
+        );
+      wire([row(1)], 1);
+      await call({ order: "oldest" });
+      expect(sent()).toContain("order=period_end.asc.nullslast,meta->>at.asc.nullslast,id.asc");
+      mockSupabaseFetch.mockClear();
+      wire([row(1)], 1);
+      await call({});
+      expect(sent()).toContain("order=period_end.desc.nullslast,meta->>at.desc.nullsfirst,id.desc");
+      mockSupabaseFetch.mockClear();
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      expect(sent()).toContain("order=first_seen_at.desc,id.desc");
+      expect(sent()).toContain("at:meta->>at");
+    });
+
+    /** A UTC time shown bare reads as local: 06:52 UTC was 08:52 in Berlin that morning. */
+    it("shows each record's time in Berlin time, and a day where it has none", async () => {
+      wire(
+        [
+          {
+            source: "whatsapp",
+            source_id: "wa:g#wa-2026-10-13-0652",
+            title: "WhatsApp: LoveIQ — 2026-10-13 08:52",
+            period_end: "2026-10-13",
+            at: "2026-10-13T06:52:00.000Z",
+          },
+          {
+            source: "slack",
+            source_id: "ch:all-loveiq:2026-10-13",
+            title: "Slack #all-loveiq — 2026-10-13",
+            period_end: "2026-10-13",
+            at: null,
+          },
+        ],
+        2
+      );
+      const text = (await call({ since: "2026-10-13", order: "oldest" })).content[0].text as string;
+      expect(text).toContain("2026-10-13 08:52  [whatsapp]  WhatsApp: LoveIQ — 2026-10-13 08:52");
+      expect(text).toContain("2026-10-13        [slack]  Slack #all-loveiq — 2026-10-13");
+      expect(text).toContain("oldest first, times in Berlin time.");
+    });
+
+    it("shows when the brain learned a record in Berlin time too", async () => {
+      wire([{ ...row(1), first_seen_at: "2026-10-13T22:30:00+00:00" }], 1);
+      const text = (await call({ order: "recently_learned" })).content[0].text as string;
+      expect(text).toContain("learned 2026-10-14 00:30");
+    });
+
     it("translates every filter into the query it sends", async () => {
       wire([row(1)], 1);
       await call({

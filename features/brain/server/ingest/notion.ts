@@ -5,6 +5,7 @@ import { KPI_NUMBERS_DATABASE_ID } from "@features/admin/server/kpi-notion";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   chunkPage,
+  momentOf,
   recordSweep,
   shouldSweep,
   sweepMissing,
@@ -388,6 +389,7 @@ export function taskToRow(
     .join(" · ");
 
   const edited = page.last_edited_time ?? page.created_time ?? null;
+  const at = momentOf(edited);
 
   // Every property, not just the six the board happens to use. A row in
   // "Literature" or "Competitor Tracker" carries its meaning in fields this
@@ -521,6 +523,7 @@ export function taskToRow(
       completed: completed || null,
       created: page.created_time ?? null,
       edited,
+      ...(at ? { at } : {}),
     },
     updated_at: stampedAt,
     // The date this task last MOVED, so a stale backlog item does not outrank a
@@ -590,6 +593,7 @@ export function pageToRow(
   const title = titleOf(page).trim();
   if (!page.id || !title) return null;
   const edited = page.last_edited_time ?? page.created_time ?? null;
+  const at = momentOf(edited);
   const author = page.created_by?.id ? people.get(page.created_by.id) : undefined;
 
   return {
@@ -603,6 +607,7 @@ export function pageToRow(
       v: BUILDER_VERSION,
       created: page.created_time ?? null,
       edited,
+      ...(at ? { at } : {}),
       // Absent rather than null when unresolved, matching `peopleIn`: a null author
       // asserts "written by nobody", which of a page someone typed is never true.
       ...(author ? { author } : {}),

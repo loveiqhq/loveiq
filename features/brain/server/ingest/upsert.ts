@@ -32,6 +32,22 @@ export interface BrainRow {
   period_end?: string | null;
 }
 
+/**
+ * `meta.at`: the moment a record describes, as UTC in `toISOString()` form, the one
+ * format whose text order is time order.
+ *
+ * `period_end` is a day, so `browse_context` listed one day's meetings, chats and mail
+ * in no particular order, and paged through them unstably. The listing orders by this
+ * within a day and shows it in Berlin time. Use the same instant `period_end` is the day
+ * of, or a record sorts and reads under a day it does not belong to. Absent where a
+ * record has no time of day: a Slack day, an all-day event, a decision.
+ */
+export function momentOf(value: string | number | null | undefined): string | undefined {
+  if (value === null || value === undefined || value === "" || value === 0) return undefined;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
+}
+
 const BATCH = 200;
 
 /** Postgres text columns reject NUL bytes outright (SQLSTATE 22021). */

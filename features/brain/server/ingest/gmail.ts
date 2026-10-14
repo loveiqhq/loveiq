@@ -15,6 +15,7 @@ import {
   isJobApplication,
   isLegalInstrument,
   chunkPage,
+  momentOf,
   recordSweep,
   shouldSweep,
   sweepMissing,
@@ -1139,6 +1140,7 @@ export function threadToRows(
   const last = msgs[msgs.length - 1]!;
   const when = Number(last.internalDate ?? first.internalDate ?? 0);
   const day = when ? new Date(when).toISOString().slice(0, 10) : null;
+  const at = momentOf(when);
 
   const hiring = isHiringMailbox(mailbox);
   const lines: string[] = [];
@@ -1216,6 +1218,8 @@ export function threadToRows(
       // Gmail's own change cursor: a thread whose historyId has not moved has not
       // been replied to, so it never needs refetching.
       historyId: thread.historyId ?? null,
+      // The last message, which `day` is the day of.
+      ...(at ? { at } : {}),
     },
     updated_at: stampedAt,
     period_end: day,

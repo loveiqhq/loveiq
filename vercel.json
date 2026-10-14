@@ -75,6 +75,10 @@
       "schedule": "52 * * * *"
     },
     {
+      "path": "/api/cron/brain-meeting-notes",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/brain-crm",
       "schedule": "17 */2 * * *"
     },
@@ -182,6 +186,9 @@
     },
     "app/api/cron/brain-drive/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/brain-meeting-notes/route.ts": {
+      "maxDuration": 60
     },
     "app/api/cron/brain-calendar/route.ts": {
       "maxDuration": 120

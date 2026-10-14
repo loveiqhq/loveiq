@@ -21,6 +21,7 @@ import { domainMailboxes } from "./gmail";
 import { splitBody } from "./notion";
 import {
   chunkPage,
+  momentOf,
   recordSweep,
   shouldSweep,
   sweepStale,
@@ -156,6 +157,7 @@ export function eventToRows(e: CalEvent, stampedAt: string, mailbox: string | nu
   if (!uid) return [];
 
   const day = eventDay(e);
+  const at = momentOf(e.start?.dateTime);
   const guests = (e.attendees ?? [])
     .filter((a) => !a.resource)
     .map(who)
@@ -200,6 +202,8 @@ export function eventToRows(e: CalEvent, stampedAt: string, mailbox: string | nu
        */
       attendeeCount: attending.length,
       organizer: e.organizer ? who(e.organizer) : null,
+      // When it starts. An all-day event has a day and no time, so none.
+      ...(at ? { at } : {}),
       /**
        * The calendar this row was walked from. One meeting is stored ONCE
        * (keyed on iCalUID plus the day), so this is whichever attendee's
