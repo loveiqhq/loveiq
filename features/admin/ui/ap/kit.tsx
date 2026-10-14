@@ -127,9 +127,19 @@ export function Spark({
 /**
  * A headline tile, in the design's two layouts. "lg" (Overview): the change beside the value,
  * the trend line, then the note. "md" (Assessment, Survey, Report): the value, the change and
- * the note on one line, the trend line, then what the line covers.
+ * the note on one line, the trend line, then what the line covers. `level`: the tile's parts sit
+ * on its grid's shared rows (subgrid), so a label that wraps moves the whole row's values down
+ * together; every tile in that grid must set it.
  */
-export function KpiTile({ tile, size = "lg" }: { tile: Tile; size?: "lg" | "md" }) {
+export function KpiTile({
+  tile,
+  size = "lg",
+  level = false,
+}: {
+  tile: Tile;
+  size?: "lg" | "md";
+  level?: boolean;
+}) {
   const d = tile.blocked
     ? null
     : delta(tile.unit, tile.value, tile.prev, tile.goodWhen, tile.deltaAs);
@@ -171,7 +181,10 @@ export function KpiTile({ tile, size = "lg" }: { tile: Tile; size?: "lg" | "md" 
         )}
       </>
     );
-  const cls = `flex flex-col rounded-[20px] border border-ap-line bg-white text-ap-ink no-underline shadow-ap ${
+  const layout = level
+    ? `grid grid-rows-subgrid ${size === "lg" ? "row-span-4" : "row-span-5"}`
+    : "flex flex-col";
+  const cls = `${layout} rounded-[20px] border border-ap-line bg-white text-ap-ink no-underline shadow-ap ${
     size === "lg" ? "gap-2.5 px-5 py-[18px]" : "gap-2 px-[18px] py-4"
   }`;
   return tile.href ? (
@@ -228,14 +241,29 @@ function StatFoot({ stat }: { stat: MiniStat }) {
   ) : null;
 }
 
-/** A grey box with a label, a value and a line under it (Revenue, Costs, Survey card). */
-export function StatBox({ stat, tone = "grey" }: { stat: MiniStat; tone?: "grey" | "white" }) {
+/**
+ * A grey box with a label, a value and a line under it (Revenue, Costs, Survey card), sized by
+ * its grid. The value is 24px as drawn, smaller in a narrower box (three across a phone, or two
+ * cards side by side on a small laptop) so that a figure up to "€12,345" stays inside it.
+ * `level`: the box's lines sit on its grid's shared rows (subgrid), so a label that wraps moves
+ * the whole row's values down together; every box in that grid must set it.
+ */
+export function StatBox({
+  stat,
+  tone = "grey",
+  level = false,
+}: {
+  stat: MiniStat;
+  tone?: "grey" | "white";
+  level?: boolean;
+}) {
   return (
     <div
-      className={`flex min-w-0 flex-col gap-1 rounded-[14px] p-3.5 ${tone === "grey" ? "bg-ap-ground" : "bg-white"}`}
+      className={`${level ? "row-span-4 grid grid-rows-subgrid" : "flex flex-col"} min-w-0 gap-1 rounded-[14px] p-3.5 [container-type:inline-size] ${tone === "grey" ? "bg-ap-ground" : "bg-white"}`}
     >
       <span className="text-xs text-ap-muted">{stat.label}</span>
-      <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">
+      {/* 23% of the box: Lora's "€12,345" is about 4.2em wide, so it fits at any width. */}
+      <span className="font-serif text-[length:min(24px,23cqi)] font-semibold leading-[1.33] tabular-nums text-ap-ink">
         {fmt(stat.unit, stat.value)}
       </span>
       <StatFoot stat={stat} />
@@ -251,12 +279,15 @@ export function Pills<T extends string>({
   onChange,
   label,
   onWhite = false,
+  tight = false,
 }: {
   options: Array<{ value: T; label: string }>;
   value: T;
   onChange: (v: T) => void;
   label: string;
   onWhite?: boolean;
+  /** 14px sides instead of 16px: the Overview's split, as that artboard draws it. */
+  tight?: boolean;
 }) {
   return (
     <div
@@ -272,9 +303,9 @@ export function Pills<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(o.value)}
-            className={`min-h-10 cursor-pointer rounded-full border-0 px-3.5 text-[13px] font-semibold ${
-              on ? "bg-ap-ink text-white" : "bg-transparent text-ap-body hover:bg-white/70"
-            }`}
+            className={`min-h-10 cursor-pointer rounded-full border-0 text-[13px] font-semibold ${
+              tight ? "px-3.5" : "px-4"
+            } ${on ? "bg-ap-ink text-white" : "bg-transparent text-ap-body hover:bg-white/70"}`}
           >
             {o.label}
           </button>
@@ -394,6 +425,23 @@ export function HeaderFilter({
 }
 
 /**
+ * The least width of a column for its heading: the label in at most two lines, its last word
+ * and its buttons (15px each) on one line, inside the 14px sides. A capital at 11px bold runs
+ * about 8.2px (SUBMISSIONS measures 83px). ponytail: a letter count, not the font's metrics;
+ * a label of wide letters (M, W) may need a few pixels more.
+ */
+function headWidth(label: string, buttons: number): number {
+  const w = (s: string) => s.length * 8.2;
+  const words = label.split(" ");
+  let need = w(label) + buttons * 15;
+  for (let i = 1; i < words.length; i++) {
+    const [head, tail] = [words.slice(0, i).join(" "), words.slice(i).join(" ")];
+    need = Math.min(need, Math.max(w(head), w(tail) + buttons * 15));
+  }
+  return Math.ceil(need) + 28;
+}
+
+/**
  * A table from the server's Table: the first column is the row's name, the rest are
  * numbers. Every column sorts, the first also filters (as the design draws them); muted
  * rows ("Not launched", "Unknown source") stay at the bottom.
@@ -411,14 +459,17 @@ export function DataTable({
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const [filtering, setFiltering] = useState(false);
   const [filter, setFilter] = useState("");
-  // The design's columns: the name at least 150px, each number at least 88px (headers wrap),
-  // so a five-column table fits beside a chart at 1440px.
+  // The design's columns: the name at least 150px, each number at least 88px, and each wide
+  // enough for its heading in two lines (headWidth). Narrower than all of them, it scrolls.
   const hasBar = table.rows.some((r) => r.bar !== undefined);
+  const widths = table.columns.map((c, i) =>
+    Math.max(i ? 88 : 150, headWidth(c.label, i ? 1 : sortFirst ? 2 : 1))
+  );
   const gtc = [
-    "minmax(150px, 1.5fr)",
-    ...table.columns.slice(1).map(() => "minmax(88px, 1fr)"),
+    ...widths.map((w, i) => `minmax(${w}px, ${i ? 1 : 1.5}fr)`),
     ...(hasBar ? ["minmax(120px, 1.2fr)"] : []),
   ].join(" ");
+  const least = widths.reduce((a, b) => a + b, hasBar ? 120 : 0);
   const rows = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     const shown = needle
@@ -443,11 +494,15 @@ export function DataTable({
     <div className="flex min-w-0 flex-col gap-2.5">
       {filtering && <HeaderFilter label={first} value={filter} onChange={setFilter} />}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label={table.columns[0]?.label} style={{ minWidth }}>
+        <div
+          role="table"
+          aria-label={table.columns[0]?.label}
+          style={{ minWidth: Math.max(minWidth, least) }}
+        >
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
             {table.columns.map((c, i) => (
-              // Text with its buttons inline, as drawn: a label wider than a narrow column
-              // runs on into its own padding, never back over the column before it.
+              // Text with its buttons inline, as drawn; the last word and the buttons never
+              // part, so a button never wraps onto a line of its own.
               <span
                 key={c.label}
                 role="columnheader"
@@ -456,37 +511,40 @@ export function DataTable({
                   i ? "text-right" : "text-left"
                 }`}
               >
-                {c.label}
-                {i === 0 && (
-                  <button
-                    type="button"
-                    aria-label={`Filter ${c.label}`}
-                    aria-expanded={filtering}
-                    onClick={() => {
-                      if (filtering) setFilter("");
-                      setFiltering(!filtering);
-                    }}
-                    className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
-                  >
-                    <FilterIcon />
-                  </button>
-                )}
-                {(i > 0 || sortFirst) && (
-                  <button
-                    type="button"
-                    aria-label={`Sort by ${c.label}`}
-                    onClick={() =>
-                      setSort((s) =>
-                        s?.col === i
-                          ? { col: i, dir: s.dir === 1 ? -1 : 1 }
-                          : { col: i, dir: i ? -1 : 1 }
-                      )
-                    }
-                    className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
-                  >
-                    <SortIcon dir={sort?.col === i ? sort.dir : null} />
-                  </button>
-                )}
+                {c.label.slice(0, c.label.lastIndexOf(" ") + 1)}
+                <span className="whitespace-nowrap">
+                  {c.label.slice(c.label.lastIndexOf(" ") + 1)}
+                  {i === 0 && (
+                    <button
+                      type="button"
+                      aria-label={`Filter ${c.label}`}
+                      aria-expanded={filtering}
+                      onClick={() => {
+                        if (filtering) setFilter("");
+                        setFiltering(!filtering);
+                      }}
+                      className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
+                    >
+                      <FilterIcon />
+                    </button>
+                  )}
+                  {(i > 0 || sortFirst) && (
+                    <button
+                      type="button"
+                      aria-label={`Sort by ${c.label}`}
+                      onClick={() =>
+                        setSort((s) =>
+                          s?.col === i
+                            ? { col: i, dir: s.dir === 1 ? -1 : 1 }
+                            : { col: i, dir: i ? -1 : 1 }
+                        )
+                      }
+                      className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
+                    >
+                      <SortIcon dir={sort?.col === i ? sort.dir : null} />
+                    </button>
+                  )}
+                </span>
               </span>
             ))}
             {hasBar && (

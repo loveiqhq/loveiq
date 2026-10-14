@@ -134,7 +134,7 @@ export default function ApDashboard() {
             </h2>
             <TileGrid min={200}>
               {data.tiles.map((t) => (
-                <KpiTile key={t.key} tile={t} size="md" />
+                <KpiTile key={t.key} tile={t} size="md" level />
               ))}
             </TileGrid>
 
@@ -144,7 +144,7 @@ export default function ApDashboard() {
                   Journey, step by step
                 </h3>
                 <span className="text-[13px] text-ap-muted">
-                  Each step links to its report · % = of the step before
+                  Each step links to its report · % = of previous step
                 </span>
               </div>
               <ol
@@ -229,6 +229,7 @@ export default function ApDashboard() {
                       title="Survey complete CVR"
                       rows={data.performance.map((r) => ({ label: r.label, value: r.surveyCvr }))}
                       unit="pct"
+                      digits={2}
                     />
                     <SourceBars
                       title="€ revenue per visit"
@@ -282,11 +283,14 @@ function SourceBars({
   title,
   rows,
   unit,
+  digits,
   color = "#795fc8",
 }: {
   title: string;
   rows: Array<{ label: string; value: number | null }>;
   unit: "pct" | "eur3";
+  /** Decimals where the design fixes them (a CVR in hundredths, as the Sources table). */
+  digits?: number;
   color?: string;
 }) {
   const max = Math.max(0, ...rows.map((r) => r.value ?? 0)) || 1;
@@ -301,7 +305,7 @@ function SourceBars({
         >
           <span>{r.label}</span>
           <Bar pct={r.value === null ? null : r.value / max} color={color} />
-          <span className="text-right font-bold tabular-nums">{fmt(unit, r.value)}</span>
+          <span className="text-right font-bold tabular-nums">{fmt(unit, r.value, digits)}</span>
         </div>
       ))}
     </div>
@@ -362,7 +366,7 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
             </span>
             <span className="font-serif text-2xl font-semibold">{fmt("count", g.visitors)}</span>
             <span className="text-[13px] text-ap-muted">
-              Survey CVR {fmt("pct", g.visitors ? g.completed / g.visitors : null)} · € / visit{" "}
+              Survey CVR {fmt("pct", g.visitors ? g.completed / g.visitors : null, 1)} · € / visit{" "}
               {fmt("eur3", perVisit(key, g.visitors))}
             </span>
           </div>

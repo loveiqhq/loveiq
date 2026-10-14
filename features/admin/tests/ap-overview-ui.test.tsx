@@ -14,7 +14,11 @@ const now = new Date("2026-10-13T10:00:00Z");
 const filters = parseFilters({ period: "custom", from: "2026-10-01", to: "2026-10-07" }, TODAY);
 
 // The screens draw payloads the builders made, without the network or the URL.
-const screenData = vi.hoisted(() => ({ overview: null as unknown, dashboard: null as unknown }));
+const screenData = vi.hoisted(() => ({
+  overview: null as unknown,
+  dashboard: null as unknown,
+  status: null as unknown,
+}));
 vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (url: string) => ({
     data:
@@ -22,7 +26,9 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
         ? screenData.overview
         : url === "/api/admin/ap/assessment"
           ? screenData.dashboard
-          : null,
+          : url === "/api/admin/ap/status"
+            ? screenData.status
+            : null,
     loading: false,
     error: null,
     refetch: () => {},
@@ -110,21 +116,57 @@ describe("the Overview as drawn", () => {
     for (const g of groups) expect(pressed(g)).toEqual(["Per source"]);
     // Over Traffic and Submissions, whose visitors are estimated; Engagement has no estimate.
     expect(screen.getAllByText("Sample split · totals are live")).toHaveLength(2);
-    // The design's widths, below which each table scrolls (Submissions fitted to its column).
+    // The design's widths, below which each table scrolls; wider where the headings need it
+    // in two lines (Submissions, Engagement).
     expect(screen.getAllByRole("table", { name: "Source" }).map((t) => t.style.minWidth)).toEqual([
       "460px",
-      "516px",
-      "560px",
+      "612px",
+      "595px",
     ]);
     const google = within(screen.getAllByRole("table", { name: "Source" })[0]!)
       .getAllByRole("row")
       .find((r) => r.textContent?.startsWith("Google Ads"))!;
-    // 30% of 220 live visits; 10 starts of 66.
+    // 30% of 220 live visits, in tenths; 10 starts of 66, in hundredths, as drawn.
     expect(
       within(google)
         .getAllByRole("cell")
         .map((c) => c.textContent)
-    ).toEqual(["66", "30%", "15.2%"]);
+    ).toEqual(["66", "30.0%", "15.15%"]);
+  });
+
+  it("a heading's last word and its buttons never part; the splits have 14px sides", () => {
+    screenData.overview = buildOverview({ facts, previous, ad, filters, today: TODAY, now });
+    render(<ApOverview />);
+    const subs = screen.getAllByRole("table", { name: "Assessment" })[1]!;
+    const heads = within(subs).getAllByRole("columnheader");
+    expect(heads.map((h) => h.textContent)).toEqual([
+      "Assessment",
+      "Starts",
+      "Submissions",
+      "Completion",
+      "Submission CVR",
+    ]);
+    for (const h of heads) {
+      const tail = h.querySelector(".whitespace-nowrap")!;
+      // Every button of the heading sits in its last, unbroken part, with the last word.
+      expect(
+        within(h)
+          .getAllByRole("button")
+          .every((b) => tail.contains(b))
+      ).toBe(true);
+      expect(tail.textContent).toBe(h.textContent!.split(" ").at(-1));
+    }
+    // Wide enough for SUBMISSIONS and its button on one line, not the design's 516px.
+    expect(subs.style.minWidth).toBe("612px");
+    // Beside the funnel, the table's share is at least that wide, so it never scrolls there.
+    const basis = (t: HTMLElement) =>
+      Number(t.closest("[class*='flex-[1_1_']")!.className.match(/flex-\[1_1_(\d+)px\]/)![1]);
+    expect(basis(subs)).toBeGreaterThanOrEqual(parseInt(subs.style.minWidth));
+    const split = within(screen.getByRole("group", { name: "Split traffic by" }));
+    expect(split.getByRole("button", { name: "Per source" }).className).toContain("px-3.5");
+    fireEvent.click(split.getByRole("button", { name: "Per source" }));
+    const bySource = screen.getAllByRole("table", { name: "Source" })[1]!;
+    expect(basis(bySource)).toBeGreaterThanOrEqual(parseInt(bySource.style.minWidth));
   });
 
   it("the funnel's last step is Paid, its shares a tenth of a percent", () => {
@@ -161,8 +203,17 @@ describe("the Overview as drawn", () => {
     expect(line("Costs & CAC", 1).className).toContain("text-ap-good");
     expect(line("Costs & CAC", 2).textContent).toBe("prev. €50.25");
     expect(line("Costs & CAC", 2).className).toContain("text-ap-bad");
-    // Three boxes a row at every width, as drawn.
+    // Three boxes a row at every width, as drawn, their lines on shared rows, so a label in two
+    // lines ("Per submission" on a phone) keeps the values level.
     expect(box("Costs & CAC", 0).parentElement!.className).toContain("grid-cols-3");
+    for (const section of ["Revenue", "Costs & CAC"]) {
+      for (const i of [0, 1, 2]) {
+        expect(box(section, i).className).toMatch(/\brow-span-4\b.*\bgrid-rows-subgrid\b/);
+        // The value is sized by its box, so "€3,986" fits three across a phone.
+        expect(box(section, i).className).toContain("[container-type:inline-size]");
+        expect(box(section, i).children[1]!.className).toContain("text-[length:min(24px,23cqi)]");
+      }
+    }
     // The costs table's money with cents.
     const costs = screen.getAllByRole("table", { name: "Assessment" }).at(-1)!;
     expect(
@@ -225,10 +276,18 @@ describe("the Assessment A dashboard as drawn", () => {
   });
 
   it("Performance and New & returning: per visit, as drawn", () => {
-    screenData.dashboard = dashboard();
+    const d = dashboard();
+    // A rate over 10% keeps its hundredths, as the design's bars and the Sources table do.
+    screenData.dashboard = {
+      ...d,
+      performance: d.performance.map((r) =>
+        r.label === "Google Ads" ? { ...r, surveyCvr: 10 / 66 } : r
+      ),
+    };
     render(<ApDashboard />);
     fireEvent.click(screen.getByRole("button", { name: "Performance" }));
     const traffic = within(screen.getByRole("region", { name: "Traffic" }));
+    expect(traffic.getByText("15.15%")).toBeTruthy();
     expect(traffic.getByText("Survey complete CVR")).toBeTruthy();
     expect(traffic.getByText("€ revenue per visit")).toBeTruthy();
     expect(traffic.queryByText(/Payment CVR/)).toBeNull();
@@ -236,9 +295,27 @@ describe("the Assessment A dashboard as drawn", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New & return" }));
     // €6.99 paid by a new visitor's person, over 100 new visitors; none by returning ones.
-    expect(screen.getByText(/Survey CVR 5\.00% · € \/ visit €0\.070/)).toBeTruthy();
-    expect(screen.getByText(/Survey CVR 4\.00% · € \/ visit €0\.000/)).toBeTruthy();
+    // The CVR in tenths, as the design's cards write it ("Survey CVR 3.6%").
+    expect(screen.getByText(/Survey CVR 5\.0% · € \/ visit €0\.070/)).toBeTruthy();
+    expect(screen.getByText(/Survey CVR 4\.0% · € \/ visit €0\.000/)).toBeTruthy();
     expect(screen.queryByText("Sample split · totals are live")).toBeNull();
+  });
+
+  it("tiles keep their values level, the journey is worded as drawn, the tabs have 16px sides", () => {
+    screenData.dashboard = dashboard();
+    render(<ApDashboard />);
+    const dash = within(screen.getByRole("region", { name: "Dashboard" }));
+    // Every tile on the grid's shared rows: a label in two lines moves the whole row's values.
+    for (const label of ["Visitors", "€ rev. per survey complete", "Report open rate"]) {
+      expect(dash.getByText(label).parentElement!.className).toMatch(
+        /\bgrid grid-rows-subgrid row-span-5\b/
+      );
+    }
+    expect(dash.getByText("Each step links to its report · % = of previous step")).toBeTruthy();
+    // 10 of the 14 starts finished.
+    expect(dash.getByText("71.4% of starts")).toBeTruthy();
+    const tabs = within(screen.getByRole("group", { name: "Traffic report" }));
+    expect(tabs.getByRole("button", { name: "Sources" }).className).toContain("px-4");
   });
 
   it("Prices: the design's description, plan names and whole price pills", () => {
@@ -252,6 +329,22 @@ describe("the Assessment A dashboard as drawn", () => {
     const prices = screen.getByRole("table", { name: "Prices" });
     expect(within(prices).getByText("Full")).toBeTruthy();
     expect(within(prices).getByText("€6.99 · A3").className).toContain("whitespace-nowrap");
+  });
+});
+
+describe("blanks on screen say why", () => {
+  it("Overview: ad spend with no figure for the range says so on its tile and its boxes", () => {
+    const later = { byDay: new Map([["2026-10-10", 30]]), from: "2026-10-10", to: TODAY };
+    screenData.overview = buildOverview({ facts, previous, ad: later, filters, today: TODAY, now });
+    render(<ApOverview />);
+    const why = "No ad spend recorded for these days.";
+    const tile = screen.getByText("Ad spend", { selector: "a span" }).parentElement!;
+    expect(within(tile).getByText(why)).toBeTruthy();
+    expect(within(tile).queryByText("Google Ads")).toBeNull();
+    const costs = within(screen.getByRole("region", { name: "Costs & CAC" }));
+    // One in each of the three boxes; the table's note says it too.
+    expect(costs.getAllByText(why)).toHaveLength(3);
+    expect(costs.getByText(/refreshed every 15 minutes\. No ad spend recorded/)).toBeTruthy();
   });
 });
 
@@ -277,5 +370,25 @@ describe("the filter bar as drawn", () => {
         .getAllByRole("option")
         .map((o) => o.textContent)
     ).toEqual(["All assessments", "Assessment A", "Assessment B", "Assessment C"]);
+  });
+
+  it("suggests a saved filter's name as the design does", async () => {
+    const { default: FilterBar } = await vi.importActual<
+      typeof import("@features/admin/ui/ap/ApFilterBar")
+    >("@features/admin/ui/ap/ApFilterBar");
+    const { ApStatusProvider } = await import("@features/admin/ui/ap/status");
+    // An editor: the save button needs the role.
+    screenData.status = { email: "e@x", role: "editor" };
+    render(
+      <ApStatusProvider>
+        <FilterBar scope="overall" />
+      </ApStatusProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save current filter" }));
+    expect(screen.getByRole("textbox", { name: "Name this filter" })).toHaveAttribute(
+      "placeholder",
+      "e.g. Paid search · mobile · 30 days"
+    );
+    screenData.status = null;
   });
 });

@@ -79,16 +79,26 @@ export function visitsBlocked(scope: Scope): string | null {
   return null;
 }
 
+/**
+ * Why every figure about people (starts, finishers, readers, payers, prices) is blank under the
+ * tablet filter for a range from `from`, or null. Tablets are told apart from
+ * SURVEY_TRACKING_FROM: before, nobody counts as one, so each count would read a false zero.
+ */
+export function tabletBlocked(scope: Pick<Scope, "device">, from: string): string | null {
+  return scope.device === "tablet" && from < SURVEY_TRACKING_FROM
+    ? `Tablets are told apart from ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}: pick a range from that day on.`
+    : null;
+}
+
 /** Why starts are blank under the filters for a range from `from`, read on `today`. */
 export function startsBlocked(scope: Scope, from: string, today: string): string | null {
   if (scope.tier !== "all") return "Survey starts don't record the country tier.";
   if (scope.visitor !== "all")
     return "Survey starts can't be split into new and returning: an unfinished start isn't linked to PostHog.";
+  const tablet = tabletBlocked(scope, from);
+  if (tablet) return tablet;
   if (scope.device !== "all" && from < STEP_DEVICE_FROM) {
     return "Survey starts record the device from 12 Oct 2026.";
-  }
-  if (scope.device === "tablet" && from < SURVEY_TRACKING_FROM) {
-    return `Survey starts tell tablets apart from ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}.`;
   }
   if (scope.source !== "all" && from < draftsKeptFrom(today)) {
     return "An unfinished start keeps its source only while its draft does (30 days): older starts can't be split by source.";
@@ -207,8 +217,10 @@ export function totals(facts: Facts, scope: Scope, from = facts.from, to = facts
 }
 
 export interface Spend {
-  /** EUR, or null when the filters can't split spend. */
+  /** EUR, or null when the filters can't split spend or no day of the range has a figure. */
   eur: number | null;
+  /** Why `eur` is null, for the page to say in its place; null while it is a figure. */
+  why: string | null;
   /** False when some days of the range have no spend figure yet. */
   complete: boolean;
   /** The first and last day with a spend figure, for the note. */
@@ -218,9 +230,10 @@ export interface Spend {
 
 /** Google Ads spend over [from, to]. Every source but Google Ads costs nothing. */
 export function spend(ad: AdCost, scope: Scope, from: string, to: string): Spend {
-  const base = { from: ad.from, to: ad.to };
+  const base = { from: ad.from, to: ad.to, why: null };
   if (!launched(scope)) return { eur: 0, complete: true, ...base };
-  if (spendBlocked(scope)) return { eur: null, complete: false, ...base };
+  const blocked = spendBlocked(scope);
+  if (blocked) return { eur: null, complete: false, ...base, why: blocked };
   let complete = true;
   let covered = false;
   let eur = 0;
@@ -231,8 +244,15 @@ export function spend(ad: AdCost, scope: Scope, from: string, to: string): Spend
   }
   if (scope.source !== "all" && scope.source !== "google_ads")
     return { eur: 0, complete: true, ...base };
-  // No day of the range has a spend figure: unknown, never €0.
-  if (!covered) return { eur: null, complete: false, ...base };
+  // No day of the range has a spend figure: unknown, never €0, and said why. No window at all
+  // is a failed read (adCostByDay swallows its errors), not a range outside it.
+  if (!covered) {
+    const why =
+      ad.from === null || ad.to === null
+        ? "Ad spend could not be read just now."
+        : "No ad spend recorded for these days.";
+    return { eur: null, complete: false, ...base, why };
+  }
   return { eur: Math.round(eur * 100) / 100, complete, ...base };
 }
 

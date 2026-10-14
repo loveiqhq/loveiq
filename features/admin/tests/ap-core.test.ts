@@ -22,8 +22,11 @@ import {
   draftsKeptFrom,
   sameAge,
   sourceShares,
+  spend,
   spendBlocked,
+  startsBlocked,
   startsComplete,
+  tabletBlocked,
   totals,
   visitsBlocked,
 } from "@features/admin/server/ap/metrics";
@@ -162,13 +165,31 @@ describe("AP number format", () => {
     expect(fmt("eur", 1199)).toBe("€1,199");
     expect(fmt("eur", 29.5)).toBe("€29.50");
     expect(fmt("eur3", 0.0023)).toBe("€0.002");
+    // A tenth of a cent only under a euro ("€0.058"); cents from one ("€2.39", not "€22.394").
+    expect(fmt("eur3", 0.0577)).toBe("€0.058");
+    expect(fmt("eur3", 2.39)).toBe("€2.39");
+    expect(fmt("eur3", 22.394)).toBe("€22.39");
+    expect(fmt("eur3", 0.9996)).toBe("€1.00");
+    expect(fmt("eur3", 1234.5)).toBe("€1,234.50");
     expect(fmt("mmss", 400_000)).toBe("6:40");
     expect(fmt("count", -3)).toBe("−3");
     expect(fmt("count", null)).toBe("—");
   });
 
+  it("writes a change in points as the design does: tenths from a point, hundredths below", () => {
+    expect(delta("pct", 0.96, 0.981)?.text).toBe("−2.1 pt");
+    expect(delta("pct", 0.394, 0.372)?.text).toBe("+2.2 pt");
+    // No trailing ".0".
+    expect(delta("pct", 0.33, 0.3)?.text).toBe("+3 pt");
+    expect(delta("pct", 0.002, 0.0096)?.text).toBe("−0.76 pt");
+    expect(delta("pct", 0.0596, 0.055)?.text).toBe("+0.46 pt");
+    // A change that rounds up to a point reads as one, not "1.00 pt".
+    expect(delta("pct", 0.10996, 0.1)?.text).toBe("+1 pt");
+    expect(delta("pct", 0.25, 0.1)?.text).toBe("+15 pt");
+  });
+
   it("gives rates in points and calls a change under 1% flat", () => {
-    expect(delta("pct", 0.07, 0.05)).toEqual({ text: "+2.00 pt", tone: "good" });
+    expect(delta("pct", 0.07, 0.05)).toEqual({ text: "+2 pt", tone: "good" });
     expect(delta("count", 1005, 1000)?.tone).toBe("flat");
     expect(delta("eur", 90, 100, "down")).toEqual({ text: "−10.0%", tone: "good" });
     expect(delta("count", 5, 0)).toEqual({ text: "+5", tone: "good" });
@@ -180,12 +201,58 @@ describe("AP number format", () => {
     expect(fmt("mmss", 41_000)).toBe("0:41");
     expect(fmt("mmss", 9_960)).toBe("0:10");
     // A check whose change is neither good nor bad (the report open rate) reads grey.
-    expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2.00 pt", tone: "flat" });
+    expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2 pt", tone: "flat" });
     expect(delta("count", 1, 4, "up", "abs")).toEqual({ text: "−3", tone: "bad" });
     // Small sums of money: cents once the change is ten cents or more, a third decimal below.
     expect(delta("eur3", 0.058, 0.309)?.text).toBe("−€0.25");
     expect(delta("eur3", 0.002, 0.011)?.text).toBe("−€0.009");
     expect(delta("eur3", 0.309, 0.209)?.text).toBe("+€0.10");
+    // Both sums written in cents: so is the change, as fmt writes them.
+    expect(delta("eur3", 2.39, 2.36)?.text).toBe("+€0.03");
+    expect(delta("eur3", 0.95, 1.02)?.text).toBe("−€0.070");
+    expect(delta("eur3", 1250, 10)?.text).toBe("+€1,240.00");
+  });
+});
+
+describe("AP blanks that say why", () => {
+  const ad = (from: string | null, to: string | null) => ({
+    byDay: new Map([["2026-06-01", 40]]),
+    from,
+    to,
+  });
+
+  it("ad spend with no figure for the range is unknown, never €0, and says why", () => {
+    // Recorded from 28 May: April has none.
+    expect(spend(ad("2026-05-28", "2026-10-12"), ALL, "2026-04-01", "2026-04-30")).toMatchObject({
+      eur: null,
+      why: "No ad spend recorded for these days.",
+    });
+    // No window at all: the read failed (adCostByDay swallows its errors).
+    expect(spend(ad(null, null), ALL, "2026-06-01", "2026-06-07")).toMatchObject({
+      eur: null,
+      why: "Ad spend could not be read just now.",
+    });
+    // A filter that can't split it says so; a figure says nothing.
+    expect(
+      spend(ad("2026-05-28", "2026-10-12"), { ...ALL, device: "phone" }, "2026-06-01", "2026-06-07")
+        .why
+    ).toBe("Ad spend can't be split by device here.");
+    expect(spend(ad("2026-05-28", "2026-10-12"), ALL, "2026-06-01", "2026-06-07")).toMatchObject({
+      eur: 40,
+      why: null,
+    });
+  });
+
+  it("the tablet filter blanks every figure about people before tablets were told apart", () => {
+    const reason = "Tablets are told apart from 15 Oct 2026: pick a range from that day on.";
+    expect(tabletBlocked({ device: "tablet" }, "2026-10-14")).toBe(reason);
+    expect(tabletBlocked({ device: "tablet" }, "2026-10-15")).toBeNull();
+    expect(tabletBlocked({ device: "phone" }, "2026-10-01")).toBeNull();
+    // Starts follow the same rule, even before the steps recorded any device.
+    expect(startsBlocked({ ...ALL, device: "tablet" }, "2026-10-01", TODAY)).toBe(reason);
+    expect(startsBlocked({ ...ALL, device: "phone" }, "2026-10-01", TODAY)).toBe(
+      "Survey starts record the device from 12 Oct 2026."
+    );
   });
 });
 

@@ -184,7 +184,7 @@ describe("a headline tile's change", () => {
   it("reads grey where neither way is better, and as a plain difference where asked", () => {
     // The report open rate: a check, neither good nor bad when it moves.
     expect(change(tile({ value: 0.94, prev: 0.96, goodWhen: "either" }))).toEqual({
-      text: "−2.00 pt",
+      text: "−2 pt",
       tone: "muted",
     });
     expect(change(tile({ value: 0.94, prev: 0.96 }))).toMatchObject({ tone: "bad" });

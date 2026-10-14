@@ -263,7 +263,7 @@ export default function ApFilterBar({
                   value={draftName}
                   maxLength={80}
                   onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="e.g. Google Ads · phone · 30 days"
+                  placeholder="e.g. Paid search · mobile · 30 days"
                   className={control}
                 />
               </label>

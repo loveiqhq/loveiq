@@ -14,7 +14,10 @@ export const EMPTY = "—";
 const grouped = (v: number, digits = 0) =>
   v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-/** "12,608", "€1,199", "€29.00", "€0.002", "5.96%", "6:40", "0:02.9", "2.4 days". */
+/** Under a euro once rounded to a tenth of a cent: a sum "eur3" writes with three decimals. */
+const subEuro = (a: number) => Math.round(Math.abs(a) * 1000) < 1000;
+
+/** "12,608", "€1,199", "€29.00", "€0.002", "€2.39", "5.96%", "6:40", "0:02.9", "2.4 days". */
 export function fmt(unit: Unit, v: number | null | undefined, digits?: number): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return EMPTY;
   const sign = v < 0 ? MINUS : "";
@@ -25,7 +28,8 @@ export function fmt(unit: Unit, v: number | null | undefined, digits?: number): 
     case "eur":
       return `${sign}€${grouped(a, digits ?? (a >= 1000 || Number.isInteger(a) ? 0 : 2))}`;
     case "eur3":
-      return `${sign}€${a.toFixed(digits ?? 3)}`;
+      // A tenth of a cent only under a euro, as drawn ("€0.058"); cents from one ("€2.39").
+      return `${sign}€${grouped(a, digits ?? (subEuro(a) ? 3 : 2))}`;
     case "pct":
       return `${sign}${(a * 100).toFixed(digits ?? (a * 100 >= 10 ? 1 : 2))}%`;
     case "min":
@@ -72,17 +76,19 @@ export function delta(
         : "bad";
   const sign = diff > 0 ? "+" : diff < 0 ? MINUS : "±";
   if (unit === "pct") {
-    return {
-      text: `${sign}${Math.abs(diff * 100).toFixed(Math.abs(diff * 100) >= 10 ? 1 : 2)} pt`,
-      tone,
-    };
+    // A tenth of a point from one point, without a trailing ".0" ("−2.1 pt", "+3 pt"); a
+    // hundredth below ("+0.46 pt"), as the design writes them.
+    const pt = Math.abs(diff * 100);
+    const fine = pt.toFixed(2);
+    return { text: `${sign}${Number(fine) >= 1 ? Number(pt.toFixed(1)) : fine} pt`, tone };
   }
   if (unit === "mmss") return { text: `${sign}${fmt("mmss", Math.abs(diff))}`, tone };
-  // Cents once the change is ten cents or more, as the design writes them ("−€0.25"); a
-  // smaller one keeps its third decimal ("−€0.009"), or it would read as no change.
+  // Cents once the change is ten cents or more, as the design writes them ("−€0.25"), or when
+  // both sums are written in cents (from €1); a smaller change between small sums keeps its
+  // third decimal ("−€0.009"), or it would read as no change.
   if (unit === "eur3") {
-    const cents = Math.round(Math.abs(diff) * 100) >= 10;
-    return { text: `${sign}€${Math.abs(diff).toFixed(cents ? 2 : 3)}`, tone };
+    const cents = Math.round(Math.abs(diff) * 100) >= 10 || (!subEuro(now) && !subEuro(before));
+    return { text: `${sign}${fmt("eur3", Math.abs(diff), cents ? 2 : 3)}`, tone };
   }
   if (before === 0 || as === "abs") {
     return {
