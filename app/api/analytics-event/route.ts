@@ -75,6 +75,10 @@ const ALLOWED_EVENTS = [
   // Per-chapter reading and the wizard's Skip Intro (14.10)
   "report_chapter_stats",
   "wizard_skipped",
+  // The report's leave offer: the full report free for a call with the founders
+  "leave_offer_shown",
+  "leave_offer_clicked",
+  "leave_offer_dismissed",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -131,6 +135,9 @@ function entityTypeFor(event: AllowedEvent): string {
       return "ux";
     case "scroll_paywall_shown":
     case "locked_card_price_shown":
+    case "leave_offer_shown":
+    case "leave_offer_clicked":
+    case "leave_offer_dismissed":
       return "paywall";
     case "experiment_exposure":
     case "experiment_card_flipped":

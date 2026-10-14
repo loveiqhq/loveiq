@@ -244,9 +244,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    // 12. Report-engagement events (persisted by /api/analytics-event)
+    // 12. Report-engagement events (persisted by /api/analytics-event). The events
+    // asked for are exactly the ones with a label, so a new label cannot be left
+    // showing nothing.
     const analyticsRes = await supabaseFetch(
-      `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}&event_type=in.(report_viewed,paywall_view,paywall_initiated,begin_checkout,paywall_unlocked,report_engagement_1min,report_engagement_5min,report_engagement_10min)&select=event_type,event_time,metadata,duration_ms&order=event_time.asc`
+      `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}` +
+        `&event_type=in.(${Object.keys(ANALYTICS_LABELS).join(",")})` +
+        `&select=event_type,event_time,metadata,duration_ms&order=event_time.asc`
     );
     if (analyticsRes.ok) {
       const rows = (await analyticsRes.json()) as Array<{
@@ -384,6 +388,11 @@ const ANALYTICS_LABELS: Record<string, string> = {
   report_engagement_1min: "1 min on report",
   report_engagement_5min: "5 min on report",
   report_engagement_10min: "10 min on report",
+  // The founder-call offer. A booking has no webhook, so "booking page opened" here is
+  // what the founders match a calendar booking against before granting the coupon.
+  leave_offer_shown: "Founder-call offer shown",
+  leave_offer_clicked: "Founder-call booking page opened",
+  leave_offer_dismissed: "Founder-call offer dismissed",
 };
 
 function buildAnalyticsDetail(
@@ -423,6 +432,13 @@ function buildAnalyticsDetail(
       const scrollDepth =
         typeof m.scroll_depth_pct === "number" ? `${m.scroll_depth_pct}% scrolled` : null;
       return scrollDepth ?? undefined;
+    }
+    case "leave_offer_shown":
+    case "leave_offer_clicked":
+    case "leave_offer_dismissed": {
+      const trigger = typeof m.trigger === "string" ? m.trigger : null;
+      const source = typeof m.source === "string" ? m.source : null;
+      return [trigger, source].filter(Boolean).join(" · ") || undefined;
     }
   }
   return undefined;
