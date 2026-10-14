@@ -25,8 +25,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockGetReportSessionId = vi.fn();
+// The report token the survey left in this tab: the leave offer's "first visit" check.
+const mockCompletedReportToken = vi.fn((): string | null => null);
 vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
+  completedReportToken: () => mockCompletedReportToken(),
   getReportNurturePromo: () => null,
   getReportPricingSessionId: () => null,
   setReportNurturePromo: () => {},
@@ -78,6 +81,11 @@ vi.mock("@features/analytics/client", () => ({
   trackChapterFeedbackSubmitted: vi.fn(),
   trackLockedCardPriceShown: vi.fn(),
   trackExperimentExposure: vi.fn(),
+  // The engagement timers' 1-minute mark: the leave-offer cases run past it.
+  trackReportEngagement: vi.fn(),
+  trackLeaveOfferShown: vi.fn(),
+  trackLeaveOfferClicked: vi.fn(),
+  trackLeaveOfferDismissed: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
@@ -2454,6 +2462,276 @@ describe("ReportPage", () => {
 
       expect(exposure()).not.toHaveBeenCalled();
       expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+  });
+
+  // Mark, #all-loveiq 08.10: the full report free for a 20-minute call with him and
+  // Marcus, offered once as an unpaid reader leaves (features/report/logic/leaveIntent.ts).
+  // jsdom lays everything out at the top, so the first paywall card counts as reached on
+  // mount, and so does the pay pop-up test's point: in both arms its claim lands at mount
+  // and holds the offer back until about 31 s.
+  describe("V4 — the founder-call leave offer", () => {
+    const LEAVE_URL = "https://calendar.app.google/e2e-founder-call";
+    const LEAVE_TOKEN = "rpt_leave_offer";
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.stubEnv("NEXT_PUBLIC_FOUNDER_CALL_URL", LEAVE_URL);
+      mockCompletedReportToken.mockReturnValue(LEAVE_TOKEN);
+      vi.mocked(analytics.trackLeaveOfferShown).mockClear();
+      vi.mocked(analytics.trackLeaveOfferClicked).mockClear();
+      vi.mocked(analytics.trackLeaveOfferDismissed).mockClear();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+      mockCompletedReportToken.mockReturnValue(null);
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      document.cookie = "loveiq_probe=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+    });
+
+    /** A locked V4 reader who just finished the survey in this tab, with nothing auto-opening. */
+    function leaveV4(query = "&popup=off", data: Record<string, unknown> = {}) {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(`v4=1${query}`));
+      const response = buildSuccessResponse();
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue({
+        ...response,
+        data: {
+          ...response.data,
+          submissionId: 2063,
+          reportDate: new Date(Date.now() - 5 * 60_000).toISOString(),
+          ...data,
+        },
+      });
+    }
+
+    const offer = () =>
+      screen.queryByRole("dialog", { name: "Your Full Report, Free for a 20-Minute Call" });
+    const shown = () => vi.mocked(analytics.trackLeaveOfferShown);
+    const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+    /** The phone bar's pill: the bar draws a desktop twin with the same name. */
+    const stickyCta = () =>
+      document.querySelector<HTMLButtonElement>(
+        ".report-sticky-unlock--mobile .report-sticky-unlock__cta--v4"
+      )!;
+    const closePlans = () =>
+      fireEvent.click(screen.getByRole("button", { name: /close pricing modal/i }));
+
+    it("opens on a phone after 30 s idle at the paywall, held past the pay test's window", () => {
+      leaveV4("&popup=off");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(29_000);
+      expect(offer()).toBeNull();
+      advance(3_000);
+
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledTimes(1);
+      expect(shown()).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "founder_call", trigger: "idle", popup_arm: "no_popup" })
+      );
+      const link = within(offer()!).getByRole("link", { name: /Book a 20-Minute Call/ });
+      expect(link.getAttribute("href")).toBe(LEAVE_URL);
+    });
+
+    it("waits out the pay test's own pop-up, and closing it is not a leave signal", () => {
+      leaveV4("&popup=on");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(1_700);
+      expect(screen.getByRole("button", { name: /close pricing modal/i })).toBeInTheDocument();
+      advance(60_000);
+      expect(offer()).toBeNull();
+
+      closePlans();
+      advance(2_000);
+      expect(offer(), "closing the automatic pop-up opened the offer").toBeNull();
+      advance(27_000);
+      expect(offer()).toBeNull();
+      advance(3_000);
+
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: "idle", popup_arm: "popup" })
+      );
+    });
+
+    it("opens as the reader closes a plans window they opened, after the pay test's window", () => {
+      leaveV4("&popup=off");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(25_000);
+      fireEvent.scroll(window);
+      fireEvent.click(stickyCta());
+      advance(15_000);
+      expect(offer()).toBeNull();
+
+      closePlans();
+      advance(1_000);
+
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "plans_closed" }));
+    });
+
+    it("drops a plans window closed inside the pay test's window, then waits for idle", () => {
+      leaveV4("&popup=off");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(5_000);
+      fireEvent.click(stickyCta());
+      advance(1_000);
+      closePlans();
+      advance(2_000);
+      expect(offer()).toBeNull();
+
+      advance(30_000);
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledTimes(1);
+      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "idle" }));
+    });
+
+    it("opens on a desktop when the pointer leaves through the top", () => {
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn().mockImplementation((query: string) => ({
+          matches: true,
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }))
+      );
+      leaveV4("&popup=on");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(120_000);
+      expect(offer(), "a desktop opened it on idle").toBeNull();
+      act(() => {
+        document.dispatchEvent(new MouseEvent("mouseout", { clientY: -1, relatedTarget: null }));
+      });
+
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "exit_intent" }));
+    });
+
+    it("blurs the page behind it and hides the sticky bar while open", () => {
+      leaveV4("&popup=off");
+      const { container } = render(<ReportPage token={LEAVE_TOKEN} />);
+      expect(container.querySelector(".report-page__shell-wrap--obscured")).toBeNull();
+
+      advance(32_000);
+
+      expect(offer()).toBeInTheDocument();
+      expect(container.querySelector(".report-page__shell-wrap--obscured")).not.toBeNull();
+      expect(
+        container.querySelector(".report-sticky-unlock--mobile")?.getAttribute("aria-hidden"),
+        "the sticky bar stayed reachable over the offer"
+      ).toBe("true");
+    });
+
+    it("records the booking page being opened and gets out of the way", () => {
+      leaveV4("&popup=off");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+      advance(32_000);
+
+      fireEvent.click(within(offer()!).getByRole("link", { name: /Book a 20-Minute Call/ }));
+
+      expect(offer()).toBeNull();
+      expect(vi.mocked(analytics.trackLeaveOfferClicked)).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "founder_call", trigger: "idle" })
+      );
+    });
+
+    it("never shows twice for the same submission, across a reload", () => {
+      leaveV4("&popup=off");
+      const first = render(<ReportPage token={LEAVE_TOKEN} />);
+      advance(32_000);
+      fireEvent.click(within(offer()!).getByRole("button", { name: "No Thanks, Keep Reading" }));
+      expect(offer()).toBeNull();
+      expect(vi.mocked(analytics.trackLeaveOfferDismissed)).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "not_now" })
+      );
+      first.unmount();
+
+      render(<ReportPage token={LEAVE_TOKEN} />);
+      advance(120_000);
+
+      expect(offer()).toBeNull();
+      expect(shown()).toHaveBeenCalledTimes(1);
+    });
+
+    it.each<[string, () => void]>([
+      ["a shared report", () => leaveV4("&popup=off", { viewMode: "shared" })],
+      ["a reader who has paid", () => leaveV4("&popup=off", { accessPlan: "full_report" })],
+      ["no email to send the code to", () => leaveV4("&popup=off", { userEmail: null })],
+      ["no submission", () => leaveV4("&popup=off", { submissionId: null })],
+      [
+        "another tab than the survey's",
+        () => {
+          leaveV4("&popup=off");
+          mockCompletedReportToken.mockReturnValue(null);
+        },
+      ],
+      [
+        "a report made days ago",
+        () => leaveV4("&popup=off", { reportDate: "2026-04-07T22:23:16.851299+00:00" }),
+      ],
+      ["an email link", () => leaveV4("&popup=off&from=email")],
+      ["a discount link", () => leaveV4("&popup=off&offer=1")],
+      ["a coupon link", () => leaveV4("&popup=off&promo=LIQ-100-abcdefgh")],
+      ["an invite link", () => leaveV4("&popup=off&invite=1")],
+      [
+        "Report 2.0",
+        () => {
+          leaveV4("&popup=off");
+          mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1&popup=off"));
+        },
+      ],
+      [
+        "no booking page configured",
+        () => {
+          vi.stubEnv("NEXT_PUBLIC_FOUNDER_CALL_URL", "");
+          leaveV4("&popup=off");
+        },
+      ],
+      [
+        "a booking page that is not Google's",
+        () => {
+          vi.stubEnv("NEXT_PUBLIC_FOUNDER_CALL_URL", "https://calendly.com/loveiq/20min");
+          leaveV4("&popup=off");
+        },
+      ],
+      ["the preview switch set to off", () => leaveV4("&popup=off&leave=off")],
+      [
+        "our own probe",
+        () => {
+          document.cookie = "loveiq_probe=1; path=/";
+          leaveV4("&popup=off");
+        },
+      ],
+    ])("never shows for %s", (_case, arrange) => {
+      arrange();
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(120_000);
+
+      expect(offer()).toBeNull();
+      expect(shown()).not.toHaveBeenCalled();
+    });
+
+    it("opens at once in a preview with ?leave=show, with no submission behind it", () => {
+      mockCompletedReportToken.mockReturnValue(null);
+      leaveV4("&popup=off&preview=1&leave=show", { submissionId: null, userEmail: null });
+      render(<ReportPage />);
+
+      advance(100);
+
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "forced" }));
     });
   });
 
