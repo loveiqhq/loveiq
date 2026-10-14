@@ -7,6 +7,7 @@ import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 import { supabaseFetch } from "@features/admin/server/supabase";
 
 import { assessmentScope } from "./assessment";
+import { addDays, shortDate } from "./days";
 import { type Facts, type SubFact } from "./facts";
 import { activeNarrowing, bucketCaption, type ApFilters } from "./filters";
 import {
@@ -48,14 +49,24 @@ export interface ReportExtras {
     commented: boolean;
   }>;
   votes_total: number;
-  /** returned: of those sent, readers who came back through the email's link after it. */
+  /**
+   * returned: of those sent, readers who came back through the email's link after it.
+   * opened, clicked: of those sent, readers whose email the Resend webhook saw opened, or a
+   * link in it clicked (email_message_event).
+   */
   emails: Array<{
     stage: string;
     sent: number;
+    opened: number | null;
+    clicked: number | null;
     returned: number | null;
     bought: number;
     revenue: number;
   }>;
+  /** The first Berlin day an email's own event was kept (clicks count from it); null before. */
+  email_events_from: string | null;
+  /** The first Berlin day an open was kept: open tracking is switched on after the rest. */
+  email_opens_from: string | null;
 }
 
 export async function fetchReportExtras(from: string, to: string): Promise<ReportExtras> {
@@ -84,7 +95,14 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
     issues: raw.issues ?? [],
     feedback: raw.feedback,
     votes_total: Number(raw.votes_total) || 0,
-    emails: raw.emails.map((e) => ({ ...e, returned: e.returned ?? null })),
+    emails: raw.emails.map((e) => ({
+      ...e,
+      returned: e.returned ?? null,
+      opened: e.opened ?? null,
+      clicked: e.clicked ?? null,
+    })),
+    email_events_from: typeof raw.email_events_from === "string" ? raw.email_events_from : null,
+    email_opens_from: typeof raw.email_opens_from === "string" ? raw.email_opens_from : null,
   };
 }
 
@@ -186,6 +204,14 @@ export interface ReportPayload extends PageHead {
       stage: string;
       status: "Live" | "Retired";
       sent: number;
+      /** Of those sent, readers whose email was opened; null when the range is not all counted. */
+      opened: number | null;
+      /** opened ÷ sent. */
+      openRate: number | null;
+      /** Of those sent, readers who clicked a link in the email; null as opened. */
+      clicked: number | null;
+      /** clicked ÷ sent. */
+      clickRate: number | null;
       /** Of those sent, readers who came back through the email's link after it was sent. */
       returned: number | null;
       /** returned ÷ sent. */
@@ -193,6 +219,8 @@ export interface ReportPayload extends PageHead {
       purchased: number;
       revenue: number;
     }>;
+    /** Since when opens and clicks are counted, for the note under the campaigns. */
+    emailEvents: string;
   };
   chapters: Array<{
     n: number;
@@ -553,16 +581,29 @@ export function buildReportPage(input: {
       sources = input.returns;
     }
   }
+  // An email's opens and clicks count from the first whole day the webhook kept them (opens
+  // start later: open tracking is switched on after the rest). A range that starts earlier
+  // would count only part of its emails, so it shows none.
+  const opensFrom = wholeDayAfter(extras.email_opens_from);
+  const clicksFrom = wholeDayAfter(extras.email_events_from);
+  const counted = (from: string | null) => from !== null && facts.from >= from;
   const campaigns = ["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"].map((stage) => {
     const e = extras.emails.find((x) => x.stage === stage);
     // No row: nothing was sent (or bought) for the stage, so nobody came back from it.
     const returned = e ? e.returned : 0;
+    const sent = e?.sent ?? 0;
+    const opened = counted(opensFrom) ? (e ? e.opened : 0) : null;
+    const clicked = counted(clicksFrom) ? (e ? e.clicked : 0) : null;
     return {
       stage,
       status: stage === "72h_no_unlock" ? ("Live" as const) : ("Retired" as const),
-      sent: e?.sent ?? 0,
+      sent,
+      opened,
+      openRate: ratio(opened, sent),
+      clicked,
+      clickRate: ratio(clicked, sent),
       returned,
-      returnRate: ratio(returned, e?.sent ?? 0),
+      returnRate: ratio(returned, sent),
       purchased: e?.bought ?? 0,
       revenue: e?.revenue ?? 0,
     };
@@ -621,6 +662,7 @@ export function buildReportPage(input: {
       days,
       sources,
       campaigns,
+      emailEvents: emailEventsNote(opensFrom, clicksFrom),
     },
     chapters,
     feedback: {
@@ -641,6 +683,22 @@ export function buildReportPage(input: {
       })),
     },
   };
+}
+
+/** The day after the first (partial) day of recording: the first whole day, or null. */
+function wholeDayAfter(day: string | null): string | null {
+  return day === null ? null : addDays(day, 1);
+}
+
+/** The note under the campaigns: since when opens and clicks are counted. */
+function emailEventsNote(opens: string | null, clicks: string | null): string {
+  const from = (d: string) => `from ${shortDate(d)} ${d.slice(0, 4)}`;
+  if (!opens && !clicks) return "Opens and clicks are not recorded yet.";
+  const said =
+    opens === clicks
+      ? `Opens and clicks counted ${from(opens!)}`
+      : `${clicks ? `Clicks counted ${from(clicks)}` : "Clicks not recorded yet"}, ${opens ? `opens ${from(opens)}` : "opens not recorded yet"}`;
+  return `${said}: a range that starts earlier shows —.`;
 }
 
 function pct(v: number | null): string {

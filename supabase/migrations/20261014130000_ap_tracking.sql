@@ -502,14 +502,21 @@ AS $function$
     SELECT x.stage, x.sid, x.sent_at, lead(x.sent_at) OVER (PARTITION BY x.sid ORDER BY x.sent_at) AS next_at
       FROM all_sends x
   ),
+  -- delivered, opened, clicked: the readers whose email had that event after it was sent, as the
+  -- Resend webhook keeps it by the stage and submission the send tagged it with (from 14 Oct 2026).
   sent AS (
-    SELECT se.stage, count(DISTINCT se.sid) AS n, count(DISTINCT a.survey_submission_id) AS returned
+    SELECT se.stage, count(DISTINCT se.sid) AS n, count(DISTINCT a.survey_submission_id) AS returned,
+           count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'delivered') AS delivered,
+           count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'opened') AS opened,
+           count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'clicked') AS clicked
       FROM sends se
       CROSS JOIN b
       LEFT JOIN analytics_event a
         ON a.survey_submission_id = se.sid AND a.event_type = 'paywall_initiated'
        AND a.metadata->>'source' = 'offer_link' AND a.event_time >= se.sent_at
        AND (se.next_at IS NULL OR a.event_time < se.next_at)
+      LEFT JOIN email_message_event m
+        ON m.survey_submission_id = se.sid AND m.stage = se.stage AND m.first_at >= se.sent_at
      WHERE se.sent_at >= b.since_ts AND se.sent_at < b.until_ts
        AND NOT EXISTS (SELECT 1 FROM survey_submission s JOIN staff ON staff.id = s.user_id WHERE s.id = se.sid)
      GROUP BY se.stage
@@ -544,10 +551,19 @@ AS $function$
                    'issue', v.issue, 'commented', v.commented) ORDER BY v.created_at DESC), '[]'::json)
                    FROM (SELECT * FROM votes ORDER BY created_at DESC LIMIT 200) v),
     'votes_total', (SELECT count(*) FROM votes),
-    'emails', (SELECT coalesce(json_agg(json_build_object('stage', x.stage, 'sent', x.sent, 'returned', x.returned, 'bought', x.bought, 'revenue', x.revenue)), '[]'::json)
+    'emails', (SELECT coalesce(json_agg(json_build_object('stage', x.stage, 'sent', x.sent, 'returned', x.returned,
+                                                          'delivered', x.delivered, 'opened', x.opened, 'clicked', x.clicked,
+                                                          'bought', x.bought, 'revenue', x.revenue)), '[]'::json)
                  FROM (SELECT coalesce(s.stage, bo.stage) AS stage, coalesce(s.n, 0) AS sent, coalesce(s.returned, 0) AS returned,
+                              coalesce(s.delivered, 0) AS delivered, coalesce(s.opened, 0) AS opened, coalesce(s.clicked, 0) AS clicked,
                               coalesce(bo.n, 0) AS bought, coalesce(bo.revenue, 0) AS revenue
-                         FROM sent s FULL JOIN bought bo ON bo.stage = s.stage) x)
+                         FROM sent s FULL JOIN bought bo ON bo.stage = s.stage) x),
+    -- The first Berlin day an email's own event was kept (deliveries and clicks count from it),
+    -- and the first an open was: open tracking is switched on in Resend after the rest. Null
+    -- until then.
+    'email_events_from', (SELECT (min(m.first_at) AT TIME ZONE 'Europe/Berlin')::date FROM email_message_event m),
+    'email_opens_from', (SELECT (min(m.first_at) AT TIME ZONE 'Europe/Berlin')::date
+                           FROM email_message_event m WHERE m.event_type = 'opened')
   );
 $function$;
 
