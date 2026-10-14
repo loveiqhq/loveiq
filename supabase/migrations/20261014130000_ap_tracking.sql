@@ -607,6 +607,12 @@ AS $function$
     SELECT x.stage, x.sid, x.sent_at, lead(x.sent_at) OVER (PARTITION BY x.sid ORDER BY x.sent_at) AS next_at
       FROM all_sends x
   ),
+  open_start AS (
+    SELECT min(d.first_at) AS at
+      FROM email_message_event d
+     WHERE d.event_type = 'delivered'
+       AND EXISTS (SELECT 1 FROM email_message_event o WHERE o.resend_id = d.resend_id AND o.event_type = 'opened')
+  ),
   -- delivered, opened, clicked: the readers whose email had that event after it was sent, as the
   -- Resend webhook keeps it by the stage and submission the send tagged it with (from 14 Oct 2026).
   sent AS (
@@ -614,10 +620,11 @@ AS $function$
            count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'delivered') AS delivered,
            count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'opened') AS opened,
            count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'clicked') AS clicked,
-           -- Delivered after open tracking began: what an open rate can be out of.
+           -- Delivered once emails carried the open image: what an open rate can be out of. The
+           -- image goes in at send time, so tracking began no later than the delivery of the first
+           -- email that was ever opened.
            count(DISTINCT m.survey_submission_id) FILTER (
-             WHERE m.event_type = 'delivered'
-               AND m.first_at >= (SELECT min(o.first_at) FROM email_message_event o WHERE o.event_type = 'opened')
+             WHERE m.event_type = 'delivered' AND m.first_at >= (SELECT os.at FROM open_start os)
            ) AS delivered_opens
       FROM sends se
       CROSS JOIN b
@@ -687,8 +694,7 @@ AS $function$
     -- and the first an open was: open tracking is switched on in Resend after the rest. Null
     -- until then.
     'email_events_from', (SELECT (min(m.first_at) AT TIME ZONE 'Europe/Berlin')::date FROM email_message_event m),
-    'email_opens_from', (SELECT (min(m.first_at) AT TIME ZONE 'Europe/Berlin')::date
-                           FROM email_message_event m WHERE m.event_type = 'opened')
+    'email_opens_from', (SELECT (os.at AT TIME ZONE 'Europe/Berlin')::date FROM open_start os)
   );
 $function$;
 
