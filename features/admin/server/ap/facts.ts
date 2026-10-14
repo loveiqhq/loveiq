@@ -58,7 +58,7 @@ export interface SubFact extends Tagged {
   /** Report visits: sessions starting 30+ minutes after the latest end of the ones before. */
   visits: number;
   returnedAt: string | null;
-  /** Reading time over the closed sessions (end recorded, under 4 hours). */
+  /** Reading time over the closed sessions (end recorded, under 4 hours), each up to 30 minutes. */
   readMs: number;
   closed: number;
   paywallAt: string | null;
@@ -113,6 +113,8 @@ export interface IntroFact {
   wentOn: number | null;
   /** Visitors whose furthest card that day was this one: they left here. */
   left: number | null;
+  /** The consent's viewers who saw no intro that day (the landing card's starters). */
+  direct: number;
 }
 
 export interface QuoteFact extends Tagged {
@@ -249,6 +251,7 @@ export function parseFacts(
       skipped: num(r.skipped),
       wentOn: numOrNull(r.wentOn),
       left: numOrNull(r.left),
+      direct: num(r.direct),
     })),
     invites: rows(o.invites, "invites").map((r) => ({ day: String(r.day), n: num(r.n) })),
     quotes: rows(o.quotes, "quotes").map((r) => ({
@@ -418,7 +421,12 @@ export async function fetchFactsFor(
   f: Pick<ApFilters, "visitor">
 ): Promise<Facts> {
   const facts = await fetchFacts(from, to);
-  if (f.visitor !== "all") await markVisitors([...facts.subs, ...facts.money]);
+  if (f.visitor !== "all") {
+    // A payment's finisher started the survey when their submission says.
+    const startOf = new Map(facts.subs.map((s) => [s.id, s.startAt]));
+    await markVisitors(facts.subs, (s) => s.startAt);
+    await markVisitors(facts.money, (m) => startOf.get(m.sid));
+  }
   return facts;
 }
 

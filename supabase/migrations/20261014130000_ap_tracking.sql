@@ -121,6 +121,8 @@ AS $function$
            count(*) FILTER (WHERE s.new_visit) AS visits,
            min(s.started_at) FILTER (WHERE s.new_visit AND s.started_at > (SELECT min(x.started_at) FROM sess x WHERE x.sid = s.sid)) AS returned_at,
            -- A session counts up to 30 minutes: longer is mostly a tab left open (14 Oct 2026).
+           -- One of 4 hours or more has no plausible end and counts nothing, as the core KPIs
+           -- read it (counting its 30 minutes lifted the average from 7:22 to 9:01, 14 Oct).
            coalesce(sum(least(extract(epoch FROM s.ended_at - s.started_at), 1800) * 1000)
                       FILTER (WHERE s.ended_at > s.started_at AND s.ended_at - s.started_at < interval '4 hours'), 0)::bigint AS read_ms,
            count(*) FILTER (WHERE s.ended_at > s.started_at AND s.ended_at - s.started_at < interval '4 hours') AS closed
@@ -141,7 +143,9 @@ AS $function$
   -- The device the survey itself recorded (survey steps, from 12 Oct 2026), for readers with no
   -- price quote yet: a quote is made only when the report is opened.
   step_device AS (
-    SELECT DISTINCT ON (s.id) s.id AS sid, e.device_type AS device, e.is_tablet AS tablet
+    -- A tablet if any step said so, as the starts, payments and quotes read it.
+    SELECT DISTINCT ON (s.id) s.id AS sid, e.device_type AS device,
+           EXISTS (SELECT 1 FROM survey_behavior_event t WHERE t.session_id = s.session_id AND t.is_tablet) AS tablet
       FROM survey_submission s
       JOIN survey_behavior_event e ON e.session_id = s.session_id
      WHERE s.id IN (SELECT id FROM subs) AND e.device_type IS NOT NULL
@@ -188,7 +192,7 @@ AS $function$
   ),
   wizard AS (
     SELECT a.survey_submission_id AS sid,
-           max(CASE WHEN (a.metadata->>'to_slide') ~ '^[0-9]+$' THEN (a.metadata->>'to_slide')::int END)
+           max(CASE WHEN (a.metadata->>'to_slide') ~ '^[0-5]$' THEN (a.metadata->>'to_slide')::int END)
              FILTER (WHERE a.metadata->>'direction' = 'next') AS slide
       FROM analytics_event a
      WHERE a.event_type = 'wizard_slide_advanced' AND a.survey_submission_id IN (SELECT id FROM subs)
@@ -284,10 +288,14 @@ AS $function$
   intro AS (
     SELECT f.day, f.event_type AS step, count(*) AS n,
            coalesce(array_agg(round(extract(epoch FROM coalesce(nx.first_seen, q4.first_seen) - f.first_seen) * 1000)::bigint)
-                      FILTER (WHERE coalesce(nx.first_seen, q4.first_seen) > f.first_seen), '{}') AS ms,
+                      FILTER (WHERE coalesce(nx.first_seen, q4.first_seen) > f.first_seen AND s4.visitor_id IS NULL), '{}') AS ms,
            count(*) FILTER (WHERE nx.visitor_id IS NULL AND q1.visitor_id IS NOT NULL) AS skipped,
-           count(coalesce(nx.visitor_id, q4.visitor_id)) AS went_on,
-           count(*) FILTER (WHERE l.card = c.card) AS exited
+           -- Skip Intro on slide 4 also lands on the consent: that is a skip, not going on.
+           count(coalesce(nx.visitor_id, q4.visitor_id)) FILTER (WHERE s4.visitor_id IS NULL) AS went_on,
+           count(*) FILTER (WHERE l.card = c.card) AS exited,
+           -- Consent viewers who saw no intro that day: the landing card's starters come straight
+           -- to the consent, so the consent's reach is read over those who came through the intro.
+           count(*) FILTER (WHERE f.event_type = 'consent_view' AND iv.visitor_id IS NULL) AS direct
       FROM funnel_event f
       LEFT JOIN intro_cards c ON c.step = f.event_type
       LEFT JOIN funnel_event nx
@@ -309,6 +317,12 @@ AS $function$
        AND q1.event_type = 'survey_engine_mount' AND q1.first_seen > f.first_seen
        AND f.event_type IN ('intro_slide_1', 'intro_slide_2', 'intro_slide_3')
       LEFT JOIN intro_last l ON l.visitor_id = f.visitor_id AND l.day = f.day
+      LEFT JOIN funnel_event s4
+        ON f.event_type = 'intro_slide_4' AND s4.visitor_id = f.visitor_id AND s4.day = f.day
+       AND s4.event_type = 'intro_skip_4'
+      LEFT JOIN funnel_event iv
+        ON f.event_type = 'consent_view' AND iv.visitor_id = f.visitor_id AND iv.day = f.day
+       AND iv.event_type = 'intro_view'
      WHERE f.event_type IN ('survey_engine_mount', 'intro_view', 'intro_slide_1', 'intro_slide_2',
                             'intro_slide_3', 'intro_slide_4', 'consent_view',
                             'intro_back_1', 'intro_back_2', 'intro_back_3', 'intro_back_4',
@@ -378,7 +392,7 @@ AS $function$
         FROM money m
     ),
     'intro', (SELECT coalesce(json_agg(json_build_object('day', x.day, 'step', x.step, 'n', x.n, 'ms', x.ms, 'skipped', x.skipped,
-                                                         'wentOn', x.went_on, 'left', x.exited)), '[]'::json) FROM intro x),
+                                                         'wentOn', x.went_on, 'left', x.exited, 'direct', x.direct)), '[]'::json) FROM intro x),
     'invites', (SELECT coalesce(json_agg(json_build_object('day', x.day, 'n', x.n)), '[]'::json) FROM invites x),
     'quotes', (
       SELECT coalesce(json_agg(json_build_object(
@@ -493,8 +507,8 @@ AS $function$
   ),
   moves AS (
     SELECT a.survey_submission_id AS sid, a.event_time,
-           CASE WHEN (a.metadata->>'from_slide') ~ '^[0-9]+$' THEN (a.metadata->>'from_slide')::int END AS from_slide,
-           CASE WHEN (a.metadata->>'to_slide') ~ '^[0-9]+$' THEN (a.metadata->>'to_slide')::int END AS to_slide,
+           CASE WHEN (a.metadata->>'from_slide') ~ '^[0-5]$' THEN (a.metadata->>'from_slide')::int END AS from_slide,
+           CASE WHEN (a.metadata->>'to_slide') ~ '^[0-5]$' THEN (a.metadata->>'to_slide')::int END AS to_slide,
            a.metadata->>'direction' AS direction
       FROM analytics_event a
      WHERE a.event_type = 'wizard_slide_advanced' AND a.survey_submission_id IN (SELECT id FROM subs)
@@ -618,8 +632,16 @@ AS $function$
   sent AS (
     SELECT se.stage, count(DISTINCT se.sid) AS n, count(DISTINCT a.survey_submission_id) AS returned,
            count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'delivered') AS delivered,
-           count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'opened') AS opened,
-           count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'clicked') AS clicked,
+           -- Opens and clicks only of emails known delivered: a lost delivery row would otherwise
+           -- count an open over a smaller delivered count (over 100%).
+           count(DISTINCT m.survey_submission_id) FILTER (
+             WHERE m.event_type = 'opened'
+               AND EXISTS (SELECT 1 FROM email_message_event d WHERE d.resend_id = m.resend_id AND d.event_type = 'delivered')
+           ) AS opened,
+           count(DISTINCT m.survey_submission_id) FILTER (
+             WHERE m.event_type = 'clicked'
+               AND EXISTS (SELECT 1 FROM email_message_event d WHERE d.resend_id = m.resend_id AND d.event_type = 'delivered')
+           ) AS clicked,
            -- Delivered once emails carried the open image: what an open rate can be out of. The
            -- image goes in at send time, so tracking began no later than the delivery of the first
            -- email that was ever opened.

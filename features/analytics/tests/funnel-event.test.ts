@@ -57,6 +57,20 @@ describe("POST /api/funnel-event", () => {
     });
   });
 
+  it("keeps the intro cards' steps off the start count's rate-limit bucket", async () => {
+    mockSupabaseFetch.mockResolvedValue(new Response(null, { status: 201 }));
+    const bucketOf = async (event: string) => {
+      vi.mocked(ratelimit.checkRateLimit).mockClear();
+      await POST(makeRequest({ event, visitor_id: VALID_UUID }));
+      return (vi.mocked(ratelimit.checkRateLimit).mock.calls[0]?.[1] as { bucket: string }).bucket;
+    };
+    expect(await bucketOf("survey_engine_mount")).toBe("funnel-event");
+    expect(await bucketOf("intro_slide_2")).toBe("funnel-event");
+    expect(await bucketOf("unique_visitor")).toBe("funnel-event");
+    for (const e of ["intro_view", "consent_view", "intro_back_2", "intro_skip_4", "consent_back"])
+      expect(await bucketOf(e)).toBe("funnel-event-intro");
+  });
+
   it("returns 400 when event_type is invalid", async () => {
     const res = await POST(makeRequest({ event: "bogus", visitor_id: VALID_UUID }));
     expect(res.status).toBe(400);

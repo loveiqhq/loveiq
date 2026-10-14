@@ -718,8 +718,11 @@ const SlideScreen: FC<{
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleNext, handlePrev, slideIndex, isLeaving]);
 
-  // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide).
+  // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide). Slide 1 also
+  // sends the intro's own view if the intro could not: the visitor cookie exists only once the
+  // cookie banner is accepted, which can happen while the intro is on screen.
   useEffect(() => {
+    if (slideIndex === 0) pingFunnelEvent("intro_view");
     pingFunnelEvent(`intro_slide_${slideIndex + 1}`);
   }, [slideIndex]);
 

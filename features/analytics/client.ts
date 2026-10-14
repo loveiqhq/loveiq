@@ -497,12 +497,12 @@ const sentFunnelEvents = new Set<string>();
 
 /**
  * Durable top-of-funnel ping to `funnel_event` (keyed by visitor_id + day, NOT a
- * survey_submission): the survey intro's cards and their Back and Skip. It
- * fires regardless of analytics consent — first-party funnel measurement with no
- * third-party sharing — so pre-payment drop-off is never lost. No-op without a
- * visitor cookie or CSRF token. PK (visitor_id, day, event_type) dedupes server-side,
- * so each event is sent once per page: a card seen again after Back would only spend
- * the route's rate limit.
+ * survey_submission): the survey intro's cards and their Back and Skip. It needs the
+ * visitor cookie, which proxy.ts sets only once the cookie banner's analytics consent is
+ * given, so it covers consenting visitors only; without the cookie (or a CSRF token) it
+ * does nothing and a later call can still send. PK (visitor_id, day, event_type) dedupes
+ * server-side, so each event is sent once per page: a card seen again after Back would
+ * only spend the route's rate limit.
  */
 export const pingFunnelEvent = (event: string) => {
   if (typeof window === "undefined" || sentFunnelEvents.has(event)) return;

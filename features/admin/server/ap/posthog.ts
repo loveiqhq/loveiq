@@ -62,24 +62,29 @@ function rows(query: string, cap: number): Promise<PostHogResult<unknown[][]>> {
 
 /** PostHog's session ids are UUIDs; anything else never reaches a query. */
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** Whether the person had visited before a session (true: returning), kept for the process. */
-const returningBySession = new Map<string, boolean>();
+/** A session's start and its person's first event, in ms, kept for the process. */
+const visitBySession = new Map<string, { started: number; firstSeen: number }>();
+/** A visit begins after this much idle time, as PostHog counts visits. */
+const VISIT_GAP_MS = 30 * 60_000;
 
 /**
  * Marks each finisher (a submission, a payment's finisher, an answer's) new or returning:
- * returning when PostHog saw the person before the visit they finished the survey in
- * (PostHog starts a new visit after 30 idle minutes). A visit PostHog never saw stays unknown,
+ * returning when PostHog saw the person more than half an hour before the visit the survey
+ * began in. That visit's start is the PostHog visit they finished in, or the survey's own
+ * start when that came first: a pause of half an hour mid-survey makes PostHog start a new
+ * visit, and the person is still on their first. A visit PostHog never saw stays unknown,
  * which neither "new" nor "returning" matches, and is asked again next time. Throws when
  * PostHog can't be read.
  */
-export async function markVisitors(
-  people: Array<{ ph: string | null; visitorNew?: boolean | null }>
+export async function markVisitors<P extends { ph: string | null; visitorNew?: boolean | null }>(
+  people: P[],
+  startOf: (p: P) => string | null | undefined = () => null
 ): Promise<void> {
-  if (returningBySession.size > 50_000) returningBySession.clear();
+  if (visitBySession.size > 50_000) visitBySession.clear();
   const ids = [...new Set(people.map((x) => x.ph))].filter(
     (id): id is string => typeof id === "string" && SESSION_ID.test(id)
   );
-  const ask = ids.filter((id) => !returningBySession.has(id));
+  const ask = ids.filter((id) => !visitBySession.has(id.toLowerCase()));
   const since = `toDateTime('${POSTHOG_FROM} 00:00:00', 'UTC')`;
   for (let i = 0; i < ask.length; i += 500) {
     const list = ask
@@ -89,7 +94,8 @@ export async function markVisitors(
     const visit = `SELECT properties.$session_id AS sid, any(person_id) AS pid, min(timestamp) AS started
       FROM events WHERE timestamp >= ${since} AND properties.$session_id IN (${list}) GROUP BY sid`;
     const r = await rows(
-      `SELECT v.sid, if(f.first_seen < v.started - toIntervalMinute(1), 1, 0) AS returning
+      `SELECT v.sid, toUnixTimestamp64Milli(v.started) AS started_ms,
+              toUnixTimestamp64Milli(f.first_seen) AS first_seen_ms
        FROM (${visit}) v
        JOIN (SELECT person_id, min(timestamp) AS first_seen FROM events
              WHERE timestamp >= ${since} AND person_id IN (SELECT pid FROM (${visit}))
@@ -97,14 +103,24 @@ export async function markVisitors(
       600
     );
     if (!r.ok) throw new Error(r.error);
-    for (const [sid, returning] of r.value)
-      returningBySession.set(String(sid), Number(returning) === 1);
+    for (const [sid, started, firstSeen] of r.value) {
+      if (Number.isFinite(Number(started)) && Number.isFinite(Number(firstSeen)))
+        visitBySession.set(String(sid).toLowerCase(), {
+          started: Number(started),
+          firstSeen: Number(firstSeen),
+        });
+    }
   }
-  const isNew = (ph: string | null) => {
-    const r = ph ? returningBySession.get(ph.toLowerCase()) : undefined;
-    return r === undefined ? null : !r;
-  };
-  for (const p of people) p.visitorNew = isNew(p.ph);
+  for (const p of people) {
+    const v = p.ph ? visitBySession.get(p.ph.toLowerCase()) : undefined;
+    if (!v) {
+      p.visitorNew = null;
+      continue;
+    }
+    const surveyStart = Date.parse(startOf(p) ?? "");
+    const began = Number.isFinite(surveyStart) ? Math.min(v.started, surveyStart) : v.started;
+    p.visitorNew = v.firstSeen >= began - VISIT_GAP_MS;
+  }
 }
 
 export interface NewReturning {

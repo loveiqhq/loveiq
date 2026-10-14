@@ -1006,12 +1006,15 @@ describe("the new/returning filter", () => {
         });
       return json(null, { status: 404 });
     });
+    // PostHog: each visit's start and its person's first event (ms). A came on this visit;
+    // B was seen a day before.
+    const visit = Date.parse("2026-10-02T09:50:00Z");
     mockHogql.mockResolvedValue({
       ok: true,
       cut: null,
       rows: [
-        [A, 0],
-        [B, 1],
+        [A, visit, visit],
+        [B, visit, visit - 86_400_000],
       ],
     });
   });
@@ -1043,6 +1046,33 @@ describe("the new/returning filter", () => {
     mockHogql.mockClear();
     expect(await get("all")).toMatchObject({ respondents: 3, finished: 4 });
     expect(mockHogql).not.toHaveBeenCalled();
+  });
+
+  it("keeps a first-timer new when a pause mid-survey made PostHog start a second visit", async () => {
+    const P = "0192f0aa-6666-7000-8000-000000000006";
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: unknown) => {
+      if (path !== "/rest/v1/rpc/ap_facts") return facts(path, init);
+      const res = (await facts(path, init)) as Response;
+      const body = (await res.json()) as { subs: Array<Record<string, unknown>> };
+      // Landed 10:00, started the survey 10:02, paused 40 minutes, finished on a new visit.
+      body.subs.push({ ...finisher(6, P), startAt: "2026-10-02T10:02:00Z" });
+      return json(body);
+    });
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [[P, Date.parse("2026-10-02T10:52:00Z"), Date.parse("2026-10-02T10:00:00Z")]],
+    });
+    clearFactsCache();
+    const res = await answersGet(
+      new Request(
+        `http://localhost/api/admin/ap/survey/answers?q=02001&dim=none&period=custom&from=2026-10-01&to=2026-10-07&visitor=new`
+      )
+    );
+    expect(res.status).toBe(200);
+    // A (new), and P: still on their first visit by the survey's start.
+    expect(((await res.json()) as { finished: number }).finished).toBe(2);
   });
 
   it("fails the page plainly when PostHog can't be read, instead of showing zeros", async () => {

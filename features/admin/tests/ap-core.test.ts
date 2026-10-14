@@ -375,6 +375,7 @@ describe("AP totals", () => {
           wentOn: "2",
           left: 1,
         },
+        { day: "2026-10-01", step: "intro_consent", n: "4", direct: "3" },
         { day: "2026-10-01", step: "intro_slide_2", n: 2 },
       ],
       invites: [],
@@ -389,6 +390,18 @@ describe("AP totals", () => {
         skipped: 1,
         wentOn: 2,
         left: 1,
+        direct: 0,
+      },
+      // Consent viewers who came straight in, without the intro that day.
+      {
+        day: "2026-10-01",
+        step: "intro_consent",
+        n: 4,
+        ms: [],
+        skipped: 0,
+        wentOn: null,
+        left: null,
+        direct: 3,
       },
       // Without them: unknown, never a zero continue or exit.
       {
@@ -399,6 +412,7 @@ describe("AP totals", () => {
         skipped: 0,
         wentOn: null,
         left: null,
+        direct: 0,
       },
     ]);
   });

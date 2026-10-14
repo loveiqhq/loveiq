@@ -678,10 +678,25 @@ describe("SurveyPage — the intro's own records", () => {
     expect(sent()).toEqual([
       "intro_slide_2",
       "intro_back_2",
+      // Slide 1 sends the intro's view too (once a page), in case the intro could not.
+      "intro_view",
       "intro_slide_1",
       "intro_back_1",
-      "intro_view",
     ]);
+  });
+
+  it("still records the intro when the cookie banner was accepted on it", async () => {
+    // No visitor cookie while the intro is on screen: its own ping cannot go.
+    document.cookie = "__liq_vid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+    const user = userEvent.setup();
+    render(<SurveyPage />);
+    const go = await screen.findByRole("button", { name: /continue to survey introduction/i });
+    expect(sent()).toEqual([]);
+    // The banner is accepted; the next request set the cookie.
+    document.cookie = "__liq_vid=11111111-1111-4111-8111-111111111111; path=/";
+    await user.click(go);
+    await screen.findByRole("heading", { name: /quality in/i }, { timeout: 2000 });
+    expect(sent()).toEqual(["intro_view", "intro_slide_1"]);
   });
 
   it("records the browser's Back from the consent, and each step once a page", async () => {
@@ -711,7 +726,7 @@ describe("SurveyPage — the intro's own records", () => {
     await new Promise((r) => setTimeout(r, 250));
 
     expect(screen.getByRole("heading", { name: /quality in/i })).toBeInTheDocument();
-    expect(sent()).toEqual(["intro_slide_1"]);
+    expect(sent()).toEqual(["intro_view", "intro_slide_1"]);
   });
 
   it("records nothing without the visitor cookie (cookies not accepted)", async () => {

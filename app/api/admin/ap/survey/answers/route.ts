@@ -38,7 +38,11 @@ export async function GET(request: Request) {
       fetchAnswers(filters.from, filters.to, qid, otherQid),
       fetchFactsFor(filters.from, filters.to, filters),
     ]);
-    if (filters.visitor !== "all") await markVisitors(rows);
+    if (filters.visitor !== "all") {
+      // An answer's finisher started the survey when their submission says (the same visit).
+      const startOf = new Map(facts.subs.map((s) => [s.ph, s.startAt]));
+      await markVisitors(rows, (r) => (r.ph ? startOf.get(r.ph) : null));
+    }
     // "N of M finished surveys": M are the filters' people (probes out), as N's are.
     const finished = subsIn(facts, scope).length;
     return NextResponse.json(splitAnswers(qid, rows, dim, otherQid, scope, finished), {

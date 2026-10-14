@@ -54,6 +54,21 @@ const ALLOWED_EVENTS = [
   "consent_back",
 ] as const;
 
+/** The steps added with the intro cards' Back and Skip, on a rate-limit bucket of their own. */
+const INTRO_STEPS: ReadonlySet<string> = new Set([
+  "intro_view",
+  "consent_view",
+  "intro_back_1",
+  "intro_back_2",
+  "intro_back_3",
+  "intro_back_4",
+  "intro_skip_1",
+  "intro_skip_2",
+  "intro_skip_3",
+  "intro_skip_4",
+  "consent_back",
+]);
+
 const schema = z.object({
   event: z.enum(ALLOWED_EVENTS),
   visitor_id: z.string().uuid(),
@@ -77,8 +92,10 @@ export async function POST(request: Request) {
   }
 
   const ip = getClientIp(request);
+  // The intro cards' own steps (14 Oct 2026) get a bucket of their own, so they never use up
+  // the one survey_engine_mount (the start count) and the visit and slide pings share.
   const rateLimit = await checkRateLimit(ip, {
-    bucket: "funnel-event",
+    bucket: INTRO_STEPS.has(parsed.data.event) ? "funnel-event-intro" : "funnel-event",
     limit: 30,
     windowMs: 60_000,
   });
