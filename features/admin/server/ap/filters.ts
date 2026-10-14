@@ -29,8 +29,9 @@ export type Compare = (typeof COMPARES)[number]["value"];
 export const ASSESSMENTS = [
   { value: "all", label: "All assessments" },
   { value: "a", label: "Assessment A" },
-  { value: "b", label: "Assessment B (not launched)" },
-  { value: "c", label: "Assessment C (not launched)" },
+  // Not launched: the pages say so (as the design's options, without the remark).
+  { value: "b", label: "Assessment B" },
+  { value: "c", label: "Assessment C" },
 ] as const;
 export type AssessmentFilter = (typeof ASSESSMENTS)[number]["value"];
 
@@ -265,13 +266,17 @@ function labelOf(options: readonly { value: string; label: string }[], value: st
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-/** The line under the bar: the range, the comparison and every filter that narrows. */
+/**
+ * The line under the bar, as the design writes it: "13 Sep 2026 – 12 Oct 2026 · vs previous
+ * period · …", the range with both years, the comparison by name, every filter that narrows.
+ */
 export function filterSummary(f: ApFilters, today: string): string {
-  const cmp = comparisonRange(f);
+  const day = (d: string) => `${shortDate(d)} ${year(d)}`;
   const parts = [
-    rangeLabel(f.from, f.to) + (f.to >= today ? " (today so far)" : ""),
-    cmp
-      ? `vs ${rangeLabel(cmp.from, cmp.to)}`
+    (f.from === f.to ? day(f.from) : `${day(f.from)} – ${day(f.to)}`) +
+      (f.to >= today ? " (today so far)" : ""),
+    comparisonRange(f)
+      ? `vs ${labelOf(COMPARES, f.compare).toLowerCase()}`
       : f.period === "today" || f.running
         ? "no comparison while today runs"
         : "no comparison",

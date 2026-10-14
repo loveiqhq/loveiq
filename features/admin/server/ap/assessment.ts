@@ -32,11 +32,12 @@ import {
   readMedianMs,
   SOURCE_ROWS,
   spendCoverage,
+  visitorSplit,
   type PageHead,
   type Table,
   type Tile,
 } from "./overview";
-import type { NewReturning, PostHogResult } from "./posthog";
+import type { NewReturning, PostHogResult, SessionTags } from "./posthog";
 
 export interface ScoreRow {
   group: string;
@@ -76,21 +77,19 @@ export interface DashboardPayload extends PageHead {
   scorecard: ScoreRow[];
   journey: JourneyStep[];
   sources: Table;
-  performance: Array<{
-    label: string;
-    completion: number | null;
-    paymentCvr: number | null;
-    perSub: number | null;
-  }>;
+  /** Per source, over its estimated visitors (blank with sources' note when they are). */
+  performance: Array<{ label: string; surveyCvr: number | null; perVisit: number | null }>;
   newReturning: PostHogResult<NewReturning> | null;
+  /** Payments in the range by each of newReturning's groups, for € per visit. */
+  newReturningRevenue: PostHogResult<{ new: number; returning: number }> | null;
   prices: PriceRow[];
   /** Why the prices table is empty under the filters, or null. */
   pricesBlocked: string | null;
 }
 
 const PLAN_LABELS: Record<string, string> = {
-  full_report: "Full report",
-  all_reports: "All 14 archetypes",
+  full_report: "Full",
+  all_reports: "Full All",
   essentials: "Essentials (retired)",
   core: "Core (retired)",
 };
@@ -114,6 +113,10 @@ export function buildDashboard(input: {
   today: string;
   now: Date;
   newReturning: PostHogResult<NewReturning> | null;
+  /** PostHog's visits by first-page tracking, for visitors per source (null: not read). */
+  sessions?: PostHogResult<SessionTags[]> | null;
+  /** fetchVisitorGroups for the range's payments: whose visitors each payment counts with. */
+  visitorGroups?: PostHogResult<Map<string, "new" | "returning">> | null;
 }): DashboardPayload {
   const { facts, previous, ad, filters: f, today, now } = input;
   const scope = assessmentScope(f);
@@ -448,45 +451,55 @@ export function buildDashboard(input: {
     },
   ];
 
-  const bySource = SOURCE_ROWS.map((s) => {
-    const sc = { ...scope, source: s.value };
-    const x = totals(facts, sc);
-    return { ...s, x };
-  }).filter((s) => (s.x.starts ?? 0) > 0 || s.x.subs > 0);
-  const allStarts = t.starts;
-  const maxStarts = Math.max(1, ...bySource.map((s) => s.x.starts ?? 0));
+  // Every source, its visitors estimated as the Overview's are (sample split, totals live).
+  const split = visitorSplit(f, t.visits, input.sessions ?? null);
+  const bySource = SOURCE_ROWS.map((s) => ({
+    ...s,
+    x: totals(facts, { ...scope, source: s.value }),
+    visitors: split.bySource.get(s.value)?.visitors ?? null,
+  }));
+  const maxVisitors = Math.max(0, ...bySource.map((s) => s.visitors ?? 0));
   const sources: Table = {
-    barLabel: "Share of starts",
+    sample: split.ok,
+    barLabel: "Share of visits",
     columns: [
       { label: "Source", unit: "text" },
-      { label: "Starts", unit: "count" },
-      { label: "Share", unit: "pct" },
+      { label: "Visitors", unit: "count" },
+      { label: "Share", unit: "pct", digits: 0 },
       { label: "Submissions", unit: "count" },
-      { label: "Completion", unit: "pct" },
-      { label: "Paid", unit: "count" },
-      { label: "€ / submission", unit: "eur3" },
+      { label: "Survey CVR", unit: "pct" },
+      { label: "€ / visit", unit: "eur3" },
     ],
     rows: bySource.map((s) => ({
       label: s.label,
       values: [
-        s.x.starts,
-        f.source === "all" ? ratio(s.x.starts, allStarts) : null,
+        s.visitors,
+        split.bySource.get(s.value)?.share ?? null,
         s.x.subs,
-        ratio(s.x.startsFinished, s.x.starts),
-        s.x.paidCohort,
-        ratio(s.x.revenue, s.x.subs),
+        ratio(s.x.subs, s.visitors),
+        ratio(s.x.revenue, s.visitors),
       ],
-      bar: (s.x.starts ?? 0) / maxStarts,
+      // No bars while the visitors are blank: an empty track would read as none.
+      ...(split.ok ? { bar: maxVisitors ? (s.visitors ?? 0) / maxVisitors : 0 } : {}),
     })),
-    note: `Visits are not split by source: the visit log misses most ad clicks. ${startsBlocked({ ...scope, source: "google_ads" }, facts.from, today) ?? "Starts, submissions and payments carry the source the survey recorded; revenue by payment day."}`,
+    note: `${split.note} Survey CVR: submissions ÷ visitors. Submissions and payments carry the source the survey recorded; revenue by payment day.`,
   };
 
   const performance = bySource.map((s) => ({
     label: s.label,
-    completion: ratio(s.x.startsFinished, s.x.starts),
-    paymentCvr: ratio(s.x.paidCohort, s.x.subs),
-    perSub: ratio(s.x.revenue, s.x.subs),
+    surveyCvr: ratio(s.x.subs, s.visitors),
+    perVisit: ratio(s.x.revenue, s.visitors),
   }));
+
+  // € per visit for each of PostHog's visitor groups: the range's payments, each with the
+  // group of the person who made it (fetchVisitorGroups). All traffic, as the panel is.
+  const groups = input.visitorGroups ?? null;
+  const newReturningRevenue: DashboardPayload["newReturningRevenue"] =
+    groups === null
+      ? null
+      : groups.ok
+        ? { ok: true, value: revenueByGroup(facts, groups.value) }
+        : groups;
 
   // Sales per plan and price: of the prices quoted in the range, the checkouts and sales on
   // them. The narrowing filters apply by the reader's own source, device and tier; quotes are
@@ -533,12 +546,33 @@ export function buildDashboard(input: {
     sources,
     performance,
     newReturning: input.newReturning,
+    newReturningRevenue,
     prices,
     pricesBlocked:
       scope.visitor !== "all"
         ? "Prices are counted per price, not per person, so new and returning can't split them."
         : null,
   };
+}
+
+/**
+ * The range's sales (money in, by payment day; our probes out) by the payer's PostHog group,
+ * found through the visit they finished the survey in. One PostHog never saw is in neither.
+ */
+export function revenueByGroup(
+  facts: Facts,
+  groups: Map<string, "new" | "returning">
+): { new: number; returning: number } {
+  let fresh = 0;
+  let back = 0;
+  for (const m of facts.money) {
+    const g = m.ph ? groups.get(m.ph.toLowerCase()) : undefined;
+    if (!g || m.amount <= 0 || m.day < facts.from || m.day > facts.to) continue;
+    if (classifySource(m) === "test") continue;
+    if (g === "new") fresh += m.amount;
+    else back += m.amount;
+  }
+  return { new: Math.round(fresh * 100) / 100, returning: Math.round(back * 100) / 100 };
 }
 
 function pct(v: number | null): string {

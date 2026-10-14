@@ -4,7 +4,7 @@ import DashboardErrorBoundary from "@features/admin/ui/DashboardErrorBoundary";
 import ApOverview from "@features/admin/ui/ap/ApOverview";
 
 export const metadata: Metadata = {
-  title: "AP-Analytics · Overview",
+  title: "AP-Analytics · Overall performance",
   robots: { index: false, follow: false },
 };
 

@@ -7,7 +7,8 @@ import {
   comparisonRange,
   parseFilters,
 } from "@features/admin/server/ap/filters";
-import { buildOverview } from "@features/admin/server/ap/overview";
+import { buildOverview, splitBlocked } from "@features/admin/server/ap/overview";
+import { fetchSessionSources, postHogFailed } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { fetchSurveyQuestions, questionSegment, topExit } from "@features/admin/server/ap/survey";
 import { adCostByDay } from "@features/brain/server/ingest/analytics";
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
   const cmp = comparisonRange(filters);
 
   try {
-    const [facts, previous, ad, questions] = await Promise.all([
+    const [facts, previous, ad, questions, sessions] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       adCostByDay(),
@@ -37,6 +38,10 @@ export async function GET(request: Request) {
         logger.warn({ err }, "AP overview: survey questions unavailable");
         return null;
       }),
+      // Visitors per source are estimated from PostHog's split: its failure blanks them only.
+      splitBlocked(filters)
+        ? Promise.resolve(null)
+        : fetchSessionSources(filters.from, filters.to).catch(postHogFailed),
     ]);
     const payload = buildOverview({
       facts,
@@ -51,6 +56,7 @@ export async function GET(request: Request) {
         activeNarrowing(filters).length > 0 && questionSegment(filters).segment === "All traffic"
           ? "all traffic"
           : null,
+      sessions,
     });
     return NextResponse.json(payload, { headers: NO_STORE });
   } catch (err) {

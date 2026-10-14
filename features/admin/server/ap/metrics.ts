@@ -9,7 +9,14 @@ import { addDays } from "./days";
 import type { AdCost } from "@features/brain/server/ingest/analytics";
 
 import { classifySource, deviceClass, type Facts, type SubFact } from "./facts";
-import { rangeLabel, SURVEY_TRACKING_FROM, trendBuckets, type ApFilters } from "./filters";
+import {
+  rangeLabel,
+  SURVEY_TRACKING_FROM,
+  trendBuckets,
+  type ApFilters,
+  type Source,
+} from "./filters";
+import type { SessionTags } from "./posthog";
 
 /** Survey steps record the device from this day (migration 20261012093000). */
 export const STEP_DEVICE_FROM = "2026-10-12";
@@ -227,6 +234,22 @@ export function spend(ad: AdCost, scope: Scope, from: string, to: string): Spend
   // No day of the range has a spend figure: unknown, never €0.
   if (!covered) return { eur: null, complete: false, ...base };
   return { eur: Math.round(eur * 100) / 100, complete, ...base };
+}
+
+/**
+ * Each source's share of the visits PostHog saw (fetchSessionSources), sorted by our own
+ * rules; our probes are left out, as they are of the visit total. Null when it saw none.
+ */
+export function sourceShares(groups: SessionTags[]): Map<Source, number> | null {
+  const by = new Map<Source, number>();
+  let total = 0;
+  for (const g of groups) {
+    const c = classifySource(g);
+    if (c === "test" || c === "unknown") continue;
+    by.set(c, (by.get(c) ?? 0) + g.sessions);
+    total += g.sessions;
+  }
+  return total > 0 ? new Map([...by].map(([s, n]) => [s, n / total])) : null;
 }
 
 /** a / b, or null when b is 0 or either is unknown. */

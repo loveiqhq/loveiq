@@ -41,7 +41,11 @@ import { GET as answersGet } from "@/app/api/admin/ap/survey/answers/route";
 import { clearFactsCache, fetchFacts } from "@features/admin/server/ap/facts";
 import { GET as statusGet } from "@/app/api/admin/ap/status/route";
 import { clearExplorerCaches, signUnlock } from "@features/admin/server/ap/explorer";
-import { fetchSurveyIntroClicks } from "@features/admin/server/ap/posthog";
+import {
+  fetchSessionSources,
+  fetchSurveyIntroClicks,
+  fetchVisitorGroups,
+} from "@features/admin/server/ap/posthog";
 import { countRows, fetchAllRows } from "@features/admin/server/supabase";
 
 const SCHEMA = {
@@ -1075,6 +1079,96 @@ describe("fetchSurveyIntroClicks", () => {
     expect(String(mockHogql.mock.calls[0]?.[0])).toContain(
       "event = '$autocapture' AND elements_chain LIKE '%Continue to survey introduction%'"
     );
+  });
+});
+
+describe("fetchSessionSources", () => {
+  it("groups the live site's visits by their first page's tags, read as the tracker reads them", async () => {
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [
+        ["google", "cpc", 1, 0, "", 30],
+        ["", "", 0, 0, "www.google.com", 10],
+        ["", "", 0, 0, "$direct", 50],
+        ["", "", 0, 0, "www.loveiq.org", 5],
+        ["paid%20social", null, 0, 1, "", 2],
+      ],
+    });
+    // Its own range, so the five-minute cache holds nothing for it.
+    const r = await fetchSessionSources("2026-06-01", "2026-06-07");
+    const tag = { src: null, med: null, ads: false, fb: false, ref: null };
+    expect(r).toEqual({
+      ok: true,
+      value: [
+        { ...tag, src: "google", med: "cpc", ads: true, sessions: 30 },
+        { ...tag, ref: "www.google.com", sessions: 10 },
+        // No referrer, or our own page: no site to name, as the tracker keeps it.
+        { ...tag, sessions: 50 },
+        { ...tag, sessions: 5 },
+        { ...tag, src: "paid social", fb: true, sessions: 2 },
+      ],
+    });
+    const [query, cap] = mockHogql.mock.calls[0]!;
+    expect(cap).toBe(1000);
+    expect(String(query)).toMatch(/LIMIT 1000$/);
+    expect(String(query)).toContain("properties.$host = 'www.loveiq.org'");
+    expect(String(query)).toContain("argMin(properties.$current_url, timestamp) AS url");
+    // The referrer only where classifySource reads it, so the groups stay few.
+    expect(String(query)).toContain("if(src = '' AND med = '' AND ads = 0 AND fb = 0, ref, '')");
+    // Berlin's 1 Jun starts at 22:00 UTC the day before.
+    expect(String(query)).toContain("timestamp >= toDateTime('2026-05-31 22:00:00', 'UTC')");
+  });
+
+  it("fails plainly when PostHog cuts the answer short, rather than splitting part of it", async () => {
+    mockHogql.mockResolvedValue({ ok: true, cut: "own_limit", rows: [] });
+    expect(await fetchSessionSources("2026-06-08", "2026-06-14")).toMatchObject({ ok: false });
+  });
+});
+
+describe("fetchVisitorGroups", () => {
+  const A = "0192f0aa-1111-7000-8000-000000000001";
+  const B = "0192f0aa-2222-7000-8000-000000000002";
+
+  it("asks only about real visit ids, and reads each one's group for the range", async () => {
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [
+        [A, "new"],
+        [B, "returning"],
+      ],
+    });
+    const r = await fetchVisitorGroups("2026-06-01", "2026-06-07", [
+      A.toUpperCase(),
+      B,
+      B,
+      null,
+      "x' OR 1=1 --",
+    ]);
+    expect(r.ok && [...r.value]).toEqual([
+      [A, "new"],
+      [B, "returning"],
+    ]);
+    const query = String(mockHogql.mock.calls[0]![0]);
+    expect(query).toContain(`'${A}','${B}')`);
+    expect(query).not.toMatch(/OR 1=1/);
+    // New: first seen in the range, as fetchNewReturning counts its visitors.
+    expect(query).toContain(
+      "if(f.first_seen >= toDateTime('2026-05-31 22:00:00', 'UTC'), 'new', 'returning')"
+    );
+  });
+
+  it("asks nothing when no payment has a visit id, and says when PostHog fails", async () => {
+    expect(await fetchVisitorGroups("2026-06-01", "2026-06-07", [null])).toEqual({
+      ok: true,
+      value: new Map(),
+    });
+    expect(mockHogql).not.toHaveBeenCalled();
+    mockHogql.mockResolvedValue({ ok: false, error: "boom" });
+    expect(
+      await fetchVisitorGroups("2026-06-15", "2026-06-21", ["0192f0aa-9999-7000-8000-000000000009"])
+    ).toMatchObject({ ok: false });
   });
 });
 
