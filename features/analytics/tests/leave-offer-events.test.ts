@@ -54,7 +54,7 @@ describe("leave offer events", () => {
   it("records the offer being shown, with its trigger and the pay test's arm", async () => {
     client.trackLeaveOfferShown({
       variant: "founder_call",
-      trigger: "idle",
+      trigger: "paywall_reached",
       popup_arm: "no_popup",
       armed_ms: 31_234.6,
     });
@@ -62,7 +62,7 @@ describe("leave offer events", () => {
     expect(sent("leave_offer_shown")).toEqual([
       expect.objectContaining({
         variant: "founder_call",
-        trigger: "idle",
+        trigger: "paywall_reached",
         popup_arm: "no_popup",
         armed_ms: 31_235,
       }),
@@ -70,13 +70,13 @@ describe("leave offer events", () => {
     const [row] = await stored();
     expect(row?.event_type).toBe("leave_offer_shown");
     expect(row?.submission_id).toBe(42);
-    expect(row?.metadata).toMatchObject({ variant: "founder_call", trigger: "idle" });
+    expect(row?.metadata).toMatchObject({ variant: "founder_call", trigger: "paywall_reached" });
   });
 
   it("leaves the pay test's arm out for a reader who is in neither", () => {
     client.trackLeaveOfferShown({
       variant: "founder_call",
-      trigger: "exit_intent",
+      trigger: "paywall_reached",
       popup_arm: null,
       armed_ms: 5_000,
     });
@@ -86,13 +86,13 @@ describe("leave offer events", () => {
   it("records the booking page being opened", async () => {
     client.trackLeaveOfferClicked({
       variant: "founder_call",
-      trigger: "plans_closed",
+      trigger: "paywall_reached",
       view_duration_ms: 4_200.4,
     });
     expect(sent("leave_offer_clicked")).toEqual([
       expect.objectContaining({
         variant: "founder_call",
-        trigger: "plans_closed",
+        trigger: "paywall_reached",
         view_duration_ms: 4_200,
       }),
     ]);
@@ -103,7 +103,7 @@ describe("leave offer events", () => {
   it("records how the offer was turned down", async () => {
     client.trackLeaveOfferDismissed({
       variant: "founder_call",
-      trigger: "idle",
+      trigger: "paywall_reached",
       source: "not_now",
       view_duration_ms: -5,
     });

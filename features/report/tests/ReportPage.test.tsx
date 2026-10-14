@@ -2466,10 +2466,10 @@ describe("ReportPage", () => {
   });
 
   // Mark, #all-loveiq 08.10: the full report free for a 20-minute call with him and
-  // Marcus, offered once as an unpaid reader leaves (features/report/logic/leaveIntent.ts).
-  // jsdom lays everything out at the top, so the first paywall card counts as reached on
-  // mount, and so does the pay pop-up test's point: in both arms its claim lands at mount
-  // and holds the offer back until about 31 s.
+  // Marcus (features/report/logic/leaveIntent.ts). Since 14.10 it opens by scroll on every
+  // device: 1.6 s after the first paywall card comes into view. jsdom lays everything out
+  // at the top, so the card counts as reached on mount, and on a phone so does the pay
+  // pop-up test's point, whose 30 s the offer waits out.
   describe("V4 — the founder-call leave offer", () => {
     const LEAVE_URL = "https://calendar.app.google/e2e-founder-call";
     const LEAVE_TOKEN = "rpt_leave_offer";
@@ -2507,92 +2507,8 @@ describe("ReportPage", () => {
       });
     }
 
-    const offer = () =>
-      screen.queryByRole("dialog", { name: "Your Full Report, Free for a 20-Minute Call" });
-    const shown = () => vi.mocked(analytics.trackLeaveOfferShown);
-    const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
-    /** The phone bar's pill: the bar draws a desktop twin with the same name. */
-    const stickyCta = () =>
-      document.querySelector<HTMLButtonElement>(
-        ".report-sticky-unlock--mobile .report-sticky-unlock__cta--v4"
-      )!;
-    const closePlans = () =>
-      fireEvent.click(screen.getByRole("button", { name: /close pricing modal/i }));
-
-    it("opens on a phone after 30 s idle at the paywall, held past the pay test's window", () => {
-      leaveV4("&popup=off");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(29_000);
-      expect(offer()).toBeNull();
-      advance(3_000);
-
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledTimes(1);
-      expect(shown()).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "founder_call", trigger: "idle", popup_arm: "no_popup" })
-      );
-      const link = within(offer()!).getByRole("link", { name: /Book a 20-Minute Call/ });
-      expect(link.getAttribute("href")).toBe(LEAVE_URL);
-    });
-
-    it("waits out the pay test's own pop-up, and closing it is not a leave signal", () => {
-      leaveV4("&popup=on");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(1_700);
-      expect(screen.getByRole("button", { name: /close pricing modal/i })).toBeInTheDocument();
-      advance(60_000);
-      expect(offer()).toBeNull();
-
-      closePlans();
-      advance(2_000);
-      expect(offer(), "closing the automatic pop-up opened the offer").toBeNull();
-      advance(27_000);
-      expect(offer()).toBeNull();
-      advance(3_000);
-
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledWith(
-        expect.objectContaining({ trigger: "idle", popup_arm: "popup" })
-      );
-    });
-
-    it("opens as the reader closes a plans window they opened, after the pay test's window", () => {
-      leaveV4("&popup=off");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(25_000);
-      fireEvent.scroll(window);
-      fireEvent.click(stickyCta());
-      advance(15_000);
-      expect(offer()).toBeNull();
-
-      closePlans();
-      advance(1_000);
-
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "plans_closed" }));
-    });
-
-    it("drops a plans window closed inside the pay test's window, then waits for idle", () => {
-      leaveV4("&popup=off");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(5_000);
-      fireEvent.click(stickyCta());
-      advance(1_000);
-      closePlans();
-      advance(2_000);
-      expect(offer()).toBeNull();
-
-      advance(30_000);
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledTimes(1);
-      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "idle" }));
-    });
-
-    it("opens on a desktop when the pointer leaves through the top", () => {
+    /** A window from 700px wide with a mouse: no pay pop-up test there, so no 30 s wait. */
+    const stubDesktop = () =>
       vi.stubGlobal(
         "matchMedia",
         vi.fn().mockImplementation((query: string) => ({
@@ -2605,17 +2521,86 @@ describe("ReportPage", () => {
           dispatchEvent: vi.fn(),
         }))
       );
+
+    const offer = () =>
+      screen.queryByRole("dialog", { name: "Your Full Report, Free for a 20-Minute Call" });
+    const shown = () => vi.mocked(analytics.trackLeaveOfferShown);
+    const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+    const closePlans = () =>
+      fireEvent.click(screen.getByRole("button", { name: /close pricing modal/i }));
+
+    it("opens on a desktop 1.6 s after the paywall card comes into view", () => {
+      stubDesktop();
       leaveV4("&popup=on");
       render(<ReportPage token={LEAVE_TOKEN} />);
 
-      advance(120_000);
-      expect(offer(), "a desktop opened it on idle").toBeNull();
-      act(() => {
-        document.dispatchEvent(new MouseEvent("mouseout", { clientY: -1, relatedTarget: null }));
-      });
+      advance(1_500);
+      expect(offer()).toBeNull();
+      advance(200);
 
       expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "exit_intent" }));
+      expect(shown()).toHaveBeenCalledTimes(1);
+      expect(shown()).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "founder_call", trigger: "paywall_reached" })
+      );
+      const link = within(offer()!).getByRole("link", { name: /Book a 20-Minute Call/ });
+      expect(link.getAttribute("href")).toBe(LEAVE_URL);
+    });
+
+    it("on a phone, waits out the 30 s after the pay test's point, which it reached too", () => {
+      leaveV4("&popup=off");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(30_500);
+      expect(offer()).toBeNull();
+      advance(1_000);
+
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: "paywall_reached", popup_arm: "no_popup" })
+      );
+    });
+
+    it("on a phone in the popup arm, waits until the reader closes the pay test's pop-up", () => {
+      leaveV4("&popup=on");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+
+      advance(1_700);
+      expect(screen.getByRole("button", { name: /close pricing modal/i })).toBeInTheDocument();
+      advance(60_000);
+      expect(offer(), "the offer opened over the plans pop-up").toBeNull();
+
+      closePlans();
+      advance(1_000);
+
+      expect(offer()).toBeInTheDocument();
+      expect(shown()).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: "paywall_reached", popup_arm: "popup" })
+      );
+    });
+
+    // A plans window the reader opens and closes is no longer a signal of its own (the
+    // offer waits out any open window by itself), so closing one must not reach for one.
+    it("lets the reader open and close the plans window without an error", () => {
+      leaveV4("&popup=off");
+      render(<ReportPage token={LEAVE_TOKEN} />);
+      const errors: unknown[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.error);
+        event.preventDefault();
+      };
+      window.addEventListener("error", onError);
+      try {
+        fireEvent.click(
+          document.querySelector<HTMLButtonElement>(
+            ".report-sticky-unlock--mobile .report-sticky-unlock__cta--v4"
+          )!
+        );
+        closePlans();
+      } finally {
+        window.removeEventListener("error", onError);
+      }
+      expect(errors).toEqual([]);
     });
 
     it("blurs the page behind it and hides the sticky bar while open", () => {
@@ -2642,7 +2627,7 @@ describe("ReportPage", () => {
 
       expect(offer()).toBeNull();
       expect(vi.mocked(analytics.trackLeaveOfferClicked)).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "founder_call", trigger: "idle" })
+        expect.objectContaining({ variant: "founder_call", trigger: "paywall_reached" })
       );
     });
 
@@ -2725,17 +2710,12 @@ describe("ReportPage", () => {
 
     // Final review, 14.10: a purchase that lands mid-session (a 409 "already owned" from
     // another tab, then "Back to your report" reloads the data) turns the offer off while
-    // it is armed. Closing the plans window afterwards must not open an offer that is no
-    // longer mounted, which would leave the page blurred and inert with nothing on it.
+    // it is armed. It must stay off, and the page must stay usable.
     it("stays shut once the reader's purchase lands, with the page left usable", () => {
+      stubDesktop();
       leaveV4("&popup=off");
       const { container, rerender } = render(<ReportPage token={LEAVE_TOKEN} />);
-      // Past the pay test's window (which would drop the signal for its own reason), with
-      // a scroll so that idle does not open the offer first.
-      advance(20_000);
-      fireEvent.scroll(window);
-      advance(15_000);
-      fireEvent.click(stickyCta());
+      advance(500);
 
       const paid = buildSuccessResponse();
       mockUseReportData.mockReturnValue({
@@ -2748,7 +2728,6 @@ describe("ReportPage", () => {
         },
       });
       rerender(<ReportPage token={LEAVE_TOKEN} />);
-      closePlans();
       advance(60_000);
 
       expect(offer()).toBeNull();
