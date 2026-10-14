@@ -355,7 +355,7 @@ const OUTSIDE: Array<
           "Google Analytics' default channel group: Paid Search, Direct, Organic Search and so on.",
       },
       { name: "sessions", type: "int", description: "Sessions started." },
-      { name: "users", type: "int", description: "Users (Google Analytics' total users)." },
+      { name: "users", type: "int", description: "Active users." },
       { name: "new_users", type: "int", description: "Users on their first visit." },
       {
         name: "engaged_sessions",

@@ -599,7 +599,8 @@ export async function ingestGa4(
         dimensions: [{ name: "date" }, { name: "sessionDefaultChannelGroup" }],
         metrics: [
           { name: "sessions" },
-          { name: "totalUsers" },
+          // Active users, as the design's table defines its users (GA4's own "Users").
+          { name: "activeUsers" },
           { name: "newUsers" },
           { name: "engagedSessions" },
           { name: "userEngagementDuration" },

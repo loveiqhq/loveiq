@@ -237,7 +237,7 @@ const CHANNEL_SESSIONS = report([
   [["20260827", "Direct"], [10]],
   [["20260827", "Paid Search"], [20]],
 ]);
-/** The table's: sessions, totalUsers, newUsers, engagedSessions, userEngagementDuration. */
+/** The table's: sessions, activeUsers, newUsers, engagedSessions, userEngagementDuration. */
 const CHANNEL_FULL = report([
   [
     ["20260825", "Direct"],
