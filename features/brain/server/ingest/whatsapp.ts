@@ -22,7 +22,7 @@
 import { createHash } from "node:crypto";
 import { reportingDateTime } from "@shared/time/reporting-day";
 import { BODY_LIMIT, splitBody } from "./notion";
-import { momentOf, type BrainRow } from "./upsert";
+import { dayOfMoment, momentOf, type BrainRow } from "./upsert";
 
 /** iOS: `[06/08/2026, 14:23:11] Marcus: text` — the leading mark is WhatsApp's own. */
 const IOS =
@@ -231,7 +231,9 @@ export function dayRows(input: DayRowInput): BrainRow[] {
         ...(parts.length > 1 ? { part: i + 1, parts: parts.length } : {}),
       },
       updated_at: stampedAt,
-      period_end: day,
+      // The Berlin day it opened on; `meta.day` and the id stay the UTC day they were keyed
+      // on, and the laptop sync's sweep is scoped by `meta.day`.
+      period_end: dayOfMoment(at) ?? day,
     })) satisfies BrainRow[];
   });
 }

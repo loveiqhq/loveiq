@@ -5,6 +5,7 @@ import { KPI_NUMBERS_DATABASE_ID } from "@features/admin/server/kpi-notion";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   chunkPage,
+  dayOfMoment,
   momentOf,
   recordSweep,
   shouldSweep,
@@ -528,7 +529,7 @@ export function taskToRow(
     updated_at: stampedAt,
     // The date this task last MOVED, so a stale backlog item does not outrank a
     // task touched today on a scoring tie.
-    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+    period_end: dayOfMoment(at),
   };
 }
 
@@ -613,7 +614,7 @@ export function pageToRow(
       ...(author ? { author } : {}),
     },
     updated_at: stampedAt,
-    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+    period_end: dayOfMoment(at),
   };
 }
 

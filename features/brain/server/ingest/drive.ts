@@ -20,6 +20,7 @@ import {
   chunkPage,
   isLegalInstrument,
   MEETING_NOTE_NAME,
+  dayOfMoment,
   momentOf,
   recordSweep,
   shouldSweep,
@@ -1111,7 +1112,7 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     updated_at: stampedAt,
     // The date the document last changed, so a note from today outranks one from
     // March on a scoring tie.
-    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+    period_end: dayOfMoment(at),
   };
 
   // Split rather than let the write path slice the tail off — a call note is

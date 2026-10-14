@@ -1545,9 +1545,9 @@ export const TOOLS = [
           type: "string",
           description:
             "YYYY-MM-DD. Filters on the date a record DESCRIBES, not when it was indexed. " +
-            "Any date range excludes repository documentation, which carries no date. For " +
-            "most sources that day is the UTC day, so something written between midnight and " +
-            "2 a.m. Berlin time counts toward the day before.",
+            "Any date range excludes repository documentation, which carries no date. A day " +
+            "is the Berlin day, so 'today' is the team's today; only a Slack day summary is a " +
+            "UTC day.",
         },
         until: {
           type: "string",
