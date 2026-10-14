@@ -31,6 +31,7 @@ export const sub = (over: Partial<Facts["subs"][number]> = {}): Facts["subs"][nu
   revenue: 0,
   gifted: false,
   plan: null,
+  full: false,
   shared: false,
   sharedAt: null,
   votes: 0,
@@ -38,6 +39,7 @@ export const sub = (over: Partial<Facts["subs"][number]> = {}): Facts["subs"][nu
   invited: false,
   invitedAt: null,
   wizardSlide: null,
+  ph: null,
   ...over,
 });
 
@@ -103,6 +105,7 @@ export function factsFixture(over: Partial<Facts> = {}): Facts {
         arm: "white_card",
         device: "iOS",
         tier: "tier_1",
+        ph: null,
       },
       {
         day: "2026-10-03",
@@ -115,6 +118,7 @@ export function factsFixture(over: Partial<Facts> = {}): Facts {
         arm: "white_video",
         device: "iOS",
         tier: "tier_1",
+        ph: null,
       },
     ],
     intro: [],

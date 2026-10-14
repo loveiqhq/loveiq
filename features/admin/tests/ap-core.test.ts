@@ -359,6 +359,25 @@ describe("AP totals", () => {
     expect(parseFacts([{ ap_facts: raw }], "2026-10-01", "2026-10-01").visits[0]?.n).toBe(3);
   });
 
+  it("reads a Full purchase from its flag, or from the first plan where the function has none", () => {
+    const subs = (rows: Array<Record<string, unknown>>) =>
+      parseFacts(
+        { visits: [], starts: [], subs: rows, money: [], intro: [], invites: [], quotes: [] },
+        "2026-10-01",
+        "2026-10-01"
+      ).subs.map((s) => s.full);
+    const at = { day: "2026-10-01", at: "2026-10-01T10:00:00Z" };
+    expect(
+      subs([
+        { id: 1, ...at, plan: "essentials", full: true }, // upgraded to Full later
+        { id: 2, ...at, plan: "essentials", full: false },
+        { id: 3, ...at, plan: "all_reports" }, // an older ap_facts: the first plan decides
+        { id: 4, ...at, plan: "essentials" },
+        { id: 5, ...at, plan: null },
+      ])
+    ).toEqual([true, false, true, false, false]);
+  });
+
   it("reads each intro step's times and skips, and none from a function without them", () => {
     const raw = {
       visits: [],

@@ -28,15 +28,34 @@ export async function GET(request: Request) {
   const cmp = comparisonRange(filters);
 
   try {
-    const [facts, previous, benchmark, extras, returns] = await Promise.all([
+    const compared = cmp && !beforeData(cmp) ? cmp : null;
+    const [facts, previous, benchmark, extras, previousExtras, returns] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
-      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
+      compared ? fetchFactsFor(compared.from, compared.to, filters) : Promise.resolve(null),
       fetchFacts(DATA_START, addDays(today, -1)),
       fetchReportExtras(filters.from, filters.to),
+      // The earlier period's Skip Intro presses, for that tile's change only: without them the
+      // tile is shown uncompared rather than the page failing.
+      compared
+        ? fetchReportExtras(compared.from, compared.to).catch((err: unknown) => {
+            logger.warn({ err }, "AP report: earlier period's extras unavailable");
+            return null;
+          })
+        : Promise.resolve(null),
       fetchReportReturns(filters.from, filters.to).catch(postHogFailed),
     ]);
     return NextResponse.json(
-      buildReportPage({ facts, previous, benchmark, extras, returns, filters, today, now }),
+      buildReportPage({
+        facts,
+        previous,
+        benchmark,
+        extras,
+        previousExtras,
+        returns,
+        filters,
+        today,
+        now,
+      }),
       {
         headers: NO_STORE,
       }

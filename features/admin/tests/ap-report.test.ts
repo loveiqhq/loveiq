@@ -205,21 +205,30 @@ describe("report page", () => {
     const paid = "2026-10-02T10:00:00Z";
     const f = factsFixture({
       subs: [
-        sub({ id: 1, paidAt: paid, plan: "full_report", wizardSlide: 5 }),
-        sub({ id: 2, paidAt: paid, plan: "all_reports", wizardSlide: 5, openedAt: null }),
+        sub({ id: 1, paidAt: paid, plan: "full_report", full: true, wizardSlide: 5 }),
+        sub({
+          id: 2,
+          paidAt: paid,
+          plan: "all_reports",
+          full: true,
+          wizardSlide: 5,
+          openedAt: null,
+        }),
         sub({ id: 3, paidAt: paid, plan: "essentials" }),
         sub({ id: 4 }),
+        // Essentials first, Full later: the first plan says Essentials, the purchase was Full.
+        sub({ id: 5, paidAt: paid, plan: "essentials", full: true }),
       ],
     });
     const p = page({ facts: f, benchmark: f });
-    // Of the three who opened their report, one bought Full (the Full All buyer never opened it).
+    // Of the four who opened their report, two bought Full (the Full All buyer never opened it).
     expect(p.tiles.find((t) => t.key === "full")).toMatchObject({
-      value: 1 / 3,
+      value: 2 / 4,
       foot: "Full & Full All plans purchases ÷ report openers",
     });
     // Both reached slide 6; only the one who then opened the report continued through it.
     expect(p.wizard.tiles.find((t) => t.key === "completed")).toMatchObject({
-      value: 1 / 4,
+      value: 1 / 5,
       foot: "continued through slide 6",
     });
   });

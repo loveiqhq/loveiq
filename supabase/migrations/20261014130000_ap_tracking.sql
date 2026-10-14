@@ -163,7 +163,9 @@ AS $function$
            count(*) FILTER (WHERE p.amount > 0) AS sales,
            coalesce(sum(p.amount) FILTER (WHERE p.amount > 0), 0) AS revenue,
            bool_or(coalesce(p.amount, 0) = 0) AS gifted,
-           (array_agg(p.metadata->>'plan' ORDER BY p.created_date_time) FILTER (WHERE p.amount > 0))[1] AS plan
+           (array_agg(p.metadata->>'plan' ORDER BY p.created_date_time) FILTER (WHERE p.amount > 0))[1] AS plan,
+           -- Bought Full or Full All, first or as an upgrade from Essentials (the plan is the first).
+           coalesce(bool_or(p.metadata->>'plan' IN ('full_report', 'all_reports')) FILTER (WHERE p.amount > 0), false) AS full_paid
       FROM payment p
       JOIN personal_report pr ON pr.id = p.personal_report_id
      WHERE p.status = 'succeeded' AND coalesce(p.is_test, false) = false
@@ -218,7 +220,7 @@ AS $function$
            r.opened_at, r.visits, r.returned_at, r.read_ms, r.closed,
            q.paywall_at, c.at AS clicked_at, q.checkout_at,
            CASE WHEN sd.tablet THEN 'Tablet' ELSE coalesce(q.device, sd.device) END AS device, q.tier, q.price_arm,
-           p.paid_at, p.sales, p.revenue, p.gifted, p.plan,
+           p.paid_at, p.sales, p.revenue, p.gifted, p.plan, p.full_paid,
            (sh.sid IS NOT NULL) AS shared, sh.at AS shared_at, coalesce(v.n, 0) AS votes, v.at AS voted_at,
            (iv.sid IS NOT NULL) AS invited, iv.at AS invited_at,
            w.slide AS wizard_slide,
@@ -374,7 +376,7 @@ AS $function$
                'readMs', coalesce(x.read_ms, 0), 'closed', coalesce(x.closed, 0),
                'paywallAt', x.paywall_at, 'clickedAt', x.clicked_at, 'checkoutAt', x.checkout_at,
                'paidAt', x.paid_at, 'sales', coalesce(x.sales, 0), 'revenue', coalesce(x.revenue, 0),
-               'gifted', coalesce(x.gifted, false), 'plan', x.plan,
+               'gifted', coalesce(x.gifted, false), 'plan', x.plan, 'full', coalesce(x.full_paid, false),
                'shared', x.shared, 'sharedAt', x.shared_at, 'votes', x.votes, 'votedAt', x.voted_at,
                'invited', x.invited, 'invitedAt', x.invited_at, 'wizardSlide', x.wizard_slide,
                -- The visit the survey was finished in, for the new/returning filter (PostHog).

@@ -185,9 +185,6 @@ const RETURN_SOURCES: Array<[posthog: string, label: string]> = [
   ["Another tagged link", "Other"],
 ];
 
-/** The plans the Full unlock rate counts: Full and Full All. */
-const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_reports"]);
-
 /** "1 share", "12 shares". */
 const plural = (n: number, one: string) =>
   `${n.toLocaleString("en-US")} ${n === 1 ? one : `${one}s`}`;
@@ -419,10 +416,7 @@ export function buildReportPage(input: {
   const inviteRate = (list: SubFact[]) =>
     per((l) => l.filter((s) => s.openedAt && s.invited).length, list);
   const unlockRate = (list: SubFact[]) =>
-    per(
-      (l) => l.filter((s) => s.openedAt && s.paidAt && FULL_PLANS.has(s.plan ?? "")).length,
-      list
-    );
+    per((l) => l.filter((s) => s.openedAt && s.paidAt && s.full).length, list);
   const spark = (pick: (x: SubFact[]) => number | null) =>
     trend(facts, scope, (_x, from, to) => pick(subsIn(facts, scope, from, to)));
   // Paywall clicks, share-method invites and the wizard's slides were recorded only with

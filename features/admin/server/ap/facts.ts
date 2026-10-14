@@ -69,7 +69,10 @@ export interface SubFact extends Tagged {
   sales: number;
   revenue: number;
   gifted: boolean;
+  /** The first paid plan. */
   plan: string | null;
+  /** Bought Full or Full All, first or as an upgrade later. */
+  full: boolean;
   shared: boolean;
   /** When the first share, vote and invite happened (for age-matched comparisons). */
   sharedAt: string | null;
@@ -97,6 +100,9 @@ export interface MoneyFact extends Tagged {
   ph: string | null;
   visitorNew?: boolean | null;
 }
+
+/** The plans that unlock the full report. */
+export const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_reports"]);
 
 export interface IntroFact {
   day: string;
@@ -222,6 +228,8 @@ export function parseFacts(
       revenue: num(r.revenue),
       gifted: r.gifted === true,
       plan: str(r.plan),
+      // An ap_facts from before the flag: the first plan, as it was read then.
+      full: typeof r.full === "boolean" ? r.full : FULL_PLANS.has(str(r.plan) ?? ""),
       shared: r.shared === true,
       sharedAt: str(r.sharedAt),
       votes: num(r.votes),

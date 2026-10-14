@@ -49,6 +49,13 @@ describe("AP readers' SQL", () => {
     }
   });
 
+  it("marks a finisher who bought Full or Full All at any point, not only first", () => {
+    expect(SQL).toMatch(
+      /coalesce\(bool_or\(p\.metadata->>'plan' IN \('full_report', 'all_reports'\)\) FILTER \(WHERE p\.amount > 0\), false\) AS full_paid/
+    );
+    expect(SQL).toMatch(/'full', coalesce\(x\.full_paid, false\)/);
+  });
+
   it("leaves a Skip Intro on slide 4 out of going on and of the slide's time", () => {
     expect(SQL).toMatch(/FILTER \(WHERE s4\.visitor_id IS NULL\) AS went_on/);
     expect(SQL).toMatch(/> f\.first_seen AND s4\.visitor_id IS NULL\), '\{\}'\) AS ms/);
