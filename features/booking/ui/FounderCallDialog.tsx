@@ -115,7 +115,7 @@ const FounderCallDialog: FC<Props> = ({ open, bookingUrl, onDismiss, onBook }) =
             </svg>
           </button>
 
-          <p className="report-leave-offer__eyebrow">Before You Go</p>
+          <p className="report-leave-offer__eyebrow">Prefer to Talk?</p>
           <h2 id={TITLE_ID} className="report-leave-offer__title">
             {"Your Full Report, "}
             <span className="rpg-gradient">Free</span>

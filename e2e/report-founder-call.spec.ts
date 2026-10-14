@@ -5,15 +5,16 @@ import { mockReport } from "./fixtures/report";
 /**
  * The founder-call leave offer on a real build (features/report/logic/leaveIntent.ts):
  * an unpaid reader who just finished the survey in this tab is offered their full report
- * free for a 20-minute call with the founders, once, as they leave.
+ * free for a 20-minute call with the founders, once, 1.6 s after the first paywall card
+ * comes into view. Every device the same since 14.10.
  *
  * The offer needs the build's NEXT_PUBLIC_FOUNDER_CALL_URL, which Next inlines at build
  * time. ci.yml passes a stub calendar page to the build and the same value to this run;
  * without it the offer is off, so these cases skip.
  *
  * Submission 1 is the pay pop-up test's no_popup arm, so no plans pop-up opens on its
- * own, and none of these readers scroll to that test's point. The fixture's other specs
- * keep their old report date, which makes every one of them a return visit.
+ * own, and none of these readers scroll as far as that test's point. The fixture's other
+ * specs keep their old report date, which makes every one of them a return visit.
  */
 const BOOKING = process.env.NEXT_PUBLIC_FOUNDER_CALL_URL ?? "";
 const TOKEN = "test-token-leave";
@@ -58,10 +59,10 @@ async function openFreshReport(page: Page) {
 
 const offer = (page: Page) => page.getByRole("dialog", { name: /Free for a 20-Minute Call/ });
 
-/** Brings the first locked chapter into view: the offer arms at the first paywall. */
+/** Brings the first paywall card into view: the offer follows 1.6 s later. */
 async function reachThePaywall(page: Page) {
-  const locked = page.locator(".rv4-premium, .rv4-chapter.is-locked").first();
-  await locked.scrollIntoViewIfNeeded();
+  const card = page.locator(".rv4-premium, .rv4-chapter.is-locked").first();
+  await card.scrollIntoViewIfNeeded();
   await page.evaluate(() => window.dispatchEvent(new Event("scroll")));
 }
 
@@ -74,20 +75,15 @@ async function sentLeaveEvents(page: Page) {
   );
 }
 
-test.describe("founder-call leave offer — a mouse on a wide screen", () => {
-  test.skip(({ isMobile }) => isMobile, "the pointer leaving the window is a desktop signal");
-
-  test("opens as the pointer leaves through the top, and books in a new tab", async ({ page }) => {
+test.describe("founder-call leave offer", () => {
+  test("waits for the paywall card, then opens and books in a new tab", async ({ page }) => {
     await openFreshReport(page);
-    await reachThePaywall(page);
+    // At the top of the report, nothing: the reader has not reached the paywall.
+    await page.waitForTimeout(3_000);
     await expect(offer(page)).toHaveCount(0);
 
-    // A real pointer cannot leave a headless window, so the leave arrives as the event
-    // the browser sends for it.
-    await page.evaluate(() =>
-      document.dispatchEvent(new MouseEvent("mouseout", { clientY: -1, relatedTarget: null }))
-    );
-    await expect(offer(page)).toBeVisible();
+    await reachThePaywall(page);
+    await expect(offer(page)).toBeVisible({ timeout: 5_000 });
 
     const cta = offer(page).getByRole("link", { name: /Book a 20-Minute Call/ });
     await expect(cta).toHaveAttribute("href", BOOKING);
@@ -105,22 +101,11 @@ test.describe("founder-call leave offer — a mouse on a wide screen", () => {
         .toEqual(["leave_offer_shown", "leave_offer_clicked"]);
     }
   });
-});
 
-test.describe("founder-call leave offer — phones", () => {
-  test.skip(({ isMobile }) => !isMobile, "phones get the plans-window and idle signals");
-
-  test("opens after the reader closes a plans window they opened, and never again", async ({
-    page,
-  }) => {
+  test("once dismissed, never again for that report, across a reload", async ({ page }) => {
     await openFreshReport(page);
     await reachThePaywall(page);
-
-    await page.locator(".report-sticky-unlock--mobile .report-sticky-unlock__cta--v4").click();
-    await expect(page.locator(".report-pricing-modal")).toHaveAttribute("data-state", "open");
-    await page.getByRole("button", { name: /close pricing modal/i }).click();
-
-    await expect(offer(page)).toBeVisible();
+    await expect(offer(page)).toBeVisible({ timeout: 5_000 });
     await offer(page).getByRole("button", { name: "No Thanks, Keep Reading" }).click();
     await expect(offer(page)).toHaveCount(0);
 
@@ -128,20 +113,7 @@ test.describe("founder-call leave offer — phones", () => {
     await page.reload();
     await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
     await reachThePaywall(page);
-    await page.locator(".report-sticky-unlock--mobile .report-sticky-unlock__cta--v4").click();
-    await expect(page.locator(".report-pricing-modal")).toHaveAttribute("data-state", "open");
-    await page.getByRole("button", { name: /close pricing modal/i }).click();
-    await page.waitForTimeout(1_500);
+    await page.waitForTimeout(3_000);
     await expect(offer(page)).toHaveCount(0);
-  });
-
-  test("opens after 30 seconds with nothing happening at the paywall", async ({ page }) => {
-    test.setTimeout(120_000);
-    await openFreshReport(page);
-    await reachThePaywall(page);
-
-    await page.waitForTimeout(25_000);
-    await expect(offer(page)).toHaveCount(0);
-    await expect(offer(page)).toBeVisible({ timeout: 15_000 });
   });
 });

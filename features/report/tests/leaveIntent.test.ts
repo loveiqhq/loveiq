@@ -6,12 +6,10 @@ import {
   chooseLeaveOffer,
   findOpenOverlay,
   hasReturnMarkers,
-  isExitIntent,
   isFirstVisit,
   isInsidePopupWindow,
   leaveMode,
   leaveOfferKey,
-  leaveSignalSet,
   parseReportDate,
   popupPointKey,
   resolveLeaveOverride,
@@ -178,27 +176,6 @@ describe("leaveMode", () => {
     expect(leaveMode({ ...anonymousPreview, override: "on", hasPurchased: true })).toBe("off");
     expect(leaveMode({ ...anonymousPreview, override: "show", bookingUrl: null })).toBe("off");
     expect(leaveMode({ ...anonymousPreview, override: "show", viewMode: "shared" })).toBe("off");
-  });
-});
-
-describe("leaveSignalSet", () => {
-  it("uses the mouse only on a wide screen with a fine pointer", () => {
-    expect(leaveSignalSet({ wide: true, finePointer: true })).toBe("pointer");
-    expect(leaveSignalSet({ wide: true, finePointer: false })).toBe("touch");
-    expect(leaveSignalSet({ wide: false, finePointer: true })).toBe("touch");
-    expect(leaveSignalSet({ wide: false, finePointer: false })).toBe("touch");
-  });
-});
-
-describe("isExitIntent", () => {
-  it("is the mouse leaving the window through the top", () => {
-    expect(isExitIntent({ relatedTarget: null, clientY: 0 })).toBe(true);
-    expect(isExitIntent({ relatedTarget: null, clientY: -3 })).toBe(true);
-  });
-
-  it("ignores moves between elements and exits through the sides or bottom", () => {
-    expect(isExitIntent({ relatedTarget: document.body, clientY: 0 })).toBe(false);
-    expect(isExitIntent({ relatedTarget: null, clientY: 400 })).toBe(false);
   });
 });
 
