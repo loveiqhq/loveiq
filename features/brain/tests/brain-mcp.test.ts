@@ -5433,7 +5433,7 @@ describe("/api/mcp", () => {
     it("says a source is ok when its job succeeded", async () => {
       cronRuns = { "brain-notion": { started_at: "2026-08-30T22:41:39Z", status: "success" } };
       wireCorpus({ notion: 1404 });
-      expect(await text()).toContain("brain-notion ok at 2026-08-30 22:41");
+      expect(await text()).toContain("brain-notion ok at 2026-08-31 00:41 Berlin time");
     });
 
     describe("the Notion reach line", () => {
@@ -5461,7 +5461,7 @@ describe("/api/mcp", () => {
         wireCorpus({ notion: 1404 });
         const out = await text();
         expect(out).toContain(
-          "brain-notion ok at 2026-10-12 05:41; reach check 2026-10-12: 2 linked Notion pages Jarvis cannot open (Email Marketing Playbook, untitled)"
+          "brain-notion ok at 2026-10-12 07:41 Berlin time; reach check 2026-10-12: 2 linked Notion pages Jarvis cannot open (Email Marketing Playbook, untitled)"
         );
         // The counters stay in cron_run.
         expect(out).not.toContain("checked 19");
@@ -5494,14 +5494,14 @@ describe("/api/mcp", () => {
         const lines = (await text()).split("\n");
         const gmail = lines.find((l) => l.startsWith("gmail:")) ?? "";
         const notion = lines.find((l) => l.startsWith("notion:")) ?? "";
-        expect(gmail).toContain("brain-gmail ok at 2026-10-12 05:11");
+        expect(gmail).toContain("brain-gmail ok at 2026-10-12 07:11 Berlin time");
         expect(gmail).not.toContain("reach check");
         expect(notion).toContain("reach check 2026-10-12: all 80 linked Notion pages are readable");
 
         // Silence would read as "nothing missing".
         cronRuns = { "brain-notion": { started_at: "2026-10-12T05:41:00Z", status: "success" } };
         expect(await text()).toContain(
-          "brain-notion ok at 2026-10-12 05:41; the Notion reach check has not run yet"
+          "brain-notion ok at 2026-10-12 07:41 Berlin time; the Notion reach check has not run yet"
         );
       });
 
@@ -5545,14 +5545,14 @@ describe("/api/mcp", () => {
       wireCorpus({ gsc: 276 });
       const out = await text();
       expect(out).not.toContain("no record of brain-ingest ever running");
-      expect(out).toContain("brain-ingest ok at 2026-08-30 04:47");
+      expect(out).toContain("brain-ingest ok at 2026-08-30 06:47 Berlin time");
     });
 
     it("shows WhatsApp's last sync from the laptop, and says when it failed", async () => {
       cronRuns = { "brain-whatsapp": { started_at: "2026-08-30T21:15:02Z", status: "success" } };
       wireCorpus({ whatsapp: 540 });
       expect(await text()).toContain(
-        "synced every five minutes from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off; last synced 2026-08-30 21:15"
+        "synced every five minutes from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off; last recorded sync 2026-08-30 23:15 Berlin time (one that finds nothing new records itself once an hour)"
       );
       cronRuns = {
         "brain-whatsapp": {
@@ -5562,11 +5562,11 @@ describe("/api/mcp", () => {
         },
       };
       expect(await text()).toContain(
-        "the last sync FAILED at 2026-08-30 22:15 (WhatsApp Desktop has not written its database for 30h)"
+        "the last sync FAILED at 2026-08-31 00:15 Berlin time (WhatsApp Desktop has not written its database for 30h)"
       );
       // A timeout is a failure too, not a sync.
       cronRuns = { "brain-whatsapp": { started_at: "2026-08-30T23:15:02Z", status: "timeout" } };
-      expect(await text()).toContain("the last sync FAILED at 2026-08-30 23:15");
+      expect(await text()).toContain("the last sync FAILED at 2026-08-31 01:15 Berlin time");
       cronRuns = {};
       expect(await text()).toContain("no sync has recorded itself yet");
     });

@@ -6679,6 +6679,14 @@ async function callTool(
       })
     );
 
+    /**
+     * Berlin time, and said so. A bare UTC time reads as local: on 2026-10-14 an answer
+     * told the team WhatsApp had "last synced at 08:58", which was 10:58 their time.
+     */
+    const berlin = (iso: string) =>
+      Number.isNaN(Date.parse(iso))
+        ? "an unknown time"
+        : `${reportingDateTime(new Date(iso))} Berlin time`;
     const health = (source: string): string => {
       if (source === "doc" || source === "commit") return " · ingested on push to main";
       /**
@@ -6695,9 +6703,11 @@ async function callTool(
           " · synced every five minutes from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off";
         const run = lastRun.get("brain-whatsapp");
         if (!run) return `${note}; no sync has recorded itself yet`;
-        const when = run.at.slice(0, 16).replace("T", " ");
+        const when = berlin(run.at);
+        // "Last recorded", because a sync that finds nothing new records itself only once
+        // an hour: read as the last sync, "08:58" told a reader newer messages were missing.
         return run.status === "success"
-          ? `${note}; last synced ${when}`
+          ? `${note}; last recorded sync ${when} (one that finds nothing new records itself once an hour)`
           : `${note}; the last sync FAILED at ${when}${run.error ? ` (${run.error})` : ""}`;
       }
       // Written by `record_decision`, so there is no job to be behind. Said explicitly:
@@ -6718,7 +6728,7 @@ async function callTool(
         return unread.has(cron)
           ? ` · ${cron} status could not be read${reach}`
           : ` · no record of ${cron} ever running${reach}`;
-      const when = run.at.slice(0, 16).replace("T", " ");
+      const when = berlin(run.at);
       if (run.status === "success") return ` · ${cron} ok at ${when}${reach}`;
       return ` · ${cron} FAILING since at least ${when}${run.error ? ` (${run.error})` : ""}${reach}`;
     };
