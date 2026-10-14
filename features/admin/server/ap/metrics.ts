@@ -21,9 +21,15 @@ export const EVENTS_COMPLETE_FROM = "2026-09-18";
 /** Drafts of people who never finish are cleared after about this many days. */
 export const DRAFT_DAYS = 30;
 
-export type Scope = Pick<ApFilters, "assessment" | "source" | "device" | "tier">;
+export type Scope = Pick<ApFilters, "assessment" | "source" | "device" | "tier" | "visitor">;
 
-export const ALL: Scope = { assessment: "all", source: "all", device: "all", tier: "all" };
+export const ALL: Scope = {
+  assessment: "all",
+  source: "all",
+  device: "all",
+  tier: "all",
+  visitor: "all",
+};
 
 /** Only Assessment A has launched: B and C have no data at all. */
 export function launched(scope: Scope): boolean {
@@ -36,6 +42,8 @@ interface Attributes {
   ads: boolean;
   device: string | null;
   tier: string | null;
+  /** From PostHog, set only while the visitor filter is on (fetchFacts); null: unknown. */
+  visitorNew?: boolean | null;
 }
 
 /** Whether one person's facts pass the narrowing filters. Unknown never matches a filter. */
@@ -44,6 +52,7 @@ export function inScope(a: Attributes, scope: Scope, known = true): boolean {
   if (scope.source !== "all" && classifySource(a, known) !== scope.source) return false;
   if (scope.device !== "all" && deviceClass(a.device) !== scope.device) return false;
   if (scope.tier !== "all" && a.tier !== scope.tier) return false;
+  if (scope.visitor !== "all" && (a.visitorNew ?? null) !== (scope.visitor === "new")) return false;
   return true;
 }
 
@@ -58,12 +67,16 @@ export function visitsBlocked(scope: Scope): string | null {
     return "Visits can't be split by source: the visit log misses most ad clicks.";
   if (scope.device !== "all") return "Visits don't record the device.";
   if (scope.tier !== "all") return "Visits don't record the country.";
+  if (scope.visitor !== "all")
+    return "Visits can't be split into new and returning: the visit log keeps no visitor history.";
   return null;
 }
 
 /** Why starts are blank under the filters for a range from `from`, read on `today`. */
 export function startsBlocked(scope: Scope, from: string, today: string): string | null {
   if (scope.tier !== "all") return "Survey starts don't record the country tier.";
+  if (scope.visitor !== "all")
+    return "Survey starts can't be split into new and returning: an unfinished start isn't linked to PostHog.";
   if (scope.device !== "all" && from < STEP_DEVICE_FROM) {
     return "Survey starts record the device from 12 Oct 2026.";
   }
@@ -76,6 +89,7 @@ export function startsBlocked(scope: Scope, from: string, today: string): string
 export function spendBlocked(scope: Scope): string | null {
   if (scope.device !== "all") return "Ad spend can't be split by device here.";
   if (scope.tier !== "all") return "Ad spend can't be split by country tier.";
+  if (scope.visitor !== "all") return "Ad spend can't be split into new and returning visitors.";
   return null;
 }
 

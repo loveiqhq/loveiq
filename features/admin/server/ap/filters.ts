@@ -58,6 +58,17 @@ export const DEVICES = [
 ] as const;
 export type DeviceFilter = (typeof DEVICES)[number]["value"];
 
+/**
+ * New or returning, from PostHog: whether the person had visited the site before the visit
+ * they finished the survey in. Only finishers, their reports and their payments can be split.
+ */
+export const VISITORS = [
+  { value: "all", label: "New & returning" },
+  { value: "new", label: "New only" },
+  { value: "returning", label: "Returning only" },
+] as const;
+export type VisitorFilter = (typeof VISITORS)[number]["value"];
+
 /** The country price tiers the pricing code assigns (report_price_quote.country_tier). */
 export const TIERS = [
   { value: "all", label: "All tiers" },
@@ -81,6 +92,7 @@ export interface ApFilters {
   source: SourceFilter;
   device: DeviceFilter;
   tier: TierFilter;
+  visitor: VisitorFilter;
   /** The range includes today, which is still running (set by parseFilters). */
   running?: boolean;
 }
@@ -124,6 +136,7 @@ export function defaultFilters(today: string): ApFilters {
     source: "all",
     device: "all",
     tier: "all",
+    visitor: "all",
   };
 }
 
@@ -161,6 +174,7 @@ export function parseFilters(
     source: oneOf(SOURCES, get("source"), base.source),
     device: oneOf(DEVICES, get("device"), base.device),
     tier: oneOf(TIERS, get("tier"), base.tier),
+    visitor: oneOf(VISITORS, get("visitor"), base.visitor),
     running: range!.to >= today,
   };
 }
@@ -178,6 +192,7 @@ export function filterParams(f: ApFilters): Record<string, string> {
   if (f.source !== "all") out.source = f.source;
   if (f.device !== "all") out.device = f.device;
   if (f.tier !== "all") out.tier = f.tier;
+  if (f.visitor !== "all") out.visitor = f.visitor;
   return out;
 }
 
@@ -251,14 +266,15 @@ export function filterSummary(f: ApFilters, today: string): string {
     f.source !== "all" ? labelOf(SOURCES, f.source) : null,
     f.device !== "all" ? labelOf(DEVICES, f.device) : null,
     f.tier !== "all" ? labelOf(TIERS, f.tier) : null,
+    f.visitor !== "all" ? labelOf(VISITORS, f.visitor) : null,
   ].filter((x): x is string => x !== null);
   parts.push(narrowing.length ? narrowing.join(" · ") : "all assessments, sources and devices");
   return parts.join(" · ");
 }
 
 /** The narrowing filters that are on, by name, for "this figure ignores …" notes. */
-export function activeNarrowing(f: ApFilters): Array<"source" | "device" | "tier"> {
-  return (["source", "device", "tier"] as const).filter((k) => f[k] !== "all");
+export function activeNarrowing(f: ApFilters): Array<"source" | "device" | "tier" | "visitor"> {
+  return (["source", "device", "tier", "visitor"] as const).filter((k) => f[k] !== "all");
 }
 
 export interface Bucket {

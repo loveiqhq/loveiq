@@ -510,7 +510,7 @@ export function buildReportPage(input: {
   ];
 
   const benchRec = recorded(
-    subsIn(input.benchmark, { ...scope, source: "all", device: "all", tier: "all" })
+    subsIn(input.benchmark, { ...scope, source: "all", device: "all", tier: "all", visitor: "all" })
   ).filter((s) => s.day >= EVENTS_COMPLETE_FROM);
   const buckets = timeShares(rec);
   const benchBuckets = timeShares(benchRec);

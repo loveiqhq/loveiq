@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fetchFacts } from "@features/admin/server/ap/facts";
+import { fetchFactsFor } from "@features/admin/server/ap/facts";
 import {
   activeNarrowing,
   beforeData,
@@ -29,8 +29,8 @@ export async function GET(request: Request) {
 
   try {
     const [facts, previous, ad, questions] = await Promise.all([
-      fetchFacts(filters.from, filters.to),
-      cmp && !beforeData(cmp) ? fetchFacts(cmp.from, cmp.to) : Promise.resolve(null),
+      fetchFactsFor(filters.from, filters.to, filters),
+      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       adCostByDay(),
       fetchSurveyQuestions(filters.from, filters.to, filters).catch((err: unknown) => {
         // The survey card's one cell is not worth failing the page for.

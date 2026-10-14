@@ -1,7 +1,8 @@
 -- AP-Analytics reads the new tracking (14 Oct 2026): per-chapter report reading, the intro
--- cards' Back and Skip, tablets, Meta Ads and organic search as sources, and per-email opens
--- and clicks. The three readers are replaced whole (bodies otherwise as in 20261013120000,
--- 20261013120200 and 20261013120300); the tables and columns they read come first, in
+-- cards' Back and Skip, tablets, Meta Ads and organic search as sources, per-email opens and
+-- clicks, and the PostHog visit a survey was finished in (the new/returning filter). The four
+-- readers are replaced whole (bodies otherwise as in 20261013120000, 20261013120200 and
+-- 20261013120300); the tables and columns they read come first, in
 -- 20261014120100..20261014120300. Rollback: supabase/rollbacks/20261014130000_ap_tracking_down.sql.
 
 CREATE OR REPLACE FUNCTION public.ap_facts(p_from date, p_to date)
@@ -78,7 +79,7 @@ AS $function$
      WHERE st.started_at >= b.since_ts AND st.started_at < b.until_ts
   ),
   subs AS (
-    SELECT s.id, s.user_id, s.created_date_time, s.start_date_time, s.duration_ms,
+    SELECT s.id, s.user_id, s.created_date_time, s.start_date_time, s.duration_ms, s.posthog_session_id AS ph,
            CASE WHEN s.utm_tracker IS NOT NULL AND pg_input_is_valid(s.utm_tracker, 'jsonb')
                      AND jsonb_typeof(s.utm_tracker::jsonb) = 'object'
                 THEN s.utm_tracker::jsonb END AS j
@@ -205,7 +206,7 @@ AS $function$
      ORDER BY a.survey_submission_id, a.id DESC
   ),
   sub_rows AS (
-    SELECT s.id, s.created_date_time, s.start_date_time, s.duration_ms, s.j,
+    SELECT s.id, s.created_date_time, s.start_date_time, s.duration_ms, s.j, s.ph,
            (s.created_date_time AT TIME ZONE 'Europe/Berlin')::date AS day,
            r.opened_at, r.visits, r.returned_at, r.read_ms, r.closed,
            q.paywall_at, c.at AS clicked_at, q.checkout_at, coalesce(q.device, sd.device) AS device, q.tier, q.price_arm,
@@ -229,7 +230,7 @@ AS $function$
   ),
   money AS (
     SELECT (p.created_date_time AT TIME ZONE 'Europe/Berlin')::date AS day, p.amount, s.id AS sid,
-           p.metadata->>'plan' AS plan,
+           p.metadata->>'plan' AS plan, s.posthog_session_id AS ph,
            CASE WHEN s.utm_tracker IS NOT NULL AND pg_input_is_valid(s.utm_tracker, 'jsonb')
                      AND jsonb_typeof(s.utm_tracker::jsonb) = 'object'
                 THEN s.utm_tracker::jsonb END AS j,
@@ -321,7 +322,9 @@ AS $function$
                'paidAt', x.paid_at, 'sales', coalesce(x.sales, 0), 'revenue', coalesce(x.revenue, 0),
                'gifted', coalesce(x.gifted, false), 'plan', x.plan,
                'shared', x.shared, 'sharedAt', x.shared_at, 'votes', x.votes, 'votedAt', x.voted_at,
-               'invited', x.invited, 'invitedAt', x.invited_at, 'wizardSlide', x.wizard_slide
+               'invited', x.invited, 'invitedAt', x.invited_at, 'wizardSlide', x.wizard_slide,
+               -- The visit the survey was finished in, for the new/returning filter (PostHog).
+               'ph', x.ph
              ) ORDER BY x.created_date_time), '[]'::json)
         FROM sub_rows x
     ),
@@ -330,7 +333,7 @@ AS $function$
                'day', m.day, 'sid', m.sid, 'amount', m.amount, 'plan', m.plan,
                'src', m.j->>'utm_source', 'med', m.j->>'utm_medium',
                'ads', (coalesce(m.j->>'gclid', '') <> '' OR coalesce(m.j->>'gbraid', '') <> '' OR coalesce(m.j->>'wbraid', '') <> ''),
-               'arm', m.j->>'landing_variant', 'device', m.device, 'tier', m.tier)), '[]'::json)
+               'arm', m.j->>'landing_variant', 'device', m.device, 'tier', m.tier, 'ph', m.ph)), '[]'::json)
         FROM money m
     ),
     'intro', (SELECT coalesce(json_agg(json_build_object('day', x.day, 'step', x.step, 'n', x.n, 'ms', x.ms, 'skipped', x.skipped)), '[]'::json) FROM intro x),
@@ -553,3 +556,77 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.ap_report_extras(date, date) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ap_report_extras(date, date) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.ap_question_answers(p_from date, p_to date, p_qid text, p_other text DEFAULT NULL)
+ RETURNS json
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  WITH
+  b AS (
+    SELECT (p_from::timestamp AT TIME ZONE 'Europe/Berlin') AS since_ts,
+           ((p_to + 1)::timestamp AT TIME ZONE 'Europe/Berlin') AS until_ts
+  ),
+  subs AS (
+    SELECT s.id, s.user_id, s.utm_tracker, s.session_id, s.posthog_session_id
+      FROM survey_submission s, b
+     WHERE s.status = 'completed'
+       AND s.created_date_time >= b.since_ts AND s.created_date_time < b.until_ts
+       AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.id = s.user_id AND u.email ~* '@loveiq\.org$')
+  ),
+  q AS (
+    SELECT sq.id, sq.frontend_qid, sq.type
+      FROM survey_question sq
+     WHERE sq.frontend_qid IN (p_qid, p_other)
+       AND (sq.type IN ('scale', 'single', 'multiple') OR sq.frontend_qid = '15001')
+  ),
+  answers AS (
+    SELECT a.survey_submission_id AS sid, q.frontend_qid AS qid,
+           CASE
+             WHEN q.type = 'scale' THEN array[trim(to_char(a.normalized_value, 'FM999990'))]
+             WHEN q.type = 'multiple' THEN (
+               SELECT array_agg(ao.option_text ORDER BY ao.display_order, ao.id)
+                 FROM survey_submission_answer_options o
+                 JOIN answer_option ao ON ao.id = o.answer_option_id
+                WHERE o.survey_submission_answer_id = a.id)
+             WHEN a.answer_option_id IS NOT NULL THEN (SELECT array[ao.option_text] FROM answer_option ao WHERE ao.id = a.answer_option_id)
+             WHEN q.frontend_qid = '15001' THEN array[a.answer_text]
+           END AS vals
+      FROM survey_submission_answer a
+      JOIN q ON q.id = a.survey_question_id
+     WHERE a.survey_submission_id IN (SELECT id FROM subs)
+       AND coalesce(a.was_skipped, false) = false
+  )
+  SELECT json_build_object(
+    'rows', (
+      SELECT coalesce(json_agg(json_build_object(
+               'answer', mine.vals,
+               'other', other.vals,
+               'src', t.j->>'utm_source', 'med', t.j->>'utm_medium',
+               'ads', (coalesce(t.j->>'gclid', '') <> '' OR coalesce(t.j->>'gbraid', '') <> '' OR coalesce(t.j->>'wbraid', '') <> ''),
+               'gender', up.gender, 'relationship', up.relationship_status,
+               -- As ap_facts: the pricing quote's device, else the survey steps' (from 12 Oct 2026).
+               'device', coalesce(
+                 (SELECT q2.device_type FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.device_type IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1),
+                 (SELECT e.device_type FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.device_type IS NOT NULL ORDER BY e.created_at DESC LIMIT 1)),
+               'tier', (SELECT q2.country_tier FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.country_tier IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1),
+               -- As ap_facts: the visit the survey was finished in, for the new/returning filter.
+               'ph', s.posthog_session_id
+             )), '[]'::json)
+        FROM subs s
+        JOIN answers mine ON mine.sid = s.id AND mine.qid = p_qid
+        LEFT JOIN answers other ON other.sid = s.id AND other.qid = p_other
+        LEFT JOIN app_user u ON u.id = s.user_id
+        LEFT JOIN user_profile up ON up.id = u.user_profile_id,
+        LATERAL (SELECT CASE WHEN s.utm_tracker IS NOT NULL AND pg_input_is_valid(s.utm_tracker, 'jsonb')
+                              AND jsonb_typeof(s.utm_tracker::jsonb) = 'object'
+                         THEN s.utm_tracker::jsonb END AS j) t
+       WHERE mine.vals IS NOT NULL
+    ),
+    'finished', (SELECT count(*) FROM subs)
+  );
+$function$;
+
+REVOKE ALL ON FUNCTION public.ap_question_answers(date, date, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ap_question_answers(date, date, text, text) TO service_role;

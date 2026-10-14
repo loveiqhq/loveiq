@@ -669,8 +669,8 @@ export default function ApLanding() {
       />
       <ApFilterBar
         scope="assessment"
-        fixed={["compare", "source", "device", "tier"]}
-        fixedNote="This page compares test arms over all traffic: the visit log has no source, device or tier, and arms are compared with each other, not with another period."
+        fixed={["compare", "source", "device", "tier", "visitor"]}
+        fixedNote="This page compares test arms over all traffic: the visit log has no source, device, tier or visitor history, and arms are compared with each other, not with another period."
       />
       {loading && !data && <Loading label="the landing page" />}
       {error && <Failed message={error} onRetry={refetch} />}

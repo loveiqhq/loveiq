@@ -10,6 +10,7 @@ import {
   PERIODS,
   SOURCES,
   TIERS,
+  VISITORS,
 } from "@features/admin/server/ap/filters";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { supabaseFetch } from "@features/admin/server/supabase";
@@ -44,6 +45,7 @@ const FILTER_STATE = z
     source: values(SOURCES).optional(),
     device: values(DEVICES).optional(),
     tier: values(TIERS).optional(),
+    visitor: values(VISITORS).optional(),
   })
   .strict();
 

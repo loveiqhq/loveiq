@@ -60,12 +60,20 @@ interface Steps {
 }
 
 /** The questions' segment for the filter bar's state, or why there is none. */
-export function questionSegment(f: Pick<ApFilters, "source" | "device" | "tier" | "assessment">): {
+export function questionSegment(
+  f: Pick<ApFilters, "source" | "device" | "tier" | "assessment" | "visitor">
+): {
   segment: Segment;
   blocked: string | null;
 } {
   if (f.tier !== "all")
     return { segment: "All traffic", blocked: "Survey steps don't record the country tier." };
+  if (f.visitor !== "all") {
+    return {
+      segment: "All traffic",
+      blocked: "Survey steps can't be split into new and returning visitors.",
+    };
+  }
   if (f.source !== "all" && f.device !== "all") {
     return {
       segment: "All traffic",
@@ -165,11 +173,12 @@ const cache = new Map<string, { at: number; value: Promise<SurveyQuestions> }>()
 export function fetchSurveyQuestions(
   from: string,
   to: string,
-  f: Pick<ApFilters, "source" | "device" | "tier" | "assessment"> = {
+  f: Pick<ApFilters, "source" | "device" | "tier" | "assessment" | "visitor"> = {
     source: "all",
     device: "all",
     tier: "all",
     assessment: "all",
+    visitor: "all",
   },
   now = Date.now()
 ): Promise<SurveyQuestions> {

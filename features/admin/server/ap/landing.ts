@@ -464,7 +464,13 @@ export function buildLanding(input: {
     comparisons.push(compare(test, w, a, b));
   }
 
-  const pageHead = head(f, today, now);
+  // The page fixes the comparison and the narrowing filters (all traffic, arm against arm):
+  // its notes must not describe filters a shared link carried in from another page.
+  const pageHead = head(
+    { ...f, compare: "none", source: "all", device: "all", tier: "all", visitor: "all" },
+    today,
+    now
+  );
   const notes = [...pageHead.notes];
   if (facts.from < POSTHOG_FROM)
     notes.push(

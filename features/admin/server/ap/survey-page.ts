@@ -230,7 +230,13 @@ export function buildSurveyPage(input: {
   ];
 
   const mine = subsIn(facts, scope);
-  const bench = subsIn(input.benchmark, { ...scope, source: "all", device: "all", tier: "all" });
+  const bench = subsIn(input.benchmark, {
+    ...scope,
+    source: "all",
+    device: "all",
+    tier: "all",
+    visitor: "all",
+  });
   const benchNote =
     input.benchmarkKind === "all"
       ? "all finished surveys since launch"

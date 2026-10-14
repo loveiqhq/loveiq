@@ -31,6 +31,9 @@ export interface AnswerRow {
   relationship: string | null;
   device: string | null;
   tier: string | null;
+  /** The visit the survey was finished in (PostHog), and new or returning once marked. */
+  ph: string | null;
+  visitorNew?: boolean | null;
 }
 
 export interface AnswerSplit {
@@ -211,6 +214,7 @@ export async function fetchAnswers(
         relationship: str(o.relationship),
         device: str(o.device),
         tier: str(o.tier),
+        ph: str(o.ph),
       };
     }),
   };

@@ -9,6 +9,7 @@ import {
   PERIODS,
   SOURCES,
   TIERS,
+  VISITORS,
   filterParams,
   filterSummary,
   parseFilters,
@@ -42,7 +43,7 @@ function sameFilters(a: ApFilters, b: ApFilters): boolean {
  * comparison, and the narrowing filters. Collapsible; the state lives in the URL.
  */
 /** Filters a page cannot apply: shown greyed at their "all" value, with the reason. */
-type Fixed = "compare" | "source" | "device" | "tier";
+type Fixed = "compare" | "source" | "device" | "tier" | "visitor";
 
 const SAVED_PARAMS = { kind: "filter" };
 
@@ -76,6 +77,7 @@ export default function ApFilterBar({
     ...(off("source") ? { source: "all" as const } : {}),
     ...(off("device") ? { device: "all" as const } : {}),
     ...(off("tier") ? { tier: "all" as const } : {}),
+    ...(off("visitor") ? { visitor: "all" as const } : {}),
   };
   // Open on a wide screen, closed on a phone (where it would fill the first screen), until
   // the reader chooses.
@@ -416,13 +418,20 @@ export default function ApFilterBar({
                 ))}
               </select>
             </label>
-            <label
-              className={`${fieldLabel} flex-[1_1_170px]`}
-              title="Our visit log starts a new visitor id every day, so it cannot tell a returning visitor from a new one."
-            >
+            <label className={`${fieldLabel} flex-[1_1_170px]`}>
               Visitor
-              <select disabled value="all" className={control} aria-describedby="ap-visitor-note">
-                <option value="all">New &amp; returning</option>
+              <select
+                value={filters.visitor}
+                disabled={off("visitor")}
+                onChange={(e) => update({ visitor: e.target.value as ApFilters["visitor"] })}
+                className={control}
+                aria-describedby="ap-visitor-note"
+              >
+                {VISITORS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
               </select>
             </label>
             <button
@@ -434,11 +443,11 @@ export default function ApFilterBar({
             </button>
           </div>
           <p id="ap-visitor-note" className="m-0 text-xs text-ap-muted">
-            New vs returning can&rsquo;t filter these figures: the visit log starts a new visitor id
-            every day. The Assessment A dashboard shows the split from PostHog. No Meta Ads or
-            organic search: we run no Meta campaigns (Meta-tagged links count as Social), and
-            organic search can&rsquo;t be told from direct visits, as no referrer is kept. Tablets
-            count as mobile.
+            New or returning comes from PostHog: whether the person had visited before the visit
+            they finished the survey in. It splits finished surveys, their reports and payments;
+            visits, survey starts and ad spend can&rsquo;t be split that way. No Meta Ads or organic
+            search: we run no Meta campaigns (Meta-tagged links count as Social), and organic search
+            can&rsquo;t be told from direct visits, as no referrer is kept. Tablets count as mobile.
             {assessmentFixed && (
               <> These pages are Assessment A&rsquo;s; B and C have not launched.</>
             )}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { assessmentScope } from "@features/admin/server/ap/assessment";
-import { fetchFacts } from "@features/admin/server/ap/facts";
+import { fetchFacts, fetchFactsFor } from "@features/admin/server/ap/facts";
 import {
   DATA_START,
   beforeData,
@@ -36,8 +36,8 @@ export async function GET(request: Request) {
 
   try {
     const [facts, previous, questions, introClicks] = await Promise.all([
-      fetchFacts(filters.from, filters.to),
-      cmp && !beforeData(cmp) ? fetchFacts(cmp.from, cmp.to) : Promise.resolve(null),
+      fetchFactsFor(filters.from, filters.to, filters),
+      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       fetchSurveyQuestions(filters.from, filters.to, scope).then(
         (q) => ({ q, error: null as string | null }),
         (err: unknown) => {

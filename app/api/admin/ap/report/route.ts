@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fetchFacts } from "@features/admin/server/ap/facts";
+import { fetchFacts, fetchFactsFor } from "@features/admin/server/ap/facts";
 import {
   DATA_START,
   beforeData,
@@ -29,8 +29,8 @@ export async function GET(request: Request) {
 
   try {
     const [facts, previous, benchmark, extras, returns] = await Promise.all([
-      fetchFacts(filters.from, filters.to),
-      cmp && !beforeData(cmp) ? fetchFacts(cmp.from, cmp.to) : Promise.resolve(null),
+      fetchFactsFor(filters.from, filters.to, filters),
+      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       fetchFacts(DATA_START, addDays(today, -1)),
       fetchReportExtras(filters.from, filters.to),
       fetchReportReturns(filters.from, filters.to).catch(postHogFailed),

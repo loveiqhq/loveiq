@@ -517,9 +517,11 @@ describe("POST /api/admin/ap/saved-filters", () => {
     database([{ id: 7 }]);
     expect((await save({ period: "7d", source: "google_ads" }, "filter")).status).toBe(200);
     expect(inserted()).toBe(true);
+    expect((await save({ visitor: "returning" }, "filter")).status).toBe(200);
     mockSupabaseFetch.mockClear();
     for (const bad of [
       { period: "7d", name: "x" },
+      { visitor: "everyone" },
       { source: "ana@example.com" },
       { period: "custom", from: "2026-10-01", to: "ana@example.com" },
     ]) {
@@ -727,6 +729,107 @@ describe("GET /api/admin/ap/survey/answers", () => {
     };
     expect(await get("all")).toMatchObject({ respondents: 2, finished: 3 });
     expect(await get("google_ads")).toMatchObject({ respondents: 1, finished: 1 });
+  });
+});
+
+describe("the new/returning filter", () => {
+  const A = "0192f0aa-1111-7000-8000-000000000001";
+  const B = "0192f0aa-2222-7000-8000-000000000002";
+  const finisher = (id: number, ph: string | null) => ({
+    id,
+    day: "2026-10-02",
+    at: "2026-10-02T10:00:00Z",
+    src: "google",
+    med: "cpc",
+    ads: false,
+    ph,
+  });
+  beforeEach(() => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/rpc/ap_question_answers")
+        return json({
+          rows: [
+            { answer: ["Yes"], src: "google", med: "cpc", ph: A },
+            { answer: ["No"], src: "google", med: "cpc", ph: B },
+            { answer: ["No"], src: "google", med: "cpc", ph: "not-a-session'); DROP" },
+          ],
+          finished: 3,
+        });
+      if (path === "/rest/v1/rpc/ap_facts")
+        return json({
+          visits: [],
+          starts: [],
+          // A was new, B had visited before, C's id is no session id, D PostHog never saw.
+          subs: [
+            finisher(1, A),
+            finisher(2, B),
+            finisher(3, "x' OR 1=1 --"),
+            finisher(4, "0192f0aa-4444-7000-8000-000000000004"),
+          ],
+          money: [],
+          intro: [],
+          invites: [],
+          quotes: [],
+        });
+      return json(null, { status: 404 });
+    });
+    mockHogql.mockResolvedValue({
+      ok: true,
+      cut: null,
+      rows: [
+        [A, 0],
+        [B, 1],
+      ],
+    });
+  });
+  const get = async (visitor: string) => {
+    clearFactsCache();
+    const res = await answersGet(
+      new Request(
+        `http://localhost/api/admin/ap/survey/answers?q=02001&dim=none&period=custom&from=2026-10-01&to=2026-10-07&visitor=${visitor}`
+      )
+    );
+    expect(res.status).toBe(200);
+    return (await res.json()) as { respondents: number; finished: number };
+  };
+
+  it("splits finishers and their answers by PostHog's first visit; unknown is in neither", async () => {
+    mockHogql.mockClear();
+    expect(await get("new")).toMatchObject({ respondents: 1, finished: 1 });
+    // Only well-formed session ids ever reach the query.
+    const first = mockHogql.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(first).toContain(`'${A}'`);
+    expect(first).toContain(`'${B}'`);
+    expect(first).not.toMatch(/DROP|OR 1=1/);
+    mockHogql.mockClear();
+    expect(await get("returning")).toMatchObject({ respondents: 1, finished: 1 });
+    // A known visit is not asked again; one PostHog never saw is.
+    const again = mockHogql.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(again).not.toContain(A);
+    expect(again).toContain("0192f0aa-4444-7000-8000-000000000004");
+    mockHogql.mockClear();
+    expect(await get("all")).toMatchObject({ respondents: 3, finished: 4 });
+    expect(mockHogql).not.toHaveBeenCalled();
+  });
+
+  it("fails the page plainly when PostHog can't be read, instead of showing zeros", async () => {
+    // A visit not asked before (a five-minute cache holds the last answer), and PostHog fails.
+    const facts = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: unknown) => {
+      if (path !== "/rest/v1/rpc/ap_facts") return facts(path, init);
+      const res = (await facts(path, init)) as Response;
+      const body = (await res.json()) as { subs: Array<Record<string, unknown>> };
+      body.subs.push(finisher(5, "0192f0aa-5555-7000-8000-000000000005"));
+      return json(body);
+    });
+    mockHogql.mockResolvedValue({ ok: false, error: "boom" });
+    clearFactsCache();
+    const res = await answersGet(
+      new Request(
+        `http://localhost/api/admin/ap/survey/answers?q=02001&dim=none&period=custom&from=2026-10-01&to=2026-10-07&visitor=returning`
+      )
+    );
+    expect(res.status).toBe(500);
   });
 });
 

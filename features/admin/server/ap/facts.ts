@@ -8,7 +8,8 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { reportingDay } from "@shared/time/reporting-day";
 
-import type { DeviceFilter, Source } from "./filters";
+import type { ApFilters, DeviceFilter, Source } from "./filters";
+import { markVisitors } from "./posthog";
 
 export interface VisitFact {
   day: string;
@@ -74,6 +75,10 @@ export interface SubFact extends Tagged {
   invitedAt: string | null;
   /** The furthest pre-report wizard slide reached, 1-5; null when no advance was recorded. */
   wizardSlide: number | null;
+  /** PostHog's id of the visit the survey was finished in. */
+  ph: string | null;
+  /** New or returning (markVisitors); unset until the visitor filter asks. */
+  visitorNew?: boolean | null;
 }
 
 export interface MoneyFact extends Tagged {
@@ -84,6 +89,9 @@ export interface MoneyFact extends Tagged {
   arm: string | null;
   device: string | null;
   tier: string | null;
+  /** The finisher's visit, as on SubFact. */
+  ph: string | null;
+  visitorNew?: boolean | null;
 }
 
 export interface IntroFact {
@@ -206,6 +214,7 @@ export function parseFacts(
       invited: r.invited === true,
       invitedAt: str(r.invitedAt),
       wizardSlide: numOrNull(r.wizardSlide),
+      ph: str(r.ph),
     })),
     money: rows(o.money, "money").map((r) => ({
       ...tagged(r),
@@ -216,6 +225,7 @@ export function parseFacts(
       arm: str(r.arm),
       device: str(r.device),
       tier: str(r.tier),
+      ph: str(r.ph),
     })),
     intro: rows(o.intro, "intro").map((r) => ({
       day: String(r.day),
@@ -333,6 +343,17 @@ export function fetchFacts(from: string, to: string, now = Date.now()): Promise<
   // A failed read must not stay cached for five minutes.
   facts.catch(() => cache.delete(key));
   if (cache.size > 50) cache.delete(cache.keys().next().value!);
+  return facts;
+}
+
+/** The facts, with every finisher marked new or returning while the visitor filter is on. */
+export async function fetchFactsFor(
+  from: string,
+  to: string,
+  f: Pick<ApFilters, "visitor">
+): Promise<Facts> {
+  const facts = await fetchFacts(from, to);
+  if (f.visitor !== "all") await markVisitors([...facts.subs, ...facts.money]);
   return facts;
 }
 

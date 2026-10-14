@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 
 import { fetchAnswers, isDimension, splitAnswers } from "@features/admin/server/ap/answers";
 import { assessmentScope } from "@features/admin/server/ap/assessment";
-import { fetchFacts } from "@features/admin/server/ap/facts";
+import { fetchFactsFor } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { subsIn } from "@features/admin/server/ap/metrics";
+import { markVisitors } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
@@ -35,8 +36,9 @@ export async function GET(request: Request) {
     const scope = assessmentScope(filters);
     const [{ rows }, facts] = await Promise.all([
       fetchAnswers(filters.from, filters.to, qid, otherQid),
-      fetchFacts(filters.from, filters.to),
+      fetchFactsFor(filters.from, filters.to, filters),
     ]);
+    if (filters.visitor !== "all") await markVisitors(rows);
     // "N of M finished surveys": M are the filters' people (probes out), as N's are.
     const finished = subsIn(facts, scope).length;
     return NextResponse.json(splitAnswers(qid, rows, dim, otherQid, scope, finished), {

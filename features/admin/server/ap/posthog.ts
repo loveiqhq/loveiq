@@ -60,6 +60,53 @@ function rows(query: string, cap: number): Promise<PostHogResult<unknown[][]>> {
   return result;
 }
 
+/** PostHog's session ids are UUIDs; anything else never reaches a query. */
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Whether the person had visited before a session (true: returning), kept for the process. */
+const returningBySession = new Map<string, boolean>();
+
+/**
+ * Marks each finisher (a submission, a payment's finisher, an answer's) new or returning:
+ * returning when PostHog saw the person before the visit they finished the survey in
+ * (PostHog starts a new visit after 30 idle minutes). A visit PostHog never saw stays unknown,
+ * which neither "new" nor "returning" matches, and is asked again next time. Throws when
+ * PostHog can't be read.
+ */
+export async function markVisitors(
+  people: Array<{ ph: string | null; visitorNew?: boolean | null }>
+): Promise<void> {
+  if (returningBySession.size > 50_000) returningBySession.clear();
+  const ids = [...new Set(people.map((x) => x.ph))].filter(
+    (id): id is string => typeof id === "string" && SESSION_ID.test(id)
+  );
+  const ask = ids.filter((id) => !returningBySession.has(id));
+  const since = `toDateTime('${POSTHOG_FROM} 00:00:00', 'UTC')`;
+  for (let i = 0; i < ask.length; i += 500) {
+    const list = ask
+      .slice(i, i + 500)
+      .map((id) => `'${id.toLowerCase()}'`)
+      .join(",");
+    const visit = `SELECT properties.$session_id AS sid, any(person_id) AS pid, min(timestamp) AS started
+      FROM events WHERE timestamp >= ${since} AND properties.$session_id IN (${list}) GROUP BY sid`;
+    const r = await rows(
+      `SELECT v.sid, if(f.first_seen < v.started - toIntervalMinute(1), 1, 0) AS returning
+       FROM (${visit}) v
+       JOIN (SELECT person_id, min(timestamp) AS first_seen FROM events
+             WHERE timestamp >= ${since} AND person_id IN (SELECT pid FROM (${visit}))
+             GROUP BY person_id) f ON f.person_id = v.pid`,
+      600
+    );
+    if (!r.ok) throw new Error(r.error);
+    for (const [sid, returning] of r.value)
+      returningBySession.set(String(sid), Number(returning) === 1);
+  }
+  const isNew = (ph: string | null) => {
+    const r = ph ? returningBySession.get(ph.toLowerCase()) : undefined;
+    return r === undefined ? null : !r;
+  };
+  for (const p of people) p.visitorNew = isNew(p.ph);
+}
+
 export interface NewReturning {
   new: { visitors: number; started: number; completed: number };
   returning: { visitors: number; started: number; completed: number };

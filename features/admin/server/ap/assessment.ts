@@ -84,6 +84,8 @@ export interface DashboardPayload extends PageHead {
   }>;
   newReturning: PostHogResult<NewReturning> | null;
   prices: PriceRow[];
+  /** Why the prices table is empty under the filters, or null. */
+  pricesBlocked: string | null;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -100,6 +102,7 @@ export function assessmentScope(f: ApFilters): Scope {
     source: f.source,
     device: f.device,
     tier: f.tier,
+    visitor: f.visitor,
   };
 }
 
@@ -486,10 +489,11 @@ export function buildDashboard(input: {
   }));
 
   // Sales per plan and price: of the prices quoted in the range, the checkouts and sales on
-  // them. The narrowing filters apply by the reader's own source, device and tier.
+  // them. The narrowing filters apply by the reader's own source, device and tier; quotes are
+  // counted per price, not per person, so new and returning can't split them.
   const priceMap = new Map<string, PriceRow>();
   for (const qf of facts.quotes) {
-    if (!launched(scope)) break;
+    if (!launched(scope) || scope.visitor !== "all") break;
     if (scope.source !== "all" && classifySource(qf) !== scope.source) continue;
     if (scope.device !== "all" && deviceClass(qf.device) !== scope.device) continue;
     if (scope.tier !== "all" && qf.tier !== scope.tier) continue;
@@ -530,6 +534,10 @@ export function buildDashboard(input: {
     performance,
     newReturning: input.newReturning,
     prices,
+    pricesBlocked:
+      scope.visitor !== "all"
+        ? "Prices are counted per price, not per person, so new and returning can't split them."
+        : null,
   };
 }
 

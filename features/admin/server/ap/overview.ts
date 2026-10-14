@@ -21,6 +21,7 @@ import {
   type Source,
 } from "./filters";
 import { fmt, type GoodWhen, type Unit } from "./format";
+import { POSTHOG_FROM } from "./posthog";
 import {
   EVENTS_COMPLETE_FROM,
   STEP_DEVICE_FROM,
@@ -185,6 +186,11 @@ export function head(f: ApFilters, today: string, now: Date): PageHead {
       "Before 12 Oct 2026 the device is known only for people who opened their report, so under a device filter those days cover readers only: submissions read low and the report open rate high."
     );
   }
+  if (f.visitor !== "all") {
+    notes.push(
+      `New or returning comes from PostHog (from ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}), which saw almost every finisher's visit: one it didn't see is in neither group. Visits, survey starts, ad spend and prices can't be split this way.`
+    );
+  }
   return {
     range: { from: f.from, to: f.to, label: rangeLabel(f.from, f.to) },
     compare: cmp ? { ...cmp, label: rangeLabel(cmp.from, cmp.to) } : null,
@@ -192,7 +198,7 @@ export function head(f: ApFilters, today: string, now: Date): PageHead {
     notes,
     narrowed:
       activeNarrowing(f).length > 0
-        ? "All traffic: its records carry no source, device or tier, so the filters do not apply here."
+        ? "All traffic: its records carry no source, device, tier or visitor history, so the filters do not apply here."
         : null,
   };
 }
@@ -250,6 +256,7 @@ export function buildOverview(input: {
     source: f.source,
     device: f.device,
     tier: f.tier,
+    visitor: f.visitor,
   };
   const t = totals(facts, scope);
   // The earlier period at the same age as this one, so "so far" rates compare like with like.

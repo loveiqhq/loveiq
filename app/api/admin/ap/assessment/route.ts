@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { buildDashboard } from "@features/admin/server/ap/assessment";
-import { fetchFacts } from "@features/admin/server/ap/facts";
+import { fetchFactsFor } from "@features/admin/server/ap/facts";
 import { beforeData, comparisonRange, parseFilters } from "@features/admin/server/ap/filters";
 import { fetchNewReturning, postHogFailed } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
@@ -24,8 +24,8 @@ export async function GET(request: Request) {
 
   try {
     const [facts, previous, ad, newReturning] = await Promise.all([
-      fetchFacts(filters.from, filters.to),
-      cmp && !beforeData(cmp) ? fetchFacts(cmp.from, cmp.to) : Promise.resolve(null),
+      fetchFactsFor(filters.from, filters.to, filters),
+      cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       adCostByDay(),
       // PostHog is a side panel: its failure shows there, it never fails the page.
       fetchNewReturning(filters.from, filters.to).catch(postHogFailed),

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import { addDays, shortDate } from "@features/admin/server/ap/days";
 import { classifySource, deviceClass, parseFacts } from "@features/admin/server/ap/facts";
 import {
+  activeNarrowing,
   comparisonRange,
   DATA_START,
+  filterParams,
   filterSummary,
   grainOf,
   MAX_DAYS,
@@ -19,8 +21,10 @@ import {
   armStartsComplete,
   draftsKeptFrom,
   sameAge,
+  spendBlocked,
   startsComplete,
   totals,
+  visitsBlocked,
 } from "@features/admin/server/ap/metrics";
 
 import { factsFixture, sub } from "./ap-fixtures";
@@ -111,6 +115,16 @@ describe("AP filters", () => {
     expect(comparisonRange(f)).toBeNull();
     expect(comparisonRange({ ...f, compare: "yoy" })).toBeNull();
     expect(parseFilters({}, TODAY).running).toBe(false);
+  });
+
+  it("reads, writes and names the new/returning filter like the others", () => {
+    const f = parseFilters({ visitor: "returning" }, TODAY);
+    expect(f.visitor).toBe("returning");
+    expect(parseFilters({ visitor: "everyone" }, TODAY).visitor).toBe("all");
+    expect(filterParams(f)).toEqual({ visitor: "returning" });
+    expect(filterParams(parseFilters({}, TODAY))).toEqual({});
+    expect(filterSummary(f, TODAY)).toContain("Returning only");
+    expect(activeNarrowing(f)).toEqual(["visitor"]);
   });
 
   it("says when the range is still running", () => {
@@ -207,6 +221,25 @@ describe("AP totals", () => {
     expect(t.starts).toBe(10);
     expect(totals(factsFixture(), { ...ALL, tier: "tier_1" }).starts).toBeNull();
     expect(totals(factsFixture(), { ...ALL, assessment: "b" }).subs).toBe(0);
+  });
+
+  it("splits finishers and payments by new or returning, and blanks what has no visit history", () => {
+    const facts = factsFixture();
+    const [first, second] = facts.subs;
+    first!.visitorNew = true;
+    second!.visitorNew = false;
+    for (const m of facts.money) m.visitorNew = m.sid === first!.id;
+    const n = totals(facts, { ...ALL, visitor: "new" });
+    const r = totals(facts, { ...ALL, visitor: "returning" });
+    expect(n.subs + r.subs).toBe(totals(facts, ALL).subs);
+    expect(n.subs).toBe(1);
+    expect(n.visits).toBeNull();
+    expect(n.starts).toBeNull();
+    expect(visitsBlocked({ ...ALL, visitor: "new" })).toMatch(/new and returning/);
+    expect(spendBlocked({ ...ALL, visitor: "returning" })).toMatch(/new and returning/);
+    // Not marked (PostHog never saw the visit): in neither group.
+    second!.visitorNew = null;
+    expect(totals(facts, { ...ALL, visitor: "returning" }).subs).toBe(0);
   });
 
   it("blanks starts split by source once the drafts that carried the source are gone", () => {

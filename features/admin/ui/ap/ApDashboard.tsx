@@ -265,7 +265,11 @@ export default function ApDashboard() {
                 </a>
               }
             />
-            <PricesTable rows={data.prices} />
+            {data.pricesBlocked ? (
+              <p className="m-0 text-sm text-ap-muted">{data.pricesBlocked}</p>
+            ) : (
+              <PricesTable rows={data.prices} />
+            )}
             <p className="m-0 text-xs text-ap-muted">
               Quoted and checkouts come from report_price_quote; sales and revenue from payment, on
               those quotes. Payment CVR = sales ÷ quoted. A reader is quoted every plan, so the rows
