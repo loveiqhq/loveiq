@@ -20,8 +20,9 @@
  */
 
 import { createHash } from "node:crypto";
+import { reportingDateTime } from "@shared/time/reporting-day";
 import { BODY_LIMIT, splitBody } from "./notion";
-import type { BrainRow } from "./upsert";
+import { momentOf, type BrainRow } from "./upsert";
 
 /** iOS: `[06/08/2026, 14:23:11] Marcus: text` — the leading mark is WhatsApp's own. */
 const IOS =
@@ -174,13 +175,28 @@ export function dayRows(input: DayRowInput): BrainRow[] {
     else last.push(m);
   }
 
+  /**
+   * THE TIME A PERSON READS, which for a synced message is not the one it is keyed on.
+   *
+   * The desktop read stamps `day` and `time` in UTC, and they stay the id and the stored
+   * day so no conversation is re-keyed. Shown bare they read as local: "Can we move to
+   * 9:30?" sent at 08:52 in Berlin read "06:52". An export is already in the phone's time.
+   */
+  const shown = (m: WaMessage) => {
+    if (m.at == null) return { day: m.day, time: m.time };
+    const [day, time] = reportingDateTime(new Date(m.at)).split(" ");
+    return { day: day ?? m.day, time: time ?? m.time };
+  };
+
   return bursts.flatMap((msgs) => {
     const day = msgs[0]!.day;
     const from = msgs[0]!.time;
+    const opened = shown(msgs[0]!);
+    const at = momentOf(msgs[0]!.at);
     const speakers = [...new Set(msgs.map((m) => m.sender).filter(Boolean))];
-    const title = `WhatsApp: ${chat} — ${day} ${from}`;
+    const title = `WhatsApp: ${chat} — ${opened.day} ${opened.time}`;
     const head = [title, `Between: ${speakers.join(", ")}`, ""].join("\n");
-    const lines = msgs.map((m) => `${m.sender} (${m.time}): ${m.text}`).join("\n");
+    const lines = msgs.map((m) => `${m.sender} (${shown(m).time}): ${m.text}`).join("\n");
 
     /**
      * Still split on length as well: `upsertChunks` clamps every body to 2,400
@@ -203,6 +219,8 @@ export function dayRows(input: DayRowInput): BrainRow[] {
         kind: "whatsapp-chat",
         chat,
         day,
+        // When the conversation opened, so a day's conversations list in order.
+        ...(at ? { at } : {}),
         speakers: speakers.slice(0, 12),
         messages: msgs.length,
         // Same spelling as every other source, because the three readers of this key

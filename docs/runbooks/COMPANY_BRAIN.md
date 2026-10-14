@@ -189,7 +189,9 @@ a transcript. Filter on `surface` to tell the two apart.
 | Source                                                                                     | Where from                                                             | When                    |
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------- |
 | Repo docs                                                                                  | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| GA4, call notes, funnel numbers, Slack                                                     | `/api/cron/brain-fast`                                                 | every 15 min            |
+| GA4, funnel numbers, Slack                                                                 | `/api/cron/brain-fast`                                                 | every 15 min            |
+| New Gemini meeting notes                                                                   | `/api/cron/brain-meeting-notes`                                        | every 10 min            |
+| Drive (the whole company Drive, meeting notes included)                                    | `/api/cron/brain-drive`                                                | hourly, at :52          |
 | Slack screenshots and screen recordings, described in words                                | `brain-daily.yml` → `/api/cron/brain-slack-media` (GitHub Actions)     | every 6 hours           |
 | Notion (board + pages)                                                                     | `/api/cron/brain-notion`                                               | hourly, at :41          |
 | Gmail (every mailbox on the domain)                                                        | `/api/cron/brain-gmail`                                                | hourly, at :11          |
@@ -539,7 +541,7 @@ only the first table will not know the brain can send an email.
 | `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with. With `group_by` (one or two of plan, price list, device, source, country price tier, landing arm, month), a period's real sales, revenue and EUR 0 comps per group instead, read from `payment` the way the daily numbers count it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `count_context`          | How many, and broken down by source, month or person. Search ranks and caps at 30, so it can never answer "how many" — this reads the whole corpus                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `browse_context`         | Everything matching a filter, in the order it happened and without ranking, with Berlin times: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `explain_change`         | Whether a day's numbers were outside their usual range (each against the 28 days before, median and spread) and where each move came from: traffic source or GA4 channel, the two halves of a rate, engagement, GA4 against our own count, ad spend and campaigns, what shipped and what was decided. The likely causes are fixed rules over numbers, never a model's guess. The anomaly watcher writes yesterday's unusual numbers as a notice between 07:00 and 11:00 UTC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `show_chart`             | One or two of the site's daily numbers as a line chart in the digest's style: every metric `explain_change` reads, plus revenue (payment ledger, net of refunds) and Google Ads spend (a gap outside the days the ad data covers, never a zero), 7 to 180 days. Returns the picture, a signed link to it that opens in any browser without a login, and the numbers. Two metrics share one axis, so they must be the same kind                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -1484,12 +1486,23 @@ notification — the note itself is a Google Doc, and a Doc exports to clean tex
 Parsing the mail body would mean guessing at HTML Google can change at will, for a
 worse result. So the ingester reads Drive.
 
-**Live since 2026-08-28:** the folder is shared and 23 notes (105 chunks) are
-indexed, back to 7 August. A dedicated cron re-checks every 15 minutes
-(`/api/cron/brain-fast`, at 7/22/37/52 past), so a note written after a call is
-searchable within minutes rather than the next morning. The nightly `brain-ingest`
-also ingests Drive — deliberate redundancy, so a failure of the fast job degrades to
-daily rather than to nothing.
+**Live since 2026-08-28. Two jobs read the notes.**
+
+- `/api/cron/brain-meeting-notes`, every ten minutes, makes a note searchable within
+  about ten minutes of Gemini writing it. It asks Drive only for Gemini notes changed
+  in the last three hours, in the walk's own view and in every colleague's Drive, since
+  Meet files a note in the organiser's Drive. Seven of the twelve notes from 6 to 13
+  October were in Mark's Drive only.
+- It writes a note that is not stored at its current edit, built exactly as the walk
+  builds it, so the walk then finds it current. Only a note Gemini has finished: one
+  carrying Google's "review Gemini's notes" line, which was in 114 of 114. Checked live on 2026-10-14: 44 of 44
+  parts matched what the walk had stored.
+- A run with nothing new takes about four seconds.
+- `/api/cron/brain-drive`, hourly at :52, walks the whole Drive and stays the
+  authority. Only it sweeps.
+- A note reachable only through a shortcut still waits for the hourly walk.
+- Measured 2026-10-11, before the ten-minute job: notes arrived 29-62 minutes after
+  Gemini wrote them.
 
 **Scope is controlled by SHARING, not by configuration.** It indexes every Google
 Doc the service account can see, and it can see nothing by default. To switch it on,
@@ -1868,6 +1881,12 @@ Three things the schema will not tell you:
   `ZGROUPMEMBER` to `ZWAPROFILEPUSHNAME` instead.
 - Dates are Core Data seconds from 2001-01-01; add 978307200 for a Unix timestamp.
 
+**Times are shown in Berlin time, and stored in UTC** (since 2026-10-14). The script reads
+each message's day and time in UTC, and those stay the conversation's id and its day. Shown
+bare, they read as local: "Can we move to 9:30?", sent at 08:52 in Berlin, read "06:52". The
+title and each message line now show Berlin time, and `meta.at` holds the moment the
+conversation opened.
+
 **It runs every five minutes on Eman's Mac**, not on Vercel — there is no server that can see a
 WhatsApp Desktop database. `list_sources` says so rather than showing an empty slot
 where a cron should be.
@@ -1981,17 +2000,19 @@ unsearchable. `embedQuery` takes ONE attempt and four seconds, because it sits i
 front of a person waiting for an answer. Sharing the backfill's patience puts ~22
 seconds of backoff on every question whenever the edge worker is cold.
 
-### Four ingest jobs, at four speeds
+### Ingest jobs, each at its source's speed
 
 Each source is refreshed as fast as its upstream actually changes — which is not
 the same as "as fast as possible".
 
-| Job            | Every   | Sources                                      | Measured                           |
-| -------------- | ------- | -------------------------------------------- | ---------------------------------- |
-| `brain-fast`   | 15 min  | ga4, drive, analytics, slack, **embeddings** | ~12s in production                 |
-| `brain-notion` | hourly  | notion                                       | up to ~65s (its walk budget)       |
-| `brain-gmail`  | hourly  | gmail                                        | 621s first walk, incremental after |
-| `brain-ingest` | nightly | gsc                                          | seconds                            |
+| Job                   | Every   | Sources                               | Measured                           |
+| --------------------- | ------- | ------------------------------------- | ---------------------------------- |
+| `brain-meeting-notes` | 10 min  | new Gemini meeting notes (drive)      | ~4s with nothing new               |
+| `brain-fast`          | 15 min  | ga4, analytics, slack, **embeddings** | ~12s in production                 |
+| `brain-drive`         | hourly  | drive                                 | up to ~120s of walking             |
+| `brain-notion`        | hourly  | notion                                | up to ~65s (its walk budget)       |
+| `brain-gmail`         | hourly  | gmail                                 | 621s first walk, incremental after |
+| `brain-ingest`        | nightly | gsc                                   | seconds                            |
 
 - **Slack, the funnel numbers and call notes change continuously** and are all
   cheap. Slack only became cheap once its pass stopped re-walking all history
@@ -2017,9 +2038,9 @@ the same as "as fast as possible".
   its newest available day was 2026-08-26 — three days back. Asking every 15 minutes
   would refetch identical numbers 96 times a day. For GSC alone, nightly IS live.
 
-`brain-fast` replaced `brain-drive`, which ran call notes by themselves. Its
-15-minute slots (`7,22,37,52`) are unchanged, so the cadence is the one already
-proven in production.
+Drive left `brain-fast` on 2026-08-31 for its own hourly `brain-drive`, once it walked the
+whole Drive and took the 15-minute job past its ceiling. New meeting notes got a fast job
+of their own again on 2026-10-14: `brain-meeting-notes`, which reads only them.
 
 ### Decisions are mined out of meeting notes, and marked as reconstructed
 
@@ -2164,6 +2185,13 @@ boundary was drawn by the people in them rather than by the company.
   argument; a null vector degrades it to exactly the previous lexical behaviour,
   so an embedding outage costs recall rather than search. New chunks are embedded
   at the end of the 15-minute lane — see "Embeddings" below.
+- **A record's day is mostly the UTC day, while its time is shown in Berlin.**
+  `browse_context` orders a day's records by `meta.at` and prints it in Berlin time, but
+  `since`/`until` and the day a record sorts under are `period_end`. That is the UTC day
+  everywhere except calendar events, which keep the date in their own time zone. So between
+  midnight and 2 a.m. Berlin time, a record can sit under the day before, and a meeting can
+  sort a little out of place against mail and chat. Moving every source to Berlin days means
+  re-keying Slack and calendar ids, and nothing here meets at that hour.
 - **No relevance floor.** Scores are not comparable between questions, so the
   pipeline cannot tell "we have this" from "we don't" — declining honestly is a
   property of the prompt, not something the search can enforce.

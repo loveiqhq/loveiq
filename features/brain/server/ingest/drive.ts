@@ -20,6 +20,7 @@ import {
   chunkPage,
   isLegalInstrument,
   MEETING_NOTE_NAME,
+  momentOf,
   recordSweep,
   shouldSweep,
   sweepMissing,
@@ -1054,6 +1055,7 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     return [];
   }
   const edited = file.modifiedTime ?? file.createdTime ?? null;
+  const at = momentOf(edited);
   const owner = file.owners?.[0]?.emailAddress ?? null;
 
   /**
@@ -1103,6 +1105,8 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
       owner,
       created: file.createdTime ?? null,
       edited,
+      // When it was last written, as period_end: for a meeting note, when Gemini wrote it.
+      ...(at ? { at } : {}),
     },
     updated_at: stampedAt,
     // The date the document last changed, so a note from today outranks one from
@@ -1254,33 +1258,46 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
  * its files either, and every exported file also carries TEAM_FILE_TAG for the rest.
  */
 const MAX_EXPORT_FOLDERS = 50;
+
+/**
+ * Every file a Drive query matches, or null when any page was refused, unreadable, out of
+ * time or past MAX_PAGES: a caller that needs the whole answer gets none rather than part.
+ */
+async function listAll(
+  token: string,
+  q: string,
+  fields: string,
+  isOutOfTime: () => boolean,
+  extra = ""
+): Promise<DriveFile[] | null> {
+  const out: DriveFile[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (isOutOfTime()) return null;
+    const res = await driveGet(
+      token,
+      `/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent(fields)}` +
+        `&pageSize=${PAGE_SIZE}${extra}` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
+    );
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => null)) as {
+      files?: DriveFile[];
+      nextPageToken?: string;
+    } | null;
+    if (!json) return null;
+    out.push(...(json.files ?? []));
+    pageToken = json.nextPageToken;
+    if (!pageToken) return out;
+  }
+  return null;
+}
+
 export async function teamExportFileIds(
   token: string,
   isOutOfTime: () => boolean = () => false
 ): Promise<Set<string> | null> {
-  const list = async (q: string): Promise<DriveFile[] | null> => {
-    const out: DriveFile[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      if (isOutOfTime()) return null;
-      const res = await driveGet(
-        token,
-        `/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent("nextPageToken,files(id,mimeType)")}` +
-          `&pageSize=${PAGE_SIZE}` +
-          (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
-      );
-      if (!res.ok) return null;
-      const json = (await res.json().catch(() => null)) as {
-        files?: DriveFile[];
-        nextPageToken?: string;
-      } | null;
-      if (!json) return null;
-      out.push(...(json.files ?? []));
-      pageToken = json.nextPageToken;
-      if (!pageToken) return out;
-    }
-    return null;
-  };
+  const list = (q: string) => listAll(token, q, "nextPageToken,files(id,mimeType)", isOutOfTime);
   const folders = await list(
     `properties has { key='${TEAM_FOLDER_TAG.key}' and value='${TEAM_FOLDER_TAG.value}' } ` +
       `and mimeType='${FOLDER_MIME}' and '${TEAM_EXPORT_OWNER}' in owners and trashed=false`
@@ -1394,6 +1411,21 @@ export function isVendorBilling(name?: string, mimeType?: string): boolean {
  */
 export { isJobApplication };
 
+/**
+ * Files the walk indexes nothing from, judged on what the listing says about them.
+ * Shared with `ingestFreshMeetingNotes`, so a note it writes is one the walk keeps.
+ */
+function excludedByListing(f: DriveFile, teamExport: ReadonlySet<string>): boolean {
+  return (
+    SKIP_FILE_IDS.has(f.id ?? "") ||
+    teamExport.has(f.id ?? "") ||
+    isTeamExportFile(f) ||
+    isVendorBilling(f.name, f.mimeType) ||
+    isJobApplication(f.name) ||
+    isLegalInstrument(f.name)
+  );
+}
+
 export async function ingestDrive(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
@@ -1443,15 +1475,7 @@ export async function ingestDrive(
   // sweep, not merely unfetched, or the sweep would protect the rows we are
   // removing.
   const listed = {
-    items: resolved.docs.filter(
-      (f) =>
-        !SKIP_FILE_IDS.has(f.id ?? "") &&
-        !teamExport.has(f.id ?? "") &&
-        !isTeamExportFile(f) &&
-        !isVendorBilling(f.name, f.mimeType) &&
-        !isJobApplication(f.name) &&
-        !isLegalInstrument(f.name)
-    ),
+    items: resolved.docs.filter((f) => !excludedByListing(f, teamExport)),
     /**
      * BOTH HALVES, because the sweep reads this. The colleague walk contributes a
      * colleague's whole Drive now, so a run that lost one mailbox to the clock or a
@@ -1722,6 +1746,174 @@ export async function ingestDrive(
       (unusableDocs > 0 ? ` unusable=${unusableDocs}` : "") +
       (exportFailures.length > 0
         ? ` exportFailed=${exportFailures.length}:${exportFailures.slice(0, 3).join(",")}`
+        : ""),
+  };
+}
+
+/** Three hourly walks back, so new notes still arrive quickly while the walk fails twice. */
+const FRESH_NOTES_LOOKBACK_MS = 3 * 3_600_000;
+
+const NOTE_FIELDS =
+  "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink," +
+  "owners(emailAddress),properties)";
+
+/**
+ * NEW MEETING NOTES WITHIN TEN MINUTES, not within the hour.
+ *
+ * Measured 2026-10-11: notes reached Jarvis 29-62 minutes after Gemini wrote them (median
+ * about 45), because the hourly walk above was their only reader. The 5 Oct sync was
+ * searched 27 minutes before its notes were indexed.
+ *
+ * Asks Drive only for Gemini notes changed in the last three hours, as the walk sees them:
+ * the walk's own login, plus what each colleague owns. Mark's calls are in his Drive alone
+ * (7 of the last 12 notes on 2026-10-14). A note not stored at its current edit is read and
+ * built exactly as the walk builds it, so the next walk finds it current and only touches
+ * it. The walk's exclusions apply, the team export folder included. Only a note Gemini has
+ * finished is written (see below).
+ *
+ * It never sweeps: the walk stays the authority and the only sweep. A rewritten note that
+ * comes out shorter loses its leftover parts, as any rewrite does. A note reachable only
+ * through a shortcut still waits for the walk.
+ */
+export async function ingestFreshMeetingNotes(
+  stampedAt: string,
+  isOutOfTime: () => boolean = () => false,
+  oidcToken?: string | null,
+  nowMs: number = Date.now()
+): Promise<IngestResult> {
+  if (!isGoogleConfigured()) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
+  }
+  const token = await driveToken(oidcToken);
+  if (!token) {
+    return {
+      source: SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})`,
+    };
+  }
+
+  const since = new Date(nowMs - FRESH_NOTES_LOOKBACK_MS).toISOString();
+  const recent =
+    `mimeType='${DOC_MIME}' and trashed=false and modifiedTime > '${since}' ` +
+    `and name contains 'Notes by Gemini'`;
+  const mailboxes = await domainMailboxes(oidcToken);
+  const [own, ...theirs] = await Promise.all([
+    listAll(
+      token,
+      recent,
+      NOTE_FIELDS,
+      isOutOfTime,
+      "&includeItemsFromAllDrives=true&supportsAllDrives=true"
+    ),
+    ...(mailboxes ?? []).map(async (mailbox) => {
+      const userToken = await getDelegatedToken(mailbox, DRIVE_SCOPE, Date.now(), oidcToken);
+      if (!userToken) return null;
+      const owned = `'${mailbox.replace(/'/g, "\\'")}' in owners and ${recent}`;
+      const files = await listAll(userToken, owned, NOTE_FIELDS, isOutOfTime);
+      return files ? { files, token: userToken } : null;
+    }),
+  ]);
+
+  // As the walk reads them: the walk's own login first, then a colleague's note with theirs.
+  const readWith = new Map<string, string>();
+  const notes: DriveFile[] = [];
+  const take = (files: DriveFile[], readToken: string) => {
+    for (const f of files) {
+      if (!f.id || readWith.has(f.id)) continue;
+      if (!MEETING_NOTE_NAME.test(f.name ?? "") || excludedByListing(f, new Set())) continue;
+      readWith.set(f.id, readToken);
+      notes.push(f);
+    }
+  };
+  take(own ?? [], token);
+  for (const t of theirs) if (t) take(t.files, t.token);
+  const unread = (own ? 0 : 1) + theirs.filter((t) => !t).length + (mailboxes ? 0 : 1);
+
+  const stored = new Map<string, { edited: string | null; v: number }>();
+  if (notes.length > 0) {
+    const ids = notes.map((f) => `"doc:${f.id}"`).join(",");
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id,edited:meta->>edited,v:meta->>v` +
+        `&source=eq.${SOURCE}&source_id=in.(${encodeURIComponent(ids)})`
+    );
+    const got = await chunkPage<{ source_id?: string; edited?: string | null; v?: string | null }>(
+      "drive",
+      res
+    );
+    for (const r of got) {
+      if (r.source_id) stored.set(r.source_id, { edited: r.edited ?? null, v: Number(r.v) });
+    }
+  }
+  const stale = notes.filter((f) => {
+    const seen = stored.get(`doc:${f.id}`);
+    const edited = f.modifiedTime ?? f.createdTime ?? null;
+    return !seen || seen.edited !== edited || seen.v !== DRIVE_BUILDER_VERSION;
+  });
+
+  const rows: BrainRow[] = [];
+  const failures: string[] = [];
+  let deferred = 0;
+  let unfinished = 0;
+  if (stale.length > 0) {
+    /**
+     * Only now, because it costs a login and a folder walk, and most runs read nothing.
+     * Out of time, it is a deferral and not a failed check: a slow listing earlier in the
+     * run must not page #brain with "team-export-check-failed".
+     */
+    let teamExport: Set<string> | null = null;
+    if (!isOutOfTime()) {
+      const ownerToken = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim()
+        ? await getDelegatedToken(TEAM_EXPORT_OWNER, DRIVE_SCOPE, Date.now(), oidcToken)
+        : null;
+      teamExport = await teamExportFileIds(ownerToken ?? token, isOutOfTime);
+      if (!teamExport && !isOutOfTime()) {
+        return { source: SOURCE, rows: 0, swept: 0, skipped: "team-export-check-failed" };
+      }
+    }
+    for (const file of stale) {
+      if (!teamExport || isOutOfTime()) {
+        deferred += 1;
+        continue;
+      }
+      if (teamExport.has(file.id ?? "")) continue;
+      try {
+        const text = await docText(readWith.get(file.id!)!, file.id!, file.mimeType);
+        /**
+         * ONLY A NOTE GEMINI HAS FINISHED. Google ends its notes with this line, before the
+         * transcript, and it was in 114 of 114 notes. A note without it may be a stub, and
+         * a stub of a candidate call lacks the summary `docToRows` refuses one by, so it
+         * would be indexed until the daily sweep. The walk still reads it within the hour.
+         */
+        if (!TRANSCRIPT_DIVIDER.test(text)) {
+          unfinished += 1;
+          continue;
+        }
+        rows.push(...docToRows(file, text, stampedAt));
+      } catch (err) {
+        logger.warn({ err, file: file.id }, "brain-ingest drive: fresh note export failed");
+        failures.push(
+          `${file.id}(${(err instanceof Error ? err.message : String(err)).slice(0, 60)})`
+        );
+      }
+    }
+  }
+  const written = await upsertChunks(rows);
+
+  return {
+    source: SOURCE,
+    rows: written,
+    swept: 0,
+    complete: unread === 0 && deferred === 0,
+    detail:
+      `notes=${notes.length} stale=${stale.length} written=${written}` +
+      ` asked=${1 + (mailboxes?.length ?? 0)}` +
+      (unread > 0 ? ` unread=${unread}` : "") +
+      (deferred > 0 ? ` deferred=${deferred}` : "") +
+      (unfinished > 0 ? ` unfinished=${unfinished}` : "") +
+      (failures.length > 0
+        ? ` exportFailed=${failures.length}:${failures.slice(0, 3).join(",")}`
         : ""),
   };
 }

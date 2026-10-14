@@ -158,7 +158,7 @@ describe("whatsappRows — one chunk per DAY", () => {
   it("leaves room for the head on EVERY part, so no part loses the end of its last message", () => {
     // The head was added to parts 2+ AFTER splitting, so they ran past 2,400 and the writer
     // cut them (a stored part sat at exactly 2,400). The fixture above never got that long.
-    const at = 1_754_460_000_000;
+    const at = Date.parse("2026-08-06T09:12:00Z");
     const rows = dayRows({
       source: "whatsapp",
       idBase: "wa:test",
@@ -176,7 +176,7 @@ describe("whatsappRows — one chunk per DAY", () => {
     expect(rows.length).toBeGreaterThan(2);
     for (const r of rows) {
       expect(r.body.length).toBeLessThanOrEqual(2400);
-      expect(r.body.startsWith("WhatsApp: LoveIQ — 2026-08-06 09:12\nBetween: Marcus\n\n")).toBe(
+      expect(r.body.startsWith("WhatsApp: LoveIQ — 2026-08-06 11:12\nBetween: Marcus\n\n")).toBe(
         true
       );
     }
@@ -185,7 +185,13 @@ describe("whatsappRows — one chunk per DAY", () => {
     for (let i = 0; i < 200; i += 1) expect(all).toContain(`message ${i} ends here`);
   });
 
-  it("writes a one-part day exactly as before, so its fingerprint does not change", () => {
+  /**
+   * The desktop read stamps `day` and `time` in UTC, as the sync script does from one Date.
+   * Shown bare they read as local: on 2026-10-13 "Can we move to 9:30?", sent at 08:52 in
+   * Berlin, read "06:52". The id and the stored day stay UTC, so nothing is re-keyed.
+   */
+  it("shows a synced day in Berlin time, keyed and dated in UTC as before", () => {
+    const utc = (hhmm: string) => Date.parse(`2026-08-06T${hhmm}:00Z`);
     const rows = dayRows({
       source: "whatsapp",
       idBase: "wa:test",
@@ -193,13 +199,53 @@ describe("whatsappRows — one chunk per DAY", () => {
       url: null,
       stampedAt: STAMP,
       messages: [
-        { day: "2026-08-06", time: "09:12", sender: "Marcus", text: "hi", at: 1 },
-        { day: "2026-08-06", time: "09:13", sender: "Mark", text: "hello", at: 60_001 },
+        { day: "2026-08-06", time: "09:12", sender: "Marcus", text: "hi", at: utc("09:12") },
+        { day: "2026-08-06", time: "09:13", sender: "Mark", text: "hello", at: utc("09:13") },
       ],
     });
     expect(rows[0]!.body).toBe(
-      "WhatsApp: LoveIQ — 2026-08-06 09:12\nBetween: Marcus, Mark\n\nMarcus (09:12): hi\nMark (09:13): hello"
+      "WhatsApp: LoveIQ — 2026-08-06 11:12\nBetween: Marcus, Mark\n\nMarcus (11:12): hi\nMark (11:13): hello"
     );
+    expect(rows[0]!.source_id).toBe("wa:test#wa-2026-08-06-0912");
+    expect(rows[0]!.period_end).toBe("2026-08-06");
+    expect(rows[0]!.meta.at).toBe("2026-08-06T09:12:00.000Z");
+  });
+
+  it("titles a late UTC conversation with the Berlin day it was written on", () => {
+    const rows = dayRows({
+      source: "whatsapp",
+      idBase: "wa:test",
+      chat: "LoveIQ",
+      url: null,
+      stampedAt: STAMP,
+      messages: [
+        {
+          day: "2026-10-13",
+          time: "22:30",
+          sender: "Marcus",
+          text: "late",
+          at: Date.parse("2026-10-13T22:30:00Z"),
+        },
+      ],
+    });
+    expect(rows[0]!.title).toBe("WhatsApp: LoveIQ — 2026-10-14 00:30");
+    expect(rows[0]!.source_id).toBe("wa:test#wa-2026-10-13-2230");
+  });
+
+  it("leaves an exported chat in the phone's own time, with no moment to order by", () => {
+    // An export carries no instant, only the phone's clock, which is already local.
+    const rows = dayRows({
+      source: "drive",
+      idBase: "doc:file",
+      chat: "LoveIQ",
+      url: null,
+      stampedAt: STAMP,
+      messages: [{ day: "2026-08-06", time: "09:12", sender: "Marcus", text: "hi" }],
+    });
+    expect(rows[0]!.body).toBe(
+      "WhatsApp: LoveIQ — 2026-08-06 09:12\nBetween: Marcus\n\nMarcus (09:12): hi"
+    );
+    expect(rows[0]!.meta.at).toBeUndefined();
   });
 
   /**

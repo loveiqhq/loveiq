@@ -75,6 +75,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-calendar": 3 * 3_600_000,
   // Hourly, but with a 300s ceiling — a full Drive walk is minutes, not seconds.
   "brain-drive": 3 * 3_600_000,
+  // Every ten minutes: new meeting notes ahead of the hourly walk. Thirty minutes is three
+  // missed runs, after which notes are back to arriving hourly.
+  "brain-meeting-notes": 30 * 60_000,
   // Every two hours, filing recorded calls into the Notion CRM. Five hours is two missed runs.
   "brain-crm": 5 * 3_600_000,
   // Daily at 05:20 UTC: which Notion pages the team links to that Jarvis cannot open.
