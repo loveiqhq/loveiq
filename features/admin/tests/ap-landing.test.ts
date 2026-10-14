@@ -224,8 +224,8 @@ describe("buildLanding", () => {
     expect(a?.bounce).toBeNull();
     expect(p.compare).toBeNull();
     expect(p.outside.map((o) => o.split(" (")[0])).toEqual([
-      "Hero: video vs question 1",
-      "Landing rebuild: V1 vs V2",
+      "#6 · Hero video vs Q1",
+      "Landing rebuild V1 vs V2",
     ]);
     // 12 of 100 against 18 of 120: enough to read, far from sure.
     expect(p.comparisons[0]?.metrics[0]?.verdict).toBe("74% chance B is better");
@@ -352,10 +352,7 @@ describe("buildLanding", () => {
       ok: true,
       value: { medianSeconds: 7.25, meanSeconds: 11.5 },
     });
-    expect(q.rows.map((r) => r.testShort)).toEqual([
-      "#6 · Hero video vs Q1",
-      "#6 · Hero video vs Q1",
-    ]);
+    expect(q.rows.map((r) => r.test)).toEqual(["#6 · Hero video vs Q1", "#6 · Hero video vs Q1"]);
     expect(q.sections).toEqual({ ok: true, value: null });
   });
 });
@@ -397,6 +394,29 @@ function livePayload(over: Partial<Parameters<typeof buildLanding>[0]> = {}) {
     ...over,
   });
 }
+
+describe("a PostHog read that failed", () => {
+  const failed = {
+    ok: false as const,
+    error: "PostHog could not be read just now. Try again in a minute.",
+  };
+
+  it("says PostHog could not be read, not that it saw too few visits, and why the table is blank", () => {
+    const p = livePayload({ armEngagement: { hero: failed } });
+    const verdict = (key: string) => p.comparisons[0]!.metrics.find((m) => m.key === key)!.verdict;
+    expect(verdict("bounce")).toBe(failed.error);
+    expect(verdict("meanSeconds")).toBe(failed.error);
+    expect(p.rows.map((r) => [r.bounce, r.meanSeconds])).toEqual([
+      [null, null],
+      [null, null],
+    ]);
+    expect(p.unread).toEqual([
+      `#6 · Hero video vs Q1: bounce and avg. time are blank. ${failed.error}`,
+    ]);
+    // Read, with every arm large enough: nothing to explain.
+    expect(livePayload().unread).toEqual([]);
+  });
+});
 
 describe("landing time", () => {
   it("compares the arms on the average time with its chance, the medians in the small print", () => {
@@ -680,7 +700,7 @@ describe("the landing page's screen", () => {
     ).toEqual(["#6", "#6 · run 1"]);
     expect(tabs.parentElement).toHaveClass("w-max");
     expect(tabs.parentElement!.parentElement).toHaveClass("overflow-x-auto");
-    const compare = within(screen.getByRole("region", { name: "Hero: video vs question 1" }));
+    const compare = within(screen.getByRole("region", { name: "#6 · Hero video vs Q1" }));
     expect(compare.getByText("10.0%")).toBeInTheDocument();
     expect(compare.getByText("10.4%")).toBeInTheDocument();
     expect(compare.getAllByText(/^40%$/)).toHaveLength(2);
@@ -689,7 +709,7 @@ describe("the landing page's screen", () => {
     ).toBeInTheDocument();
     fireEvent.click(within(tabs).getByRole("button", { name: "#6 · run 1" }));
     expect(
-      screen.getByRole("heading", { name: "Hero: video vs question 1, first run" })
+      screen.getByRole("heading", { name: "Hero video vs Q1, first run" })
     ).toBeInTheDocument();
   });
 

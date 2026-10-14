@@ -30,9 +30,11 @@ import {
 
 export interface LandingTest {
   key: string;
+  /**
+   * The one name every line uses (the table, the compare title, "Not in this range"), with the
+   * registry number if any, as the design's "LP-07 · Hero promise".
+   */
   name: string;
-  /** One line for the tests table, with the registry number if any. */
-  short: string;
   /** The compare tab's few characters, as the design's "LP-07". */
   code: string;
   from: string;
@@ -50,8 +52,7 @@ export interface LandingTest {
 export const LANDING_TESTS: LandingTest[] = [
   {
     key: "hero",
-    name: "Hero: video vs question 1",
-    short: "#6 · Hero video vs Q1",
+    name: "#6 · Hero video vs Q1",
     code: "#6",
     from: LANDING_TEST_START_DAY,
     to: null,
@@ -60,8 +61,7 @@ export const LANDING_TESTS: LandingTest[] = [
   },
   {
     key: "hero-first-run",
-    name: "Hero: video vs question 1, first run",
-    short: "Hero video vs Q1, first run",
+    name: "Hero video vs Q1, first run",
     code: "#6 · run 1",
     from: LANDING_HERO_VIDEO_LAUNCH_DAY,
     to: addDays(LANDING_TEST_START_DAY, -1),
@@ -70,8 +70,7 @@ export const LANDING_TESTS: LandingTest[] = [
   },
   {
     key: "rebuild",
-    name: "Landing rebuild: V1 vs V2",
-    short: "Landing rebuild V1 vs V2",
+    name: "Landing rebuild V1 vs V2",
     code: "Rebuild",
     // The test ran from 21 Aug, but V1's visits were logged without their version until the
     // evening of 24 Aug (49e71d0f): the comparison starts on the first whole day after.
@@ -120,7 +119,6 @@ export type ArmStatus = "Running" | "Winner" | "Ended";
 export interface ArmRow {
   testKey: string;
   test: string;
-  testShort: string;
   /** "A · Landing Page V2 (Survey in Hero)". */
   label: string;
   arm: string;
@@ -202,6 +200,8 @@ export interface LandingPayload extends PageHead {
   rows: ArmRow[];
   /** Tests with no days in the range. */
   outside: string[];
+  /** Why a test's bounce and time are blank: its PostHog read failed. */
+  unread: string[];
   comparisons: Comparison[];
   engagement: PostHogResult<LandingEngagement> | null;
   sections: PostHogResult<SectionsView | null> | null;
@@ -320,7 +320,6 @@ function armRow(
   return {
     testKey: test.key,
     test: test.name,
-    testShort: test.short,
     label: `${letter} · ${armLabel("landing", arm).short}`,
     arm,
     status: test.to === null ? "Running" : test.winner === arm ? "Winner" : "Ended",
@@ -352,15 +351,15 @@ function compare(
   test: LandingTest,
   w: { from: string; to: string },
   a: ArmRow,
-  b: ArmRow
+  b: ArmRow,
+  /** Why PostHog's read for the test failed; null when it was read. */
+  phError: string | null
 ): Comparison {
   const posthog = test.from >= POSTHOG_ARMS_FROM;
   const phVerdict = (x: number | null, y: number | null) =>
     !posthog
       ? "Before 7 Oct 2026 PostHog did not reliably know which version a visitor saw"
-      : x === null || y === null
-        ? "PostHog saw too few visits"
-        : null;
+      : (phError ?? (x === null || y === null ? "PostHog saw too few visits" : null));
   // An ended test reads as its decision, as the design writes it, with the chance kept after it.
   const kept = test.winner ? (test.winner === test.arms[0] ? "A" : "B") : null;
   const decided = (verdict: string) =>
@@ -527,6 +526,7 @@ export function buildLanding(input: {
   const { facts, filters: f, today, now } = input;
   const rows: ArmRow[] = [];
   const outside: string[] = [];
+  const unread: string[] = [];
   const comparisons: Comparison[] = [];
   for (const test of LANDING_TESTS) {
     const w = testWindow(test, facts.from, facts.to, today);
@@ -542,7 +542,10 @@ export function buildLanding(input: {
       armRow(facts, test, w, arm, i === 0 ? "A" : "B", today, byArm.get(arm))
     ) as [ArmRow, ArmRow];
     rows.push(a, b);
-    comparisons.push(compare(test, w, a, b));
+    // A failed read is not a small sample: the verdicts and the table say which it was.
+    const phError = ph && !ph.ok ? ph.error : null;
+    if (phError) unread.push(`${test.name}: bounce and avg. time are blank. ${phError}`);
+    comparisons.push(compare(test, w, a, b, phError));
   }
 
   // The page fixes the comparison and the narrowing filters (all traffic, arm against arm):
@@ -565,6 +568,7 @@ export function buildLanding(input: {
     notes,
     rows,
     outside,
+    unread,
     comparisons,
     engagement:
       input.engagement === null
