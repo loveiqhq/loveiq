@@ -265,6 +265,8 @@ describe("buildLanding", () => {
     const verdicts = p.comparisons[0]!.metrics.map((m) => m.verdict);
     // V2 (B) was kept: a chance reading leads with the decision, a caveat stays as it is.
     expect(verdicts[1]).toMatch(/^Ended · B kept · \d+% chance [AB] is better$/);
+    // A caveat that goes through the same decision reads as it is: no payments to call.
+    expect(verdicts[2]).toBe("Too few payments to call");
     expect(verdicts[0]).toBe("Not recorded for these days: see the note under the tests");
     // The hero test has no winner yet: its chances read plain.
     expect(LANDING_TESTS.find((t) => t.key === "hero")!.winner).toBeUndefined();
@@ -559,7 +561,9 @@ describe("PostHog's landing readers", () => {
       ok: true,
       value: { median: 41, mean: null },
     });
-    const capped = "least(toFloat(properties.$prev_pageview_duration), 1800)";
+    // A view without a duration stays out: PostHog's least(NULL, 1800) is 1800.
+    const capped =
+      "if(isNull(properties.$prev_pageview_duration), NULL, least(toFloat(properties.$prev_pageview_duration), 1800))";
     const leaves = query("$prev_pageview_max_scroll_percentage");
     expect(leaves).toContain(`avg(${capped})`);
     // The chance reads the same capped views the average does: their count and squares.

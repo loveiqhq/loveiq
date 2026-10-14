@@ -320,8 +320,13 @@ export interface LandingArmEngagement {
 /** A number PostHog returned, or null where it had none. */
 const orNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 
-/** A landing view's seconds, up to 30 minutes: the one value the average and its spread read. */
-const CAPPED = "least(toFloat(properties.$prev_pageview_duration), 1800)";
+/**
+ * A landing view's seconds, up to 30 minutes: the one value the average and its spread read.
+ * A view without a duration stays out: PostHog's least() skips a NULL, so least(NULL, 1800)
+ * would count it as 30 minutes (none lacked one on 14 Oct 2026, of 1,134 in 14 days).
+ */
+const CAPPED =
+  "if(isNull(properties.$prev_pageview_duration), NULL, least(toFloat(properties.$prev_pageview_duration), 1800))";
 
 /**
  * The landing page's engagement per arm, from PostHog: bounce, call-to-action clicks, scroll
