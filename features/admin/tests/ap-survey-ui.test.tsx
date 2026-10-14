@@ -96,7 +96,7 @@ describe("the Survey page as drawn", () => {
 
     const intro = "Intro wizard cards";
     expect(column(intro, 0)).toEqual(["1", "2", "3", "4", "5", "6"]);
-    expect(column(intro, 1)).toEqual(["—", "5.0 s", "12.0 s", "—", "1:05", "—"]);
+    expect(column(intro, 1)).toEqual(["—", "0:05.0", "0:12", "—", "1:05", "—"]);
     const text = rows(intro).map((r) => r.textContent);
     expect(text[0]).toContain("31% tap the silhouette");
     // Whole percentages as drawn; a tenth under 10%, so a handful never reads "0%".
@@ -105,9 +105,9 @@ describe("the Survey page as drawn", () => {
 
     const byTime = within(table(intro)).getByRole("button", { name: "Sort by Time" });
     fireEvent.click(byTime);
-    expect(column(intro, 1)).toEqual(["1:05", "12.0 s", "5.0 s", "—", "—", "—"]);
+    expect(column(intro, 1)).toEqual(["1:05", "0:12", "0:05.0", "—", "—", "—"]);
     fireEvent.click(byTime);
-    expect(column(intro, 1)).toEqual(["5.0 s", "12.0 s", "1:05", "—", "—", "—"]);
+    expect(column(intro, 1)).toEqual(["0:05.0", "0:12", "1:05", "—", "—", "—"]);
   });
 
   it("intro: Skip intro, Back and Exit columns, which say when they start for an earlier range", () => {

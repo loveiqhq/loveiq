@@ -158,7 +158,10 @@ describe("AP number format", () => {
     // Prices change in euros: cents on small sums, whole euros from €100.
     expect(delta("eur", 29, 32.25, "up", "abs")?.text).toBe("−€3.25");
     expect(delta("eur", 1169.39, 301.96, "down", "abs")).toEqual({ text: "+€867", tone: "bad" });
-    expect(fmt("mmss", 5300)).toBe("5.3 s");
+    expect(fmt("mmss", 5300)).toBe("0:05.3");
+    expect(fmt("mmss", 400)).toBe("0:00.4");
+    expect(fmt("mmss", 41_000)).toBe("0:41");
+    expect(fmt("mmss", 9_960)).toBe("0:10");
     // A check whose change is neither good nor bad (the report open rate) reads grey.
     expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2.00 pt", tone: "flat" });
     expect(delta("count", 1, 4, "up", "abs")).toEqual({ text: "−3", tone: "bad" });

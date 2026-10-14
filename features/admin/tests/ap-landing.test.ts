@@ -392,7 +392,7 @@ describe("landing time", () => {
     const time = livePayload().comparisons[0]!.metrics.at(-1)!;
     expect(time).toMatchObject({ label: "Avg. time on page", unit: "mmss", a: 8000, b: 9000 });
     expect(time.verdict).toBe(
-      "PostHog's sample; averages are not tested for chance · medians: A 5.0 s, B 5.0 s"
+      "PostHog's sample; averages are not tested for chance · medians: A 0:05.0, B 0:05.0"
     );
     expect(livePayload().rows.map((r) => r.meanSeconds)).toEqual([8, 9]);
   });
@@ -501,7 +501,7 @@ describe("the landing page's screen", () => {
     expect(screen.getByText("Avg. time on page")).toBeInTheDocument();
     const engagement = within(screen.getByRole("region", { name: "Engagement" }));
     expect(engagement.getByText("Avg. time")).toBeInTheDocument();
-    expect(engagement.getByText("52.5 s")).toBeInTheDocument();
+    expect(engagement.getByText("0:53")).toBeInTheDocument();
     const card = within(screen.getByRole("region", { name: "Section time" }));
     expect(
       card.getByText("Avg. seconds in view · share of visitors who reach the section")

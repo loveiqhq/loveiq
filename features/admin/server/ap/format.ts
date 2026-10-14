@@ -14,7 +14,7 @@ export const EMPTY = "—";
 const grouped = (v: number, digits = 0) =>
   v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-/** "12,608", "€1,199", "€29.00", "€0.002", "5.96%", "6:40", "2.4 days". */
+/** "12,608", "€1,199", "€29.00", "€0.002", "5.96%", "6:40", "0:02.9", "2.4 days". */
 export function fmt(unit: Unit, v: number | null | undefined, digits?: number): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return EMPTY;
   const sign = v < 0 ? MINUS : "";
@@ -31,8 +31,9 @@ export function fmt(unit: Unit, v: number | null | undefined, digits?: number): 
     case "min":
       return `${sign}${a.toFixed(digits ?? 1)} min`;
     case "mmss": {
-      // Under a minute in seconds with a tenth: medians of a few seconds must not all read "0:05".
-      if (a < 59_950) return `${sign}${(a / 1000).toFixed(digits ?? 1)} s`;
+      // m:ss as the design writes it ("0:41", "6:40"). Under 10 seconds with a tenth
+      // ("0:02.9"): medians of a few seconds must not all read "0:03", nor a glance "0:00".
+      if (a < 9_950) return `${sign}0:0${(a / 1000).toFixed(digits ?? 1)}`;
       const s = Math.round(a / 1000);
       return `${sign}${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     }
