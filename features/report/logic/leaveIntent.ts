@@ -40,6 +40,9 @@ export type LeaveTrigger = "exit_intent" | "plans_closed" | "idle" | "forced";
 export type LeaveOffer = "founder_call";
 export type LeaveOverride = "on" | "off" | "show";
 export type LeaveMode = "off" | "trigger" | "show";
+/** The page's query: `useSearchParams()` in the app, `URLSearchParams` in tests. */
+export type SearchParams = Pick<URLSearchParams, "get" | "has">;
+
 export type LeaveDismissSource =
   "close_button" | "not_now" | "backdrop" | "escape" | "browser_back" | "superseded";
 
@@ -55,7 +58,7 @@ export function resolveLeaveOverride(param: string | null | undefined): LeaveOve
 }
 
 /** Signs the address came from an email or a checkout, not straight from the survey. */
-export function hasReturnMarkers(search: URLSearchParams): boolean {
+export function hasReturnMarkers(search: SearchParams): boolean {
   if (search.has("offer") || search.has("promo") || search.has("pricingSessionId")) return true;
   if (search.get("invite") === "1") return true;
   if (search.has("from")) return true;
@@ -96,7 +99,7 @@ export function isFirstVisit({
   completedToken: string | null;
   reportDate: string | null | undefined;
   now: number;
-  search: URLSearchParams;
+  search: SearchParams;
 }): boolean {
   if (!urlToken || completedToken !== urlToken) return false;
   if (hasReturnMarkers(search)) return false;

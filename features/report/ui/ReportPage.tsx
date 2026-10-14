@@ -24,6 +24,8 @@ import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import InviteModal from "@features/invite/ui/InviteModal";
+import FounderCallDialog from "@features/booking/ui/FounderCallDialog";
+import { getFounderCallUrl } from "@features/booking/logic/founderCall";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
 import MeansForYouSection from "./sections/MeansForYouSection";
@@ -84,12 +86,14 @@ import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
+  completedReportToken,
   getReportPricingSessionId,
   getReportSessionId,
   setReportNurturePromo,
   setReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isProbeRequest } from "@shared/http/probe-cookie";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
 import { useCloseOnBack } from "./hooks/useCloseOnBack";
@@ -181,7 +185,10 @@ import {
 } from "@features/analytics/client";
 import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
+import { isFirstVisit, leaveMode, resolveLeaveOverride } from "../logic/leaveIntent";
+import { plansOfferedKey } from "../logic/plansOffer";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
+import { useLeaveIntent } from "./hooks/useLeaveIntent";
 import {
   captureUnlockAnchor,
   parseUnlockAnchor,
@@ -198,6 +205,8 @@ interface SnapshotAnswers {
 }
 
 const subscribeNoop = () => () => {};
+/** Our own probes and persona walks carry this cookie; they never get the leave offer. */
+const readProbeCookie = () => isProbeRequest(document.cookie);
 
 // Report 2.0 part dividers (Figma 8427:794 / 1440 / 1751 / 2554) — the big
 // centered "PART N" heading that opens each part.
@@ -230,7 +239,7 @@ function recentTapTarget(tap: { at: number; el: Element | null }): Element | nul
  */
 function claimPlansOffer(submissionId: number | null | undefined): boolean {
   if (!submissionId) return true;
-  const key = `loveiq-report-plans-offered:${submissionId}`;
+  const key = plansOfferedKey(submissionId);
   try {
     if (sessionStorage.getItem(key)) return false;
     sessionStorage.setItem(key, "1");
@@ -443,6 +452,8 @@ interface ReportExperienceProps {
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
   isShareModalOpen: boolean;
+  /** The founder-call leave offer is open over the report. */
+  isLeaveOfferOpen?: boolean;
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
@@ -583,6 +594,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   feedbacks,
   isPricingModalOpen,
   isShareModalOpen,
+  isLeaveOfferOpen = false,
   matchScore,
   onBeginCheckout,
   onClosePricingModal,
@@ -1071,8 +1083,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           correctly when a modal is open — no filter/transform here, so the
           containing-block bug stays gone. */}
       <div
-        aria-hidden={isPricingModalOpen || isShareModalOpen}
-        inert={isPricingModalOpen || isShareModalOpen}
+        aria-hidden={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen}
+        inert={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen}
       >
         <WithActiveSection store={activeSection}>
           {(activeSectionId) => (
@@ -1104,7 +1116,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         <div
           className={[
             "report-page__shell-wrap",
-            isPricingModalOpen || isShareModalOpen ? "report-page__shell-wrap--obscured" : "",
+            isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen
+              ? "report-page__shell-wrap--obscured"
+              : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -2870,6 +2884,47 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     archetype: viewArchetype || null,
   });
 
+  /**
+   * The leave offer (features/report/logic/leaveIntent.ts): an unpaid reader's full
+   * report, free for a 20-minute call with Mark and Marcus, offered once as they leave.
+   * Off unless the booking page is configured. The tab's survey token and the probe
+   * cookie are read from the browser like the session id above.
+   */
+  const founderCallUrl = getFounderCallUrl();
+  const completedToken = useSyncExternalStore(subscribeNoop, completedReportToken, () => null);
+  const isProbe = useSyncExternalStore(subscribeNoop, readProbeCookie, () => false);
+  const [pageOpenedAt] = useState(() => Date.now());
+  const leaveOfferMode = leaveMode({
+    override: resolveLeaveOverride(searchParams.get("leave")),
+    bookingUrl: founderCallUrl,
+    isV4,
+    viewMode,
+    hasPurchased,
+    viewingOwnArchetype:
+      Boolean(primaryArchetypeFromData) && viewArchetype === primaryArchetypeFromData,
+    submissionId: data?.submissionId,
+    userEmail: data?.userEmail,
+    firstVisit: isFirstVisit({
+      urlToken: token ?? null,
+      completedToken,
+      reportDate: data?.reportDate,
+      now: pageOpenedAt,
+      search: searchParams,
+    }),
+    isProbe,
+  });
+  const leaveOffer = useLeaveIntent({
+    mode: leaveOfferMode,
+    submissionId: data?.submissionId ?? null,
+    overlayOpen: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
+    plansOpen: isPricingModalOpen,
+    popupArm,
+  });
+  const { notifyPlansClosed, dismiss: dismissLeaveOffer } = leaveOffer;
+  // Set only where the READER opens the plans window, never by the automatic opens, so
+  // closing the pay pop-up test's own pop-up is not taken for a reader leaving.
+  const plansOpenedByReaderRef = useRef(false);
+
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
     if (!data) return;
@@ -3210,6 +3265,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       trackPaywallInitiated({ source: "archetype_unlock", archetype: name });
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
       setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
+      plansOpenedByReaderRef.current = true;
       setIsPricingModalOpen(true);
     },
     [
@@ -3335,7 +3391,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
     setPricingVariant("default");
-  }, []);
+    // A plans window the reader opened, closed without buying: a leave signal on a phone.
+    if (plansOpenedByReaderRef.current) {
+      plansOpenedByReaderRef.current = false;
+      notifyPlansClosed();
+    }
+  }, [notifyPlansClosed]);
 
   // Paid or not, every reader shares with up to two people (planAccess.ts).
   const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
@@ -3344,6 +3405,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // useCloseOnBack for the readers it was losing.
   useCloseOnBack(isPricingModalOpen, closePricingModal);
   useCloseOnBack(isShareModalOpen, closeShareModal);
+  const closeLeaveOfferOnBack = useCallback(
+    () => dismissLeaveOffer("browser_back"),
+    [dismissLeaveOffer]
+  );
+  useCloseOnBack(leaveOffer.open, closeLeaveOfferOnBack);
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
       // Scope the modal to the archetype the user is currently upgrading. If
@@ -3351,6 +3417,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // viewed (locked-section CTAs in /report?archetype=Y must upgrade Y,
       // not primary). null = primary archetype.
       const scope = archetype ?? null;
+      plansOpenedByReaderRef.current = true;
       setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
       setPricingVariant(
         viewMode === "shared" ? "recipient" : shouldShowOfferVariant ? "offer" : "default"
@@ -3548,6 +3615,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             feedbacks={feedbacks}
             isPricingModalOpen={isPricingModalOpen}
             isShareModalOpen={isShareModalOpen}
+            isLeaveOfferOpen={leaveOffer.open}
             matchScore={matchScore}
             onBeginCheckout={beginCheckout}
             onClosePricingModal={closePricingModal}
@@ -3699,6 +3767,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           </div>
         </div>
       )}
+      {founderCallUrl && leaveOfferMode !== "off" && (
+        <FounderCallDialog
+          open={leaveOffer.open}
+          bookingUrl={founderCallUrl}
+          onDismiss={leaveOffer.dismiss}
+          onBook={leaveOffer.book}
+        />
+      )}
       {/* The bar unlocks the full report, so the question is whether the reader's plan
           already covers that tier — not whether it equals one of two named plans.
           `core` buys the top-3 archetypes AT full_report tier, so listing plans
@@ -3712,7 +3788,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           <ReportStickyUnlockBar
             quote={pricingQuotes?.full_report ?? null}
             onUnlock={() => openPricingModal(effectiveViewArchetype)}
-            hidden={isPricingModalOpen || isShareModalOpen}
+            hidden={isPricingModalOpen || isShareModalOpen || leaveOffer.open}
             archetype={effectiveViewArchetype}
             v4={isV4}
           />
