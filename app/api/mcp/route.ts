@@ -144,7 +144,7 @@ import { canonicalPeople } from "@features/brain/server/people";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
-import { reportingDateTime } from "@shared/time/reporting-day";
+import { reportingDateTime, reportingDayStart } from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1445,7 +1445,7 @@ export const TOOLS = [
         learned_since: {
           type: "string",
           description:
-            "YYYY-MM-DD, or an ISO timestamp. WHEN THE BRAIN LEARNED IT, which is a " +
+            "YYYY-MM-DD (from midnight in Berlin), or an ISO timestamp. WHEN THE BRAIN LEARNED IT, which is a " +
             "different question from `since`/`until` — those filter the date a record " +
             "DESCRIBES, so an August meeting indexed yesterday is August to them and " +
             "yesterday to this. Use this for 'what is new', 'what changed since Friday', " +
@@ -1512,8 +1512,8 @@ export const TOOLS = [
           type: "string",
           description:
             "`newest` (default) or `oldest`, by the date each record DESCRIBES and, within " +
-            "a day, by its time: when a meeting starts, a chat or email thread was last " +
-            "written to, a document or Notion task last changed. Times are shown in Berlin " +
+            "a day, by its time: when a meeting starts, a chat conversation opens, an email " +
+            "thread was last written to, a document or Notion task last changed. Times are shown in Berlin " +
             "time. Within its day, a record with no time of day (a Slack day, a decision) " +
             "counts as the end of the day. SCHEDULED MEETINGS THAT HAVE NOT HAPPENED YET " +
             "LEAD A `newest` LIST. Undated records — repository documentation — sort last " +
@@ -1523,7 +1523,7 @@ export const TOOLS = [
         learned_since: {
           type: "string",
           description:
-            "YYYY-MM-DD, or an ISO timestamp. WHEN THE BRAIN LEARNED IT, which is a " +
+            "YYYY-MM-DD (from midnight in Berlin), or an ISO timestamp. WHEN THE BRAIN LEARNED IT, which is a " +
             "different question from `since`/`until` — those filter the date a record " +
             "DESCRIBES, so an August meeting indexed yesterday is August to them and " +
             "yesterday to this. Use this for 'what is new', 'what changed since Friday', " +
@@ -4430,6 +4430,15 @@ async function callTool(
         ? args.learned_since.trim()
         : undefined;
     /**
+     * A BARE DAY STARTS AT MIDNIGHT IN BERLIN, where the listing prints its times. Read at
+     * UTC midnight, `learned_since=2026-10-14` left out a record the same listing printed as
+     * "learned 2026-10-14 00:30". Only for the query; everything shown keeps what was typed.
+     */
+    const learnedFrom = (): string | undefined =>
+      learnedSince && /^\d{4}-\d{2}-\d{2}$/.test(learnedSince)
+        ? reportingDayStart(learnedSince).toISOString()
+        : learnedSince;
+    /**
      * VALIDATED HERE, because Postgres rejects a bad date with a 400 and the failure
      * branch below reports any non-OK response as the knowledge base being unreachable.
      * A caller who typed "last friday" would be told the database is down, look somewhere
@@ -4495,7 +4504,7 @@ async function callTool(
           since: opts.since ?? null,
           until: opts.until ?? null,
           meta_filter: opts.meta ?? null,
-          learned_since: learnedSince ?? null,
+          learned_since: learnedFrom() ?? null,
         }),
       });
       if (!res.ok) {
@@ -4622,7 +4631,7 @@ async function callTool(
     if (opts.since) qs.append("period_end", `gte.${opts.since}`);
     if (opts.until) qs.append("period_end", `lte.${opts.until}`);
     if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
-    if (learnedSince) qs.set("first_seen_at", `gte.${learnedSince}`);
+    if (learnedSince) qs.set("first_seen_at", `gte.${learnedFrom()}`);
     /**
      * `q` WAS ACCEPTED, ECHOED BACK, AND IGNORED.
      *

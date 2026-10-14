@@ -134,10 +134,19 @@ describe("/api/cron/brain-meeting-notes", () => {
     expect(notified[0]!.text).toMatch(/brain-meeting-notes failed/);
   });
 
-  it("gives itself twenty seconds of reading under a sixty-second ceiling", async () => {
-    mockIngest.mockResolvedValue({ source: "drive", rows: 0, swept: 0 });
-    await GET(req());
-    const isOutOfTime = mockIngest.mock.calls[0]![1] as () => boolean;
-    expect(isOutOfTime()).toBe(false);
+  it("stops reading after twenty seconds, well inside its ceiling", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-14T09:10:00Z"));
+      mockIngest.mockResolvedValue({ source: "drive", rows: 0, swept: 0 });
+      await GET(req());
+      const isOutOfTime = mockIngest.mock.calls[0]![1] as () => boolean;
+      vi.setSystemTime(new Date("2026-10-14T09:10:19.900Z"));
+      expect(isOutOfTime()).toBe(false);
+      vi.setSystemTime(new Date("2026-10-14T09:10:20.100Z"));
+      expect(isOutOfTime()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

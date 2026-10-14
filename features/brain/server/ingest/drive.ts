@@ -1768,9 +1768,11 @@ const NOTE_FIELDS =
  * the walk's own login, plus what each colleague owns. Mark's calls are in his Drive alone
  * (7 of the last 12 notes on 2026-10-14). A note not stored at its current edit is read and
  * built exactly as the walk builds it, so the next walk finds it current and only touches
- * it. The walk's exclusions apply, the team export folder included.
+ * it. The walk's exclusions apply, the team export folder included. Only a note Gemini has
+ * finished is written (see below).
  *
- * It never deletes: the walk stays the authority and the only sweep. A note reachable only
+ * It never sweeps: the walk stays the authority and the only sweep. A rewritten note that
+ * comes out shorter loses its leftover parts, as any rewrite does. A note reachable only
  * through a shortcut still waits for the walk.
  */
 export async function ingestFreshMeetingNotes(
@@ -1853,24 +1855,42 @@ export async function ingestFreshMeetingNotes(
   const rows: BrainRow[] = [];
   const failures: string[] = [];
   let deferred = 0;
+  let unfinished = 0;
   if (stale.length > 0) {
-    // Only now, because it costs a login and a folder walk, and most runs read nothing.
-    const ownerToken = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim()
-      ? await getDelegatedToken(TEAM_EXPORT_OWNER, DRIVE_SCOPE, Date.now(), oidcToken)
-      : null;
-    const teamExport = await teamExportFileIds(ownerToken ?? token, isOutOfTime);
-    if (!teamExport) {
-      return { source: SOURCE, rows: 0, swept: 0, skipped: "team-export-check-failed" };
+    /**
+     * Only now, because it costs a login and a folder walk, and most runs read nothing.
+     * Out of time, it is a deferral and not a failed check: a slow listing earlier in the
+     * run must not page #brain with "team-export-check-failed".
+     */
+    let teamExport: Set<string> | null = null;
+    if (!isOutOfTime()) {
+      const ownerToken = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim()
+        ? await getDelegatedToken(TEAM_EXPORT_OWNER, DRIVE_SCOPE, Date.now(), oidcToken)
+        : null;
+      teamExport = await teamExportFileIds(ownerToken ?? token, isOutOfTime);
+      if (!teamExport && !isOutOfTime()) {
+        return { source: SOURCE, rows: 0, swept: 0, skipped: "team-export-check-failed" };
+      }
     }
     for (const file of stale) {
-      if (teamExport.has(file.id ?? "")) continue;
-      if (isOutOfTime()) {
+      if (!teamExport || isOutOfTime()) {
         deferred += 1;
         continue;
       }
+      if (teamExport.has(file.id ?? "")) continue;
       try {
         const text = await docText(readWith.get(file.id!)!, file.id!, file.mimeType);
-        if (text.trim()) rows.push(...docToRows(file, text, stampedAt));
+        /**
+         * ONLY A NOTE GEMINI HAS FINISHED. Google ends its notes with this line, before the
+         * transcript, and it was in 114 of 114 notes. A note without it may be a stub, and
+         * a stub of a candidate call lacks the summary `docToRows` refuses one by, so it
+         * would be indexed until the daily sweep. The walk still reads it within the hour.
+         */
+        if (!TRANSCRIPT_DIVIDER.test(text)) {
+          unfinished += 1;
+          continue;
+        }
+        rows.push(...docToRows(file, text, stampedAt));
       } catch (err) {
         logger.warn({ err, file: file.id }, "brain-ingest drive: fresh note export failed");
         failures.push(
@@ -1891,6 +1911,7 @@ export async function ingestFreshMeetingNotes(
       ` asked=${1 + (mailboxes?.length ?? 0)}` +
       (unread > 0 ? ` unread=${unread}` : "") +
       (deferred > 0 ? ` deferred=${deferred}` : "") +
+      (unfinished > 0 ? ` unfinished=${unfinished}` : "") +
       (failures.length > 0
         ? ` exportFailed=${failures.length}:${failures.slice(0, 3).join(",")}`
         : ""),

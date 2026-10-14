@@ -16,14 +16,18 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+/**
+ * 120, though reading stops at 20 s: a Drive request started just inside that can spend
+ * three 20 s tries (about 62 s), and a run killed at the ceiling records nothing.
+ */
+export const maxDuration = 120;
 
 /**
  * GET /api/cron/brain-meeting-notes
  *
  * New Gemini meeting notes into the brain every ten minutes, instead of up to an hour
  * later with the hourly Drive walk (`brain-drive`), which stays the authority: this
- * only adds and updates notes, and never deletes. See `ingestFreshMeetingNotes`.
+ * only adds and updates notes, and never sweeps. See `ingestFreshMeetingNotes`.
  *
  * At :00, :10 … :50, so the :50 run is done well before the walk starts at :52.
  */

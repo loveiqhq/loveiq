@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *
  * Measured 2026-10-11: notes reached Jarvis 29-62 minutes after Gemini wrote them, because
  * the hourly walk was their only reader. This check must write a note exactly as the walk
- * would, read it as the walk would, skip what the walk skips, and never delete anything.
+ * would, read it as the walk would, skip what the walk skips, and never sweep.
  */
 
 const mailboxes: { value: string[] | null } = { value: [] };
@@ -70,6 +70,8 @@ const text: Record<string, string> = {};
 const listings: string[] = [];
 const reads: Array<{ id: string; auth: string }> = [];
 const exportCheck = { fails: false };
+/** Files in the team export folder, which the walk never indexes. */
+const exportFolder: string[] = [];
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
@@ -82,7 +84,15 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     }
     if (decoded.includes("properties has")) {
       if (exportCheck.fails) return new Response("no", { status: 500 });
-      return new Response(JSON.stringify({ files: [] }), { status: 200 });
+      const folders = exportFolder.length
+        ? [{ id: "export-folder", mimeType: "application/vnd.google-apps.folder" }]
+        : [];
+      return new Response(JSON.stringify({ files: folders }), { status: 200 });
+    }
+    if (decoded.includes("'export-folder' in parents")) {
+      return new Response(JSON.stringify({ files: exportFolder.map((id) => ({ id })) }), {
+        status: 200,
+      });
     }
     listings.push(decoded);
     const owner = decoded.match(/'([^']+)' in owners/)?.[1] ?? "";
@@ -125,6 +135,7 @@ beforeEach(() => {
   listings.length = 0;
   reads.length = 0;
   exportCheck.fails = false;
+  exportFolder.length = 0;
   for (const k of Object.keys(drive)) delete drive[k];
   for (const k of Object.keys(text)) delete text[k];
 });
@@ -249,18 +260,78 @@ describe("ingestFreshMeetingNotes", () => {
     text.n1 = NOTE_TEXT;
     text.n2 = NOTE_TEXT;
     let checks = 0;
-    // Listing, then the export check's listing, then the first note; out of time after that.
-    const r = await run(() => ++checks > 3);
+    // The listing, the check before the export check, its listing, the first note; then out.
+    const r = await run(() => ++checks > 4);
     expect(reads).toHaveLength(1);
     expect(r.complete).toBe(false);
     expect(r.detail).toMatch(/deferred=1/);
   });
 
-  it("never deletes anything: the hourly walk is the only sweep", async () => {
+  /**
+   * NEVER SWEEPS: the hourly walk is the only sweep. A rewritten note that comes out
+   * shorter still loses its leftover parts, as every rewrite does, through upsertChunks.
+   */
+  it("never sweeps: no sweep state, no read of the whole source", async () => {
     drive[""] = [note("n1", SYNC)];
     text.n1 = NOTE_TEXT;
     await run();
-    expect(dbCalls.filter((c) => c.method === "DELETE")).toEqual([]);
     expect(dbCalls.some((c) => c.path.includes("brain_sweep"))).toBe(false);
+    expect(dbCalls.some((c) => c.path.includes("order=source_id.asc"))).toBe(false);
+  });
+
+  it("skips a note that sits in the team export folder", async () => {
+    drive[""] = [note("n1", SYNC)];
+    text.n1 = NOTE_TEXT;
+    exportFolder.push("n1");
+    await run();
+    expect(reads).toEqual([]);
+    expect(upserted).toEqual([]);
+  });
+
+  it("skips a note the export tagged, wherever it was moved", async () => {
+    drive[""] = [{ ...note("n1", SYNC), properties: { loveiq_team_export_file: "production" } }];
+    text.n1 = NOTE_TEXT;
+    await run();
+    expect(reads).toEqual([]);
+    expect(upserted).toEqual([]);
+  });
+
+  /**
+   * Gemini's own closing line, before the transcript, was in 114 of 114 notes. A note
+   * without it may be a stub, and a stub of a candidate call lacks the summary that gets
+   * one refused, so it waits for the walk rather than being indexed half-written.
+   */
+  it("writes only a note Gemini has finished", async () => {
+    drive[""] = [note("n1", SYNC)];
+    text.n1 = "Notes\nGemini is taking notes. They will appear here when the meeting ends.";
+    const r = await run();
+    expect(reads.map((x) => x.id)).toEqual(["n1"]);
+    expect(upserted).toEqual([]);
+    expect(r.detail).toMatch(/unfinished=1/);
+    expect(r.skipped).toBeUndefined();
+  });
+
+  /** A slow listing must not turn into "team-export-check-failed" and page #brain. */
+  it("defers, without alarm, when time runs out during the export check", async () => {
+    drive[""] = [note("n1", SYNC)];
+    text.n1 = NOTE_TEXT;
+    let checks = 0;
+    // The listing and the check before it pass; the export check's own listing is cut off.
+    const r = await run(() => ++checks > 2);
+    expect(r.skipped).toBeUndefined();
+    expect(reads).toEqual([]);
+    expect(r.detail).toMatch(/deferred=1/);
+  });
+
+  it("defers, without alarm, when time runs out before the export check", async () => {
+    drive[""] = [note("n1", SYNC)];
+    text.n1 = NOTE_TEXT;
+    let checks = 0;
+    // Out of time straight after the listing.
+    const r = await run(() => ++checks > 1);
+    expect(r.skipped).toBeUndefined();
+    expect(reads).toEqual([]);
+    expect(r.complete).toBe(false);
+    expect(r.detail).toMatch(/deferred=1/);
   });
 });

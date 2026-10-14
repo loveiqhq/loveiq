@@ -188,7 +188,7 @@
       "maxDuration": 300
     },
     "app/api/cron/brain-meeting-notes/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "app/api/cron/brain-calendar/route.ts": {
       "maxDuration": 120

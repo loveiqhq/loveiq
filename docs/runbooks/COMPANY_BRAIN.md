@@ -189,7 +189,9 @@ a transcript. Filter on `surface` to tell the two apart.
 | Source                                                                                     | Where from                                                             | When                    |
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------- |
 | Repo docs                                                                                  | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| GA4, call notes, funnel numbers, Slack                                                     | `/api/cron/brain-fast`                                                 | every 15 min            |
+| GA4, funnel numbers, Slack                                                                 | `/api/cron/brain-fast`                                                 | every 15 min            |
+| New Gemini meeting notes                                                                   | `/api/cron/brain-meeting-notes`                                        | every 10 min            |
+| Drive (the whole company Drive, meeting notes included)                                    | `/api/cron/brain-drive`                                                | hourly, at :52          |
 | Slack screenshots and screen recordings, described in words                                | `brain-daily.yml` → `/api/cron/brain-slack-media` (GitHub Actions)     | every 6 hours           |
 | Notion (board + pages)                                                                     | `/api/cron/brain-notion`                                               | hourly, at :41          |
 | Gmail (every mailbox on the domain)                                                        | `/api/cron/brain-gmail`                                                | hourly, at :11          |
@@ -1492,11 +1494,12 @@ worse result. So the ingester reads Drive.
   Meet files a note in the organiser's Drive. Seven of the twelve notes from 6 to 13
   October were in Mark's Drive only.
 - It writes a note that is not stored at its current edit, built exactly as the walk
-  builds it, so the walk then finds it current. Checked live on 2026-10-14: 44 of 44
+  builds it, so the walk then finds it current. Only a note Gemini has finished: one
+  carrying Google's "review Gemini's notes" line, which was in 114 of 114. Checked live on 2026-10-14: 44 of 44
   parts matched what the walk had stored.
 - A run with nothing new takes about four seconds.
 - `/api/cron/brain-drive`, hourly at :52, walks the whole Drive and stays the
-  authority. Only it deletes.
+  authority. Only it sweeps.
 - A note reachable only through a shortcut still waits for the hourly walk.
 - Measured 2026-10-11, before the ten-minute job: notes arrived 29-62 minutes after
   Gemini wrote them.
@@ -2182,6 +2185,13 @@ boundary was drawn by the people in them rather than by the company.
   argument; a null vector degrades it to exactly the previous lexical behaviour,
   so an embedding outage costs recall rather than search. New chunks are embedded
   at the end of the 15-minute lane — see "Embeddings" below.
+- **A record's day is mostly the UTC day, while its time is shown in Berlin.**
+  `browse_context` orders a day's records by `meta.at` and prints it in Berlin time, but
+  `since`/`until` and the day a record sorts under are `period_end`. That is the UTC day
+  everywhere except calendar events, which keep the date in their own time zone. So between
+  midnight and 2 a.m. Berlin time, a record can sit under the day before, and a meeting can
+  sort a little out of place against mail and chat. Moving every source to Berlin days means
+  re-keying Slack and calendar ids, and nothing here meets at that hour.
 - **No relevance floor.** Scores are not comparable between questions, so the
   pipeline cannot tell "we have this" from "we don't" — declining honestly is a
   property of the prompt, not something the search can enforce.
