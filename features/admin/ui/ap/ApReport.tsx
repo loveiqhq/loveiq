@@ -308,13 +308,26 @@ export default function ApReport() {
                         columns: [
                           { label: "Campaign", unit: "text" },
                           { label: "Sent", unit: "count" },
+                          { label: "Opened", unit: "count" },
+                          { label: "Open rate", unit: "pct" },
+                          { label: "Clicked", unit: "count" },
+                          { label: "Click rate", unit: "pct" },
                           { label: "Returned", unit: "count" },
                           { label: "Return rate", unit: "pct" },
                           { label: "Purchased", unit: "count" },
                         ],
                         rows: data.returns.campaigns.map((c) => ({
                           label: c.stage,
-                          values: [c.sent, c.returned, c.returnRate, c.purchased],
+                          values: [
+                            c.sent,
+                            c.opened,
+                            c.openRate,
+                            c.clicked,
+                            c.clickRate,
+                            c.returned,
+                            c.returnRate,
+                            c.purchased,
+                          ],
                         })),
                       },
                     },
@@ -699,7 +712,7 @@ const SOURCE_COLOURS: Record<string, string> = {
   "Another tagged link": "#d6cff0",
 };
 
-type CampaignKey = "sent" | "returned" | "rate" | "purchased";
+type CampaignKey = "sent" | "opened" | "clicked" | "returned" | "rate" | "purchased";
 type CampaignFilter = "campaign" | "status";
 type CampaignRow = ReportPayload["returns"]["campaigns"][number];
 
@@ -717,20 +730,39 @@ const campaignName = (stage: string) =>
 const campaignValue = (c: CampaignRow, k: CampaignFilter) =>
   k === "campaign" ? campaignName(c.stage) : c.status;
 
+/** A count with its share of the emails sent under it; "—" while it is not counted. */
+function CountAndRate({ n, rate }: { n: number | null; rate: number | null }) {
+  return (
+    <span
+      role="cell"
+      className={`flex flex-col items-end px-3 py-2.5 text-[13px] tabular-nums ${n === null ? "text-ap-muted" : ""}`}
+    >
+      {fmt("count", n)}
+      {n !== null && rate !== null && (
+        <span className="text-xs text-ap-muted">{fmt("pct", rate, 1)}</span>
+      )}
+    </span>
+  );
+}
+
 function ReturnsSection({ data }: { data: ReportPayload }) {
   const r = data.returns;
   const maxBand = Math.max(0.0001, ...r.days.map((d) => d.share));
   const [sort, setSort] = useState<Sort<CampaignKey>>(null);
   const head = { sort, onSort: (k: CampaignKey) => setSort((s) => nextSort(s, k)) };
   const filters = useColumnFilters(r.campaigns, CAMPAIGN_FILTERS, campaignValue);
-  const campaigns = sortRows(filters.matches, sort, (c, k) =>
-    k === "sent"
-      ? c.sent
-      : k === "returned"
-        ? c.returned
-        : k === "rate"
-          ? c.returnRate
-          : c.purchased
+  const campaigns = sortRows(
+    filters.matches,
+    sort,
+    (c, k) =>
+      ({
+        sent: c.sent,
+        opened: c.opened,
+        clicked: c.clicked,
+        returned: c.returned,
+        rate: c.returnRate,
+        purchased: c.purchased,
+      })[k]
   );
   const gtc = "minmax(220px,2fr) 90px repeat(6, minmax(84px,1fr))";
   return (
@@ -850,8 +882,8 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
               <Th label="Campaign" filter={filters.funnel("campaign")} />
               <Th label="Status" filter={filters.funnel("status")} />
               <Th label="Sent" col="sent" right {...head} />
-              <Th label="Opened" right />
-              <Th label="Clicked" right />
+              <Th label="Opened" col="opened" right {...head} />
+              <Th label="Clicked" col="clicked" right {...head} />
               <Th label="Returned" col="returned" right {...head} />
               <Th label="Return rate" col="rate" right {...head} />
               <Th label="Purchased" col="purchased" right {...head} />
@@ -888,12 +920,8 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                 <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
                   {fmt("count", c.sent)}
                 </span>
-                <span role="cell" className="px-3 py-2.5 text-right text-xs text-ap-muted">
-                  not recorded
-                </span>
-                <span role="cell" className="px-3 py-2.5 text-right text-xs text-ap-muted">
-                  not recorded
-                </span>
+                <CountAndRate n={c.opened} rate={c.openRate} />
+                <CountAndRate n={c.clicked} rate={c.clickRate} />
                 <span
                   role="cell"
                   className="px-3 py-2.5 text-right text-[13px] font-bold tabular-nums"
@@ -912,11 +940,14 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         </div>
         <span className="text-xs leading-relaxed text-ap-muted">
           Sent: emails sent in the range (marked just before sending, so a failed send still
-          counts). Returned: of those, readers who opened their report from the email&rsquo;s link
-          after it was sent, as the report records every such arrival since 18 Sep 2026. It replaces
-          PostHog&rsquo;s count, which saw only about a quarter of visits. Return rate = returned ÷
-          sent. Purchased: sales in the range that used the email&rsquo;s code. Opened and Clicked:
-          Resend keeps opens and clicks only as daily totals.
+          counts). Opened and Clicked: of those, readers whose email was opened, or a link in it
+          clicked, as Resend reports each email; the share of sent is under the count.{" "}
+          {r.emailEvents} Opens are inflated by Apple Mail, which loads images for privacy, so
+          clicks are the surer signal. Returned: of those sent, readers who opened their report from
+          the email&rsquo;s link after it was sent, as the report records every such arrival since
+          18 Sep 2026. It replaces PostHog&rsquo;s count, which saw only about a quarter of visits.
+          Return rate = returned ÷ sent. Purchased: sales in the range that used the email&rsquo;s
+          code.
         </span>
       </div>
     </Card>

@@ -213,6 +213,11 @@ describe("GET /api/cron/nurture-sequence", () => {
     // The report CTA carries from=email so a forced-paywall user who clicks it
     // gets the soft, dismissible blurred-preview experience, not the hard wall.
     expect(sent.html).toContain("from=email");
+    // The webhook keeps this email's opens and clicks by these two tags: ids, no address.
+    expect(sent.tags).toEqual([
+      { name: "stage", value: "72h_no_unlock" },
+      { name: "sub", value: "7" },
+    ]);
 
     expect(patchSpy).toHaveBeenCalled();
   });

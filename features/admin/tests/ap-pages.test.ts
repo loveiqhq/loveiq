@@ -79,6 +79,8 @@ const extras: ReportExtras = {
   feedback: [],
   votes_total: 0,
   emails: [],
+  email_events_from: null,
+  email_opens_from: null,
 };
 const ad = {
   byDay: new Map([

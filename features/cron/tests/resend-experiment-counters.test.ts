@@ -437,3 +437,172 @@ describe("resend webhook: which reason a suppression keeps", () => {
     expect(mockAddToSuppression).toHaveBeenCalledWith("a@example.com", "complaint");
   });
 });
+
+describe("resend webhook: each nurture email's own events", () => {
+  /**
+   * The nurture send tags every email with its stage and the reader's submission, and the
+   * webhook keeps the email's delivery, opens and clicks by them (email_message_event): the
+   * campaign table on the admin's Report page counts those.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    mockAddToSuppression.mockResolvedValue(true);
+  });
+
+  const EMAIL_ID = "4ef9a417-02e9-4d39-ad75-9611e0fcc33c";
+  const nurture = (
+    type: string,
+    data: Record<string, unknown> = {},
+    tags: unknown = { stage: "72h_no_unlock", sub: "42" }
+  ) => ({
+    type,
+    created_at: "2026-10-15T09:30:00.000Z",
+    data: {
+      email_id: EMAIL_ID,
+      // When the email was created, the same for all its events: not the event's time.
+      created_at: "2026-10-15T08:00:00.000Z",
+      to: ["reader@example.com"],
+      tags,
+      ...data,
+    },
+  });
+  /** The insert the webhook made, if it made one. */
+  const insert = () => {
+    const call = mockFetch.mock.calls.find((c) =>
+      String(c[0]).endsWith("/rest/v1/email_message_event")
+    );
+    return call ? (call[1] as { body: string; headers: Record<string, string> }) : null;
+  };
+
+  it.each(["delivered", "opened", "clicked", "bounced"])(
+    "keeps a nurture email's %s by the tags its send carried",
+    async (kind) => {
+      mockVerify.mockReturnValue(nurture(`email.${kind}`));
+      expect((await POST(request())).status).toBe(200);
+      const call = insert();
+      expect(call, "the event must be inserted").not.toBeNull();
+      expect(JSON.parse(call!.body)).toEqual({
+        resend_id: EMAIL_ID,
+        event_type: kind,
+        stage: "72h_no_unlock",
+        survey_submission_id: 42,
+        first_at: "2026-10-15T09:30:00.000Z",
+      });
+      // The key (email, kind) keeps the first: a retry or a second open adds nothing.
+      expect(call!.headers.Prefer).toContain("resolution=ignore-duplicates");
+    }
+  );
+
+  it("reads the tags in either shape Resend sends", async () => {
+    mockVerify.mockReturnValue(
+      nurture("email.opened", {}, [
+        { name: "stage", value: "72h_no_unlock" },
+        { name: "sub", value: "42" },
+      ])
+    );
+    await POST(request());
+    expect(JSON.parse(insert()!.body)).toMatchObject({
+      stage: "72h_no_unlock",
+      survey_submission_id: 42,
+    });
+  });
+
+  it("never stores the address, the IP, the user agent or the clicked link", async () => {
+    mockVerify.mockReturnValue(
+      nurture("email.clicked", {
+        click: {
+          ipAddress: "203.0.113.7",
+          userAgent: "Mozilla/5.0 (iPhone)",
+          link: "https://www.loveiq.org/report/rpt_SECRET?promo=LIQ-50-ABCDEFGH",
+          timestamp: "2026-10-15T09:30:00.000Z",
+        },
+      })
+    );
+    await POST(request());
+    const body = insert()!.body;
+    expect(Object.keys(JSON.parse(body)).sort()).toEqual([
+      "event_type",
+      "first_at",
+      "resend_id",
+      "stage",
+      "survey_submission_id",
+    ]);
+    for (const kept of ["reader@example.com", "203.0.113.7", "iPhone", "rpt_SECRET", "LIQ-50"]) {
+      expect(body).not.toContain(kept);
+    }
+  });
+
+  it.each([
+    // null, not undefined: undefined would take the helper's default tags.
+    ["no tags", null],
+    ["an A/B arm's tags", { exp: "invite", arm: "a" }],
+    ["a submission that is not a number", { stage: "72h_no_unlock", sub: "42 or 1=1" }],
+    ["a stage outside Resend's characters", { stage: "72h no unlock", sub: "42" }],
+  ])("keeps nothing for %s", async (_label, tags) => {
+    mockVerify.mockReturnValue(nurture("email.opened", {}, tags));
+    expect((await POST(request())).status).toBe(200);
+    expect(insert()).toBeNull();
+  });
+
+  it("keeps nothing without Resend's id for the email, or for an event it does not keep", async () => {
+    mockVerify.mockReturnValue(nurture("email.opened", { email_id: undefined }));
+    await POST(request());
+    mockVerify.mockReturnValue(nurture("email.complained"));
+    await POST(request());
+    mockVerify.mockReturnValue(nurture("email.sent"));
+    await POST(request());
+    expect(insert()).toBeNull();
+  });
+
+  it("takes the time it arrived when the event carries no valid time", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-15T10:00:00.000Z"));
+      mockVerify.mockReturnValue({ ...nurture("email.opened"), created_at: "not a date" });
+      await POST(request());
+      expect(JSON.parse(insert()!.body).first_at).toBe("2026-10-15T10:00:00.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("needs no certain claim: the key is what dedupes", async () => {
+    mockVerify.mockReturnValue(nurture("email.opened"));
+    // The replay guard fails open on a Supabase error…
+    mockFetch.mockImplementation((url: string) =>
+      String(url).includes("resend_webhook_event")
+        ? Promise.resolve({ ok: false, status: 500, headers: new Headers() })
+        : Promise.resolve({ ok: true, status: 201, headers: new Headers() })
+    );
+    expect((await POST(request())).status).toBe(200);
+    // …and the event is still kept.
+    expect(insert()).not.toBeNull();
+  });
+
+  it("is best effort: a failed insert is logged and the webhook still answers 200", async () => {
+    mockVerify.mockReturnValue(nurture("email.bounced"));
+    mockFetch.mockImplementation((url: string) =>
+      String(url).endsWith("/rest/v1/email_message_event")
+        ? Promise.resolve({ ok: false, status: 404, headers: new Headers() })
+        : Promise.resolve({ ok: true, status: 201, headers: new Headers() })
+    );
+    expect((await POST(request())).status).toBe(200);
+    const warned = mockWarn.mock.calls.some((c) =>
+      String(c[1] ?? "").includes("email message event non-ok")
+    );
+    expect(warned, "a non-ok insert must be logged, not swallowed").toBe(true);
+    // The bounce is still suppressed: the point of the whole endpoint.
+    expect(mockAddToSuppression).toHaveBeenCalled();
+
+    mockFetch.mockImplementation((url: string) =>
+      String(url).endsWith("/rest/v1/email_message_event")
+        ? Promise.reject(new Error("down"))
+        : Promise.resolve({ ok: true, status: 201, headers: new Headers() })
+    );
+    expect((await POST(request())).status).toBe(200);
+  });
+});

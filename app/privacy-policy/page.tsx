@@ -95,6 +95,7 @@ export default function PrivacyPolicyPage() {
                 <li>Device and browser information</li>
                 <li>Time and date of access</li>
                 <li>Interaction logs</li>
+                <li>Whether our emails were opened and their links clicked</li>
               </ul>
 
               <h3 className="text-gray-900 font-medium mb-2">3.4 Payment Data</h3>
@@ -187,6 +188,21 @@ export default function PrivacyPolicyPage() {
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Resend Inc. (USA) - transactional and marketing email delivery</li>
               </ul>
+              <p className="mb-4">
+                Our emails contain a small tracking image, and their links pass through Resend
+                before they reach our website. When you open one of our emails with its images
+                shown, or click a link in it, Resend records this together with your IP address and
+                details of your device and email app. For the emails we send about your report, we
+                also keep our own record of each email: whether it was delivered, opened and
+                clicked, and when, linked to your survey submission. Our record does not include
+                your IP address, your device details or which link you clicked. We use this to see
+                which of our emails are useful and to improve them, on the basis of our legitimate
+                interest (Art. 6(1)(f) GDPR). Some email apps load images automatically, so an email
+                can count as opened without being read. To avoid this, turn off automatic image
+                loading in your email app and visit our website directly instead of clicking a link,
+                or unsubscribe using the link in our emails. You may also object under Art. 21 GDPR
+                using the contact details in section 1.
+              </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.4 Analytics and product insight</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
