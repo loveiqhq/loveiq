@@ -26,7 +26,10 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+import { GET as assessmentGet } from "@/app/api/admin/ap/assessment/route";
+import { GET as overviewGet } from "@/app/api/admin/ap/overview/route";
 import { GET as reportGet } from "@/app/api/admin/ap/report/route";
+import { GET as surveyGet } from "@/app/api/admin/ap/survey/route";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
 
 const json = (body: unknown, status = 200) => ({
@@ -113,5 +116,99 @@ describe("GET /api/admin/ap/report", () => {
   it("shows the tile uncompared when the earlier period's presses can't be read", async () => {
     extrasFails = true;
     expect(await skipped()).toMatchObject({ value: 1 / 4, prev: null });
+  });
+});
+
+describe("the New & returning filter on every page route", () => {
+  // A finished on their first visit and paid 6.99; B had visited the day before and paid 4.99;
+  // C's visit PostHog never saw: in neither group.
+  const A = "0192f0aa-a111-7000-8000-00000000000a";
+  const B = "0192f0aa-b222-7000-8000-00000000000b";
+  const C = "0192f0aa-c333-7000-8000-00000000000c";
+  const day = "2026-10-07";
+  const paidSub = (id: number, ph: string, revenue: number) => ({
+    ...finisher(id, day),
+    ph,
+    paidAt: `${day}T11:00:00Z`,
+    sales: 1,
+    revenue,
+    plan: "full_report",
+    full: true,
+  });
+  const pay = (sid: number, ph: string, amount: number) => ({
+    day,
+    sid,
+    amount,
+    plan: "full_report",
+    src: "google",
+    med: "cpc",
+    ph,
+  });
+  const visit = Date.parse(`${day}T09:55:00Z`);
+
+  beforeEach(() => {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path === "/rest/v1/rpc/ap_facts")
+        return json({
+          ...facts([paidSub(1, A, 6.99), paidSub(2, B, 4.99), { ...finisher(3, day), ph: C }]),
+          money: [pay(1, A, 6.99), pay(2, B, 4.99)],
+        });
+      if (path === "/rest/v1/rpc/ap_report_extras") return json(extras([]));
+      return json(null, 404);
+    });
+    // PostHog: each visit's start and its person's first event; anything else reads empty.
+    mockHogql.mockImplementation(async (q: string) =>
+      q.includes("AS started_ms")
+        ? {
+            ok: true,
+            cut: null,
+            rows: [
+              [A, visit, visit],
+              [B, visit, visit - 86_400_000],
+            ],
+          }
+        : { ok: true, cut: null, rows: [] }
+    );
+  });
+
+  const read = async (
+    get: (r: Request) => Promise<Response>,
+    page: string,
+    visitor: string
+  ): Promise<{ tiles: Array<{ key: string; value: number | null }> } & Record<string, unknown>> => {
+    clearFactsCache();
+    const res = await get(
+      new Request(
+        `http://localhost/api/admin/ap/${page}?period=custom&from=2026-10-06&to=2026-10-12&visitor=${visitor}`
+      )
+    );
+    expect(res.status).toBe(200);
+    return res.json();
+  };
+  const tile = (p: { tiles: Array<{ key: string; value: number | null }> }, key: string) =>
+    p.tiles.find((t) => t.key === key)?.value;
+
+  it("overview: finishers and revenue by the payer's group", async () => {
+    const all = await read(overviewGet, "overview", "all");
+    const fresh = await read(overviewGet, "overview", "new");
+    const back = await read(overviewGet, "overview", "returning");
+    expect([tile(all, "subs"), tile(fresh, "subs"), tile(back, "subs")]).toEqual([3, 1, 1]);
+    expect([tile(all, "revenue"), tile(fresh, "revenue"), tile(back, "revenue")]).toEqual([
+      11.98, 6.99, 4.99,
+    ]);
+  });
+
+  it("assessment: revenue by the payer's group, and prices said not to split", async () => {
+    const fresh = await read(assessmentGet, "assessment", "new");
+    expect(tile(fresh, "revenue")).toBe(6.99);
+    expect(tile(await read(assessmentGet, "assessment", "returning"), "revenue")).toBe(4.99);
+    expect(fresh.pricesBlocked).toMatch(/new and returning can't split them/);
+    expect((await read(assessmentGet, "assessment", "all")).pricesBlocked).toBeNull();
+  });
+
+  it("survey and report: the same people", async () => {
+    expect(tile(await read(surveyGet, "survey", "returning"), "subs")).toBe(1);
+    expect(tile(await read(reportGet, "report", "new"), "opened")).toBe(1);
+    expect(tile(await read(reportGet, "report", "all"), "opened")).toBe(3);
   });
 });
