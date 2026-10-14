@@ -957,7 +957,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                 </span>
                 <span role="cell" className="px-3 py-2.5">
                   <span
-                    className={`rounded-full px-2.5 py-[3px] text-xs font-bold ${c.status === "Live" ? "bg-ap-good/10 text-ap-good" : "bg-ap-track text-ap-muted"}`}
+                    className={`rounded-full px-2.5 py-[3px] text-xs font-bold ${c.status === "Live" ? "bg-ap-good/10 text-ap-good-ink" : "bg-ap-track text-ap-muted"}`}
                   >
                     {c.status}
                   </span>

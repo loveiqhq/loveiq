@@ -95,7 +95,7 @@ function shownText(v: unknown, type: string | undefined): string {
 /** A status pill's colours, as the design draws it: green when done, red when it failed. */
 function statusTone(v: string): string {
   if (/^(succeeded|completed|submitted|generated|paid)$/i.test(v))
-    return "bg-ap-good/10 text-ap-good";
+    return "bg-ap-good/10 text-ap-good-ink";
   if (/^(failed|canceled|cancelled|refunded)$/i.test(v)) return "bg-ap-bad/10 text-ap-bad-ink";
   return "bg-ap-ground text-ap-body";
 }
