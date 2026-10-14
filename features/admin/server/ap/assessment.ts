@@ -9,18 +9,18 @@ import { askedQuestions } from "@features/admin/server/dropoff-weekly";
 import { classifySource, deviceClass, type Facts } from "./facts";
 import { bucketCaption, grainOf, trendBuckets, type ApFilters } from "./filters";
 import { shortDate } from "./days";
-import type { GoodWhen, Unit } from "./format";
+import { fmt, type GoodWhen, type Unit } from "./format";
 import {
   launched,
   LATE_SOURCES,
   lateSourceNote,
   ratio,
   spend,
-  spendBlocked,
   startsBlocked,
   comparableStarts,
   startsComplete,
   subsIn,
+  tabletBlocked,
   totals,
   trend,
   visitsBlocked,
@@ -123,8 +123,15 @@ export function buildDashboard(input: {
   const { facts, previous, ad, filters: f, today, now } = input;
   const scope = assessmentScope(f);
   const t = totals(facts, scope);
+  // The tablet filter before tablets were told apart: nobody counts as one, so every figure about
+  // people is blank with the reason rather than a false zero, and such a period is not compared.
+  const tablet = tabletBlocked(scope, facts.from);
+  const known = (v: number) => (tablet ? null : v);
   // The earlier period at the same age as this one, so "so far" rates compare like with like.
-  const prevAged = previous ? ageMatched(previous, sameAge(facts, previous, now)) : null;
+  const prevAged =
+    previous && !tabletBlocked(scope, previous.from)
+      ? ageMatched(previous, sameAge(facts, previous, now))
+      : null;
   const pRaw = prevAged ? totals(prevAged, scope) : null;
   const startsOk = startsComplete(facts.from, today, scope);
   const p: Totals | null = comparableStarts(pRaw, facts.from, previous?.from ?? null, today, scope);
@@ -137,7 +144,6 @@ export function buildDashboard(input: {
   const caption = bucketCaption(facts.from, facts.to);
   const vB = visitsBlocked(scope);
   const stB = startsBlocked(scope, facts.from, today);
-  const spB = spendBlocked(scope);
   const cac = (s: { eur: number | null }, x: Totals) =>
     s.eur === null ? null : ratio(s.eur, x.payers);
   const prevCac = sPrev && p ? cac(sPrev, p) : null;
@@ -165,7 +171,8 @@ export function buildDashboard(input: {
     goodWhen: opts.goodWhen ?? "up",
     spark: opts.spark ?? trend(facts, scope, (x) => pick(x)),
     foot: foot(t),
-    blocked: opts.blocked ?? null,
+    // Every tile counts people or visits: blank under the tablet filter too, unless already blank.
+    blocked: opts.blocked ?? tablet,
     trend: opts.trend ?? caption,
     ...(opts.deltaAs ? { deltaAs: opts.deltaAs } : {}),
   });
@@ -223,7 +230,7 @@ export function buildDashboard(input: {
       "€ rev. per visit",
       "eur3",
       (x) => ratio(x.revenue, x.visits),
-      () => (p ? `vs ${eur(ratio(p.revenue, p.visits), 3)}` : ""),
+      () => (p ? `vs ${fmt("eur3", ratio(p.revenue, p.visits))}` : ""),
       {
         blocked: vB,
       }
@@ -235,7 +242,7 @@ export function buildDashboard(input: {
       (x) => ratio(x.revenue, x.subs),
       (x) =>
         p
-          ? `vs ${eur(ratio(p.revenue, p.subs), 3)} · ${count(x.subs)} submissions`
+          ? `vs ${fmt("eur3", ratio(p.revenue, p.subs))} · ${count(x.subs)} submissions`
           : `${count(x.subs)} submissions`
     ),
     tile(
@@ -278,7 +285,8 @@ export function buildDashboard(input: {
           ? "Google Ads spend ÷ paying customers"
           : `${prevCac !== null ? `vs ${eur(prevCac)} · ` : ""}spend ${eur(sNow.eur, 0)}${partialSpend}`,
       {
-        blocked: spB,
+        // Blank spend says why: a filter that can't split it, no figure for these days, or no read.
+        blocked: sNow.why,
         goodWhen: "down",
         deltaAs: "abs",
         value: cac(sNow, t),
@@ -332,21 +340,29 @@ export function buildDashboard(input: {
       label: "CAC",
       unit: "eur",
       value: cac(sNow, t),
-      note: `Google Ads spend ÷ paying customers${partialSpend}`,
+      note: sNow.why ?? `Google Ads spend ÷ paying customers${partialSpend}`,
     },
     {
       group: "Economics",
       label: "ROAS",
       unit: "ratio",
       value: sNow.eur ? ratio(t.revenue, sNow.eur) : null,
-      note: `revenue ÷ ad spend (1.0 = break-even on the first purchase)${partialSpend}`,
+      note:
+        sNow.why ?? `revenue ÷ ad spend (1.0 = break-even on the first purchase)${partialSpend}`,
     },
     {
       group: "Economics",
       label: "CLV",
       unit: "eur",
       value: ratio(t.revenue, t.payers),
-      note: "revenue per paying customer; one purchase each so far, so it equals the average order",
+      // It equals the average order only while nobody has bought twice.
+      note: `revenue per paying customer${
+        t.payers === 0
+          ? ""
+          : t.sales === t.payers
+            ? "; one purchase each so far, so it equals the average order"
+            : `; ${t.sales} purchases by ${t.payers} customer${t.payers === 1 ? "" : "s"} so far`
+      }`,
     },
     {
       group: "Engagement",
@@ -426,28 +442,28 @@ export function buildDashboard(input: {
     {
       n: 4,
       label: "Submitted",
-      value: t.subs,
-      step: `${pct(ratio(t.startsFinished, t.starts))} of starts finish`,
+      value: known(t.subs),
+      step: `${pct(ratio(t.startsFinished, t.starts))} of starts`,
       href: "survey",
     },
     {
       n: 5,
       label: "Report opened",
-      value: t.opened,
+      value: known(t.opened),
       step: `${pct(ratio(t.opened, t.subs))} of submits`,
       href: "report",
     },
     {
       n: 6,
       label: "Paywall reached",
-      value: t.paywall,
+      value: known(t.paywall),
       step: `${pct(ratio(t.paywall, t.opened))} of opens`,
       href: "report",
     },
     {
       n: 7,
       label: "Paid",
-      value: t.paidCohort,
+      value: known(t.paidCohort),
       step: `${pct(ratio(t.paidCohort, t.paywall))} of paywall`,
       href: "#payment",
     },
@@ -468,12 +484,13 @@ export function buildDashboard(input: {
   const sources: Table = {
     sample: split.ok,
     barLabel: "Share of visits",
+    // The design's decimals: a share in tenths, a CVR in hundredths.
     columns: [
       { label: "Source", unit: "text" },
       { label: "Visitors", unit: "count" },
-      { label: "Share", unit: "pct", digits: 0 },
+      { label: "Share", unit: "pct", digits: 1 },
       { label: "Submissions", unit: "count" },
-      { label: "Survey CVR", unit: "pct" },
+      { label: "Survey CVR", unit: "pct", digits: 2 },
       { label: "€ / visit", unit: "eur3" },
     ],
     rows: bySource.map((s) => ({
@@ -481,14 +498,14 @@ export function buildDashboard(input: {
       values: [
         s.visitors,
         split.bySource.get(s.value)?.share ?? null,
-        s.x.subs,
+        known(s.x.subs),
         ratio(s.x.subs, perVisitor(s)),
         ratio(s.x.revenue, perVisitor(s)),
       ],
       // No bars while the visitors are blank: an empty track would read as none.
       ...(split.ok ? { bar: maxVisitors ? (s.visitors ?? 0) / maxVisitors : 0 } : {}),
     })),
-    note: `${split.note} Survey CVR: submissions ÷ visitors. Submissions and payments carry the source the survey recorded; revenue by payment day.${late ? ` ${late}` : ""}`,
+    note: `${split.note} Survey CVR: submissions ÷ visitors. Submissions and payments carry the source the survey recorded; revenue by payment day.${late ? ` ${late}` : ""}${tablet ? ` ${tablet}` : ""}`,
   };
 
   const performance = bySource.map((s) => ({
@@ -538,9 +555,10 @@ export function buildDashboard(input: {
     row.revenue = Math.round((row.revenue + qf.revenue) * 100) / 100;
     priceMap.set(key, row);
   }
+  // By the plan's name, then price, as the design lists them.
   const prices = [...priceMap.values()]
     .map((r) => ({ ...r, cvr: ratio(r.sales, r.quoted) }))
-    .sort((a, b) => a.plan.localeCompare(b.plan) || (a.price ?? 0) - (b.price ?? 0));
+    .sort((a, b) => a.planLabel.localeCompare(b.planLabel) || (a.price ?? 0) - (b.price ?? 0));
 
   return {
     ...head(f, today, now),
@@ -557,7 +575,7 @@ export function buildDashboard(input: {
     pricesBlocked:
       scope.visitor !== "all"
         ? "Prices are counted per price, not per person, so new and returning can't split them."
-        : null,
+        : tablet,
   };
 }
 

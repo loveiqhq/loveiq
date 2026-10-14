@@ -193,6 +193,7 @@ export default function ApOverview() {
                   options={SPLITS}
                   value={split}
                   onChange={setSplit}
+                  tight
                 />
               }
             />
@@ -232,14 +233,14 @@ export default function ApOverview() {
                   options={SPLITS}
                   value={split}
                   onChange={setSplit}
+                  tight
                 />
               }
             />
-            <div
-              className="grid items-start gap-6"
-              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))" }}
-            >
-              <div className="flex flex-col gap-3.5">
+            {/* Side by side as drawn, but the table takes the larger share: its headings need
+                about 610px (DataTable), more than half the card. Narrower, it goes under. */}
+            <div className="flex flex-wrap items-start gap-6">
+              <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5">
                 <span className="text-[13px] font-bold text-ap-body">
                   {/* With visits blank under a filter, the shares are of the starts. */}
                   Funnel · share of{" "}
@@ -263,14 +264,14 @@ export default function ApOverview() {
                   Opened and paid: of the people who submitted in the range, so far.
                 </p>
               </div>
-              <SplitTable
-                split={split}
-                byAssessment={data.submissions.byAssessment}
-                bySource={data.submissions.bySource}
-                // The design's 520px is 3px wider than this column ever is (517px at the
-                // page's full width), which cut the table's edge off: 516 fits it.
-                minWidth={516}
-              />
+              <div className="min-w-0 flex-[1_1_620px]">
+                <SplitTable
+                  split={split}
+                  byAssessment={data.submissions.byAssessment}
+                  bySource={data.submissions.bySource}
+                  minWidth={520}
+                />
+              </div>
             </div>
           </Card>
 
@@ -286,6 +287,7 @@ export default function ApOverview() {
                   options={SPLITS}
                   value={split}
                   onChange={setSplit}
+                  tight
                 />
               }
             />
@@ -322,7 +324,7 @@ export default function ApOverview() {
               <SectionHead id="h-rev" eyebrow="04 · Revenue · per assessment" title="Revenue" />
               <div className="grid grid-cols-3 gap-3">
                 {data.revenue.stats.map((s) => (
-                  <StatBox key={s.label} stat={s} />
+                  <StatBox key={s.label} stat={s} level />
                 ))}
               </div>
               <DataTable table={data.revenue.byAssessment} minWidth={440} />
@@ -331,7 +333,7 @@ export default function ApOverview() {
               <SectionHead id="h-cost" eyebrow="05 · Costs · per assessment" title="Costs & CAC" />
               <div className="grid grid-cols-3 gap-3">
                 {data.costs.stats.map((s) => (
-                  <StatBox key={s.label} stat={s} />
+                  <StatBox key={s.label} stat={s} level />
                 ))}
               </div>
               <DataTable table={data.costs.byAssessment} minWidth={440} />

@@ -35,11 +35,11 @@ import {
   ratio,
   sourceShares,
   spend,
-  spendBlocked,
   startsBlocked,
   comparableStarts,
   startsComplete,
   subsIn,
+  tabletBlocked,
   totals,
   trend,
   visitsBlocked,
@@ -273,9 +273,11 @@ export function head(f: ApFilters, today: string, now: Date): PageHead {
     );
   } else if (f.device !== "all" && cmp && !beforeData(cmp) && cmp.from < SURVEY_TRACKING_FROM) {
     // The range is after the day but its comparison is not: tablets there read as phones or
-    // computers, so a change against it is partly that.
+    // computers, so a change against it is partly that; under the tablet filter, nobody is one.
     notes.push(
-      `Tablets are told apart from ${tracking}, but the comparison period starts before then: in it, tablets count as Mobile, or as Desktop for newer iPads, which present themselves as Macs, so part of the change comes from that.`
+      f.device === "tablet"
+        ? `Tablets are told apart from ${tracking}, but the comparison period starts before then, when nobody counts as a tablet.`
+        : `Tablets are told apart from ${tracking}, but the comparison period starts before then: in it, tablets count as Mobile, or as Desktop for newer iPads, which present themselves as Macs, so part of the change comes from that.`
     );
   }
   // A source the tracker tells apart only from that day, filtered on.
@@ -359,8 +361,15 @@ export function buildOverview(input: {
     visitor: f.visitor,
   };
   const t = totals(facts, scope);
+  // The tablet filter before tablets were told apart: nobody counts as one, so every figure about
+  // people is blank with the reason rather than a false zero, and such a period is not compared.
+  const tablet = tabletBlocked(scope, facts.from);
+  const known = (v: number) => (tablet ? null : v);
   // The earlier period at the same age as this one, so "so far" rates compare like with like.
-  const prevAged = previous ? ageMatched(previous, sameAge(facts, previous, now)) : null;
+  const prevAged =
+    previous && !tabletBlocked(scope, previous.from)
+      ? ageMatched(previous, sameAge(facts, previous, now))
+      : null;
   const pRaw = prevAged ? totals(prevAged, scope) : null;
   // Starts before 18 Sep 2026 miss people who declined cookies: never compared with a range
   // that holds everyone, or the change is made of the gap.
@@ -437,7 +446,7 @@ export function buildOverview(input: {
         ratio(t.subs, t.starts) !== null
           ? `${pctText(ratio(t.subs, t.starts))} of starts submit`
           : "Finished surveys",
-      blocked: null,
+      blocked: tablet,
       trend: caption,
       href: "#submissions",
     },
@@ -450,11 +459,9 @@ export function buildOverview(input: {
       goodWhen: "up",
       spark: trend(facts, scope, (x) => x.revenue),
       foot: `${t.payers} paid report${t.payers === 1 ? "" : "s"}${
-        p
-          ? ` · prev. ${p.payers} (€${p.revenue.toLocaleString("en-US", { maximumFractionDigits: 2 })})`
-          : ""
+        p ? ` · prev. ${p.payers} (${fmt("eur", p.revenue)})` : ""
       }${t.gifts ? ` · ${t.gifts} gifted` : ""}`,
-      blocked: null,
+      blocked: tablet,
       trend: caption,
       href: "#revenue",
     },
@@ -470,7 +477,8 @@ export function buildOverview(input: {
         sNow.eur === null
           ? "Google Ads"
           : `CAC ${fmt("eur", cac(sNow, t))} · ${eurText(perSub(sNow, t))} per submission${spendNote ? ` · ${spendNote}` : ""}`,
-      blocked: spendBlocked(scope),
+      // Blank spend says why: a filter that can't split it, no figure for these days, or no read.
+      blocked: sNow.why,
       trend: caption,
       href: "#costs",
     },
@@ -495,12 +503,13 @@ export function buildOverview(input: {
   const perVisitorOf = (s: Source) => (late && LATE_SOURCES.has(s) ? null : visitorsOf(s));
   const lateNote = late ? ` ${late}` : "";
 
+  // Rates with the design's fixed decimals: a CVR in hundredths, a share or a completion in tenths.
   const trafficByAssessment: Table = {
     columns: [
       { label: "Assessment", unit: "text" },
       { label: "Visitors", unit: "count" },
       { label: "Share", unit: "pct", digits: 0 },
-      { label: "Start CVR", unit: "pct" },
+      { label: "Start CVR", unit: "pct", digits: 2 },
     ],
     rows: [
       byAssessmentRow(
@@ -533,8 +542,8 @@ export function buildOverview(input: {
     columns: [
       { label: "Source", unit: "text" },
       { label: "Visitors", unit: "count" },
-      { label: "Share", unit: "pct", digits: 0 },
-      { label: "Start CVR", unit: "pct" },
+      { label: "Share", unit: "pct", digits: 1 },
+      { label: "Start CVR", unit: "pct", digits: 2 },
     ],
     rows: sourceTotals.map((s) => ({
       label: s.label,
@@ -550,9 +559,9 @@ export function buildOverview(input: {
   const funnelValues: Array<[string, number | null]> = [
     ["Visited", t.visits],
     ["Started survey", t.starts],
-    ["Submitted", t.subs],
-    ["Opened report", t.opened],
-    ["Paid", t.paidCohort],
+    ["Submitted", known(t.subs)],
+    ["Opened report", known(t.opened)],
+    ["Paid", known(t.paidCohort)],
   ];
   const first = funnelValues.find(([, v]) => v !== null)?.[1] ?? null;
   const funnel: FunnelStep[] = funnelValues.map(([label, value], i) => ({
@@ -567,18 +576,19 @@ export function buildOverview(input: {
       { label: "Assessment", unit: "text" },
       { label: "Starts", unit: "count" },
       { label: "Submissions", unit: "count" },
-      { label: "Completion", unit: "pct" },
-      { label: "Submission CVR", unit: "pct" },
+      { label: "Completion", unit: "pct", digits: 1 },
+      { label: "Submission CVR", unit: "pct", digits: 2 },
     ],
     rows: [
       byAssessmentRow(
         aLabel,
         launchedA
-          ? [t.starts, t.subs, ratio(t.startsFinished, t.starts), ratio(t.subs, t.visits)]
+          ? [t.starts, known(t.subs), ratio(t.startsFinished, t.starts), ratio(t.subs, t.visits)]
           : [null, null, null, null]
       ),
       ...laterAssessments(4),
     ],
+    note: tablet ?? undefined,
   };
   const subsBySource: Table = {
     sample: split.ok,
@@ -586,15 +596,15 @@ export function buildOverview(input: {
       { label: "Source", unit: "text" },
       { label: "Starts", unit: "count" },
       { label: "Submissions", unit: "count" },
-      { label: "Completion", unit: "pct" },
-      { label: "Submission CVR", unit: "pct" },
+      { label: "Completion", unit: "pct", digits: 1 },
+      { label: "Submission CVR", unit: "pct", digits: 2 },
     ],
     rows: [
       ...sourceTotals.map((s) => ({
         label: s.label,
         values: [
           s.t.starts,
-          s.t.subs,
+          known(s.t.subs),
           ratio(s.t.startsFinished, s.t.starts),
           ratio(s.t.subs, perVisitorOf(s.value)),
         ],
@@ -626,7 +636,7 @@ export function buildOverview(input: {
     ratio(tt.startsFinished, tt.starts),
     ratio(tt.opened, tt.subs),
     readMeanMs(facts, scopeX),
-    returners(facts, scopeX),
+    known(returners(facts, scopeX)),
   ];
   const engagement = {
     survey: [
@@ -653,7 +663,7 @@ export function buildOverview(input: {
     ],
     report: [
       { label: "Open rate", unit: "pct" as Unit, value: ratio(t.opened, t.subs) },
-      { label: "Reports opened", unit: "count" as Unit, value: t.opened },
+      { label: "Reports opened", unit: "count" as Unit, value: known(t.opened) },
       {
         label: "Avg. read time",
         unit: "mmss" as Unit,
@@ -679,7 +689,7 @@ export function buildOverview(input: {
     byAssessment: {
       columns: [
         { label: "Assessment", unit: "text" as const },
-        { label: "Survey completion", unit: "pct" as const },
+        { label: "Survey completion", unit: "pct" as const, digits: 1 },
         { label: "Report open rate", unit: "pct" as const },
         { label: "Avg. read time", unit: "mmss" as const },
         { label: "Returns", unit: "count" as const },
@@ -688,12 +698,12 @@ export function buildOverview(input: {
         byAssessmentRow(aLabel, launchedA ? engagementRow(scope, t) : [null, null, null, null]),
         ...laterAssessments(4),
       ],
-      note: "Returns: readers who came back to their report on a later visit, so far.",
+      note: `Returns: readers who came back to their report on a later visit, so far.${tablet ? ` ${tablet}` : ""}`,
     },
     bySource: {
       columns: [
         { label: "Source", unit: "text" as const },
-        { label: "Survey completion", unit: "pct" as const },
+        { label: "Survey completion", unit: "pct" as const, digits: 1 },
         { label: "Report open rate", unit: "pct" as const },
         { label: "Avg. read time", unit: "mmss" as const },
         { label: "Returns", unit: "count" as const },
@@ -703,7 +713,11 @@ export function buildOverview(input: {
         values: engagementRow({ ...scope, source: s.value }, s.t),
       })),
       note: `Returns: readers who came back to their report on a later visit, so far.${
-        sourceStartsBlocked ? ` Survey completion: ${sourceStartsBlocked}` : ""
+        tablet
+          ? ` ${tablet}`
+          : sourceStartsBlocked
+            ? ` Survey completion: ${sourceStartsBlocked}`
+            : ""
       }`,
     },
   };
@@ -716,17 +730,19 @@ export function buildOverview(input: {
       {
         label: "Revenue",
         unit: "eur" as Unit,
-        value: t.revenue,
+        value: known(t.revenue),
         prev: p?.revenue ?? null,
         foot: "change" as const,
+        note: tablet ?? undefined,
       },
       {
         label: "Paid reports",
         unit: "count" as Unit,
-        value: t.payers,
+        value: known(t.payers),
         prev: p?.payers ?? null,
         deltaAs: "abs" as const,
         foot: "change" as const,
+        note: tablet ?? undefined,
       },
       {
         label: "€ per visit",
@@ -746,18 +762,20 @@ export function buildOverview(input: {
       rows: [
         byAssessmentRow(
           aLabel,
-          launchedA ? [t.payers, t.revenue, perVisit(t)] : [null, null, null]
+          launchedA ? [known(t.payers), known(t.revenue), perVisit(t)] : [null, null, null]
         ),
         ...laterAssessments(3),
       ],
-      note: t.gifts
-        ? `${t.gifts} report${t.gifts === 1 ? " was" : "s were"} unlocked for free (gifted) and ${t.gifts === 1 ? "is" : "are"} not counted as paid.`
-        : undefined,
+      note:
+        tablet ??
+        (t.gifts
+          ? `${t.gifts} report${t.gifts === 1 ? " was" : "s were"} unlocked for free (gifted) and ${t.gifts === 1 ? "is" : "are"} not counted as paid.`
+          : undefined),
     },
   };
 
   // Ad spend its change ("flat vs prev." under 1%); the cost per submission and per paying
-  // customer their previous value, coloured by the change (lower is good).
+  // customer their previous value, coloured by the change (lower is good). Blank, each says why.
   const costs = {
     stats: [
       {
@@ -767,7 +785,7 @@ export function buildOverview(input: {
         prev: sPrev?.eur ?? null,
         goodWhen: "down" as const,
         foot: "change" as const,
-        note: spendNote ?? undefined,
+        note: sNow.why ?? spendNote ?? undefined,
       },
       {
         label: "Per submission",
@@ -776,7 +794,7 @@ export function buildOverview(input: {
         prev: sPrev && p ? perSub(sPrev, p) : null,
         goodWhen: "down" as const,
         foot: "prev-toned" as const,
-        note: spendNote ?? undefined,
+        note: sNow.why ?? spendNote ?? undefined,
       },
       {
         label: "CAC (paid)",
@@ -785,7 +803,9 @@ export function buildOverview(input: {
         prev: sPrev && p ? cac(sPrev, p) : null,
         goodWhen: "down" as const,
         foot: "prev-toned" as const,
-        note: t.payers === 0 ? "no paying customer in the range" : (spendNote ?? undefined),
+        note:
+          sNow.why ??
+          (t.payers === 0 ? "no paying customer in the range" : (spendNote ?? undefined)),
       },
     ],
     byAssessment: {
@@ -803,7 +823,9 @@ export function buildOverview(input: {
         ),
         ...laterAssessments(3),
       ],
-      note: `Google Ads is the only paid channel; its spend comes from Google Analytics, refreshed every 15 minutes.${spendNote ? ` For this range: ${spendNote}.` : ""}`,
+      note: `Google Ads is the only paid channel; its spend comes from Google Analytics, refreshed every 15 minutes.${
+        sNow.why ? ` ${sNow.why}` : spendNote ? ` For this range: ${spendNote}.` : ""
+      }`,
     },
   };
 
