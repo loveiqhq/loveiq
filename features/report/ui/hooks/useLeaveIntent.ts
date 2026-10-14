@@ -139,11 +139,13 @@ export function useLeaveIntent({
   const overlayOpenRef = useRef(overlayOpen);
   const popupArmRef = useRef(popupArm);
   const submissionIdRef = useRef(submissionId);
+  const modeRef = useRef(mode);
 
   useEffect(() => {
     overlayOpenRef.current = overlayOpen;
     popupArmRef.current = popupArm;
     submissionIdRef.current = submissionId;
+    modeRef.current = mode;
   });
 
   const blocked = useCallback(
@@ -172,6 +174,9 @@ export function useLeaveIntent({
 
   const attempt = useCallback(
     (trigger: LeaveTrigger) => {
+      // Only while the page still wants the offer: a purchase that lands mid-session
+      // turns it off, and with it the dialog this would open.
+      if (modeRef.current !== "trigger") return;
       if (phaseRef.current !== "armed" || blocked()) return;
       const now = Date.now();
       const id = submissionIdRef.current;
@@ -187,6 +192,13 @@ export function useLeaveIntent({
 
   useEffect(() => {
     if (mode === "off") {
+      if (pendingRef.current) {
+        clearTimeout(pendingRef.current);
+        pendingRef.current = null;
+      }
+      // Armed is not kept across an "off": if the page turns the offer back on, it arms
+      // again from the paywall card.
+      if (phaseRef.current === "armed") phaseRef.current = "waiting";
       if (phaseRef.current === "open") {
         phaseRef.current = "done";
         // eslint-disable-next-line react-hooks/set-state-in-effect -- the page turned the offer off while it was open (a purchase, another archetype): close it
@@ -269,7 +281,7 @@ export function useLeaveIntent({
   const notifyPlansClosed = useCallback(() => {
     // A window closing is the reader acting: idle counts from here.
     lastActivityRef.current = Date.now();
-    if (phaseRef.current !== "armed") return;
+    if (modeRef.current !== "trigger" || phaseRef.current !== "armed") return;
     if (pendingRef.current) clearTimeout(pendingRef.current);
     pendingRef.current = setTimeout(() => {
       pendingRef.current = null;
@@ -310,5 +322,14 @@ export function useLeaveIntent({
     if (plansOpen) dismiss("superseded");
   }, [plansOpen, dismiss]);
 
-  return { open: shown !== null, variant, trigger: shown, notifyPlansClosed, dismiss, book };
+  // Never "open" while the page has the offer off: the dialog is not mounted then, and an
+  // open offer blurs and freezes the page behind it.
+  return {
+    open: shown !== null && mode !== "off",
+    variant,
+    trigger: shown,
+    notifyPlansClosed,
+    dismiss,
+    book,
+  };
 }

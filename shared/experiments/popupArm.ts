@@ -31,9 +31,12 @@
  *  - Judge on exits in the 30s after the point and on the median time read after
  *    it. Sales are the safety check, not the verdict: at 2 sales in 5 weeks, a
  *    doubling takes over two years of readers to show.
- *  - The founder-call leave offer (features/report/logic/leaveIntent.ts) stays out
- *    of the 30s after the point in both arms, but can show later. Split the time
- *    read after the point by `leave_offer_shown`, which carries `popup_arm`.
+ *  - The founder-call leave offer (features/report/logic/leaveIntent.ts) never shows
+ *    in the 30s after the point, in either arm, but it can show BEFORE the point (it
+ *    arms at the first paywall card, chapters earlier) or after those 30s. A `popup`
+ *    reader who already saw it meets a second pop-up at the point, so it can move
+ *    both measures differently per arm. Split both by `leave_offer_shown` (it carries
+ *    `popup_arm`): before the reader's `experiment_exposure`, after it, or never.
  *
  * NO SUBMISSION ID MEANS NOT IN THE TEST. Such a reader gets the pop-up as built
  * and logs no exposure, so they fall out of both arms rather than into one.
