@@ -52,6 +52,17 @@ const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 
 const matches = (r: QuestionRow, term: string) =>
   !term || r.id.includes(term) || r.text.toLowerCase().includes(term);
 
+/**
+ * A card's Continue as the table and the CSV show it: before the consent recorded itself,
+ * PostHog's share of survey sessions that agreed.
+ */
+function introCont(data: SurveyPayload, card: IntroCard): number | null {
+  const c = data.intro.clicks;
+  if (card.cont !== null || !data.intro.recordedFrom || card.step !== "consent_view")
+    return card.cont;
+  return c && c.ok && c.value.opened ? c.value.agreed / c.value.opened : null;
+}
+
 export default function ApSurvey() {
   const { params } = useApFilters();
   const [benchmark, setBenchmark] = useState<Benchmark>("all");
@@ -138,7 +149,7 @@ export default function ApSurvey() {
                           c.medianMs,
                           c.reached,
                           c.reachedShare,
-                          c.cont,
+                          introCont(data, c),
                           c.skip,
                           c.back,
                           c.exit,
@@ -302,7 +313,7 @@ const INTRO_GRID =
 
 function IntroSection({ data }: { data: SurveyPayload }) {
   const [sort, setSort] =
-    useState<Sort<"time" | "reached" | "cont" | "skip" | "back" | "exit">>(null);
+    useState<Sort<"time" | "reachedShare" | "cont" | "skip" | "back" | "exit">>(null);
   const c = data.intro.clicks;
   const ok = c && c.ok ? c.value : null;
   const own = data.intro.own;
@@ -327,10 +338,7 @@ function IntroSection({ data }: { data: SurveyPayload }) {
     ...card,
     n: i + 1,
     time: card.medianMs,
-    // Before the consent recorded itself: PostHog's share of survey sessions that agreed.
-    cont:
-      card.cont ??
-      (data.intro.recordedFrom && card.step === "consent_view" && ok ? share(ok.agreed) : null),
+    cont: introCont(data, card),
     eng: eng(card.step),
   }));
   return (
@@ -413,7 +421,8 @@ function IntroSection({ data }: { data: SurveyPayload }) {
             <Th label="#" />
             <Th label="Card" />
             <Th label="Time" sortKey="time" sort={sort} onSort={setSort} right />
-            <Th label="Reached" sortKey="reached" sort={sort} onSort={setSort} />
+            {/* By the share the bar and the figure show, not the count beside them. */}
+            <Th label="Reached" sortKey="reachedShare" sort={sort} onSort={setSort} />
             <Th label="Continue" sortKey="cont" sort={sort} onSort={setSort} right />
             <Th label="Skip intro" sortKey="skip" sort={sort} onSort={setSort} right />
             <Th label="Back" sortKey="back" sort={sort} onSort={setSort} right />

@@ -318,9 +318,10 @@ export function buildSurveyPage(input: {
       spark: trend(facts, scope, (x, from) =>
         startsComplete(from, today, scope) ? ratio(x.startsFinished, x.starts) : null
       ),
+      // The design's "of starts submit · vs 64.6%", with "(so far)": a start may still finish.
       foot:
         noCmp ??
-        `of the starts, finished (so far)${prevCompletion === null ? "" : ` · vs ${fmt("pct", prevCompletion)}`}`,
+        `of starts submit (so far)${prevCompletion === null ? "" : ` · vs ${fmt("pct", prevCompletion)}`}`,
       blocked: stB,
       trend: caption,
     },

@@ -30,8 +30,9 @@ export interface QuestionRow {
   /** Exits per point of the trend line (all traffic). */
   exitsTrend: number[];
   /**
-   * First reached after the range's first day (by the earliest run to reach it): added during
-   * the range, so its fall from the question before is not people leaving.
+   * Not asked from the range's start: its earliest runs went through to the survey's last
+   * question without it. Added during the range, so its fall from the question before is not
+   * people leaving.
    */
   newInRange: boolean;
 }
@@ -135,12 +136,21 @@ export function buildSurveyQuestions(
         .filter((e) => e.q_id === qId && e.day >= b.from && e.day <= b.to)
         .reduce((n, e) => n + Number(e.n), 0)
     );
-  // A run's start is its first step ever, so this is no later than the question's first day.
-  const firstReached = new Map<string, number>();
-  for (const run of kept)
-    for (const id of run.reached)
-      firstReached.set(id, Math.min(firstReached.get(id) ?? Infinity, run.startedAt));
   const order = askedQuestions(400);
+  // Whether a question was asked from the range's start. Of the runs begun in the range (an
+  // earlier run's first steps fall before it), earliest first, the first that reached either
+  // the question or the survey's last question decides: reaching the end passes every question
+  // asked then, whatever order a test asked them in, so ending without it means it was not
+  // asked yet. A quiet first day, when nobody reached it, is no sign of that.
+  const end = order.at(-1)?.qId;
+  const ownRuns = kept
+    .filter((r) => reportingDay(new Date(r.startedAt)) >= from)
+    .sort((a, b) => a.startedAt - b.startedAt)
+    .map((r) => new Set(r.reached));
+  const addedInRange = (id: string) => {
+    const first = ownRuns.find((r) => r.has(id) || (end !== undefined && r.has(end)));
+    return first !== undefined && !first.has(id);
+  };
   const known = new Set(order.map((q) => q.qId));
   const extra = [...tally.byQuestion.keys()].filter((id) => !known.has(id)).sort();
   const rows: QuestionRow[] = [
@@ -150,7 +160,6 @@ export function buildSurveyQuestions(
     .map(({ id, n }) => {
       const t = tally.byQuestion.get(id) ?? { reached: 0, left: 0 };
       const s = stepOf.get(id);
-      const first = firstReached.get(id);
       return {
         id,
         n,
@@ -164,7 +173,7 @@ export function buildSurveyQuestions(
         wentBack: s ? Number(s.went_back) : 0,
         skipped: s ? Number(s.skipped) : 0,
         exitsTrend: exitsTrend(id),
-        newInRange: first !== undefined && reportingDay(new Date(first)) > from,
+        newInRange: addedInRange(id),
       };
     })
     .filter((r) => r.reached > 0 || r.n > 0);
