@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -63,10 +63,18 @@ const notionCalls: string[] = [];
 let blocksStatus = 200;
 /** Answers the DATABASE search gives first, one per call, before it answers normally. */
 let databaseSearchAnswers: Array<() => Response> = [];
+/** When set, answers the PAGE search, page by page, from the cursor it is given. */
+let pageSearch: ((cursor: string | undefined) => Response) | null = null;
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string, init?: RequestInit) => {
     notionCalls.push(url);
-    const body = JSON.parse(String(init?.body ?? "{}")) as { filter?: { value?: string } };
+    const body = JSON.parse(String(init?.body ?? "{}")) as {
+      filter?: { value?: string };
+      start_cursor?: string;
+    };
+    if (pageSearch && url.endsWith("/search") && body.filter?.value === "page") {
+      return pageSearch(body.start_cursor);
+    }
     if (url.endsWith("/search") && body.filter?.value === "database") {
       const next = databaseSearchAnswers.shift();
       if (next) return next();
@@ -660,5 +668,89 @@ describe("a database a job writes numbers into is never read, and what came from
     expect(notionCalls.some((u) => u.includes("/databases/db-lit/query"))).toBe(true);
     const deletes = dbCalls.filter((c) => c.method === "DELETE");
     expect(deletes.some((c) => c.path.includes("dropoff-row-1"))).toBe(true);
+  });
+});
+
+/**
+ * THE LISTING CAP IS FOR PAGES PEOPLE WRITE. On 13 Oct 2026 "KPI report data" sat under a
+ * page this connection sees, so the KPI tables' rows (rewritten daily, so first in a
+ * newest-first search) took 1,542 of the 2,500 the crawl lists, every crawl was partial,
+ * and the sweep stopped for two days.
+ */
+describe("rows of a job's table do not use up the listing cap", () => {
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    existingChunks = [];
+    blocksStatus = 200;
+    databaseSearchAnswers = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+    delete process.env.NOTION_EXCLUDE_TITLES;
+  });
+  afterEach(() => {
+    pageSearch = null;
+  });
+
+  /** `pages` pages of 100 results; page i is a job's rows when `generated(i)`, else untitled pages. */
+  const listing = (pages: number, generated: (i: number) => boolean) => (cursor?: string) => {
+    const i = cursor ? Number(cursor) : 0;
+    const results = Array.from({ length: 100 }, (_, k) =>
+      generated(i)
+        ? {
+            id: `kpi-${i}-${k}`,
+            parent: { type: "database_id", database_id: DROPOFF_DATA_DATABASE_ID },
+          }
+        : { id: `p-${i}-${k}`, parent: { type: "workspace" }, properties: {} }
+    );
+    const more = i + 1 < pages;
+    return json({ results, has_more: more, next_cursor: more ? String(i + 1) : null });
+  };
+
+  it("lists past 2,500 when the rest are a job's rows, completes, and says how many", async () => {
+    // 16 pages of KPI rows first (newest edits), then 14 of pages people write: 3,000.
+    pageSearch = listing(30, (i) => i < 16);
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBeUndefined();
+    expect(r.detail).toMatch(/kpiRowsVisible=1600/);
+    expect(r.detail).toMatch(/move "KPI report data"/);
+  });
+
+  /** A part of a hundred still buys a request, or those pages would come off the 2,500. */
+  it("keeps all 2,500 for pages people write when a job's rows are fewer than 100", async () => {
+    // 50 KPI rows and 2,500 pages people write, over 26 responses.
+    pageSearch = (cursor?: string) => {
+      const i = cursor ? Number(cursor) : 0;
+      const results = Array.from({ length: i === 25 ? 50 : 100 }, (_, k) =>
+        i === 0 && k < 50
+          ? {
+              id: `kpi-${k}`,
+              parent: { type: "database_id", database_id: DROPOFF_DATA_DATABASE_ID },
+            }
+          : { id: `p-${i}-${k}`, parent: { type: "workspace" }, properties: {} }
+      );
+      const more = i < 25;
+      return json({ results, has_more: more, next_cursor: more ? String(i + 1) : null });
+    };
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBeUndefined();
+    expect(r.detail).toMatch(/kpiRowsVisible=50 /);
+  });
+
+  it("still stops at 2,500 pages people write, and blames nothing else", async () => {
+    pageSearch = listing(40, () => false);
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBe("notion-crawl-incomplete");
+    expect(r.detail).toBeUndefined();
+    const searches = notionCalls.filter((u) => u.endsWith("/search")).length;
+    // One database search, 25 page searches.
+    expect(searches).toBe(26);
+  });
+
+  it("gives a job's rows at most twice the cap of extra room", async () => {
+    pageSearch = listing(500, () => true);
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBe("notion-crawl-incomplete");
+    expect(r.detail).toMatch(/kpiRowsVisible=7500/);
+    expect(notionCalls.filter((u) => u.endsWith("/search")).length).toBe(1 + 75);
   });
 });
