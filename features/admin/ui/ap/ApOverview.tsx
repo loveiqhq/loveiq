@@ -38,26 +38,29 @@ function SplitTable({
   split,
   byAssessment,
   bySource,
+  minWidth,
 }: {
   split: Split;
   byAssessment: Table;
   bySource: Table;
+  /** The design's width for this section's table, below which it scrolls. */
+  minWidth?: number;
 }) {
   // Keyed by the split: a sort chosen on one split must not carry over to the other.
-  // Where the design marks a per-source split "Sample split", ours says what it really is.
+  // "Sample split" over a table whose visitors are estimated; its note says how, or why not.
   return split === "source" ? (
     <div className="flex min-w-0 flex-col gap-2.5">
-      <NotTracked>Split by the survey&apos;s source · visits not split</NotTracked>
-      <DataTable key={split} table={bySource} />
+      {bySource.sample && <NotTracked>Sample split · totals are live</NotTracked>}
+      <DataTable key={split} table={bySource} minWidth={minWidth} />
     </div>
   ) : (
-    <DataTable key={split} table={byAssessment} />
+    <DataTable key={split} table={byAssessment} minWidth={minWidth} />
   );
 }
 
 export function RangeLine({
   data,
-  sources = "Production database, ad spend from Google Ads via Google Analytics",
+  sources = "Production database, ad spend from GA4",
   trend,
   withRange = true,
 }: {
@@ -76,7 +79,7 @@ export function RangeLine({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-ap-muted">
-        {withRange && <LiveBadge />}
+        {withRange && <LiveBadge dot />}
         <span>
           {withRange &&
             `Figures below: ${data.range.label}${data.compare ? ` vs ${data.compare.label}` : ""} · `}
@@ -103,9 +106,8 @@ export default function ApOverview() {
     params
   );
   useHashScroll(Boolean(data));
-  const [trafficSplit, setTrafficSplit] = useState<Split>("assessment");
-  const [subsSplit, setSubsSplit] = useState<Split>("assessment");
-  const [engSplit, setEngSplit] = useState<Split>("assessment");
+  // One split for Traffic, Submissions and Engagement: switching any switches all three.
+  const [split, setSplit] = useState<Split>("assessment");
 
   return (
     <>
@@ -189,8 +191,8 @@ export default function ApOverview() {
                 <Pills
                   label="Split traffic by"
                   options={SPLITS}
-                  value={trafficSplit}
-                  onChange={setTrafficSplit}
+                  value={split}
+                  onChange={setSplit}
                 />
               }
             />
@@ -210,9 +212,10 @@ export default function ApOverview() {
                 <VisitBars bars={data.traffic.bars} />
               </figure>
               <SplitTable
-                split={trafficSplit}
+                split={split}
                 byAssessment={data.traffic.byAssessment}
                 bySource={data.traffic.bySource}
+                minWidth={460}
               />
             </div>
           </Card>
@@ -227,8 +230,8 @@ export default function ApOverview() {
                 <Pills
                   label="Split submissions by"
                   options={SPLITS}
-                  value={subsSplit}
-                  onChange={setSubsSplit}
+                  value={split}
+                  onChange={setSplit}
                 />
               }
             />
@@ -247,8 +250,9 @@ export default function ApOverview() {
                     <div className="flex justify-between gap-3 text-[13px]">
                       <span className="font-semibold">{f.label}</span>
                       <span className="tabular-nums text-ap-muted">
+                        {/* A tenth of a percent, as drawn; a hundredth for a step under ten. */}
                         <strong className="text-ap-ink">{fmt("count", f.value)}</strong> ·{" "}
-                        {fmt("pct", f.ofFirst)} ·{" "}
+                        {fmt("pct", f.ofFirst, (f.value ?? 0) < 10 ? 2 : 1)} ·{" "}
                         {i === 0 ? "entry" : `${fmt("pct", f.ofPrev, 1)} of previous`}
                       </span>
                     </div>
@@ -260,9 +264,12 @@ export default function ApOverview() {
                 </p>
               </div>
               <SplitTable
-                split={subsSplit}
+                split={split}
                 byAssessment={data.submissions.byAssessment}
                 bySource={data.submissions.bySource}
+                // The design's 520px is 3px wider than this column ever is (517px at the
+                // page's full width), which cut the table's edge off: 516 fits it.
+                minWidth={516}
               />
             </div>
           </Card>
@@ -277,8 +284,8 @@ export default function ApOverview() {
                 <Pills
                   label="Split engagement by"
                   options={SPLITS}
-                  value={engSplit}
-                  onChange={setEngSplit}
+                  value={split}
+                  onChange={setSplit}
                 />
               }
             />
@@ -300,9 +307,10 @@ export default function ApOverview() {
               />
             </div>
             <SplitTable
-              split={engSplit}
+              split={split}
               byAssessment={data.engagement.byAssessment}
               bySource={data.engagement.bySource}
+              minWidth={560}
             />
           </Card>
 
@@ -312,10 +320,7 @@ export default function ApOverview() {
           >
             <Card id="revenue" labelledBy="h-rev">
               <SectionHead id="h-rev" eyebrow="04 · Revenue · per assessment" title="Revenue" />
-              <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(120px, 100%), 1fr))" }}
-              >
+              <div className="grid grid-cols-3 gap-3">
                 {data.revenue.stats.map((s) => (
                   <StatBox key={s.label} stat={s} />
                 ))}
@@ -324,10 +329,7 @@ export default function ApOverview() {
             </Card>
             <Card id="costs" labelledBy="h-cost">
               <SectionHead id="h-cost" eyebrow="05 · Costs · per assessment" title="Costs & CAC" />
-              <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(120px, 100%), 1fr))" }}
-              >
+              <div className="grid grid-cols-3 gap-3">
                 {data.costs.stats.map((s) => (
                   <StatBox key={s.label} stat={s} />
                 ))}

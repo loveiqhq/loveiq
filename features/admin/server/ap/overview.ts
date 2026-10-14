@@ -22,7 +22,7 @@ import {
   type Source,
 } from "./filters";
 import { fmt, type GoodWhen, type Unit } from "./format";
-import { POSTHOG_FROM } from "./posthog";
+import { POSTHOG_FROM, type PostHogResult, type SessionTags } from "./posthog";
 import {
   EVENTS_COMPLETE_FROM,
   STEP_DEVICE_FROM,
@@ -31,6 +31,7 @@ import {
   mean,
   median,
   ratio,
+  sourceShares,
   spend,
   spendBlocked,
   startsBlocked,
@@ -67,6 +68,8 @@ export interface Tile {
 export interface Column {
   label: string;
   unit: Unit | "text";
+  /** Decimals, where the design fixes them (a share in whole percent, money with cents). */
+  digits?: number;
 }
 
 export interface TableRow {
@@ -84,6 +87,8 @@ export interface Table {
   note?: string;
   /** The heading over the bar column, when the rows have bars. */
   barLabel?: string;
+  /** Its visitors are estimated (visitorSplit): the page marks it "Sample split". */
+  sample?: boolean;
 }
 
 export interface FunnelStep {
@@ -103,6 +108,13 @@ export interface MiniStat {
   goodWhen?: GoodWhen;
   /** "abs": the change as a plain difference ("−3"), as the design shows a count of sales. */
   deltaAs?: "abs";
+  /**
+   * The line under the value, as the design's Revenue and Costs boxes write it: "change", the
+   * change alone ("flat vs prev." under 1%); "prev", the previous value in grey; "prev-toned",
+   * the previous value coloured by whether the change is good. Unset: the change, then the
+   * previous value.
+   */
+  foot?: "change" | "prev" | "prev-toned";
   note?: string;
 }
 
@@ -137,10 +149,61 @@ export interface OverviewPayload extends PageHead {
   costs: { stats: MiniStat[]; byAssessment: Table };
 }
 
-/** The sources a per-source table lists: every one that has people in the range. */
+/** The rows of a per-source table: every source, in the filter's order, empty ones too. */
 export const SOURCE_ROWS: Array<{ value: Source; label: string }> = SOURCES.filter(
   (s): s is { value: Source; label: string } & (typeof SOURCES)[number] => s.value !== "all"
 ).map((s) => ({ value: s.value as Source, label: s.label }));
+
+/** Visitors per source, estimated (visitorSplit), or blank with the reason. */
+export interface VisitorSplit {
+  /** Each source's estimated visitors and share of the visits; empty while blank. */
+  bySource: Map<Source, { visitors: number; share: number }>;
+  /** Shown: the "Sample split" badge goes with it. */
+  ok: boolean;
+  /** How the estimate is made, or why it is blank. */
+  note: string;
+}
+
+/**
+ * Why visitors can't be split by source under these filters, or null. The split is of all
+ * traffic, so a narrowing filter blanks it, and it needs PostHog, which starts on 23 Aug 2026.
+ */
+export function splitBlocked(f: ApFilters): string | null {
+  if (activeNarrowing(f).length)
+    return "Visitors per source are estimated over all traffic, so a source, device, tier or visitor filter leaves them blank.";
+  if (f.from < POSTHOG_FROM)
+    return `Visitors per source are estimated from PostHog, which starts on ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}: pick a range from that day on.`;
+  return null;
+}
+
+/**
+ * Visitors per source, as the design's "Sample split · totals are live": the live visit
+ * total split by each source's share of the visits PostHog saw (fetchSessionSources), sorted
+ * by our own source rules. Never a number when the filters or PostHog can't support one.
+ */
+export function visitorSplit(
+  f: ApFilters,
+  visits: number | null,
+  sessions: PostHogResult<SessionTags[]> | null
+): VisitorSplit {
+  const blank = (note: string): VisitorSplit => ({ bySource: new Map(), ok: false, note });
+  const blocked = splitBlocked(f);
+  if (blocked) return blank(blocked);
+  if (!sessions) return blank("Visitors per source: PostHog was not read for this range.");
+  if (!sessions.ok) return blank(`Visitors per source: ${sessions.error}`);
+  const shares = sourceShares(sessions.value);
+  if (visits === null || !shares) return blank("Visitors per source: PostHog saw no visits here.");
+  return {
+    bySource: new Map(
+      SOURCE_ROWS.map((s) => {
+        const share = shares.get(s.value) ?? 0;
+        return [s.value, { visitors: Math.round(visits * share), share }];
+      })
+    ),
+    ok: true,
+    note: "Visitors per source: the live visit total, split by each source's share of the visits PostHog saw. Starts, submissions and revenue are live.",
+  };
+}
 
 export function head(f: ApFilters, today: string, now: Date): PageHead {
   const cmp = comparisonRange(f);
@@ -192,9 +255,16 @@ export function head(f: ApFilters, today: string, now: Date): PageHead {
       `New or returning comes from PostHog (from ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}), which saw almost every finisher's visit: one it didn't see is in neither group. Visits, survey starts, ad spend and prices can't be split this way.`
     );
   }
+  const tracking = rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM);
   if (f.device !== "all" && f.from < SURVEY_TRACKING_FROM) {
     notes.push(
-      `Tablets are told apart from ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}: before, they count as Mobile, or as Desktop for newer iPads, which present themselves as Macs.`
+      `Tablets are told apart from ${tracking}: before, they count as Mobile, or as Desktop for newer iPads, which present themselves as Macs.`
+    );
+  } else if (f.device !== "all" && cmp && !beforeData(cmp) && cmp.from < SURVEY_TRACKING_FROM) {
+    // The range is after the day but its comparison is not: tablets there read as phones or
+    // computers, so a change against it is partly that.
+    notes.push(
+      `Tablets are told apart from ${tracking}, but the comparison period starts before then: in it, tablets count as Mobile, or as Desktop for newer iPads, which present themselves as Macs, so part of the change comes from that.`
     );
   }
   return {
@@ -238,10 +308,9 @@ export function readMeanMs(facts: Facts, scope: Scope): number | null {
   return mean(readTimes(facts, scope));
 }
 
-/** Of the readers, how many came back on a later visit. */
-export function returnRate(facts: Facts, scope: Scope): number | null {
-  const readers = subsIn(facts, scope).filter((s) => s.openedAt);
-  return ratio(readers.filter((s) => s.visits > 1).length, readers.length);
+/** The readers who came back to their report on a later visit (the design's "Returns"). */
+export function returners(facts: Facts, scope: Scope): number {
+  return subsIn(facts, scope).filter((s) => s.openedAt && s.visits > 1).length;
 }
 
 export function buildOverview(input: {
@@ -255,6 +324,8 @@ export function buildOverview(input: {
   topExit?: { id: string; text: string } | null;
   /** Who the top exit counts, when not the filters' people ("all traffic"). */
   topExitScope?: string | null;
+  /** PostHog's visits by first-page tracking, for visitors per source (null: not read). */
+  sessions?: PostHogResult<SessionTags[]> | null;
 }): OverviewPayload {
   const { facts, previous, ad, filters: f, today, now } = input;
   const scope: Scope = {
@@ -389,17 +460,19 @@ export function buildOverview(input: {
   const launchedA = launched(scope);
   const aLabel = "Assessment A";
 
-  // Per source: what each source brought, person by person. Visits are never split.
+  // Per source: what each source brought, person by person, and its visitors estimated.
   const sourceTotals = SOURCE_ROWS.map((s) => ({
     ...s,
     t: totals(facts, { ...scope, source: s.value }),
-  })).filter((s) => (s.t.starts ?? 0) > 0 || s.t.subs > 0 || s.t.revenue > 0);
+  }));
+  const split = visitorSplit(f, t.visits, input.sessions ?? null);
+  const visitorsOf = (s: Source) => split.bySource.get(s)?.visitors ?? null;
 
   const trafficByAssessment: Table = {
     columns: [
       { label: "Assessment", unit: "text" },
       { label: "Visitors", unit: "count" },
-      { label: "Share", unit: "pct" },
+      { label: "Share", unit: "pct", digits: 0 },
       { label: "Start CVR", unit: "pct" },
     ],
     rows: [
@@ -422,33 +495,29 @@ export function buildOverview(input: {
   const knownStarts = sourceTotals.reduce((n, s) => n + (s.t.starts ?? 0), 0);
   const knownSubs = sourceTotals.reduce((n, s) => n + s.t.subs, 0);
   const unknownStarts = allStarts === null ? null : allStarts - knownStarts;
+  // Starts no draft names: shown, in the table with starts, only when there are some.
   const unknownRow =
     scope.source === "all" && sourceStartsBlocked === null && (unknownStarts ?? 0) > 0
       ? { label: "Unknown source", starts: unknownStarts, subs: allTotals.subs - knownSubs }
       : null;
+  const startsNote = sourceStartsBlocked ? ` ${sourceStartsBlocked}` : "";
   const trafficBySource: Table = {
+    sample: split.ok,
     columns: [
       { label: "Source", unit: "text" },
-      { label: "Survey starts", unit: "count" },
-      { label: "Share of starts", unit: "pct" },
-      { label: "Submissions", unit: "count" },
+      { label: "Visitors", unit: "count" },
+      { label: "Share", unit: "pct", digits: 0 },
+      { label: "Start CVR", unit: "pct" },
     ],
-    rows: [
-      ...sourceTotals.map((s) => ({
-        label: s.label,
-        values: [s.t.starts, ratio(s.t.starts, allStarts), s.t.subs],
-      })),
-      ...(unknownRow
-        ? [
-            {
-              label: unknownRow.label,
-              values: [unknownRow.starts, ratio(unknownRow.starts, allStarts), unknownRow.subs],
-              muted: true,
-            },
-          ]
-        : []),
-    ],
-    note: `Visits are not split by source: the visit log misses most ad clicks (Google Analytics files 79% of visitors under Direct). ${sourceStartsBlocked ?? "Starts and submissions carry the source the survey recorded."}`,
+    rows: sourceTotals.map((s) => ({
+      label: s.label,
+      values: [
+        visitorsOf(s.value),
+        split.bySource.get(s.value)?.share ?? null,
+        ratio(s.t.starts, visitorsOf(s.value)),
+      ],
+    })),
+    note: `${split.note} Start CVR: survey starts ÷ visitors.${startsNote}`,
   };
 
   const funnelValues: Array<[string, number | null]> = [
@@ -456,7 +525,7 @@ export function buildOverview(input: {
     ["Started survey", t.starts],
     ["Submitted", t.subs],
     ["Opened report", t.opened],
-    ["Paid (so far)", t.paidCohort],
+    ["Paid", t.paidCohort],
   ];
   const first = funnelValues.find(([, v]) => v !== null)?.[1] ?? null;
   const funnel: FunnelStep[] = funnelValues.map(([label, value], i) => ({
@@ -485,28 +554,52 @@ export function buildOverview(input: {
     ],
   };
   const subsBySource: Table = {
+    sample: split.ok,
     columns: [
       { label: "Source", unit: "text" },
       { label: "Starts", unit: "count" },
       { label: "Submissions", unit: "count" },
       { label: "Completion", unit: "pct" },
-      { label: "Paid (so far)", unit: "count" },
+      { label: "Submission CVR", unit: "pct" },
     ],
-    rows: sourceTotals.map((s) => ({
-      label: s.label,
-      values: [s.t.starts, s.t.subs, ratio(s.t.startsFinished, s.t.starts), s.t.paidCohort],
-    })),
-    note: `Completion: of the people who started in the range, how many finished. No submission CVR per source: it needs visits by source, which the visit log cannot give.${sourceStartsBlocked ? ` ${sourceStartsBlocked}` : ""}`,
+    rows: [
+      ...sourceTotals.map((s) => ({
+        label: s.label,
+        values: [
+          s.t.starts,
+          s.t.subs,
+          ratio(s.t.startsFinished, s.t.starts),
+          ratio(s.t.subs, visitorsOf(s.value)),
+        ],
+      })),
+      ...(unknownRow
+        ? [
+            {
+              label: unknownRow.label,
+              // Unfinished by definition (a finished start has a submission that carries its
+              // source): no completion, and no visitors to divide by.
+              values: [unknownRow.starts, unknownRow.subs, null, null],
+              muted: true,
+            },
+          ]
+        : []),
+    ],
+    note: `Completion: of the people who started in the range, how many finished. Submission CVR: submissions ÷ the source's estimated visitors.${split.ok ? "" : ` ${split.note}`}${
+      unknownRow
+        ? " Unknown source: starts with no saved draft or submission to say where they came from."
+        : ""
+    }${startsNote}`,
   };
 
   const introOf = (step: string) =>
     launchedA ? facts.intro.filter((i) => i.step === step).reduce((n, i) => n + i.n, 0) : 0;
   const read = readMedianMs(facts, scope);
+  const readMean = readMeanMs(facts, scope);
   const engagementRow = (scopeX: Scope, tt: Totals): Array<number | null> => [
     ratio(tt.startsFinished, tt.starts),
     ratio(tt.opened, tt.subs),
     readMeanMs(facts, scopeX),
-    returnRate(facts, scopeX),
+    returners(facts, scopeX),
   ];
   const engagement = {
     survey: [
@@ -537,8 +630,12 @@ export function buildOverview(input: {
       {
         label: "Avg. read time",
         unit: "mmss" as Unit,
-        value: readMeanMs(facts, scope),
-        note: `${readFoot(read)} · readers whose reading time was recorded`,
+        value: readMean,
+        // Without a time the card shows a blank note's first part as the value: no note then.
+        note:
+          readMean === null
+            ? undefined
+            : `${readFoot(read)} · readers whose reading time was recorded`,
       },
       {
         label: "Invites sent",
@@ -558,12 +655,13 @@ export function buildOverview(input: {
         { label: "Survey completion", unit: "pct" as const },
         { label: "Report open rate", unit: "pct" as const },
         { label: "Avg. read time", unit: "mmss" as const },
-        { label: "Returns", unit: "pct" as const },
+        { label: "Returns", unit: "count" as const },
       ],
       rows: [
         byAssessmentRow(aLabel, launchedA ? engagementRow(scope, t) : [null, null, null, null]),
         ...laterAssessments(4),
       ],
+      note: "Returns: readers who came back to their report on a later visit, so far.",
     },
     bySource: {
       columns: [
@@ -571,32 +669,44 @@ export function buildOverview(input: {
         { label: "Survey completion", unit: "pct" as const },
         { label: "Report open rate", unit: "pct" as const },
         { label: "Avg. read time", unit: "mmss" as const },
-        { label: "Returns", unit: "pct" as const },
+        { label: "Returns", unit: "count" as const },
       ],
       rows: sourceTotals.map((s) => ({
         label: s.label,
         values: engagementRow({ ...scope, source: s.value }, s.t),
       })),
-      note: sourceStartsBlocked ? `Survey completion: ${sourceStartsBlocked}` : undefined,
+      note: `Returns: readers who came back to their report on a later visit, so far.${
+        sourceStartsBlocked ? ` Survey completion: ${sourceStartsBlocked}` : ""
+      }`,
     },
   };
 
   const perVisit = (tt: Totals) => ratio(tt.revenue, tt.visits);
+  // The boxes' lines as drawn: revenue its change, paid reports the plain difference, € per
+  // visit the previous value in grey.
   const revenue = {
     stats: [
-      { label: "Revenue", unit: "eur" as Unit, value: t.revenue, prev: p?.revenue ?? null },
+      {
+        label: "Revenue",
+        unit: "eur" as Unit,
+        value: t.revenue,
+        prev: p?.revenue ?? null,
+        foot: "change" as const,
+      },
       {
         label: "Paid reports",
         unit: "count" as Unit,
         value: t.payers,
         prev: p?.payers ?? null,
         deltaAs: "abs" as const,
+        foot: "change" as const,
       },
       {
         label: "€ per visit",
         unit: "eur3" as Unit,
         value: perVisit(t),
         prev: p ? perVisit(p) : null,
+        foot: "prev" as const,
       },
     ],
     byAssessment: {
@@ -619,6 +729,8 @@ export function buildOverview(input: {
     },
   };
 
+  // Ad spend its change ("flat vs prev." under 1%); the cost per submission and per paying
+  // customer their previous value, coloured by the change (lower is good).
   const costs = {
     stats: [
       {
@@ -627,6 +739,7 @@ export function buildOverview(input: {
         value: sNow.eur,
         prev: sPrev?.eur ?? null,
         goodWhen: "down" as const,
+        foot: "change" as const,
         note: spendNote ?? undefined,
       },
       {
@@ -635,6 +748,7 @@ export function buildOverview(input: {
         value: perSub(sNow, t),
         prev: sPrev && p ? perSub(sPrev, p) : null,
         goodWhen: "down" as const,
+        foot: "prev-toned" as const,
         note: spendNote ?? undefined,
       },
       {
@@ -643,15 +757,17 @@ export function buildOverview(input: {
         value: cac(sNow, t),
         prev: sPrev && p ? cac(sPrev, p) : null,
         goodWhen: "down" as const,
+        foot: "prev-toned" as const,
         note: t.payers === 0 ? "no paying customer in the range" : (spendNote ?? undefined),
       },
     ],
     byAssessment: {
+      // Money with cents in this table, as drawn ("€1,199.19").
       columns: [
         { label: "Assessment", unit: "text" as const },
-        { label: "Ad spend", unit: "eur" as const },
-        { label: "€ / submission", unit: "eur" as const },
-        { label: "CAC", unit: "eur" as const },
+        { label: "Ad spend", unit: "eur" as const, digits: 2 },
+        { label: "€ / submission", unit: "eur" as const, digits: 2 },
+        { label: "CAC", unit: "eur" as const, digits: 2 },
       ],
       rows: [
         byAssessmentRow(

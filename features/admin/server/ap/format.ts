@@ -78,7 +78,12 @@ export function delta(
     };
   }
   if (unit === "mmss") return { text: `${sign}${fmt("mmss", Math.abs(diff))}`, tone };
-  if (unit === "eur3") return { text: `${sign}€${Math.abs(diff).toFixed(3)}`, tone };
+  // Cents once the change is ten cents or more, as the design writes them ("−€0.25"); a
+  // smaller one keeps its third decimal ("−€0.009"), or it would read as no change.
+  if (unit === "eur3") {
+    const cents = Math.round(Math.abs(diff) * 100) >= 10;
+    return { text: `${sign}€${Math.abs(diff).toFixed(cents ? 2 : 3)}`, tone };
+  }
   if (before === 0 || as === "abs") {
     return {
       text:

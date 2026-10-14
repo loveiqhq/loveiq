@@ -171,6 +171,128 @@ export async function fetchNewReturning(
   return { ok: true, value: out };
 }
 
+/**
+ * Which of fetchNewReturning's groups each visit's person is in for the range: "new" when
+ * PostHog first saw them in the range, else "returning", read the way that query reads it.
+ * By the visit's id (a finisher's ph), so a payment can be put with its group's visitors; a
+ * visit PostHog never saw is left out.
+ */
+export async function fetchVisitorGroups(
+  from: string,
+  to: string,
+  visits: Array<string | null>
+): Promise<PostHogResult<Map<string, "new" | "returning">>> {
+  const { since, until } = windowOf({ from, to });
+  const ids = [...new Set(visits.map((id) => id?.toLowerCase()))].filter(
+    (id): id is string => typeof id === "string" && SESSION_ID.test(id)
+  );
+  const start = `toDateTime('${POSTHOG_FROM} 00:00:00', 'UTC')`;
+  const out = new Map<string, "new" | "returning">();
+  for (let i = 0; i < ids.length; i += 500) {
+    const list = ids
+      .slice(i, i + 500)
+      .map((id) => `'${id}'`)
+      .join(",");
+    const visit = `SELECT properties.$session_id AS sid, any(person_id) AS pid
+      FROM events WHERE timestamp >= ${start} AND properties.$session_id IN (${list}) GROUP BY sid`;
+    const r = await rows(
+      `SELECT v.sid, if(f.first_seen >= ${at(since)}, 'new', 'returning') AS grp
+       FROM (${visit}) v
+       JOIN (SELECT person_id, min(timestamp) AS first_seen FROM events
+             WHERE properties.$host = '${HOST}'
+               AND event IN ('$pageview', 'survey_started', 'survey_completed')
+               AND timestamp >= ${start} AND timestamp < ${at(until)}
+               AND person_id IN (SELECT pid FROM (${visit}))
+             GROUP BY person_id) f ON f.person_id = v.pid`,
+      600
+    );
+    if (!r.ok) return r;
+    for (const [sid, grp] of r.value) {
+      if (grp === "new" || grp === "returning") out.set(String(sid).toLowerCase(), grp);
+    }
+  }
+  return { ok: true, value: out };
+}
+
+/** One group of the live site's visits, by what their first page view carried. */
+export interface SessionTags {
+  src: string | null;
+  med: string | null;
+  /** A Google Ads click id (gclid, gbraid or wbraid) in the address. */
+  ads: boolean;
+  /** Meta's click id (fbclid) in the address. */
+  fb: boolean;
+  /** The referring site, kept only on a visit with no tag and no click id. */
+  ref: string | null;
+  sessions: number;
+}
+
+/** A tag as the survey's tracker stores it: decoded, as URLSearchParams reads it. */
+function tagValue(raw: unknown): string | null {
+  return typeof raw === "string" && raw ? new URLSearchParams(`v=${raw}`).get("v") || null : null;
+}
+
+/**
+ * The referring site as the tracker keeps it (shared/url/utm.ts): none for a direct visit
+ * ("$direct"), our own pages or Stripe's checkout.
+ */
+function referrer(raw: unknown): string | null {
+  const host = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (!host || host === "$direct" || /(^|\.)(loveiq\.org|stripe\.com)$/.test(host)) return null;
+  return host;
+}
+
+/**
+ * The live site's visits in a range, one per PostHog session, grouped by what the session's
+ * first page view carried: utm_source, utm_medium, a Google Ads click id, Meta's click id and,
+ * on an untagged visit only (the one place classifySource reads it, which keeps the groups
+ * few), the referring site. Pages the visit log leaves out (admin, Jarvis, the login) are
+ * left out here. Our own source rules sort the groups (sourceShares), never PostHog's.
+ */
+export async function fetchSessionSources(
+  from: string,
+  to: string
+): Promise<PostHogResult<SessionTags[]>> {
+  const { since, until } = windowOf({ from, to });
+  const q = `
+    SELECT src, med, ads, fb, if(src = '' AND med = '' AND ads = 0 AND fb = 0, ref, '') AS r,
+           count() AS n
+    FROM (
+      SELECT lower(extract(url, '[?&]utm_source=([^&#]*)')) AS src,
+             lower(extract(url, '[?&]utm_medium=([^&#]*)')) AS med,
+             if(url LIKE '%gclid=%' OR url LIKE '%gbraid=%' OR url LIKE '%wbraid=%', 1, 0) AS ads,
+             if(url LIKE '%fbclid=%', 1, 0) AS fb,
+             lower(coalesce(first_ref, '')) AS ref
+      FROM (
+        SELECT $session_id AS sid,
+               argMin(properties.$current_url, timestamp) AS url,
+               argMin(properties.$referring_domain, timestamp) AS first_ref
+        FROM events
+        WHERE event = '$pageview' AND properties.$host = '${HOST}' AND $session_id != ''
+          AND properties.$pathname NOT LIKE '/admin%' AND properties.$pathname NOT LIKE '/jarvis%'
+          AND properties.$pathname != '/login'
+          AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+        GROUP BY sid
+      )
+    )
+    GROUP BY src, med, ads, fb, r
+    ORDER BY n DESC
+    LIMIT 1000`;
+  const r = await rows(q, 1000);
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    value: r.value.map(([src, med, ads, fb, ref, n]) => ({
+      src: tagValue(src),
+      med: tagValue(med),
+      ads: Number(ads) === 1,
+      fb: Number(fb) === 1,
+      ref: referrer(ref),
+      sessions: Number(n) || 0,
+    })),
+  };
+}
+
 export interface SurveyIntroClicks {
   opened: number;
   skipped: number;

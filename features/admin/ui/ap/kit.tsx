@@ -140,13 +140,18 @@ export function KpiTile({ tile, size = "lg" }: { tile: Tile; size?: "lg" | "md" 
       {tile.blocked ? EMPTY : fmt(tile.unit, tile.value)}
     </span>
   );
+  // A change never breaks inside itself ("+€3,986" may break after its sign otherwise).
   const body =
     size === "lg" ? (
       <>
         <Eyebrow>{tile.label}</Eyebrow>
         <span className="flex items-baseline justify-between gap-2">
           {value}
-          {d && <span className={`text-[13px] font-bold ${TONE_TEXT[d.tone]}`}>{d.text}</span>}
+          {d && (
+            <span className={`whitespace-nowrap text-[13px] font-bold ${TONE_TEXT[d.tone]}`}>
+              {d.text}
+            </span>
+          )}
         </span>
         <Spark values={tile.blocked ? [] : tile.spark} />
         <span className="text-xs leading-normal text-ap-muted">{tile.blocked ?? tile.foot}</span>
@@ -156,7 +161,7 @@ export function KpiTile({ tile, size = "lg" }: { tile: Tile; size?: "lg" | "md" 
         <Eyebrow>{tile.label}</Eyebrow>
         {value}
         <span className="text-xs leading-normal text-ap-muted">
-          {d && <strong className={TONE_TEXT[d.tone]}>{d.text}</strong>}
+          {d && <strong className={`whitespace-nowrap ${TONE_TEXT[d.tone]}`}>{d.text}</strong>}
           {d ? " " : ""}
           {tile.blocked ?? tile.foot}
         </span>
@@ -189,12 +194,42 @@ export function TileGrid({ children, min = 196 }: { children: ReactNode; min?: n
   );
 }
 
-/** A grey box with a label, a value and a line under it (Revenue, Costs, Survey card). */
-export function StatBox({ stat, tone = "grey" }: { stat: MiniStat; tone?: "grey" | "white" }) {
+/**
+ * The line under a box's value, by the stat's `foot` (see MiniStat): the change alone, the
+ * previous value grey or coloured by the change, or (unset) the change and the previous value.
+ */
+function StatFoot({ stat }: { stat: MiniStat }) {
   const d =
     stat.prev !== undefined
       ? delta(stat.unit, stat.value, stat.prev ?? null, stat.goodWhen ?? "up", stat.deltaAs)
       : null;
+  const prev =
+    stat.prev !== null && stat.prev !== undefined ? `prev. ${fmt(stat.unit, stat.prev)}` : null;
+  if (stat.foot === "change") {
+    if (!d) return null;
+    return d.tone === "flat" ? (
+      <span className="text-xs text-ap-muted">flat vs prev.</span>
+    ) : (
+      <span className={`whitespace-nowrap text-xs font-bold ${TONE_TEXT[d.tone]}`}>{d.text}</span>
+    );
+  }
+  if (stat.foot === "prev")
+    return prev ? <span className="text-xs text-ap-muted">{prev}</span> : null;
+  if (stat.foot === "prev-toned") {
+    return prev ? (
+      <span className={`text-xs font-bold ${TONE_TEXT[d?.tone ?? "flat"]}`}>{prev}</span>
+    ) : null;
+  }
+  return d ? (
+    <span className="text-xs text-ap-muted">
+      <strong className={`whitespace-nowrap ${TONE_TEXT[d.tone]}`}>{d.text}</strong>
+      {prev ? ` · ${prev}` : ""}
+    </span>
+  ) : null;
+}
+
+/** A grey box with a label, a value and a line under it (Revenue, Costs, Survey card). */
+export function StatBox({ stat, tone = "grey" }: { stat: MiniStat; tone?: "grey" | "white" }) {
   return (
     <div
       className={`flex min-w-0 flex-col gap-1 rounded-[14px] p-3.5 ${tone === "grey" ? "bg-ap-ground" : "bg-white"}`}
@@ -203,14 +238,7 @@ export function StatBox({ stat, tone = "grey" }: { stat: MiniStat; tone?: "grey"
       <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">
         {fmt(stat.unit, stat.value)}
       </span>
-      {d ? (
-        <span className="text-xs text-ap-muted">
-          <strong className={TONE_TEXT[d.tone]}>{d.text}</strong>
-          {stat.prev !== null && stat.prev !== undefined
-            ? ` · prev. ${fmt(stat.unit, stat.prev)}`
-            : ""}
-        </span>
-      ) : null}
+      <StatFoot stat={stat} />
       {stat.note && <span className="text-xs leading-snug text-ap-muted">{stat.note}</span>}
     </div>
   );
@@ -289,10 +317,10 @@ export function Bar({
   );
 }
 
-export function cellText(unit: Column["unit"], v: number | string | null): string {
+export function cellText(unit: Column["unit"], v: number | string | null, digits?: number): string {
   if (typeof v === "string") return v;
   if (unit === "text") return v === null ? EMPTY : String(v);
-  return fmt(unit as Unit, v);
+  return fmt(unit as Unit, v, digits);
 }
 
 /** Both arrows while unsorted; the one arrow of the direction once sorted. */
@@ -367,10 +395,19 @@ export function HeaderFilter({
 
 /**
  * A table from the server's Table: the first column is the row's name, the rest are
- * numbers. Every column sorts, the first also filters (as the design draws them); "Not
- * launched" rows stay at the bottom.
+ * numbers. Every column sorts, the first also filters (as the design draws them); muted
+ * rows ("Not launched", "Unknown source") stay at the bottom.
  */
-export function DataTable({ table, minWidth = 460 }: { table: Table; minWidth?: number }) {
+export function DataTable({
+  table,
+  minWidth = 460,
+  sortFirst = true,
+}: {
+  table: Table;
+  minWidth?: number;
+  /** False where the design gives the name column a filter only (the dashboard's Sources). */
+  sortFirst?: boolean;
+}) {
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const [filtering, setFiltering] = useState(false);
   const [filter, setFilter] = useState("");
@@ -409,12 +446,14 @@ export function DataTable({ table, minWidth = 460 }: { table: Table; minWidth?: 
         <div role="table" aria-label={table.columns[0]?.label} style={{ minWidth }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
             {table.columns.map((c, i) => (
+              // Text with its buttons inline, as drawn: a label wider than a narrow column
+              // runs on into its own padding, never back over the column before it.
               <span
                 key={c.label}
                 role="columnheader"
                 aria-sort={sort?.col === i ? (sort.dir === 1 ? "ascending" : "descending") : "none"}
-                className={`flex items-center gap-1 px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${
-                  i ? "justify-end text-right" : ""
+                className={`px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${
+                  i ? "text-right" : "text-left"
                 }`}
               >
                 {c.label}
@@ -427,25 +466,27 @@ export function DataTable({ table, minWidth = 460 }: { table: Table; minWidth?: 
                       if (filtering) setFilter("");
                       setFiltering(!filtering);
                     }}
-                    className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
+                    className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
                   >
                     <FilterIcon />
                   </button>
                 )}
-                <button
-                  type="button"
-                  aria-label={`Sort by ${c.label}`}
-                  onClick={() =>
-                    setSort((s) =>
-                      s?.col === i
-                        ? { col: i, dir: s.dir === 1 ? -1 : 1 }
-                        : { col: i, dir: i ? -1 : 1 }
-                    )
-                  }
-                  className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
-                >
-                  <SortIcon dir={sort?.col === i ? sort.dir : null} />
-                </button>
+                {(i > 0 || sortFirst) && (
+                  <button
+                    type="button"
+                    aria-label={`Sort by ${c.label}`}
+                    onClick={() =>
+                      setSort((s) =>
+                        s?.col === i
+                          ? { col: i, dir: s.dir === 1 ? -1 : 1 }
+                          : { col: i, dir: i ? -1 : 1 }
+                      )
+                    }
+                    className={`inline-flex cursor-pointer border-0 bg-transparent py-0 pl-1 pr-0 align-[-1px] ${sort?.col === i ? "text-ap-violet" : "text-ap-muted"}`}
+                  >
+                    <SortIcon dir={sort?.col === i ? sort.dir : null} />
+                  </button>
+                )}
               </span>
             ))}
             {hasBar && (
@@ -469,12 +510,8 @@ export function DataTable({ table, minWidth = 460 }: { table: Table; minWidth?: 
               className="grid border-t border-ap-line"
               style={{ gridTemplateColumns: gtc }}
             >
-              <span
-                role="rowheader"
-                title={r.label.endsWith("(not launched)") ? "Not launched yet" : undefined}
-                className="px-3.5 py-3 text-sm font-semibold text-ap-ink"
-              >
-                {r.label.replace(" (not launched)", "")}
+              <span role="rowheader" className="px-3.5 py-3 text-sm font-semibold text-ap-ink">
+                {r.label}
               </span>
               {r.values.map((v, i) => (
                 <span
@@ -484,7 +521,7 @@ export function DataTable({ table, minWidth = 460 }: { table: Table; minWidth?: 
                     r.muted || v === null || typeof v === "string" ? "text-ap-muted" : "text-ap-ink"
                   }`}
                 >
-                  {cellText(table.columns[i + 1]?.unit ?? "text", v)}
+                  {cellText(table.columns[i + 1]?.unit ?? "text", v, table.columns[i + 1]?.digits)}
                 </span>
               ))}
               {hasBar && (
@@ -508,7 +545,6 @@ export function AllTraffic({ note }: { note: string | null }) {
   return note ? <p className="m-0 text-xs font-semibold text-ap-plum">{note}</p> : null;
 }
 
-/** "Sample split" in the design; here the plain reason a part has no data. */
 /**
  * Scrolls to the section the address names (#traffic) once the page's sections exist: they
  * render only after the figures arrive, so the browser's own jump finds nothing.
@@ -539,6 +575,7 @@ export function Busy({ busy, children }: { busy: boolean; children: ReactNode })
   );
 }
 
+/** The design's small purple pill ("Sample split · totals are live"): what a part's figures are. */
 export function NotTracked({ children }: { children: ReactNode }) {
   return (
     <span className="self-start rounded-full bg-ap-purple/10 px-2.5 py-1 text-xs font-bold text-ap-plum">
@@ -608,7 +645,7 @@ export function PageHeader({
           ))}
         </nav>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="m-0 text-balance font-serif text-[28px] font-semibold leading-tight tracking-[-0.01em] text-ap-ink sm:text-[34px]">
+          <h1 className="m-0 text-balance font-serif text-[34px] font-semibold leading-tight tracking-[-0.01em] text-ap-ink">
             {title}
           </h1>
           {badge}
@@ -620,8 +657,17 @@ export function PageHeader({
   );
 }
 
-export function LiveBadge() {
-  return (
+/**
+ * "Live". With `dot`, the range line's pill: a green dot and 13px text (the design's
+ * Overview); the text keeps the darker green, which reads on the pale fill.
+ */
+export function LiveBadge({ dot = false }: { dot?: boolean }) {
+  return dot ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-ap-good/10 px-2.5 py-1 text-[13px] font-bold text-ap-good-ink">
+      <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-ap-good" />
+      Live
+    </span>
+  ) : (
     <span className="inline-flex items-center rounded-full bg-ap-good/10 px-2.5 py-1 text-xs font-bold text-ap-good-ink">
       Live
     </span>

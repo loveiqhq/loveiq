@@ -3,7 +3,13 @@ import { NextResponse } from "next/server";
 import { buildDashboard } from "@features/admin/server/ap/assessment";
 import { fetchFactsFor } from "@features/admin/server/ap/facts";
 import { beforeData, comparisonRange, parseFilters } from "@features/admin/server/ap/filters";
-import { fetchNewReturning, postHogFailed } from "@features/admin/server/ap/posthog";
+import { splitBlocked } from "@features/admin/server/ap/overview";
+import {
+  fetchNewReturning,
+  fetchSessionSources,
+  fetchVisitorGroups,
+  postHogFailed,
+} from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { adCostByDay } from "@features/brain/server/ingest/analytics";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -23,15 +29,34 @@ export async function GET(request: Request) {
   const cmp = comparisonRange(filters);
 
   try {
-    const [facts, previous, ad, newReturning] = await Promise.all([
+    const [facts, previous, ad, newReturning, sessions] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       adCostByDay(),
       // PostHog is a side panel: its failure shows there, it never fails the page.
       fetchNewReturning(filters.from, filters.to).catch(postHogFailed),
+      splitBlocked(filters)
+        ? Promise.resolve(null)
+        : fetchSessionSources(filters.from, filters.to).catch(postHogFailed),
     ]);
+    // The New & returning panel's € per visit: each payment with its payer's visitor group.
+    const visitorGroups = await fetchVisitorGroups(
+      filters.from,
+      filters.to,
+      facts.money.map((m) => m.ph)
+    ).catch(postHogFailed);
     return NextResponse.json(
-      buildDashboard({ facts, previous, ad, filters, today, now, newReturning }),
+      buildDashboard({
+        facts,
+        previous,
+        ad,
+        filters,
+        today,
+        now,
+        newReturning,
+        sessions,
+        visitorGroups,
+      }),
       {
         headers: NO_STORE,
       }

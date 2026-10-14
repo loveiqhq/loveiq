@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDashboard } from "@features/admin/server/ap/assessment";
+import { buildDashboard, revenueByGroup } from "@features/admin/server/ap/assessment";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { ALL, comparableStarts, totals } from "@features/admin/server/ap/metrics";
-import { buildOverview } from "@features/admin/server/ap/overview";
+import { buildOverview, head, SOURCE_ROWS } from "@features/admin/server/ap/overview";
+import type { SessionTags } from "@features/admin/server/ap/posthog";
 import { buildReportPage, type ReportExtras } from "@features/admin/server/ap/report-page";
 import { buildSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage, demoCard } from "@features/admin/server/ap/survey-page";
@@ -565,11 +566,14 @@ describe("page builders", () => {
     const f90 = parseFilters({ period: "90d" }, TODAY);
     const long = factsFixture({ from: f90.from, to: f90.to });
     const p = buildOverview({ facts: long, previous: null, ad, filters: f90, today: TODAY, now });
-    expect(p.traffic.bySource.rows.map((r) => r.label)).not.toContain("Unknown source");
+    expect(p.submissions.bySource.rows.map((r) => r.label)).not.toContain("Unknown source");
     expect(p.traffic.bySource.note).toContain("older starts can't be split by source");
-    // Within the drafts' 30 days the starts no draft names stay visible as Unknown.
+    // Within the drafts' 30 days the starts no draft names stay visible as Unknown, in the
+    // table with starts; Traffic has no visitors to give it.
     const recent = buildOverview({ facts, previous: null, ad, filters, today: TODAY, now });
-    expect(recent.traffic.bySource.rows.map((r) => r.label)).toContain("Unknown source");
+    const unknown = recent.submissions.bySource.rows.find((r) => r.label === "Unknown source");
+    expect(unknown).toMatchObject({ values: [4, 0, null, null], muted: true });
+    expect(recent.traffic.bySource.rows.map((r) => r.label)).not.toContain("Unknown source");
   });
 
   it("overview: counts the invites sent in the range, as the design's Report card does", () => {
@@ -635,5 +639,299 @@ describe("page builders", () => {
       "Tablets are told apart from 15 Oct 2026"
     );
     expect(notes(filters)).not.toContain("Tablets are told apart");
+  });
+});
+
+describe("visitors per source: a sample split, the totals live", () => {
+  const tags = (
+    src: string | null,
+    med: string | null,
+    sessions: number,
+    more: Partial<SessionTags> = {}
+  ): SessionTags => ({ src, med, ads: false, fb: false, ref: null, sessions, ...more });
+  // PostHog's 100 visits besides our probes: Google Ads 30, organic 10, direct 50, Meta 10.
+  const sessions = {
+    ok: true as const,
+    value: [
+      tags("google", "cpc", 30, { ads: true }),
+      tags(null, null, 10, { ref: "www.google.com" }),
+      tags(null, null, 50),
+      tags("ig", "paid", 10),
+      tags("prod-verification", null, 100),
+    ],
+  };
+  const overview = (over: Partial<Parameters<typeof buildOverview>[0]> = {}) =>
+    buildOverview({ facts, previous: null, ad, filters, today: TODAY, now, sessions, ...over });
+  const values = (t: { rows: Array<{ label: string; values: unknown[] }> }, label: string) =>
+    t.rows.find((r) => r.label === label)?.values;
+
+  it("overview: the live 220 visits split by PostHog's shares, every source in the filter's order", () => {
+    const p = overview();
+    const traffic = p.traffic.bySource;
+    expect(traffic.sample).toBe(true);
+    expect(traffic.columns.map((c) => c.label)).toEqual([
+      "Source",
+      "Visitors",
+      "Share",
+      "Start CVR",
+    ]);
+    expect(traffic.columns[2]).toMatchObject({ unit: "pct", digits: 0 });
+    expect(traffic.rows.map((r) => r.label)).toEqual(SOURCE_ROWS.map((s) => s.label));
+    expect(values(traffic, "Google Ads")).toEqual([66, 0.3, 10 / 66]);
+    expect(values(traffic, "Direct / untagged")).toEqual([110, 0.5, 0]);
+    expect(values(traffic, "Meta Ads")).toEqual([22, 0.1, 0]);
+    // Nobody from a source: a zero row, not a missing one, and no rate out of nothing.
+    expect(values(traffic, "Email")).toEqual([0, 0, null]);
+    const subs = p.submissions.bySource;
+    expect(subs.columns.map((c) => c.label)).toEqual([
+      "Source",
+      "Starts",
+      "Submissions",
+      "Completion",
+      "Submission CVR",
+    ]);
+    expect(values(subs, "Google Ads")).toEqual([10, 2, 1, 2 / 66]);
+    expect(subs.sample).toBe(true);
+    // Engagement holds no estimate: no sample mark.
+    expect(p.engagement.bySource.sample).toBeUndefined();
+  });
+
+  it("overview: blank with its reason under a narrowing filter, before PostHog, or when it fails", () => {
+    const blank = (p: ReturnType<typeof overview>) => {
+      expect(p.traffic.bySource.sample).toBe(false);
+      expect(p.traffic.bySource.rows.every((r) => r.values.every((v) => v === null))).toBe(true);
+      expect(p.submissions.bySource.rows.every((r) => r.values[3] === null)).toBe(true);
+      return `${p.traffic.bySource.note} | ${p.submissions.bySource.note}`;
+    };
+    expect(blank(overview({ filters: { ...filters, device: "phone" } }))).toMatch(
+      /a source, device, tier or visitor filter leaves them blank.* \| .*leaves them blank/
+    );
+    expect(blank(overview({ filters: { ...filters, source: "google_ads" } }))).toContain(
+      "estimated over all traffic"
+    );
+    expect(
+      blank(
+        overview({
+          sessions: {
+            ok: false,
+            error: "PostHog could not be read just now. Try again in a minute.",
+          },
+        })
+      )
+    ).toContain("Visitors per source: PostHog could not be read just now.");
+    const august = parseFilters({ period: "custom", from: "2026-08-10", to: "2026-08-31" }, TODAY);
+    expect(
+      blank(
+        overview({ filters: august, facts: factsFixture({ from: august.from, to: august.to }) })
+      )
+    ).toContain("PostHog, which starts on 23 Aug 2026");
+    expect(blank(overview({ sessions: { ok: true, value: [] } }))).toContain("saw no visits");
+    expect(blank(overview({ sessions: null }))).toContain("PostHog was not read");
+  });
+
+  it("dashboard: Sources and Performance over the estimated visitors, as drawn", () => {
+    const dash = (s: typeof sessions | null) =>
+      buildDashboard({
+        facts,
+        previous: null,
+        ad,
+        filters,
+        today: TODAY,
+        now,
+        newReturning: null,
+        sessions: s,
+      });
+    const p = dash(sessions);
+    expect(p.sources.columns.map((c) => c.label)).toEqual([
+      "Source",
+      "Visitors",
+      "Share",
+      "Submissions",
+      "Survey CVR",
+      "€ / visit",
+    ]);
+    expect(p.sources).toMatchObject({ sample: true, barLabel: "Share of visits" });
+    const google = p.sources.rows.find((r) => r.label === "Google Ads")!;
+    expect(google.values).toEqual([66, 0.3, 2, 2 / 66, 6.99 / 66]);
+    expect(google.bar).toBeCloseTo(66 / 110);
+    expect(p.sources.rows).toHaveLength(SOURCE_ROWS.length);
+    expect(p.performance.find((r) => r.label === "Google Ads")).toEqual({
+      label: "Google Ads",
+      surveyCvr: 2 / 66,
+      perVisit: 6.99 / 66,
+    });
+    // Blank: dashes and no bars, which would read as no visits.
+    const none = dash(null);
+    expect(none.sources.sample).toBe(false);
+    expect(none.sources.rows.every((r) => r.bar === undefined && r.values[0] === null)).toBe(true);
+    expect(none.performance.every((r) => r.surveyCvr === null && r.perVisit === null)).toBe(true);
+  });
+
+  it("dashboard: € per visit for new and returning, each payment with its payer's group", () => {
+    const A = "0192f0aa-1111-7000-8000-000000000001";
+    const B = "0192f0aa-2222-7000-8000-000000000002";
+    const [paid, gift] = facts.money;
+    const withVisits = factsFixture({
+      money: [
+        { ...paid!, ph: A.toUpperCase() },
+        { ...paid!, sid: 5, amount: 4.99, ph: B },
+        // PostHog never saw this visit, a gift brings no money, a probe is never counted.
+        { ...paid!, sid: 6, amount: 9.99, ph: "0192f0aa-3333-7000-8000-000000000003" },
+        { ...gift!, ph: A },
+        // Only money in counts, as in the revenue totals.
+        { ...paid!, sid: 9, amount: -6.99, ph: A },
+        { ...paid!, sid: 7, amount: 3, ph: B, src: "prod-verification", med: null, ads: false },
+        // Outside the range.
+        { ...paid!, sid: 8, day: "2026-10-09", ph: A },
+      ],
+    });
+    const groups = new Map<string, "new" | "returning">([
+      [A, "new"],
+      [B, "returning"],
+    ]);
+    expect(revenueByGroup(withVisits, groups)).toEqual({ new: 6.99, returning: 4.99 });
+    const dash = (visitorGroups: Parameters<typeof buildDashboard>[0]["visitorGroups"]) =>
+      buildDashboard({
+        facts: withVisits,
+        previous: null,
+        ad,
+        filters,
+        today: TODAY,
+        now,
+        newReturning: null,
+        visitorGroups,
+      }).newReturningRevenue;
+    expect(dash({ ok: true, value: groups })).toEqual({
+      ok: true,
+      value: { new: 6.99, returning: 4.99 },
+    });
+    expect(dash({ ok: false, error: "down" })).toEqual({ ok: false, error: "down" });
+    expect(dash(null)).toBeNull();
+  });
+
+  it("dashboard: the plans are named as drawn, the retired ones kept", () => {
+    const quote = (plan: string, price: number) => ({
+      src: "google",
+      med: "cpc",
+      ads: true,
+      plan,
+      priceArm: null,
+      price,
+      device: "iOS",
+      tier: "tier_1",
+      quoted: 4,
+      checkouts: 1,
+      sales: 1,
+      revenue: price,
+    });
+    const p = buildDashboard({
+      facts: factsFixture({
+        quotes: [
+          quote("full_report", 6.99),
+          quote("all_reports", 9.99),
+          quote("essentials", 4.99),
+          quote("core", 2.99),
+        ],
+      }),
+      previous: null,
+      ad,
+      filters,
+      today: TODAY,
+      now,
+      newReturning: null,
+    });
+    expect(p.prices.map((r) => r.planLabel)).toEqual([
+      "Full All",
+      "Core (retired)",
+      "Essentials (retired)",
+      "Full",
+    ]);
+  });
+
+  it("overview: boxes, funnel and tables say what the design's do", () => {
+    const prev = factsFixture({
+      from: "2026-09-24",
+      to: "2026-09-30",
+      subs: [sub({ id: 31, day: "2026-09-25", at: "2026-09-25T10:00:00Z" })],
+      money: [
+        { ...facts.money[0]!, sid: 31, day: "2026-09-25", amount: 12.5 },
+        { ...facts.money[0]!, sid: 32, day: "2026-09-26", amount: 12.5 },
+      ],
+    });
+    const p = buildOverview({ facts, previous: prev, ad, filters, today: TODAY, now });
+    expect(p.revenue.stats.map((s) => [s.label, s.foot])).toEqual([
+      ["Revenue", "change"],
+      ["Paid reports", "change"],
+      ["€ per visit", "prev"],
+    ]);
+    expect(p.costs.stats.map((s) => [s.label, s.foot, s.goodWhen])).toEqual([
+      ["Ad spend", "change", "down"],
+      ["Per submission", "prev-toned", "down"],
+      ["CAC (paid)", "prev-toned", "down"],
+    ]);
+    // Money with cents in the costs table; shares in whole percent.
+    expect(p.costs.byAssessment.columns.slice(1).map((c) => c.digits)).toEqual([2, 2, 2]);
+    expect(p.traffic.byAssessment.columns[2]).toMatchObject({ label: "Share", digits: 0 });
+    expect(p.submissions.funnel.map((s) => s.label)).toEqual([
+      "Visited",
+      "Started survey",
+      "Submitted",
+      "Opened report",
+      "Paid",
+    ]);
+  });
+
+  it("overview: Returns counts the readers who came back", () => {
+    const p = buildOverview({
+      facts: factsFixture({
+        subs: [
+          sub({ id: 1, visits: 3, returnedAt: "2026-10-02T09:00:00Z" }),
+          sub({ id: 2, visits: 2, returnedAt: "2026-10-03T09:00:00Z" }),
+          sub({ id: 3 }),
+          // Never opened: not a reader.
+          sub({ id: 4, openedAt: null, visits: 0 }),
+        ],
+      }),
+      previous: null,
+      ad,
+      filters,
+      today: TODAY,
+      now,
+    });
+    expect(p.engagement.byAssessment.columns[4]).toEqual({ label: "Returns", unit: "count" });
+    expect(p.engagement.byAssessment.rows[0]?.values[3]).toBe(2);
+    expect(p.engagement.bySource.rows.find((r) => r.label === "Google Ads")?.values[3]).toBe(2);
+    expect(p.engagement.bySource.rows.find((r) => r.label === "Email")?.values[3]).toBe(0);
+  });
+
+  it("overview: no read time, no note for the Report card to show in its place", () => {
+    const card = (closed: number) =>
+      buildOverview({
+        facts: factsFixture({ subs: [sub({ id: 1, closed, readMs: 120_000 })] }),
+        previous: null,
+        ad,
+        filters,
+        today: TODAY,
+        now,
+      }).engagement.report.find((s) => s.label === "Avg. read time")!;
+    expect(card(0)).toMatchObject({ value: null, note: undefined });
+    expect(card(1).value).toBe(120_000);
+    expect(card(1).note).toContain("readers whose reading time was recorded");
+  });
+
+  it("notes tablets when only the comparison period starts before they were told apart", () => {
+    const today = "2026-10-23";
+    const late = parseFilters(
+      { period: "custom", from: "2026-10-15", to: "2026-10-21", device: "tablet" },
+      today
+    );
+    const notes = (f: typeof late) => head(f, today, now).notes.join(" ");
+    expect(notes(late)).toContain(
+      "Tablets are told apart from 15 Oct 2026, but the comparison period starts before then"
+    );
+    expect(notes({ ...late, compare: "none" })).not.toContain("Tablets");
+    expect(notes({ ...late, device: "all" })).not.toContain("Tablets");
+    // A range before the day keeps its own note, once.
+    expect(notes({ ...late, from: "2026-10-10" }).match(/Tablets are told apart/g)).toHaveLength(1);
   });
 });

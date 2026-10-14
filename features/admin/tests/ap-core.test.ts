@@ -21,6 +21,7 @@ import {
   armStartsComplete,
   draftsKeptFrom,
   sameAge,
+  sourceShares,
   spendBlocked,
   startsComplete,
   totals,
@@ -136,6 +137,22 @@ describe("AP filters", () => {
     expect(filterSummary(f, TODAY)).toContain("(today so far)");
     expect(filterSummary(parseFilters({}, TODAY), TODAY)).not.toContain("today so far");
   });
+
+  it("sums the filters up as drawn: both years, the comparison by name, no remarks", () => {
+    const f = parseFilters({}, TODAY);
+    expect(filterSummary(f, TODAY)).toBe(
+      "13 Sep 2026 – 12 Oct 2026 · vs previous period · all assessments, sources and devices"
+    );
+    expect(filterSummary({ ...f, compare: "yoy" }, TODAY)).toContain(
+      " · vs same period last year · "
+    );
+    expect(filterSummary({ ...f, compare: "none" }, TODAY)).toContain(" · no comparison · ");
+    expect(filterSummary(parseFilters({ period: "today" }, TODAY), TODAY)).toMatch(
+      /^13 Oct 2026 \(today so far\) · no comparison while today runs · /
+    );
+    // Not launched: the pages say so, the filter's names don't.
+    expect(filterSummary({ ...f, assessment: "b" }, TODAY)).toMatch(/· Assessment B$/);
+  });
 });
 
 describe("AP number format", () => {
@@ -165,6 +182,40 @@ describe("AP number format", () => {
     // A check whose change is neither good nor bad (the report open rate) reads grey.
     expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2.00 pt", tone: "flat" });
     expect(delta("count", 1, 4, "up", "abs")).toEqual({ text: "−3", tone: "bad" });
+    // Small sums of money: cents once the change is ten cents or more, a third decimal below.
+    expect(delta("eur3", 0.058, 0.309)?.text).toBe("−€0.25");
+    expect(delta("eur3", 0.002, 0.011)?.text).toBe("−€0.009");
+    expect(delta("eur3", 0.309, 0.209)?.text).toBe("+€0.10");
+  });
+});
+
+describe("AP visitors per source", () => {
+  const tags = (
+    src: string | null,
+    med: string | null,
+    sessions: number,
+    more: { ads?: boolean; fb?: boolean; ref?: string } = {}
+  ) => ({ src, med, ads: false, fb: false, ref: null, sessions, ...more });
+
+  it("shares PostHog's visits out by our own source rules, our probes left out", () => {
+    const shares = sourceShares([
+      tags("google", "cpc", 30, { ads: true }),
+      tags(null, null, 10, { ref: "www.google.com" }),
+      tags(null, null, 40),
+      tags(null, null, 10, { fb: true }),
+      tags("ig", "paid", 5),
+      tags(null, null, 5, { ads: true }),
+      tags("prod-verification", null, 900),
+    ]);
+    expect(Object.fromEntries(shares!)).toEqual({
+      google_ads: 0.35,
+      organic_search: 0.1,
+      direct: 0.4,
+      social: 0.1,
+      meta_ads: 0.05,
+    });
+    expect(sourceShares([])).toBeNull();
+    expect(sourceShares([tags("verify", null, 3)])).toBeNull();
   });
 });
 
