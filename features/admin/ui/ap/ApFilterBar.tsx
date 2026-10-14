@@ -8,10 +8,12 @@ import {
   DEVICES,
   PERIODS,
   SOURCES,
+  SURVEY_TRACKING_FROM,
   TIERS,
   filterParams,
   filterSummary,
   parseFilters,
+  rangeLabel,
   type ApFilters,
 } from "@features/admin/server/ap/filters";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
@@ -45,6 +47,9 @@ function sameFilters(a: ApFilters, b: ApFilters): boolean {
 type Fixed = "compare" | "source" | "device" | "tier";
 
 const SAVED_PARAMS = { kind: "filter" };
+
+/** When the referrer and tablets started being recorded, as the note says it. */
+const trackingDay = rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM);
 
 const WIDE = "(min-width: 1024px)";
 const subscribeWide = (onChange: () => void) => {
@@ -435,10 +440,13 @@ export default function ApFilterBar({
           </div>
           <p id="ap-visitor-note" className="m-0 text-xs text-ap-muted">
             New vs returning can&rsquo;t filter these figures: the visit log starts a new visitor id
-            every day. The Assessment A dashboard shows the split from PostHog. No Meta Ads or
-            organic search: we run no Meta campaigns (Meta-tagged links count as Social), and
-            organic search can&rsquo;t be told from direct visits, as no referrer is kept. Tablets
-            count as mobile.
+            every day. The Assessment A dashboard shows the split from PostHog. Meta Ads: a Meta
+            link tagged as paid; Meta&rsquo;s click id alone counts as Social. Organic search: a
+            search engine tagged organic, or an untagged visit from a search engine, told from
+            direct visits by the site a visit came from, recorded from {trackingDay} (before, those
+            read as Direct). Gmail on the web opens links through Google, so an untagged email click
+            can read as organic search. Tablets are told apart from {trackingDay}: before, they
+            count as Mobile, or as Desktop for newer iPads, which present themselves as Macs.
             {assessmentFixed && (
               <> These pages are Assessment A&rsquo;s; B and C have not launched.</>
             )}

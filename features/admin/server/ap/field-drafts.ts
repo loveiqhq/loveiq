@@ -4,6 +4,9 @@
  * team writes its own (admin_field_note), and the database's own comments where there is no
  * draft. Written for the team, not for engineers: what a field means, not how it is built.
  */
+import { rangeLabel, SURVEY_TRACKING_FROM } from "./filters";
+
+const TRACKING_DAY = rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM);
 
 export interface TableDraft {
   table: string;
@@ -18,8 +21,7 @@ export const DRAFTS: Record<string, TableDraft> = {
       id: "Submission id.",
       user_id: "The person, in app_user (where the email is).",
       survey_id: "Which assessment was taken.",
-      utm_tracker:
-        "Captured at entry, as JSON text: UTM tags, Google Ads click ids (gclid, gbraid, wbraid) and its network and match type, and the test arms the person was in (landing page, question order, email question). No referrer is kept.",
+      utm_tracker: `Captured at entry, as JSON text: UTM tags, Google Ads click ids (gclid, gbraid, wbraid) and its network and match type, Meta's click id (fbclid) and the name of the site the visit came from (referrer_host, both from ${TRACKING_DAY}), and the test arms the person was in (landing page, question order, email question).`,
       regeneration_url: "Link that rebuilds the report.",
       status: "Always completed.",
       start_date_time: "When the survey was started.",
@@ -93,13 +95,12 @@ export const DRAFTS: Record<string, TableDraft> = {
   },
   funnel_event: {
     table:
-      "Visits and the first survey steps, one row per browser, day and step. unique_visitor and survey_page_view are written by our server for everyone; the survey start and intro slides are sent by the browser after the cookie banner.",
+      "Visits and the first survey steps, one row per browser, day and step. unique_visitor and survey_page_view are written by our server for everyone; the survey start and the intro's cards are sent by the browser after the cookie banner.",
     fields: {
       visitor_id:
         "A browser's id for one day: a new one every day, so a returning person counts once per day.",
       day: "The day, in Berlin time.",
-      event_type:
-        "unique_visitor, survey_page_view, survey_engine_mount (the survey opened), intro_slide_1 to intro_slide_4, prepaid_gate_viewed, prepaid_checkout_started.",
+      event_type: `unique_visitor, survey_page_view, survey_engine_mount (the survey opened), intro_slide_1 to intro_slide_4, prepaid_gate_viewed, prepaid_checkout_started; from ${TRACKING_DAY} also intro_view and consent_view (the intro and the consent shown), intro_back_1 to intro_back_4 and consent_back (went back from it) and intro_skip_1 to intro_skip_4 (Skip Intro on that slide).`,
       first_seen: "First time that day.",
       utm_source:
         "The visit's utm_source tag: most ad clicks carry none, so it undercounts Google.",

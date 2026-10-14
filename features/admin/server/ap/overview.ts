@@ -17,6 +17,7 @@ import {
   DATA_START,
   periodRange,
   rangeLabel,
+  SURVEY_TRACKING_FROM,
   type ApFilters,
   type Source,
 } from "./filters";
@@ -183,6 +184,11 @@ export function head(f: ApFilters, today: string, now: Date): PageHead {
   } else if (f.device !== "all" && f.from < STEP_DEVICE_FROM) {
     notes.push(
       "Before 12 Oct 2026 the device is known only for people who opened their report, so under a device filter those days cover readers only: submissions read low and the report open rate high."
+    );
+  }
+  if (f.device !== "all" && f.from < SURVEY_TRACKING_FROM) {
+    notes.push(
+      `Tablets are told apart from ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}: before, they count as Mobile, or as Desktop for newer iPads, which present themselves as Macs.`
     );
   }
   return {

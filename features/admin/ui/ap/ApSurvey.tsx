@@ -3,9 +3,15 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import type { AnswerSplit, Dimension } from "@features/admin/server/ap/answers";
+import { rangeLabel, SURVEY_TRACKING_FROM } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
 import type { QuestionRow } from "@features/admin/server/ap/survey";
-import type { Benchmark, DemoCard, SurveyPayload } from "@features/admin/server/ap/survey-page";
+import type {
+  Benchmark,
+  DemoCard,
+  IntroCard,
+  SurveyPayload,
+} from "@features/admin/server/ap/survey-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
@@ -23,6 +29,7 @@ import {
   KpiTile,
   LiveBadge,
   Loading,
+  NotTracked,
   PageHeader,
   SectionHead,
   SortIcon,
@@ -82,7 +89,10 @@ export default function ApSurvey() {
                         { label: "This range", unit: "pct" as const },
                         { label: "Benchmark", unit: "pct" as const },
                       ],
-                      rows: c.rows.map((r) => ({ label: r.label, values: [r.share, r.bench] })),
+                      rows: c.rows.map((r) => ({
+                        label: r.label,
+                        values: r.pending ? [null, null] : [r.share, r.bench],
+                      })),
                     },
                   })),
                   {
@@ -106,15 +116,26 @@ export default function ApSurvey() {
                     name: "Intro wizard (cookie-accepting visitors)",
                     table: {
                       columns: [
-                        { label: "Slide", unit: "text" },
+                        { label: "Card", unit: "text" },
                         { label: "Median time", unit: "mmss" },
                         { label: "Reached", unit: "count" },
-                        { label: "Share of slide 1", unit: "pct" },
-                        { label: "Went on", unit: "pct" },
+                        { label: "Share of the first card", unit: "pct" },
+                        { label: "Continue", unit: "pct" },
+                        { label: "Skip intro", unit: "pct" },
+                        { label: "Back", unit: "pct" },
+                        { label: "Exit", unit: "pct" },
                       ],
-                      rows: data.intro.slides.map((sl) => ({
-                        label: `${sl.n} · ${sl.name}`,
-                        values: [sl.medianMs, sl.reached, sl.reachedShare, sl.cont],
+                      rows: data.intro.cards.map((c, i) => ({
+                        label: `${i + 1} · ${c.name}`,
+                        values: [
+                          c.medianMs,
+                          c.reached,
+                          c.reachedShare,
+                          c.cont,
+                          c.skip,
+                          c.back,
+                          c.exit,
+                        ],
                       })),
                     },
                   },
@@ -226,31 +247,37 @@ function DemographicCard({ card }: { card: DemoCard }) {
             <span className="truncate font-semibold" title={r.label}>
               {r.label}
             </span>
-            <span className="relative h-3.5 rounded-full bg-white">
-              <span
-                className="absolute inset-y-0 left-0 rounded-full bg-ap-purple"
-                style={{ width: `${(r.share / max) * 100}%` }}
-              />
-              {r.bench !== null && (
+            {r.pending ? (
+              <span className="col-span-3 text-xs text-ap-muted">{r.pending}</span>
+            ) : (
+              <>
+                <span className="relative h-3.5 rounded-full bg-white">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded-full bg-ap-purple"
+                    style={{ width: `${(r.share / max) * 100}%` }}
+                  />
+                  {r.bench !== null && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-[3px] -top-[3px] -ml-px w-[3px] rounded-sm bg-ap-ink"
+                      style={{ left: `${(r.bench / max) * 100}%` }}
+                    />
+                  )}
+                </span>
+                <span className="text-right font-bold tabular-nums">{fmt("pct", r.share, 1)}</span>
                 <span
-                  aria-hidden="true"
-                  className="absolute -bottom-[3px] -top-[3px] -ml-px w-[3px] rounded-sm bg-ap-ink"
-                  style={{ left: `${(r.bench / max) * 100}%` }}
-                />
-              )}
-            </span>
-            <span className="text-right font-bold tabular-nums">{fmt("pct", r.share, 1)}</span>
-            <span
-              className={`rounded-md px-1.5 py-0.5 text-right text-xs font-bold tabular-nums ${
-                big && d !== null
-                  ? d > 0
-                    ? "bg-ap-good/10 text-ap-good-ink"
-                    : "bg-ap-bad/10 text-ap-bad-ink"
-                  : "text-ap-muted"
-              }`}
-            >
-              {d === null ? "—" : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d).toFixed(1)}`}
-            </span>
+                  className={`rounded-md px-1.5 py-0.5 text-right text-xs font-bold tabular-nums ${
+                    big && d !== null
+                      ? d > 0
+                        ? "bg-ap-good/10 text-ap-good-ink"
+                        : "bg-ap-bad/10 text-ap-bad-ink"
+                      : "text-ap-muted"
+                  }`}
+                >
+                  {d === null ? "—" : `${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d).toFixed(1)}`}
+                </span>
+              </>
+            )}
           </div>
         );
       })}
@@ -259,21 +286,16 @@ function DemographicCard({ card }: { card: DemoCard }) {
   );
 }
 
-interface IntroCard {
-  n: number;
-  name: string;
-  purpose: string;
-  time: number | null;
-  reached: number | null;
-  reachedN: number | null;
-  cont: number | null;
-  eng: string;
-}
+type IntroRowData = IntroCard & { n: number; time: number | null; eng: string };
 
-const INTRO_GRID = "44px minmax(220px,2.2fr) 80px minmax(160px,1.2fr) 100px minmax(170px,1.3fr)";
+const SURVEY_TRACKING_DAY = rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM);
+
+const INTRO_GRID =
+  "44px minmax(200px,2fr) 72px minmax(150px,1.1fr) 84px 84px 72px 72px minmax(160px,1.2fr)";
 
 function IntroSection({ data }: { data: SurveyPayload }) {
-  const [sort, setSort] = useState<Sort<"time" | "reached" | "cont">>(null);
+  const [sort, setSort] =
+    useState<Sort<"time" | "reached" | "cont" | "skip" | "back" | "exit">>(null);
   const c = data.intro.clicks;
   const ok = c && c.ok ? c.value : null;
   const share = (n: number) => (ok && ok.opened ? n / ok.opened : null);
@@ -283,35 +305,26 @@ function IntroSection({ data }: { data: SurveyPayload }) {
     return fmt("pct", v, v !== null && v < 0.1 ? 1 : 0);
   };
   const answered = ok ? share(ok.answered) : null;
-  const cards: IntroCard[] = [
-    {
-      name: "Intro · Let’s prepare you",
-      purpose: "Start with Continue or a tap on the silhouette",
-      time: null,
-      reached: null,
-      reachedN: null,
-      cont: null,
-      eng: ok ? `${pct(ok.silhouette)} tap the silhouette` : "—",
-    },
-    ...data.intro.slides.map((s) => ({
-      name: s.name,
-      purpose: s.purpose,
-      time: s.medianMs,
-      reached: s.reachedShare,
-      reachedN: s.reached,
-      cont: s.cont,
-      eng: s.n === 3 && ok ? `${pct(ok.trust)} open the Trust Zone` : "—",
-    })),
-    {
-      name: "Consent · Before we begin",
-      purpose: "18+ confirmation and terms; I agree or Return to site",
-      time: null,
-      reached: null,
-      reachedN: null,
-      cont: ok ? share(ok.agreed) : null,
-      eng: ok ? `Return to site ${pct(ok.returned)} · read the terms ${pct(ok.terms)}` : "—",
-    },
-  ].map((card, i) => ({ ...card, n: i + 1 }));
+  const eng = (step: string) =>
+    !ok
+      ? "—"
+      : step === "intro_view"
+        ? `${pct(ok.silhouette)} tap the silhouette`
+        : step === "intro_slide_3"
+          ? `${pct(ok.trust)} open the Trust Zone`
+          : step === "consent_view"
+            ? `Return to site ${pct(ok.returned)} · read the terms ${pct(ok.terms)}`
+            : "—";
+  const cards: IntroRowData[] = data.intro.cards.map((card, i) => ({
+    ...card,
+    n: i + 1,
+    time: card.medianMs,
+    // Before the consent recorded itself: PostHog's share of survey sessions that agreed.
+    cont:
+      card.cont ??
+      (data.intro.recordedFrom && card.step === "consent_view" && ok ? share(ok.agreed) : null),
+    eng: eng(card.step),
+  }));
   return (
     <Card id="wizard" labelledBy="h-wiz">
       <SectionHead
@@ -355,14 +368,23 @@ function IntroSection({ data }: { data: SurveyPayload }) {
           PostHog could not be read{c && !c.ok ? `: ${c.error}` : ""}.
         </p>
       )}
+      {data.intro.recordedFrom && (
+        <NotTracked>
+          Skip intro, Back, Exit and the intro and consent rows are recorded from{" "}
+          {data.intro.recordedFrom}: pick a range from that day on
+        </NotTracked>
+      )}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-        <div role="table" aria-label="Intro wizard cards" style={{ minWidth: 840 }}>
+        <div role="table" aria-label="Intro wizard cards" style={{ minWidth: 1080 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: INTRO_GRID }}>
             <Th label="#" />
             <Th label="Card" />
             <Th label="Time" sortKey="time" sort={sort} onSort={setSort} right />
             <Th label="Reached" sortKey="reached" sort={sort} onSort={setSort} />
             <Th label="Continue" sortKey="cont" sort={sort} onSort={setSort} right />
+            <Th label="Skip intro" sortKey="skip" sort={sort} onSort={setSort} right />
+            <Th label="Back" sortKey="back" sort={sort} onSort={setSort} right />
+            <Th label="Exit" sortKey="exit" sort={sort} onSort={setSort} right />
             <Th label="Engagement on card" />
           </div>
           {sortRows(cards, sort).map((card) => (
@@ -371,20 +393,21 @@ function IntroSection({ data }: { data: SurveyPayload }) {
         </div>
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Slides 1 to 4: time, reached and continue come from our own records, which the slides only
-        send for visitors who accepted cookies, so they describe those visitors only. Time is the
-        median from a slide to the next screen; slide 4’s runs to question 1, so it includes the
-        consent card. Most skips: the slide most of those visitors left for question 1 without the
-        next slide. The boxes, the intro and the consent: clicks PostHog recorded on the survey
-        page, as a share of its sessions there (it sees most survey sessions). Not recorded: time on
-        the intro and the consent; Back, Skip and leaving per card; Continue after slide 4 (the next
-        screen has no count of its own).
+        The cards: our own records, which the cards send only for visitors who accepted cookies, so
+        they describe those visitors only. Time: the median from a card to the next one (before{" "}
+        {SURVEY_TRACKING_DAY}, slide 4’s ran to question 1, past the consent). Continue: reached the
+        next card that day. Skip intro: pressed it on that slide. Back: the Back button, the arrow
+        key, a swipe or the browser’s Back (slide 1 and the consent have only the browser’s). Exit:
+        the furthest card that visitor reached that day. Most skips: the slide most of those
+        visitors left for question 1 without the next slide. The boxes and the engagement column:
+        clicks PostHog recorded on the survey page, as a share of its sessions there (it sees most
+        survey sessions), as is the consent’s continue before {SURVEY_TRACKING_DAY}.
       </p>
     </Card>
   );
 }
 
-function IntroRow({ card }: { card: IntroCard }) {
+function IntroRow({ card }: { card: IntroRowData }) {
   return (
     <div
       role="row"
@@ -409,20 +432,22 @@ function IntroRow({ card }: { card: IntroCard }) {
         ) : (
           <>
             <span className="flex-1">
-              <Bar pct={card.reached} height={8} />
+              <Bar pct={card.reachedShare} height={8} />
             </span>
-            <span className="text-xs font-bold tabular-nums">{fmt("pct", card.reached, 0)}</span>
-            {card.reachedN != null && (
-              <span className="text-[11px] text-ap-muted tabular-nums">
-                {fmt("count", card.reachedN)}
-              </span>
-            )}
+            <span className="text-xs font-bold tabular-nums">
+              {fmt("pct", card.reachedShare, 0)}
+            </span>
+            <span className="text-[11px] text-ap-muted tabular-nums">
+              {fmt("count", card.reached)}
+            </span>
           </>
         )}
       </span>
-      <span role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
-        {fmt("pct", card.cont, 1)}
-      </span>
+      {[card.cont, card.skip, card.back, card.exit].map((v, i) => (
+        <span key={i} role="cell" className="px-3 py-2.5 text-right text-[13px] tabular-nums">
+          {fmt("pct", v, 1)}
+        </span>
+      ))}
       <span role="cell" className="px-3 py-2.5 text-xs leading-snug text-ap-body">
         {card.eng}
       </span>

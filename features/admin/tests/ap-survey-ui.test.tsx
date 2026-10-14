@@ -110,6 +110,23 @@ describe("the Survey page as drawn", () => {
     expect(column(intro, 1)).toEqual(["5.0 s", "12.0 s", "1:05", "—", "—", "—"]);
   });
 
+  it("intro: Skip intro, Back and Exit columns, which say when they start for an earlier range", () => {
+    render(<ApSurvey />);
+    const intro = "Intro wizard cards";
+    for (const name of ["Skip intro", "Back", "Exit"]) {
+      expect(within(table(intro)).getByRole("button", { name: `Sort by ${name}` })).toBeTruthy();
+    }
+    // 1 to 7 Oct is before the tracking day: no zeros, a note saying when they start.
+    for (const i of [4, 5, 6]) expect(new Set(column(intro, i))).toEqual(new Set(["—"]));
+    expect(
+      screen.getByText(/recorded from 15 Oct 2026: pick a range from that day on/)
+    ).toBeTruthy();
+    // Before the consent recorded itself, its continue is PostHog's: 60 agreed of 100 sessions.
+    expect(column(intro, 3)[5]).toBe("60.0%");
+    // The device card: tablets are recorded from the same day.
+    expect(screen.getByText("Recorded from 15 Oct 2026")).toBeTruthy();
+  });
+
   it("funnel: no orange for a question first asked in the range; sorts; shares the search", () => {
     render(<ApSurvey />);
     const funnel = "Survey question funnel";

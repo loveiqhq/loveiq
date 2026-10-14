@@ -9,7 +9,7 @@ import { addDays } from "./days";
 import type { AdCost } from "@features/brain/server/ingest/analytics";
 
 import { classifySource, deviceClass, type Facts, type SubFact } from "./facts";
-import { trendBuckets, type ApFilters } from "./filters";
+import { rangeLabel, SURVEY_TRACKING_FROM, trendBuckets, type ApFilters } from "./filters";
 
 /** Survey steps record the device from this day (migration 20261012093000). */
 export const STEP_DEVICE_FROM = "2026-10-12";
@@ -66,6 +66,9 @@ export function startsBlocked(scope: Scope, from: string, today: string): string
   if (scope.tier !== "all") return "Survey starts don't record the country tier.";
   if (scope.device !== "all" && from < STEP_DEVICE_FROM) {
     return "Survey starts record the device from 12 Oct 2026.";
+  }
+  if (scope.device === "tablet" && from < SURVEY_TRACKING_FROM) {
+    return `Survey starts tell tablets apart from ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}.`;
   }
   if (scope.source !== "all" && from < draftsKeptFrom(today)) {
     return "An unfinished start keeps its source only while its draft does (30 days): older starts can't be split by source.";
