@@ -9,6 +9,8 @@ import { buildReportPage, type ReportExtras } from "@features/admin/server/ap/re
 import { buildSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage, demoCard } from "@features/admin/server/ap/survey-page";
 import type { DropoffRun } from "@features/admin/server/dropoff-report";
+import { askedQuestions } from "@features/admin/server/dropoff-weekly";
+import { C13_OPENING } from "@features/survey/ui/questionOrder";
 
 import { factsFixture, sub } from "./ap-fixtures";
 
@@ -106,33 +108,56 @@ function nonFinite(o: unknown, path = ""): string[] {
 }
 
 describe("buildSurveyQuestions", () => {
-  it("marks a question first reached after the range's first day as new in the range", () => {
-    const run = (sessionId: string, startedAt: string, reached: string[]): DropoffRun => ({
-      sessionId,
-      startedAt: Date.parse(startedAt),
-      reached,
-      leftAt: null,
-      source: "other",
-      device: null,
-    });
-    const q = buildSurveyQuestions(
-      [
-        // 23:30 UTC on 30 Sep is already 1 Oct in Berlin: the range's first day.
-        run("a", "2026-09-30T23:30:00Z", ["16015"]),
-        run("b", "2026-10-03T09:00:00Z", ["16015", "16016"]),
-        run("c", "2026-10-04T09:00:00Z", ["16016"]),
-      ],
+  const run = (sessionId: string, startedAt: string, reached: string[]): DropoffRun => ({
+    sessionId,
+    startedAt: Date.parse(startedAt),
+    reached,
+    leftAt: null,
+    source: "other",
+    device: null,
+  });
+  /** Every question today, in today's order: what a run through to the end reaches. */
+  const EVERY = askedQuestions(400).map((q) => q.qId);
+  const without = (id: string) => EVERY.filter((x) => x !== id);
+  const questions = (runs: DropoffRun[]) =>
+    buildSurveyQuestions(
+      runs,
       { steps: [], exits: [] },
       "2026-10-01",
       "2026-10-07",
       "All traffic",
       null
     );
+
+  it("marks a question new only where the range's first runs went to the end without it", () => {
+    const q = questions([
+      // 21:00 UTC on 30 Sep is 23:00 in Berlin, before the range: its first steps fall before
+      // it, so its reaching only the end says nothing.
+      run("before", "2026-09-30T21:00:00Z", ["00000", "16015"]),
+      // 23:30 UTC on 30 Sep is already 1 Oct in Berlin, the range's first day. The opening
+      // order test's other opening asks later questions first; this run left after it, so it
+      // went past none of the questions that opening moves on.
+      run("opening", "2026-09-30T23:30:00Z", [...C13_OPENING]),
+      // To the end before 16016 was asked; the next runs had it.
+      run("a", "2026-10-02T09:00:00Z", without("16016")),
+      run("b", "2026-10-03T09:00:00Z", EVERY),
+      run("c", "2026-10-04T09:00:00Z", EVERY),
+    ]);
     const row = (id: string) => q.rows.find((r) => r.id === id)!;
     expect(row("16016")).toMatchObject({ reached: 2, newInRange: true });
-    expect(row("16015")).toMatchObject({ reached: 2, newInRange: false });
-    // Reached by no one: nothing says it is new.
-    expect(row("16017")).toMatchObject({ reached: 0, newInRange: false });
+    // Nobody reached them on the range's first day, but they were asked all along.
+    expect(row("16015")).toMatchObject({ reached: 4, newInRange: false });
+    expect(row(EVERY[30]!)).toMatchObject({ reached: 3, newInRange: false });
+    expect(q.rows.filter((r) => r.newInRange).map((r) => r.id)).toEqual(["16016"]);
+
+    // Not reached by anyone: new only if a run went through to the end without it.
+    const early = questions([run("x", "2026-10-02T09:00:00Z", EVERY.slice(0, 5))]);
+    expect(early.rows.filter((r) => r.newInRange)).toEqual([]);
+    const passed = questions([run("x", "2026-10-02T09:00:00Z", without("16017"))]);
+    expect(passed.rows.find((r) => r.id === "16017")).toMatchObject({
+      reached: 0,
+      newInRange: true,
+    });
 
     // Our own finished test runs are left out of reach, exits and the people count.
     const mine = buildSurveyQuestions(
@@ -253,7 +278,7 @@ describe("page builders", () => {
     // 24 to 30 Sep holds every start: compared as usual.
     const week = surveyPage({ previous: lastWeek });
     expect(foot(week, "starts")).toBe("vs 0");
-    expect(foot(week, "completion")).toBe("of the starts, finished (so far)");
+    expect(foot(week, "completion")).toBe("of starts submit (so far)");
     // No comparison at all is not a gap.
     expect(foot(surveyPage({ previous: null }), "starts")).toBe(
       "answered at least the first question"
@@ -314,7 +339,7 @@ describe("page builders", () => {
     const completion = surveyPage({ previous: week }).tiles.find((t) => t.key === "completion")!;
     expect(completion).toMatchObject({
       prev: 0.5,
-      foot: "of the starts, finished (so far) · vs 50.0%",
+      foot: "of starts submit (so far) · vs 50.0%",
     });
 
     const people = factsFixture({

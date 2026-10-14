@@ -121,11 +121,13 @@ function QuickRanges({
   onPick: (from: string, to: string) => void;
 }) {
   const month = `${today.slice(0, 8)}01`;
+  const yesterday = addDays(today, -1);
+  // Ranges end yesterday, as on the other pages; on the 1st, this month is today alone.
   const ranges: Array<[string, string, string]> = [
     ["Today", today, today],
-    ["7 days", addDays(today, -7), addDays(today, -1)],
-    ["30 days", addDays(today, -30), addDays(today, -1)],
-    ["This month", month, today],
+    ["7 days", addDays(today, -7), yesterday],
+    ["30 days", addDays(today, -30), yesterday],
+    ["This month", month, yesterday < month ? today : yesterday],
   ];
   return (
     <>
@@ -1003,6 +1005,8 @@ export default function ApExplorer() {
                             f &&
                             (f.type === "json" || f.type === "jsonb" || f.type.endsWith("[]"))
                           );
+                        // Not kept on one line: where the columns are tight the buttons go under
+                        // the name, as the design's do, so the nine default columns fit at 1440px.
                         return (
                           <th
                             key={c}
@@ -1010,7 +1014,7 @@ export default function ApExplorer() {
                             aria-sort={
                               sort === c ? (dir === "asc" ? "ascending" : "descending") : "none"
                             }
-                            className={`whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-bold text-ap-muted ${amounts.has(c) ? "text-right" : "text-left"}`}
+                            className={`px-3 py-2.5 font-mono text-[11px] font-bold text-ap-muted ${amounts.has(c) ? "text-right" : "text-left"}`}
                           >
                             {c}
                             {filterable && (

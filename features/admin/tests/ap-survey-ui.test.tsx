@@ -6,7 +6,9 @@ import type { AnswerSplit } from "@features/admin/server/ap/answers";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { buildSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage } from "@features/admin/server/ap/survey-page";
+import type { Table } from "@features/admin/server/ap/overview";
 import type { DropoffRun } from "@features/admin/server/dropoff-report";
+import { askedQuestions } from "@features/admin/server/dropoff-weekly";
 
 import { factsFixture } from "./ap-fixtures";
 
@@ -18,14 +20,17 @@ const run = (sessionId: string, startedAt: string, reached: string[]): DropoffRu
   source: "other",
   device: null,
 });
-// 16014 is reached by three people from before the range, 16019 (next in today's order) by
-// one who began during it: a fall to a third, but 16019 was first asked in the range.
+// The range's first two runs went through to the end before 16019 was asked; the last one had
+// it: 16014 is reached by three, 16019 (next in today's order) by one, a fall to a third, but
+// 16019 was added in the range. The third run left on question 1, so 01002 really loses one.
+const every = askedQuestions(400).map((q) => q.qId);
+const before16019 = every.filter((id) => id !== "16019");
 const questions = buildSurveyQuestions(
   [
-    run("a", "2026-09-30T10:00:00Z", ["00001", "01002", "16014"]),
-    run("b", "2026-09-30T10:00:00Z", ["00001", "01002", "16014"]),
-    run("c", "2026-09-30T10:00:00Z", ["00001", "16014"]),
-    run("d", "2026-10-03T10:00:00Z", ["00001", "16019"]),
+    run("a", "2026-10-01T10:00:00Z", before16019),
+    run("b", "2026-10-01T11:00:00Z", before16019),
+    run("c", "2026-10-02T10:00:00Z", ["00001"]),
+    run("d", "2026-10-03T10:00:00Z", every),
   ],
   { steps: [], exits: [] },
   "2026-10-01",
@@ -83,6 +88,13 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 vi.mock("@features/admin/ui/ap/ApOverview", () => ({ RangeLine: () => null }));
+// The CSV's tables as the page hands them over, without a download.
+const exported = vi.hoisted(() => ({ sections: [] as Array<{ name: string; table: Table }> }));
+vi.mock("@features/admin/ui/ap/csv", () => ({
+  exportTables: (_file: string, sections: Array<{ name: string; table: Table }>) => {
+    exported.sections = sections;
+  },
+}));
 
 import ApSurvey from "@features/admin/ui/ap/ApSurvey";
 
@@ -139,6 +151,16 @@ describe("the Survey page as drawn", () => {
     expect(column(intro, 3)[5]).toBe("60%");
     // The device card: tablets are recorded from the same day.
     expect(screen.getByText("Recorded from 15 Oct 2026")).toBeTruthy();
+  });
+
+  it("intro CSV: the consent's Continue as the table shows it, PostHog's before our own", () => {
+    render(<ApSurvey />);
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const intro = exported.sections.find((s) => s.name.startsWith("Intro wizard"))!.table;
+    // A row's values follow its name: each sits one place left of its column.
+    const cont = intro.columns.findIndex((c) => c.label === "Continue") - 1;
+    expect(column("Intro wizard cards", 3)[5]).toBe("60%");
+    expect(intro.rows[5]!.values[cont]).toBe(0.6);
   });
 
   it("intro from the tracking day: our own first two boxes, kept when PostHog fails, and the reds", () => {
@@ -201,6 +223,19 @@ describe("the Survey page as drawn", () => {
     expect(cell(2, 4).className).not.toContain("text-ap-bad");
     expect(cell(5, 6).className).toContain("font-bold text-ap-bad");
     expect(cell(1, 6).className).not.toContain("text-ap-bad");
+
+    // Reached sorts by the share it shows. The consent's 6 include the two from the landing
+    // page: by that count it would sit above slides 3 and 4 (5 each); by its 40% it is last.
+    fireEvent.click(within(table(intro)).getByRole("button", { name: "Sort by Reached" }));
+    expect(column(intro, 0)).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(column(intro, 2).map((t) => t!.match(/^\d+%/)![0])).toEqual([
+      "100%",
+      "80%",
+      "60%",
+      "50%",
+      "50%",
+      "40%",
+    ]);
   });
 
   it("reads as drawn: the page's line, completed counts, the detail's step and its answers", () => {
@@ -257,5 +292,28 @@ describe("the Survey page as drawn", () => {
     fireEvent.click(filter);
     expect(search).toHaveProperty("value", "");
     expect(rows(funnel).length).toBeGreaterThan(50);
+  });
+
+  it("funnel: shades a real fall in a quiet range, though nobody reached it on the first day", () => {
+    // Nobody began on 1 Oct. One run went to the end on the 2nd; one left on the 3rd after
+    // question 31. Question 32 keeps one of the two, and was asked all along: shaded.
+    view.payload = {
+      ...payload,
+      questions: buildSurveyQuestions(
+        [
+          run("p", "2026-10-02T10:00:00Z", every),
+          run("q", "2026-10-03T10:00:00Z", every.slice(0, 31)),
+        ],
+        { steps: [], exits: [] },
+        "2026-10-01",
+        "2026-10-07",
+        "All traffic",
+        null
+      ),
+    };
+    render(<ApSurvey />);
+    const row = rows("Survey question funnel").find((r) => r.textContent!.includes(every[31]!))!;
+    expect(row.textContent).toContain("50.0%");
+    expect(row.className).toContain("bg-ap-orange");
   });
 });

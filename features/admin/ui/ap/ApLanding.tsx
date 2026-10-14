@@ -139,7 +139,8 @@ function TestsTable({ data }: { data: LandingPayload }) {
       <FilterIcon />
     </button>
   );
-  const gtc = "minmax(220px, 2fr) minmax(96px, 0.8fr) repeat(7, minmax(92px, 1fr))";
+  // The design's columns: on a phone the test and status leave part of Visits in view.
+  const gtc = "minmax(200px, 2fr) minmax(90px, 0.8fr) repeat(7, minmax(84px, 1fr))";
   return (
     <Card id="tests" labelledBy="h-tests">
       <SectionHead
@@ -160,7 +161,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
               <option value="all">All tests</option>
               {tests.map((k) => (
                 <option key={k} value={k}>
-                  {data.rows.find((r) => r.testKey === k)?.testShort ?? k}
+                  {data.rows.find((r) => r.testKey === k)?.test ?? k}
                 </option>
               ))}
             </select>
@@ -184,7 +185,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
         <p className="m-0 text-sm text-ap-muted">No landing test ran in this range.</p>
       ) : (
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-          <div role="table" aria-label="Landing tests and variants" style={{ minWidth: 1040 }}>
+          <div role="table" aria-label="Landing tests and variants" style={{ minWidth: 980 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <span
                 role="columnheader"
@@ -240,8 +241,8 @@ function TestsTable({ data }: { data: LandingPayload }) {
                 style={{ gridTemplateColumns: gtc }}
               >
                 <span role="cell" className="flex min-w-0 flex-col gap-0.5 px-3.5 py-2.5">
-                  <span className="truncate text-[13px] font-bold text-ap-ink" title={r.test}>
-                    {r.testShort}
+                  <span className="truncate text-sm font-semibold text-ap-ink" title={r.test}>
+                    {r.test}
                   </span>
                   <span className="text-xs text-ap-muted">
                     {r.label} · {rangeLabel(r.from, r.to)}
@@ -283,6 +284,11 @@ function TestsTable({ data }: { data: LandingPayload }) {
         </div>
       )}
       <div className="flex flex-col gap-1.5 text-xs leading-relaxed text-ap-muted">
+        {data.unread.map((u) => (
+          <p key={u} className="m-0 text-ap-bad-ink">
+            {u}
+          </p>
+        ))}
         {data.outside.length > 0 && (
           <p className="m-0">Not in this range: {data.outside.join(" · ")}.</p>
         )}
@@ -445,12 +451,15 @@ function EngagementCard({ data }: { data: LandingPayload }) {
               },
               { label: "CTA clicks", value: fmt("pct", e.value.cta, 1) },
             ].map((s) => (
+              // The design's 22px where the box has room. A narrow box (on a phone, or with the
+              // two cards side by side on a tablet or a small laptop) scales it down: "100.0%",
+              // the widest value, is about 3.7 times its font size wide, so a quarter fits.
               <div
                 key={s.label}
-                className="flex min-w-0 flex-col gap-1 rounded-[14px] bg-ap-ground p-3"
+                className="flex min-w-0 flex-col gap-1 rounded-[14px] bg-ap-ground p-3 [container-type:inline-size]"
               >
                 <span className="text-xs text-ap-muted">{s.label}</span>
-                <span className="font-serif text-[22px] font-semibold tabular-nums text-ap-ink">
+                <span className="font-serif text-[length:min(22px,25cqi)] font-semibold tabular-nums text-ap-ink">
                   {s.value}
                 </span>
               </div>
