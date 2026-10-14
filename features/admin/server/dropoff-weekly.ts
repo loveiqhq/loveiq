@@ -12,11 +12,15 @@
  * job reads it per person (`dropoff-report.ts`), the same numbers, so the page's
  * filters can cut it by traffic source and by the survey tests.
  */
+import { addDays, shortDate } from "@features/admin/server/ap/days";
 import { surveyQuestionNames } from "@features/admin/server/friction-metrics";
 import { HIDDEN_QIDS } from "@features/survey/questionFlags";
 import { orderAskedQuestions } from "@features/survey/ui/questionOrder";
 import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import { surveyQuestions } from "@/data/survey-data";
+
+// Day arithmetic lives in a module the browser can load (the AP-Analytics filter bar uses it).
+export { addDays, shortDate };
 
 /** 📊 KPI › Survey Drop-off Rate per Question %. */
 export const DROPOFF_KPI_PAGE_ID = "35500a24-0f11-4911-92dd-ff15ff499d1d";
@@ -44,18 +48,6 @@ export interface DropoffWeek {
 }
 
 /** `YYYY-MM-DD` plus n days, on the calendar (no time zone involved). */
-export function addDays(day: string, n: number): string {
-  const [y = 1970, m = 1, d = 1] = day.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
-}
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "21 Sep". Spelled out here because ICU builds disagree ("Sep" vs "Sept"). */
-export function shortDate(day: string): string {
-  const [, m = 1, d = 1] = day.split("-").map(Number);
-  return `${d} ${MONTHS[m - 1]}`;
-}
 
 /**
  * Up to `completeWeeks` (eight) complete Monday-to-Sunday weeks (Berlin days) from

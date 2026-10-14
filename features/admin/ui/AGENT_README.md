@@ -29,3 +29,4 @@ If you only know the product problem, start with [`docs/admin/domains/AGENT_READ
 - `CommandCenterDashboard.tsx`: active `/admin` landing surface
 - `AdminStatsDashboard.tsx`: standalone stats-heavy dashboard component, not the default `/admin` page
 - `hooks/useAdminFetch.ts`: common client-side admin data loader
+- `ap/`: AP-Analytics, its own light shell (`ApShell.tsx`, `ApSidebar.tsx`, `ApFilterBar.tsx`) and one component per page; the building blocks are in `ap/kit.tsx`. It imports only browser-safe server modules (`format`, `filters`, `days`, `explorer-spec`)

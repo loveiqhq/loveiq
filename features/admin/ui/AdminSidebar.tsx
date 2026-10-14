@@ -12,6 +12,12 @@ const analyticsItems = [
     icon: "M3 12h4l3 8 4-16 3 8h4",
   },
   {
+    // Marcus's analytics admin (12 Oct 2026 design): its own light shell, back here by its footer.
+    href: "/admin/ap",
+    label: "AP-Analytics",
+    icon: "M4 20V10m6 10V4m6 16v-7M2 20h20",
+  },
+  {
     href: "/admin/analytics",
     label: "Core KPIs",
     icon: "M9 19V6l7 13V6m4 13V10m-4 9V3m-8 16V13",
