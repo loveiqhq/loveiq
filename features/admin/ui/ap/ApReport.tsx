@@ -984,13 +984,13 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         <span className="text-xs leading-relaxed text-ap-muted">
           Sent: emails sent in the range (marked just before sending, so a failed send still
           counts). Opened and Clicked: of those, readers whose email was opened, or a link in it
-          clicked, as Resend reports each email; the share of sent is under the count.{" "}
-          {r.emailEvents} Opens are inflated by Apple Mail, which loads images for privacy, so
-          clicks are the surer signal. Returned: of those sent, readers who opened their report from
-          the email&rsquo;s link after it was sent, as the report records every such arrival since
-          18 Sep 2026. It replaces PostHog&rsquo;s count, which saw only about a quarter of visits.
-          Return rate = returned ÷ sent. Purchased: sales in the range that used the email&rsquo;s
-          code.
+          clicked, as Resend reports each email; under the count, the share of the emails Resend
+          reported delivered. {r.emailEvents} Opens are inflated by Apple Mail, which loads images
+          for privacy, so clicks are the surer signal. Returned: of those sent, readers who opened
+          their report from the email&rsquo;s link after it was sent, as the report records every
+          such arrival since 18 Sep 2026. It replaces PostHog&rsquo;s count, which saw only about a
+          quarter of visits. Return rate = returned ÷ sent. Purchased: sales in the range that used
+          the email&rsquo;s code.
         </span>
       </div>
     </Card>

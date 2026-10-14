@@ -436,51 +436,50 @@ describe("report page", () => {
     ).toMatchObject({ returned: null, returnRate: null });
   });
 
-  it("opens and clicks count, with their share of sent, from the first whole day each was kept", () => {
+  it("opens and clicks count from the day each was kept, out of the emails delivered since", () => {
+    // 40 sent in the range, 16 of them reported delivered (tracking began part way), 12 of
+    // those after open tracking was switched on.
     const row = {
       stage: "72h_no_unlock",
       sent: 40,
-      opened: 20,
-      clicked: 5,
+      delivered: 16,
+      delivered_opens: 12,
+      opened: 6,
+      clicked: 4,
       returned: 10,
       bought: 2,
       revenue: 7,
     };
-    // The fixture's range starts on 1 Oct.
     const returns = (events: string | null, opens: string | null) =>
       page({
         extras: { ...extras, emails: [row], email_events_from: events, email_opens_from: opens },
       }).returns;
 
-    const both = returns("2026-09-29", "2026-09-29");
+    // Recording began after the range's first day: the range still counts, out of what was seen.
+    const both = returns("2026-10-03", "2026-10-04");
     expect(both.campaigns[0]).toMatchObject({
-      opened: 20,
+      sent: 40,
+      opened: 6,
       openRate: 0.5,
-      clicked: 5,
-      clickRate: 0.125,
+      clicked: 4,
+      clickRate: 0.25,
     });
     // A retired stage sent nothing: none opened, and no share of nothing.
     expect(both.campaigns[1]).toMatchObject({ opened: 0, openRate: null, clicked: 0 });
     expect(both.emailEvents).toBe(
-      "Opens and clicks count from 30 Sep 2026, the first whole day recorded; a range that starts earlier shows —."
+      "Clicks are of the emails delivered since 3 Oct 2026, and opens of those delivered since 4 Oct 2026, when open tracking began."
+    );
+    expect(returns("2026-10-03", "2026-10-03").emailEvents).toBe(
+      "Opens and clicks are of the emails delivered since 3 Oct 2026, when recording began."
     );
 
     // Opens are switched on later than the rest: until one is kept, opens stay blank.
-    const clicksOnly = returns("2026-09-30", null);
-    expect(clicksOnly.campaigns[0]).toMatchObject({ opened: null, openRate: null, clicked: 5 });
+    const clicksOnly = returns("2026-10-03", null);
+    expect(clicksOnly.campaigns[0]).toMatchObject({ opened: null, openRate: null, clicked: 4 });
     expect(clicksOnly.emailEvents).toBe(
-      "Clicks count from 1 Oct 2026, the first whole day recorded (a range that starts earlier shows —); opens are not recorded yet."
-    );
-    expect(returns("2026-09-20", "2026-09-27").emailEvents).toBe(
-      "Clicks count from 21 Sep 2026 and opens from 28 Sep 2026, the first whole days recorded; a range that starts earlier shows —."
+      "Clicks are of the emails delivered since 3 Oct 2026, when recording began; opens are not recorded yet."
     );
 
-    // The first day kept is partial (sends before the deploy carried no tags): a range
-    // starting on it is not counted, nor one before anything was kept.
-    expect(returns("2026-10-01", "2026-10-01").campaigns[0]).toMatchObject({
-      opened: null,
-      clicked: null,
-    });
     const none = returns(null, null);
     expect(none.campaigns[0]).toMatchObject({ opened: null, clicked: null });
     expect(none.emailEvents).toBe("Opens and clicks are not recorded yet.");
@@ -605,6 +604,8 @@ describe("report page, on screen", () => {
         {
           stage: "72h_no_unlock",
           sent: 8,
+          delivered: 8,
+          delivered_opens: 8,
           opened: 4,
           clicked: 1,
           returned: 2,
@@ -641,11 +642,13 @@ describe("report page, on screen", () => {
     ]);
     const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
     expect(campaigns.getByText("25.0%")).toBeInTheDocument();
-    // Opened and Clicked: the count, its share of sent under it.
+    // Opened and Clicked: the count, its share of the delivered emails under it.
     expect(campaigns.getByText("50.0%")).toBeInTheDocument();
     expect(campaigns.getByText("12.5%")).toBeInTheDocument();
     expect(
-      screen.getByText(/Clicks count from 21 Sep 2026 and opens from 26 Sep 2026/)
+      screen.getByText(
+        /Clicks are of the emails delivered since 20 Sep 2026, and opens of those delivered since 25 Sep 2026/
+      )
     ).toBeInTheDocument();
     expect(screen.getByText(/Opens are inflated by Apple Mail/)).toBeInTheDocument();
     // Both sort: the second press turns low to high, so the one opened email goes last.

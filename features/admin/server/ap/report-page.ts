@@ -7,7 +7,7 @@ import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 import { supabaseFetch } from "@features/admin/server/supabase";
 
 import { assessmentScope } from "./assessment";
-import { addDays, shortDate } from "./days";
+import { shortDate } from "./days";
 import { type Facts, type SubFact } from "./facts";
 import { activeNarrowing, bucketCaption, rangeLabel, type ApFilters } from "./filters";
 import {
@@ -81,6 +81,9 @@ export interface ReportExtras {
   emails: Array<{
     stage: string;
     sent: number;
+    /** Reported delivered by the webhook (all of it, and since open tracking began). */
+    delivered: number | null;
+    delivered_opens: number | null;
     opened: number | null;
     clicked: number | null;
     returned: number | null;
@@ -135,6 +138,8 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
     emails: raw.emails.map((e) => ({
       ...e,
       returned: e.returned ?? null,
+      delivered: e.delivered ?? null,
+      delivered_opens: e.delivered_opens ?? null,
       opened: e.opened ?? null,
       clicked: e.clicked ?? null,
     })),
@@ -669,27 +674,26 @@ export function buildReportPage(input: {
       sources = input.returns;
     }
   }
-  // An email's opens and clicks count from the first whole day the webhook kept them (opens
-  // start later: open tracking is switched on after the rest). A range that starts earlier
-  // would count only part of its emails, so it shows none.
-  const opensFrom = wholeDayAfter(extras.email_opens_from);
-  const clicksFrom = wholeDayAfter(extras.email_events_from);
-  const counted = (from: string | null) => from !== null && facts.from >= from;
+  // Opens and clicks are of the emails the webhook reported delivered: clicks once it kept any
+  // event, opens of those delivered after open tracking was switched on (later than the rest).
+  // So a range reaching back before tracking still counts right, out of the emails it saw.
+  const opensFrom = extras.email_opens_from;
+  const clicksFrom = extras.email_events_from;
   const campaigns = ["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"].map((stage) => {
     const e = extras.emails.find((x) => x.stage === stage);
     // No row: nothing was sent (or bought) for the stage, so nobody came back from it.
     const returned = e ? e.returned : 0;
     const sent = e?.sent ?? 0;
-    const opened = counted(opensFrom) ? (e ? e.opened : 0) : null;
-    const clicked = counted(clicksFrom) ? (e ? e.clicked : 0) : null;
+    const opened = opensFrom ? (e ? e.opened : 0) : null;
+    const clicked = clicksFrom ? (e ? e.clicked : 0) : null;
     return {
       stage,
       status: stage === "72h_no_unlock" ? ("Live" as const) : ("Retired" as const),
       sent,
       opened,
-      openRate: ratio(opened, sent),
+      openRate: ratio(opened, e?.delivered_opens ?? null),
       clicked,
-      clickRate: ratio(clicked, sent),
+      clickRate: ratio(clicked, e?.delivered ?? null),
       returned,
       returnRate: ratio(returned, sent),
       purchased: e?.bought ?? 0,
@@ -801,24 +805,19 @@ export function buildReportPage(input: {
 }
 
 /** The day after the first (partial) day of recording: the first whole day, or null. */
-function wholeDayAfter(day: string | null): string | null {
-  return day === null ? null : addDays(day, 1);
-}
-
 /**
- * The note under the campaigns: since when opens and clicks are counted. Clicks count from the
- * first event of any kind, so they never start after opens.
+ * The note under the campaigns: what opens and clicks are out of, and since when. Clicks count
+ * from the first event of any kind, so they never start after opens.
  */
 function emailEventsNote(opens: string | null, clicks: string | null): string {
   const day = (d: string) => `${shortDate(d)} ${d.slice(0, 4)}`;
-  const earlier = "a range that starts earlier shows —";
   if (!clicks) return "Opens and clicks are not recorded yet.";
   if (!opens) {
-    return `Clicks count from ${day(clicks)}, the first whole day recorded (${earlier}); opens are not recorded yet.`;
+    return `Clicks are of the emails delivered since ${day(clicks)}, when recording began; opens are not recorded yet.`;
   }
   return opens === clicks
-    ? `Opens and clicks count from ${day(clicks)}, the first whole day recorded; ${earlier}.`
-    : `Clicks count from ${day(clicks)} and opens from ${day(opens)}, the first whole days recorded; ${earlier}.`;
+    ? `Opens and clicks are of the emails delivered since ${day(clicks)}, when recording began.`
+    : `Clicks are of the emails delivered since ${day(clicks)}, and opens of those delivered since ${day(opens)}, when open tracking began.`;
 }
 
 function pct(v: number | null): string {

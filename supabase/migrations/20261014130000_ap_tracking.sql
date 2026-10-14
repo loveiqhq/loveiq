@@ -613,7 +613,12 @@ AS $function$
     SELECT se.stage, count(DISTINCT se.sid) AS n, count(DISTINCT a.survey_submission_id) AS returned,
            count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'delivered') AS delivered,
            count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'opened') AS opened,
-           count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'clicked') AS clicked
+           count(DISTINCT m.survey_submission_id) FILTER (WHERE m.event_type = 'clicked') AS clicked,
+           -- Delivered after open tracking began: what an open rate can be out of.
+           count(DISTINCT m.survey_submission_id) FILTER (
+             WHERE m.event_type = 'delivered'
+               AND m.first_at >= (SELECT min(o.first_at) FROM email_message_event o WHERE o.event_type = 'opened')
+           ) AS delivered_opens
       FROM sends se
       CROSS JOIN b
       LEFT JOIN analytics_event a
@@ -670,10 +675,12 @@ AS $function$
                    FROM (SELECT * FROM votes ORDER BY created_at DESC LIMIT 200) v),
     'votes_total', (SELECT count(*) FROM votes),
     'emails', (SELECT coalesce(json_agg(json_build_object('stage', x.stage, 'sent', x.sent, 'returned', x.returned,
-                                                          'delivered', x.delivered, 'opened', x.opened, 'clicked', x.clicked,
+                                                          'delivered', x.delivered, 'delivered_opens', x.delivered_opens,
+                                                          'opened', x.opened, 'clicked', x.clicked,
                                                           'bought', x.bought, 'revenue', x.revenue)), '[]'::json)
                  FROM (SELECT coalesce(s.stage, bo.stage) AS stage, coalesce(s.n, 0) AS sent, coalesce(s.returned, 0) AS returned,
-                              coalesce(s.delivered, 0) AS delivered, coalesce(s.opened, 0) AS opened, coalesce(s.clicked, 0) AS clicked,
+                              coalesce(s.delivered, 0) AS delivered, coalesce(s.delivered_opens, 0) AS delivered_opens,
+                              coalesce(s.opened, 0) AS opened, coalesce(s.clicked, 0) AS clicked,
                               coalesce(bo.n, 0) AS bought, coalesce(bo.revenue, 0) AS revenue
                          FROM sent s FULL JOIN bought bo ON bo.stage = s.stage) x),
     -- The first Berlin day an email's own event was kept (deliveries and clicks count from it),
