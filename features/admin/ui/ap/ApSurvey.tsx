@@ -131,7 +131,7 @@ export default function ApSurvey() {
                     },
                   },
                   {
-                    name: "Intro wizard (cookie-accepting visitors)",
+                    name: "Intro wizard",
                     table: {
                       columns: [
                         { label: "Card", unit: "text" },
@@ -435,8 +435,8 @@ function IntroSection({ data }: { data: SurveyPayload }) {
         </div>
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        The cards: our own records, which the cards send only for visitors who accepted cookies, so
-        they describe those visitors only. Reached: of the visitors on the intro card (on slide 1
+        The cards: our own records, for every visitor from {SURVEY_TRACKING_DAY} (before it, only
+        for visitors who accepted cookies). Reached: of the visitors on the intro card (on slide 1
         for a range before {SURVEY_TRACKING_DAY}). People who start from the landing page’s question
         card skip the intro and land on the consent, so they are left out of the consent’s Reached
         share. Time: the median from a card to the next one (before {SURVEY_TRACKING_DAY}, slide 4’s

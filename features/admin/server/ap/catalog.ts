@@ -11,6 +11,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { columnPrivacy, isExported, unclassifiedColumns } from "@features/admin/server/team-export";
 
 import { DRAFTS } from "./field-drafts";
+import { rangeLabel, SURVEY_TRACKING_FROM } from "./filters";
 import { POSTHOG_FROM } from "./posthog";
 
 /**
@@ -352,8 +353,7 @@ const OUTSIDE: Array<
     source: "ga4",
     name: "sessions_daily",
     group: "Traffic",
-    description:
-      "Google Analytics per day and channel, as the company brain copies it every 15 minutes. Counts only visitors who accepted cookies, so it reads below our own visit log.",
+    description: `Google Analytics per day and channel, as the company brain copies it every 15 minutes. Before ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)} only visitors who accepted cookies; from then also cookieless visits, which Google counts only as far as its own modelling does, so it reads below our own visit log.`,
     key: ["date", "channel"],
     fields: [
       { name: "date", type: "date", description: "The day." },

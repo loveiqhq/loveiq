@@ -50,7 +50,8 @@ export interface IntroCard {
   name: string;
   purpose: string;
   /**
-   * Visitors who reached it (cookie-accepting visitors), and as a share of the first card. The
+   * Visitors who reached it (every visitor from SURVEY_TRACKING_FROM, before it only those who
+   * accepted cookies), and as a share of the first card. The
    * consent's share leaves out its visitors who saw no intro (they started from the landing
    * page's card), so it never passes the intro's reach.
    */

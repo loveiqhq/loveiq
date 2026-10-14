@@ -649,7 +649,9 @@ export function buildOverview(input: {
         label: "Intro completed",
         unit: "count" as Unit,
         value: introOf("intro_slide_4"),
-        note: `of ${introOf("intro_slide_1").toLocaleString("en-US")} who saw slide 1 (cookie-accepting visitors)${activeNarrowing(f).length ? " · all traffic" : ""}`,
+        // Every visitor from the tracking day; before it, the cards were recorded only for
+        // visitors who accepted cookies.
+        note: `of ${introOf("intro_slide_1").toLocaleString("en-US")} who saw slide 1${facts.from < SURVEY_TRACKING_FROM ? ` (before ${rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM)}, only visitors who accepted cookies)` : ""}${activeNarrowing(f).length ? " · all traffic" : ""}`,
       },
       { label: "Median duration", unit: "mmss" as Unit, value: t.surveyMedianMs },
       {
