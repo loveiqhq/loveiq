@@ -1094,11 +1094,13 @@ async function standalonePages(
    * of a job's table (`isGeneratedDatabase`) are rewritten daily, so they head the list
    * and took the cap from 13 Oct 2026: "KPI report data" had been moved under a page this
    * connection sees, 1,542 of 2,981 listed pages were the KPI tables' rows, every crawl
-   * was partial and the sweep stopped. Each hundred such rows now buys one more request,
+   * was partial and the sweep stopped. Each hundred such rows, or part of a hundred, buys one more request,
    * up to twice the cap, and the count is reported so the move can be undone.
    */
   let generatedRows = 0;
-  const limit = () => MAX_PAGES + Math.min(2 * MAX_PAGES, Math.floor(generatedRows / PAGE_SIZE));
+  // Rounded UP, so the job's rows never take a slot from the 2,500: 150 of them buy two
+  // requests, not one, or 50 pages people write would fall off the end.
+  const limit = () => MAX_PAGES + Math.min(2 * MAX_PAGES, Math.ceil(generatedRows / PAGE_SIZE));
   for (let page = 0; ; page++) {
     if (isOutOfTime()) {
       complete = false;

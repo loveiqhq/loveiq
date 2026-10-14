@@ -715,6 +715,27 @@ describe("rows of a job's table do not use up the listing cap", () => {
     expect(r.detail).toMatch(/move "KPI report data"/);
   });
 
+  /** A part of a hundred still buys a request, or those pages would come off the 2,500. */
+  it("keeps all 2,500 for pages people write when a job's rows are fewer than 100", async () => {
+    // 50 KPI rows and 2,500 pages people write, over 26 responses.
+    pageSearch = (cursor?: string) => {
+      const i = cursor ? Number(cursor) : 0;
+      const results = Array.from({ length: i === 25 ? 50 : 100 }, (_, k) =>
+        i === 0 && k < 50
+          ? {
+              id: `kpi-${k}`,
+              parent: { type: "database_id", database_id: DROPOFF_DATA_DATABASE_ID },
+            }
+          : { id: `p-${i}-${k}`, parent: { type: "workspace" }, properties: {} }
+      );
+      const more = i < 25;
+      return json({ results, has_more: more, next_cursor: more ? String(i + 1) : null });
+    };
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBeUndefined();
+    expect(r.detail).toMatch(/kpiRowsVisible=50 /);
+  });
+
   it("still stops at 2,500 pages people write, and blames nothing else", async () => {
     pageSearch = listing(40, () => false);
     const r = await ingestNotion(STAMP, () => false);
