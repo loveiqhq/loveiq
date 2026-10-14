@@ -12,6 +12,7 @@ import { activeNarrowing, bucketCaption, type ApFilters } from "./filters";
 import {
   EVENTS_COMPLETE_FROM,
   launched,
+  mean,
   median,
   ratio,
   subsIn,
@@ -21,7 +22,7 @@ import {
   ageMatched,
   sameAge,
 } from "./metrics";
-import { head, type PageHead, type Tile } from "./overview";
+import { head, readFoot, type PageHead, type Tile } from "./overview";
 import type { PostHogResult, ReportReturns } from "./posthog";
 import { genderLabel } from "./survey-page";
 
@@ -241,10 +242,6 @@ function timeShares(list: SubFact[]): number[] {
   );
 }
 
-function mean(values: number[]): number | null {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-}
-
 const DAY_BANDS: Array<[string, number, number]> = [
   ["Same day", 0, 0],
   ["1 day", 1, 1],
@@ -283,7 +280,7 @@ export function buildReportPage(input: {
   const readers = subs.filter((s) => s.openedAt);
   const rec = recorded(subs);
   const prevSubs = prevAged ? subsIn(prevAged, scope) : [];
-  const readMedian = (list: SubFact[]) => median(recorded(list).map((s) => s.readMs));
+  const readMean = (list: SubFact[]) => mean(recorded(list).map((s) => s.readMs));
   const per = (pick: (x: SubFact[]) => number, list: SubFact[]) =>
     ratio(pick(list), list.filter((s) => s.openedAt).length);
   const returnedShare = (list: SubFact[]) =>
@@ -348,13 +345,13 @@ export function buildReportPage(input: {
     ),
     tile(
       "read",
-      "Read time (median)",
+      "Avg. read time",
       "mmss",
-      readMedian(subs),
+      readMean(subs),
       // Reading time has no time per step, so it cannot be cut at the same age.
       null,
-      `median per reader, recorded for ${n(rec.length)} of ${n(readers.length)}${previous ? " · not compared: earlier readers' later visits count too" : ""}`,
-      spark((l) => readMedian(l))
+      `${readFoot(median(rec.map((s) => s.readMs)))} · recorded for ${n(rec.length)} of ${n(readers.length)}${previous ? " · not compared: earlier readers' later visits count too" : ""}`,
+      spark((l) => readMean(l))
     ),
     tile(
       "returned",

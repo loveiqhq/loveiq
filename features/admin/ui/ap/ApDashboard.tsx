@@ -101,7 +101,7 @@ export default function ApDashboard() {
                         { label: "Revenue", unit: "eur" },
                       ],
                       rows: data.prices.map((r) => ({
-                        label: `${r.planLabel} · ${fmt("eur", r.price, 2)}${r.priceArm ? ` · ${r.priceArm}` : ""}`,
+                        label: `${r.planLabel} · ${priceText(r)}`,
                         values: [r.quoted, r.checkouts, r.sales, r.cvr, r.revenue],
                       })),
                     },
@@ -377,14 +377,20 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
 
 type PriceKey = "planLabel" | "price" | "quoted" | "checkouts" | "sales" | "cvr" | "revenue";
 
+type PriceFilter = "plan" | "price";
+
+const priceText = (r: DashboardPayload["prices"][number]) =>
+  `${fmt("eur", r.price, 2)}${r.priceArm ? ` · ${r.priceArm}` : ""}`;
+
 function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
   const [sort, setSort] = useState<{ key: PriceKey; dir: 1 | -1 } | null>(null);
-  const [filtering, setFiltering] = useState(false);
-  const [filter, setFilter] = useState("");
+  const [open, setOpen] = useState<PriceFilter | null>(null);
+  const [filter, setFilter] = useState<Record<PriceFilter, string>>({ plan: "", price: "" });
   if (all.length === 0)
     return <p className="m-0 text-sm text-ap-muted">No price was quoted in this range.</p>;
-  const needle = filter.trim().toLowerCase();
-  const kept = needle ? all.filter((r) => r.planLabel.toLowerCase().includes(needle)) : all;
+  const has = (text: string, k: PriceFilter) =>
+    text.toLowerCase().includes(filter[k].trim().toLowerCase());
+  const kept = all.filter((r) => has(r.planLabel, "plan") && has(priceText(r), "price"));
   const rows = sort
     ? [...kept].sort((a, b) => {
         const x = a[sort.key];
@@ -406,7 +412,13 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
   const gtc = "minmax(130px,1.2fr) minmax(110px,0.9fr) repeat(5, minmax(90px,1fr))";
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
-      {filtering && <HeaderFilter label="Plan" value={filter} onChange={setFilter} />}
+      {open && (
+        <HeaderFilter
+          label={open === "plan" ? "Plan" : "Price"}
+          value={filter[open]}
+          onChange={(v) => setFilter((f) => ({ ...f, [open]: v }))}
+        />
+      )}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
         <div role="table" aria-label="Prices" style={{ minWidth: 700 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
@@ -420,20 +432,24 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                 className={`flex items-center gap-1 px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ap-muted ${i > 1 ? "justify-end text-right" : ""}`}
               >
                 {h}
-                {i === 0 && (
-                  <button
-                    type="button"
-                    aria-label="Filter Plan"
-                    aria-expanded={filtering}
-                    onClick={() => {
-                      if (filtering) setFilter("");
-                      setFiltering(!filtering);
-                    }}
-                    className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${filtering || filter ? "text-ap-violet" : "text-ap-muted"}`}
-                  >
-                    <FilterIcon />
-                  </button>
-                )}
+                {i < 2 &&
+                  (() => {
+                    const k: PriceFilter = i === 0 ? "plan" : "price";
+                    return (
+                      <button
+                        type="button"
+                        aria-label={`Filter ${h}`}
+                        aria-expanded={open === k}
+                        onClick={() => {
+                          if (open === k) setFilter((f) => ({ ...f, [k]: "" }));
+                          setOpen(open === k ? null : k);
+                        }}
+                        className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || filter[k] ? "text-ap-violet" : "text-ap-muted"}`}
+                      >
+                        <FilterIcon />
+                      </button>
+                    );
+                  })()}
                 {key && (
                   <button
                     type="button"
@@ -465,8 +481,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
               </span>
               <span role="cell" className="px-3.5 py-3 text-sm">
                 <span className="rounded-full bg-ap-purple/10 px-2.5 py-[3px] text-xs font-bold text-ap-plum">
-                  {fmt("eur", r.price, 2)}
-                  {r.priceArm ? ` · ${r.priceArm}` : ""}
+                  {priceText(r)}
                 </span>
               </span>
               <span role="cell" className="px-3.5 py-3 text-right text-sm tabular-nums">
@@ -491,7 +506,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
           ))}
           {rows.length === 0 && (
             <p className="m-0 border-t border-ap-line px-3.5 py-3 text-sm text-ap-muted">
-              No plan matches the filter.
+              No price matches the filter.
             </p>
           )}
         </div>

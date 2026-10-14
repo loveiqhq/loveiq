@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { delta, fmt } from "@features/admin/server/ap/format";
 import type { ReportPayload } from "@features/admin/server/ap/report-page";
@@ -124,6 +124,66 @@ function Th<K extends string>({
       )}
     </span>
   );
+}
+
+/**
+ * The design's funnel filters on a table: a column's funnel opens a choice of that column's
+ * values above the table, one column at a time, and a row must match every choice. A value
+ * picked for an earlier range and gone from this one filters nothing, unless it is one of the
+ * column's fixed options (a vote can be Bad with no Bad votes in the range).
+ */
+function useColumnFilters<T, F extends string>(
+  rows: T[],
+  labels: Record<F, string>,
+  valueOf: (row: T, key: F) => string,
+  { fixed = {}, onPick }: { fixed?: Partial<Record<F, string[]>>; onPick?: () => void } = {}
+) {
+  const [chosen, setChosen] = useState<Partial<Record<F, string>>>({});
+  const [open, setOpen] = useState<F | null>(null);
+  const options = (k: F) =>
+    fixed[k] ??
+    [...new Set(rows.map((r) => valueOf(r, k)).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "en", { numeric: true })
+    );
+  const keys = Object.keys(labels) as F[];
+  const picked = Object.fromEntries(
+    keys.map((k) => [k, chosen[k] && options(k).includes(chosen[k]) ? chosen[k] : ""])
+  ) as Record<F, string>;
+  const pick = (k: F, v: string) => {
+    setChosen((c) => ({ ...c, [k]: v }));
+    onPick?.();
+  };
+  const matches = rows.filter((r) => keys.every((k) => !picked[k] || valueOf(r, k) === picked[k]));
+  const funnel = (k: F) => (
+    <button
+      type="button"
+      aria-label={`Filter ${labels[k]}`}
+      aria-expanded={open === k}
+      onClick={() => setOpen(open === k ? null : k)}
+      className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
+    >
+      <FilterIcon />
+    </button>
+  );
+  const choice = open && (
+    <label className="flex items-center gap-2 text-xs font-semibold text-ap-body">
+      <span>Filter {labels[open].toLowerCase()}</span>
+      <select
+        autoFocus
+        value={picked[open]}
+        onChange={(e) => pick(open, e.target.value)}
+        className="min-h-9 max-w-full rounded-full border border-ap-line bg-white px-3.5 font-sans text-[13px] text-ap-ink"
+      >
+        <option value="">All</option>
+        {options(open).map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  return { picked, pick, matches, funnel, choice };
 }
 
 export default function ApReport() {
@@ -640,13 +700,30 @@ const SOURCE_COLOURS: Record<string, string> = {
 };
 
 type CampaignKey = "sent" | "returned" | "rate" | "purchased";
+type CampaignFilter = "campaign" | "status";
+type CampaignRow = ReportPayload["returns"]["campaigns"][number];
+
+const CAMPAIGN_FILTERS: Record<CampaignFilter, string> = { campaign: "Campaign", status: "Status" };
+
+/** "72h_no_unlock" reads "72 hours on, not unlocked". */
+const campaignName = (stage: string) =>
+  stage
+    .replace(
+      /^(\d+)h_no_(view|unlock)$/,
+      (_m, h: string, w: string) =>
+        `${h} hours on, ${w === "view" ? "report not opened" : "not unlocked"}`
+    )
+    .replace(/_/g, " ");
+const campaignValue = (c: CampaignRow, k: CampaignFilter) =>
+  k === "campaign" ? campaignName(c.stage) : c.status;
 
 function ReturnsSection({ data }: { data: ReportPayload }) {
   const r = data.returns;
   const maxBand = Math.max(0.0001, ...r.days.map((d) => d.share));
   const [sort, setSort] = useState<Sort<CampaignKey>>(null);
   const head = { sort, onSort: (k: CampaignKey) => setSort((s) => nextSort(s, k)) };
-  const campaigns = sortRows(r.campaigns, sort, (c, k) =>
+  const filters = useColumnFilters(r.campaigns, CAMPAIGN_FILTERS, campaignValue);
+  const campaigns = sortRows(filters.matches, sort, (c, k) =>
     k === "sent"
       ? c.sent
       : k === "returned"
@@ -766,11 +843,12 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         <span className="text-[13px] font-bold text-ap-body">
           Email campaigns that bring readers back
         </span>
+        {filters.choice}
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
           <div role="table" aria-label="Email campaigns" style={{ minWidth: 900 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
-              <Th label="Campaign" />
-              <Th label="Status" />
+              <Th label="Campaign" filter={filters.funnel("campaign")} />
+              <Th label="Status" filter={filters.funnel("status")} />
               <Th label="Sent" col="sent" right {...head} />
               <Th label="Opened" right />
               <Th label="Clicked" right />
@@ -778,6 +856,13 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
               <Th label="Return rate" col="rate" right {...head} />
               <Th label="Purchased" col="purchased" right {...head} />
             </div>
+            {campaigns.length === 0 && (
+              <p className="m-0 border-t border-ap-line px-3 py-3 text-sm text-ap-muted">
+                {r.campaigns.length
+                  ? "No campaign matches the filters."
+                  : "No campaign email was sent in this range."}
+              </p>
+            )}
             {campaigns.map((c) => (
               <div
                 key={c.stage}
@@ -786,15 +871,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                 style={{ gridTemplateColumns: gtc }}
               >
                 <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
-                  <span className="text-sm font-bold">
-                    {c.stage
-                      .replace(
-                        /^(\d+)h_no_(view|unlock)$/,
-                        (_m, h: string, w: string) =>
-                          `${h} hours on, ${w === "view" ? "report not opened" : "not unlocked"}`
-                      )
-                      .replace(/_/g, " ")}
-                  </span>
+                  <span className="text-sm font-bold">{campaignName(c.stage)}</span>
                   <span className="text-xs text-ap-muted">
                     {c.status === "Live"
                       ? "Sent 72 h after the report if not unlocked, with a 50% code"
@@ -850,12 +927,9 @@ type ChapterKey = "name" | "votes" | "paywall";
 
 function ChaptersSection({ data }: { data: ReportPayload }) {
   const [sort, setSort] = useState<Sort<ChapterKey>>(null);
-  const rows = useMemo(
-    () =>
-      sortRows(data.chapters, sort, (c, k) =>
-        k === "name" ? c.name : k === "votes" ? c.up + c.down : c.paywallReaders
-      ),
-    [data.chapters, sort]
+  const filters = useColumnFilters(data.chapters, { name: "Chapter" }, (c) => c.name);
+  const rows = sortRows(filters.matches, sort, (c, k) =>
+    k === "name" ? c.name : k === "votes" ? c.up + c.down : c.paywallReaders
   );
   const head = {
     sort,
@@ -890,11 +964,12 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
         nothing records who saw each chapter&rsquo;s paywall. Reach, time and the Show more / Learn
         more / Exercise clicks per chapter are not recorded yet.
       </p>
+      {filters.choice}
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
         <div role="table" aria-label="Chapters" style={{ minWidth: 720 }}>
           <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
             <Th label="#" />
-            <Th label="Chapter" col="name" {...head} />
+            <Th label="Chapter" col="name" filter={filters.funnel("name")} {...head} />
             <Th label="Feedback · good / bad" col="votes" {...head} />
             <Th label="Paywall clicks" col="paywall" right {...head} />
           </div>
@@ -951,50 +1026,42 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
 }
 
 type LogKey = "at" | "chapter";
-type LogFilter = "chapter" | "vote" | "issue";
+type LogFilter = "submission" | "chapter" | "vote" | "issue";
 type LogRow = ReportPayload["feedback"]["log"][number];
 
-const LOG_FILTERS: Record<LogFilter, string> = { chapter: "Chapter", vote: "Vote", issue: "Issue" };
+const LOG_FILTERS: Record<LogFilter, string> = {
+  submission: "Submission",
+  chapter: "Chapter",
+  vote: "Vote",
+  issue: "Issue",
+};
 const logValue = (r: LogRow, k: LogFilter) =>
-  k === "chapter" ? r.chapter : k === "vote" ? r.vote : (r.issue ?? "");
+  k === "submission"
+    ? r.submission === null
+      ? ""
+      : `#${r.submission}`
+    : k === "chapter"
+      ? r.chapter
+      : k === "vote"
+        ? r.vote
+        : (r.issue ?? "");
 
 function FeedbackSection({ data }: { data: ReportPayload }) {
   const fb = data.feedback;
-  const [picked, setPicked] = useState<Record<LogFilter, string>>({
-    chapter: "",
-    vote: "",
-    issue: "",
-  });
-  const [open, setOpen] = useState<LogFilter | null>(null);
   const [sort, setSort] = useState<Sort<LogKey>>({ key: "at", dir: -1 });
   const [all, setAll] = useState(false);
-  const pick = (k: LogFilter, v: string) => {
-    setPicked((p) => ({ ...p, [k]: v }));
-    setAll(false);
-  };
-  const matches = sortRows(
-    fb.log.filter((r) =>
-      (Object.keys(picked) as LogFilter[]).every((k) => !picked[k] || logValue(r, k) === picked[k])
-    ),
-    sort,
-    (r, k) => (k === "at" ? Date.parse(r.at) : r.chapter)
-  );
+  const {
+    picked,
+    pick,
+    matches: kept,
+    funnel,
+    choice,
+  } = useColumnFilters(fb.log, LOG_FILTERS, logValue, {
+    fixed: { vote: ["Good", "Bad"] },
+    onPick: () => setAll(false),
+  });
+  const matches = sortRows(kept, sort, (r, k) => (k === "at" ? Date.parse(r.at) : r.chapter));
   const shown = all ? matches : matches.slice(0, 8);
-  const options = (k: LogFilter) =>
-    k === "vote"
-      ? ["Good", "Bad"]
-      : [...new Set(fb.log.map((r) => logValue(r, k)).filter(Boolean))].sort();
-  const funnel = (k: LogFilter) => (
-    <button
-      type="button"
-      aria-label={`Filter ${LOG_FILTERS[k]}`}
-      aria-expanded={open === k}
-      onClick={() => setOpen(open === k ? null : k)}
-      className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
-    >
-      <FilterIcon />
-    </button>
-  );
   const head = {
     sort,
     onSort: (k: LogKey) => setSort((s) => nextSort(s, k, k === "chapter" ? 1 : -1)),
@@ -1072,29 +1139,12 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
             onChange={(v) => pick("vote", v)}
           />
         </div>
-        {open && (
-          <label className="flex items-center gap-2 text-xs font-semibold text-ap-body">
-            <span>Filter {LOG_FILTERS[open].toLowerCase()}</span>
-            <select
-              autoFocus
-              value={picked[open]}
-              onChange={(e) => pick(open, e.target.value)}
-              className="min-h-9 max-w-full rounded-full border border-ap-line bg-white px-3.5 font-sans text-[13px] text-ap-ink"
-            >
-              <option value="">All</option>
-              {options(open).map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        {choice}
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
           <div role="table" aria-label="Feedback log" style={{ minWidth: 860 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <Th label="Date & time (Berlin)" col="at" {...head} />
-              <Th label="Submission" />
+              <Th label="Submission" filter={funnel("submission")} />
               <Th label="Chapter" col="chapter" filter={funnel("chapter")} {...head} />
               <Th label="Vote" filter={funnel("vote")} />
               <Th label="Issue" filter={funnel("issue")} />

@@ -5,6 +5,8 @@
 
 export type Unit = "count" | "eur" | "eur3" | "pct" | "min" | "mmss" | "days" | "ratio";
 export type Tone = "good" | "bad" | "flat";
+/** Which way a change is good; "either" for a check whose change is neither (shown grey). */
+export type GoodWhen = "up" | "down" | "either";
 
 const MINUS = "−";
 export const EMPTY = "—";
@@ -54,7 +56,7 @@ export function delta(
   unit: Unit,
   now: number | null,
   before: number | null,
-  goodWhen: "up" | "down" = "up",
+  goodWhen: GoodWhen = "up",
   /** "abs": the plain difference ("−€3.25") rather than a percentage, as the design does for prices. */
   as?: "abs"
 ): Delta | null {
@@ -62,7 +64,11 @@ export function delta(
     return null;
   const diff = now - before;
   const tone: Tone =
-    Math.abs(diff) < 1e-9 ? "flat" : diff > 0 === (goodWhen === "up") ? "good" : "bad";
+    Math.abs(diff) < 1e-9 || goodWhen === "either"
+      ? "flat"
+      : diff > 0 === (goodWhen === "up")
+        ? "good"
+        : "bad";
   const sign = diff > 0 ? "+" : diff < 0 ? MINUS : "±";
   if (unit === "pct") {
     return {

@@ -179,6 +179,44 @@ describe("buildLanding", () => {
     expect(p.comparisons[0]?.metrics[2]?.verdict).toBe("Too few payments to call");
   });
 
+  it("reads an ended test as its decision, keeping the chance after it", () => {
+    const facts = factsFixture({
+      from: "2026-09-13",
+      to: "2026-09-19",
+      visits: [
+        { day: "2026-09-15", arm: "white_prev", src: null, n: 400 },
+        { day: "2026-09-15", arm: "white", src: null, n: 500 },
+      ],
+      starts: [],
+      subs: [
+        ...Array.from({ length: 20 }, (_, i) =>
+          sub({ id: 100 + i, day: "2026-09-15", at: "2026-09-15T10:00:00Z", arm: "white_prev" })
+        ),
+        ...Array.from({ length: 30 }, (_, i) =>
+          sub({ id: 200 + i, day: "2026-09-15", at: "2026-09-15T10:00:00Z", arm: "white" })
+        ),
+      ],
+    });
+    const p = buildLanding({
+      facts,
+      filters: parseFilters(
+        { period: "custom", from: "2026-09-13", to: "2026-09-19" },
+        "2026-10-13"
+      ),
+      today: "2026-10-13",
+      now,
+      armEngagement: {},
+      engagement: null,
+      sections: null,
+    });
+    const verdicts = p.comparisons[0]!.metrics.map((m) => m.verdict);
+    // V2 (B) was kept: a chance reading leads with the decision, a caveat stays as it is.
+    expect(verdicts[1]).toMatch(/^Ended · B kept · \d+% chance [AB] is better$/);
+    expect(verdicts[0]).toBe("Not recorded for these days: see the note under the tests");
+    // The hero test has no winner yet: its chances read plain.
+    expect(LANDING_TESTS.find((t) => t.key === "hero")!.winner).toBeUndefined();
+  });
+
   it("leaves start CVR blank where starts by arm are not kept, and takes bounce from PostHog's sample", () => {
     const facts = factsFixture({
       from: "2026-09-13",

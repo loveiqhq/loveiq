@@ -141,6 +141,9 @@ describe("AP number format", () => {
     expect(delta("eur", 29, 32.25, "up", "abs")?.text).toBe("−€3.25");
     expect(delta("eur", 1169.39, 301.96, "down", "abs")).toEqual({ text: "+€867", tone: "bad" });
     expect(fmt("mmss", 5300)).toBe("5.3 s");
+    // A check whose change is neither good nor bad (the report open rate) reads grey.
+    expect(delta("pct", 0.94, 0.96, "either")).toEqual({ text: "−2.00 pt", tone: "flat" });
+    expect(delta("count", 1, 4, "up", "abs")).toEqual({ text: "−3", tone: "bad" });
   });
 });
 

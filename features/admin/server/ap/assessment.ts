@@ -9,7 +9,7 @@ import { askedQuestions } from "@features/admin/server/dropoff-weekly";
 import { classifySource, deviceClass, type Facts } from "./facts";
 import { bucketCaption, grainOf, trendBuckets, type ApFilters } from "./filters";
 import { shortDate } from "./days";
-import type { Unit } from "./format";
+import type { GoodWhen, Unit } from "./format";
 import {
   launched,
   ratio,
@@ -141,7 +141,7 @@ export function buildDashboard(input: {
     foot: (x: Totals) => string,
     opts: {
       blocked?: string | null;
-      goodWhen?: "up" | "down";
+      goodWhen?: GoodWhen;
       spark?: Array<number | null>;
       value?: number | null;
       prev?: number | null;
@@ -287,7 +287,9 @@ export function buildDashboard(input: {
       "Report open rate",
       "pct",
       (x) => ratio(x.opened, x.subs),
-      (x) => `${count(x.opened)} of ${count(x.subs)}`
+      (x) => `${count(x.opened)} of ${count(x.subs)}`,
+      // A health check (almost everyone opens their report), so its change is grey, as drawn.
+      { goodWhen: "either" }
     ),
   ];
   // The CAC tile's line is spend per submission (a sale is too rare to draw), so its caption says so.

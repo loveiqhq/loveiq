@@ -20,12 +20,13 @@ import {
   type ApFilters,
   type Source,
 } from "./filters";
-import { fmt, type Unit } from "./format";
+import { fmt, type GoodWhen, type Unit } from "./format";
 import {
   EVENTS_COMPLETE_FROM,
   STEP_DEVICE_FROM,
   draftsKeptFrom,
   launched,
+  mean,
   median,
   ratio,
   spend,
@@ -49,7 +50,7 @@ export interface Tile {
   unit: Unit;
   value: number | null;
   prev: number | null;
-  goodWhen: "up" | "down";
+  goodWhen: GoodWhen;
   spark: Array<number | null>;
   /** The line under the value; the page adds the change before it. */
   foot: string;
@@ -97,7 +98,9 @@ export interface MiniStat {
   unit: Unit;
   value: number | null;
   prev?: number | null;
-  goodWhen?: "up" | "down";
+  goodWhen?: GoodWhen;
+  /** "abs": the change as a plain difference ("−3"), as the design shows a count of sales. */
+  deltaAs?: "abs";
   note?: string;
 }
 
@@ -203,13 +206,24 @@ export function laterAssessments(width: number): TableRow[] {
   }));
 }
 
-/** Median reading time per reader, over readers whose reading was recorded. */
+/** What an average reading time counts, and the median beside it. */
+export function readFoot(medianMs: number | null): string {
+  return `per reader, all visits, each up to 30 min${medianMs === null ? "" : ` · median ${fmt("mmss", medianMs)}`}`;
+}
+
+/** Reading time per reader (all their visits), over readers whose reading was recorded. */
+function readTimes(facts: Facts, scope: Scope): number[] {
+  return subsIn(facts, scope)
+    .filter((s) => s.closed > 0)
+    .map((s) => s.readMs);
+}
+
 export function readMedianMs(facts: Facts, scope: Scope): number | null {
-  return median(
-    subsIn(facts, scope)
-      .filter((s) => s.closed > 0)
-      .map((s) => s.readMs)
-  );
+  return median(readTimes(facts, scope));
+}
+
+export function readMeanMs(facts: Facts, scope: Scope): number | null {
+  return mean(readTimes(facts, scope));
 }
 
 /** Of the readers, how many came back on a later visit. */
@@ -478,7 +492,7 @@ export function buildOverview(input: {
   const engagementRow = (scopeX: Scope, tt: Totals): Array<number | null> => [
     ratio(tt.startsFinished, tt.starts),
     ratio(tt.opened, tt.subs),
-    readMedianMs(facts, scopeX),
+    readMeanMs(facts, scopeX),
     returnRate(facts, scopeX),
   ];
   const engagement = {
@@ -508,10 +522,10 @@ export function buildOverview(input: {
       { label: "Open rate", unit: "pct" as Unit, value: ratio(t.opened, t.subs) },
       { label: "Reports opened", unit: "count" as Unit, value: t.opened },
       {
-        label: "Median read time",
+        label: "Avg. read time",
         unit: "mmss" as Unit,
-        value: read,
-        note: "readers whose reading time was recorded",
+        value: readMeanMs(facts, scope),
+        note: `${readFoot(read)} · readers whose reading time was recorded`,
       },
       {
         label: "Invites sent",
@@ -530,7 +544,7 @@ export function buildOverview(input: {
         { label: "Assessment", unit: "text" as const },
         { label: "Survey completion", unit: "pct" as const },
         { label: "Report open rate", unit: "pct" as const },
-        { label: "Median read time", unit: "mmss" as const },
+        { label: "Avg. read time", unit: "mmss" as const },
         { label: "Returns", unit: "pct" as const },
       ],
       rows: [
@@ -543,7 +557,7 @@ export function buildOverview(input: {
         { label: "Source", unit: "text" as const },
         { label: "Survey completion", unit: "pct" as const },
         { label: "Report open rate", unit: "pct" as const },
-        { label: "Median read time", unit: "mmss" as const },
+        { label: "Avg. read time", unit: "mmss" as const },
         { label: "Returns", unit: "pct" as const },
       ],
       rows: sourceTotals.map((s) => ({
@@ -558,7 +572,13 @@ export function buildOverview(input: {
   const revenue = {
     stats: [
       { label: "Revenue", unit: "eur" as Unit, value: t.revenue, prev: p?.revenue ?? null },
-      { label: "Paid reports", unit: "count" as Unit, value: t.payers, prev: p?.payers ?? null },
+      {
+        label: "Paid reports",
+        unit: "count" as Unit,
+        value: t.payers,
+        prev: p?.payers ?? null,
+        deltaAs: "abs" as const,
+      },
       {
         label: "€ per visit",
         unit: "eur3" as Unit,

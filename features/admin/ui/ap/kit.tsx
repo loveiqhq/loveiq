@@ -193,7 +193,7 @@ export function TileGrid({ children, min = 196 }: { children: ReactNode; min?: n
 export function StatBox({ stat, tone = "grey" }: { stat: MiniStat; tone?: "grey" | "white" }) {
   const d =
     stat.prev !== undefined
-      ? delta(stat.unit, stat.value, stat.prev ?? null, stat.goodWhen ?? "up")
+      ? delta(stat.unit, stat.value, stat.prev ?? null, stat.goodWhen ?? "up", stat.deltaAs)
       : null;
   return (
     <div

@@ -307,6 +307,10 @@ function compare(
       : x === null || y === null
         ? "PostHog saw too few visits"
         : null;
+  // An ended test reads as its decision, as the design writes it, with the chance kept after it.
+  const kept = test.winner ? (test.winner === test.arms[0] ? "A" : "B") : null;
+  const decided = (verdict: string) =>
+    kept && verdict.includes("chance") ? `Ended · ${kept} kept · ${verdict}` : verdict;
   return {
     key: test.key,
     name: test.name,
@@ -326,7 +330,7 @@ function compare(
         verdict:
           a.starts === null || b.starts === null
             ? "Not recorded for these days: see the note under the tests"
-            : rateVerdict(a.starts, a.visits, b.starts, b.visits),
+            : decided(rateVerdict(a.starts, a.visits, b.starts, b.visits)),
       },
       {
         label: "Survey submission CVR",
@@ -334,7 +338,7 @@ function compare(
         a: a.submitCvr,
         b: b.submitCvr,
         lowerIsBetter: false,
-        verdict: rateVerdict(a.subs, a.visits, b.subs, b.visits),
+        verdict: decided(rateVerdict(a.subs, a.visits, b.subs, b.visits)),
       },
       {
         label: "Payment CVR",
@@ -342,7 +346,9 @@ function compare(
         a: a.paymentCvr,
         b: b.paymentCvr,
         lowerIsBetter: false,
-        verdict: rateVerdict(a.paid, a.visits, b.paid, b.visits, false, "Too few payments to call"),
+        verdict: decided(
+          rateVerdict(a.paid, a.visits, b.paid, b.visits, false, "Too few payments to call")
+        ),
       },
       {
         label: "€ rev. per visit",
@@ -350,7 +356,7 @@ function compare(
         a: a.perVisit,
         b: b.perVisit,
         lowerIsBetter: false,
-        verdict: revenueVerdict(a, b),
+        verdict: decided(revenueVerdict(a, b)),
       },
       {
         label: "Bounce rate",
@@ -360,8 +366,10 @@ function compare(
         lowerIsBetter: true,
         verdict:
           phVerdict(a.bounce, b.bounce) ??
-          rateVerdict(a.phBounced!, a.phSessions!, b.phBounced!, b.phSessions!, true) +
-            " (PostHog)",
+          decided(
+            rateVerdict(a.phBounced!, a.phSessions!, b.phBounced!, b.phSessions!, true) +
+              " (PostHog)"
+          ),
       },
       {
         label: "Time on page (median)",

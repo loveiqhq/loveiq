@@ -83,7 +83,7 @@ describe("report page", () => {
     );
     expect(foot("invite")).toMatch(/\(0 of 2\) · not compared: before 18 Sep$/);
     expect(foot("read")).toMatch(
-      /^median per reader, recorded for \d+ of \d+ · not compared: earlier readers' later visits count too$/
+      /^per reader, all visits, each up to 30 min( · median \d+:\d\d)? · recorded for \d+ of \d+ · not compared: earlier readers' later visits count too$/
     );
     expect(p.wizard.tiles.find((t) => t.key === "completed")).toMatchObject({
       prev: null,
@@ -99,7 +99,7 @@ describe("report page", () => {
     expect(q.notes.join(" ")).toContain("Before 18 Sep 2026");
     for (const t of [...q.tiles, ...q.wizard.tiles]) expect(t.foot).not.toMatch(/18 Sep|cookies/);
     expect(q.tiles.find((t) => t.key === "read")!.foot).toMatch(
-      /^median per reader, recorded for \d+ of \d+$/
+      /^per reader, all visits, each up to 30 min( · median \d+:\d\d)? · recorded for \d+ of \d+$/
     );
   });
 
@@ -376,23 +376,57 @@ describe("report page, on screen", () => {
     screenData.payload = payload;
     render(createElement(ApReport));
     expect(screen.getByText("Feedback log · 2 of 2")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Filter Vote" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Filter vote" }), {
+    // The chapters table has a Chapter funnel too: these are the log's own.
+    const log = within(document.getElementById("feedback")!);
+    fireEvent.click(log.getByRole("button", { name: "Filter Vote" }));
+    fireEvent.change(log.getByRole("combobox", { name: "Filter vote" }), {
       target: { value: "Bad" },
     });
     expect(screen.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
     expect(screen.getByText("left a comment").className).toContain("font-serif italic");
     // The filters add up: the bad vote's reason, then the chapter that had only a good vote.
-    fireEvent.click(screen.getByRole("button", { name: "Filter Issue" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Filter issue" }), {
+    fireEvent.click(log.getByRole("button", { name: "Filter Issue" }));
+    fireEvent.change(log.getByRole("combobox", { name: "Filter issue" }), {
       target: { value: "Unclear" },
     });
     expect(screen.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Filter Chapter" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Filter chapter" }), {
+    fireEvent.click(log.getByRole("button", { name: "Filter Chapter" }));
+    fireEvent.change(log.getByRole("combobox", { name: "Filter chapter" }), {
       target: { value: payload.feedback.log[1]!.chapter },
     });
     expect(screen.getByText("No votes match the filters.")).toBeInTheDocument();
+  });
+
+  it("filters the log by submission, and the campaigns and chapters by their funnels", () => {
+    screenData.payload = payload;
+    render(createElement(ApReport));
+    const log = within(document.getElementById("feedback")!);
+    const sub = payload.feedback.log.find((r) => r.submission !== null)!;
+    fireEvent.click(log.getByRole("button", { name: "Filter Submission" }));
+    const subs = log.getByRole("combobox", { name: "Filter submission" });
+    fireEvent.change(subs, { target: { value: `#${sub.submission}` } });
+    const want = payload.feedback.log.filter((r) => r.submission === sub.submission).length;
+    expect(screen.getByText(`Feedback log · ${want} of ${want}`)).toBeInTheDocument();
+
+    const campaigns = within(screen.getByRole("table", { name: "Email campaigns" }));
+    const before = campaigns.getAllByRole("row").length;
+    fireEvent.click(campaigns.getByRole("button", { name: "Filter Status" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter status" }), {
+      target: { value: "Retired" },
+    });
+    const retired = payload.returns.campaigns.filter((c) => c.status === "Retired").length;
+    expect(campaigns.getAllByRole("row")).toHaveLength(1 + retired);
+    expect(before).toBe(1 + payload.returns.campaigns.length);
+
+    const chapters = within(screen.getByRole("table", { name: "Chapters" }));
+    fireEvent.click(chapters.getByRole("button", { name: "Filter Chapter" }));
+    fireEvent.change(
+      within(document.getElementById("chapters")!).getByRole("combobox", {
+        name: "Filter chapter",
+      }),
+      { target: { value: payload.chapters[0]!.name } }
+    );
+    expect(chapters.getAllByRole("row")).toHaveLength(2);
   });
 
   it("marks the section in view in the section nav", () => {

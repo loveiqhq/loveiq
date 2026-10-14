@@ -108,6 +108,10 @@ export interface Totals {
 
 const within = (day: string, from: string, to: string) => day >= from && day <= to;
 
+export function mean(values: number[]): number | null {
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+}
+
 export function median(values: number[]): number | null {
   if (!values.length) return null;
   const s = [...values].sort((a, b) => a - b);
