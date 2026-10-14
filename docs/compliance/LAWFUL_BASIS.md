@@ -34,7 +34,7 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A2 — Survey submission
 
-- **Data**: email, first_name, ~60 question answers including sensitive-by-context data, IP, session_id, duration, UTM context (campaign tags; ad click ids: Google `gclid`/`gbraid`/`wbraid`, and from 2026-10-14 Meta `fbclid`; from 2026-10-14 the referring site's hostname, never its full address)
+- **Data**: email, first_name, ~60 question answers including sensitive-by-context data, IP, session_id, duration, UTM context (campaign tags; click ids: Google's ad click ids `gclid`/`gbraid`/`wbraid` and, from 2026-10-14, Meta's `fbclid`, which Meta adds to any link click, ad or not; from 2026-10-14 the referring site's hostname, never its full address)
 - **Basis**: (a) consent — survey landing page + intro screen make the purpose explicit
 - **Retention**: until DSAR deletion. Partial saves >30d are auto-purged (F-02).
 - **Withdraw**: DSAR delete (F-01)

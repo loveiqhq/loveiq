@@ -98,7 +98,8 @@ export default function PrivacyPolicyPage() {
                 <li>Whether our emails were opened and their links clicked</li>
                 <li>
                   Where your visit came from: the campaign details in the link you clicked, the
-                  ad&apos;s click ID and the name of the website that sent you to us
+                  click ID that Google or Meta adds to the link and the name of the website that
+                  sent you to us
                 </li>
               </ul>
 
