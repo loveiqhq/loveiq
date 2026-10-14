@@ -536,6 +536,61 @@ AS $function$
        AND coalesce(a.metadata->>'section_id', '') <> ''
      GROUP BY 1
   ),
+  -- Reading per Report 3.0 chapter (report_chapter_stats): one row per save, holding only
+  -- what changed since the save before, so a reader's rows add up. Readers who finished from
+  -- the first day it was recorded only: an earlier reader's later visits would be part of their
+  -- reading. Every value is checked before a cast: anyone with a CSRF cookie can post this
+  -- metadata, and one bad cast would fail the whole page.
+  chapter_start AS (
+    SELECT (min(a.event_time) AT TIME ZONE 'Europe/Berlin')::date AS day
+      FROM analytics_event a
+     WHERE a.event_type = 'report_chapter_stats'
+  ),
+  chapter_reads AS (
+    SELECT a.survey_submission_id AS sid, c.key AS section,
+           -- Up to 30 minutes per reader and chapter: longer is mostly a tab left open.
+           least(coalesce(sum(CASE WHEN c.value->>'ms' ~ '^[0-9]{1,8}$' THEN (c.value->>'ms')::int END), 0), 1800000) AS ms,
+           coalesce(bool_or(c.value->>'open' ~ '^[1-9][0-9]{0,5}$'), false) AS opened,
+           coalesce(bool_or(c.value->>'show_all' ~ '^[1-9][0-9]{0,5}$'), false) AS show_all,
+           coalesce(bool_or(c.value->>'learn_more' ~ '^[1-9][0-9]{0,5}$'), false) AS learn_more,
+           coalesce(bool_or(c.value->>'try_this' ~ '^[1-9][0-9]{0,5}$'), false) AS try_this,
+           coalesce(bool_or(c.value->>'pw_seen' ~ '^[1-9][0-9]{0,5}$'), false) AS pw_seen,
+           coalesce(bool_or(c.value->>'pw_click' ~ '^[1-9][0-9]{0,5}$'), false) AS pw_click
+      FROM analytics_event a
+      CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(a.metadata->'chapters') = 'object'
+                                         THEN a.metadata->'chapters' ELSE '{}'::jsonb END) AS c
+     WHERE a.event_type = 'report_chapter_stats'
+       AND a.survey_submission_id IN (
+             SELECT s.id FROM subs s, chapter_start cs
+              WHERE s.created_date_time >= (cs.day::timestamp AT TIME ZONE 'Europe/Berlin'))
+       AND jsonb_typeof(c.value) = 'object'
+       AND c.key ~ '^[a-z][a-z0-9_]{0,79}$'
+     GROUP BY 1, 2
+  ),
+  -- Reached: a second or more with the chapter on screen, or anything used in it.
+  chapter_reached AS (
+    SELECT r.* FROM chapter_reads r
+     WHERE r.ms >= 1000 OR r.opened OR r.show_all OR r.learn_more OR r.try_this OR r.pw_seen OR r.pw_click
+  ),
+  chapter_stats AS (
+    SELECT r.section, count(*) AS reached, round(avg(r.ms)) AS ms_avg,
+           count(*) FILTER (WHERE r.opened) AS opened,
+           count(*) FILTER (WHERE r.show_all) AS show_all,
+           count(*) FILTER (WHERE r.learn_more) AS learn_more,
+           count(*) FILTER (WHERE r.try_this) AS try_this,
+           count(*) FILTER (WHERE r.pw_seen) AS pw_seen,
+           -- Clicked a paywall they had seen: the click rate is within those who saw one.
+           count(*) FILTER (WHERE r.pw_seen AND r.pw_click) AS pw_click
+      FROM chapter_reached r
+     GROUP BY r.section
+  ),
+  -- The wizard's Skip Intro (wizard_skipped): who pressed it, by the slide (0-5) it was on.
+  skips AS (
+    SELECT CASE WHEN (a.metadata->>'from_slide') ~ '^[0-5]$' THEN (a.metadata->>'from_slide')::int END AS slide,
+           a.survey_submission_id AS sid
+      FROM analytics_event a
+     WHERE a.event_type = 'wizard_skipped' AND a.survey_submission_id IN (SELECT id FROM subs)
+  ),
   -- Every nurture send of a reader, whenever it was, and their next one: a return counts for
   -- the email it came after, not for every earlier email too.
   all_sends AS (
@@ -594,6 +649,19 @@ AS $function$
                    FROM (SELECT section_id, count(*) FILTER (WHERE feedback = 'up') AS up, count(*) FILTER (WHERE feedback = 'down') AS down
                            FROM votes GROUP BY section_id) c),
     'paywall_clicks', (SELECT coalesce(json_agg(json_build_object('section', pc.section_id, 'readers', pc.readers)), '[]'::json) FROM paywall_clicks pc),
+    'chapter_stats', (SELECT coalesce(json_agg(json_build_object(
+                        'section', cs.section, 'reached', cs.reached, 'ms_avg', cs.ms_avg, 'opened', cs.opened,
+                        'show_all', cs.show_all, 'learn_more', cs.learn_more, 'try_this', cs.try_this,
+                        'pw_seen', cs.pw_seen, 'pw_click', cs.pw_click) ORDER BY cs.section), '[]'::json)
+                        FROM chapter_stats cs),
+    -- Reach's denominator: the readers above who reached any chapter.
+    'chapter_readers', (SELECT count(DISTINCT r.sid) FROM chapter_reached r),
+    'chapter_stats_from', (SELECT st.day FROM chapter_start st),
+    'wizard_skips', (SELECT coalesce(json_agg(json_build_object('slide', k.slide, 'n', k.n, 'sids', k.sids) ORDER BY k.slide), '[]'::json)
+                       FROM (SELECT x.slide, count(DISTINCT x.sid) AS n, array_agg(DISTINCT x.sid) AS sids
+                               FROM skips x WHERE x.slide IS NOT NULL GROUP BY x.slide) k),
+    'wizard_skips_from', (SELECT (min(a.event_time) AT TIME ZONE 'Europe/Berlin')::date
+                            FROM analytics_event a WHERE a.event_type = 'wizard_skipped'),
     'issues', (SELECT coalesce(json_agg(json_build_object('issue', i.issue, 'n', i.n)), '[]'::json)
                  FROM (SELECT issue, count(*) AS n FROM votes WHERE feedback = 'down' AND issue IS NOT NULL GROUP BY issue) i),
     'feedback', (SELECT coalesce(json_agg(json_build_object(

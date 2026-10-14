@@ -93,6 +93,9 @@ const PERSISTED_EVENTS = new Set([
   "experiment_card_flipped",
   // Locked-chapter-card paywall surface (inline price)
   "locked_card_price_shown",
+  // Per-chapter reading and the wizard's Skip Intro (14.10)
+  "report_chapter_stats",
+  "wizard_skipped",
 ]);
 
 /**
@@ -1155,6 +1158,25 @@ export const trackWizardMapStep = (params: {
   track("wizard_map_step", params);
   persistAnalyticsEvent("wizard_map_step", params);
 };
+
+/**
+ * The wizard's Skip Intro, from the slide (0-5) it was pressed on, and on the map (slide
+ * 2) from which of its steps. Its own event: wizard_slide_advanced means "moved to slide
+ * 0-5" to the digests, and a skip goes to no slide.
+ */
+export const trackWizardSkipped = (params: { from_slide: number; map_step?: number }) => {
+  track("wizard_skipped", params);
+  persistAnalyticsEvent("wizard_skipped", params);
+};
+
+/**
+ * Reading per report chapter, saved by chapterStats.ts. To our own table only, never GA4
+ * or PostHog: these rows describe someone reading a report about their sex life.
+ */
+export const persistReportChapterStats = (metadata: {
+  archetype?: string;
+  chapters: Record<string, Record<string, number>>;
+}) => persistAnalyticsEvent("report_chapter_stats", metadata);
 
 export const trackSurveyConfirmationCtaClicked = (params: {
   cta: "view_report" | "back" | string;

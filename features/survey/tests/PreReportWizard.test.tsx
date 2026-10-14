@@ -16,6 +16,7 @@ vi.mock("next/image", () => ({
 const analytics = vi.hoisted(() => ({
   trackWizardSlideAdvanced: vi.fn(),
   trackWizardMapStep: vi.fn(),
+  trackWizardSkipped: vi.fn(),
 }));
 vi.mock("@features/analytics/client", () => analytics);
 
@@ -65,6 +66,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   analytics.trackWizardSlideAdvanced.mockClear();
   analytics.trackWizardMapStep.mockClear();
+  analytics.trackWizardSkipped.mockClear();
 });
 
 afterEach(() => {
@@ -133,6 +135,27 @@ describe("PreReportWizard — slides", () => {
     fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
     flush(650);
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  // A skip used to record nothing, so the admin counted every skipper as a leaver.
+  it("SKIP INTRO records the slide it was pressed on, and the map's step on slide 2", () => {
+    const { unmount } = render(<PreReportWizard onComplete={vi.fn()} />);
+    press(continueButton());
+    press(continueButton());
+    expect(activeTile()).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    expect(analytics.trackWizardSkipped.mock.calls).toEqual([[{ from_slide: 1, map_step: 1 }]]);
+    unmount();
+
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    for (let i = 0; i < 4; i++) press(continueButton());
+    expect(heading()).toBe(HEADINGS[3]);
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    // No map step off the map; and not a slide move, which the digests count 0-5.
+    expect(analytics.trackWizardSkipped).toHaveBeenLastCalledWith({ from_slide: 3 });
+    expect(analytics.trackWizardSlideAdvanced).not.toHaveBeenCalledWith(
+      expect.objectContaining({ from_slide: 3 })
+    );
   });
 
   // Final review, 30.09: the column is the scroller (the page is one screen tall), and
@@ -535,8 +558,10 @@ describe("PreReportWizard — track={false}, for the preview page", () => {
     expect(heading()).toBe(HEADINGS[1]);
     press(nextDeepDive());
     expect(activeTile()).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
     expect(analytics.trackWizardSlideAdvanced).not.toHaveBeenCalled();
     expect(analytics.trackWizardMapStep).not.toHaveBeenCalled();
+    expect(analytics.trackWizardSkipped).not.toHaveBeenCalled();
   });
 });
 

@@ -10,7 +10,11 @@ import {
   type ReactNode,
 } from "react";
 import Image from "next/image";
-import { trackWizardMapStep, trackWizardSlideAdvanced } from "@features/analytics/client";
+import {
+  trackWizardMapStep,
+  trackWizardSkipped,
+  trackWizardSlideAdvanced,
+} from "@features/analytics/client";
 import WizardReportMap, { MAP_STEPS } from "./wizard/WizardReportMap";
 import { useWizardFit } from "./wizard/useWizardFit";
 import { WIZARD_PROOF_CARDS, WIZARD_SLIDE_COUNT } from "./wizard/wizardContent";
@@ -405,8 +409,15 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, track = true })
 
   const handleSkip = useCallback(() => {
     if (busyRef.current) return;
+    if (track) {
+      const slide = slideRef.current;
+      trackWizardSkipped({
+        from_slide: slide,
+        ...(slide === MAP_SLIDE ? { map_step: stepRef.current } : {}),
+      });
+    }
     exit();
-  }, [exit]);
+  }, [exit, track]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

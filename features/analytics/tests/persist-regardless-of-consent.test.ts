@@ -218,3 +218,42 @@ describe("first-party events are written whatever the banner says", () => {
     expect(beacon).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * Reading per chapter describes someone reading about their sex life, so it goes to our
+ * own table and nowhere else: not GA4 and not PostHog, even with every consent given. The
+ * granted consent is what makes this a real test: a GA4 event would fire with it.
+ */
+describe("reading per chapter stays in our own table", () => {
+  it("writes the row, and sends nothing to GA4 or PostHog", async () => {
+    grantAllConsent();
+    (window as unknown as Record<string, unknown>).__loveiqReportSubmissionId = 1296;
+    client.persistReportChapterStats({
+      archetype: "Spark Seeker",
+      chapters: { typical_beliefs: { ms: 4000, open: 1 } },
+    });
+
+    expect(beacon).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(await (beacon.mock.calls[0]![1] as Blob).text()) as {
+      event_type: string;
+      metadata: Record<string, unknown>;
+    };
+    expect(body.event_type).toBe("report_chapter_stats");
+    expect(body.metadata).toMatchObject({
+      archetype: "Spark Seeker",
+      chapters: { typical_beliefs: { ms: 4000, open: 1 } },
+    });
+    expect(dataLayer()).toHaveLength(0);
+    expect(gtag).not.toHaveBeenCalled();
+    expect(ph.capture).not.toHaveBeenCalled();
+  });
+
+  it("while the wizard's Skip Intro goes everywhere its slide moves go", () => {
+    grantConsent();
+    (window as unknown as Record<string, unknown>).__loveiqReportSubmissionId = 1296;
+    client.trackWizardSkipped({ from_slide: 1, map_step: 2 });
+    expect(beacon).toHaveBeenCalledTimes(1);
+    expect(ph.capture).toHaveBeenCalledWith("wizard_skipped", { from_slide: 1, map_step: 2 });
+    expect(dataLayer()).toContainEqual({ event: "wizard_skipped", from_slide: 1, map_step: 2 });
+  });
+});

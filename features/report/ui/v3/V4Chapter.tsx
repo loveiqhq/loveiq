@@ -138,6 +138,7 @@ const V4Chapter: FC<Props> = ({
         className="rv4-chapter__button"
         aria-expanded={isOpen}
         aria-controls={bodyId}
+        data-chapter-action="open"
         onClick={() => setIsOpen((v) => !v)}
       >
         <V4ChapterTitle title={title ?? ""} archetype={archetype} />

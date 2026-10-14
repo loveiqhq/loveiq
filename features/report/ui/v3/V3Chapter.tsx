@@ -221,6 +221,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
           className="rv4-chapter__button"
           aria-expanded={isOpen}
           aria-controls={bodyId}
+          data-chapter-action="open"
           onClick={() => setIsOpen((v) => !v)}
         >
           <V4ChapterTitle
