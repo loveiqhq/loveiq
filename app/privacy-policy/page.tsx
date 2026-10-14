@@ -190,18 +190,18 @@ export default function PrivacyPolicyPage() {
               </ul>
               <p className="mb-4">
                 Our emails contain a small tracking image, and their links pass through Resend
-                before they reach our website. When you open one of our emails with its images
-                shown, or click a link in it, Resend records this together with your IP address and
-                details of your device and email app. For the emails we send about your report, we
-                also keep our own record of each email: whether it was delivered, opened and
-                clicked, and when, linked to your survey submission. Our record does not include
-                your IP address, your device details or which link you clicked. We use this to see
-                which of our emails are useful and to improve them, on the basis of our legitimate
-                interest (Art. 6(1)(f) GDPR). Some email apps load images automatically, so an email
-                can count as opened without being read. To avoid this, turn off automatic image
-                loading in your email app and visit our website directly instead of clicking a link,
-                or unsubscribe using the link in our emails. You may also object under Art. 21 GDPR
-                using the contact details in section 1.
+                before they reach our website. When you open one of our emails with images on, or
+                click one of its links, Resend records it. It also records your IP address and
+                details of your device and email app. For the emails about your report, we keep our
+                own record of each email too. It says whether the email was delivered, opened and
+                clicked, and when, and it is linked to your survey submission. Our record does not
+                include your IP address, your device or which link you clicked. We use it to see
+                which emails are useful and to make them better. Our legal basis is our legitimate
+                interest (Art. 6(1)(f) GDPR). Some email apps load images by themselves, so an email
+                can count as opened without being read. To avoid tracking, turn off image loading in
+                your email app. You can also visit our website directly instead of clicking a link,
+                or unsubscribe with the link in our emails. You may object under Art. 21 GDPR using
+                the contact details in section 1.
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.4 Analytics and product insight</h3>
