@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
-import { delta, fmt } from "@features/admin/server/ap/format";
+import { delta, fmt, type Tone } from "@features/admin/server/ap/format";
 import type { ReportPayload, ReportTile } from "@features/admin/server/ap/report-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
@@ -43,23 +43,32 @@ const atLeast = (v: number | null, pct: number) => v !== null && Math.round(v * 
 /** "1 vote", "74 votes". */
 const votes = (n: number) => `${fmt("count", n)} vote${n === 1 ? "" : "s"}`;
 
+const TONE: Record<Tone, string> = {
+  good: "text-ap-good",
+  bad: "text-ap-bad",
+  flat: "text-ap-muted",
+};
+
 /**
- * KpiTile's "md" layout for a tile whose change the payload writes as the design does ("1 share",
- * "10 users", "+1"); every other tile is KpiTile itself.
+ * KpiTile's "md" layout, with the value to the tile's own decimals (KpiTile takes none) and the
+ * change the payload writes as the design does ("1 share", "10 users", "+1") where it has one.
  */
 function ReportKpiTile({ tile }: { tile: ReportTile }) {
-  const c = tile.change;
-  if (!c || tile.blocked) return <KpiTile tile={tile} size="md" />;
-  const tone =
-    c.tone === "good" ? "text-ap-good" : c.tone === "bad" ? "text-ap-bad" : "text-ap-muted";
+  if (tile.blocked) return <KpiTile tile={tile} size="md" />;
+  const c = tile.change ?? delta(tile.unit, tile.value, tile.prev, tile.goodWhen, tile.deltaAs);
   return (
     <div className="flex flex-col gap-2 rounded-[20px] border border-ap-line bg-white px-[18px] py-4 text-ap-ink shadow-ap">
       <Eyebrow>{tile.label}</Eyebrow>
       <span className="font-serif text-[28px] font-semibold leading-none tabular-nums text-ap-ink">
-        {fmt(tile.unit, tile.value)}
+        {tile.unit === "pct" && tile.digits === 0
+          ? wholePct(tile.value)
+          : fmt(tile.unit, tile.value, tile.digits)}
       </span>
+      {/* A change never breaks inside itself ("+€3,986" may break after its sign otherwise). */}
       <span className="text-xs leading-normal text-ap-muted">
-        <strong className={tone}>{c.text}</strong> {tile.foot}
+        {c && <strong className={`whitespace-nowrap ${TONE[c.tone]}`}>{c.text}</strong>}
+        {c ? " " : ""}
+        {tile.foot}
       </span>
       <Spark values={tile.spark} />
       {tile.trend && <span className="text-[11px] text-ap-muted">{tile.trend}</span>}
@@ -441,26 +450,31 @@ export default function ApReport() {
             </BlackButton>
           }
         />
-        <nav
-          aria-label="Report sections"
-          className="flex max-w-full flex-wrap gap-1.5 self-start rounded-full border border-ap-line bg-white p-1"
-        >
-          {SECTIONS.map((s) => {
-            const on = s.id === current;
-            return (
-              <a
-                key={s.id}
-                href={`#${s.id}`}
-                aria-current={on ? "true" : undefined}
-                className={`inline-flex min-h-10 items-center rounded-full px-4 text-[13px] font-semibold no-underline ${
-                  on ? "bg-ap-ink text-white" : "text-ap-body hover:bg-ap-ground"
-                }`}
-              >
-                {s.label}
-              </a>
-            );
-          })}
-        </nav>
+        {/* One row on a phone: the pills scroll sideways rather than wrap. */}
+        <div className="max-w-full self-start overflow-x-auto">
+          <nav
+            aria-label="Report sections"
+            className="flex w-max gap-1.5 rounded-full border border-ap-line bg-white p-1"
+          >
+            {SECTIONS.map((s) => {
+              const on = s.id === current;
+              return (
+                <a
+                  key={s.id}
+                  href={`#${s.id}`}
+                  aria-current={on ? "true" : undefined}
+                  className={`inline-flex min-h-10 items-center rounded-full px-4 text-[13px] no-underline ${
+                    on
+                      ? "bg-ap-ink font-bold text-white"
+                      : "font-semibold text-ap-body hover:bg-ap-ground"
+                  }`}
+                >
+                  {s.label}
+                </a>
+              );
+            })}
+          </nav>
+        </div>
       </div>
       <ApFilterBar scope="assessment" />
       {loading && !data && <Loading label="the report page" />}
@@ -522,7 +536,7 @@ function WizardSection({ data }: { data: ReportPayload }) {
       />
       <TileGrid min={200}>
         {w.tiles.map((t) => (
-          <KpiTile key={t.key} tile={t} size="md" />
+          <ReportKpiTile key={t.key} tile={t} />
         ))}
       </TileGrid>
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
@@ -639,18 +653,8 @@ function TimeSection({ data }: { data: ReportPayload }) {
           <span className="text-xs text-ap-muted">
             {vs ? (
               <>
-                <strong
-                  className={
-                    vs.tone === "good"
-                      ? "text-ap-good"
-                      : vs.tone === "bad"
-                        ? "text-ap-bad"
-                        : "text-ap-muted"
-                  }
-                >
-                  {vs.text}
-                </strong>{" "}
-                vs all reports ({fmt("mmss", t.benchAvgMs)})
+                <strong className={TONE[vs.tone]}>{vs.text}</strong> vs all reports (
+                {fmt("mmss", t.benchAvgMs)})
               </>
             ) : (
               "all sessions per reader"
@@ -754,7 +758,8 @@ function TimeSplit({
     <div className="flex flex-col gap-2.5">
       <span className="text-[13px] font-bold text-ap-body">Avg. total time by {title}</span>
       {rows.map((r) => {
-        const d = r.ms !== null && r.benchMs !== null ? r.ms - r.benchMs : null;
+        // As the average's own difference above: no difference reads "±0:00.0", grey.
+        const d = delta("mmss", r.ms, r.benchMs);
         return (
           <div
             key={r.label}
@@ -777,9 +782,9 @@ function TimeSplit({
             </span>
             <span className="text-right font-bold tabular-nums">{fmt("mmss", r.ms)}</span>
             <span
-              className={`text-right text-xs font-bold tabular-nums ${d === null ? "text-ap-muted" : d >= 0 ? "text-ap-good" : "text-ap-bad"}`}
+              className={`text-right text-xs font-bold tabular-nums ${TONE[d?.tone ?? "flat"]}`}
             >
-              {d === null ? "—" : `${d >= 0 ? "+" : "−"}${fmt("mmss", Math.abs(d))}`}
+              {d?.text ?? "—"}
             </span>
           </div>
         );
@@ -806,6 +811,17 @@ const campaignName = (stage: string) => stage.replace(/_/g, " ");
 const campaignValue = (c: CampaignRow, k: CampaignFilter) =>
   k === "campaign" ? campaignName(c.stage) : c.status;
 
+/** StatBox's look, for a value written here: StatBox takes no decimals. */
+function ValueBox({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-[14px] bg-ap-ground p-3.5">
+      <span className="text-xs text-ap-muted">{label}</span>
+      <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">{value}</span>
+      <span className="text-xs leading-snug text-ap-muted">{note}</span>
+    </div>
+  );
+}
+
 /** A count with its share of the emails sent under it; "—" while it is not counted. */
 function CountAndRate({ n, rate }: { n: number | null; rate: number | null }) {
   return (
@@ -824,6 +840,8 @@ function CountAndRate({ n, rate }: { n: number | null; rate: number | null }) {
 function ReturnsSection({ data }: { data: ReportPayload }) {
   const r = data.returns;
   const maxBand = Math.max(0.0001, ...r.days.map((d) => d.share));
+  // The ways back against the largest one, as the design draws them.
+  const topSource = Math.max(0.0001, ...(r.sources?.ok ? r.sources.value : []).map((s) => s.share));
   const [sort, setSort] = useState<Sort<CampaignKey>>(null);
   const head = { sort, onSort: (k: CampaignKey) => setSort((s) => nextSort(s, k)) };
   const filters = useColumnFilters(r.campaigns, CAMPAIGN_FILTERS, campaignValue);
@@ -853,13 +871,11 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         className="grid gap-3"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))" }}
       >
-        <StatBox
-          stat={{
-            label: "Came back",
-            unit: "pct",
-            value: r.cameBack,
-            note: "of readers, 30+ minutes after their last visit",
-          }}
+        {/* Whole percentages, as the design writes the returns. */}
+        <ValueBox
+          label="Came back"
+          value={wholePct(r.cameBack)}
+          note="of readers, 30+ minutes after their last visit"
         />
         <StatBox
           stat={{
@@ -869,13 +885,10 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
             note: "first visit to the second",
           }}
         />
-        <StatBox
-          stat={{
-            label: "Returned via email",
-            unit: "pct",
-            value: r.viaEmail,
-            note: "of return visits, from any email link (PostHog)",
-          }}
+        <ValueBox
+          label="Returned via email"
+          value={wholePct(r.viaEmail)}
+          note="of return visits, from any email link (PostHog)"
         />
         <StatBox
           stat={{
@@ -912,9 +925,9 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                 color={d.cumulative === null ? "#d6cff0" : "#795fc8"}
                 height={12}
               />
-              <span className="text-right font-bold tabular-nums">{fmt("pct", d.share, 1)}</span>
+              <span className="text-right font-bold tabular-nums">{wholePct(d.share)}</span>
               <span className="text-right text-xs tabular-nums text-ap-muted">
-                {d.cumulative === null ? "—" : fmt("pct", d.cumulative, 1)}
+                {wholePct(d.cumulative)}
               </span>
             </div>
           ))}
@@ -941,7 +954,11 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
                 style={{ gridTemplateColumns: "180px minmax(0,1fr) 56px" }}
               >
                 <span>{s.source}</span>
-                <Bar pct={s.share} color={SOURCE_COLOURS[s.source] ?? "#795fc8"} height={12} />
+                <Bar
+                  pct={s.share / topSource}
+                  color={SOURCE_COLOURS[s.source] ?? "#795fc8"}
+                  height={12}
+                />
                 <span className="text-right font-bold tabular-nums">{fmt("pct", s.share, 0)}</span>
               </div>
             ))
@@ -1085,12 +1102,17 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
         id="h-ch"
         title="Chapters"
         right={
-          <Pills<"order" | ChapterKey>
-            label="Sort chapters by"
-            options={[{ value: "order", label: "Report order" }, ...CHAPTER_SORTS]}
-            value={sort?.key ?? "order"}
-            onChange={(v) => setSort(v === "order" ? null : { key: v, dir: -1 })}
-          />
+          // One row on a phone: the pills scroll sideways rather than wrap.
+          <div className="min-w-0 max-w-full overflow-x-auto">
+            <div className="w-max">
+              <Pills<"order" | ChapterKey>
+                label="Sort chapters by"
+                options={[{ value: "order", label: "Report order" }, ...CHAPTER_SORTS]}
+                value={sort?.key ?? "order"}
+                onChange={(v) => setSort(v === "order" ? null : { key: v, dir: -1 })}
+              />
+            </div>
+          </div>
         }
       />
       <AllTraffic note={data.narrowed} />
@@ -1136,9 +1158,10 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
               <span role="cell" className="px-3 py-2 text-xs tabular-nums text-ap-muted">
                 {c.n}
               </span>
-              <span role="rowheader" className="flex flex-col gap-px px-3 py-2">
+              {/* A long id wraps inside its column rather than running into Reach. */}
+              <span role="rowheader" className="flex min-w-0 flex-col gap-px px-3 py-2">
                 <span className="text-[13px] font-bold">{c.name}</span>
-                <span className="font-mono text-[11px] text-ap-muted">
+                <span className="font-mono text-[11px] text-ap-muted [overflow-wrap:anywhere]">
                   {c.part} · {c.id}
                 </span>
               </span>
@@ -1178,19 +1201,20 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                   <span className="min-w-[74px] text-right text-xs text-ap-muted">no votes</span>
                 )}
               </span>
+              {/* Whole percentages, as drawn, and the highlights by the figure shown. */}
               <span
                 role="cell"
                 className={`px-3 py-2 text-right text-[13px] tabular-nums ${
                   c.showMore === null
                     ? ""
-                    : c.showMore >= 0.18
+                    : atLeast(c.showMore, 18)
                       ? "font-bold text-ap-good-ink"
-                      : c.showMore <= 0.04
+                      : !atLeast(c.showMore, 5)
                         ? "text-ap-bad-ink"
                         : ""
                 }`}
               >
-                {fmt("pct", c.showMore, 1)}
+                {wholePct(c.showMore)}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
                 {reading.recorded ? (
@@ -1215,10 +1239,10 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
                 )}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                {fmt("pct", c.learnMore, 1)}
+                {wholePct(c.learnMore)}
               </span>
               <span role="cell" className="px-3 py-2 text-right text-[13px] tabular-nums">
-                {fmt("pct", c.exercise, 1)}
+                {wholePct(c.exercise)}
               </span>
             </div>
           ))}
@@ -1270,7 +1294,9 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
     onSort: (k: LogKey) => setSort((s) => nextSort(s, k, k === "chapter" ? 1 : -1)),
   };
   const goodShare = fb.good + fb.bad ? fb.good / (fb.good + fb.bad) : null;
-  const gtc = "170px 100px minmax(220px,2fr) 90px 140px 110px";
+  // The comment takes the room left over, as in the design (the issue keeps 140px: our
+  // reasons, as "Not relevant to me", are longer than the design's).
+  const gtc = "170px 100px minmax(220px,2fr) 90px 140px minmax(160px,1.6fr)";
   return (
     <Card id="feedback" labelledBy="h-fb">
       <SectionHead
@@ -1345,7 +1371,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
         </div>
         {choice}
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
-          <div role="table" aria-label="Feedback log" style={{ minWidth: 860 }}>
+          <div role="table" aria-label="Feedback log" style={{ minWidth: 880 }}>
             <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: gtc }}>
               <Th label="Date & time (Berlin)" col="at" {...head} />
               <Th label="Submission" filter={funnel("submission")} />

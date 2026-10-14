@@ -24,6 +24,7 @@ import { parseFilters } from "@features/admin/server/ap/filters";
 import {
   buildReportPage,
   fetchReportExtras,
+  twoFigures,
   type ReportExtras,
 } from "@features/admin/server/ap/report-page";
 import ApReport from "@features/admin/ui/ap/ApReport";
@@ -199,6 +200,35 @@ describe("report page", () => {
     });
     // No earlier period: no difference in inviters.
     expect(q.tiles.find((t) => t.key === "invite")!.change).toBeUndefined();
+  });
+
+  it("gives the headline rates two figures and the wizard's none, as the design writes them", () => {
+    // "34%", "14%", "2.1%", "0.21%"; 9.96% rounds to "10%", not "10.0%"; none at all is "0%".
+    expect([0.34, 0.14, 0.0996, 0.021, 0.00996, 0.0021, 0, null].map(twoFigures)).toEqual([
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      0,
+      undefined,
+    ]);
+    const f = factsFixture({
+      subs: [
+        sub({ id: 1, returnedAt: "2026-10-03T10:00:00Z", visits: 2, wizardSlide: 5 }),
+        sub({ id: 2 }),
+        sub({ id: 3, votes: 1 }),
+      ],
+    });
+    const p = page({ facts: f, benchmark: f });
+    const digits = (k: string) => p.tiles.find((t) => t.key === k)!.digits;
+    expect(digits("returned")).toBe(0);
+    expect(digits("rating")).toBe(0);
+    // A count and a time keep their own writing.
+    expect(digits("opened")).toBeUndefined();
+    expect(digits("read")).toBeUndefined();
+    expect(p.wizard.tiles.map((t) => t.digits)).toEqual([0, 0, 0, 0]);
   });
 
   it("Full unlock rate counts the Full and Full All plans only; Completed all 6 needs the report opened", () => {
@@ -656,6 +686,27 @@ describe("report page", () => {
     const none = returns(null, null);
     expect(none.campaigns[0]).toMatchObject({ opened: null, clicked: null });
     expect(none.emailEvents).toBe("Opens and clicks are not recorded yet.");
+
+    // A range (1 to 7 Oct) that ends before recording began: those emails carried no tracking,
+    // so blank, not 0, and the note says since when they are counted.
+    const before = returns("2026-10-14", "2026-10-14");
+    expect(before.campaigns[0]).toMatchObject({
+      sent: 40,
+      opened: null,
+      openRate: null,
+      clicked: null,
+      clickRate: null,
+    });
+    expect(before.emailEvents).toBe(
+      "Opens and clicks are of the emails delivered since 14 Oct 2026, when recording began."
+    );
+    // Clicks counted from within the range, opens only from after it.
+    expect(returns("2026-10-07", "2026-10-08").campaigns[0]).toMatchObject({
+      opened: null,
+      openRate: null,
+      clicked: 4,
+      clickRate: 0.25,
+    });
   });
 });
 
@@ -908,10 +959,10 @@ describe("report page, on screen", () => {
       },
     });
     render(createElement(ApReport));
-    expect(screen.getByText("1 share").className).toBe("text-ap-muted");
-    expect(screen.getByText("1 user").className).toBe("text-ap-muted");
+    expect(screen.getByText("1 share")).toHaveClass("text-ap-muted");
+    expect(screen.getByText("1 user")).toHaveClass("text-ap-muted");
     // One inviter against none before: the difference, in green.
-    expect(screen.getByText("+1").className).toBe("text-ap-good");
+    expect(screen.getByText("+1")).toHaveClass("text-ap-good");
     expect(
       screen.getByText(/of report openers invited a friend to the test \(1 of 2 · prev\. 0\)/)
     ).toBeInTheDocument();
@@ -927,8 +978,9 @@ describe("report page, on screen", () => {
     expect(fb.getByText(/good · 250 good \/ 50 bad · 300 votes/)).toBeInTheDocument();
 
     const chapters = within(screen.getByRole("table", { name: "Chapters" }));
-    expect(chapters.getByText("20.0%").className).toContain("font-bold text-ap-good-ink");
-    expect(chapters.getByText("3.3%").className).toContain("text-ap-bad-ink");
+    // Show more whole, as drawn (2 of 10, 1 of 30); the paywall to a tenth.
+    expect(chapters.getByText("20%").className).toContain("font-bold text-ap-good-ink");
+    expect(chapters.getByText("3%").className).toContain("text-ap-bad-ink");
     expect(chapters.getByText("10.0%").className).toContain("font-bold text-ap-good-ink");
   });
 
@@ -959,7 +1011,11 @@ describe("report page, on screen", () => {
     expect(screen.getByText("This report")).toBeInTheDocument();
     expect(screen.getByText("Benchmark · all reports")).toBeInTheDocument();
     const age = within(screen.getByText("Avg. total time by age").parentElement!);
-    expect(age.getByText("55+").parentElement!.textContent).toBe("55+1:40+0:00.0");
+    // The same as all reports: no difference, grey, as the average's own line writes it.
+    const same = age.getByText("55+").parentElement!;
+    expect(same.textContent).toBe("55+1:40±0:00.0");
+    expect(same.lastElementChild).toHaveClass("text-ap-muted");
+    expect(same.lastElementChild).not.toHaveClass("text-ap-good");
     expect(age.getByText("18–24").parentElement!.textContent).toBe("18–24——");
     expect(age.getByText("Not stated")).toBeInTheDocument();
     expect(
@@ -1147,6 +1203,14 @@ describe("report page, on screen", () => {
     expect(table.getByText("2:05")).toBeInTheDocument();
     // The paywall rate, with how many clicked of how many saw it under it.
     expect(table.getByText("1 of 2")).toBeInTheDocument();
+    // Learn more and Exercise whole, as drawn: 1 and 2 of the chapter's 3 readers.
+    const beliefs = table.getByText("Typical Beliefs").closest<HTMLElement>("[role=row]")!;
+    expect(
+      within(beliefs)
+        .getAllByRole("cell")
+        .slice(-2)
+        .map((c) => c.textContent)
+    ).toEqual(["33%", "67%"]);
     fireEvent.click(pills.getByRole("button", { name: "Paywall" }));
     expect(rowNames("Chapters").slice(0, 2)).toEqual([
       expect.stringContaining("Love Language"),
@@ -1206,5 +1270,89 @@ describe("report page, on screen", () => {
     );
     expect(nav.getByRole("link", { name: "Chapters" })).toHaveAttribute("aria-current", "true");
     expect(nav.getByRole("link", { name: "Wizard" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("keeps the section nav and the chapter sort in one row that scrolls, the current pill bold", () => {
+    screenData.payload = payload;
+    render(createElement(ApReport));
+    const nav = screen.getByRole("navigation", { name: "Report sections" });
+    expect(nav).toHaveClass("w-max");
+    expect(nav).not.toHaveClass("flex-wrap");
+    expect(nav.parentElement).toHaveClass("overflow-x-auto", "max-w-full");
+    // The design's 700 for the section in view, 600 for the rest.
+    expect(within(nav).getByRole("link", { name: "Wizard" })).toHaveClass("font-bold");
+    expect(within(nav).getByRole("link", { name: "Chapters" })).toHaveClass("font-semibold");
+    expect(within(nav).getByRole("link", { name: "Chapters" })).not.toHaveClass("font-bold");
+    const pills = screen.getByRole("group", { name: "Sort chapters by" });
+    expect(pills.parentElement).toHaveClass("w-max");
+    expect(pills.parentElement!.parentElement).toHaveClass("overflow-x-auto");
+  });
+
+  it("writes the tiles' and the returns' percentages as the design does", () => {
+    // 200 readers: 68 came back, 4 rated, 1 shared; 68 went through the intro and opened it.
+    const many = factsFixture({
+      subs: Array.from({ length: 200 }, (_, i) =>
+        sub({
+          id: i + 1,
+          ...day("2026-10-02"),
+          returnedAt: i < 68 ? "2026-10-03T10:00:00Z" : null,
+          visits: i < 68 ? 2 : 1,
+          votes: i < 4 ? 1 : 0,
+          shared: i === 0,
+          wizardSlide: i < 68 ? 5 : 1,
+        })
+      ),
+    });
+    screenData.payload = page({
+      facts: many,
+      benchmark: many,
+      returns: posthog({
+        sources: [
+          { source: "Email link", sessions: 3 },
+          { source: "Bookmark or direct", sessions: 1 },
+        ],
+      }),
+    });
+    render(createElement(ApReport));
+    /** A tile's or a box's value, by its label. */
+    const value = (label: string) =>
+      screen
+        .getAllByText(label)
+        .map((e) => e.nextElementSibling)
+        .find((v) => v?.className.includes("font-serif"))!.textContent;
+    // Headline rates to two figures: "34%", "2.0%", "0.50%".
+    expect(value("Returned")).toBe("34%");
+    expect(value("Rating rate")).toBe("2.0%");
+    expect(value("Share rate")).toBe("0.50%");
+    // The wizard's whole: 68 of 200 continued through slide 6.
+    expect(value("Completed all 6")).toBe("34%");
+    // The returns whole.
+    expect(value("Came back")).toBe("34%");
+    expect(value("Returned via email")).toBe("75%");
+    const band = screen.getByText("1 day").parentElement!;
+    expect([...band.children].slice(2).map((c) => c.textContent)).toEqual(["34%", "34%"]);
+    // What brought readers back: each bar against the largest, email's 75% full width.
+    const bar = (source: string) =>
+      parseFloat(
+        (screen.getByText(source).nextElementSibling!.firstElementChild as HTMLElement).style.width
+      );
+    expect(bar("Email campaign")).toBe(100);
+    expect(bar("Bookmark or direct")).toBeCloseTo(33.33);
+  });
+
+  it("gives the feedback log's comment the room left, and keeps a long chapter id in its column", () => {
+    screenData.payload = payload;
+    render(createElement(ApReport));
+    const log = screen.getByRole("table", { name: "Feedback log" });
+    expect(within(log).getAllByRole("row")[0]!.style.gridTemplateColumns).toBe(
+      "170px 100px minmax(220px,2fr) 90px 140px minmax(160px,1.6fr)"
+    );
+    expect(log.style.minWidth).toBe("880px");
+    // A chapter's name and id may be wider than the column: they wrap inside it.
+    const head = within(screen.getByRole("table", { name: "Chapters" })).getAllByRole(
+      "rowheader"
+    )[0]!;
+    expect(head).toHaveClass("min-w-0");
+    expect(head.lastElementChild).toHaveClass("[overflow-wrap:anywhere]");
   });
 });

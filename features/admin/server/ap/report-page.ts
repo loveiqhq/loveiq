@@ -222,16 +222,27 @@ export function prettyId(id: string): string {
 
 /**
  * A headline tile whose change is written as the design writes it (a count of sharers or
- * raters, the difference in inviters) rather than worked out from `prev`.
+ * raters, the difference in inviters) rather than worked out from `prev`, and whose value has
+ * the design's decimals (`digits`; the page's own tile reads them, KpiTile has none).
  */
-export type ReportTile = Tile & { change?: Delta };
+export type ReportTile = Tile & { change?: Delta; digits?: number };
+
+/**
+ * A headline rate's decimals, as the design writes them: two figures ("34%", "2.1%", "0.21%"),
+ * and "0%" for none. Read off the rounded rate, so 9.96% is "10%", not "10.0%".
+ */
+export function twoFigures(v: number | null): number | undefined {
+  if (v === null) return undefined;
+  const p = Math.abs(v) * 100;
+  return p >= 9.95 || p === 0 ? 0 : p >= 0.995 ? 1 : 2;
+}
 
 export interface ReportPayload extends PageHead {
   launched: boolean;
   tiles: ReportTile[];
   wizard: {
-    /** Intro started, completed all 6, skipped and left the report. */
-    tiles: Tile[];
+    /** Intro started, completed all 6, skipped and left the report; rates whole, as drawn. */
+    tiles: ReportTile[];
     slides: Array<{
       n: number;
       name: string;
@@ -437,11 +448,13 @@ export function buildReportPage(input: {
     foot: string,
     sp: Array<number | null>,
     blocked: string | null = null
-  ): Tile => ({
+  ): ReportTile => ({
     key,
     label,
     unit,
     value,
+    // The design's headline rates read "34%", "2.1%", "0.21%"; the wizard's are whole (below).
+    digits: unit === "pct" ? twoFigures(value) : undefined,
     prev,
     goodWhen: "up",
     spark: sp,
@@ -631,7 +644,7 @@ export function buildReportPage(input: {
     const k = subs.filter((x) => who.has(x.id)).length;
     if (k > (topSkip?.n ?? 0)) topSkip = { slide, n: k };
   }
-  const skippedTile: Tile = ownSkips
+  const skippedTile: ReportTile = ownSkips
     ? {
         ...tile(
           "skipped",
@@ -667,7 +680,7 @@ export function buildReportPage(input: {
     ratio(l.filter((s) => s.openedAt && (s.wizardSlide ?? 0) >= 5).length, l.length);
   // Finishers whose report was never opened (so far): they left during the intro.
   const leftShare = (l: SubFact[]) => ratio(l.filter((s) => !s.openedAt).length, l.length);
-  const wizardTiles: Tile[] = [
+  const wizardTiles: ReportTile[] = [
     tile(
       "intro",
       "Intro started",
@@ -748,9 +761,12 @@ export function buildReportPage(input: {
   }
   // Opens and clicks are of the emails the webhook reported delivered: clicks once it kept any
   // event, opens of those delivered after open tracking was switched on (later than the rest).
-  // So a range reaching back before tracking still counts right, out of the emails it saw.
+  // So a range reaching back before tracking still counts right, out of the emails it saw. A
+  // range that ends before either began has nothing of it to count: blank, not 0.
   const opensFrom = extras.email_opens_from;
   const clicksFrom = extras.email_events_from;
+  const opensCounted = opensFrom !== null && opensFrom <= f.to;
+  const clicksCounted = clicksFrom !== null && clicksFrom <= f.to;
   const campaigns = ["72h_no_unlock", "54h_no_unlock", "30h_no_unlock"].map((stage) => {
     const e = extras.emails.find((x) => x.stage === stage);
     const status = stage === "72h_no_unlock" ? ("Live" as const) : ("Retired" as const);
@@ -759,8 +775,8 @@ export function buildReportPage(input: {
     // No row: nothing was sent (or bought) for the stage, so nobody came back from it.
     const returned = idle ? null : e ? e.returned : 0;
     const sent = idle ? null : (e?.sent ?? 0);
-    const opened = idle || !opensFrom ? null : e ? e.opened : 0;
-    const clicked = idle || !clicksFrom ? null : e ? e.clicked : 0;
+    const opened = idle || !opensCounted ? null : e ? e.opened : 0;
+    const clicked = idle || !clicksCounted ? null : e ? e.clicked : 0;
     return {
       stage,
       status,
@@ -813,7 +829,7 @@ export function buildReportPage(input: {
     ...head(f, today, now),
     launched: launched(scope),
     tiles,
-    wizard: { tiles: wizardTiles, slides, skipsFrom },
+    wizard: { tiles: wizardTiles.map((t) => ({ ...t, digits: 0 })), slides, skipsFrom },
     time: {
       readers: readers.length,
       recorded: rec.length,
