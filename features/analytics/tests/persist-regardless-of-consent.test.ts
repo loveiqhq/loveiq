@@ -137,17 +137,21 @@ describe("first-party events are written whatever the banner says", () => {
   });
 
   /**
-   * THE SAFETY HALF. Removing the first-party gate must not leak a single event
-   * to Google — `track()` holds the dataLayer push behind its own check, and
-   * this is what proves that check is still doing its job.
+   * Declined: since 15 Oct 2026 (owner decision, measure everyone) Google's own tag still
+   * gets the event, as a cookieless ping under the banner's denied signal (Google Consent
+   * Mode); the tag manager's push, which feeds pixels with no cookieless mode, stays held
+   * behind consent.
    */
-  it("sends NOTHING to GA4 when consent was declined", () => {
+  it("sends Google's tag a cookieless event but the tag manager nothing when consent was declined", () => {
     declineConsent();
     (window as unknown as Record<string, unknown>).__loveiqReportSubmissionId = 1296;
     priceShown();
 
     expect(beacon).toHaveBeenCalledTimes(1); // ours
-    expect(dataLayer()).toHaveLength(0); // theirs
+    expect(
+      gtag.mock.calls.some((c) => c[0] === "event" && c[1] === "locked_card_price_shown")
+    ).toBe(true);
+    expect(dataLayer()).toHaveLength(0); // the tag manager's
   });
 
   it("sends to GA4 as well once consent is granted", () => {
@@ -162,22 +166,35 @@ describe("first-party events are written whatever the banner says", () => {
   const conversionCalls = () =>
     gtag.mock.calls.filter((c) => c[0] === "event" && c[1] === "conversion");
 
-  it("keeps Google Ads behind the separate advertisement category", () => {
-    // analytics:yes but advertisement:no — the conversion must still not fire.
+  it("fires the Google Ads conversion without advertising consent too (a cookieless ping)", () => {
+    // analytics:yes but advertisement:no: since 15 Oct 2026 the conversion still goes, and the
+    // banner's denied signal makes it cookieless for Google Ads to model.
     grantConsent();
     client.trackGoogleAdsPurchaseConversion({
       value: 29,
       currency: "EUR",
       transaction_id: "cs_test_1",
     });
-    expect(conversionCalls()).toHaveLength(0);
+    expect(conversionCalls()).toHaveLength(1);
   });
 
-  /**
-   * The positive control, and the only reason the assertion above means
-   * anything: without it the test passes just as happily when the gate is
-   * deleted, because nothing would have fired either way.
-   */
+  it("sends a declining buyer's purchase to Google's tag and Ads, never to the tag manager", () => {
+    declineConsent();
+    client.trackReportPurchase({ value: 29, currency: "EUR", transaction_id: "cs_test_2" });
+    const purchase = gtag.mock.calls.find((c) => c[0] === "event" && c[1] === "purchase");
+    expect(purchase?.[2]).toMatchObject({
+      transaction_id: "cs_test_2",
+      value: 29,
+      currency: "EUR",
+    });
+    expect(conversionCalls()).toHaveLength(1);
+    expect(dataLayer()).toHaveLength(0);
+    // A comp is still never sent, consent or not.
+    gtag.mockClear();
+    client.trackReportPurchase({ value: 0, currency: "EUR", transaction_id: "cs_test_3" });
+    expect(gtag).not.toHaveBeenCalled();
+  });
+
   it("fires the Google Ads conversion once the advertisement category is granted", () => {
     grantAllConsent();
     client.trackGoogleAdsPurchaseConversion({

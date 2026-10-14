@@ -24,6 +24,7 @@ import {
   setEmailQuestionArm,
   trackExperimentExposure,
 } from "@features/analytics/client";
+import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { EMAIL_QID, orderAskedQuestions } from "./questionOrder";
 import {
@@ -44,7 +45,6 @@ import { completedReportToken } from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
-import { readCookie } from "@shared/observability/cookie";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
 import SurveyConfirmation from "./SurveyConfirmation";
@@ -240,47 +240,45 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       hasTrackedStart.current = true;
       trackSurveyStart();
 
-      // Server-side engine-mount ping for the daily Slack digest. The
-      // funnel_event PK dedupes per (visitor_id, day) so a re-mount in the
-      // same day is a no-op server-side.
-      const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
+      // Server-side engine-mount ping for the daily Slack digest, for every visitor: the
+      // visitor cookie, or this page's own id without it (funnelVisitorId). The funnel_event
+      // PK dedupes per (visitor_id, day) so a re-mount in the same day is a no-op server-side.
+      const visitorId = funnelVisitorId();
       // The landing arm is NOT sent from here: /api/funnel-event reads the same
       // cookie server-side, so it cannot be attested by a client.
-      if (visitorId) {
-        // First-touch acquisition source, so start-rate can be split by channel
-        // (the visitor denominator carries it too — see proxy.ts/recordVisit.ts).
-        // Best-effort: empty/unparseable stored UTM just sends no source.
-        let utmSource: string | undefined;
-        try {
-          const rawUtm = getStoredUtm();
-          if (rawUtm) {
-            const parsed = JSON.parse(rawUtm) as { utm_source?: unknown };
-            if (typeof parsed.utm_source === "string") {
-              // Same normalizer as proxy.ts so both rows share one label format
-              // (this is first-touch localStorage; the visitor row is last-touch
-              // URL — per-channel start-rate is directional, not exact).
-              utmSource = sanitizeUtmSource(parsed.utm_source);
-            }
+      // First-touch acquisition source, so start-rate can be split by channel
+      // (the visitor denominator carries it too — see proxy.ts/recordVisit.ts).
+      // Best-effort: empty/unparseable stored UTM just sends no source.
+      let utmSource: string | undefined;
+      try {
+        const rawUtm = getStoredUtm();
+        if (rawUtm) {
+          const parsed = JSON.parse(rawUtm) as { utm_source?: unknown };
+          if (typeof parsed.utm_source === "string") {
+            // Same normalizer as proxy.ts so both rows share one label format
+            // (this is first-touch localStorage; the visitor row is last-touch
+            // URL — per-channel start-rate is directional, not exact).
+            utmSource = sanitizeUtmSource(parsed.utm_source);
           }
-        } catch {
-          /* no usable stored UTM */
         }
-        fetch("/api/funnel-event", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": getCsrfToken(),
-          },
-          body: JSON.stringify({
-            event: "survey_engine_mount",
-            visitor_id: visitorId,
-            ...(utmSource ? { utm_source: utmSource } : {}),
-          }),
-          keepalive: true,
-        }).catch(() => {
-          // Best-effort — failure just means the day's count is short by one.
-        });
+      } catch {
+        /* no usable stored UTM */
       }
+      fetch("/api/funnel-event", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          event: "survey_engine_mount",
+          visitor_id: visitorId,
+          ...(utmSource ? { utm_source: utmSource } : {}),
+        }),
+        keepalive: true,
+      }).catch(() => {
+        // Best-effort — failure just means the day's count is short by one.
+      });
     }
   }, []);
 

@@ -1,6 +1,7 @@
 import posthog, { type CaptureOptions } from "posthog-js";
 import type { PricingExperimentGroup } from "@features/pricing/logic/reportPricing";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { __resetFunnelVisitorForTests, funnelVisitorId } from "./funnelVisitor";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import {
   LANDING_VARIANT_COOKIE,
@@ -117,7 +118,7 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
   if (typeof window === "undefined") return;
   window.__loveiqSurveyVariant = variant;
   if (variant) posthog.register({ survey_variant: variant });
-  if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
+  if (variant && isProductionSite()) {
     gtagSend("set", "user_properties", { survey_variant: variant });
   }
 };
@@ -394,7 +395,7 @@ const getLandingVariant = (): LandingVariant | null => {
 export const setLandingVariant = (variant: LandingVariant | null) => {
   if (typeof window === "undefined") return;
   if (variant) posthog.register({ landing_variant: variant });
-  if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
+  if (variant && isProductionSite()) {
     gtagSend("set", "user_properties", { landing_variant: variant });
   }
 };
@@ -409,7 +410,7 @@ export const setLandingVariant = (variant: LandingVariant | null) => {
 export const setEmailQuestionArm = (arm: EmailQuestionArm) => {
   if (typeof window === "undefined") return;
   posthog.register({ [EMAIL_QUESTION_ARM_KEY]: arm });
-  if (isProductionSite() && hasCookieYesConsent("analytics")) {
+  if (isProductionSite()) {
     gtagSend("set", "user_properties", { [EMAIL_QUESTION_ARM_KEY]: arm });
   }
 };
@@ -468,17 +469,20 @@ export const track = (
    * page load, `window.dataLayer` held nine entries and not one of them was ours.
    * `landing_page_view` never fired at all.
    *
-   * `isProductionSite()` is inlined at build time, so it carries no race. Consent
-   * still gates everything below it.
+   * `isProductionSite()` is inlined at build time, so it carries no race.
    */
   if (!isProductionSite()) return;
-  if (!hasCookieYesConsent("analytics")) return;
 
-  // Both of these are safe before gtag.js has loaded: the shim in layout.tsx makes
-  // `gtag` a dataLayer pusher from `afterInteractive`, and dataLayer is an ordinary
-  // array that GTM and gtag.js each drain on load. Queueing is the designed
-  // behaviour — dropping was not.
+  // Google's own tag gets every event, whatever the banner says (owner decision, 15 Oct
+  // 2026: measure everyone). For a visitor who declined, the banner's "denied" consent
+  // signal makes it a cookieless ping (Google Consent Mode): no cookie, no identifier,
+  // and Google models those visitors. Safe before gtag.js has loaded: the shim in
+  // layout.tsx makes `gtag` a dataLayer pusher from `afterInteractive`, and dataLayer is
+  // an ordinary array that gtag.js drains on load.
   gtagSend("event", name, params);
+  // The tag manager's own tags (any ad pixel in the container) only with consent: they set
+  // their own cookies and have no cookieless mode, so the event is pushed for them only then.
+  if (!hasCookieYesConsent("analytics")) return;
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({ event: name, ...params });
 };
@@ -494,22 +498,18 @@ export const trackLandingPageView = () => {
 };
 
 const sentFunnelEvents = new Set<string>();
-
 /**
  * Durable top-of-funnel ping to `funnel_event` (keyed by visitor_id + day, NOT a
- * survey_submission): the survey intro's cards and their Back and Skip. It needs the
- * visitor cookie, which proxy.ts sets only once the cookie banner's analytics consent is
- * given, so it covers consenting visitors only; without the cookie (or a CSRF token) it
- * does nothing and a later call can still send. PK (visitor_id, day, event_type) dedupes
- * server-side, so each event is sent once per page and UTC day (the route's day): a card
- * seen again after Back would only spend the route's rate limit, and a tab still open the
- * next day records that day too.
+ * survey_submission): the survey intro's cards and their Back and Skip, for every visitor
+ * (funnelVisitorId). Without a CSRF token it does nothing and a later call can still send.
+ * PK (visitor_id, day, event_type) dedupes server-side, so each event is sent once per page
+ * and UTC day (the route's day): a card seen again after Back would only spend the route's
+ * rate limit, and a tab still open the next day records that day too.
  */
 export const pingFunnelEvent = (event: string) => {
   const once = `${event}|${new Date().toISOString().slice(0, 10)}`;
   if (typeof window === "undefined" || sentFunnelEvents.has(once)) return;
-  const visitorId = getCookieValue("__Host-liq_vid") || getCookieValue("__liq_vid");
-  if (!visitorId) return;
+  const visitorId = funnelVisitorId();
   const csrf = getCsrfToken();
   if (!csrf) return;
   sentFunnelEvents.add(once);
@@ -531,7 +531,10 @@ export const pingFunnelEvent = (event: string) => {
 };
 
 /** For tests: forget what this page has sent. */
-export const __resetFunnelPingsForTests = () => sentFunnelEvents.clear();
+export const __resetFunnelPingsForTests = () => {
+  sentFunnelEvents.clear();
+  __resetFunnelVisitorForTests();
+};
 
 export const trackStartSurvey = (
   location:
@@ -900,7 +903,6 @@ export interface ReportPurchaseParams {
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
   if (!isProductionSite()) return;
-  if (!hasCookieYesConsent("analytics")) return;
   /**
    * A `purchase` in the dataLayer becomes a GA4 purchase and then a Google Ads
    * conversion the bidding algorithm optimises on, so one that carried no money
@@ -913,6 +915,20 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
    */
   if (params.isTest) return;
   if (!(params.value > 0)) return;
+
+  // A buyer who declined cookies: the purchase goes to Google's own tag, a cookieless ping
+  // under the banner's denied signal (as track() does), and the ad conversion below. GA4
+  // dedupes on transaction_id, so the server-side copy can never make it two.
+  if (!hasCookieYesConsent("analytics")) {
+    gtagSend("event", "purchase", {
+      transaction_id: params.transaction_id,
+      value: params.value,
+      currency: params.currency,
+      items: [{ item_name: params.item_name || "LoveIQ Report", price: params.value, quantity: 1 }],
+    });
+    trackGoogleAdsPurchaseConversion(params);
+    return;
+  }
 
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({
@@ -948,7 +964,8 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
 export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
   if (!isProductionSite()) return;
-  if (!hasCookieYesConsent("advertisement")) return;
+  // Every buyer (owner decision, 15 Oct 2026): without advertising consent the banner's
+  // denied signal makes it a cookieless conversion ping that Google Ads models.
 
   gtagSend("event", "conversion", {
     send_to: GOOGLE_ADS_PURCHASE_SEND_TO,

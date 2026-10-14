@@ -166,19 +166,23 @@ describe("analytics", () => {
       expect(globalThis.window.dataLayer).toEqual([{ event: "test_event", a: 1 }]);
     });
 
-    it("does nothing when analytics consent is not granted", () => {
+    it("sends Google's tag the event without analytics consent, but nothing to the tag manager", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ advertisement: true });
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        dataLayer: [],
         google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
       track("test_event");
 
-      expect(mockGtag).not.toHaveBeenCalled();
+      // A cookieless ping under the banner's denied signal (Google Consent Mode).
+      expect(mockGtag).toHaveBeenCalledWith("event", "test_event", undefined);
+      // The tag manager's ad pixels have no cookieless mode: nothing pushed for them.
+      expect(window.dataLayer).toEqual([]);
     });
 
     it("calls window.gtag with event name", () => {
@@ -831,7 +835,7 @@ describe("analytics", () => {
       expect(mockGtag).not.toHaveBeenCalled();
     });
 
-    it("does nothing when advertisement consent is not granted", () => {
+    it("fires without advertisement consent too: a cookieless conversion Google Ads models", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ analytics: true });
       globalThis.window = {
@@ -843,7 +847,11 @@ describe("analytics", () => {
 
       trackGoogleAdsPurchaseConversion(purchaseParams);
 
-      expect(mockGtag).not.toHaveBeenCalled();
+      expect(mockGtag).toHaveBeenCalledWith(
+        "event",
+        "conversion",
+        expect.objectContaining({ transaction_id: purchaseParams.transaction_id })
+      );
     });
 
     it("fires the Google Ads conversion event with dynamic value, currency, and transaction_id", () => {

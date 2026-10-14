@@ -130,7 +130,7 @@ describe("gtag delivery queue", () => {
     ]);
   });
 
-  it("does not set the email question test's arm in GA4 without analytics consent", async () => {
+  it("sets the email question test's arm in GA4 without analytics consent too (cookieless)", async () => {
     document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
     const gtag = vi.fn();
     const mod = await import("@features/analytics/client");
@@ -140,7 +140,8 @@ describe("gtag delivery queue", () => {
     mod.setEmailQuestionArm("control");
     vi.advanceTimersByTime(300);
 
-    expect(gtag.mock.calls.filter((c) => c[0] === "set")).toEqual([]);
+    // Google's tag gets it for everyone; the banner's denied signal keeps it cookieless.
+    expect(gtag.mock.calls.filter((c) => c[0] === "set")).toHaveLength(1);
   });
 
   it("gives up if gtag.js never arrives, rather than queueing forever", async () => {

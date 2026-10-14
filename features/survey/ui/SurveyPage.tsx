@@ -22,7 +22,7 @@ import { pingFunnelEvent } from "@features/analytics/client";
 
 /*
  * The intro's cards record themselves in `funnel_event`, one row per visitor, day and step
- * (cookie-accepting visitors only; see pingFunnelEvent): intro_view, intro_slide_1..4 and
+ * (every visitor; see pingFunnelEvent): intro_view, intro_slide_1..4 and
  * consent_view when shown, intro_back_N / consent_back on going back, intro_skip_N on Skip
  * Intro. Leaving is not sent: AP-Analytics takes each visitor's furthest card that day.
  */

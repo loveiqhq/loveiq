@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
@@ -84,6 +85,11 @@ export interface Ga4PurchaseInput {
  * client_id is a clean skip (logged at info); network/HTTP errors log at error.
  * Fulfillment must never fail because analytics did.
  */
+/** A GA client id ("<random>.<seconds>") for a buyer with none of their own; random, never reused. */
+function oneOffClientId(): string {
+  return `${randomInt(1, 2 ** 31)}.${Math.floor(Date.now() / 1000)}`;
+}
+
 export async function sendGa4PurchaseEvent(input: Ga4PurchaseInput): Promise<void> {
   /**
    * Production only. This is the one analytics send that survives the client-side
@@ -139,20 +145,11 @@ export async function sendGa4PurchaseEvent(input: Ga4PurchaseInput): Promise<voi
     );
     return;
   }
-  if (!input.consentGranted) {
-    logger.info(
-      { transactionId: input.transactionId },
-      "Analytics consent not granted — skipping GA4 purchase (Measurement Protocol)"
-    );
-    return;
-  }
-  if (!input.clientId) {
-    logger.info(
-      { transactionId: input.transactionId },
-      "No GA client_id — skipping GA4 purchase (Measurement Protocol)"
-    );
-    return;
-  }
+  // Every paid purchase reaches GA4 (owner decision, 15 Oct 2026: measure everyone). A buyer
+  // without a `_ga` id (declined cookies, or a blocker) goes under a one-off id made from
+  // nothing about them, so no visit is joined to it; one who declined is marked denied for ad
+  // use, as Google's consent mode marks a declined visitor.
+  const clientId = input.clientId ?? oneOffClientId();
 
   // Drop empty/undefined extras so the GA4 payload stays clean. Built via
   // fromEntries (not dynamic-key assignment) to avoid an object-injection sink.
@@ -163,7 +160,10 @@ export async function sendGa4PurchaseEvent(input: Ga4PurchaseInput): Promise<voi
   ) as Record<string, string | number>;
 
   const body = {
-    client_id: input.clientId,
+    client_id: clientId,
+    ...(input.consentGranted
+      ? {}
+      : { consent: { ad_user_data: "DENIED", ad_personalization: "DENIED" } }),
     events: [
       {
         name: "purchase",
@@ -177,7 +177,7 @@ export async function sendGa4PurchaseEvent(input: Ga4PurchaseInput): Promise<voi
           items: [{ item_name: input.itemName, price: input.value, quantity: 1 }],
           // session_id + engagement_time_msec let the event attribute to the
           // buyer's session/source instead of landing as a session-less hit.
-          ...(input.sessionId ? { session_id: input.sessionId } : {}),
+          ...(input.sessionId && input.clientId ? { session_id: input.sessionId } : {}),
           engagement_time_msec: 1,
         },
       },

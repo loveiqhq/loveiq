@@ -715,11 +715,23 @@ describe("SurveyPage — the intro's own records", () => {
     expect(sent()).toEqual(["intro_slide_1"]);
   });
 
-  it("records nothing without the visitor cookie (cookies not accepted)", async () => {
+  it("records a visitor who declined cookies too, under this page's own id, stored nowhere", async () => {
     document.cookie = "__liq_vid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+    const user = userEvent.setup();
     render(<SurveyPage />);
-    await screen.findByRole("button", { name: /continue to survey introduction/i });
-    expect(sent()).toEqual([]);
+    await user.click(
+      await screen.findByRole("button", { name: /continue to survey introduction/i })
+    );
+    await screen.findByRole("heading", { name: /quality in/i }, { timeout: 2000 });
+    expect(sent()).toEqual(["intro_view", "intro_slide_1"]);
+    const ids = fetchSpy.mock.calls
+      .filter(([url]) => url === "/api/funnel-event")
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)).visitor_id as string);
+    // One id for the page's steps, a UUID, and no cookie or storage written for it.
+    expect(new Set(ids).size).toBe(1);
+    expect(ids[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(document.cookie).not.toContain(ids[0]);
+    expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toContain(ids[0]);
   });
 });
 
