@@ -278,6 +278,44 @@ describe("useLeaveIntent: once, and only when it can be remembered", () => {
   });
 });
 
+describe("useLeaveIntent: the page turning the offer off", () => {
+  it("ignores a leave signal that comes after the page turned the offer off", () => {
+    // A purchase that lands mid-session (a 409 "already owned", then a reload of the data)
+    // turns the mode off while the hook is armed; the dialog is no longer mounted.
+    const { result, rerender } = mount();
+    advance(5_000);
+    rerender({ ...BASE, mode: "off" });
+    act(() => result.current.notifyPlansClosed());
+    advance(120_000);
+    expect(result.current.open).toBe(false);
+    expect(shown).not.toHaveBeenCalled();
+    expect(localStorage.getItem("loveiq-leave-offer:42")).toBeNull();
+  });
+
+  it("drops a plans close already waiting out its beat", () => {
+    const { result, rerender } = mount();
+    advance(5_000);
+    act(() => result.current.notifyPlansClosed());
+    advance(300);
+    rerender({ ...BASE, mode: "off" });
+    advance(2_000);
+    expect(result.current.open).toBe(false);
+    expect(shown).not.toHaveBeenCalled();
+  });
+
+  it("arms again from the start when the page turns the offer back on", () => {
+    const { result, rerender } = mount();
+    advance(5_000);
+    rerender({ ...BASE, mode: "off" });
+    advance(60_000);
+    rerender({ ...BASE, mode: "trigger" });
+    advance(29_000);
+    expect(result.current.open).toBe(false);
+    advance(2_000);
+    expect(result.current.open).toBe(true);
+  });
+});
+
 describe("useLeaveIntent: what the reader does with it", () => {
   it("records a dismissal, how, and how long it was on screen", () => {
     const { result } = mount();
