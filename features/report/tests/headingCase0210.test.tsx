@@ -28,6 +28,7 @@ import V4PremiumCard from "@features/report/ui/v3/V4PremiumCard";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import { V4_ARTICLE_LABEL, V4_PRACTICE_TITLE } from "@features/report/ui/v3/v4CardsFromV2";
 import { REPORT_V4_NAV_PARTS } from "@features/report/ui/v3/reportV3Nav";
+import FounderCallDialog from "@features/booking/ui/FounderCallDialog";
 import { WIZARD_DRAWER } from "@features/survey/ui/wizard/wizardContent";
 
 /**
@@ -257,5 +258,31 @@ describe("Report 2.0's headings that V4 shows follow the 02.10 heading rule", ()
     follows(ATTACHMENT_PATTERNS_TITLE);
     expect(ATTACHMENT_FAMILY_CARDS).toHaveLength(5);
     for (const card of ATTACHMENT_FAMILY_CARDS) follows(card.title);
+  });
+});
+
+describe("the founder-call leave offer follows the 02.10 heading rule", () => {
+  it("in its eyebrow, its heading and both of its buttons", () => {
+    const { container } = render(
+      <FounderCallDialog
+        open
+        bookingUrl="https://calendar.app.google/x"
+        onDismiss={() => {}}
+        onBook={() => {}}
+      />
+    );
+    for (const selector of [
+      ".report-leave-offer__eyebrow",
+      ".report-leave-offer__title",
+      ".report-leave-offer__later",
+    ]) {
+      const text = container.querySelector(selector)?.textContent ?? "";
+      expect(text, selector).not.toBe("");
+      follows(text);
+    }
+    const cta = container.querySelector(".report-leave-offer__cta")!;
+    const label = cta.firstChild?.textContent?.trim() ?? "";
+    expect(label).toBe("Book a 20-Minute Call");
+    follows(label);
   });
 });
