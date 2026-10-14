@@ -1882,10 +1882,11 @@ Three things the schema will not tell you:
 - Dates are Core Data seconds from 2001-01-01; add 978307200 for a Unix timestamp.
 
 **Times are shown in Berlin time, and stored in UTC** (since 2026-10-14). The script reads
-each message's day and time in UTC, and those stay the conversation's id and its day. Shown
-bare, they read as local: "Can we move to 9:30?", sent at 08:52 in Berlin, read "06:52". The
-title and each message line now show Berlin time, and `meta.at` holds the moment the
-conversation opened.
+each message's day and time in UTC, and those stay the conversation's id and `meta.day`,
+which the sweep is scoped by. Shown bare, they read as local: "Can we move to 9:30?", sent
+at 08:52 in Berlin, read "06:52". The title and each message line show Berlin time,
+`meta.at` holds the moment the conversation opened, and it is filed (`period_end`) under that
+moment's Berlin day.
 
 **It runs every five minutes on Eman's Mac**, not on Vercel — there is no server that can see a
 WhatsApp Desktop database. `list_sources` says so rather than showing an empty slot
@@ -2185,13 +2186,12 @@ boundary was drawn by the people in them rather than by the company.
   argument; a null vector degrades it to exactly the previous lexical behaviour,
   so an embedding outage costs recall rather than search. New chunks are embedded
   at the end of the 15-minute lane — see "Embeddings" below.
-- **A record's day is mostly the UTC day, while its time is shown in Berlin.**
-  `browse_context` orders a day's records by `meta.at` and prints it in Berlin time, but
-  `since`/`until` and the day a record sorts under are `period_end`. That is the UTC day
-  everywhere except calendar events, which keep the date in their own time zone. So between
-  midnight and 2 a.m. Berlin time, a record can sit under the day before, and a meeting can
-  sort a little out of place against mail and chat. Moving every source to Berlin days means
-  re-keying Slack and calendar ids, and nothing here meets at that hour.
+- **A Slack day summary is a UTC day.** Every timed record (a meeting, a chat, an email
+  thread, a document, a Notion task) is filed under the Berlin day of its `meta.at` since
+  2026-10-14, so `since`/`until` mean the team's days. A Slack day has no single moment and
+  its id carries the UTC day it is fetched by, so Slack between midnight and 2 a.m. Berlin
+  time still sits under the day before. Ids never moved: a WhatsApp or calendar id keeps the
+  day it was keyed on, and only `period_end` follows Berlin.
 - **No relevance floor.** Scores are not comparable between questions, so the
   pipeline cannot tell "we have this" from "we don't" — declining honestly is a
   property of the prompt, not something the search can enforce.

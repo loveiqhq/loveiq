@@ -15,6 +15,7 @@ import {
   isJobApplication,
   isLegalInstrument,
   chunkPage,
+  dayOfMoment,
   momentOf,
   recordSweep,
   shouldSweep,
@@ -1222,7 +1223,8 @@ export function threadToRows(
       ...(at ? { at } : {}),
     },
     updated_at: stampedAt,
-    period_end: day,
+    // The Berlin day of the last message. `day` stays UTC for the review title above.
+    period_end: dayOfMoment(at),
   };
 
   const parts = splitBody(base.body);
