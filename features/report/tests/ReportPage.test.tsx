@@ -115,6 +115,19 @@ vi.mock("@features/report/ui/hooks/useReportEngagementTimers", async (importOrig
 // The real V3Chapter, counted: the scroll-spy test below checks that moving the nav's
 // highlight renders no chapter again. Transparent to every other test.
 const v3ChapterRenders = vi.hoisted(() => ({ count: 0 }));
+// The real chapter stats, with whether each render turned them on recorded.
+const chapterStats = vi.hoisted(() => ({ enabled: [] as boolean[] }));
+vi.mock("@features/analytics/chapterStats", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/analytics/chapterStats")>();
+  return {
+    ...actual,
+    useChapterStats: (options: Parameters<typeof actual.useChapterStats>[0]) => {
+      chapterStats.enabled.push(options.enabled);
+      actual.useChapterStats(options);
+    },
+  };
+});
+
 vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/report/ui/v3/V3Chapter")>();
   const { createElement } = await import("react");
@@ -1953,6 +1966,45 @@ describe("ReportPage", () => {
       mockUseReportData.mockReturnValue(view("owner"));
       const owner = render(<ReportPage />);
       expect(owner.container.querySelector(".report-sticky-unlock")).not.toBeNull();
+    });
+
+    // AP-Analytics' chapter reading is the owner's on Report 3.0: a recipient's reading,
+    // or an older report's, would count under the owner's submission.
+    it("saves the owner's chapter reading on Report 3.0, never a recipient's or an older report's", () => {
+      const read = (params: string, viewMode: "owner" | "shared") => {
+        vi.mocked(analytics.persistReportChapterStats).mockClear();
+        chapterStats.enabled.length = 0;
+        mockSearchParams.mockImplementation(() => new URLSearchParams(params));
+        mockUseReportData.mockReturnValue(view(viewMode));
+        const { container, unmount } = render(<ReportPage />);
+        const closed = container.querySelector<HTMLElement>(
+          '[data-chapter-action="open"][aria-expanded="false"]'
+        );
+        if (closed) fireEvent.click(closed);
+        window.dispatchEvent(new Event("pagehide"));
+        unmount();
+        return {
+          opened: closed !== null,
+          saved: vi.mocked(analytics.persistReportChapterStats).mock.calls,
+          on: chapterStats.enabled.at(-1),
+        };
+      };
+
+      const owner = read("v4=1", "owner");
+      expect(owner.on).toBe(true);
+      expect(owner.opened).toBe(true);
+      expect(owner.saved).toHaveLength(1);
+      expect(Object.values(owner.saved[0]![0].chapters)).toContainEqual({ open: 1 });
+
+      const shared = read("v4=1", "shared");
+      expect(shared.on).toBe(false);
+      expect(shared.opened).toBe(true);
+      expect(shared.saved).toHaveLength(0);
+
+      // No chapter there opens closed, so whether it would count shows only in the switch.
+      const older = read("v2=1", "owner");
+      expect(older.on).toBe(false);
+      expect(older.saved).toHaveLength(0);
     });
 
     // Marcus, 09.10, with a recording from production: the bar's "Unlock Full Report →"

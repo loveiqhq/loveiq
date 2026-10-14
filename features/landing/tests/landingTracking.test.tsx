@@ -96,6 +96,17 @@ describe("question 1's landing card", () => {
     fireEvent.click(screen.getByRole("link", { name: "Start my test now - hero" }));
     expect(events("cta_click")).toEqual([["cta_click", { cta: "start_survey", location: "hero" }]]);
   });
+
+  it("marks the hero for its time in view, but not as a section reached", async () => {
+    const { default: WHero } = await import("@features/landing/ui/white/WHero");
+    const { container } = render(<WHero media="card" />);
+    const timed = container.querySelectorAll("[data-landing-time]");
+    expect(timed).toHaveLength(1);
+    expect(timed[0]!.tagName).toBe("SECTION");
+    expect(timed[0]!.getAttribute("data-landing-time")).toBe("hero");
+    expect(timed[0]!.parentElement).toBe(container);
+    expect(container.querySelector("[data-landing-section]")).toBeNull();
+  });
 });
 
 describe("the landing's sticky bar", () => {
