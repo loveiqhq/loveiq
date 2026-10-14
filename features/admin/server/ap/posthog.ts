@@ -296,10 +296,16 @@ export interface LandingArmEngagement {
   medianSeconds: number | null;
   /** Average seconds on it, each view counted up to 30 minutes (a tab left open is not reading). */
   meanSeconds: number | null;
+  /** The views that average is over, and the sum of their squared seconds: its spread. */
+  timed: number;
+  sqSeconds: number;
 }
 
 /** A number PostHog returned, or null where it had none. */
 const orNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+
+/** A landing view's seconds, up to 30 minutes: the one value the average and its spread read. */
+const CAPPED = "least(toFloat(properties.$prev_pageview_duration), 1800)";
 
 /**
  * The landing page's engagement per arm, from PostHog: bounce, call-to-action clicks, scroll
@@ -334,7 +340,7 @@ export async function fetchLandingEngagement(
            countIf(properties.$prev_pageview_max_scroll_percentage >= 0.75) AS s75,
            countIf(properties.$prev_pageview_max_scroll_percentage >= 0.99) AS s100,
            quantile(0.5)(properties.$prev_pageview_duration) AS median_dur,
-           avg(least(toFloat(properties.$prev_pageview_duration), 1800)) AS mean_dur
+           avg(${CAPPED}) AS mean_dur, count(${CAPPED}) AS timed, sum(${CAPPED} * ${CAPPED}) AS sq_dur
     FROM events
     WHERE event IN ('$pageleave', '$pageview') AND properties.$prev_pageview_pathname = '/' AND ${range}
     GROUP BY arm
@@ -357,6 +363,8 @@ export async function fetchLandingEngagement(
           scroll: [0, 0, 0, 0],
           medianSeconds: null,
           meanSeconds: null,
+          timed: 0,
+          sqSeconds: 0,
         })
       );
     return e;
@@ -367,12 +375,14 @@ export async function fetchLandingEngagement(
     e.bounced = Number(bounced) || 0;
     e.cta = Number(cta) || 0;
   }
-  for (const [arm, leaves, s25, s50, s75, s100, med, mean] of l.value) {
+  for (const [arm, leaves, s25, s50, s75, s100, med, mean, timed, sq] of l.value) {
     const e = get(String(arm));
     e.leaves = Number(leaves) || 0;
     e.scroll = [Number(s25) || 0, Number(s50) || 0, Number(s75) || 0, Number(s100) || 0];
     e.medianSeconds = orNull(med);
     e.meanSeconds = orNull(mean);
+    e.timed = Number(timed) || 0;
+    e.sqSeconds = Number(sq) || 0;
   }
   return { ok: true, value: [...arms.values()] };
 }
@@ -394,7 +404,7 @@ export async function fetchLandingTime(
   const { since, until } = windowOf({ from, to });
   const q = `
     SELECT quantile(0.5)(properties.$prev_pageview_duration) AS median_dur,
-           avg(least(toFloat(properties.$prev_pageview_duration), 1800)) AS mean_dur
+           avg(${CAPPED}) AS mean_dur
     FROM events
     WHERE event IN ('$pageleave', '$pageview') AND properties.$prev_pageview_pathname = '/'
       AND properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}

@@ -54,11 +54,25 @@ const COLUMNS: Array<{ key: MetricKey; label: string; heat: boolean; lower?: boo
   { key: "meanSeconds", label: "Avg. time", heat: true },
 ];
 
+/** Percentages as the design writes them here: "5.4%", payment CVR "0.19%", bounce "61%". */
+const DIGITS: Partial<Record<MetricKey, number>> = {
+  startCvr: 1,
+  submitCvr: 1,
+  paymentCvr: 2,
+  bounce: 0,
+};
+
 function cell(key: MetricKey, v: number | null): string {
   if (key === "visits") return fmt("count", v);
   if (key === "perVisit") return fmt("eur3", v);
   if (key === "meanSeconds") return fmt("mmss", v === null ? null : v * 1000);
-  return fmt("pct", v);
+  return fmt("pct", v, DIGITS[key]);
+}
+
+/** A cell's number as it reads ("5.4%" is 5.4, "0:41" is 41): the design shades what it shows. */
+function shown(text: string): number {
+  const [m, s] = text.replace(/[^0-9.:]/g, "").split(":");
+  return s === undefined ? Number(m) : Number(m) * 60 + Number(s);
 }
 
 /** Shaded from best (green) to worst (red) among the rows shown, as the design shades it. */
@@ -103,7 +117,10 @@ function TestsTable({ data }: { data: LandingPayload }) {
     () =>
       Object.fromEntries(
         COLUMNS.map((c) => {
-          const vs = rows.map((r) => r[c.key]).filter((v): v is number => v !== null);
+          const vs = rows
+            .map((r) => r[c.key])
+            .filter((v): v is number => v !== null)
+            .map((v) => shown(cell(c.key, v)));
           return [c.key, vs.length ? [Math.min(...vs), Math.max(...vs)] : null];
         })
       ) as Record<MetricKey, [number, number] | null>,
@@ -239,13 +256,12 @@ function TestsTable({ data }: { data: LandingPayload }) {
                 </span>
                 {COLUMNS.map((c) => {
                   const v = r[c.key];
+                  const text = cell(c.key, v);
                   const range = ranges[c.key];
                   let style = {};
                   if (c.heat && v !== null && range) {
                     const [mn, mx] = range;
-                    // Under a 5% spread (35.2% vs 35.1% bounce) there is no best or worst.
-                    const flat = mx - mn <= 0.05 * Math.max(Math.abs(mx), Math.abs(mn));
-                    let t = flat ? 0.5 : (v - mn) / (mx - mn);
+                    let t = mx === mn ? 0.5 : (shown(text) - mn) / (mx - mn);
                     if (c.lower) t = 1 - t;
                     style = heat(t);
                   }
@@ -256,7 +272,7 @@ function TestsTable({ data }: { data: LandingPayload }) {
                       className={`flex items-center justify-end px-2.5 py-2 text-right text-sm tabular-nums ${v === null ? "text-ap-muted" : "text-ap-ink"}`}
                     >
                       <span className="rounded-lg px-2 py-1.5" style={style}>
-                        {cell(c.key, v)}
+                        {text}
                       </span>
                     </span>
                   );
@@ -329,12 +345,17 @@ function CompareSection({ data }: { data: LandingPayload }) {
         description={`${cmp.window}. ${cmp.outcome}`}
         right={
           data.comparisons.length > 1 ? (
-            <Pills
-              label="Test to compare"
-              value={cmp.key}
-              onChange={setKey}
-              options={data.comparisons.map((c) => ({ value: c.key, label: c.short }))}
-            />
+            // One row on a phone: the tabs scroll sideways rather than wrap.
+            <div className="min-w-0 max-w-full overflow-x-auto">
+              <div className="w-max">
+                <Pills
+                  label="Test to compare"
+                  value={cmp.key}
+                  onChange={setKey}
+                  options={data.comparisons.map((c) => ({ value: c.key, label: c.code }))}
+                />
+              </div>
+            </div>
           ) : undefined
         }
       />
@@ -373,7 +394,7 @@ function CompareSection({ data }: { data: LandingPayload }) {
                   track="#ffffff"
                 />
                 <span className="text-right font-semibold tabular-nums text-ap-ink">
-                  {fmt(m.unit, m.a)}
+                  {fmt(m.unit, m.a, DIGITS[m.key])}
                 </span>
                 <span className="font-bold text-ap-muted">B</span>
                 <Bar
@@ -383,7 +404,7 @@ function CompareSection({ data }: { data: LandingPayload }) {
                   track="#ffffff"
                 />
                 <span className="text-right font-semibold tabular-nums text-ap-ink">
-                  {fmt(m.unit, m.b)}
+                  {fmt(m.unit, m.b, DIGITS[m.key])}
                 </span>
               </div>
               <span className="text-xs text-ap-muted">{m.verdict}</span>
@@ -412,10 +433,7 @@ function EngagementCard({ data }: { data: LandingPayload }) {
         <p className="m-0 text-sm text-ap-bad-ink">{e.error}</p>
       ) : (
         <>
-          <div
-            className="grid gap-2.5"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100px, 100%), 1fr))" }}
-          >
+          <div className="grid grid-cols-3 gap-2.5">
             {[
               { label: "Bounce", value: fmt("pct", e.value.bounce, 1) },
               {
@@ -512,17 +530,17 @@ function ReviewsCard({ data }: { data: LandingPayload }) {
         </>
       )}
       <div className="flex flex-col gap-1.5 border-t border-ap-line pt-3">
-        <span className="text-[13px] font-bold text-ap-ink">Field reports block on the page</span>
+        <span className="text-[13px] font-bold text-ap-ink">Review block on page</span>
         {t ? (
           <>
             <span className="text-[13px] text-ap-muted">
-              Reached by {fmt("pct", t.seen, 1)} of landing visitors · started the survey:{" "}
-              {fmt("pct", t.startedSeen, 1)} of those who reached it,{" "}
-              {fmt("pct", t.startedNotSeen, 1)} of those who did not
+              Seen by {fmt("pct", t.seen, 0)} of visitors · start CVR after seeing{" "}
+              {fmt("pct", t.startedSeen, 1)} vs {fmt("pct", t.startedNotSeen, 1)} without
             </span>
             <span className="text-xs leading-relaxed text-ap-muted">
+              The block is the field reports, which scroll by themselves and have nothing to click.
               People who scroll that far are not like those who start from the top, so this is not
-              the block&rsquo;s effect. The block scrolls by itself and has nothing to click.
+              the block&rsquo;s effect.
             </span>
           </>
         ) : s && !s.ok ? (
@@ -549,14 +567,18 @@ function SectionTime({ data }: { data: LandingPayload }) {
   const view =
     time ?? (reach && { ...reach, rows: reach.rows.map((r) => ({ ...r, seconds: null })) });
   const failed = t && !t.ok ? t.error : !view && s && !s.ok ? s.error : null;
+  // The bar is the time, against the longest section's, as the design draws it.
+  const longest = Math.max(0, ...(view?.rows ?? []).map((r) => r.seconds ?? 0));
   return (
     <Card labelledBy="h-sections">
-      <SectionHead
-        id="h-sections"
-        title="Section time"
-        level={3}
-        description="Avg. seconds in view · share of visitors who reach the section"
-      />
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id="h-sections" className="m-0 font-serif text-lg font-semibold">
+          Section time
+        </h3>
+        <span className="text-[13px] text-ap-muted">
+          Avg. seconds in view · share of visitors who reach the section
+        </span>
+      </div>
       {failed && <p className="m-0 text-sm text-ap-bad-ink">{failed}</p>}
       {view ? (
         <>
@@ -567,15 +589,19 @@ function SectionTime({ data }: { data: LandingPayload }) {
           )}
           <div className="flex flex-col gap-2.5">
             {view.rows.map((r) => (
+              // The design's columns; on a phone they would leave the bar no room, so a
+              // narrower name and time column there.
               <div
                 key={r.section}
-                className="grid items-center gap-3 text-[13px]"
-                style={{ gridTemplateColumns: "minmax(110px, 170px) 44px minmax(0, 1fr) 84px" }}
+                className="grid grid-cols-[minmax(0,104px)_minmax(0,1fr)_40px_70px] items-center gap-3 text-[13px] sm:grid-cols-[minmax(120px,180px)_minmax(0,1fr)_60px_70px]"
               >
                 <span className="font-semibold text-ap-ink">{r.name}</span>
+                <Bar
+                  pct={r.seconds === null || !longest ? null : r.seconds / longest}
+                  height={12}
+                />
                 <span className="text-right font-bold tabular-nums">{secs(r.seconds)}</span>
-                <Bar pct={r.reach} height={12} />
-                <span className="text-right tabular-nums text-ap-muted">
+                <span className="justify-self-end whitespace-nowrap tabular-nums text-ap-muted">
                   {fmt("pct", r.reach, 0)} reach
                 </span>
               </div>

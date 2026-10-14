@@ -31,8 +31,10 @@ import {
 export interface LandingTest {
   key: string;
   name: string;
-  /** One line for the tests table and the compare tabs, with the registry number if any. */
+  /** One line for the tests table, with the registry number if any. */
   short: string;
+  /** The compare tab's few characters, as the design's "LP-07". */
+  code: string;
   from: string;
   /** Last day, or null while it runs. */
   to: string | null;
@@ -50,6 +52,7 @@ export const LANDING_TESTS: LandingTest[] = [
     key: "hero",
     name: "Hero: video vs question 1",
     short: "#6 · Hero video vs Q1",
+    code: "#6",
     from: LANDING_TEST_START_DAY,
     to: null,
     outcome: "Running (test #6 in the registry), read over up to 28 days.",
@@ -59,6 +62,7 @@ export const LANDING_TESTS: LandingTest[] = [
     key: "hero-first-run",
     name: "Hero: video vs question 1, first run",
     short: "Hero video vs Q1, first run",
+    code: "#6 · run 1",
     from: LANDING_HERO_VIDEO_LAUNCH_DAY,
     to: addDays(LANDING_TEST_START_DAY, -1),
     outcome: `Run again from ${rangeLabel(LANDING_TEST_START_DAY, LANDING_TEST_START_DAY)}, when the video or question 1 moves onto a phone's first screen and both versions take the new copy.`,
@@ -68,6 +72,7 @@ export const LANDING_TESTS: LandingTest[] = [
     key: "rebuild",
     name: "Landing rebuild: V1 vs V2",
     short: "Landing rebuild V1 vs V2",
+    code: "Rebuild",
     // The test ran from 21 Aug, but V1's visits were logged without their version until the
     // evening of 24 Aug (49e71d0f): the comparison starts on the first whole day after.
     from: "2026-08-25",
@@ -140,9 +145,14 @@ export interface ArmRow {
   medianSeconds: number | null;
   /** Average seconds on the page, each view up to 30 minutes. */
   meanSeconds: number | null;
+  /** The views behind that average and the sum of their squared seconds, for its chance. */
+  phTimed: number | null;
+  phTimeSq: number | null;
 }
 
 export interface CompareMetric {
+  /** The tests table's column for the same figure. */
+  key: "startCvr" | "submitCvr" | "paymentCvr" | "perVisit" | "bounce" | "meanSeconds";
   label: string;
   unit: "pct" | "eur3" | "mmss";
   a: number | null;
@@ -154,7 +164,7 @@ export interface CompareMetric {
 export interface Comparison {
   key: string;
   name: string;
-  short: string;
+  code: string;
   window: string;
   outcome: string;
   note?: string;
@@ -257,6 +267,27 @@ export function revenueVerdict(a: ArmRow, b: ArmRow): string {
   return chanceText((b.revenue / b.visits - a.revenue / a.visits) / se);
 }
 
+/** Under this many PostHog visits (or timed views) in an arm, its bounce and time are noise. */
+const PH_MIN = 30;
+
+/**
+ * The same for the average time on the page (Welch): each view's seconds, capped as the
+ * average caps them, so z = (mean B − mean A) / √(sA²/nA + sB²/nB).
+ */
+export function timeVerdict(a: ArmRow, b: ArmRow): string {
+  // s²/n with s² the sample variance: the sum of squares gives the spread about the mean.
+  const err = (r: ArmRow) =>
+    r.meanSeconds === null || r.phTimed === null || r.phTimeSq === null || r.phTimed < PH_MIN
+      ? null
+      : Math.max(0, r.phTimeSq / r.phTimed - r.meanSeconds ** 2) / (r.phTimed - 1);
+  const ea = err(a);
+  const eb = err(b);
+  if (ea === null || eb === null) return "Too few to call";
+  const se = Math.sqrt(ea + eb);
+  if (se === 0) return "No difference";
+  return chanceText((b.meanSeconds! - a.meanSeconds!) / se);
+}
+
 function armRow(
   facts: Facts,
   test: LandingTest,
@@ -285,8 +316,7 @@ function armRow(
   );
   const payers = subs.filter((s) => s.paidAt);
   const revenue = Math.round(payers.reduce((n, s) => n + s.revenue, 0) * 100) / 100;
-  // Too few PostHog sessions in an arm and its bounce and time are noise.
-  const phOk = ph !== undefined && ph.sessions >= 30;
+  const phOk = ph !== undefined && ph.sessions >= PH_MIN;
   return {
     testKey: test.key,
     test: test.name,
@@ -311,6 +341,8 @@ function armRow(
     bounce: phOk ? ratio(ph.bounced, ph.sessions) : null,
     medianSeconds: phOk ? ph.medianSeconds : null,
     meanSeconds: phOk ? ph.meanSeconds : null,
+    phTimed: phOk ? ph.timed : null,
+    phTimeSq: phOk ? ph.sqSeconds : null,
   };
 }
 
@@ -336,7 +368,7 @@ function compare(
   return {
     key: test.key,
     name: test.name,
-    short: test.short,
+    code: test.code,
     window: rangeLabel(w.from, w.to),
     outcome: test.outcome,
     note: test.note,
@@ -344,6 +376,7 @@ function compare(
     b: b.label,
     metrics: [
       {
+        key: "startCvr",
         label: "Survey start CVR",
         unit: "pct",
         a: a.startCvr,
@@ -355,6 +388,7 @@ function compare(
             : decided(rateVerdict(a.starts, a.visits, b.starts, b.visits)),
       },
       {
+        key: "submitCvr",
         label: "Survey submission CVR",
         unit: "pct",
         a: a.submitCvr,
@@ -363,6 +397,7 @@ function compare(
         verdict: decided(rateVerdict(a.subs, a.visits, b.subs, b.visits)),
       },
       {
+        key: "paymentCvr",
         label: "Payment CVR",
         unit: "pct",
         a: a.paymentCvr,
@@ -373,6 +408,7 @@ function compare(
         ),
       },
       {
+        key: "perVisit",
         label: "€ rev. per visit",
         unit: "eur3",
         a: a.perVisit,
@@ -381,6 +417,7 @@ function compare(
         verdict: decided(revenueVerdict(a, b)),
       },
       {
+        key: "bounce",
         label: "Bounce rate",
         unit: "pct",
         a: a.bounce,
@@ -394,6 +431,7 @@ function compare(
           ),
       },
       {
+        key: "meanSeconds",
         label: "Avg. time on page",
         unit: "mmss",
         a: ms(a.meanSeconds),
@@ -401,7 +439,7 @@ function compare(
         lowerIsBetter: false,
         verdict:
           phVerdict(a.meanSeconds, b.meanSeconds) ??
-          `PostHog's sample; averages are not tested for chance · medians: A ${fmt("mmss", ms(a.medianSeconds))}, B ${fmt("mmss", ms(b.medianSeconds))}`,
+          `${decided(`${timeVerdict(a, b)} (PostHog)`)} · medians: A ${fmt("mmss", ms(a.medianSeconds))}, B ${fmt("mmss", ms(b.medianSeconds))}`,
       },
     ],
   };

@@ -33,6 +33,7 @@ import {
   rateVerdict,
   revenueVerdict,
   testWindow,
+  timeVerdict,
   type ArmRow,
 } from "@features/admin/server/ap/landing";
 import {
@@ -50,17 +51,25 @@ import {
 
 import { factsFixture, sub } from "./ap-fixtures";
 
-/** PostHog's engagement for one arm: `sessions` visits, `bounced` of them bounced. */
-const ph = (arm: string, sessions: number, bounced: number): LandingArmEngagement => ({
-  arm,
-  sessions,
-  bounced,
-  cta: 0,
-  leaves: sessions,
-  scroll: [sessions, 0, 0, 0],
-  medianSeconds: 5,
-  meanSeconds: arm === "white_video" ? 9 : 8,
-});
+/**
+ * PostHog's engagement for one arm: `sessions` visits, `bounced` of them bounced, one timed
+ * view each, averaging 8 s (9 s for the video) with a variance of 100 (10 s either way).
+ */
+const ph = (arm: string, sessions: number, bounced: number): LandingArmEngagement => {
+  const mean = arm === "white_video" ? 9 : 8;
+  return {
+    arm,
+    sessions,
+    bounced,
+    cta: 0,
+    leaves: sessions,
+    scroll: [sessions, 0, 0, 0],
+    medianSeconds: 5,
+    meanSeconds: mean,
+    timed: sessions,
+    sqSeconds: sessions * (100 + mean ** 2),
+  };
+};
 
 const test = (key: string) => LANDING_TESTS.find((t) => t.key === key)!;
 
@@ -388,13 +397,71 @@ function livePayload(over: Partial<Parameters<typeof buildLanding>[0]> = {}) {
 }
 
 describe("landing time", () => {
-  it("compares the arms on the average time, with the medians in the small print", () => {
+  it("compares the arms on the average time with its chance, the medians in the small print", () => {
     const time = livePayload().comparisons[0]!.metrics.at(-1)!;
     expect(time).toMatchObject({ label: "Avg. time on page", unit: "mmss", a: 8000, b: 9000 });
-    expect(time.verdict).toBe(
-      "PostHog's sample; averages are not tested for chance · medians: A 0:05.0, B 0:05.0"
-    );
+    // 8 s over 200 views against 9 s over 120, 10 s either way: z = 1 / √(100/199 + 100/119).
+    expect(time.verdict).toBe("81% chance B is better (PostHog) · medians: A 0:05.0, B 0:05.0");
     expect(livePayload().rows.map((r) => r.meanSeconds)).toEqual([8, 9]);
+  });
+
+  it("reads Welch's test on the capped seconds, and refuses under 30 timed views an arm", () => {
+    // n views of an average and a variance, as PostHog's count, avg and sum of squares give them.
+    const arm = (n: number, mean: number, variance = 1250) =>
+      ({ meanSeconds: mean, phTimed: n, phTimeSq: n * (variance + mean ** 2) }) as ArmRow;
+    // Each s²/n is 1250 · 101/100 / 101 = 12.5: an error of 5, so 10 s apart is z = 2.
+    expect(timeVerdict(arm(101, 41), arm(101, 51))).toBe("98% chance B is better");
+    expect(timeVerdict(arm(101, 51), arm(101, 41))).toBe("98% chance A is better");
+    expect(timeVerdict(arm(101, 41, 0), arm(101, 41, 0))).toBe("No difference");
+    // 30 views is enough, and the spread is the sample's (n − 1): 1450 / 29 = 50 an arm, so
+    // z = 10 / √100 = 1, 84% (dividing by n would read 85%).
+    expect(timeVerdict(arm(30, 41, 1450), arm(30, 51, 1450))).toBe("84% chance B is better");
+    expect(timeVerdict(arm(29, 41), arm(500, 51))).toBe("Too few to call");
+    const unread = { meanSeconds: null, phTimed: null, phTimeSq: null } as ArmRow;
+    expect(timeVerdict(unread, arm(500, 51))).toBe("Too few to call");
+    // Under 30 PostHog visits the arm has no average at all, as for bounce.
+    const few = livePayload({
+      armEngagement: {
+        hero: { ok: true, value: [ph("white_card", 200, 80), ph("white_video", 29, 5)] },
+      },
+    });
+    expect(few.comparisons[0]!.metrics.at(-1)!.verdict).toBe("PostHog saw too few visits");
+  });
+
+  it("reads an ended test's time as its decision, keeping the chance after it", () => {
+    const first = LANDING_TESTS.find((t) => t.key === "hero-first-run")!;
+    first.winner = "white_video";
+    try {
+      const p = buildLanding({
+        facts: factsFixture({
+          from: "2026-10-07",
+          to: "2026-10-13",
+          visits: [],
+          starts: [],
+          subs: [],
+        }),
+        filters: parseFilters(
+          { period: "custom", from: "2026-10-07", to: "2026-10-13" },
+          "2026-10-14"
+        ),
+        today: "2026-10-14",
+        now: new Date("2026-10-14T12:00:00Z"),
+        armEngagement: {
+          "hero-first-run": {
+            ok: true,
+            value: [ph("white_card", 200, 80), ph("white_video", 120, 30)],
+          },
+        },
+        engagement: null,
+        sections: null,
+      });
+      expect(p.comparisons.map((c) => c.key)).toEqual(["hero-first-run"]);
+      expect(p.comparisons[0]!.metrics.at(-1)!.verdict).toBe(
+        "Ended · B kept · 81% chance B is better (PostHog) · medians: A 0:05.0, B 0:05.0"
+      );
+    } finally {
+      delete first.winner;
+    }
   });
 
   it("gives each section its average seconds over the visits that reached it, and its reach", () => {
@@ -469,7 +536,7 @@ describe("PostHog's landing readers", () => {
   it("reads the average time beside the median, each view up to 30 minutes", async () => {
     mockHogql.mockImplementation(async (q: string) =>
       q.includes("$prev_pageview_max_scroll_percentage")
-        ? answer([["white_card", 100, 80, 50, 20, 5, 41, 52.5]])
+        ? answer([["white_card", 100, 80, 50, 20, 5, 41, 52.5, 98, 400_000]])
         : q.includes("countIf(event = 'cta_click')")
           ? answer([["white_card", 120, 40, 12]])
           : answer([[41, null]])
@@ -477,15 +544,28 @@ describe("PostHog's landing readers", () => {
     const arms = await fetchLandingEngagement("2026-09-01", "2026-09-07");
     expect(arms).toMatchObject({
       ok: true,
-      value: [{ arm: "white_card", sessions: 120, medianSeconds: 41, meanSeconds: 52.5 }],
+      value: [
+        {
+          arm: "white_card",
+          sessions: 120,
+          medianSeconds: 41,
+          meanSeconds: 52.5,
+          timed: 98,
+          sqSeconds: 400_000,
+        },
+      ],
     });
     expect(await fetchLandingTime("2026-09-01", "2026-09-07")).toEqual({
       ok: true,
       value: { median: 41, mean: null },
     });
-    const cap = "avg(least(toFloat(properties.$prev_pageview_duration), 1800))";
-    expect(query("$prev_pageview_max_scroll_percentage")).toContain(cap);
-    expect(query("SELECT quantile(0.5)")).toContain(cap);
+    const capped = "least(toFloat(properties.$prev_pageview_duration), 1800)";
+    const leaves = query("$prev_pageview_max_scroll_percentage");
+    expect(leaves).toContain(`avg(${capped})`);
+    // The chance reads the same capped views the average does: their count and squares.
+    expect(leaves).toContain(`count(${capped}) AS timed`);
+    expect(leaves).toContain(`sum(${capped} * ${capped}) AS sq_dur`);
+    expect(query("SELECT quantile(0.5)")).toContain(`avg(${capped})`);
   });
 });
 
@@ -503,12 +583,110 @@ describe("the landing page's screen", () => {
     expect(engagement.getByText("Avg. time")).toBeInTheDocument();
     expect(engagement.getByText("0:53")).toBeInTheDocument();
     const card = within(screen.getByRole("region", { name: "Section time" }));
-    expect(
-      card.getByText("Avg. seconds in view · share of visitors who reach the section")
-    ).toBeInTheDocument();
-    const trust = card.getByText("Trust strip").parentElement!;
-    expect(trust).toHaveTextContent("Trust strip14s100% reach");
+    // The caption sits beside the title in one row, as the design has it, not under it.
+    const caption = card.getByText(
+      "Avg. seconds in view · share of visitors who reach the section"
+    );
+    expect(caption.parentElement).toBe(
+      card.getByRole("heading", { name: "Section time" }).parentElement
+    );
+    expect(caption.parentElement).toHaveClass("items-baseline", "justify-between");
+    expect(caption.parentElement).not.toHaveClass("flex-col");
+    // Name, then the bar (the time against the longest section's), the time and the reach.
+    const row = (name: string) => [...card.getByText(name).parentElement!.children];
+    const bar = (cells: Element[]) =>
+      parseFloat((cells[1]!.firstElementChild as HTMLElement).style.width);
+    expect(row("Trust strip").map((c) => c.textContent)).toEqual([
+      "Trust strip",
+      "",
+      "14s",
+      "100% reach",
+    ]);
+    expect(bar(row("Trust strip"))).toBe(100);
+    // FAQ: 4.5 s against the trust strip's 14 s.
+    expect(row("FAQ").map((c) => c.textContent)).toEqual(["FAQ", "", "5s", "20% reach"]);
+    expect(bar(row("FAQ"))).toBeCloseTo(32.14);
+    expect(bar(row("Hero"))).toBe(0);
     expect(card.queryByText(/Recorded from/)).toBeNull();
+    // The engagement boxes stay three across, on a phone too.
+    expect(engagement.getByText("CTA clicks").parentElement!.parentElement).toHaveClass(
+      "grid-cols-3"
+    );
+    // The reviews block, worded as the design words it.
+    const reviews = within(screen.getByRole("region", { name: "Reviews" }));
+    expect(reviews.getByText("Review block on page")).toBeInTheDocument();
+    expect(
+      reviews.getByText("Seen by 20% of visitors · start CVR after seeing 20.0% vs 7.5% without")
+    ).toBeInTheDocument();
+  });
+
+  it("shades any spread as it reads, writes percentages as the design does, and tabs tests by code", () => {
+    // Two tests in the range: the running hero test (from 14 Oct) and its first run.
+    const subs = (arm: string, n: number, from: number) =>
+      Array.from({ length: n }, (_, i) =>
+        sub({ id: from + i, day: "2026-10-15", at: "2026-10-15T10:00:00Z", arm })
+      );
+    screenData.payload = buildLanding({
+      facts: factsFixture({
+        from: "2026-10-07",
+        to: "2026-10-20",
+        visits: [
+          { day: "2026-10-15", arm: "white_card", src: null, n: 1000 },
+          { day: "2026-10-15", arm: "white_video", src: null, n: 1000 },
+        ],
+        starts: [],
+        subs: [...subs("white_card", 100, 1000), ...subs("white_video", 104, 2000)],
+      }),
+      filters: parseFilters(
+        { period: "custom", from: "2026-10-07", to: "2026-10-20" },
+        "2026-10-21"
+      ),
+      today: "2026-10-21",
+      now: new Date("2026-10-21T12:00:00Z"),
+      // 40.2% against 40.4% bounce: both read "40%".
+      armEngagement: {
+        hero: { ok: true, value: [ph("white_card", 500, 201), ph("white_video", 500, 202)] },
+      },
+      engagement: null,
+      sections: null,
+    });
+    render(createElement(ApLanding));
+    const [, a, b] = screen.getAllByRole("row");
+    const cells = (r: HTMLElement) => within(r).getAllByRole("cell");
+    const shade = (r: HTMLElement, i: number) => cells(r)[i]!.firstElementChild!;
+    // Submit CVR 10.0% against 10.4%: a 4% spread, shaded best to worst all the same.
+    expect(shade(a!, 4)).toHaveTextContent("10.0%");
+    expect(shade(a!, 4)).toHaveStyle({ color: "#a62700", fontWeight: "700" });
+    expect(shade(b!, 4)).toHaveTextContent("10.4%");
+    expect(shade(b!, 4)).toHaveStyle({ color: "#1f5c42", fontWeight: "700" });
+    // Bounce whole, and two cells that read the same are shaded the same.
+    expect(shade(a!, 7)).toHaveTextContent(/^40%$/);
+    expect(shade(b!, 7)).toHaveTextContent(/^40%$/);
+    expect(shade(a!, 7)).toHaveStyle({ color: "#161021", fontWeight: "500" });
+    expect(shade(b!, 7)).toHaveStyle({ color: "#161021", fontWeight: "500" });
+    // Payment CVR to a hundredth, as the design's "0.19%".
+    expect(shade(a!, 5)).toHaveTextContent(/^0\.00%$/);
+
+    // The compare tabs carry the tests' codes, in one row that scrolls on a phone.
+    const tabs = screen.getByRole("group", { name: "Test to compare" });
+    expect(
+      within(tabs)
+        .getAllByRole("button")
+        .map((t) => t.textContent)
+    ).toEqual(["#6", "#6 · run 1"]);
+    expect(tabs.parentElement).toHaveClass("w-max");
+    expect(tabs.parentElement!.parentElement).toHaveClass("overflow-x-auto");
+    const compare = within(screen.getByRole("region", { name: "Hero: video vs question 1" }));
+    expect(compare.getByText("10.0%")).toBeInTheDocument();
+    expect(compare.getByText("10.4%")).toBeInTheDocument();
+    expect(compare.getAllByText(/^40%$/)).toHaveLength(2);
+    expect(
+      compare.getByText(/^\d+% chance B is better \(PostHog\) · medians: /)
+    ).toBeInTheDocument();
+    fireEvent.click(within(tabs).getByRole("button", { name: "#6 · run 1" }));
+    expect(
+      screen.getByRole("heading", { name: "Hero: video vs question 1, first run" })
+    ).toBeInTheDocument();
   });
 
   it("shows the reach alone, and when the time starts, for days before it was recorded", () => {
@@ -519,5 +697,8 @@ describe("the landing page's screen", () => {
       `Recorded from ${rangeLabel(SECTION_TIME_FROM, SECTION_TIME_FROM)}`
     );
     expect(card.getByText("Trust strip").parentElement).toHaveTextContent("Trust strip—80% reach");
+    // No time yet, so no bar: the reach is only in words.
+    const bar = card.getByText("Trust strip").parentElement!.children[1]!.firstElementChild;
+    expect(parseFloat((bar as HTMLElement).style.width)).toBe(0);
   });
 });
