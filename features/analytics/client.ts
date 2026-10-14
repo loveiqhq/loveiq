@@ -501,16 +501,18 @@ const sentFunnelEvents = new Set<string>();
  * visitor cookie, which proxy.ts sets only once the cookie banner's analytics consent is
  * given, so it covers consenting visitors only; without the cookie (or a CSRF token) it
  * does nothing and a later call can still send. PK (visitor_id, day, event_type) dedupes
- * server-side, so each event is sent once per page: a card seen again after Back would
- * only spend the route's rate limit.
+ * server-side, so each event is sent once per page and UTC day (the route's day): a card
+ * seen again after Back would only spend the route's rate limit, and a tab still open the
+ * next day records that day too.
  */
 export const pingFunnelEvent = (event: string) => {
-  if (typeof window === "undefined" || sentFunnelEvents.has(event)) return;
+  const once = `${event}|${new Date().toISOString().slice(0, 10)}`;
+  if (typeof window === "undefined" || sentFunnelEvents.has(once)) return;
   const visitorId = getCookieValue("__Host-liq_vid") || getCookieValue("__liq_vid");
   if (!visitorId) return;
   const csrf = getCsrfToken();
   if (!csrf) return;
-  sentFunnelEvents.add(event);
+  sentFunnelEvents.add(once);
   const url = "/api/funnel-event";
   const payload = JSON.stringify({ event, visitor_id: visitorId, _csrf: csrf });
   // Beacon survives the page navigation to Stripe; header-CSRF fallback otherwise.
