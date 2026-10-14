@@ -15,12 +15,16 @@ import {
 
 import { classifySource, type Facts } from "./facts";
 import { rangeLabel, type ApFilters } from "./filters";
+import { fmt } from "./format";
 import { armStartsComplete, ratio } from "./metrics";
 import { head, type PageHead } from "./overview";
 import {
   POSTHOG_FROM,
+  SECTION_TIME_FROM,
   type LandingArmEngagement,
   type LandingSections,
+  type LandingSectionTime,
+  type LandingTime,
   type PostHogResult,
 } from "./posthog";
 
@@ -134,6 +138,8 @@ export interface ArmRow {
   phBounced: number | null;
   bounce: number | null;
   medianSeconds: number | null;
+  /** Average seconds on the page, each view up to 30 minutes. */
+  meanSeconds: number | null;
 }
 
 export interface CompareMetric {
@@ -162,6 +168,7 @@ export interface LandingEngagement {
   bounce: number | null;
   cta: number | null;
   medianSeconds: number | null;
+  meanSeconds: number | null;
   scroll: Array<{ label: string; share: number | null }>;
 }
 
@@ -173,6 +180,14 @@ export interface SectionsView {
   testimonials: { seen: number | null; startedSeen: number | null; startedNotSeen: number | null };
 }
 
+export interface SectionTimeView {
+  from: string;
+  to: string;
+  sessions: number;
+  /** Average seconds in view over the visits that reached the section, and its reach. */
+  rows: Array<{ section: string; name: string; seconds: number | null; reach: number | null }>;
+}
+
 export interface LandingPayload extends PageHead {
   rows: ArmRow[];
   /** Tests with no days in the range. */
@@ -180,6 +195,10 @@ export interface LandingPayload extends PageHead {
   comparisons: Comparison[];
   engagement: PostHogResult<LandingEngagement> | null;
   sections: PostHogResult<SectionsView | null> | null;
+  /** Null value for a range before sectionTimeFrom. */
+  sectionTime: PostHogResult<SectionTimeView | null> | null;
+  /** The first day the time in view was recorded. */
+  sectionTimeFrom: string;
   footnotes: string[];
 }
 
@@ -291,8 +310,11 @@ function armRow(
     phBounced: phOk ? ph.bounced : null,
     bounce: phOk ? ratio(ph.bounced, ph.sessions) : null,
     medianSeconds: phOk ? ph.medianSeconds : null,
+    meanSeconds: phOk ? ph.meanSeconds : null,
   };
 }
+
+const ms = (seconds: number | null) => (seconds === null ? null : seconds * 1000);
 
 function compare(
   test: LandingTest,
@@ -372,14 +394,14 @@ function compare(
           ),
       },
       {
-        label: "Time on page (median)",
+        label: "Avg. time on page",
         unit: "mmss",
-        a: a.medianSeconds === null ? null : a.medianSeconds * 1000,
-        b: b.medianSeconds === null ? null : b.medianSeconds * 1000,
+        a: ms(a.meanSeconds),
+        b: ms(b.meanSeconds),
         lowerIsBetter: false,
         verdict:
-          phVerdict(a.medianSeconds, b.medianSeconds) ??
-          "PostHog; medians are not tested for chance",
+          phVerdict(a.meanSeconds, b.meanSeconds) ??
+          `PostHog's sample; averages are not tested for chance · medians: A ${fmt("mmss", ms(a.medianSeconds))}, B ${fmt("mmss", ms(b.medianSeconds))}`,
       },
     ],
   };
@@ -387,7 +409,7 @@ function compare(
 
 function pageEngagement(
   all: LandingArmEngagement[],
-  median: PostHogResult<number | null> | null
+  time: PostHogResult<LandingTime> | null
 ): LandingEngagement {
   const sessions = all.reduce((n, e) => n + e.sessions, 0);
   const leaves = all.reduce((n, e) => n + e.leaves, 0);
@@ -403,7 +425,8 @@ function pageEngagement(
       sessions
     ),
     // Medians do not add up across versions: the page's own, read for every visit at once.
-    medianSeconds: median && median.ok ? median.value : null,
+    medianSeconds: time && time.ok ? time.value.median : null,
+    meanSeconds: time && time.ok ? time.value.mean : null,
     scroll: ["25%", "50%", "75%", "100%"].map((label, i) => ({
       label,
       share: ratio(scroll[i]!, leaves),
@@ -431,6 +454,24 @@ function sectionsView(s: LandingSections): SectionsView {
   };
 }
 
+function sectionTimeView(t: LandingSectionTime): SectionTimeView {
+  const by = new Map(t.sections.map((s) => [s.section, s]));
+  return {
+    from: t.from,
+    to: t.to,
+    sessions: t.sessions,
+    rows: SECTION_NAMES.map(([section, name]) => {
+      const s = by.get(section);
+      return {
+        section,
+        name,
+        seconds: s ? ratio(s.ms / 1000, s.sessions) : null,
+        reach: ratio(s?.sessions ?? 0, t.sessions),
+      };
+    }),
+  };
+}
+
 export function buildLanding(input: {
   facts: Facts;
   filters: ApFilters;
@@ -439,9 +480,10 @@ export function buildLanding(input: {
   /** Per test key (engagementWindows), PostHog's engagement by arm. */
   armEngagement: Record<string, PostHogResult<LandingArmEngagement[]>>;
   engagement: PostHogResult<LandingArmEngagement[]> | null;
-  /** The page's median time on page over the range, every version together. */
-  pageMedian?: PostHogResult<number | null> | null;
+  /** The page's time on page over the range, every version together. */
+  pageTime?: PostHogResult<LandingTime> | null;
   sections: PostHogResult<LandingSections | null> | null;
+  sectionTime?: PostHogResult<LandingSectionTime | null> | null;
 }): LandingPayload {
   const { facts, filters: f, today, now } = input;
   const rows: ArmRow[] = [];
@@ -489,7 +531,7 @@ export function buildLanding(input: {
       input.engagement === null
         ? null
         : input.engagement.ok
-          ? { ok: true, value: pageEngagement(input.engagement.value, input.pageMedian ?? null) }
+          ? { ok: true, value: pageEngagement(input.engagement.value, input.pageTime ?? null) }
           : input.engagement,
     sections:
       input.sections === null
@@ -497,6 +539,15 @@ export function buildLanding(input: {
         : input.sections.ok
           ? { ok: true, value: input.sections.value ? sectionsView(input.sections.value) : null }
           : input.sections,
+    sectionTime: !input.sectionTime
+      ? null
+      : input.sectionTime.ok
+        ? {
+            ok: true,
+            value: input.sectionTime.value ? sectionTimeView(input.sectionTime.value) : null,
+          }
+        : input.sectionTime,
+    sectionTimeFrom: SECTION_TIME_FROM,
     footnotes: [
       "Visits: our own visit log, one per browser per day, by the arm the visitor was shown. Starts: answered at least one question; submissions and payments: the people of that arm, paid whenever.",
       "Round 1 (dark vs white, June 2026) is left out: the records from then cannot reliably tell its two pages' visitors apart.",

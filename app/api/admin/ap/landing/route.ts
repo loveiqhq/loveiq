@@ -6,8 +6,9 @@ import { buildLanding, engagementWindows } from "@features/admin/server/ap/landi
 import {
   postHogFailed,
   fetchLandingEngagement,
-  fetchLandingMedian,
   fetchLandingSections,
+  fetchLandingSectionTime,
+  fetchLandingTime,
   type PostHogResult,
 } from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
@@ -31,11 +32,12 @@ export async function GET(request: Request) {
   const filters = parseFilters(new URL(request.url).searchParams, today);
   try {
     const windows = engagementWindows(filters.from, filters.to, today);
-    const [facts, engagement, pageMedian, sections, ...perTest] = await Promise.all([
+    const [facts, engagement, pageTime, sections, sectionTime, ...perTest] = await Promise.all([
       fetchFacts(filters.from, filters.to),
       settle(fetchLandingEngagement(filters.from, filters.to)),
-      settle(fetchLandingMedian(filters.from, filters.to)),
+      settle(fetchLandingTime(filters.from, filters.to)),
       settle(fetchLandingSections(filters.from, filters.to)),
+      settle(fetchLandingSectionTime(filters.from, filters.to)),
       ...windows.map((w) => settle(fetchLandingEngagement(w.from, w.to))),
     ]);
     const armEngagement = Object.fromEntries(windows.map((w, i) => [w.key, perTest[i]!]));
@@ -47,8 +49,9 @@ export async function GET(request: Request) {
         now,
         armEngagement,
         engagement,
-        pageMedian,
+        pageTime,
         sections,
+        sectionTime,
       }),
       {
         headers: NO_STORE,

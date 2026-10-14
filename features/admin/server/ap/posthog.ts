@@ -294,7 +294,12 @@ export interface LandingArmEngagement {
   scroll: [number, number, number, number];
   /** Median seconds on the landing page before leaving it. */
   medianSeconds: number | null;
+  /** Average seconds on it, each view counted up to 30 minutes (a tab left open is not reading). */
+  meanSeconds: number | null;
 }
+
+/** A number PostHog returned, or null where it had none. */
+const orNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 
 /**
  * The landing page's engagement per arm, from PostHog: bounce, call-to-action clicks, scroll
@@ -328,7 +333,8 @@ export async function fetchLandingEngagement(
            countIf(properties.$prev_pageview_max_scroll_percentage >= 0.5) AS s50,
            countIf(properties.$prev_pageview_max_scroll_percentage >= 0.75) AS s75,
            countIf(properties.$prev_pageview_max_scroll_percentage >= 0.99) AS s100,
-           quantile(0.5)(properties.$prev_pageview_duration) AS median_dur
+           quantile(0.5)(properties.$prev_pageview_duration) AS median_dur,
+           avg(least(toFloat(properties.$prev_pageview_duration), 1800)) AS mean_dur
     FROM events
     WHERE event IN ('$pageleave', '$pageview') AND properties.$prev_pageview_pathname = '/' AND ${range}
     GROUP BY arm
@@ -350,6 +356,7 @@ export async function fetchLandingEngagement(
           leaves: 0,
           scroll: [0, 0, 0, 0],
           medianSeconds: null,
+          meanSeconds: null,
         })
       );
     return e;
@@ -360,31 +367,42 @@ export async function fetchLandingEngagement(
     e.bounced = Number(bounced) || 0;
     e.cta = Number(cta) || 0;
   }
-  for (const [arm, leaves, s25, s50, s75, s100, med] of l.value) {
+  for (const [arm, leaves, s25, s50, s75, s100, med, mean] of l.value) {
     const e = get(String(arm));
     e.leaves = Number(leaves) || 0;
     e.scroll = [Number(s25) || 0, Number(s50) || 0, Number(s75) || 0, Number(s100) || 0];
-    e.medianSeconds = med === null || med === undefined ? null : Number(med);
+    e.medianSeconds = orNull(med);
+    e.meanSeconds = orNull(mean);
   }
   return { ok: true, value: [...arms.values()] };
 }
 
-/** The landing page's median time on page, all versions together: medians don't add up. */
-export async function fetchLandingMedian(
+/** Seconds on the landing page before leaving it: the median, and the capped average. */
+export interface LandingTime {
+  median: number | null;
+  mean: number | null;
+}
+
+/**
+ * The landing page's time on page, all versions together, read for every view at once:
+ * medians don't add up, and the average caps each view at 30 minutes as the arms' does.
+ */
+export async function fetchLandingTime(
   from: string,
   to: string
-): Promise<PostHogResult<number | null>> {
+): Promise<PostHogResult<LandingTime>> {
   const { since, until } = windowOf({ from, to });
   const q = `
-    SELECT quantile(0.5)(properties.$prev_pageview_duration) AS median_dur
+    SELECT quantile(0.5)(properties.$prev_pageview_duration) AS median_dur,
+           avg(least(toFloat(properties.$prev_pageview_duration), 1800)) AS mean_dur
     FROM events
     WHERE event IN ('$pageleave', '$pageview') AND properties.$prev_pageview_pathname = '/'
       AND properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
     LIMIT 1`;
   const r = await rows(q, 1);
   if (!r.ok) return r;
-  const v = r.value[0]?.[0];
-  return { ok: true, value: v === null || v === undefined ? null : Number(v) };
+  const [median, mean] = r.value[0] ?? [];
+  return { ok: true, value: { median: orNull(median), mean: orNull(mean) } };
 }
 
 /**
@@ -453,6 +471,74 @@ export async function fetchLandingSections(
         .map(([section, n]) => ({ section: String(section), sessions: Number(n) || 0 })),
       started: started ?? 0,
       testimonials: { seen: seen ?? 0, started: seenStarted ?? 0 },
+    },
+  };
+}
+
+/**
+ * section_time (how long each section was in view) is read from this day. A placeholder until
+ * it reaches production: then the first whole day after.
+ */
+export const SECTION_TIME_FROM = "2026-10-15";
+
+/** A section's time in one visit counts up to 10 minutes: past that it is an idle tab. */
+const SECTION_CAP_MS = 600_000;
+
+export interface LandingSectionTime {
+  /** The days read: the range from SECTION_TIME_FROM. */
+  from: string;
+  to: string;
+  /** Sessions that saw the landing page. */
+  sessions: number;
+  /**
+   * Per section: the sessions that reached it (section_seen, or any time in view), and their
+   * time in view added up, each session's capped.
+   */
+  sections: Array<{ section: string; sessions: number; ms: number }>;
+}
+
+/** How long each landing section was in view, per visit that reached it; null before it was recorded. */
+export async function fetchLandingSectionTime(
+  from: string,
+  to: string
+): Promise<PostHogResult<LandingSectionTime | null>> {
+  const start = from > SECTION_TIME_FROM ? from : SECTION_TIME_FROM;
+  if (start > to) return { ok: true, value: null };
+  const { since, until } = windowOf({ from: start, to });
+  const range = `properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}`;
+  // A visit that reached a section and never had it in view adds a row of no time.
+  const timeQ = `
+    SELECT section, count() AS sessions, sum(ms) AS total_ms
+    FROM (
+      SELECT $session_id AS sid, properties.section AS section,
+             least(sumIf(toFloat(properties.visible_ms), event = 'section_time'), ${SECTION_CAP_MS}) AS ms
+      FROM events
+      WHERE event IN ('section_seen', 'section_time') AND ${range}
+      GROUP BY sid, section
+    )
+    GROUP BY section
+    LIMIT 40`;
+  const landingsQ = `
+    SELECT uniqExact($session_id) AS sessions
+    FROM events
+    WHERE event = 'landing_page_view' AND ${range}
+    LIMIT 1`;
+  const [s, l] = await Promise.all([rows(timeQ, 40), rows(landingsQ, 1)]);
+  if (!s.ok) return s;
+  if (!l.ok) return l;
+  return {
+    ok: true,
+    value: {
+      from: start,
+      to,
+      sessions: Number(l.value[0]?.[0]) || 0,
+      sections: s.value
+        .filter(([section]) => section)
+        .map(([section, n, ms]) => ({
+          section: String(section),
+          sessions: Number(n) || 0,
+          ms: Number(ms) || 0,
+        })),
     },
   };
 }

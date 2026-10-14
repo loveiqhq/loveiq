@@ -1,6 +1,31 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { parseFilters } from "@features/admin/server/ap/filters";
+const mockHogql = vi.fn();
+vi.mock("@features/ux-review/server/review", () => ({
+  hogqlTable: (...args: unknown[]) => mockHogql(...args),
+}));
+vi.mock("@shared/observability/logger", () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+// The screen test draws a payload the builder made, without the network or the URL.
+const screenData = vi.hoisted(() => ({ payload: null as unknown }));
+vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
+  useAdminFetch: () => ({
+    data: screenData.payload,
+    loading: false,
+    error: null,
+    refetch: () => {},
+  }),
+}));
+vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
+vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
+vi.mock("@features/admin/ui/ap/ApOverview", () => ({ RangeLine: () => null }));
+
+import { addDays } from "@features/admin/server/ap/days";
+import { parseFilters, rangeLabel } from "@features/admin/server/ap/filters";
 import {
   buildLanding,
   engagementWindows,
@@ -10,13 +35,32 @@ import {
   testWindow,
   type ArmRow,
 } from "@features/admin/server/ap/landing";
-import type { LandingArmEngagement } from "@features/admin/server/ap/posthog";
+import {
+  fetchLandingEngagement,
+  fetchLandingSectionTime,
+  fetchLandingTime,
+  SECTION_TIME_FROM,
+  type LandingArmEngagement,
+} from "@features/admin/server/ap/posthog";
+import ApLanding from "@features/admin/ui/ap/ApLanding";
 import {
   LANDING_HERO_VIDEO_LAUNCH_DAY,
   LANDING_TEST_START_DAY,
 } from "@shared/experiments/landingVariant";
 
 import { factsFixture, sub } from "./ap-fixtures";
+
+/** PostHog's engagement for one arm: `sessions` visits, `bounced` of them bounced. */
+const ph = (arm: string, sessions: number, bounced: number): LandingArmEngagement => ({
+  arm,
+  sessions,
+  bounced,
+  cta: 0,
+  leaves: sessions,
+  scroll: [sessions, 0, 0, 0],
+  medianSeconds: 5,
+  meanSeconds: arm === "white_video" ? 9 : 8,
+});
 
 const test = (key: string) => LANDING_TESTS.find((t) => t.key === key)!;
 
@@ -252,15 +296,6 @@ describe("buildLanding", () => {
       "Before 7 Oct 2026 PostHog did not reliably know which version a visitor saw"
     );
 
-    const ph = (arm: string, sessions: number, bounced: number): LandingArmEngagement => ({
-      arm,
-      sessions,
-      bounced,
-      cta: 0,
-      leaves: sessions,
-      scroll: [sessions, 0, 0, 0],
-      medianSeconds: 5,
-    });
     const live = factsFixture({
       from: "2026-10-14",
       to: "2026-10-20",
@@ -291,6 +326,7 @@ describe("buildLanding", () => {
     expect(q.engagement).toMatchObject({ ok: true, value: { sessions: 220, bounce: 85 / 220 } });
     // Medians don't add up across versions: the page's own, or none, never one version's.
     expect(q.engagement?.ok && q.engagement.value.medianSeconds).toBeNull();
+    expect(q.engagement?.ok && q.engagement.value.meanSeconds).toBeNull();
     const withMedian = buildLanding({
       facts: live,
       filters: lf,
@@ -298,14 +334,188 @@ describe("buildLanding", () => {
       now,
       armEngagement: {},
       engagement: { ok: true, value: [ph("white_card", 200, 80), ph("white_video", 20, 5)] },
-      pageMedian: { ok: true, value: 7.25 },
+      pageTime: { ok: true, value: { median: 7.25, mean: 11.5 } },
       sections: null,
     });
-    expect(withMedian.engagement?.ok && withMedian.engagement.value.medianSeconds).toBe(7.25);
+    expect(withMedian.engagement).toMatchObject({
+      ok: true,
+      value: { medianSeconds: 7.25, meanSeconds: 11.5 },
+    });
     expect(q.rows.map((r) => r.testShort)).toEqual([
       "#6 · Hero video vs Q1",
       "#6 · Hero video vs Q1",
     ]);
     expect(q.sections).toEqual({ ok: true, value: null });
+  });
+});
+
+/** A running hero test from 14 Oct with PostHog's time and each section's, as the route reads them. */
+function livePayload(over: Partial<Parameters<typeof buildLanding>[0]> = {}) {
+  const arms = [ph("white_card", 200, 80), ph("white_video", 120, 30)];
+  return buildLanding({
+    facts: factsFixture({ from: "2026-10-14", to: "2026-10-20", visits: [], starts: [], subs: [] }),
+    filters: parseFilters({ period: "custom", from: "2026-10-14", to: "2026-10-20" }, "2026-10-21"),
+    today: "2026-10-21",
+    now: new Date("2026-10-21T12:00:00Z"),
+    armEngagement: { hero: { ok: true, value: arms } },
+    engagement: { ok: true, value: arms },
+    pageTime: { ok: true, value: { median: 41, mean: 52.5 } },
+    sections: {
+      ok: true,
+      value: {
+        from: "2026-10-14",
+        to: "2026-10-20",
+        sessions: 50,
+        reach: [{ section: "trust_strip", sessions: 40 }],
+        started: 5,
+        testimonials: { seen: 10, started: 2 },
+      },
+    },
+    sectionTime: {
+      ok: true,
+      value: {
+        from: SECTION_TIME_FROM,
+        to: "2026-10-20",
+        sessions: 100,
+        sections: [
+          { section: "trust_strip", sessions: 100, ms: 1_400_000 },
+          { section: "faq", sessions: 20, ms: 90_000 },
+        ],
+      },
+    },
+    ...over,
+  });
+}
+
+describe("landing time", () => {
+  it("compares the arms on the average time, with the medians in the small print", () => {
+    const time = livePayload().comparisons[0]!.metrics.at(-1)!;
+    expect(time).toMatchObject({ label: "Avg. time on page", unit: "mmss", a: 8000, b: 9000 });
+    expect(time.verdict).toBe(
+      "PostHog's sample; averages are not tested for chance · medians: A 5.0 s, B 5.0 s"
+    );
+    expect(livePayload().rows.map((r) => r.meanSeconds)).toEqual([8, 9]);
+  });
+
+  it("gives each section its average seconds over the visits that reached it, and its reach", () => {
+    const t = livePayload().sectionTime;
+    expect(t?.ok && t.value?.rows.slice(0, 2)).toEqual([
+      { section: "trust_strip", name: "Trust strip", seconds: 14, reach: 1 },
+      { section: "discover", name: "Discover", seconds: null, reach: 0 },
+    ]);
+    expect(t?.ok && t.value?.rows.find((r) => r.section === "faq")).toMatchObject({
+      seconds: 4.5,
+      reach: 0.2,
+    });
+    expect(livePayload({ sectionTime: { ok: true, value: null } }).sectionTime).toEqual({
+      ok: true,
+      value: null,
+    });
+    expect(livePayload({ sectionTime: { ok: false, error: "down" } }).sectionTime).toEqual({
+      ok: false,
+      error: "down",
+    });
+    expect(livePayload().sectionTimeFrom).toBe(SECTION_TIME_FROM);
+  });
+});
+
+describe("PostHog's landing readers", () => {
+  // A block, not an arrow's value: a function returned from beforeEach is run as a teardown,
+  // and mockReset() returns the mock.
+  beforeEach(() => {
+    mockHogql.mockReset();
+  });
+  const answer = (rows: unknown[][]) => ({ ok: true, cut: null, rows });
+  const query = (has: string) =>
+    String(mockHogql.mock.calls.map(([q]) => String(q)).find((q) => q.includes(has)));
+
+  it("reads each section's time in view from its first day, capped per visit", async () => {
+    mockHogql.mockImplementation(async (q: string) =>
+      q.includes("section_time")
+        ? answer([
+            ["trust_strip", 180, 2_520_000],
+            [null, 3, 0],
+          ])
+        : answer([[200]])
+    );
+    const to = addDays(SECTION_TIME_FROM, 5);
+    expect(await fetchLandingSectionTime(addDays(SECTION_TIME_FROM, -10), to)).toEqual({
+      ok: true,
+      value: {
+        from: SECTION_TIME_FROM,
+        to,
+        sessions: 200,
+        sections: [{ section: "trust_strip", sessions: 180, ms: 2_520_000 }],
+      },
+    });
+    const q = query("section_time");
+    // A visit that only reached a section (section_seen) counts with no time.
+    expect(q).toContain("WHERE event IN ('section_seen', 'section_time')");
+    expect(q).toContain(
+      "least(sumIf(toFloat(properties.visible_ms), event = 'section_time'), 600000)"
+    );
+    expect(query("landing_page_view")).toContain("uniqExact($session_id)");
+  });
+
+  it("reads nothing before the time was recorded", async () => {
+    expect(
+      await fetchLandingSectionTime(addDays(SECTION_TIME_FROM, -7), addDays(SECTION_TIME_FROM, -1))
+    ).toEqual({ ok: true, value: null });
+    expect(mockHogql).not.toHaveBeenCalled();
+  });
+
+  it("reads the average time beside the median, each view up to 30 minutes", async () => {
+    mockHogql.mockImplementation(async (q: string) =>
+      q.includes("$prev_pageview_max_scroll_percentage")
+        ? answer([["white_card", 100, 80, 50, 20, 5, 41, 52.5]])
+        : q.includes("countIf(event = 'cta_click')")
+          ? answer([["white_card", 120, 40, 12]])
+          : answer([[41, null]])
+    );
+    const arms = await fetchLandingEngagement("2026-09-01", "2026-09-07");
+    expect(arms).toMatchObject({
+      ok: true,
+      value: [{ arm: "white_card", sessions: 120, medianSeconds: 41, meanSeconds: 52.5 }],
+    });
+    expect(await fetchLandingTime("2026-09-01", "2026-09-07")).toEqual({
+      ok: true,
+      value: { median: 41, mean: null },
+    });
+    const cap = "avg(least(toFloat(properties.$prev_pageview_duration), 1800))";
+    expect(query("$prev_pageview_max_scroll_percentage")).toContain(cap);
+    expect(query("SELECT quantile(0.5)")).toContain(cap);
+  });
+});
+
+describe("the landing page's screen", () => {
+  afterEach(cleanup);
+
+  it("shows the averages and each section's time, as the design names them", () => {
+    screenData.payload = livePayload();
+    render(createElement(ApLanding));
+    const sort = screen.getByRole("button", { name: "Sort by Avg. time" });
+    fireEvent.click(sort);
+    expect(sort.closest("[role=columnheader]")).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getByText("Avg. time on page")).toBeInTheDocument();
+    const engagement = within(screen.getByRole("region", { name: "Engagement" }));
+    expect(engagement.getByText("Avg. time")).toBeInTheDocument();
+    expect(engagement.getByText("52.5 s")).toBeInTheDocument();
+    const card = within(screen.getByRole("region", { name: "Section time" }));
+    expect(
+      card.getByText("Avg. seconds in view · share of visitors who reach the section")
+    ).toBeInTheDocument();
+    const trust = card.getByText("Trust strip").parentElement!;
+    expect(trust).toHaveTextContent("Trust strip14s100% reach");
+    expect(card.queryByText(/Recorded from/)).toBeNull();
+  });
+
+  it("shows the reach alone, and when the time starts, for days before it was recorded", () => {
+    screenData.payload = livePayload({ sectionTime: { ok: true, value: null } });
+    render(createElement(ApLanding));
+    const card = within(screen.getByRole("region", { name: "Section time" }));
+    expect(card.getByText(/^Recorded from /)).toHaveTextContent(
+      `Recorded from ${rangeLabel(SECTION_TIME_FROM, SECTION_TIME_FROM)}`
+    );
+    expect(card.getByText("Trust strip").parentElement).toHaveTextContent("Trust strip—80% reach");
   });
 });

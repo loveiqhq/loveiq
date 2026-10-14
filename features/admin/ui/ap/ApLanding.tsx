@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
-import { fmt } from "@features/admin/server/ap/format";
+import { EMPTY, fmt } from "@features/admin/server/ap/format";
 import type {
   ArmRow,
   ArmStatus,
@@ -41,7 +41,7 @@ const STATUS: Record<ArmStatus, string> = {
 };
 
 type MetricKey =
-  "visits" | "startCvr" | "submitCvr" | "paymentCvr" | "perVisit" | "bounce" | "medianSeconds";
+  "visits" | "startCvr" | "submitCvr" | "paymentCvr" | "perVisit" | "bounce" | "meanSeconds";
 
 /** The heat columns: unit, and whether lower is better. */
 const COLUMNS: Array<{ key: MetricKey; label: string; heat: boolean; lower?: boolean }> = [
@@ -51,13 +51,13 @@ const COLUMNS: Array<{ key: MetricKey; label: string; heat: boolean; lower?: boo
   { key: "paymentCvr", label: "Payment CVR", heat: true },
   { key: "perVisit", label: "€ / visit", heat: true },
   { key: "bounce", label: "Bounce", heat: true, lower: true },
-  { key: "medianSeconds", label: "Median time", heat: true },
+  { key: "meanSeconds", label: "Avg. time", heat: true },
 ];
 
 function cell(key: MetricKey, v: number | null): string {
   if (key === "visits") return fmt("count", v);
   if (key === "perVisit") return fmt("eur3", v);
-  if (key === "medianSeconds") return fmt("mmss", v === null ? null : v * 1000);
+  if (key === "meanSeconds") return fmt("mmss", v === null ? null : v * 1000);
   return fmt("pct", v);
 }
 
@@ -276,11 +276,12 @@ function TestsTable({ data }: { data: LandingPayload }) {
           </summary>
           <div className="mt-1.5 flex flex-col gap-1.5">
             <p className="m-0">
-              Bounce (left without a click) and median time come from PostHog, and only for the
+              Bounce (left without a click) and avg. time come from PostHog, and only for the
               video-or-question tests: before 7 Oct 2026 PostHog did not reliably know which version
-              a visitor saw. Start CVR needs to know which version each unfinished starter saw; only
-              their saved progress records it (from 20 Sep 2026), and that is deleted after 30 days,
-              so older days show no start CVR.
+              a visitor saw. Avg. time counts each view up to 30 minutes; the export has the median
+              too. Start CVR needs to know which version each unfinished starter saw; only their
+              saved progress records it (from 20 Sep 2026), and that is deleted after 30 days, so
+              older days show no start CVR.
             </p>
             {data.footnotes.map((n) => (
               <p key={n} className="m-0">
@@ -418,10 +419,10 @@ function EngagementCard({ data }: { data: LandingPayload }) {
             {[
               { label: "Bounce", value: fmt("pct", e.value.bounce, 1) },
               {
-                label: "Median time",
+                label: "Avg. time",
                 value: fmt(
                   "mmss",
-                  e.value.medianSeconds === null ? null : e.value.medianSeconds * 1000
+                  e.value.meanSeconds === null ? null : e.value.meanSeconds * 1000
                 ),
               },
               { label: "CTA clicks", value: fmt("pct", e.value.cta, 1) },
@@ -462,7 +463,8 @@ function EngagementCard({ data }: { data: LandingPayload }) {
           <p className="m-0 text-xs leading-relaxed text-ap-muted">
             {fmt("count", e.value.sessions)} PostHog visits. Bounce: left without a click or another
             page. CTA clicks: pressed a button to the survey. Time and scroll: until the page was
-            left or the next page opened.
+            left or the next page opened. Avg. time counts each view up to 30 minutes; median{" "}
+            {fmt("mmss", e.value.medianSeconds === null ? null : e.value.medianSeconds * 1000)}.
           </p>
         </>
       )}
@@ -535,40 +537,60 @@ function ReviewsCard({ data }: { data: LandingPayload }) {
   );
 }
 
-function SectionReach({ data }: { data: LandingPayload }) {
+/** "14s", as the design writes a section's time. */
+const secs = (v: number | null) => (v === null ? EMPTY : `${Math.round(v)}s`);
+
+function SectionTime({ data }: { data: LandingPayload }) {
+  const t = data.sectionTime;
   const s = data.sections;
+  const time = t && t.ok ? t.value : null;
+  const reach = s && s.ok ? s.value : null;
+  // From the day the time in view is recorded; before it, the reach alone.
+  const view =
+    time ?? (reach && { ...reach, rows: reach.rows.map((r) => ({ ...r, seconds: null })) });
+  const failed = t && !t.ok ? t.error : !view && s && !s.ok ? s.error : null;
   return (
     <Card labelledBy="h-sections">
       <SectionHead
         id="h-sections"
-        title="Section reach"
+        title="Section time"
         level={3}
-        description="Share of landing visitors who reached each section: part of it in the top half of the screen (PostHog). Time in view is not recorded."
+        description="Avg. seconds in view · share of visitors who reach the section"
       />
-      {s && s.ok && s.value ? (
+      {failed && <p className="m-0 text-sm text-ap-bad-ink">PostHog could not be read: {failed}</p>}
+      {view ? (
         <>
+          {!time && !failed && (
+            <NotTracked>
+              Recorded from {rangeLabel(data.sectionTimeFrom, data.sectionTimeFrom)}
+            </NotTracked>
+          )}
           <div className="flex flex-col gap-2.5">
-            {s.value.rows.map((r) => (
+            {view.rows.map((r) => (
               <div
                 key={r.section}
                 className="grid items-center gap-3 text-[13px]"
-                style={{ gridTemplateColumns: "minmax(110px, 170px) minmax(0, 1fr) 60px" }}
+                style={{ gridTemplateColumns: "minmax(110px, 170px) 44px minmax(0, 1fr) 84px" }}
               >
                 <span className="font-semibold text-ap-ink">{r.name}</span>
+                <span className="text-right font-bold tabular-nums">{secs(r.seconds)}</span>
                 <Bar pct={r.reach} height={12} />
-                <span className="text-right font-bold tabular-nums">{fmt("pct", r.reach, 0)}</span>
+                <span className="text-right tabular-nums text-ap-muted">
+                  {fmt("pct", r.reach, 0)} reach
+                </span>
               </div>
             ))}
           </div>
-          <p className="m-0 text-xs text-ap-muted">
-            {fmt("count", s.value.sessions)} PostHog visits, {rangeLabel(s.value.from, s.value.to)}.
+          <p className="m-0 text-xs leading-relaxed text-ap-muted">
+            {fmt("count", view.sessions)} PostHog visits, {rangeLabel(view.from, view.to)}.{" "}
+            {time
+              ? "In view: at least half of the section on screen, or the section filling half the screen, while the page is showing; a visit counts up to 10 minutes per section. Reach: part of it came into the top half of the screen, or it was in view."
+              : "Reach: part of it came into the top half of the screen."}{" "}
             The hero is where every visit starts.
           </p>
         </>
-      ) : s && !s.ok ? (
-        <p className="m-0 text-sm text-ap-bad-ink">PostHog could not be read: {s.error}</p>
       ) : (
-        <NotTracked>Recorded from 14 Oct 2026: pick a range from that day on</NotTracked>
+        !failed && <NotTracked>Recorded from 14 Oct 2026: pick a range from that day on</NotTracked>
       )}
     </Card>
   );
@@ -590,6 +612,7 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
       { label: "Payment CVR", unit: "pct" },
       { label: "€ / visit", unit: "eur3" },
       { label: "Bounce (PostHog)", unit: "pct" },
+      { label: "Avg. time (PostHog)", unit: "mmss" },
       { label: "Median time (PostHog)", unit: "mmss" },
     ],
     rows: data.rows.map((r: ArmRow) => ({
@@ -607,6 +630,7 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
         r.paymentCvr,
         r.perVisit,
         r.bounce,
+        r.meanSeconds === null ? null : r.meanSeconds * 1000,
         r.medianSeconds === null ? null : r.medianSeconds * 1000,
       ],
     })),
@@ -642,6 +666,10 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
           { label: "Visits", values: [fmt("count", e.value.sessions)] },
           { label: "Bounce", values: [fmt("pct", e.value.bounce, 1)] },
           {
+            label: "Avg. time",
+            values: [fmt("mmss", e.value.meanSeconds === null ? null : e.value.meanSeconds * 1000)],
+          },
+          {
             label: "Median time",
             values: [
               fmt("mmss", e.value.medianSeconds === null ? null : e.value.medianSeconds * 1000),
@@ -666,6 +694,23 @@ function toCsv(data: LandingPayload): Array<{ name: string; table: Table }> {
           { label: "Reach", unit: "pct" },
         ],
         rows: s.value.rows.map((r) => ({ label: r.name, values: [r.reach] })),
+      },
+    });
+  }
+  const t = data.sectionTime;
+  if (t && t.ok && t.value) {
+    out.push({
+      name: "Section time (PostHog)",
+      table: {
+        columns: [
+          { label: "Section", unit: "text" },
+          { label: "Avg. time in view", unit: "mmss" },
+          { label: "Reach", unit: "pct" },
+        ],
+        rows: t.value.rows.map((r) => ({
+          label: r.name,
+          values: [r.seconds === null ? null : r.seconds * 1000, r.reach],
+        })),
       },
     });
   }
@@ -726,7 +771,7 @@ export default function ApLanding() {
               <ReviewsCard data={data} />
               <EngagementCard data={data} />
             </div>
-            <SectionReach data={data} />
+            <SectionTime data={data} />
           </section>
         </Busy>
       )}
