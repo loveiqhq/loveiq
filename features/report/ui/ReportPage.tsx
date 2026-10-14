@@ -2790,45 +2790,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     archetype: data?.primaryArchetype ?? null,
   });
 
-  /**
-   * The leave offer (features/report/logic/leaveIntent.ts): an unpaid reader's full
-   * report, free for a 20-minute call with Mark and Marcus, offered once as they reach the
-   * first paywall card (1.6 s after it comes into view).
-   * Off unless the booking page is configured. The tab's survey token and the probe
-   * cookie are read from the browser like the session id above.
-   */
-  const founderCallUrl = getFounderCallUrl();
-  const completedToken = useSyncExternalStore(subscribeNoop, completedReportToken, () => null);
-  const isProbe = useSyncExternalStore(subscribeNoop, readProbeCookie, () => false);
-  const [pageOpenedAt] = useState(() => Date.now());
-  const leaveOfferMode = leaveMode({
-    override: resolveLeaveOverride(searchParams.get("leave")),
-    bookingUrl: founderCallUrl,
-    isV4,
-    viewMode,
-    hasPurchased,
-    viewingOwnArchetype:
-      Boolean(primaryArchetypeFromData) && viewArchetype === primaryArchetypeFromData,
-    submissionId: data?.submissionId,
-    userEmail: data?.userEmail,
-    firstVisit: isFirstVisit({
-      urlToken: token ?? null,
-      completedToken,
-      reportDate: data?.reportDate,
-      now: pageOpenedAt,
-      search: searchParams,
-    }),
-    isProbe,
-  });
-  const leaveOffer = useLeaveIntent({
-    mode: leaveOfferMode,
-    submissionId: data?.submissionId ?? null,
-    overlayOpen: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
-    plansOpen: isPricingModalOpen,
-    popupArm,
-  });
-  const { dismiss: dismissLeaveOffer } = leaveOffer;
-
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
     if (!data) return;
@@ -3122,6 +3083,47 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     requestedArchetype && unlockedArchetypes.has(requestedArchetype)
       ? requestedArchetype
       : (primaryArchetypeFromData ?? "");
+
+  /**
+   * The leave offer (features/report/logic/leaveIntent.ts): an unpaid reader's full
+   * report, free for a 20-minute call with Mark and Marcus, offered once as they reach the
+   * first paywall card (1.6 s after it comes into view).
+   * Off unless the booking page is configured. The tab's survey token and the probe
+   * cookie are read from the browser like the session id above.
+   */
+  const founderCallUrl = getFounderCallUrl();
+  const completedToken = useSyncExternalStore(subscribeNoop, completedReportToken, () => null);
+  const isProbe = useSyncExternalStore(subscribeNoop, readProbeCookie, () => false);
+  const [pageOpenedAt] = useState(() => Date.now());
+  const leaveOfferMode = leaveMode({
+    override: resolveLeaveOverride(searchParams.get("leave")),
+    bookingUrl: founderCallUrl,
+    isV4,
+    viewMode,
+    // Staging has no `purchasedPlan`: a reader has paid when they hold a plan for this
+    // report, the test its own pop-ups use.
+    hasPurchased: accessPlan !== null,
+    viewingOwnArchetype:
+      Boolean(primaryArchetypeFromData) && viewArchetype === primaryArchetypeFromData,
+    submissionId: data?.submissionId,
+    userEmail: data?.userEmail,
+    firstVisit: isFirstVisit({
+      urlToken: token ?? null,
+      completedToken,
+      reportDate: data?.reportDate,
+      now: pageOpenedAt,
+      search: searchParams,
+    }),
+    isProbe,
+  });
+  const leaveOffer = useLeaveIntent({
+    mode: leaveOfferMode,
+    submissionId: data?.submissionId ?? null,
+    overlayOpen: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
+    plansOpen: isPricingModalOpen,
+    popupArm,
+  });
+  const { dismiss: dismissLeaveOffer } = leaveOffer;
 
   const returnToPrimaryHref = useMemo(() => {
     const params = new URLSearchParams();
