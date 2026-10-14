@@ -2547,13 +2547,15 @@ describe("ReportPage", () => {
       expect(link.getAttribute("href")).toBe(LEAVE_URL);
     });
 
-    it("on a phone, waits out the 30 s after the pay test's point, which it reached too", () => {
+    // Staging's pay pop-up test claims no key at its point (main's claimPlansOffer is not
+    // here), so on staging there is no 30 s window for the offer to keep out of.
+    it("on a phone, opens 1.6 s after the paywall card too (no pay-test window on staging)", () => {
       leaveV4("&popup=off");
       render(<ReportPage token={LEAVE_TOKEN} />);
 
-      advance(30_500);
+      advance(1_500);
       expect(offer()).toBeNull();
-      advance(1_000);
+      advance(200);
 
       expect(offer()).toBeInTheDocument();
       expect(shown()).toHaveBeenCalledWith(
@@ -2561,26 +2563,24 @@ describe("ReportPage", () => {
       );
     });
 
-    it("on a phone in the popup arm, waits until the reader closes the pay test's pop-up", () => {
+    // jsdom reaches the paywall card and the pay test's point at once. On staging, with no
+    // claim to wait on, both arrive together: the plans pop-up wins and the offer gives way.
+    // A reader going in order meets the card chapters before the point.
+    it("on a phone in the popup arm, gives way to the pay test's pop-up when both arrive", () => {
       leaveV4("&popup=on");
       render(<ReportPage token={LEAVE_TOKEN} />);
 
       advance(1_700);
-      expect(screen.getByRole("button", { name: /close pricing modal/i })).toBeInTheDocument();
-      advance(60_000);
-      expect(offer(), "the offer opened over the plans pop-up").toBeNull();
 
-      closePlans();
-      advance(1_000);
-
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledWith(
-        expect.objectContaining({ trigger: "paywall_reached", popup_arm: "popup" })
+      expect(offer()).toBeNull();
+      expect(document.querySelector(".report-pricing-modal")?.getAttribute("data-state")).toBe(
+        "open"
+      );
+      expect(vi.mocked(analytics.trackLeaveOfferDismissed)).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "superseded" })
       );
     });
 
-    // A plans window the reader opens and closes is no longer a signal of its own (the
-    // offer waits out any open window by itself), so closing one must not reach for one.
     it("lets the reader open and close the plans window without an error", () => {
       leaveV4("&popup=off");
       render(<ReportPage token={LEAVE_TOKEN} />);
@@ -2591,10 +2591,9 @@ describe("ReportPage", () => {
       };
       window.addEventListener("error", onError);
       try {
+        // Staging's sticky bar goes straight to Stripe; a locked chapter opens the plans.
         fireEvent.click(
-          document.querySelector<HTMLButtonElement>(
-            ".report-sticky-unlock--mobile .report-sticky-unlock__cta--v4"
-          )!
+          document.querySelector<HTMLButtonElement>(".rv4-chapter.is-locked .rv4-chapter__button")!
         );
         closePlans();
       } finally {
