@@ -460,7 +460,8 @@ function sectionTimeView(t: LandingSectionTime): SectionTimeView {
     from: t.from,
     to: t.to,
     sessions: t.sessions,
-    rows: SECTION_NAMES.map(([section, name]) => {
+    // The hero is timed but has no section_seen: every view starts there.
+    rows: [["hero", "Hero"] as [string, string], ...SECTION_NAMES].map(([section, name]) => {
       const s = by.get(section);
       return {
         section,

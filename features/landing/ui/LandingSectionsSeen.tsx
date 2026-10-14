@@ -53,7 +53,10 @@ const LandingSectionsSeen: FC = () => {
    */
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
-    const sections = [...document.querySelectorAll<HTMLElement>("[data-landing-section]")];
+    // The hero is timed too (data-landing-time): every view starts there, so it has no reach.
+    const sections = [
+      ...document.querySelectorAll<HTMLElement>("[data-landing-section], [data-landing-time]"),
+    ];
     const half = new Set<Element>();
     const middle = new Set<Element>();
     const since = new Map<Element, number>();
@@ -76,10 +79,11 @@ const LandingSectionsSeen: FC = () => {
     };
     const send = () => {
       for (const [el, ms] of unsent) {
-        const section = (el as HTMLElement).dataset.landingSection;
+        const { landingSection, landingTime } = (el as HTMLElement).dataset;
+        const section = landingSection ?? landingTime;
         const visible_ms = Math.round(ms);
         if (section && visible_ms > 0)
-          trackSectionTime({ section: section as LandingSection, visible_ms });
+          trackSectionTime({ section: section as LandingSection | "hero", visible_ms });
       }
       unsent.clear();
     };

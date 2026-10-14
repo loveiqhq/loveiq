@@ -1352,8 +1352,10 @@ export const trackSectionSeen = (params: { section: LandingSection }) =>
  * sent before, so a page's events add up to its time. A beacon, because it is often sent as
  * the page goes, after PostHog has emptied its own queue.
  */
-export const trackSectionTime = (params: { section: LandingSection; visible_ms: number }) =>
-  track("section_time", params, undefined, { transport: "sendBeacon" });
+export const trackSectionTime = (params: {
+  section: LandingSection | "hero";
+  visible_ms: number;
+}) => track("section_time", params, undefined, { transport: "sendBeacon" });
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);

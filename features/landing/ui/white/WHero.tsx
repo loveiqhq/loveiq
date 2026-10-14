@@ -146,7 +146,7 @@ const WHero: FC<{ media?: HeroMedia }> = ({ media = "card" }) => {
   useCtaSeen(cardRef, "hero_card", media);
 
   return (
-    <section className="relative overflow-hidden bg-white pt-[64px]">
+    <section className="relative overflow-hidden bg-white pt-[64px]" data-landing-time="hero">
       <div className="content-shell">
         <div
           className={

@@ -241,6 +241,29 @@ describe("how far down the landing a visitor got", () => {
       middle: FakeObserver.all.find((o) => o.opts?.rootMargin === "-49.5% 0px -49.5% 0px")!,
     });
 
+    it("times the hero too, without counting it as reached", async () => {
+      const { default: LandingSectionsSeen } =
+        await import("@features/landing/ui/LandingSectionsSeen");
+      const { container } = render(
+        <>
+          <section data-landing-time="hero" />
+          <LandingSectionsSeen />
+        </>
+      );
+      const hero = container.querySelector("section")!;
+      const { half } = observers();
+      expect(half.els).toContain(hero);
+      // The reach observers never see it: every view starts on the hero.
+      for (const o of FakeObserver.all.filter((x) => x !== half && x !== observers().middle))
+        expect(o.els).not.toContain(hero);
+      at(0);
+      act(() => half.show([hero], 1));
+      at(14000);
+      fire(new Event("pagehide"));
+      expect(sent()).toEqual([{ section: "hero", visible_ms: 14000 }]);
+      expect(events("section_seen")).toEqual([]);
+    });
+
     it("keeps watching every section, after section_seen has stopped", async () => {
       placeSections(["trust_strip"]);
       await renderSections();

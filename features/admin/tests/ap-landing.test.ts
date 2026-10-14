@@ -399,7 +399,9 @@ describe("landing time", () => {
 
   it("gives each section its average seconds over the visits that reached it, and its reach", () => {
     const t = livePayload().sectionTime;
-    expect(t?.ok && t.value?.rows.slice(0, 2)).toEqual([
+    // The hero comes first, as the design lists it; no time recorded for it here.
+    expect(t?.ok && t.value?.rows.slice(0, 3)).toEqual([
+      { section: "hero", name: "Hero", seconds: null, reach: 0 },
       { section: "trust_strip", name: "Trust strip", seconds: 14, reach: 1 },
       { section: "discover", name: "Discover", seconds: null, reach: 0 },
     ]);
@@ -452,7 +454,7 @@ describe("PostHog's landing readers", () => {
     // A visit that only reached a section (section_seen) counts with no time.
     expect(q).toContain("WHERE event IN ('section_seen', 'section_time')");
     expect(q).toContain(
-      "least(sumIf(toFloat(properties.visible_ms), event = 'section_time'), 600000)"
+      "least(coalesce(sumIf(toFloat(properties.visible_ms), event = 'section_time'), 0), 600000)"
     );
     expect(query("landing_page_view")).toContain("uniqExact($session_id)");
   });

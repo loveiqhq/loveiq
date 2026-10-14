@@ -506,12 +506,14 @@ export async function fetchLandingSectionTime(
   if (start > to) return { ok: true, value: null };
   const { since, until } = windowOf({ from: start, to });
   const range = `properties.$host = '${HOST}' AND timestamp >= ${at(since)} AND timestamp < ${at(until)}`;
-  // A visit that reached a section and never had it in view adds a row of no time.
+  // A visit that reached a section and never had it in view adds a row of no time. PostHog
+  // reads the sum of no time as nothing, and least() of nothing as the cap: hence coalesce
+  // (checked against live events on 14 Oct 2026).
   const timeQ = `
     SELECT section, count() AS sessions, sum(ms) AS total_ms
     FROM (
       SELECT $session_id AS sid, properties.section AS section,
-             least(sumIf(toFloat(properties.visible_ms), event = 'section_time'), ${SECTION_CAP_MS}) AS ms
+             least(coalesce(sumIf(toFloat(properties.visible_ms), event = 'section_time'), 0), ${SECTION_CAP_MS}) AS ms
       FROM events
       WHERE event IN ('section_seen', 'section_time') AND ${range}
       GROUP BY sid, section
