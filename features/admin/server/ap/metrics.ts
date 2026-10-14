@@ -93,6 +93,7 @@ export function spendBlocked(scope: Scope): string | null {
   if (scope.device !== "all") return "Ad spend can't be split by device here.";
   if (scope.tier !== "all") return "Ad spend can't be split by country tier.";
   if (scope.visitor !== "all") return "Ad spend can't be split into new and returning visitors.";
+  if (scope.source === "meta_ads") return "Meta's ad spend isn't read: only Google Ads spend is.";
   return null;
 }
 
@@ -214,13 +215,17 @@ export function spend(ad: AdCost, scope: Scope, from: string, to: string): Spend
   if (!launched(scope)) return { eur: 0, complete: true, ...base };
   if (spendBlocked(scope)) return { eur: null, complete: false, ...base };
   let complete = true;
+  let covered = false;
   let eur = 0;
   for (let d = from; d <= to; d = addDays(d, 1)) {
     if (ad.from === null || ad.to === null || d < ad.from || d > ad.to) complete = false;
+    else covered = true;
     eur += ad.byDay.get(d) ?? 0;
   }
   if (scope.source !== "all" && scope.source !== "google_ads")
     return { eur: 0, complete: true, ...base };
+  // No day of the range has a spend figure: unknown, never €0.
+  if (!covered) return { eur: null, complete: false, ...base };
   return { eur: Math.round(eur * 100) / 100, complete, ...base };
 }
 
