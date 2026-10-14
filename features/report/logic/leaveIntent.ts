@@ -1,16 +1,16 @@
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 
 /**
- * The rules behind the report's leave offer: a pop-up shown ONCE, on the first sign
- * that an unpaid reader is about to leave, offering their full report free for a
- * 20-minute call with Mark and Marcus (Mark, #all-loveiq 08.10: "a bounce pop up that
- * offers users a free report for talking to Marcus and me for 20 minutes"; LoveIQ Sync
- * 12.10: the calls are a value exchange, never a thrown-around discount).
+ * The rules behind the report's leave offer: a pop-up shown ONCE to an unpaid reader,
+ * offering their full report free for a 20-minute call with Mark and Marcus (Mark,
+ * #all-loveiq 08.10: "a bounce pop up that offers users a free report for talking to
+ * Marcus and me for 20 minutes"; LoveIQ Sync 12.10: the calls are a value exchange,
+ * never a thrown-around discount).
  *
- * WHEN IT MAY SHOW. Armed once the reader reaches the first paywall card. Then:
- *  - with a mouse on a wide screen, the pointer leaving the window through the top;
- *  - everywhere else, closing a plans window the reader opened themselves, or
- *    PHONE_IDLE_MS of nothing happening.
+ * WHEN IT SHOWS (Fatih, 14.10: by scroll, on every device). PAYWALL_BEAT_MS after the
+ * reader scrolls the first paywall card into view, the same short beat the plans pop-up
+ * takes, so the card is seen before the offer arrives. Anything that blocks it below
+ * only delays it: it opens at the first moment nothing is in the way.
  *
  * WHEN IT NEVER SHOWS.
  *  - On a return visit. The team took the returning-reader discount pop-up out on
@@ -23,11 +23,10 @@ import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
  * Pure so every rule is tested on its own; `useLeaveIntent` wires them to the page.
  */
 
-export const PHONE_IDLE_MS = 30_000;
+/** From the paywall card coming into view to the offer: the plans pop-up's own beat. */
+export const PAYWALL_BEAT_MS = 1_600;
 export const POPUP_POINT_QUIET_MS = 30_000;
 export const FIRST_VISIT_WINDOW_MS = 2 * 60 * 60 * 1000;
-/** Lets the plans window fade out before the offer fades in. */
-export const PLANS_CLOSE_BEAT_MS = 800;
 /** A report date this far ahead of the device clock still counts as now. */
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
@@ -36,7 +35,7 @@ export const FIRST_PAYWALL_SELECTOR = ".report-premium-overlay, .rv4-premium";
 /** Where a report has no card (it draws one only with its new copy): the first lock. */
 export const LOCKED_CHAPTER_SELECTOR = ".rv4-chapter.is-locked";
 
-export type LeaveTrigger = "exit_intent" | "plans_closed" | "idle" | "forced";
+export type LeaveTrigger = "paywall_reached" | "forced";
 export type LeaveOffer = "founder_call";
 export type LeaveOverride = "on" | "off" | "show";
 export type LeaveMode = "off" | "trigger" | "show";
@@ -133,25 +132,6 @@ export function leaveMode(input: {
   if (!input.submissionId || !input.userEmail?.trim()) return "off";
   if (!input.firstVisit || input.isProbe) return "off";
   return "trigger";
-}
-
-/** A mouse on a wide screen, or touch (phones, and touch tablets of any width). */
-export function leaveSignalSet({
-  wide,
-  finePointer,
-}: {
-  wide: boolean;
-  finePointer: boolean;
-}): "pointer" | "touch" {
-  return wide && finePointer ? "pointer" : "touch";
-}
-
-/** The pointer left the window through its top edge, towards the tabs and the close button. */
-export function isExitIntent(event: {
-  relatedTarget: EventTarget | null;
-  clientY: number;
-}): boolean {
-  return event.relatedTarget === null && event.clientY <= 0;
 }
 
 /** Inside the pay pop-up test's measuring window. */
