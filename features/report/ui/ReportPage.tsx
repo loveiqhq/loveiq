@@ -2886,7 +2886,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   /**
    * The leave offer (features/report/logic/leaveIntent.ts): an unpaid reader's full
-   * report, free for a 20-minute call with Mark and Marcus, offered once as they leave.
+   * report, free for a 20-minute call with Mark and Marcus, offered once as they reach the
+   * first paywall card (1.6 s after it comes into view).
    * Off unless the booking page is configured. The tab's survey token and the probe
    * cookie are read from the browser like the session id above.
    */
@@ -2920,10 +2921,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     plansOpen: isPricingModalOpen,
     popupArm,
   });
-  const { notifyPlansClosed, dismiss: dismissLeaveOffer } = leaveOffer;
-  // Set only where the READER opens the plans window, never by the automatic opens, so
-  // closing the pay pop-up test's own pop-up is not taken for a reader leaving.
-  const plansOpenedByReaderRef = useRef(false);
+  const { dismiss: dismissLeaveOffer } = leaveOffer;
 
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
@@ -3265,7 +3263,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       trackPaywallInitiated({ source: "archetype_unlock", archetype: name });
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
       setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
-      plansOpenedByReaderRef.current = true;
       setIsPricingModalOpen(true);
     },
     [
@@ -3391,12 +3388,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
     setPricingVariant("default");
-    // A plans window the reader opened, closed without buying: a leave signal on a phone.
-    if (plansOpenedByReaderRef.current) {
-      plansOpenedByReaderRef.current = false;
-      notifyPlansClosed();
-    }
-  }, [notifyPlansClosed]);
+  }, []);
 
   // Paid or not, every reader shares with up to two people (planAccess.ts).
   const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
@@ -3417,7 +3409,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // viewed (locked-section CTAs in /report?archetype=Y must upgrade Y,
       // not primary). null = primary archetype.
       const scope = archetype ?? null;
-      plansOpenedByReaderRef.current = true;
       setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
       setPricingVariant(
         viewMode === "shared" ? "recipient" : shouldShowOfferVariant ? "offer" : "default"

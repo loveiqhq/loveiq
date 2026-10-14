@@ -36,14 +36,6 @@ const setVisibility = (state: "visible" | "hidden") => {
 };
 
 const originalMatchMedia = window.matchMedia;
-/** A wide window with a mouse: what `(hover: hover) and (pointer: fine)` and 700px see. */
-const useMouse = () => {
-  window.matchMedia = ((query: string) =>
-    ({ matches: true, media: query }) as MediaQueryList) as typeof window.matchMedia;
-};
-
-const exitThroughTop = () =>
-  document.dispatchEvent(new MouseEvent("mouseout", { clientY: -2, relatedTarget: null }));
 
 const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
 
@@ -69,10 +61,11 @@ afterEach(() => {
   vi.useRealTimers();
   window.matchMedia = originalMatchMedia;
   document.body.innerHTML = "";
+  document.documentElement.style.removeProperty("--liq-consent-h");
 });
 
-describe("useLeaveIntent: phones", () => {
-  it("stays closed while the reader has not reached the paywall", () => {
+describe("useLeaveIntent: reaching the paywall card", () => {
+  it("stays closed while the reader has not reached the paywall card", () => {
     paywallCardAt(2000);
     const { result } = mount();
     advance(90_000);
@@ -80,29 +73,34 @@ describe("useLeaveIntent: phones", () => {
     expect(shown).not.toHaveBeenCalled();
   });
 
-  it("opens after 30 seconds of nothing happening at the paywall", () => {
+  it("opens 1.6 seconds after the paywall card comes into view", () => {
     const { result } = mount({ popupArm: "no_popup" });
-    advance(29_000);
+    advance(1_500);
     expect(result.current.open).toBe(false);
-    advance(2_000);
+    advance(200);
     expect(result.current.open).toBe(true);
-    expect(result.current.trigger).toBe("idle");
+    expect(result.current.trigger).toBe("paywall_reached");
     expect(shown).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "founder_call", trigger: "idle", popup_arm: "no_popup" })
+      expect.objectContaining({
+        variant: "founder_call",
+        trigger: "paywall_reached",
+        popup_arm: "no_popup",
+        armed_ms: 1_600,
+      })
     );
   });
 
   it("arms when scrolling brings the paywall card up", () => {
     paywallCardAt(2000);
     const { result } = mount();
-    advance(40_000);
+    advance(10_000);
     paywallCardAt(500);
     act(() => {
       window.dispatchEvent(new Event("scroll"));
     });
-    advance(29_000);
+    advance(1_500);
     expect(result.current.open).toBe(false);
-    advance(2_000);
+    advance(200);
     expect(result.current.open).toBe(true);
   });
 
@@ -113,139 +111,94 @@ describe("useLeaveIntent: phones", () => {
     locked.getBoundingClientRect = () => ({ top: 200 }) as DOMRect;
     document.body.appendChild(locked);
     const { result } = mount();
-    advance(31_000);
+    advance(1_700);
     expect(result.current.open).toBe(true);
   });
 
-  it("starts the 30 seconds again whenever the reader does something", () => {
+  it("works the same with a mouse on a wide screen", () => {
+    window.matchMedia = ((query: string) =>
+      ({ matches: true, media: query }) as MediaQueryList) as typeof window.matchMedia;
     const { result } = mount();
-    advance(20_000);
-    act(() => {
-      window.dispatchEvent(new Event("touchstart"));
-    });
-    advance(20_000);
-    expect(result.current.open).toBe(false);
-    advance(11_000);
+    advance(1_700);
     expect(result.current.open).toBe(true);
+    expect(result.current.trigger).toBe("paywall_reached");
   });
+});
 
-  it("does not count time the tab spent hidden", () => {
-    const { result } = mount();
-    act(() => setVisibility("hidden"));
-    advance(120_000);
-    expect(result.current.open).toBe(false);
-    act(() => setVisibility("visible"));
-    advance(29_000);
-    expect(result.current.open).toBe(false);
-    advance(2_000);
-    expect(result.current.open).toBe(true);
-  });
-
-  it("waits while another window is open, and counts from when it closes", () => {
+describe("useLeaveIntent: waiting until nothing is in the way", () => {
+  it("waits while another window is open, and opens once it closes", () => {
     const { result, rerender } = mount({ overlayOpen: true });
-    advance(60_000);
+    advance(10_000);
     expect(result.current.open).toBe(false);
     rerender({ ...BASE, overlayOpen: false });
-    advance(29_000);
-    expect(result.current.open).toBe(false);
-    advance(2_000);
+    advance(1_000);
     expect(result.current.open).toBe(true);
   });
 
-  it("never opens over a dialog or the cookie banner", () => {
+  it("waits out a dialog in the page", () => {
     const dialog = document.createElement("div");
     dialog.setAttribute("aria-modal", "true");
     document.body.appendChild(dialog);
     const { result } = mount();
-    advance(60_000);
+    advance(10_000);
     expect(result.current.open).toBe(false);
     dialog.remove();
-    document.documentElement.style.setProperty("--liq-consent-h", "140px");
-    advance(60_000);
-    expect(result.current.open).toBe(false);
-    document.documentElement.style.removeProperty("--liq-consent-h");
+    advance(1_000);
+    expect(result.current.open).toBe(true);
   });
 
-  it("opens shortly after the reader closes a plans window they opened", () => {
+  it("waits out the cookie banner", () => {
+    document.documentElement.style.setProperty("--liq-consent-h", "140px");
     const { result } = mount();
-    advance(3_000);
-    act(() => result.current.notifyPlansClosed());
-    advance(799);
+    advance(10_000);
     expect(result.current.open).toBe(false);
-    advance(2);
+    document.documentElement.style.removeProperty("--liq-consent-h");
+    advance(1_000);
     expect(result.current.open).toBe(true);
-    expect(result.current.trigger).toBe("plans_closed");
+  });
+
+  it("waits while the tab is hidden", () => {
+    const { result } = mount();
+    act(() => setVisibility("hidden"));
+    advance(10_000);
+    expect(result.current.open).toBe(false);
+    act(() => setVisibility("visible"));
+    advance(1_000);
+    expect(result.current.open).toBe(true);
   });
 
   it("holds back for 30 seconds after the pay pop-up test's point, in either arm", () => {
-    const { result } = mount();
     // openPlans() claims this key at the pop-up point, in both arms, on phones only.
     sessionStorage.setItem("loveiq-report-plans-offered:42", "1");
-    advance(4_000);
-    act(() => result.current.notifyPlansClosed());
+    const { result } = mount();
+    // The first tick (second 1) stamps the point; the offer waits until second 31.
+    advance(30_500);
+    expect(result.current.open).toBe(false);
     advance(1_000);
-    expect(result.current.open).toBe(false);
-    // The close counts as activity, so idle runs from second 4 and lands at 34,
-    // after the window that began when the key was first seen (second 1).
-    advance(28_000);
-    expect(result.current.open).toBe(false);
-    advance(3_000);
     expect(result.current.open).toBe(true);
-    expect(result.current.trigger).toBe("idle");
+    expect(result.current.trigger).toBe("paywall_reached");
   });
 
   it("is not held back by a pop-up point it saw long ago", () => {
     sessionStorage.setItem("loveiq-leave-offer-point:42", String(Date.now() - 60_000));
     sessionStorage.setItem("loveiq-report-plans-offered:42", "1");
     const { result } = mount();
-    act(() => result.current.notifyPlansClosed());
-    advance(900);
+    advance(1_700);
     expect(result.current.open).toBe(true);
-  });
-});
-
-describe("useLeaveIntent: a mouse on a wide screen", () => {
-  it("opens when the pointer leaves through the top", () => {
-    useMouse();
-    const { result } = mount();
-    act(() => exitThroughTop());
-    expect(result.current.open).toBe(true);
-    expect(result.current.trigger).toBe("exit_intent");
-  });
-
-  it("ignores the pointer leaving before the paywall, or through the sides", () => {
-    useMouse();
-    paywallCardAt(2000);
-    const { result } = mount();
-    act(() => exitThroughTop());
-    expect(result.current.open).toBe(false);
-    paywallCardAt(100);
-    act(() => {
-      document.dispatchEvent(new MouseEvent("mouseout", { clientY: 300, relatedTarget: null }));
-    });
-    expect(result.current.open).toBe(false);
-  });
-
-  it("never opens on idle or on a plans window closing", () => {
-    useMouse();
-    const { result } = mount();
-    act(() => result.current.notifyPlansClosed());
-    advance(120_000);
-    expect(result.current.open).toBe(false);
   });
 });
 
 describe("useLeaveIntent: once, and only when it can be remembered", () => {
   it("never shows again for the same submission", () => {
     const first = mount();
-    advance(31_000);
+    advance(1_700);
     expect(first.result.current.open).toBe(true);
     act(() => first.result.current.dismiss("not_now"));
     first.unmount();
     expect(localStorage.getItem("loveiq-leave-offer:42")).not.toBeNull();
 
     const second = mount();
-    advance(120_000);
+    advance(60_000);
     expect(second.result.current.open).toBe(false);
     expect(shown).toHaveBeenCalledTimes(1);
   });
@@ -260,14 +213,14 @@ describe("useLeaveIntent: once, and only when it can be remembered", () => {
       setItem: refuse,
     } as unknown as Storage);
     const { result } = mount();
-    advance(120_000);
+    advance(60_000);
     expect(result.current.open).toBe(false);
     expect(shown).not.toHaveBeenCalled();
   });
 
   it("does nothing when off", () => {
     const { result } = mount({ mode: "off" });
-    advance(120_000);
+    advance(60_000);
     expect(result.current.open).toBe(false);
   });
 
@@ -279,39 +232,27 @@ describe("useLeaveIntent: once, and only when it can be remembered", () => {
 });
 
 describe("useLeaveIntent: the page turning the offer off", () => {
-  it("ignores a leave signal that comes after the page turned the offer off", () => {
-    // A purchase that lands mid-session (a 409 "already owned", then a reload of the data)
-    // turns the mode off while the hook is armed; the dialog is no longer mounted.
+  it("never opens once the page turns the offer off inside the beat", () => {
+    // A purchase that lands mid-session turns the mode off; the dialog is no longer
+    // mounted, so an offer opening now would blur and freeze the page for nothing.
     const { result, rerender } = mount();
-    advance(5_000);
+    advance(1_000);
     rerender({ ...BASE, mode: "off" });
-    act(() => result.current.notifyPlansClosed());
-    advance(120_000);
+    advance(60_000);
     expect(result.current.open).toBe(false);
     expect(shown).not.toHaveBeenCalled();
     expect(localStorage.getItem("loveiq-leave-offer:42")).toBeNull();
   });
 
-  it("drops a plans close already waiting out its beat", () => {
-    const { result, rerender } = mount();
-    advance(5_000);
-    act(() => result.current.notifyPlansClosed());
-    advance(300);
-    rerender({ ...BASE, mode: "off" });
-    advance(2_000);
-    expect(result.current.open).toBe(false);
-    expect(shown).not.toHaveBeenCalled();
-  });
-
   it("arms again from the start when the page turns the offer back on", () => {
     const { result, rerender } = mount();
-    advance(5_000);
+    advance(1_000);
     rerender({ ...BASE, mode: "off" });
-    advance(60_000);
+    advance(10_000);
     rerender({ ...BASE, mode: "trigger" });
-    advance(29_000);
+    advance(1_500);
     expect(result.current.open).toBe(false);
-    advance(2_000);
+    advance(200);
     expect(result.current.open).toBe(true);
   });
 });
@@ -319,7 +260,7 @@ describe("useLeaveIntent: the page turning the offer off", () => {
 describe("useLeaveIntent: what the reader does with it", () => {
   it("records a dismissal, how, and how long it was on screen", () => {
     const { result } = mount();
-    advance(30_000);
+    advance(1_600);
     expect(result.current.open).toBe(true);
     advance(4_000);
     act(() => result.current.dismiss("not_now"));
@@ -327,7 +268,7 @@ describe("useLeaveIntent: what the reader does with it", () => {
     expect(dismissed).toHaveBeenCalledWith(
       expect.objectContaining({
         variant: "founder_call",
-        trigger: "idle",
+        trigger: "paywall_reached",
         source: "not_now",
         view_duration_ms: 4_000,
       })
@@ -336,17 +277,17 @@ describe("useLeaveIntent: what the reader does with it", () => {
 
   it("records the booking page being opened and gets out of the way", () => {
     const { result } = mount();
-    advance(31_000);
+    advance(1_700);
     act(() => result.current.book());
     expect(result.current.open).toBe(false);
     expect(clicked).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "founder_call", trigger: "idle" })
+      expect.objectContaining({ variant: "founder_call", trigger: "paywall_reached" })
     );
   });
 
   it("closes, as superseded, if the plans window opens over it", () => {
     const { result, rerender } = mount();
-    advance(31_000);
+    advance(1_700);
     rerender({ ...BASE, plansOpen: true });
     expect(result.current.open).toBe(false);
     expect(dismissed).toHaveBeenCalledWith(expect.objectContaining({ source: "superseded" }));

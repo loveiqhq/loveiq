@@ -206,17 +206,17 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
     {
       event_type: "leave_offer_shown",
       entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "idle", armed_ms: 31000 },
+      metadata: { variant: "founder_call", trigger: "paywall_reached", armed_ms: 31000 },
     },
     {
       event_type: "leave_offer_clicked",
       entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "idle", view_duration_ms: 4000 },
+      metadata: { variant: "founder_call", trigger: "paywall_reached", view_duration_ms: 4000 },
     },
     {
       event_type: "leave_offer_dismissed",
       entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "idle", source: "not_now" },
+      metadata: { variant: "founder_call", trigger: "paywall_reached", source: "not_now" },
     },
   ];
 

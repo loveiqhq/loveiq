@@ -44,7 +44,7 @@ describe("FounderCallDialog", () => {
     renderDialog(true);
     const heading = screen.getByRole("heading", { level: 2 }).textContent ?? "";
     expect(heading).toBe(titleCase(heading));
-    expect(screen.getByText("Before You Go")).toBeTruthy();
+    expect(screen.getByText("Prefer to Talk?")).toBeTruthy();
   });
 
   it("promises what the grant gives, and no price", () => {

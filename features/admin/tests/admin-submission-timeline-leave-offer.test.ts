@@ -41,17 +41,17 @@ const LEAVE_ROWS = [
   {
     event_type: "leave_offer_shown",
     event_time: "2026-10-14T09:10:00.000Z",
-    metadata: { variant: "founder_call", trigger: "idle" },
+    metadata: { variant: "founder_call", trigger: "paywall_reached" },
   },
   {
     event_type: "leave_offer_clicked",
     event_time: "2026-10-14T09:10:20.000Z",
-    metadata: { variant: "founder_call", trigger: "idle" },
+    metadata: { variant: "founder_call", trigger: "paywall_reached" },
   },
   {
     event_type: "leave_offer_dismissed",
     event_time: "2026-10-14T09:11:00.000Z",
-    metadata: { variant: "founder_call", trigger: "exit_intent", source: "not_now" },
+    metadata: { variant: "founder_call", trigger: "paywall_reached", source: "not_now" },
   },
 ];
 
@@ -93,9 +93,9 @@ describe("admin submission timeline — the founder-call offer", () => {
     const events = await timeline();
     const byType = Object.fromEntries(events.map((e) => [e.type, e]));
     expect(byType.leave_offer_shown?.label).toBe("Founder-call offer shown");
-    expect(byType.leave_offer_shown?.detail).toBe("idle");
+    expect(byType.leave_offer_shown?.detail).toBe("paywall_reached");
     expect(byType.leave_offer_clicked?.label).toBe("Founder-call booking page opened");
     expect(byType.leave_offer_dismissed?.label).toBe("Founder-call offer dismissed");
-    expect(byType.leave_offer_dismissed?.detail).toBe("exit_intent · not_now");
+    expect(byType.leave_offer_dismissed?.detail).toBe("paywall_reached · not_now");
   });
 });
