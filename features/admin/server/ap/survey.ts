@@ -57,6 +57,8 @@ interface Steps {
     timed: number;
   }>;
   exits: Array<{ q_id: string; day: string; n: number }>;
+  /** Our own finished test runs' sessions; absent from older readers. */
+  staff?: string[];
 }
 
 /** The questions' segment for the filter bar's state, or why there is none. */
@@ -113,7 +115,10 @@ export function buildSurveyQuestions(
   segment: Segment,
   blocked: string | null
 ): SurveyQuestions {
-  const tally = tallyRuns(runs).get(segment) ?? { people: 0, byQuestion: new Map() };
+  // Our own test runs are out, as everywhere on these pages.
+  const staff = new Set(steps.staff ?? []);
+  const kept = runs.filter((r) => !staff.has(r.sessionId));
+  const tally = tallyRuns(kept).get(segment) ?? { people: 0, byQuestion: new Map() };
   const names = surveyQuestionNames(400);
   const meta = new Map(surveyQuestions.map((q) => [q.qId, q]));
   const stepOf = new Map(steps.steps.map((s) => [s.q_id, s]));
@@ -126,7 +131,7 @@ export function buildSurveyQuestions(
     );
   // A run's start is its first step ever, so this is no later than the question's first day.
   const firstReached = new Map<string, number>();
-  for (const run of runs)
+  for (const run of kept)
     for (const id of run.reached)
       firstReached.set(id, Math.min(firstReached.get(id) ?? Infinity, run.startedAt));
   const order = askedQuestions(400);

@@ -125,6 +125,21 @@ describe("buildSurveyQuestions", () => {
     expect(row("16015")).toMatchObject({ reached: 2, newInRange: false });
     // Reached by no one: nothing says it is new.
     expect(row("16017")).toMatchObject({ reached: 0, newInRange: false });
+
+    // Our own finished test runs are left out of reach, exits and the people count.
+    const mine = buildSurveyQuestions(
+      [
+        run("a", "2026-10-02T09:00:00Z", ["16015"]),
+        { ...run("staff", "2026-10-02T09:00:00Z", ["16015"]), leftAt: "16015" },
+      ],
+      { steps: [], exits: [], staff: ["staff"] },
+      "2026-10-01",
+      "2026-10-07",
+      "All traffic",
+      null
+    );
+    expect(mine.people).toBe(1);
+    expect(mine.rows.find((r) => r.id === "16015")).toMatchObject({ reached: 1, exits: 0 });
   });
 });
 

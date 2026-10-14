@@ -418,7 +418,10 @@ AS $function$
     'steps', (SELECT coalesce(json_agg(json_build_object(
                 'q_id', s.q_id, 'went_back', s.went_back, 'skipped', s.skipped,
                 'median_ms', round(s.median_ms), 'timed', s.timed)), '[]'::json) FROM steps s),
-    'exits', (SELECT coalesce(json_agg(json_build_object('q_id', x.q_id, 'day', x.day, 'n', x.n)), '[]'::json) FROM exits x)
+    'exits', (SELECT coalesce(json_agg(json_build_object('q_id', x.q_id, 'day', x.day, 'n', x.n)), '[]'::json) FROM exits x),
+    -- Our own finished test runs, for the question table to leave out (get_survey_dropoff_runs
+    -- keeps everyone, as the weekly drop-off report counts them).
+    'staff', (SELECT coalesce(json_agg(DISTINCT x.session_id), '[]'::json) FROM staff_sessions x)
   );
 $function$;
 
