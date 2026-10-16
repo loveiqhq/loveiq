@@ -123,14 +123,21 @@ interface RouteTile {
   blocked: string | null;
 }
 
-/** The dashboard's route, as its page calls it for a link's query. */
-async function dashboard(query: string): Promise<RouteTile[]> {
-  const res = await dashboardGet(new Request(`http://localhost/api/admin/ap/assessment?${query}`));
-  expect(res.status).toBe(200);
-  return ((await res.json()) as { tiles: RouteTile[] }).tiles;
+interface RoutePayload {
+  tiles: RouteTile[];
+  journey: Array<{ label: string; value: number | null }>;
+  scorecard: Array<{ label: string; value: number | null }>;
 }
 
-async function tool(args: Record<string, unknown>): Promise<string> {
+/** The dashboard's route, as its page calls it for a link's query. */
+async function payload(query: string): Promise<RoutePayload> {
+  const res = await dashboardGet(new Request(`http://localhost/api/admin/ap/assessment?${query}`));
+  expect(res.status).toBe(200);
+  return (await res.json()) as RoutePayload;
+}
+const dashboard = async (query: string) => (await payload(query)).tiles;
+
+async function tool(args: Record<string, unknown>, name = "get_business_numbers"): Promise<string> {
   const res = await POST(
     new Request("https://www.loveiq.org/api/mcp", {
       method: "POST",
@@ -139,7 +146,7 @@ async function tool(args: Record<string, unknown>): Promise<string> {
         jsonrpc: "2.0",
         id: 1,
         method: "tools/call",
-        params: { name: "get_business_numbers", arguments: args },
+        params: { name, arguments: args },
       }),
     })
   );
@@ -292,5 +299,27 @@ describe("get_business_numbers prints what the dashboard's own route returns", (
       expect(text).toContain("Payment CVR and Report open rate are not compared");
       expect(text).not.toMatch(/ {2}(reports_opened|paid_so_far) /);
     }
+  });
+});
+
+describe("break_even counts what the dashboard counts", () => {
+  it("its visitors, finishers, average order and cost per paying customer are the dashboard's", async () => {
+    const text = await tool({ days: 30 }, "break_even");
+    // The 30 whole days to yesterday, which the ad data covers: the dashboard's Last 30 days.
+    const link = /https:\/\/www\.loveiq\.org\/admin\/ap\/assessment-a\S*/.exec(text)![0];
+    const { tiles, journey, scorecard } = await payload(new URL(link).search.slice(1));
+    const num = (re: RegExp) => Number(re.exec(text)![1]!.replace(/,/g, ""));
+    const round = (n: number) => Math.round(n * 100) / 100;
+    const visitors = num(/- ([\d,]+) visitors \(each person once a day\)/);
+    const finished = num(/- ([\d,]+) finished the survey/);
+    const paid = num(/- ([\d,]+) paid:/);
+    const spent = num(/Spent EUR ([\d,.]+) on Google Ads/);
+    expect(paid).toBeGreaterThan(0);
+    expect(visitors).toBe(tiles.find((t) => t.key === "visits")!.value);
+    expect(finished).toBe(journey.find((j) => j.label === "Submitted")!.value);
+    expect(num(/They paid EUR ([\d,.]+) on average/)).toBe(
+      round(scorecard.find((r) => r.label === "CLV")!.value!)
+    );
+    expect(round(spent / paid)).toBe(round(tiles.find((t) => t.key === "cac")!.value!));
   });
 });

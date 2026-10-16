@@ -18,12 +18,32 @@ vi.mock("@features/brain/server/ingest/analytics", async (importOriginal) => ({
   adCostByDay: async () => ad,
 }));
 /**
- * The dashboard's facts for [from, to], made from the same day rows: the visitors as one
- * visit row, each finisher a submission, each purchase a payment by a payer of its own.
+ * The dashboard's facts for [from, to], made from the same day rows: the visitors as one visit
+ * row, each finisher a submission, and each purchase that day made by one of that day's
+ * finishers, paid as ap_facts records it (the payment's `sid` is its finisher's submission, who
+ * carries the sale). A day with more purchases than finishers gets a finisher for each.
  */
 const mockFacts = vi.fn(async (from: string, to: string) => {
   const days = rows.filter((r) => r.day >= from && r.day <= to);
+  const subs: unknown[] = [];
+  const money: unknown[] = [];
   let id = 0;
+  for (const r of days) {
+    const amount = r.reports_paid ? Number(r.revenue) / r.reports_paid : 0;
+    for (let k = 0; k < Math.max(r.submissions, r.reports_paid); k++) {
+      const pays = k < r.reports_paid;
+      subs.push({
+        id: ++id,
+        day: r.day,
+        at: `${r.day}T10:00:00Z`,
+        openedAt: `${r.day}T10:05:00Z`,
+        paidAt: pays ? `${r.day}T10:30:00Z` : null,
+        sales: pays ? 1 : 0,
+        revenue: pays ? amount : 0,
+      });
+      if (pays) money.push({ day: r.day, sid: id, amount });
+    }
+  }
   return parseFacts(
     {
       visits: days.map((r) => ({
@@ -33,20 +53,8 @@ const mockFacts = vi.fn(async (from: string, to: string) => {
         n: r.unique_visitors,
       })),
       starts: [],
-      subs: days.flatMap((r) =>
-        Array.from({ length: r.submissions }, () => ({
-          id: ++id,
-          day: r.day,
-          at: `${r.day}T10:00:00Z`,
-        }))
-      ),
-      money: days.flatMap((r) =>
-        Array.from({ length: r.reports_paid }, () => ({
-          day: r.day,
-          sid: ++id,
-          amount: Number(r.revenue) / r.reports_paid,
-        }))
-      ),
+      subs,
+      money,
       checkouts: [],
       intro: [],
       invites: [],

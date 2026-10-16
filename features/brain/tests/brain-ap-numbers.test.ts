@@ -16,6 +16,12 @@ const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...a: unknown[]) => mockSupabaseFetch(...(a as [])),
 }));
+vi.mock("@features/admin/server/auth", () => ({
+  verifyAdminSession: async () => ({ email: "ap-check@example.com", role: "admin" }),
+}));
+vi.mock("@features/ux-review/server/review", () => ({
+  hogqlTable: async () => ({ ok: false, error: "PostHog is not read in this test" }),
+}));
 const mockRollup = vi.fn();
 let mockAdCost: { byDay: Map<string, number>; from: string | null; to: string | null };
 vi.mock("@features/brain/server/ingest/analytics", () => ({
@@ -25,13 +31,12 @@ vi.mock("@features/brain/server/ingest/analytics", () => ({
     ad.from !== null && ad.to !== null && day >= ad.from && day <= ad.to,
 }));
 
+import { GET as dashboardGet } from "@/app/api/admin/ap/assessment/route";
 import { POST } from "@/app/api/mcp/route";
-import { buildDashboard } from "@features/admin/server/ap/assessment";
 import { addDays } from "@features/admin/server/ap/days";
-import { clearFactsCache, parseFacts } from "@features/admin/server/ap/facts";
+import { clearFactsCache } from "@features/admin/server/ap/facts";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { fmt } from "@features/admin/server/ap/format";
-import { ALL, totals } from "@features/admin/server/ap/metrics";
 
 const TOKEN = "test-token-ap-numbers";
 const NOW = new Date("2026-10-16T10:00:00Z");
@@ -219,44 +224,37 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     expect(apCalls()).toHaveLength(1);
   });
 
-  it("prints every headline tile exactly as the dashboard's own builder makes it", async () => {
+  it("prints every headline figure as the dashboard's own route returns it for the link", async () => {
     const { text } = await call({ since: "2026-10-13", until: "2026-10-15" });
-    const facts = parseFacts(
-      factsJson("2026-10-13", "2026-10-15"),
-      "2026-10-13",
-      "2026-10-15",
-      TODAY
+    const link = /https:\/\/www\.loveiq\.org\/admin\/ap\/assessment-a\?\S+/.exec(text)![0];
+    const res = await dashboardGet(
+      new Request(`http://localhost/api/admin/ap/assessment${new URL(link).search}`)
     );
-    const dash = buildDashboard({
-      facts,
-      previous: null,
-      ad: mockAdCost,
-      filters: parseFilters({ period: "custom", from: "2026-10-13", to: "2026-10-15" }, TODAY),
-      today: TODAY,
-      now: NOW,
-      newReturning: null,
-    });
-    for (const t of dash.tiles) {
+    expect(res.status).toBe(200);
+    const { tiles } = (await res.json()) as {
+      tiles: Array<{ label: string; unit: "count"; value: number | null; blocked: string | null }>;
+    };
+    expect(tiles.length).toBeGreaterThan(5);
+    for (const t of tiles) {
       expect(text, t.label).toContain(
         `- ${t.label}: ${t.blocked ? "no figure" : fmt(t.unit, t.value)}`
       );
     }
-    // 60 starts of 300 visits: the dashboard's start CVR, never the rollup's 3 of 999.
+    // Checked by hand against the facts: 3 days of 20 starts over 100 visits (the probe's 5
+    // left out), 2 finishers a day, the sale on the 14th and the free unlock on the 15th.
     expect(text).toContain("- Survey start CVR: 20.0% · 60 starts");
     expect(text).toContain("1 paid sale by 1 paying customer and 1 free unlock");
-    // The rows add up to the dashboard's totals for the period.
-    const t = totals(facts, ALL);
     const sum = (k: string) => rowsOf(text).reduce((n, r) => n + Number(r[k] ?? 0), 0);
-    expect([sum("unique_visitors"), sum("survey_starts"), sum("submissions")]).toEqual([
-      t.visits,
-      t.starts,
-      t.subs,
-    ]);
-    expect([sum("paid_sales"), sum("free_unlocks"), sum("revenue")]).toEqual([
-      t.sales,
-      t.gifts,
-      t.revenue,
-    ]);
+    expect(
+      [
+        "unique_visitors",
+        "survey_starts",
+        "submissions",
+        "paid_sales",
+        "free_unlocks",
+        "revenue",
+      ].map(sum)
+    ).toEqual([300, 60, 6, 1, 1, 29.99]);
   });
 
   it("reads `days` as the dashboard's Last N days, and links that preset", async () => {
