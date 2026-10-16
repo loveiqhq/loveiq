@@ -1,24 +1,19 @@
 import type { FC, ReactNode } from "react";
 import { report4ArchetypeBlurbs } from "@/data/report3-archetype-blurbs";
-import {
-  REPORT_V4_TOP_THREE,
-  REPORT_V4_TOP_THREE_HEADING,
-  REPORT_V4_TOP_THREE_LEDE,
-} from "@/data/report3-archetype-page";
+import { REPORT_V4_TOP_THREE, REPORT_V4_TOP_THREE_HEADING } from "@/data/report3-archetype-page";
 import { REPORT_V4_TOP_THREE_ANCHOR } from "./reportV3Nav";
 import V3TopThree from "./V3TopThree";
 import V4Rating from "./V4Rating";
-import V4Runs from "./V4Runs";
 
 /**
- * "3 highest scoring Archetypes" — Report V4, Figma 1:493, 361x756.
+ * "3 highest scoring Archetypes" — Report V4, Figma 1:493; slimmed 1665:3553 (16.10).
  *
  * `V3TopThree` renders the ranked list itself (1:497) with V4's descriptions passed
- * in: Sanjin's fourteen (25.09), set in the rows Mark enlarged for them (191 /
- * 184.08 / 184, 10 apart — the CSS is scoped to `.rv4-top3`). What it does NOT render is the
- * section around it: the heading (1:494), the two-paragraph lede (1:496) and the
- * rating (1:560). Those live here rather than inside V3TopThree, so the component
- * the live `?v3=1` report uses is left exactly as it is.
+ * in: Sanjin's one-line descriptions (16.10), each row's description track cut from
+ * 100 to 50px to match (the CSS is scoped to `.rv4-top3`). What it does NOT render is
+ * the section around it: the heading (1:494) and the rating (1:560). Those live here
+ * rather than inside V3TopThree, so the component the live `?v3=1` report uses is
+ * left exactly as it is. The slimmed report dropped the two-paragraph lede (1:496).
  */
 
 interface Props {
@@ -45,13 +40,6 @@ const V4TopThreeSection: FC<Props> = ({ percentages = REPORT_V4_TOP_THREE, feedb
     <h2 className="rv4-top3__heading" data-node-id="1:494">
       {REPORT_V4_TOP_THREE_HEADING}
     </h2>
-    <div className="rv4-top3__lede" data-node-id="1:496">
-      {REPORT_V4_TOP_THREE_LEDE.map((runs, i) => (
-        <p key={i}>
-          <V4Runs runs={runs} />
-        </p>
-      ))}
-    </div>
 
     {/* Mark, 28.09 (1943965090): the bars grow, the % count up, the names fade in. */}
     <V3TopThree percentages={percentages} blurbs={report4ArchetypeBlurbs} animate />

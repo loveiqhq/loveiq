@@ -3088,22 +3088,6 @@
   margin: 0;
   width: 328px;
 }
-/* 1:496 — the frame separates the two paragraphs with a blank line. 33px from the
- * heading: measured against the frame at 2x, 17 left the lede 16px too high. */
-.rv3 .rv4-top3__lede {
-  display: flex;
-  flex-direction: column;
-  gap: 25.6px;
-  padding-top: 33px;
-  width: 356px;
-}
-.rv3 .rv4-top3__lede p {
-  color: var(--rv3-copy);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 25.6px;
-  margin: 0;
-}
 /* 1:497 — V4 draws the three rows straight on the page: no outer card, border or
  * shadow, and no rules between rows; only the lead row keeps its tinted panel.
  * The card's 17px side padding stays, because that is where the frame insets the
@@ -7422,21 +7406,22 @@ html {
   }
 }
 
-/* ── Top three — the rows Mark enlarged for Sanjin's descriptions (1:498, 25.09) ──
- * Every archetype now has a two-sentence description (report4ArchetypeBlurbs), so
- * the frame sets it at 12/19.2 in a 100px track — five lines — on each row: 191 /
- * 184.08 / 184 tall, 10 apart. The lead row is fixed at 191: 14 + its 1px ring
- * above the name, the rest below. `minmax` lets a narrow phone's sixth line grow
- * the row rather than spill. The rows start 36 under the lede (16 + the card's 20)
- * and the rating sits 10 under the last row, both inside 1:497. V3's card
- * (`?v3=1`) is untouched: every rule here is scoped to `.rv4-top3`. */
+/* ── Top three — the rows Mark sized for Sanjin's descriptions (1:498, 25.09) ──
+ * The slimmed report (1665:3553, 16.10) cut every description to one line, set at
+ * 12/19.2 in a 50px track (two lines) instead of 100 (five): the lead row is 141
+ * tall, 14 + its 1px ring above the name, the rest below; rows stay 10 apart.
+ * `minmax` lets a narrow phone's third line grow the row rather than spill. With the
+ * lede gone the rows start 33 + the card's 20 under the heading's 24px line: Figma
+ * draws the heading in a 41px box, 16 above the card. The rating sits 10 under the
+ * last row, inside 1:497. V3's card (`?v3=1`) is untouched: every rule here is
+ * scoped to `.rv4-top3`. */
 .rv3 .rv4-top3 .rv3-top3 {
-  margin: 16px 0 10px;
+  margin: 33px 0 10px;
   padding-bottom: 0;
   padding-top: 20px;
 }
 .rv3 .rv4-top3 .rv3-top3__row {
-  grid-template-rows: 26px minmax(100px, auto) 17.08px;
+  grid-template-rows: 26px minmax(50px, auto) 17.08px;
   padding: 14px 12px 15px;
 }
 .rv3 .rv4-top3 .rv3-top3__row.is-lead {
@@ -7597,7 +7582,6 @@ html {
     .rv4-copy,
     .rv4-copy > p,
     .rv4-top3__heading,
-    .rv4-top3__lede,
     .rv4-summary__inner,
     .rv4-summary__copy,
     .rv4-summary__closer
@@ -7884,8 +7868,7 @@ html {
   .rv3.rv4 .rv4-summary__inner,
   .rv3.rv4 .rv4-summary__copy,
   .rv3.rv4 .rv4-summary__closer,
-  .rv3.rv4 .rv4-top3__heading,
-  .rv3.rv4 .rv4-top3__lede {
+  .rv3.rv4 .rv4-top3__heading {
     width: 100%;
   }
   /* A ceiling for a phone narrower than 393, not a design width. */
