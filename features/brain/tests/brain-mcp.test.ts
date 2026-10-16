@@ -1125,7 +1125,7 @@ describe("/api/mcp", () => {
         const r = await call({ metrics: ["revenue"] });
         expect(r.isError).toBeFalsy();
         expect(r.content).toHaveLength(1);
-        expect(r.content[0]!.text).toContain("Revenue in EUR, net of refunds, 30 days to");
+        expect(r.content[0]!.text).toContain("Revenue in EUR, by the day paid, 30 days to");
         expect(r.content[0]!.text).toContain(
           "The picture could not be attached just now; the link above draws it."
         );

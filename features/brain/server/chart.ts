@@ -2,11 +2,11 @@
  * Charts in answers: one or two of the site's daily numbers drawn as a line, so a trend
  * can be seen rather than read ("I need to see it visually", Marcus).
  *
- * THE NUMBERS are the ones `explain_change` reads (jumps.ts: our own daily rollup and the
- * brain's GA4 day records), plus revenue from the same rollup, which takes it from the
- * payment ledger net of refunds with test payments left out, and Google Ads spend through
- * `adCostByDay`, the reader get_business_numbers and the digest use: a day inside the window
- * the ad data covers is its spend or zero, and a day outside it is a gap, never a zero.
+ * THE NUMBERS are the ones `explain_change` reads (jumps.ts: the AP-Analytics dashboard's
+ * visitors, survey starts, finished surveys and revenue by Berlin day, the daily rollup's
+ * reports opened and paid by UTC day, and the brain's GA4 day records), and Google Ads spend
+ * through `adCostByDay`, the reader get_business_numbers and the digest use: a day inside the
+ * window the ad data covers is its spend or zero, and a day outside it is a gap, never a zero.
  * Nothing here computes a number of its own.
  *
  * THE PICTURE is the Slack digest's own two-line renderer, reached through the same kind of
@@ -15,7 +15,13 @@
  * and it is exactly the picture the tool attaches.
  */
 import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
-import { BASELINE_DAYS, METRICS, loadSeries, type DaySeries } from "@features/brain/server/jumps";
+import {
+  BASELINE_DAYS,
+  METRICS,
+  loadSeries,
+  rollupOnly,
+  type DaySeries,
+} from "@features/brain/server/jumps";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { signImagePayload } from "@shared/url/signed-image-url";
 
@@ -68,7 +74,7 @@ export const CHART_METRICS: ChartMetric[] = [
   })),
   {
     id: "revenue",
-    label: "Revenue in EUR, net of refunds",
+    label: "Revenue in EUR, by the day paid",
     short: "Revenue",
     unit: "money",
     of: (d) => (d.rollup ? Number(d.rollup.revenue ?? 0) : null),
@@ -256,7 +262,7 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
       : "a gap is a day with no record";
   const ga4 = metrics.some((m) => m.ga4);
   const footnote = [
-    "daily, UTC",
+    "daily",
     gap,
     a.unit === "money" ? "amounts in EUR" : "",
     ga4 ? "GA4 misses visitors who decline cookies" : "",
@@ -286,6 +292,10 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
   const url = u.toString();
 
   const notes = [
+    "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
+      "dashboard counts them, by Berlin day; reports opened and paid are the daily rollup's, by " +
+      "UTC day.",
+    rollupOnly(loaded).trim(),
     until === today ? "Today is still going, so its numbers are partial." : "",
     wantsAds && !ad ? "Google Ads spend could not be read just now, so it is left blank." : "",
     ga4
@@ -293,7 +303,7 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
       : "",
   ].filter(Boolean);
   const text = [
-    `${title}, ${windowLabel} (UTC days).`,
+    `${title}, ${windowLabel}.`,
     b
       ? [a, b]
           .map((m, i) => `${m.short}: ${(i === 0 ? figA : figB)?.full ?? "nothing recorded"}.`)

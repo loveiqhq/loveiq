@@ -1,3 +1,5 @@
+import { fetchFacts, type Facts } from "@features/admin/server/ap/facts";
+import { ALL, startsComplete, totals } from "@features/admin/server/ap/metrics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { brainDailyRollup, longDate } from "@features/brain/server/ingest/analytics";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
@@ -21,7 +23,12 @@ import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
  * and the answer ends by saying none of it is proof.
  */
 
-type Rollup = Awaited<ReturnType<typeof brainDailyRollup>>[number];
+type RollupRow = Awaited<ReturnType<typeof brainDailyRollup>>[number];
+/** A day of the rollup with the dashboard's figures in place (asDashboard). */
+type Rollup = Omit<RollupRow, "survey_starts"> & {
+  /** Null on a day whose starts the dashboard does not hold every one of. */
+  survey_starts: number | null;
+};
 
 /** One GA4 day, read back from the brain's own day record. */
 export interface Ga4Day {
@@ -39,7 +46,19 @@ export interface DaySeries {
   day: string;
   rollup?: Rollup;
   ga4?: Ga4Day;
+  /** False: the dashboard's facts could not be read, so the row is the rollup's alone. */
+  dashboard?: boolean;
 }
+
+/** Said under an answer built from rollup-only rows (see `asDashboard`). */
+export const ROLLUP_ONLY =
+  "The dashboard's numbers could not be read just now, so visitors, survey starts, finished " +
+  "surveys and revenue here are the old daily rollup's (UTC days, staff included, starts only " +
+  "after the cookie banner), not the dashboard's.";
+
+/** The caveat a series needs, or "". */
+export const rollupOnly = (series: DaySeries[]): string =>
+  series.some((d) => d.dashboard === false) ? `\n\n${ROLLUP_ONLY}` : "";
 
 /**
  * Parse the GA4 day record the Google ingester writes (`renderGa4` in ingest/google.ts).
@@ -88,7 +107,9 @@ export interface Metric {
   segments?: { label: string; of: (d: DaySeries) => Record<string, number> | null };
 }
 
-const r = (k: keyof Rollup) => (d: DaySeries) => (d.rollup ? Number(d.rollup[k] ?? 0) : null);
+// A null figure (starts the dashboard does not hold every one of) is no reading, never a zero.
+const r = (k: keyof Rollup) => (d: DaySeries) =>
+  d.rollup && d.rollup[k] !== null ? Number(d.rollup[k] ?? 0) : null;
 
 export const METRICS: Metric[] = [
   {
@@ -299,16 +320,45 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
   const span =
     Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) +
     1;
-  const [rows, ga4] = await Promise.all([
+  const [rows, ga4, facts] = await Promise.all([
     brainDailyRollup(span),
     ga4Days(from, until).catch(() => new Map<string, Ga4Day>()),
+    // Unreadable, the rollup's rows stand alone, and every answer built on them says so.
+    fetchFacts(from, until).catch(() => null),
   ]);
   const byDay = new Map(rows.map((row) => [String(row.day).slice(0, 10), row]));
   const out: DaySeries[] = [];
   for (let d = from; d <= until; d = addDays(d, 1)) {
-    out.push({ day: d, rollup: byDay.get(d), ga4: ga4.get(d) });
+    const row = byDay.get(d);
+    out.push({
+      day: d,
+      rollup: row && facts ? asDashboard(row, facts, d) : row,
+      ga4: ga4.get(d),
+      dashboard: facts !== null,
+    });
   }
   return out;
+}
+
+/**
+ * VISITORS, SURVEY STARTS, FINISHED SURVEYS AND REVENUE AS THE AP-ANALYTICS DASHBOARD COUNTS
+ * THEM (ap-numbers.ts says why: the rollup's starts were posted only after the cookie banner,
+ * so its start rate read about 6% where the dashboard reads about 17%). Each is the
+ * dashboard's count for that one Berlin day. A day whose starts the dashboard does not hold
+ * every one of (before 18 Sep 2026 and over 30 days old) has none, rather than a low one that
+ * would read as a jump. Reports opened and paid stay the rollup's: the dashboard's are "so
+ * far" counts of a day's finishers, which grow with the day's age and so cannot be compared
+ * day against day.
+ */
+function asDashboard(row: RollupRow, facts: Facts, day: string): Rollup {
+  const t = totals(facts, ALL, day, day);
+  return {
+    ...row,
+    unique_visitors: t.visits ?? row.unique_visitors,
+    survey_starts: startsComplete(day, facts.asOf) ? t.starts : null,
+    submissions: t.subs,
+    revenue: t.revenue,
+  };
 }
 
 /** Every metric that is unusual on `day`; with `onsetOnly`, only those that were not already unusual the day before. */
@@ -623,7 +673,7 @@ export async function noticeJumps(
   if (readings.length === 0) return 0;
   await record({
     headline: `Unusual numbers on ${longDate(day)}`,
-    detail: `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}`,
+    detail: `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}${rollupOnly(series)}`,
     kind: "number-watch",
     evidence: `explain_change with day ${day} gives the same breakdown, and any metric in full.`,
   });

@@ -123,6 +123,7 @@ import {
   readMetric,
   renderDay,
   renderMetric,
+  rollupOnly,
   type Reading,
 } from "@features/brain/server/jumps";
 import {
@@ -2058,8 +2059,9 @@ export const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: true },
     description:
       "Whether a day's numbers were outside their usual range, and where each move came from, " +
-      "from our own data: visitors (our count and GA4), surveys started and finished, reports " +
-      "opened and paid, and the rates between them, each against the 28 days before. A move is " +
+      "from our own data: visitors (our count and GA4), surveys started and finished (both as " +
+      "the AP-Analytics dashboard counts them, by Berlin day), reports opened and paid, and the " +
+      "rates between them, each against the 28 days before. A move is " +
       "split by traffic source or GA4 channel, a rate into its two halves (a conversion that " +
       "'doubled' because traffic halved says so), and the day is checked for engagement, GA4 " +
       "against our own count, ad spend and campaigns, and what shipped or was decided. Use it " +
@@ -2090,8 +2092,10 @@ export const TOOLS = [
       "easier to see than to read: 'show me visitors this month', 'chart the share of report " +
       "openers who pay since August', 'revenue against Google Ads spend'. The link opens in any " +
       "browser without a login and can be pasted into a doc or a deck. Two numbers share one " +
-      "axis, so they must be the same kind: two counts, two shares or two amounts in EUR. Days " +
-      "are UTC, and a share is left as a gap on a day with too few people to read it.",
+      "axis, so they must be the same kind: two counts, two shares or two amounts in EUR. " +
+      "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
+      "dashboard counts them, by Berlin day; reports opened and paid by UTC day. A share is " +
+      "left as a gap on a day with too few people to read it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -6562,12 +6566,14 @@ async function callTool(
       );
     }
     const partial = day === today ? "Today is still going, so its numbers are partial.\n\n" : "";
+    // Said under every answer when the dashboard's facts could not be read (jumps.ts).
+    const caveat = rollupOnly(series);
     if (metric) {
       const reading = readMetric(metric, series, day);
       if (!reading) {
         return textResult(
           `${metric.label} has no reading for ${day}: either nothing was counted that day or there ` +
-            `are fewer than two weeks of comparable days before it.`
+            `are fewer than two weeks of comparable days before it.${caveat}`
         );
       }
       stats.sourceCount = 1;
@@ -6575,7 +6581,7 @@ async function callTool(
         partial +
           `${isJump(reading) ? "Outside its usual range" : "Within its usual range"} on ${day}.\n\n` +
           renderDay(day, [reading], series, await loadAround(day)) +
-          `\n\n${NOT_PROOF}`
+          `\n\n${NOT_PROOF}${caveat}`
       );
     }
     const jumps = jumpsOn(series, day);
@@ -6587,14 +6593,15 @@ async function callTool(
       return textResult(
         partial +
           `Nothing on ${day} was outside its usual range (each metric against the 28 days before).` +
-          (lines.length ? `\n\n${lines.join("\n")}` : "")
+          (lines.length ? `\n\n${lines.join("\n")}` : "") +
+          caveat
       );
     }
     return textResult(
       partial +
         `${jumps.length} unusual on ${day}.\n\n` +
         renderDay(day, jumps, series, await loadAround(day)) +
-        `\n\n${NOT_PROOF}`
+        `\n\n${NOT_PROOF}${caveat}`
     );
   }
 

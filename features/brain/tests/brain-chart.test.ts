@@ -92,7 +92,7 @@ describe("show_chart: what gets drawn", () => {
     expect(payload.title).toBe("Visitors (our own count)");
     expect(payload.headline).toBe("Over the 7 days: 854, 122 a day");
     // No gap on the chart, so no sentence explaining gaps under it.
-    expect(payload.footnote).toBe("daily, UTC");
+    expect(payload.footnote).toBe("daily");
     expect(url.startsWith("https://loveiq.example/api/admin/digest-image/metric-trend?d=")).toBe(
       true
     );
@@ -155,7 +155,7 @@ describe("show_chart: what gets drawn", () => {
     expect(payload.colorFirst).toBe("#334155");
     expect(payload.colorLast).toBe("#9333ea");
     expect(payload.headline).toBe("Over the 30 days: 20% · 40%");
-    expect(payload.footnote).toBe("daily, UTC");
+    expect(payload.footnote).toBe("daily");
     expect(text).toContain("Visitors who start: 20% (3,000 of 15,000 visitors).");
     expect(text).toContain("Starters who finish: 40% (1,200 of 3,000 surveys started).");
   });
@@ -167,7 +167,7 @@ describe("show_chart: what gets drawn", () => {
     expect(await refusal({ metrics: ["revenue", "reports_paid"] })).toMatch(/different kinds/);
   });
 
-  it("charts revenue from the rollup, and ad spend only on days the ad data covers", async () => {
+  it("charts the revenue it is given, and ad spend only on days the ad data covers", async () => {
     dayOf = (day) => ({ rollup: { revenue: day === "2026-09-24" ? "19.90" : 0 } });
     mockAd.mockResolvedValue({
       byDay: new Map([
@@ -188,9 +188,9 @@ describe("show_chart: what gets drawn", () => {
     expect(both.text).toContain("19 Sep –");
     expect(both.text).not.toContain("GA4 misses");
     expect(both.payload.title).toBe("Revenue and Google Ads spend");
-    expect(both.payload.footnote).toBe(
-      "daily, UTC · a gap is a day with no record · amounts in EUR"
-    );
+    expect(both.payload.footnote).toBe("daily · a gap is a day with no record · amounts in EUR");
+    // Which days each figure is counted on, since they are not all the same days.
+    expect(both.text).toContain("revenue are counted as the AP-Analytics dashboard counts them");
   });
 
   it("groups thousands in an amount, as the reader would write it", async () => {
