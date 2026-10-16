@@ -60,6 +60,16 @@ const nextConfig = {
     return [
       // /waitlist was retired — keep external links working by sending them into the survey funnel.
       { source: "/waitlist", destination: "/survey", permanent: true },
+      // The admin is AP-Analytics only since 16 Oct 2026: its front page and the old pages'
+      // links (bookmarks, old Slack messages) land on the AP Dashboard. Not permanent, so a
+      // browser does not remember it if a page comes back.
+      { source: "/admin", destination: "/admin/ap", permanent: false },
+      {
+        source:
+          "/admin/:page(analytics|answers|explorer|funnels|journey|submissions|survey-status)/:rest*",
+        destination: "/admin/ap",
+        permanent: false,
+      },
     ];
   },
   /**
