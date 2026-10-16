@@ -31,12 +31,16 @@ export const FIRST_VISIT_WINDOW_MS = 2 * 60 * 60 * 1000;
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 /**
- * The first paywall card: the same selector the page reports the paywall with. The slimmed
- * report's Summary gate (16.10) sits in Part II, above every chapter, and is left out, so
- * the offer and "paywall reached" still wait for the first chapter's card (Fatih, 16.10).
+ * The first paywall: the same selector the page reports the paywall with. Since the slimmed
+ * report (16.10) a chapter's wall is its "Unlock Full Chapter" sample (`.rv4-unlock`) where
+ * it was a card, and where the wall closes copy folded under "Show All" (Typical Beliefs'
+ * challenges) it is clipped until the fold opens, so the fold that holds it stands in for
+ * it (`.rv4-fold.has-wall`, the wall's ancestor, so first in document order). The Summary's
+ * gate sits in Part II, above every chapter, and is left out, so the offer and "paywall
+ * reached" still wait for the first chapter's wall (Fatih, 16.10).
  */
 export const FIRST_PAYWALL_SELECTOR =
-  ".report-premium-overlay, .rv4-premium:not(.rv4-premium--summary)";
+  ".report-premium-overlay, .rv4-premium:not(.rv4-premium--summary), .rv4-fold.has-wall, .rv4-unlock";
 /** Where a report has no card (it draws one only with its new copy): the first lock. */
 export const LOCKED_CHAPTER_SELECTOR = ".rv4-chapter.is-locked";
 

@@ -10,14 +10,15 @@ import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
  */
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
-const AB_PROBES = [
+/** Drawn blurred for a locked reader: sent as written (lockedBlurCopy.ts). */
+const AB_BLURRED = [
   "Low-energy, passive encounters",
   "Spontaneity and controlled unpredictability",
-  // Past Common challenges' ramp paragraph, which fades in whole and is sent as written
-  // since 314:284 (29.09), as in report-handler.test.ts.
-  "common brakes is sex that feels predictable",
   "Respect brakes that are protecting something real.",
 ];
+/** Common challenges past its sample: not drawn for a locked reader, so never sent (16.10). */
+const AB_PAST_WALL = ["common brakes is sex that feels predictable"];
+const AB_PROBES = [...AB_BLURRED, ...AB_PAST_WALL];
 
 const get = async (query: string) => {
   const res = await GET(new Request(`http://localhost:3000/api/report/preview?${query}`));
@@ -60,7 +61,8 @@ describe("GET /api/report/preview — Accelerator & Brakes", () => {
     expect(json.accelerators.lockedFrom).toBe(2);
     expect(json.acceleratorsArticle.locked).toBe(true);
     const body = JSON.stringify(json);
-    for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
+    for (const probe of AB_BLURRED) expect(body, probe).toContain(probe);
+    for (const probe of AB_PAST_WALL) expect(body, probe).not.toContain(probe);
   });
 
   it("opens every word for a full-report preview", async () => {
@@ -158,19 +160,26 @@ describe("GET /api/report/preview — Other Archetypes", () => {
 // section it replaces. The preview sent neither, so on staging the V2 section — and
 // V4's fallback for the thirteen archetypes still on it — was an empty head.
 describe("GET /api/report/preview — Challenges in Partnerships", () => {
-  const CIP_PROBES = [
-    "Routine can feel different to each partner.",
-    "They do not really want me the way they used to.",
+  /** The loop and the practice past its ramp: drawn blurred for a locked reader. */
+  const CIP_BLURRED = [
     "Intensity is my evidence that love is real",
     "keep the commitment clear while leaving parts of the experience open",
   ];
+  /** "Common Challenges", drawn locked with no body for a locked reader (16.10). */
+  const CIP_PAST_WALL = [
+    "Routine can feel different to each partner.",
+    "They do not really want me the way they used to.",
+  ];
+  const CIP_PROBES = [...CIP_BLURRED, ...CIP_PAST_WALL];
 
   it("locks the V4 chapter for a reader with no plan, the blurred copy as written", async () => {
     const { json } = await get("archetype=Spark%20Seeker&plan=&v4=1");
     expect(json.partnership.locked).toBe(true);
     expect(json.partnership.practice.locked).toBe(true);
+    expect(json.partnership.challenges).toBeNull();
     const body = JSON.stringify(json);
-    for (const probe of CIP_PROBES) expect(body, probe).toContain(probe);
+    for (const probe of CIP_BLURRED) expect(body, probe).toContain(probe);
+    for (const probe of CIP_PAST_WALL) expect(body, probe).not.toContain(probe);
   });
 
   it("keeps it locked on essentials — it is a full-report chapter, Libido's gate", async () => {

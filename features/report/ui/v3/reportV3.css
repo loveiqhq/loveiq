@@ -6656,7 +6656,9 @@ html {
  * (713:6178 / 713:6226, now 979:567 / 979:573) is the same pill. */
 .rv3 .rv4-fvt__pill,
 .rv3 .rv4-trig__pill,
-.rv3 .rv4-summary__pill {
+.rv3 .rv4-summary__pill,
+.rv3 .rv4-fold__pill,
+.rv3 .rv4-unlock__pill {
   align-items: center;
   background:
     linear-gradient(#fff, #fff) padding-box,
@@ -6685,14 +6687,18 @@ html {
  * drawn pill, 31 + 2 x 6.5 = 44 (at -6.5 it came to 41). */
 .rv3 .rv4-fvt__pill::after,
 .rv3 .rv4-trig__pill::after,
-.rv3 .rv4-summary__pill::after {
+.rv3 .rv4-summary__pill::after,
+.rv3 .rv4-fold__pill::after,
+.rv3 .rv4-unlock__pill::after {
   content: "";
   inset: -8px 0;
   position: absolute;
 }
 .rv3 .rv4-fvt__pill:focus-visible,
 .rv3 .rv4-trig__pill:focus-visible,
-.rv3 .rv4-summary__pill:focus-visible {
+.rv3 .rv4-summary__pill:focus-visible,
+.rv3 .rv4-fold__pill:focus-visible,
+.rv3 .rv4-unlock__pill:focus-visible {
   outline: 2px solid var(--rv3-violet);
   outline-offset: 2px;
 }
@@ -6701,7 +6707,9 @@ html {
  * Marcus's grey "for better readability and contrast", 1944661166). */
 .rv3 .rv4-fvt__pill-label,
 .rv3 .rv4-trig__pill-label,
-.rv3 .rv4-summary__pill-label {
+.rv3 .rv4-summary__pill-label,
+.rv3 .rv4-fold__pill-label,
+.rv3 .rv4-unlock__pill-label {
   color: #575757;
 }
 /* 639:498 — Mark's 28.09 update (1944175761) sets it centred in the table (x 121 + 43
@@ -6727,6 +6735,8 @@ html {
   .rv3 .rv4-trig__pill,
   .rv3 .rv4-fvt__pill,
   .rv3 .rv4-summary__pill,
+  .rv3 .rv4-fold__pill,
+  .rv3 .rv4-unlock__pill,
   .rv3 .rv4-learn__showmore,
   .rv3 .rv4-try__open,
   .rv3 .rv4-learn__open {
@@ -6738,6 +6748,8 @@ html {
   .rv3 .rv4-trig__pill:hover,
   .rv3 .rv4-fvt__pill:hover,
   .rv3 .rv4-summary__pill:hover,
+  .rv3 .rv4-fold__pill:hover,
+  .rv3 .rv4-unlock:hover .rv4-unlock__pill,
   .rv3 .rv4-learn__showmore:hover,
   .rv3 .rv4-try__open:hover,
   .rv3 .rv4-learn__open:hover {
@@ -6746,7 +6758,9 @@ html {
   }
   .rv3 .rv4-trig__pill:hover,
   .rv3 .rv4-fvt__pill:hover,
-  .rv3 .rv4-summary__pill:hover {
+  .rv3 .rv4-summary__pill:hover,
+  .rv3 .rv4-fold__pill:hover,
+  .rv3 .rv4-unlock:hover .rv4-unlock__pill {
     background:
       linear-gradient(#faf7ff, #faf7ff) padding-box,
       linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%) border-box;
@@ -6759,6 +6773,8 @@ html {
   .rv3 .rv4-trig__pill:hover .rv4-trig__pill-label,
   .rv3 .rv4-fvt__pill:hover .rv4-fvt__pill-label,
   .rv3 .rv4-summary__pill:hover .rv4-summary__pill-label,
+  .rv3 .rv4-fold__pill:hover .rv4-fold__pill-label,
+  .rv3 .rv4-unlock:hover .rv4-unlock__pill-label,
   .rv3 .rv4-learn__showmore:hover .rv4-learn__showmore-label {
     color: #3f3a4d;
   }
@@ -8755,6 +8771,160 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   position: relative;
   top: auto;
   transform: none;
+}
+
+/* ── The slimmed chapters — sections, folds and the wall (1686:10036, 1665:6726, 1665:6950)
+ * Each chapter body runs its opening, then sections: a heading row (Lora Bold 18/21.6 and
+ * the chapter's 34px disc, 11 above, 361 wide) over its copy, 16 below and 16 between, in
+ * block flow so a paragraph's own 16px margin collapses into the gap instead of doubling. */
+.rv3 .rv4-tb.is-slim {
+  gap: 16px;
+}
+.rv3 .rv4-tb__intro > :last-child,
+.rv3 .rv4-sect__inner > :last-child,
+.rv3 .rv4-fold__copy > :last-child {
+  margin-bottom: 0;
+}
+.rv3 .rv4-sect {
+  width: 100%;
+}
+.rv3 .rv4-sect__title {
+  margin: 0;
+}
+.rv3 .rv4-sect__head {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--rv3-ink);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0;
+  padding: 11px 0 0;
+  text-align: left;
+  width: 100%;
+}
+.rv3 .rv4-sect__head:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 4px;
+}
+.rv3 .rv4-sect__name {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 21.6px;
+  min-width: 0;
+}
+/* The chapter's disc (1:867): lavender and pointing down when the section is shut, white
+ * on a violet ring and pointing up when it is open, as the chapter rows draw it. */
+.rv3 .rv4-sect__chev {
+  align-items: center;
+  background: rgba(121, 95, 200, 0.1);
+  border-radius: 17px;
+  color: var(--rv3-violet);
+  display: flex;
+  flex-shrink: 0;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.rv3 .rv4-sect__chev svg {
+  display: block;
+  height: 15px;
+  transition: transform 260ms ease;
+  width: 15px;
+}
+.rv3 .rv4-sect.is-open .rv4-sect__chev {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--rv3-violet);
+}
+.rv3 .rv4-sect.is-open .rv4-sect__chev svg {
+  transform: rotate(180deg);
+}
+.rv3 .rv4-sect__inner {
+  display: block;
+  padding-top: 16px;
+}
+.rv3 .rv4-sect__inner[hidden] {
+  display: none;
+}
+.rv3 .rv4-sect__inner > * + * {
+  margin-top: 16px;
+}
+
+/* 1709:1486 — the fold: its first lines, the last two fading to white under a 63px fade
+ * (clear, 66% at 42%, white), and "Show All" just under them, the expand pills' own. */
+.rv3 .rv4-fold {
+  position: relative;
+  width: 100%;
+}
+.rv3 .rv4-fold.is-folded .rv4-fold__copy {
+  max-height: var(--rv4-fold-peek, 153.6px);
+  overflow: hidden;
+}
+.rv3 .rv4-fold__copy:focus:not(:focus-visible) {
+  outline: none;
+}
+.rv3 .rv4-fold__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.66) 42%,
+    #fff 100%
+  );
+  height: 63px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: calc(var(--rv4-fold-peek, 153.6px) - 63px);
+}
+.rv3 .rv4-fold__pill {
+  margin: 2px auto 0;
+  width: max-content;
+}
+
+/* 1665:6780 — the wall: three lines of the next paragraph fading out to white, and
+ * "Unlock Full Chapter" under them. The band is the click. */
+.rv3 .rv4-unlock {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.rv3 .rv4-unlock__sample {
+  max-height: 76.8px;
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+  width: 100%;
+}
+.rv3 .rv4-unlock__sample .rv4-prose__p {
+  margin: 0;
+}
+.rv3 .rv4-unlock__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.85) 55%,
+    #fff 100%
+  );
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-unlock__pill {
+  width: max-content;
+}
+/* A section wholly behind the wall: its heading keeps the row, the lock takes the disc's. */
+.rv3 .rv4-sect.is-locked .rv4-sect__head {
+  align-items: flex-start;
 }
 
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════

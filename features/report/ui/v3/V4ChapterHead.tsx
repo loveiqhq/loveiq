@@ -53,6 +53,17 @@ export const V4ChapterChevron: FC = () => (
 );
 
 /**
+ * The same disc on a section row inside a chapter (the slimmed report's "Button" rows,
+ * 1686:10509), under its own class: the chapter's open state styles every
+ * `.rv4-chapter__chev` inside it, and a section opens and closes on its own.
+ */
+export const V4SectionChevron: FC = () => (
+  <span className="rv4-sect__chev" aria-hidden="true">
+    <Chevron />
+  </span>
+);
+
+/**
  * A locked chapter's lock, in the chevron's place (Mark's mock, 26.09). Since 29.09
  * (1945269177, "Updated Lock icon + Text."): 982:379, a 28px disc in the brand gradient
  * with the frame's 14px lock, and "Unlock Report" under it — the visuals' CTA

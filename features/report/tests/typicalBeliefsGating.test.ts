@@ -6,7 +6,6 @@ import {
   TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS,
   TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS,
 } from "@/data/report3-typical-beliefs";
-import type { Report3Block } from "@/data/report3-learn-more";
 
 /** Spark Seeker's chapter: hand-set from Figma, the record these tests read. */
 const SPARK_TB = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!;
@@ -22,13 +21,6 @@ vi.mock("@features/report/server/lockedBlurCopy", () => ({ LOCKED_BLUR_COPY: "de
  * is paint only, so everything that is only ever seen under the full blur leaves
  * the server scrambled (Fatih's call, 2026-09-23).
  */
-
-const textOf = (block: Report3Block): string =>
-  block.kind === "heading"
-    ? block.text
-    : block.kind === "para"
-      ? block.runs.map((r) => r.text).join("")
-      : block.items.map((runs) => runs.map((r) => r.text).join("")).join(" ");
 
 const payload = (locked: boolean) =>
   JSON.stringify(buildTypicalBeliefs("Spark Seeker", { locked }));
@@ -82,27 +74,17 @@ describe("buildTypicalBeliefs — locked", () => {
   const view = buildTypicalBeliefs("Spark Seeker", { locked: true })!;
   const panels = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!;
 
-  it("splits Common challenges on the server: four clear, one ramp, the rest scrambled", () => {
+  it("splits Common challenges on the server: the clear blocks, the ramp, nothing after", () => {
     expect(view.challenges.free).toEqual(
       SPARK_TB.challenges.slice(0, TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS)
     );
+    // The ramp is real throughout (no anchor), so the slimmed page's faded sample of it is
+    // the copy itself; and since the page draws no blurred passage past it (16.10), none
+    // of the rest leaves the server.
     expect(view.challenges.ramp).toEqual(
       SPARK_TB.challenges[TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS]
     );
-    const originals = SPARK_TB.challenges.slice(TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS + 1);
-    expect(view.challenges.rest).toHaveLength(originals.length);
-    view.challenges.rest.forEach((block, i) => {
-      const original = originals[i]!;
-      expect(block.kind).toBe(original.kind);
-      // Same shape — so the blurred block wraps like the real one — none of the words.
-      expect(textOf(block)).toHaveLength(textOf(original).length);
-      expect(textOf(block)).not.toBe(textOf(original));
-      if (block.kind === "para" && original.kind === "para") {
-        expect(block.runs.map((r) => [r.weight, r.italic, r.text.length])).toEqual(
-          original.runs.map((r) => [r.weight, r.italic, r.text.length])
-        );
-      }
-    });
+    expect(view.challenges.rest).toEqual([]);
   });
 
   it("splits the practice the same way: two clear, the third as the ramp, the rest scrambled", () => {

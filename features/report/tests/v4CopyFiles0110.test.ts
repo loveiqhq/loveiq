@@ -35,7 +35,6 @@ const textOf = (block: Report3Block | undefined): string =>
 function sections(copy: Report3ArchetypeCopy): [string, readonly Report3Block[] | undefined][] {
   const { typicalBeliefs: tb, accelerators: ab, partnership: cip, fantasy: fvr } = copy;
   return [
-    ["tb.intro", tb.intro],
     ["tb.lede", tb.lede],
     ["tb.afterPanels", tb.afterPanels],
     ["tb.challenges", tb.challenges],

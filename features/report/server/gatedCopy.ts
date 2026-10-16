@@ -92,6 +92,30 @@ export const gate = (
   };
 };
 
+/**
+ * A ramp paragraph's real head: its runs up to the first veiled one (splitRamp marks the
+ * tail the full blur took over). A paragraph with no veiled tail is all head.
+ */
+const realHead = (block: Report3Block): Report3Block => {
+  if (block.kind !== "para") return block;
+  const at = block.runs.findIndex((run) => run.veiled);
+  return at < 0 ? block : { ...block, runs: block.runs.slice(0, at) };
+};
+
+/**
+ * The slimmed report's wall (16.10, Figma 1665:6780). Where a locked reader's free copy
+ * ends the page draws a few lines of the next paragraph fading out and "Unlock Full
+ * Chapter", in place of the blurred passage and its card (Mark's PostHog review, 13.10:
+ * "Long blurred elements make people drop"). So a locked passage keeps its free blocks
+ * and its ramp's real head, never its veiled tail, and the blurred rest no longer leaves
+ * the server. An open passage is untouched.
+ */
+export const toSample = (gated: Report3GatedCopy): Report3GatedCopy => ({
+  free: gated.free,
+  ramp: gated.ramp ? realHead(gated.ramp) : null,
+  rest: [],
+});
+
 type Report3Para = Extract<Report3Block, { kind: "para" }>;
 
 /** A sentence's end: its stop, any closing quote or bracket, then a space or the end. */

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4Partnership from "@features/report/ui/v3/V4Partnership";
-import { buildPartnership } from "@/data/report3-partnership";
+import { buildPartnership, PARTNERSHIP_RAMP_THROUGH } from "@/data/report3-partnership";
 
 /**
  * "Challenges in Partnership" — the chapter body Figma draws as 38:1679 (open,
@@ -23,16 +23,24 @@ const rule = (selector: string) => {
   return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
 };
 const lineOf = (selector: string) => V3_CSS.slice(0, V3_CSS.indexOf(selector)).split("\n").length;
+const firstClass = (el: Element) => el.className.split(" ")[0];
+/** The slimmed chapter's two sections (16.10): the archetype's challenges, then the common. */
+const sections = (container: HTMLElement) =>
+  [...container.querySelector(".rv4-cip")!.children].filter((el) =>
+    el.classList.contains("rv4-sect")
+  );
 
 afterEach(cleanup);
 
 describe("the chapter body — 38:1679", () => {
-  it("runs the prose, the loop, a 44px rule and the result, in the frame's order", () => {
-    const { container } = render(<V4Partnership view={OPEN} />);
+  it("runs the opening, its two sections, the loop, a 44px rule and the result (1665:6941)", () => {
+    const { container } = render(<V4Partnership view={OPEN} archetype="Spark Seeker" />);
     const body = container.querySelector(".rv4-cip")!;
     expect(body.getAttribute("data-node-id")).toBe("38:1679");
-    expect([...body.children].map((el) => el.className.split(" ")[0])).toEqual([
+    expect([...body.children].map(firstClass)).toEqual([
       "rv4-cip__text",
+      "rv4-sect",
+      "rv4-sect",
       "rv4-loop",
       "rv4-sep",
       "rv4-cip__closing",
@@ -44,13 +52,13 @@ describe("the chapter body — 38:1679", () => {
   // Review 25.09, Mark (1941881246): staging ran the result into "Try this". The frames
   // now draw a 44px separator 16 under the result, 20 over the card (742:6653 / 742:6656).
   it("closes on a 44px separator before 'Try this', open and paywalled", () => {
-    const open = render(<V4Partnership view={OPEN} />);
+    const open = render(<V4Partnership view={OPEN} archetype="Spark Seeker" />);
     const last = open.container.querySelector(".rv4-cip")!.lastElementChild!;
     expect(last).toHaveClass("rv4-sep");
     expect(last.getAttribute("data-node-id")).toBe("742:6653");
     expect(last.getAttribute("aria-hidden")).toBe("true");
     cleanup();
-    const locked = render(<V4Partnership view={LOCKED} />);
+    const locked = render(<V4Partnership view={LOCKED} archetype="Spark Seeker" />);
     const lockedLast = locked.container.querySelector(".rv4-cip")!.lastElementChild!;
     expect(lockedLast).toHaveClass("rv4-sep");
     expect(lockedLast.getAttribute("data-node-id")).toBe("742:6656");
@@ -60,20 +68,28 @@ describe("the chapter body — 38:1679", () => {
     expect(rule(".rv3 .rv4-cip + .rv4-try")).toContain("margin-top: 0");
   });
 
-  it("sets fifteen paragraphs and the inline 'Common challenges', nothing gated", () => {
-    const { container } = render(<V4Partnership view={OPEN} />);
-    const text = container.querySelector(".rv4-cip__text")!;
-    expect(text.querySelectorAll(".rv4-prose__p")).toHaveLength(15);
-    const heading = text.querySelectorAll(".rv4-prose__h");
-    expect(heading).toHaveLength(1);
-    expect(heading[0]!.textContent).toBe("Common Challenges");
-    expect(container.querySelector(".rv4-cip__gate")).toBeNull();
+  it("sets its fifteen paragraphs in the opening and the two sections, nothing gated", () => {
+    const { container } = render(<V4Partnership view={OPEN} archetype="Spark Seeker" />);
+    // Sanjin's two-paragraph opening.
+    expect(container.querySelectorAll(".rv4-cip__text .rv4-prose__p")).toHaveLength(2);
+    const [own, common] = sections(container);
+    expect(own!.querySelector(".rv4-sect__name")!.textContent).toBe("The Spark Seeker Challenges");
+    expect(common!.querySelector(".rv4-sect__name")!.textContent).toBe("Common Challenges");
+    // The archetype's three, folded; the inline heading is the second section's row, its
+    // ten paragraphs under it, the first sharp and the rest folded.
+    const inner = (el: Element) => el.querySelector(".rv4-sect__inner")!;
+    expect([...inner(own!).children].map(firstClass)).toEqual(["rv4-fold"]);
+    expect(inner(own!).querySelectorAll(".rv4-prose__p")).toHaveLength(3);
+    expect([...inner(common!).children].map(firstClass)).toEqual(["rv4-prose__p", "rv4-fold"]);
+    expect(inner(common!).querySelectorAll(".rv4-prose__p")).toHaveLength(10);
+    expect(container.querySelector(".rv4-cip .rv4-prose__h")).toBeNull();
+    expect(container.querySelector(".rv4-unlock, .rv4-sect.is-locked")).toBeNull();
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelector(".rv4-loop")).not.toHaveClass("is-locked");
   });
 
   it("bolds the result from its second sentence, readable when open", () => {
-    const { container } = render(<V4Partnership view={OPEN} />);
+    const { container } = render(<V4Partnership view={OPEN} archetype="Spark Seeker" />);
     const result = container.querySelector(".rv4-cip__closing")!;
     expect(result.getAttribute("data-node-id")).toBe("647:229");
     expect(result.querySelector("strong")!.textContent).toMatch(/^The more the partner tries/);
@@ -82,7 +98,7 @@ describe("the chapter body — 38:1679", () => {
   });
 
   it("closes with its practice card, closed on arrival, one list of three when opened", () => {
-    const { container } = render(<V4Partnership view={OPEN} />);
+    const { container } = render(<V4Partnership view={OPEN} archetype="Spark Seeker" />);
     const practice = container.querySelector(".rv4-cip + .rv4-try")!;
     expect(practice.getAttribute("data-node-id")).toBe("399:219");
     expect(practice.textContent).toContain("Read all");
@@ -95,69 +111,75 @@ describe("the chapter body — 38:1679", () => {
 });
 
 describe("the paywalled body — 305:358", () => {
-  it("caps the ramp's fade where its scrambled tail starts, so none of it shows lightly blurred", () => {
-    // Review 25.09: in the 588px desktop column paragraph 5's real part runs to three
-    // lines, so the scrambled tail rose into the 105px band. useRampFit measures it.
-    const box = (top: number) => ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0 });
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement
-    ) {
-      return box(this.classList.contains("rv4-cip__ramp") ? 1000 : 0) as DOMRect;
-    });
-    vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (this: Element) {
-      const rects = this.classList.contains("rv4-prose__veiled")
-        ? [{ ...box(1079), width: 40 }]
-        : [];
-      return rects as unknown as DOMRectList;
-    });
-    try {
-      const { container } = render(<V4Partnership view={LOCKED} />);
-      const ramp = container.querySelector<HTMLElement>(".rv4-cip__ramp")!;
-      expect(ramp.querySelector(".rv4-prose__veiled")).not.toBeNull();
-      expect(ramp.style.getPropertyValue("--rv4-band-fit")).toBe("79px");
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-
-  it("keeps paragraphs 1-4 sharp and ramps the blur in over paragraph 5", () => {
-    const { container } = render(<V4Partnership view={LOCKED} />);
+  it("keeps paragraphs 1-4: the opening sharp, the archetype's two folded over the wall", () => {
+    const { container } = render(<V4Partnership view={LOCKED} archetype="Spark Seeker" />);
     const body = container.querySelector(".rv4-cip")!;
     expect(body).toHaveClass("is-locked");
     expect(body.getAttribute("data-node-id")).toBe("305:358");
-    const text = container.querySelector(".rv4-cip__text")!;
-    const sharp = [...text.children].filter((el) => el.classList.contains("rv4-prose__p"));
-    expect(sharp).toHaveLength(4);
-    const gated = container.querySelector(".rv4-cip__gated")!;
-    expect(gated.getAttribute("aria-hidden")).toBe("true");
-    expect(gated.hasAttribute("inert")).toBe(true);
-    expect(gated.querySelector(".rv4-cip__ramp .rv4-pblur")).not.toBeNull();
-    expect(gated.querySelector(".rv4-cip__blurred")).not.toBeNull();
+    expect(container.querySelectorAll(".rv4-cip__text .rv4-prose__p")).toHaveLength(2);
+    const own = sections(container)[0]!.querySelector(".rv4-sect__inner")!;
+    expect([...own.children].map(firstClass)).toEqual(["rv4-fold"]);
+    const fold = own.querySelector(".rv4-fold")!;
+    expect(fold).toHaveClass("has-wall");
+    expect([...fold.querySelector(".rv4-fold__copy")!.children].map(firstClass)).toEqual([
+      "rv4-prose__p",
+      "rv4-prose__p",
+      "rv4-unlock",
+    ]);
   });
 
-  it("floats the chapter-body Premium card on the gate, as 1015:1257 draws it", () => {
-    const { container } = render(<V4Partnership view={LOCKED} />);
-    const card = container.querySelector(".rv4-cip__gate > .rv4-premium")!;
-    expect(card).toHaveClass("rv4-premium--body");
-    expect(card.getAttribute("data-node-id")).toBe("1015:1257");
+  it("samples paragraph 5 through its fade band only, nothing veiled and no blur", () => {
+    const { container } = render(<V4Partnership view={LOCKED} archetype="Spark Seeker" />);
+    const sample = container.querySelector(".rv4-cip .rv4-unlock__sample")!;
+    expect(sample.getAttribute("aria-hidden")).toBe("true");
+    expect(sample.hasAttribute("inert")).toBe(true);
+    expect(sample.textContent!.endsWith(PARTNERSHIP_RAMP_THROUGH)).toBe(true);
+    expect(sample.querySelector(".rv4-prose__veiled, .rv4-pblur")).toBeNull();
   });
 
-  it("opens the paywall once from the gate, its card, the loop or the blurred result", () => {
+  it("draws Common Challenges locked, its heading and the lock, with no body (16.10)", () => {
+    const { container } = render(<V4Partnership view={LOCKED} archetype="Spark Seeker" />);
+    const common = sections(container)[1]!;
+    expect(common).toHaveClass("is-locked");
+    expect(common.querySelector(".rv4-sect__name")!.textContent).toBe("Common Challenges");
+    expect(common.querySelector(".rv4-sect__inner")).toBeNull();
+    expect(common.querySelector(".rv4-sect__head")!.hasAttribute("aria-expanded")).toBe(false);
+  });
+
+  it("draws no card on the wall: 'Unlock Full Chapter' where 1015:1257 floated", () => {
+    const { container } = render(<V4Partnership view={LOCKED} archetype="Spark Seeker" />);
+    expect(container.querySelector(".rv4-cip .rv4-premium")).toBeNull();
+    expect(container.querySelector(".rv4-cip .rv4-unlock__pill")!.textContent).toBe(
+      "Unlock Full Chapter"
+    );
+  });
+
+  it("opens the paywall once from the wall, the locked section, the loop or the blurred result", () => {
     const onUnlock = vi.fn();
-    const { container } = render(<V4Partnership view={LOCKED} onUnlock={onUnlock} />);
-    fireEvent.click(container.querySelector(".rv4-cip__gated")!);
-    expect(onUnlock).toHaveBeenCalledTimes(1);
-    fireEvent.click(container.querySelector(".rv4-cip__gate .rv4-premium button")!);
-    expect(onUnlock).toHaveBeenCalledTimes(2);
-    fireEvent.click(container.querySelector(".rv4-loop")!);
-    expect(onUnlock).toHaveBeenCalledTimes(3);
-    // The paragraph itself is inert, so a real tap lands on its wrapper, which owns it.
-    fireEvent.click(container.querySelector(".rv4-cip__closing-text")!);
-    expect(onUnlock).toHaveBeenCalledTimes(4);
+    const { container } = render(
+      <V4Partnership view={LOCKED} archetype="Spark Seeker" onUnlock={onUnlock} />
+    );
+    const surfaces = [
+      container.querySelector(".rv4-cip .rv4-unlock__sample")!,
+      container.querySelector(".rv4-cip .rv4-unlock__pill")!,
+      container.querySelector(".rv4-cip .rv4-sect.is-locked .rv4-sect__head")!,
+      container.querySelector(".rv4-loop")!,
+      // The paragraph itself is inert, so a real tap lands on its wrapper, which owns it.
+      container.querySelector(".rv4-cip__closing-text")!,
+    ];
+    for (const surface of surfaces) {
+      onUnlock.mockClear();
+      fireEvent.click(surface);
+      expect(onUnlock).toHaveBeenCalledTimes(1);
+    }
+    // The open section's row folds it; it never sells.
+    onUnlock.mockClear();
+    fireEvent.click(sections(container)[0]!.querySelector(".rv4-sect__head")!);
+    expect(onUnlock).not.toHaveBeenCalled();
   });
 
   it("blurs the loop and the result, and gates the practice with its list numbered on", () => {
-    const { container } = render(<V4Partnership view={LOCKED} />);
+    const { container } = render(<V4Partnership view={LOCKED} archetype="Spark Seeker" />);
     expect(container.querySelector(".rv4-loop")).toHaveClass("is-locked");
     const result = container.querySelector(".rv4-cip__closing")!;
     expect(result).toHaveClass("is-blurred");
