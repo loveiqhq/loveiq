@@ -31,6 +31,23 @@ const meeting = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** The team said on 2026-10-16 that this workshop, still on the calendar, was not held. */
+describe("a meeting the team says was not held", () => {
+  const workshop = (day: string) =>
+    meeting({
+      iCalUID: "4607cc9nud22ktkpbdo14pq8cu@google.com",
+      start: { dateTime: `${day}T10:30:00+02:00` },
+    });
+
+  it("is left out on that day", () => {
+    expect(isWorthIndexing(workshop("2026-10-16"))).toBe(false);
+  });
+
+  it("is kept on any other day of the same series", () => {
+    expect(isWorthIndexing(workshop("2026-10-23"))).toBe(true);
+  });
+});
+
 describe("isWorthIndexing — a calendar is mostly not meetings", () => {
   it("keeps a real meeting between people", () => {
     expect(isWorthIndexing(meeting())).toBe(true);

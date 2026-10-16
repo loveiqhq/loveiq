@@ -104,6 +104,18 @@ export function eventDay(e: CalEvent): string | null {
 }
 
 /**
+ * MEETINGS THE TEAM SAYS DID NOT TAKE PLACE, though they are still on the calendar. An
+ * explicit list of `iCalUID:day`, like Drive's SKIP_FILE_IDS: no rule can tell a meeting
+ * that was called off from one that happened without notes, so a person says which.
+ * Leaving one out also lets the sweep remove what was stored.
+ */
+const NOT_HELD = new Set([
+  // "AI Workshop - AI in Surveys & Reports", 2026-10-16: not held (Eman, 2026-10-16).
+  // eslint-disable-next-line no-secrets/no-secrets -- calendar event id, not a secret
+  "4607cc9nud22ktkpbdo14pq8cu@google.com:2026-10-16",
+]);
+
+/**
  * Is this worth indexing at all?
  *
  * A calendar is full of things that are not meetings — "Focus time", "Lunch", a
@@ -114,6 +126,7 @@ export function eventDay(e: CalEvent): string | null {
 export function isWorthIndexing(e: CalEvent): boolean {
   if (e.status === "cancelled") return false;
   if (!e.summary?.trim()) return false;
+  if (NOT_HELD.has(`${(e.iCalUID || e.id || "").trim()}:${eventDay(e) ?? ""}`)) return false;
   // A candidate interview names the candidate in its title and invites them by address.
   if (isJobApplication(e.summary)) return false;
   const humans = (e.attendees ?? []).filter((a) => !a.resource);
