@@ -26,6 +26,7 @@ import {
   filterQuery,
   MAX_DAYS,
   parseFilters,
+  previousRange,
   rangeLabel,
   SOURCES,
   TIERS,
@@ -52,6 +53,15 @@ export const AP_ORIGIN = "https://www.loveiq.org";
 
 /** The rollup's figures the dashboard has none for: they keep the rollup's counting. */
 export const NOT_ON_DASHBOARD = ["reports_created", "invites_sent", "top_sources"] as const;
+
+/**
+ * The figures that count what a period's finishers have done "so far": they grow with the
+ * finishers' age, so they compare only at the same age (ageMatched), which exists only for
+ * the equal-length period just before. The rows' keys, and the Assessment A tiles built on
+ * them (buildDashboard's Payment CVR, paid so far over submissions, and Report open rate).
+ */
+const AGE_KEYS = ["reports_opened", "paid_so_far"] as const;
+const AGE_TILES: ReadonlySet<string> = new Set(["pay-cvr", "open-rate"]);
 
 /** Said in place of the dashboard's figures when they could not be read. */
 export const AP_UNREADABLE =
@@ -86,8 +96,8 @@ export interface ApAsk {
   until: string | null;
   /** Days back from today, used when there is no `since`. */
   days: number;
-  /** compare_to's period. */
-  other: Period | null;
+  /** compare_to: "previous" is the dashboard's own comparison, or a period of its own. */
+  other: Period | "previous" | null;
 }
 
 export interface ApRead {
@@ -95,8 +105,12 @@ export interface ApRead {
   f: ApFilters;
   facts: Facts;
   asked: Period;
-  /** compare_to's period; no facts when it lies before the records begin. */
-  other: { f: ApFilters; facts: Facts | null } | null;
+  /**
+   * compare_to's period; no facts when it lies before the records begin. `sameAge` when it is
+   * the equal-length period just before, the one comparison the dashboard makes and the only
+   * one whose "so far" figures can be read at the same age.
+   */
+  other: { f: ApFilters; facts: Facts | null; sameAge: boolean } | null;
   today: string;
   now: Date;
 }
@@ -113,12 +127,17 @@ export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | nul
   };
   const f = apFilters(asked.since, asked.until, today);
   if (beforeData(f)) return null;
-  const o = ask.other ? apFilters(ask.other.since, ask.other.until, today) : null;
+  // "previous" is the period just before the one the dashboard reads, not the one asked for:
+  // until 2026-10-31 asked on the 16th reads 1 to 16 Oct, and its previous is 15 to 30 Sep.
+  const before = previousRange(f);
+  const want = ask.other === "previous" ? { since: before.from, until: before.to } : ask.other;
+  const o = want ? apFilters(want.since, want.until, today) : null;
   const [facts, otherFacts] = await Promise.all([
     fetchFacts(f.from, f.to),
     o && !beforeData(o) ? fetchFacts(o.from, o.to) : Promise.resolve(null),
   ]);
-  return { f, facts, asked, other: o ? { f: o, facts: otherFacts } : null, today, now };
+  const sameAge = o !== null && o.from === before.from && o.to === before.to;
+  return { f, facts, asked, other: o ? { f: o, facts: otherFacts, sameAge } : null, today, now };
 }
 
 /** The part of a `brain_daily_rollup` row read here. */
@@ -184,9 +203,23 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
   let compared: ApView["other"] = null;
   if (other) {
     const otherRows = other.facts
-      ? // As the dashboard compares: the earlier finishers read at the same age as these.
-        dayRows(ageMatched(other.facts, sameAge(facts, other.facts, now)), extras)
+      ? dayRows(
+          // As the dashboard compares: the earlier finishers read at the same age as these.
+          // Only the equal-length period just before has a same age; for any other, the
+          // figures that depend on it are left out below.
+          other.sameAge ? ageMatched(other.facts, sameAge(facts, other.facts, now)) : other.facts,
+          extras
+        )
       : [];
+    if (!other.sameAge) {
+      for (const r of [...rows, ...otherRows]) for (const k of AGE_KEYS) delete r[k];
+      notes.push(
+        `${AGE_KEYS.join(", ")}, Payment CVR and Report open rate are not compared: they count ` +
+          "what a period's finishers have done so far, which grows the longer ago they " +
+          "finished, and only the equal-length period just before can be read at the same " +
+          "age, the one comparison the dashboard makes (compare_to previous)."
+      );
+    }
     // Survey starts are compared only when both periods hold every start, or the change
     // would be the gap.
     const startsOk =
@@ -216,6 +249,10 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
     now,
     newReturning: null,
   });
+  // The builder reads any earlier period at "the same age", which is right only for the one
+  // just before: for another, the tiles counting finishers "so far" carry no change.
+  if (other && !other.sameAge)
+    dash.tiles = dash.tiles.map((x) => (AGE_TILES.has(x.key) ? { ...x, prev: null } : x));
   const t = totals(facts, ALL);
   const s = spend(ad, ALL, f.from, f.to);
   const asked = read.asked;
@@ -261,11 +298,14 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
     `Behind those: ${plural(t.sales, "paid sale")} by ${plural(t.payers, "paying customer")} ` +
       `and ${plural(t.gifts, "free unlock")} (EUR 0, never a sale); ${spent}.`,
     dash.notes.length ? `The dashboard's notes on this period: ${dash.notes.join(" ")}` : null,
-    compared
-      ? `Compared with ${compared.period.since} to ${compared.period.until} as the dashboard ` +
-        "compares periods: the earlier period's reports_opened and paid_so_far are read at the " +
-        "same age as this one's, and ad spend only when both have every day of it. Its own view: " +
-        apLink("assessment-a", other!.f) +
+    compared && other
+      ? `Compared with ${compared.period.since} to ${compared.period.until}` +
+        (other.sameAge
+          ? ", the period just before, as the dashboard compares it: that period's " +
+            "reports_opened and paid_so_far are read at the same age as this one's, and ad " +
+            "spend only when both have every day of it."
+          : ".") +
+        ` That period on the dashboard: ${apLink("assessment-a", other.f)}` +
         (f.running
           ? ". The dashboard shows no comparison while today is still running: today is part of a day."
           : ".")

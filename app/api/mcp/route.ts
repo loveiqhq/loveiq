@@ -5028,7 +5028,13 @@ async function callTool(
         since: since || null,
         until: until || null,
         days: asked,
-        other: comparison && "period" in comparison ? comparison.period : null,
+        // "previous" is the dashboard's own comparison, worked out from the period it reads.
+        other:
+          comparison && "period" in comparison
+            ? compareTo.toLowerCase() === "previous"
+              ? "previous"
+              : comparison.period
+            : null,
       }).catch((err) => {
         logger.warn({ err }, "brain: the dashboard's numbers could not be read");
         return undefined;
