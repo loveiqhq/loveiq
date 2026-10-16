@@ -190,7 +190,7 @@ const payload: TrafficPayload = {
       counts({ spend: 350, clicks: 700, visitors: 3500, completes: 150 }),
       counts({ spend: 350, clicks: 700, visitors: 3500, completes: 150, revenue: 75, payers: 3 }),
     ],
-    blocked: { visitors: null, spend: null, people: null },
+    blocked: { visitors: null, spend: null, people: null, starts: null },
   },
   trend: {
     grain: "week",

@@ -403,16 +403,13 @@ function Scorecard({
   ];
   const whys = [
     ...new Set(
-      [tiles.blocked.spend, tiles.blocked.visitors, tiles.blocked.people].filter(
-        (w): w is string => w !== null
-      )
+      [
+        tiles.blocked.spend,
+        tiles.blocked.visitors,
+        tiles.blocked.people,
+        c.starts === null && known ? tiles.blocked.starts : null,
+      ].filter((w): w is string => w !== null)
     ),
-    // The payload says no more than that they're blank: the notes over the page say when.
-    ...(c.starts === null && known
-      ? [
-          "Survey starts can't be counted whole for this range or these filters, so they and their rates are blank.",
-        ]
-      : []),
   ];
   return (
     <Card id="scorecard" labelledBy="h-score">

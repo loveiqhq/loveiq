@@ -49,6 +49,8 @@ import {
   median,
   ratio,
   spend,
+  spendBlocked,
+  startsBlocked,
   STEP_DEVICE_FROM,
   startsComplete,
   subsIn,
@@ -72,7 +74,12 @@ export interface TrafficTiles {
   /** One per point of the sparkline (the range's whole weeks or months). */
   points: Counts[];
   /** Why a figure is blank, by what it needs. */
-  blocked: { visitors: string | null; spend: string | null; people: string | null };
+  blocked: {
+    visitors: string | null;
+    spend: string | null;
+    people: string | null;
+    starts: string | null;
+  };
 }
 
 export interface ChannelSeries {
@@ -515,6 +522,11 @@ export function buildTraffic(input: {
       visitors: vB ?? tablet,
       spend: s.why,
       people: tablet,
+      starts:
+        startsBlocked(scope, facts.from, today) ??
+        (startsComplete(facts.from, today, scope)
+          ? null
+          : "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared."),
     },
   };
 
@@ -606,9 +618,19 @@ export function buildTraffic(input: {
   const late = lateSourceNote(facts.from);
   const sourceSplitOk = startsSplit(facts.from, today);
 
-  const adsOk = input.ads?.ok ? input.ads.value : null;
+  // The Ads API's cost, clicks and impressions are all traffic: beside finishers narrowed by a
+  // filter spend can't follow (device, tier, visitor), or by a source other than Google Ads,
+  // they would describe other people. Then they are left out, and the rows say why.
+  const adsBlocked =
+    spendBlocked(scope) ??
+    (scope.source !== "all" && scope.source !== "google_ads"
+      ? "Google Ads' figures don't apply under this source filter."
+      : null);
+  const adsOk = !adsBlocked && input.ads?.ok ? input.ads.value : null;
   const adsWhy =
-    s.why ?? (!input.ads ? "Google Ads was not read." : !input.ads.ok ? input.ads.error : null);
+    adsBlocked ??
+    s.why ??
+    (!input.ads ? "Google Ads was not read." : !input.ads.ok ? input.ads.error : null);
 
   const tables = {} as Record<BreakdownKey, PerfTable>;
   const allRow = (label: string): PerfRow =>
@@ -773,6 +795,7 @@ export function buildTraffic(input: {
                 scope,
                 (st) =>
                   st.known &&
+                  classifySource(st) === "google_ads" &&
                   (st.camp ?? "").toLowerCase() === camp &&
                   (st.term ?? "").toLowerCase() === term
               )
