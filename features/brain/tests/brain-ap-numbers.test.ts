@@ -163,7 +163,8 @@ beforeEach(() => {
   process.env.LOVEIQ_MCP_TOKEN = TOKEN;
   clearFactsCache();
   apFails = false;
-  mockRollup.mockReset().mockResolvedValue(rollupDays(120));
+  // As the database answers: one row per day, for as many days back as asked, 4,000 at most.
+  mockRollup.mockReset().mockImplementation(async (n: number) => rollupDays(Math.min(n, 4000)));
   mockAdCost = { byDay: new Map([["2026-10-14", 40]]), from: "2026-06-01", to: "2026-10-15" };
   mockSupabaseFetch.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
     if (path === "/rest/v1/rpc/ap_facts") {
@@ -339,6 +340,35 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     expect(text.startsWith("THE DASHBOARD'S NUMBERS COULD NOT BE READ")).toBe(true);
     expect(text).toContain('"unique_visitors":999');
     expect(text).not.toContain("AP-ANALYTICS NUMBERS");
+    // `days` keeps the dashboard's meaning there too: the N whole days before today.
+    const week = await call({ days: 7 });
+    expect(rowsOf(week.text).map((r) => r.day)).toEqual([
+      "2026-10-15",
+      "2026-10-14",
+      "2026-10-13",
+      "2026-10-12",
+      "2026-10-11",
+      "2026-10-10",
+      "2026-10-09",
+    ]);
+    // And so does the old reading of the sales.
+    const sales = await call({ group_by: ["plan"], days: 7 });
+    expect(sales.text).toContain("THE DASHBOARD'S SALES COULD NOT BE READ");
+    expect(sales.text).toContain("Sales by plan, 2026-10-09 to 2026-10-15 (UTC days");
+  });
+
+  it("takes the dashboard's Berlin day, not UTC's, between midnight in Berlin and in London", async () => {
+    // 22:30 UTC on the 16th is 00:30 on the 17th in Berlin: the 17th is today, the 16th whole.
+    vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
+    const today = await call({ since: "2026-10-17" });
+    expect(today.isError).toBeFalsy();
+    expect(today.text).toContain("AP-ANALYTICS NUMBERS for 2026-10-17 to 2026-10-17");
+    const compared = await call({ since: "2026-10-10", compare_to: "previous" });
+    expect(compared.text).toMatch(
+      /2026-10-10 to 2026-10-16 \(7 days, 7 with data\) versus 2026-10-03/
+    );
+    expect((await call({ days: 7 })).text).toContain("?period=7d");
+    expect(rowsOf((await call({ days: 7 })).text)[0]!.day).toBe("2026-10-16");
   });
 
   it("does not ask the dashboard about days before LoveIQ's records begin", async () => {
