@@ -5,7 +5,13 @@
  */
 import { assessmentScope } from "./assessment";
 import { deviceClass, type Facts, type IntroFact, type SubFact } from "./facts";
-import { bucketCaption, type ApFilters, rangeLabel, SURVEY_TRACKING_FROM } from "./filters";
+import {
+  bucketCaption,
+  type ApFilters,
+  rangeLabel,
+  SURVEY_TRACKING_FROM,
+  trendBuckets,
+} from "./filters";
 import { fmt } from "./format";
 import {
   comparableStarts,
@@ -21,7 +27,7 @@ import {
   type Totals,
 } from "./metrics";
 import { head, type PageHead, type Tile } from "./common";
-import type { PostHogResult, SurveyIntroClicks } from "./posthog";
+import { POSTHOG_FROM, type PostHogResult, type SurveyIntroClicks } from "./posthog";
 import type { SurveyQuestions } from "./survey";
 
 export type Benchmark = "all" | "same" | "prev";
@@ -80,17 +86,14 @@ export interface SurveyPayload extends PageHead {
   intro: {
     /** The intro, slides 1 to 4 and the consent, in order. */
     cards: IntroCard[];
-    /** The slide (1 to 3) most visitors skipped from, straight to question 1; null if none did. */
-    mostSkipped: number | null;
     clicks: PostHogResult<IntroClicks> | null;
     /** The day Skip, Back, Exit and the intro's and consent's cards start, when the range starts earlier. */
     recordedFrom: string | null;
     /**
-     * The first two boxes from our own records, once the range has them: visitors on the intro
-     * card, and of everyone who began (on the intro, or on the consent from the landing page's
-     * card), the share who agreed and went on to question 1. Null before: PostHog's boxes.
+     * The design's four boxes as headline tiles (16 Oct 2026): saw the intro, agreed to the
+     * consent, skipped slides, left before question 1, each against the period before.
      */
-    own: { saw: number; agreed: number | null } | null;
+    tiles: Tile[];
   };
   questions: SurveyQuestions | null;
   questionsError: string | null;
@@ -268,6 +271,8 @@ export function buildSurveyPage(input: {
   questions: SurveyQuestions | null;
   questionsError: string | null;
   introClicks: PostHogResult<IntroClicks> | null;
+  /** The period before's, for the intro tiles' change while they come from PostHog. */
+  prevIntroClicks?: PostHogResult<IntroClicks> | null;
 }): SurveyPayload {
   const { facts, filters: f, today, now } = input;
   const scope = assessmentScope(f);
@@ -282,6 +287,8 @@ export function buildSurveyPage(input: {
   const stB = startsBlocked(scope, facts.from, today);
   const noCmp =
     p && p.starts === null && t.starts !== null ? "no comparison: earlier starts incomplete" : null;
+  // The headline tile says it in grey where the change would stand.
+  const noCmpNote = noCmp ? { note: "No comparison: earlier starts incomplete" } : {};
   const prevCompletion = p ? ratio(p.startsFinished, p.starts) : null;
   const tiles: Tile[] = [
     {
@@ -301,6 +308,7 @@ export function buildSurveyPage(input: {
           : "answered at least the first question"),
       blocked: stB,
       trend: caption,
+      ...noCmpNote,
     },
     {
       key: "subs",
@@ -330,6 +338,7 @@ export function buildSurveyPage(input: {
         `of starts submit (so far)${prevCompletion === null ? "" : ` · vs ${fmt("pct", prevCompletion)}`}`,
       blocked: stB,
       trend: caption,
+      ...noCmpNote,
     },
   ];
 
@@ -414,8 +423,13 @@ export function buildSurveyPage(input: {
       exit: later(sum(c.step, (x) => x.left)),
     };
   });
-  const skips = [1, 2, 3].map((i) => rowsOf(`intro_slide_${i}`).reduce((n, x) => n + x.skipped, 0));
-  const most = Math.max(...skips);
+  const introTiles = buildIntroTiles(
+    facts,
+    input.previous,
+    input.introClicks,
+    input.prevIntroClicks ?? null,
+    on
+  );
 
   return {
     ...head(f, today, now),
@@ -424,21 +438,132 @@ export function buildSurveyPage(input: {
     demographics,
     intro: {
       cards,
-      mostSkipped: most > 0 ? skips.indexOf(most) + 1 : null,
       clicks: input.introClicks,
       recordedFrom: on && !tracked ? rangeLabel(SURVEY_TRACKING_FROM, SURVEY_TRACKING_FROM) : null,
-      own:
-        on && tracked
-          ? {
-              saw: first,
-              agreed: ratio(
-                sum("consent_view", (x) => x.wentOn),
-                first + direct
-              ),
-            }
-          : null,
+      tiles: introTiles,
     },
     questions: input.questions,
     questionsError: input.questionsError,
   };
+}
+
+/**
+ * The intro's four figures for a period: from our own records once the period starts on
+ * SURVEY_TRACKING_FROM (every visitor), else from PostHog's clicks (a share of its survey
+ * sessions). Null where neither can say.
+ */
+function introFigures(
+  x: Facts,
+  clicks: PostHogResult<IntroClicks> | null
+): { saw: number | null; agreed: number | null; skipped: number | null; left: number | null } {
+  if (x.from >= SURVEY_TRACKING_FROM) {
+    const rows = (step: string) => x.intro.filter((r) => r.step === step);
+    const count = (step: string) => rows(step).reduce((n, r) => n + r.n, 0);
+    const saw = count("intro_view");
+    const direct = rows("consent_view").reduce((n, r) => n + r.direct, 0);
+    const began = saw + direct;
+    const wentOn = rows("consent_view").map((r) => r.wentOn);
+    const agreed = wentOn.every((n): n is number => typeof n === "number")
+      ? ratio(
+          wentOn.reduce((a, n) => a + n, 0),
+          began
+        )
+      : null;
+    const skipped = ratio(
+      [1, 2, 3, 4].reduce((n, i) => n + count(`intro_skip_${i}`), 0),
+      saw
+    );
+    // Everyone who began and never reached question 1 left on one of the cards.
+    const left = [
+      "intro_view",
+      "intro_slide_1",
+      "intro_slide_2",
+      "intro_slide_3",
+      "intro_slide_4",
+      "consent_view",
+    ]
+      .flatMap((step) => rows(step).map((r) => r.left))
+      .reduce<number | null>((a, n) => (a === null || n === null ? null : a + n), 0);
+    return { saw, agreed, skipped, left: left === null ? null : ratio(left, began) };
+  }
+  const c = clicks && clicks.ok ? clicks.value : null;
+  if (!c || !c.opened) return { saw: c ? c.opened : null, agreed: null, skipped: null, left: null };
+  return {
+    saw: c.opened,
+    agreed: c.agreed / c.opened,
+    skipped: c.skipped / c.opened,
+    left: 1 - c.answered / c.opened,
+  };
+}
+
+function buildIntroTiles(
+  facts: Facts,
+  previous: Facts | null,
+  clicks: PostHogResult<IntroClicks> | null,
+  prevClicks: PostHogResult<IntroClicks> | null,
+  on: boolean
+): Tile[] {
+  const now = introFigures(facts, clicks);
+  const own = facts.from >= SURVEY_TRACKING_FROM;
+  // PostHog's clicks are whole only from POSTHOG_FROM: a period starting earlier is partial.
+  const complete = (x: Facts) => x.from >= POSTHOG_FROM;
+  // Compared only like with like: both periods from our records, or both from PostHog.
+  const prev =
+    previous !== null &&
+    previous.from >= SURVEY_TRACKING_FROM === own &&
+    complete(previous) &&
+    complete(facts)
+      ? introFigures(previous, prevClicks)
+      : null;
+  // Our own records give a line per week; PostHog's clicks are read for the whole range only.
+  const points = trendBuckets(facts.from, facts.to);
+  const spark = (pick: (f: ReturnType<typeof introFigures>) => number | null) =>
+    own
+      ? points.map((b) =>
+          pick(
+            introFigures(
+              {
+                ...facts,
+                from: b.from,
+                to: b.to,
+                intro: facts.intro.filter((r) => r.day >= b.from && r.day <= b.to),
+              },
+              null
+            )
+          )
+        )
+      : [];
+  const why = !on
+    ? "Not launched."
+    : !complete(facts)
+      ? `From PostHog, which starts on ${rangeLabel(POSTHOG_FROM, POSTHOG_FROM)}: pick a range from that day on.`
+      : now.saw === null
+        ? clicks && !clicks.ok
+          ? clicks.error
+          : "PostHog could not be read just now."
+        : null;
+  const tile = (
+    key: string,
+    label: string,
+    unit: Tile["unit"],
+    pick: (f: ReturnType<typeof introFigures>) => number | null,
+    goodWhen: Tile["goodWhen"]
+  ): Tile => ({
+    key,
+    label,
+    unit,
+    value: pick(now),
+    prev: prev ? pick(prev) : null,
+    goodWhen,
+    spark: spark(pick),
+    foot: "",
+    blocked: why,
+    trend: "",
+  });
+  return [
+    tile("intro-saw", "Saw the intro", "count", (x) => x.saw, "up"),
+    tile("intro-agreed", "Agreed to consent", "pct", (x) => x.agreed, "up"),
+    tile("intro-skipped", "Skipped slides", "pct", (x) => x.skipped, "down"),
+    tile("intro-left", "Left before Q1", "pct", (x) => x.left, "down"),
+  ];
 }

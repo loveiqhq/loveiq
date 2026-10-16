@@ -3,15 +3,10 @@
  * banner notes over a range (head), visitors per source as PostHog splits them, and reading
  * time. (The Overview this began in was replaced by the Dashboard on 16 Oct 2026.)
  */
-import type { AdCost } from "@features/brain/server/ingest/analytics";
-
 import type { Facts } from "./facts";
 import {
   ASSESSMENTS,
   SOURCES,
-  buckets,
-  bucketCaption,
-  trendBuckets,
   activeNarrowing,
   beforeData,
   comparisonRange,
@@ -26,28 +21,13 @@ import { fmt, type GoodWhen, type Unit } from "./format";
 import { POSTHOG_FROM, type PostHogResult, type SessionTags } from "./posthog";
 import {
   EVENTS_COMPLETE_FROM,
-  LATE_SOURCES,
   STEP_DEVICE_FROM,
   draftsKeptFrom,
-  lateSourceNote,
-  launched,
   mean,
   median,
-  ratio,
   sourceShares,
-  spend,
-  startsBlocked,
-  comparableStarts,
-  startsComplete,
   subsIn,
-  tabletBlocked,
-  totals,
-  trend,
-  visitsBlocked,
   type Scope,
-  type Totals,
-  ageMatched,
-  sameAge,
 } from "./metrics";
 
 export interface Tile {

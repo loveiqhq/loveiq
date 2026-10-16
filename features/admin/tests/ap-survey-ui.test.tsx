@@ -97,8 +97,13 @@ vi.mock("@features/admin/ui/ap/csv", () => ({
 
 import ApSurvey from "@features/admin/ui/ap/ApSurvey";
 
+// A picked row scrolls to its detail; jsdom has no scrolling.
+const scrolled = vi.fn();
+Element.prototype.scrollIntoView = scrolled;
+
 afterEach(() => {
   cleanup();
+  scrolled.mockClear();
   view.payload = payload;
   view.answers = null;
 });
@@ -109,15 +114,16 @@ const column = (name: string, i: number) =>
   rows(name).map((r) => within(r).getAllByRole("cell")[i]!.textContent);
 
 describe("the Survey page as drawn", () => {
-  it("intro: the design's boxes, six numbered cards, their times and engagement, sortable", () => {
+  it("intro: the design's four tiles, six numbered cards, their times and engagement, sortable", () => {
     render(<ApSurvey />);
-    expect(screen.getByText("Saw the intro")).toBeTruthy();
-    expect(screen.getByText("most skips on slide 2")).toBeTruthy();
-    // Left before Q1: 1 − 55 answered of 100.
-    expect(screen.getByText("Left before Q1").nextSibling!.textContent).toBe("45.0%");
-    expect(screen.getByText("incl. 5 Return to site")).toBeTruthy();
-    // Four tiles, and the range line's own Live badge.
-    expect(screen.getAllByText("Live")).toHaveLength(5);
+    // Before the tracking day the tiles are PostHog's: 100 sessions opened the intro, 20
+    // skipped, 60 agreed, 55 answered question 1. No period before, so no change.
+    const tile = (label: string) => screen.getByText(label).nextSibling!.textContent;
+    expect(tile("Saw the intro")).toBe("100");
+    expect(tile("Agreed to consent")).toBe("60.0%");
+    expect(tile("Skipped slides")).toBe("20.0%");
+    expect(tile("Left before Q1")).toBe("45.0%");
+    expect(screen.queryByText(/The engagement column is blank/)).toBeNull();
 
     const intro = "Intro wizard cards";
     expect(column(intro, 0)).toEqual(["1", "2", "3", "4", "5", "6"]);
@@ -204,13 +210,15 @@ describe("the Survey page as drawn", () => {
     });
     render(<ApSurvey />);
     expect(screen.getByText("Saw the intro").nextSibling!.textContent).toBe("10");
-    expect(screen.getByText("visitors on the intro card")).toBeTruthy();
     // 4 agreed and went on, of the 12 who began on the intro or the consent.
     expect(screen.getByText("Agreed to consent").nextSibling!.textContent).toBe("33.3%");
-    expect(screen.getByText("went on to question 1")).toBeTruthy();
-    // PostHog's boxes give way to its one sentence; ours stay.
-    expect(screen.queryByText("Skipped slides")).toBeNull();
-    expect(screen.getByText("PostHog could not be read just now.")).toBeTruthy();
+    // Our own skips and exits: 2 of the intro's 10 skipped; 2 + 1 + 2 of the 12 left on a card.
+    expect(screen.getByText("Skipped slides").nextSibling!.textContent).toBe("20.0%");
+    expect(screen.getByText("Left before Q1").nextSibling!.textContent).toBe("41.7%");
+    // PostHog failed: the engagement column says why it is blank.
+    expect(
+      screen.getByText("The engagement column is blank: PostHog could not be read just now.")
+    ).toBeTruthy();
 
     const intro = "Intro wizard cards";
     expect(column(intro, 4)).toEqual(["—", "25%", "0%", "0%", "0%", "—"]);
@@ -263,16 +271,24 @@ describe("the Survey page as drawn", () => {
     expect(
       (screen.getByText("Strongly agree").parentElement as HTMLElement).style.gridTemplateColumns
     ).toBe("140px minmax(0,1fr)");
-    expect(screen.getByRole("button", { name: "Show first 10 only" })).toBeTruthy();
-    expect(screen.getByText(/our own finished test runs left out/)).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Survey Question Funnel" })).toBeTruthy();
-    expect(screen.getByText("Reached last step")).toBeTruthy();
+    expect(screen.getByText(/less our own finished test runs/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Question funnel" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Survey sessions reaching each question, 1 Oct – 7 Oct 2026. Click a row to open it in Question detail."
+      )
+    ).toBeTruthy();
+    // Four began; three went through to the last question (the third left on question 1).
+    expect(screen.getByText("First step").nextSibling!.textContent).toBe("4");
+    expect(screen.getByText("Reached last step").nextSibling!.textContent).toBe("75.0% · 3");
   });
 
-  it("funnel: no orange for a question first asked in the range; sorts; shares the search", () => {
+  it("funnel: no orange for a question first asked in the range; sorts; searches", () => {
     render(<ApSurvey />);
     const funnel = "Survey question funnel";
     const row = (id: string) => rows(funnel).find((r) => r.textContent!.includes(id))!;
+    // The picked row is purple, so pick one that is not under test.
+    fireEvent.click(within(row(every[0]!)).getByRole("button"));
     // Both lose more than 5% of the step before; only the older question is shaded.
     expect(row("01002").className).toContain("bg-ap-orange");
     expect(row("16019").textContent).toContain("33.3%");
@@ -285,13 +301,64 @@ describe("the Survey page as drawn", () => {
     const search = screen.getByRole("searchbox", { name: "Search questions" });
     fireEvent.change(search, { target: { value: "16019" } });
     expect(rows(funnel)).toHaveLength(1);
-    const filter = screen.getByRole("button", { name: "Filter Question" });
-    fireEvent.click(filter);
-    expect(screen.getByPlaceholderText("Type to filter")).toHaveProperty("value", "16019");
-    // Closing the filter clears the one search: both tables show every question again.
-    fireEvent.click(filter);
-    expect(search).toHaveProperty("value", "");
+    fireEvent.change(search, { target: { value: "no such question" } });
+    expect(screen.getByText("No question matches “no such question”.")).toBeTruthy();
+    fireEvent.change(search, { target: { value: "" } });
     expect(rows(funnel).length).toBeGreaterThan(50);
+  });
+
+  it("funnel: exits and the drop-out rate per question, red above 5%; a row opens its detail", () => {
+    // Four began; one left on question 1 and never finished.
+    const left = (sessionId: string, startedAt: string, reached: string[]) => ({
+      ...run(sessionId, startedAt, reached),
+      leftAt: reached[reached.length - 1]!,
+    });
+    view.payload = {
+      ...payload,
+      questions: buildSurveyQuestions(
+        [
+          run("p", "2026-10-02T10:00:00Z", every),
+          run("q", "2026-10-02T11:00:00Z", every),
+          run("r", "2026-10-03T10:00:00Z", every),
+          left("s", "2026-10-03T11:00:00Z", every.slice(0, 1)),
+        ],
+        { steps: [], exits: [] },
+        "2026-10-01",
+        "2026-10-07",
+        "All traffic",
+        null
+      ),
+    };
+    render(<ApSurvey />);
+    const funnel = "Survey question funnel";
+    const row = (id: string) => rows(funnel).find((r) => r.textContent!.includes(id))!;
+    const cells = (id: string) => within(row(id)).getAllByRole("cell");
+    // One exit of the four who reached question 1.
+    const q1 = every[0]!;
+    expect(cells(q1)[5]!.textContent).toBe("1");
+    expect(cells(q1)[6]!.textContent).toBe("25.00%");
+    expect(cells(q1)[6]!.className).toContain("text-ap-bad");
+    // Nobody left on question 2.
+    expect(cells(every[1]!)[6]!.textContent).toBe("0.00%");
+    expect(cells(every[1]!)[6]!.className).not.toContain("text-ap-bad");
+
+    // A click on another row picks that one and scrolls to its detail.
+    const pick = within(row(every[2]!)).getByRole("button");
+    expect(pick).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(pick);
+    expect(pick).toHaveAttribute("aria-pressed", "true");
+    expect(row(every[2]!).className).toContain("bg-ap-purple/10");
+    expect(
+      screen.getByText(new RegExp(`^Survey · Question detail · ${every[2]} · Step 3 of \\d+$`))
+    ).toBeTruthy();
+    expect(scrolled).toHaveBeenCalledTimes(1);
+    expect((scrolled.mock.contexts[0] as HTMLElement).id).toBe("question-detail");
+    // One row is picked at a time.
+    expect(
+      within(table(funnel))
+        .getAllByRole("button", { pressed: true })
+        .map((b) => b.textContent)
+    ).toHaveLength(1);
   });
 
   it("funnel: shades a real fall in a quiet range, though nobody reached it on the first day", () => {

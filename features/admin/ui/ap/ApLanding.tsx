@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
-import { EMPTY, fmt } from "@features/admin/server/ap/format";
+import { fmt } from "@features/admin/server/ap/format";
 import type { ArmRow, ArmStatus, LandingPayload } from "@features/admin/server/ap/landing";
 import type { Table } from "@features/admin/server/ap/common";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";

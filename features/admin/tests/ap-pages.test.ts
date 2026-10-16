@@ -265,10 +265,17 @@ describe("page builders", () => {
     const gap = surveyPage({ previous });
     expect(foot(gap, "starts")).toBe("no comparison: earlier starts incomplete");
     expect(foot(gap, "completion")).toBe("no comparison: earlier starts incomplete");
+    // The headline tiles say so in grey where the change would stand.
+    const note = (p: ReturnType<typeof surveyPage>, key: string) =>
+      p.tiles.find((t) => t.key === key)!.note;
+    expect(note(gap, "starts")).toBe("No comparison: earlier starts incomplete");
+    expect(note(gap, "completion")).toBe("No comparison: earlier starts incomplete");
+    expect(note(gap, "subs")).toBeUndefined();
     expect(foot(gap, "subs")).toBe("vs 1");
     // 24 to 30 Sep holds every start: compared as usual.
     const week = surveyPage({ previous: lastWeek });
     expect(foot(week, "starts")).toBe("vs 0");
+    expect(note(week, "starts")).toBeUndefined();
     expect(foot(week, "completion")).toBe("of starts submit (so far)");
     // No comparison at all is not a gap.
     expect(foot(surveyPage({ previous: null }), "starts")).toBe(
@@ -276,7 +283,48 @@ describe("page builders", () => {
     );
   });
 
-  it("survey: each slide's median time over the whole range, and the slide most skipped", () => {
+  it("survey: the intro tiles from PostHog, compared only with a period PostHog saw whole", () => {
+    const clicks = (opened: number, skipped: number, agreed: number, answered: number) => ({
+      ok: true as const,
+      value: { opened, skipped, agreed, answered, returned: 0, trust: 0, terms: 0, silhouette: 0 },
+    });
+    const page = (from: string, to: string, prevFrom: string | null) =>
+      buildSurveyPage({
+        facts: factsFixture({ from, to }),
+        previous: prevFrom ? factsFixture({ from: prevFrom, to: prevFrom }) : null,
+        benchmark: facts,
+        benchmarkKind: "all",
+        filters: parseFilters({ period: "custom", from, to }, "2026-10-13"),
+        today: "2026-10-13",
+        now: new Date("2026-10-13T10:00:00Z"),
+        questions: null,
+        questionsError: null,
+        introClicks: clicks(100, 20, 60, 55),
+        prevIntroClicks: clicks(80, 8, 40, 40),
+      });
+    const tiles = (p: ReturnType<typeof page>) =>
+      p.intro.tiles.map((t) => [t.label, t.value, t.prev, t.blocked]);
+    // Both weeks inside PostHog's days: each figure against the week before.
+    expect(tiles(page("2026-09-08", "2026-09-14", "2026-09-01"))).toEqual([
+      ["Saw the intro", 100, 80, null],
+      ["Agreed to consent", 0.6, 0.5, null],
+      ["Skipped slides", 0.2, 0.1, null],
+      ["Left before Q1", 1 - 55 / 100, 1 - 40 / 80, null],
+    ]);
+    // A week before begins ahead of PostHog's first day: partial, so not compared.
+    expect(page("2026-08-25", "2026-08-31", "2026-08-18").intro.tiles.map((t) => t.prev)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+    // A range that begins ahead of it says why it is blank.
+    expect(page("2026-08-20", "2026-08-31", null).intro.tiles.map((t) => t.blocked)).toEqual(
+      Array(4).fill("From PostHog, which starts on 23 Aug 2026: pick a range from that day on.")
+    );
+  });
+
+  it("survey: each slide's median time over the whole range", () => {
     const intro = (day: string, step: string, ms: number[], skipped = 0) => ({
       day,
       step,
@@ -300,15 +348,15 @@ describe("page builders", () => {
     // record themselves only from SURVEY_TRACKING_FROM, after this range.
     expect(p.intro.cards.map((s) => s.medianMs)).toEqual([null, 5000, 8000, null, 40_000, null]);
     expect(p.intro.cards.map((s) => s.reached)).toEqual([null, 4, 4, 0, 2, null]);
-    expect(p.intro.mostSkipped).toBe(2);
     expect(p.intro.recordedFrom).toBe("15 Oct 2026");
     // Skip, Back and Exit say when they start rather than read zero.
     expect(p.intro.cards.every((c) => c.skip === null && c.back === null && c.exit === null)).toBe(
       true
     );
-    expect(surveyPage({}).intro.mostSkipped).toBeNull();
-    // Before the tracking day the boxes stay PostHog's.
-    expect(p.intro.own).toBeNull();
+    // Before the tracking day the boxes stay PostHog's: none read here, so they say why.
+    expect(p.intro.tiles.map((t) => t.blocked)).toEqual(
+      Array(4).fill("PostHog could not be read just now.")
+    );
   });
 
   it("survey: completion names the earlier rate; demographics as drawn", () => {
@@ -402,8 +450,14 @@ describe("page builders", () => {
     expect(p.intro.recordedFrom).toBeNull();
     // Their consent's share leaves that visitor out: 4 of the intro's 10, never over 100%.
     expect(card("consent_view")).toMatchObject({ reached: 5, reachedShare: 0.4 });
-    // The first two boxes from our own records: 3 agreed and went on, of the 11 who began.
-    expect(p.intro.own).toEqual({ saw: 10, agreed: 3 / 11 });
+    // The four boxes from our own records: 3 agreed and went on, of the 11 who began; one
+    // skip of the intro's 10; 2 + 1 + 1 + 2 left on a card, of the 11.
+    expect(p.intro.tiles.map((t) => [t.label, t.value, t.blocked])).toEqual([
+      ["Saw the intro", 10, null],
+      ["Agreed to consent", 3 / 11, null],
+      ["Skipped slides", 0.1, null],
+      ["Left before Q1", 6 / 11, null],
+    ]);
     expect(card("intro_view")).toMatchObject({
       reached: 10,
       reachedShare: 1,

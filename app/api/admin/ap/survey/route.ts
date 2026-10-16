@@ -8,8 +8,13 @@ import {
   comparisonRange,
   parseFilters,
   previousRange,
+  SURVEY_TRACKING_FROM,
 } from "@features/admin/server/ap/filters";
-import { fetchSurveyIntroClicks, postHogFailed } from "@features/admin/server/ap/posthog";
+import {
+  fetchSurveyIntroClicks,
+  POSTHOG_FROM,
+  postHogFailed,
+} from "@features/admin/server/ap/posthog";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { fetchSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage, type Benchmark } from "@features/admin/server/ap/survey-page";
@@ -35,7 +40,7 @@ export async function GET(request: Request) {
   const scope = assessmentScope(filters);
 
   try {
-    const [facts, previous, questions, introClicks] = await Promise.all([
+    const [facts, previous, questions, introClicks, prevIntroClicks] = await Promise.all([
       fetchFactsFor(filters.from, filters.to, filters),
       cmp && !beforeData(cmp) ? fetchFactsFor(cmp.from, cmp.to, filters) : Promise.resolve(null),
       fetchSurveyQuestions(filters.from, filters.to, scope).then(
@@ -46,6 +51,11 @@ export async function GET(request: Request) {
         }
       ),
       fetchSurveyIntroClicks(filters.from, filters.to).catch(postHogFailed),
+      // The intro tiles' change while they come from PostHog: the same clicks a period earlier,
+      // when PostHog saw all of it.
+      cmp && !beforeData(cmp) && filters.from < SURVEY_TRACKING_FROM && cmp.from >= POSTHOG_FROM
+        ? fetchSurveyIntroClicks(cmp.from, cmp.to).catch(postHogFailed)
+        : Promise.resolve(null),
     ]);
     // The previous period as the benchmark (the comparison's own facts when it has them).
     const prevRange = previousRange(filters);
@@ -71,6 +81,7 @@ export async function GET(request: Request) {
         questions: questions.q,
         questionsError: questions.error,
         introClicks,
+        prevIntroClicks,
       }),
       { headers: NO_STORE }
     );
