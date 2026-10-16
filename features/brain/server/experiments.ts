@@ -205,9 +205,9 @@ async function liveLine(
   load: (since: string) => Promise<ArmOutcomes>
 ): Promise<string> {
   if (!e.axis) {
-    return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was entered in /admin.";
+    return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was recorded with it.";
   }
-  // From the start of its first day in Berlin, as the registry and /admin read a day: the
+  // From the start of its first day in Berlin, as the registry reads a day: the
   // landing test's restart (LANDING_TEST_START_AT) is 22:00 UTC the evening before.
   const outcomes = await load(
     reportingDayStart(e.start_date ?? isoDay(now - 30 * DAY_MS)).toISOString()

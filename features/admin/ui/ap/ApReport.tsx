@@ -36,6 +36,15 @@ import {
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
+/** The reader's submission in the Explorer: that one row, over all time. */
+const submissionHref = (id: number | string) =>
+  `/admin/ap/explorer?${new URLSearchParams({
+    source: "production",
+    table: "survey_submission",
+    date: "",
+    filters: JSON.stringify([["id", "eq", String(id)]]),
+  })}`;
+
 /** A whole percentage, as the design writes the wizard's; one too small for 1% reads "<1%", not "0%". */
 const wholePct = (v: number | null) =>
   v !== null && v > 0 && v < 0.005 ? "<1%" : fmt("pct", v, 0);
@@ -1489,7 +1498,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                 <span role="cell" className="px-3 py-2">
                   {r.submission ? (
                     <a
-                      href={`/admin/submissions/${r.submission}`}
+                      href={submissionHref(r.submission)}
                       className="font-mono text-xs text-ap-violet"
                     >
                       #{r.submission}

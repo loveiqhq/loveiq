@@ -2292,7 +2292,7 @@ export const TOOLS = [
     description:
       "The experiment registry: every A/B test with its hypothesis, the metric that decides " +
       "it, its dates and its outcome, plus the live readout of a running test whose arms are " +
-      "stamped, in the same words /admin's A/B overview uses (it never calls a winner the " +
+      "stamped, in plain words (it never calls a winner the " +
       "numbers cannot support), with how many people each arm needs before a difference in " +
       "purchases can be called (95% confidence, 80% power; the readout counts purchases " +
       "whatever metric decides the test) and the day that is reached at the pace so far. Also the " +
@@ -6976,7 +6976,7 @@ export const MCP_INSTRUCTIONS =
   "CHECK BEFORE SENDING: check_answer looks up every figure, date and quote in a draft answer " +
   "in the documents it cites. Run it on any answer with numbers, and fix or explain what it lists.\n\n" +
   "EXPERIMENTS: experiments is the A/B registry (running, planned, finished, with live readouts " +
-  "in /admin's words, the people each arm needs and when that is reached); record_experiment registers a test before it starts, with its hypothesis " +
+  "in plain words, the people each arm needs and when that is reached); record_experiment registers a test before it starts, with its hypothesis " +
   "and deciding metric, and records how it ended.\n\n" +
   "WHAT CUSTOMERS SAY: customer_feedback gives the report's chapter votes and comments and " +
   "the Trustpilot reviews in our mail, and names what it cannot see.\n\n" +

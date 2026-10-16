@@ -30,7 +30,7 @@ const PRIVATE_ROUTES = [
   "checkout/return",
   "login",
   "admin/login",
-  "admin/submissions",
+  "admin/ap",
 ];
 
 describe("legal pages are indexable", () => {

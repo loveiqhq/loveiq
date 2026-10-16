@@ -13,6 +13,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     "That link has already been used or has expired. Sign-in links work once only — request a new one below and open it in this same browser.",
   missing_code: "Invalid login link. Please request a new one.",
   no_email: "Unable to verify your email. Please try again.",
+  idle_timeout: "You were signed out after 30 minutes without activity. Sign in again below.",
 };
 
 function getInitialError(searchParams: URLSearchParams): string {
