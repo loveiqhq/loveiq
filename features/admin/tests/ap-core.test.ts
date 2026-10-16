@@ -14,7 +14,7 @@ import {
   periodRange,
   trendBuckets,
 } from "@features/admin/server/ap/filters";
-import { delta, fmt } from "@features/admin/server/ap/format";
+import { delta, deltaRel, fmt } from "@features/admin/server/ap/format";
 import {
   ageMatched,
   ALL,
@@ -40,6 +40,23 @@ describe("AP days", () => {
     expect(addDays("2026-10-01", -1)).toBe("2026-09-30");
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
     expect(shortDate("2026-09-21")).toBe("21 Sep");
+  });
+});
+
+describe("AP change as a percentage (deltaRel)", () => {
+  it("writes every change green or red as drawn, grey only when it rounds to nothing", () => {
+    expect(deltaRel(110, 100)).toEqual({ text: "+10.0%", tone: "good" });
+    // Under 1% still coloured, as the design's chg() colours it.
+    expect(deltaRel(11962, 11881)).toEqual({ text: "+0.7%", tone: "good" });
+    expect(deltaRel(100.04, 100)).toEqual({ text: "±0.0%", tone: "flat" });
+    expect(deltaRel(90, 100, "down")).toEqual({ text: "−10.0%", tone: "good" });
+    expect(deltaRel(110, 100, "down")).toEqual({ text: "+10.0%", tone: "bad" });
+    expect(deltaRel(110, 100, "either")).toEqual({ text: "+10.0%", tone: "flat" });
+    // From nothing: New; nothing to nothing: no change; unknown: no change line at all.
+    expect(deltaRel(5, 0)).toEqual({ text: "New", tone: "good" });
+    expect(deltaRel(0, 0)).toEqual({ text: "±0%", tone: "flat" });
+    expect(deltaRel(null, 100)).toBeNull();
+    expect(deltaRel(100, null)).toBeNull();
   });
 });
 

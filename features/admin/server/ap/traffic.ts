@@ -650,6 +650,30 @@ export function buildTraffic(input: {
       false
     );
 
+  // The rows added up, as drawn: a figure known for none of them stays unknown, and one
+  // missing from some (a row with no campaign tag has no spend of its own) adds what is known.
+  // Visitors and starts are those of all the rows' people (a row with no campaign tag has
+  // finishers but no visitors or starts of its own), so the caller gives them.
+  const sumRow = (
+    label: string,
+    people: SubFact[],
+    rows: PerfRow[],
+    reach: { visitors: number | null; starts: number | null }
+  ): PerfRow => {
+    const sum = (k: "spend" | "clicks" | "impressions") => {
+      const known = rows.map((r) => r.counts[k]).filter((v): v is number => v !== null);
+      return known.length ? round2(known.reduce((a, v) => a + v, 0)) : null;
+    };
+    return perfRow(
+      "all",
+      label,
+      "",
+      people,
+      { ...reach, spend: sum("spend"), clicks: sum("clicks"), impressions: sum("impressions") },
+      true
+    );
+  };
+
   // Channel
   {
     const rows = CHANNEL_ROWS.map(({ source, name, sub }) => {
@@ -745,7 +769,18 @@ export function buildTraffic(input: {
       label: "Campaign",
       blocked: null,
       rows,
-      total: null,
+      total:
+        rows.length > 1
+          ? sumRow("All campaigns", googleSubs, rows, {
+              visitors:
+                splitWhy || !sourceShare
+                  ? null
+                  : estimate(sourceShare.by.get("google_ads"), sourceShare.total),
+              starts: sourceSplitOk
+                ? startsWhere(facts, scope, (st) => st.known && classifySource(st) === "google_ads")
+                : null,
+            })
+          : null,
       notes: [
         ...(adsWhy ? [`Spend, clicks and impressions: ${adsWhy}`] : []),
         "Google Ads campaigns only: Meta's campaigns aren't read. Visitors are PostHog's split by the link's campaign tag.",
@@ -822,7 +857,25 @@ export function buildTraffic(input: {
       label: "Search term",
       blocked: null,
       rows,
-      total: null,
+      total:
+        rows.length > 1
+          ? sumRow("All search terms", googleSubs, rows, {
+              visitors:
+                splitWhy || !termShare
+                  ? null
+                  : estimate(
+                      [...termShare.by.values()].reduce((a, v) => a + v, 0),
+                      termShare.total
+                    ),
+              starts: sourceSplitOk
+                ? startsWhere(
+                    facts,
+                    scope,
+                    (st) => st.known && classifySource(st) === "google_ads" && !!st.term
+                  )
+                : null,
+            })
+          : null,
       notes: [
         "The keyword each Search ad matched (utm_term). Performance Max shows no keyword, so its clicks aren't here.",
         ...(adsWhy ? [`Spend, clicks and impressions: ${adsWhy}`] : []),
@@ -893,11 +946,8 @@ export function buildTraffic(input: {
     key: "assessment",
     label: "Assessment",
     blocked: null,
-    rows: [
-      { ...allRow("Assessment A"), key: "a", sub: "Live" },
-      perfRow("b", "Assessment B", "Not live", [], {}, false, true),
-      perfRow("c", "Assessment C", "Not live", [], {}, false, true),
-    ],
+    // The live one only, as drawn: B and C have no figures yet.
+    rows: [{ ...allRow("Assessment A"), key: "a", sub: "Live" }],
     total: null,
     notes: [],
   };
@@ -965,7 +1015,7 @@ export function buildTraffic(input: {
       label: "Device",
       blocked: null,
       rows,
-      total: null,
+      total: allRow("All devices"),
       notes: [
         "Ad spend isn't split by device here.",
         ...(audWhy ? [`Visitors per device: ${audWhy}.`] : []),
@@ -999,7 +1049,7 @@ export function buildTraffic(input: {
       label: "Country tier",
       blocked: null,
       rows,
-      total: null,
+      total: allRow("All country tiers"),
       notes: [
         "Ad spend isn't split by country tier, and survey starts don't record it.",
         "A finisher's tier comes from the price quote made when the report opens; a visitor's from the country PostHog placed the visit in.",
@@ -1033,7 +1083,7 @@ export function buildTraffic(input: {
           ? "PostHog could not tell new from returning finishers just now."
           : null,
       rows,
-      total: null,
+      total: allRow("All visitor types"),
       notes: [
         "New or returning comes from PostHog: whether it had seen the person more than half an hour before the visit. A finisher it never saw is in neither row.",
         "Ad spend and survey starts can't be split this way.",

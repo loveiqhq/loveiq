@@ -308,7 +308,14 @@ describe("the Dashboard as drawn", () => {
     expect(xLabels("max-sm:hidden")).toEqual(["Wk 28 Sep", "Wk 5 Oct"]);
     expect(within(card).getByText(/Survey submissions, per week/)).toBeTruthy();
     // The other charts keep their own grain.
-    expect(within(region("Survey completion")).getAllByText("7 Oct")).toHaveLength(2);
+    const completion = region("Survey completion");
+    expect(
+      [...completion.querySelectorAll("span.max-sm\\:hidden")].map((e) => e.textContent)
+    ).toEqual(DAYS);
+    // Each chart's figures as a table for a screen reader, its drawing hidden.
+    const table = within(card).getByRole("table", { name: "Survey submissions" });
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(card.querySelector("svg")!.closest("[aria-hidden='true']")).not.toBeNull();
   });
 
   it("draws axes as drawn: counts left, euros right, a floor of 100% for completion", () => {

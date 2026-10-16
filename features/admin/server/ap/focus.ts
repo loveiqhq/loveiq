@@ -67,6 +67,10 @@ export interface FocusChart {
   blocked: string | null;
   /** The left axis reaches at least this (a completion rate can pass 100% on a day). */
   leftMin?: number;
+  /** The groupings it can be read in, first the one it opens on; every one when unset. */
+  grains?: Grain[];
+  /** Said under the chart: what some of its points leave out. */
+  note?: string;
 }
 
 export interface AssessmentRow {
@@ -222,7 +226,14 @@ export function buildFocus(input: {
     title: string,
     subs: string,
     defs: Array<Omit<ChartSeries, "values"> & { pick: Pick }>,
-    opts: { wide?: boolean; blocked?: string | null; leftMin?: number; perGrain?: boolean } = {}
+    opts: {
+      wide?: boolean;
+      blocked?: string | null;
+      leftMin?: number;
+      perGrain?: boolean;
+      grains?: Grain[];
+      note?: string | null;
+    } = {}
   ): FocusChart => ({
     key,
     title,
@@ -233,6 +244,8 @@ export function buildFocus(input: {
     views: Object.fromEntries(GRAINS.map((g) => [g, view(g, defs)])) as Record<Grain, ChartView>,
     blocked: opts.blocked ?? null,
     ...(opts.leftMin !== undefined ? { leftMin: opts.leftMin } : {}),
+    ...(opts.grains ? { grains: opts.grains } : {}),
+    ...(opts.note ? { note: opts.note } : {}),
   });
   const tot = (b: { from: string; to: string }) => totals(facts, scope, b.from, b.to);
   const range = { from: facts.from, to: facts.to };
@@ -243,6 +256,11 @@ export function buildFocus(input: {
   const startsOk = (b: { from: string }) => startsComplete(b.from, today, scope);
   const startCvr: Pick = (b) => (startsOk(b) ? ratio(tot(b).starts, tot(b).visits) : null);
   const completion: Pick = (b) => (startsOk(b) ? ratio(tot(b).subs, tot(b).starts) : null);
+  // A range reaching back past what survey starts still hold: those points are left out (pick
+  // gives them none) and the chart says so, rather than giving up the points it has.
+  const startsNote = startsOk(range)
+    ? null
+    : "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out.";
   const preBlocked = PRE_PLANS.size
     ? null
     : "The Initial plan (the pre-unlock) isn't on sale yet, so nothing has been pre-unlocked.";
@@ -296,14 +314,7 @@ export function buildFocus(input: {
           pick: startCvr,
         },
       ],
-      {
-        blocked:
-          vB ??
-          tablet ??
-          (startsOk(range)
-            ? null
-            : "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out."),
-      }
+      { blocked: vB ?? tablet, note: startsNote }
     ),
     chart(
       "completion",
@@ -319,7 +330,7 @@ export function buildFocus(input: {
           pick: completion,
         },
       ],
-      { blocked: tablet, leftMin: 1 }
+      { blocked: tablet, leftMin: 1, note: startsNote }
     ),
     chart(
       "pre-unlock",
@@ -375,7 +386,7 @@ export function buildFocus(input: {
     chart(
       "per-user",
       "Assessments per user",
-      "Survey submissions ÷ unique people who finished",
+      "Survey submissions ÷ unique people who finished, per month",
       [
         {
           name: "Assessments per user",
@@ -386,7 +397,8 @@ export function buildFocus(input: {
           pick: (b) => (tablet ? null : ratio(tot(b).subs, users(b.from, b.to))),
         },
       ],
-      { blocked: tablet }
+      // Per month only, as drawn: on a day, nearly everyone is one person per submission.
+      { blocked: tablet, grains: ["month"], leftMin: 1.5 }
     ),
   ];
   // ---- the assessments

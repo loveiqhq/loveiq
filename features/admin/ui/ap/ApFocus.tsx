@@ -85,7 +85,8 @@ function runs(values: Array<number | null>, at: (i: number, v: number) => string
 }
 
 function ChartCard({ chart }: { chart: FocusChart }) {
-  const [grain, setGrain] = useState<Grain>("day");
+  const allowed = GRAINS.filter((g) => !chart.grains || chart.grains.includes(g.value));
+  const [grain, setGrain] = useState<Grain>(chart.grains?.[0] ?? "day");
   const id = `h-chart-${chart.key}`;
   const view = chart.views[grain];
   const n = view.labels.length;
@@ -142,7 +143,7 @@ function ChartCard({ chart }: { chart: FocusChart }) {
             {chart.blocked ? "" : " · thin dashed lines show the linear trend"}
           </span>
         </div>
-        {!chart.blocked && (
+        {!chart.blocked && allowed.length > 1 && (
           <label className="flex-none">
             <span className="sr-only">Group {chart.title} by</span>
             <select
@@ -150,7 +151,7 @@ function ChartCard({ chart }: { chart: FocusChart }) {
               onChange={(e) => setGrain(GRAINS.find((g) => g.value === e.target.value)!.value)}
               className="min-h-9 rounded-lg border border-ap-ink/[0.18] bg-white px-2.5 font-sans text-[13px] font-semibold text-ap-ink"
             >
-              {GRAINS.map((g) => (
+              {allowed.map((g) => (
                 <option key={g.value} value={g.value}>
                   {g.label}
                 </option>
@@ -196,7 +197,38 @@ function ChartCard({ chart }: { chart: FocusChart }) {
               );
             })}
           </div>
+          {/* The figures behind the lines, for a screen reader; the drawing itself is hidden. */}
+          <table className="sr-only">
+            <caption>{chart.title}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Period</th>
+                {view.series.map((s) => (
+                  <th key={s.name} scope="col">
+                    {s.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {view.labels.map((label, i) => (
+                <tr key={`${label}-${i}`}>
+                  <th scope="row">{label}</th>
+                  {view.series.map((s) => (
+                    <td key={s.name}>
+                      {fmt(
+                        s.unit,
+                        s.values[i] ?? null,
+                        s.unit === "eur" || s.unit === "ratio" ? 2 : undefined
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <div
+            aria-hidden="true"
             className="relative mt-2 border-b border-ap-line"
             style={{ height, marginLeft: 48, marginRight }}
           >
@@ -284,7 +316,7 @@ function ChartCard({ chart }: { chart: FocusChart }) {
               );
             })}
           </div>
-          <div className="relative h-4" style={{ marginLeft: 48, marginRight }}>
+          <div aria-hidden="true" className="relative h-4" style={{ marginLeft: 48, marginRight }}>
             {[
               { list: ticks(7), only: "max-sm:hidden" },
               { list: ticks(3), only: "sm:hidden" },
@@ -303,6 +335,7 @@ function ChartCard({ chart }: { chart: FocusChart }) {
               ))
             )}
           </div>
+          {chart.note && <p className="m-0 text-xs leading-relaxed text-ap-muted">{chart.note}</p>}
         </>
       )}
     </section>

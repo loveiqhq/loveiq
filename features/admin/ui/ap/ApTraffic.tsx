@@ -188,11 +188,12 @@ export default function ApTraffic() {
           <ChannelTrendSection trend={data.trend} />
           <Performance table={data.breakdowns[bd]} bd={bd} onBd={setBd} a={a} />
           <Leakage table={data.breakdowns[bd]} a={a} />
+          {/* Fourth, as the section bar lists it (the artboard draws it last). */}
+          <Quality quality={data.quality} />
           <Intent intent={data.intent} />
           <Cohorts cohorts={data.cohorts} />
           <Experiments experiments={data.experiments} />
           <Audience dims={data.audience.dims} />
-          <Quality quality={data.quality} />
         </Busy>
       )}
     </>
@@ -453,9 +454,9 @@ function Scorecard({
         <Note key={w}>{w}</Note>
       ))}
       <div className="flex flex-wrap items-end gap-3 border-t border-ap-line pt-3.5">
-        <span className="basis-full text-[15px] font-bold text-ap-ink">
+        <h3 className="m-0 basis-full text-[15px] font-bold text-ap-ink">
           Contribution assumptions
-        </span>
+        </h3>
         {FIELDS.map((f) => (
           <label
             key={f.key}
@@ -1086,10 +1087,10 @@ function RankChart({
   const zero = (-lo / span) * 100;
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[15px] font-bold text-ap-ink">
+      <h3 className="m-0 text-[15px] font-bold text-ap-ink">
         {col.label} by {lower}
         {col.better === "lo" ? " · lower is better" : ""}
-      </span>
+      </h3>
       {shown.length === 0 && (
         <p className="m-0 text-[13px] text-ap-muted">
           No {lower} has a figure for {col.label} in this range.
@@ -1624,7 +1625,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
       <div className="flex flex-col gap-6">
         <div className="flex min-w-0 max-w-[640px] flex-col gap-2.5">
           <div className="flex flex-col gap-1">
-            <span className="text-[15px] font-bold text-ap-ink">{d.title} · all sources</span>
+            <h3 className="m-0 text-[15px] font-bold text-ap-ink">{d.title} · all sources</h3>
             <span className="text-[13px] text-ap-muted">{d.base}</span>
           </div>
           {d.values.map((v, i) => (
@@ -1647,7 +1648,7 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
 
         <div className="flex min-w-0 flex-col gap-2.5 border-t border-ap-line pt-4">
           <div className="flex flex-col gap-1">
-            <span className="text-[15px] font-bold text-ap-ink">{d.title} by source</span>
+            <h3 className="m-0 text-[15px] font-bold text-ap-ink">{d.title} by source</h3>
             <span className="text-[13px] text-ap-muted">
               Share of each source&apos;s people. Green: over-represented against all sources, red:
               under-represented.
@@ -1702,9 +1703,9 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
 
       <div className="flex flex-col gap-2.5 border-t border-ap-line pt-4">
         <div className="flex flex-col gap-1">
-          <span className="text-[15px] font-bold text-ap-ink">
+          <h3 className="m-0 text-[15px] font-bold text-ap-ink">
             How each {d.title.toLowerCase()} group performs
-          </span>
+          </h3>
           <span className="text-[13px] text-ap-muted">
             Across all sources: does the group finish the survey, unlock and read?
           </span>

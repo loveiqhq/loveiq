@@ -108,7 +108,7 @@ export function delta(
 /**
  * The change as the design's tiles write it since 16 Oct 2026: always relative ("+5.8%",
  * "−7.7%"), rates and times too. From nothing to something is "New"; nothing to nothing is
- * no change. Under 1% reads flat (grey): noise on these volumes.
+ * no change. Green or red however small, as the design colours them; grey only at ±0.0%.
  */
 export function deltaRel(
   now: number | null,
@@ -126,8 +126,10 @@ export function deltaRel(
         : "bad";
   if (before === 0) return now === 0 ? { text: "±0%", tone: "flat" } : { text: "New", tone };
   const rel = (diff / Math.abs(before)) * 100;
-  const sign = rel > 0 ? "+" : rel < 0 ? MINUS : "±";
-  return { text: `${sign}${Math.abs(rel).toFixed(1)}%`, tone: Math.abs(rel) < 1 ? "flat" : tone };
+  // Every change in green or red, as drawn; grey only when it rounds to nothing.
+  const none = Math.abs(rel) < 0.05;
+  const sign = none ? "±" : rel > 0 ? "+" : MINUS;
+  return { text: `${sign}${Math.abs(rel).toFixed(1)}%`, tone: none ? "flat" : tone };
 }
 
 /**

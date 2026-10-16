@@ -323,7 +323,7 @@ export function buildPayment(input: {
       "Pre-unlock CVR",
       "pct",
       preOnSale ? ratio(pre.length, subs.length) : null,
-      `of ${count(subs.length)} submissions`,
+      preOnSale ? `of ${count(subs.length)} submissions` : "Initial plan · not on sale yet",
       preOnSale
         ? sparkOf((a, b) =>
             ratio(salesBetween(a, b).filter(isPre).length, subsBetween(a, b).length)
@@ -584,6 +584,16 @@ export function buildPayment(input: {
       };
     });
   };
+  // Pricing 2.x priced each visitor: the arm's base price is the range its quotes showed.
+  const quotedRange = (arm: string) => {
+    const prices = facts.quotes
+      .filter((q) => q.priceArm === arm && q.price !== null && q.price > 0 && inScope(q, scope))
+      .map((q) => q.price!);
+    if (!prices.length) return "personalised";
+    const lo = Math.min(...prices);
+    const hi = Math.max(...prices);
+    return `€${lo.toFixed(2)}${hi > lo ? `–${hi.toFixed(2)}` : ""} personalised`;
+  };
   const PRICING_2_END = "2026-08-31";
   const pricingArms: PricingArmRow[] = [
     ...armRows(
@@ -591,8 +601,8 @@ export function buildPayment(input: {
       { from: "2026-05-01", to: PRICING_2_END },
       "May – Aug 2026 · ended 31 Aug",
       [
-        { arm: "A", name: "A", basePrice: () => "personalised" },
-        { arm: "B", name: "B", basePrice: () => "personalised" },
+        { arm: "A", name: "A", basePrice: () => quotedRange("A") },
+        { arm: "B", name: "B", basePrice: () => quotedRange("B") },
       ],
       null
     ),

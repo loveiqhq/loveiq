@@ -481,30 +481,31 @@ const breakDownBy = (value: string) =>
 const clean = () => expect(document.body.innerHTML).not.toMatch(/NaN|Infinity|undefined/);
 
 describe("the Traffic page as drawn", () => {
-  it("lays the sections out in the design's order, with their headings and the section nav", () => {
+  it("lays the sections out in the section bar's order, with their headings and the section nav", () => {
     render(<ApTraffic />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Traffic");
+    // Cost vs quality fourth, as the section bar lists it (the artboard drew it last).
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "Executive scorecard",
       "Traffic and submissions by channel",
       "Performance by channel",
       "Funnel leakage by channel",
+      "Cost vs quality",
       "Buyers vs curiosity clicks",
       "Cohorts by acquisition source",
       "Experiments",
       "Audience by source",
-      "Cost vs quality",
     ]);
     expect([...document.querySelectorAll("section[id]")].map((s) => s.id)).toEqual([
       "scorecard",
       "channel-trend",
       "performance",
       "leakage",
+      "quality",
       "intent",
       "cohorts",
       "experiments",
       "audience",
-      "quality",
     ]);
     const nav = within(screen.getByRole("navigation", { name: "Traffic sections" }));
     expect(

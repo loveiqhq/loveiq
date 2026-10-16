@@ -799,9 +799,10 @@ function liftCell(a: PricingArmRow): Cell {
   if (a.aovLift === null) return { v: EMPTY, sub: a.aovWhy ?? "" };
   return {
     v: `${a.aovLift > 0 ? "+" : ""}${fmt("pct", a.aovLift, 1)}`,
+    // The verdict beside the confidence, as drawn: 95% or more is credible, as on Traffic.
     sub:
       a.aovConfidence !== null
-        ? `${Math.round(a.aovConfidence * 100)}% confidence`
+        ? `${Math.round(a.aovConfidence * 100)}% confidence · ${a.aovConfidence >= 0.95 ? "credible" : "not significant yet"}`
         : (a.aovWhy ?? ""),
     weight: "bold",
     shade: a.aovLift > 0 ? "good" : a.aovLift < 0 ? "bad" : "plain",

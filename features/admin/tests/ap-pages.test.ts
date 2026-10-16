@@ -813,6 +813,31 @@ describe("visitors per source: a sample split, the totals live", () => {
 });
 
 describe("blanks say why, and notes say what the numbers are", () => {
+  it("Dashboard: a long range keeps the start-rate chart's later points and says why earlier ones are out", () => {
+    const long = parseFilters({ period: "custom", from: "2026-07-01", to: "2026-10-07" }, TODAY);
+    const f = buildFocus({
+      facts: factsFixture({ from: "2026-07-01", to: "2026-10-07" }),
+      previous: null,
+      ad,
+      filters: long,
+      today: TODAY,
+      now,
+      ratings: null,
+    });
+    const chart = (k: string) => f.charts.find((c) => c.key === k)!;
+    for (const k of ["start-cvr", "completion"]) {
+      expect(chart(k).blocked).toBeNull();
+      expect(chart(k).note).toBe(
+        "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out."
+      );
+    }
+    // Months before 18 Sep have no point; October's has one.
+    const months = chart("start-cvr").views.month;
+    expect(months.series[0]!.values.slice(0, 2)).toEqual([null, null]);
+    // Assessments per user reads per month only, as drawn.
+    expect(chart("per-user")).toMatchObject({ grains: ["month"], leftMin: 1.5 });
+  });
+
   const focus = (over: Partial<Parameters<typeof buildFocus>[0]> = {}) =>
     buildFocus({ facts, previous: null, ad, filters, today: TODAY, now, ratings: null, ...over });
   const dashboard = (over: Partial<Parameters<typeof buildDashboard>[0]> = {}) =>

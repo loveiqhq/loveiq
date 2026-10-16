@@ -460,7 +460,7 @@ describe("the Payment page as drawn", () => {
       "€19.15",
       "18%",
       "—",
-      "+38.6%82% confidence",
+      "+38.6%82% confidence · not significant yet",
     ]);
     expect(a3!.slice(0, 3)).toEqual([
       "Pricing 3.0Live · from 9 Oct 2026",

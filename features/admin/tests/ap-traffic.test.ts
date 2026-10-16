@@ -126,6 +126,28 @@ describe("Traffic page builder", () => {
     expect(p.quality.why).toBeNull();
   });
 
+  it("totals: the Google Ads rows added up, and everyone for device, tier and visitor type", () => {
+    const p = traffic();
+    // Both campaigns: €70 + €30, 35 + 15 clicks; the three Google Ads finishers.
+    // Its starts are every Google Ads start (a finisher with no campaign tag included), not the
+    // rows' starts added up.
+    expect(p.breakdowns.campaign.total).toMatchObject({
+      name: "All campaigns",
+      counts: { spend: 100, clicks: 50, impressions: 900, completes: 3, payers: 1, starts: 3 },
+    });
+    // One keyword row only: no total row.
+    expect(p.breakdowns.keyword.total).toBeNull();
+    for (const [k, name] of [
+      ["device", "All devices"],
+      ["tier", "All country tiers"],
+      ["visitor", "All visitor types"],
+    ] as const) {
+      expect(p.breakdowns[k].total).toMatchObject({ name, counts: { completes: 4 } });
+    }
+    // The live assessment only.
+    expect(p.breakdowns.assessment.rows.map((r) => r.name)).toEqual(["Assessment A"]);
+  });
+
   it("under a filter ad spend can't follow, leaves the Ads API's figures out and says why", () => {
     const why = "Ad spend can't be split by device here.";
     const p = traffic({ filters: { ...filters, device: "phone" } });
