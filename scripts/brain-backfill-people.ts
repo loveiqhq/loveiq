@@ -12,7 +12,10 @@
  * phone export that exists on one laptop — so this backfills in place instead.
  *
  * Safe to run against production, and safe to re-run:
- *   - It only reads rows that LACK `meta.people`, so a second run does nothing.
+ *   - It only reads rows that LACK `meta.people`, so a second run does nothing. With
+ *     `--all` it recomputes every row and writes only where the names differ: what a new
+ *     colleague on the registry, or a new spelling it learns, needs, because a row that
+ *     already names somebody else would otherwise never gain them.
  *   - It writes only when the registry resolves a name; an unresolvable author
  *     (a vendor, a shared mailbox, "someone") is left alone rather than stamped empty.
  *   - It does not touch `updated_at`, so source sweeps are unaffected.
@@ -20,6 +23,7 @@
  *
  *   npx tsx scripts/brain-backfill-people.ts --dry
  *   npx tsx scripts/brain-backfill-people.ts
+ *   npx tsx scripts/brain-backfill-people.ts --all --dry
  */
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { loadPeople, peopleIn } from "@features/brain/server/people";
@@ -28,6 +32,7 @@ const PAGE = 500;
 
 async function main() {
   const dry = process.argv.includes("--dry");
+  const all = process.argv.includes("--all");
   const byAlias = await loadPeople();
   // A registry that cannot be read must stop the run, not quietly stamp nothing.
   if (!byAlias) {
@@ -39,12 +44,13 @@ async function main() {
   const scanned: Record<string, number> = {};
   const written: Record<string, number> = {};
   let failures = 0;
+  let moved = 0;
 
   for (const source of ["whatsapp", "slack", "drive", "gmail", "notion", "calendar", "decision"]) {
     let offset = 0;
     for (;;) {
       const res = await supabaseFetch(
-        `/rest/v1/brain_chunk?select=id,meta&source=eq.${source}&limit=${PAGE}&offset=${offset}`
+        `/rest/v1/brain_chunk?select=id,meta,updated_at&source=eq.${source}&order=id.asc&limit=${PAGE}&offset=${offset}`
       );
       if (!res.ok) {
         console.error(`  ${source}: read failed ${res.status}`);
@@ -54,24 +60,37 @@ async function main() {
       const rows = (await res.json()) as Array<{
         id: number;
         meta: Record<string, unknown> | null;
+        updated_at: string;
       }>;
       if (rows.length === 0) break;
 
       for (const row of rows) {
         const meta = row.meta ?? {};
-        if (meta.people) continue;
+        if (meta.people && !all) continue;
         scanned[source] = (scanned[source] ?? 0) + 1;
         const people = peopleIn(meta, byAlias);
         if (!people) continue;
+        const had = Array.isArray(meta.people) ? [...(meta.people as string[])].sort() : [];
+        if (had.length === people.length && had.every((n, i) => n === people[i])) continue;
         if (!dry) {
-          // PATCH replaces the whole jsonb column, so the existing meta is spread back in.
-          const put = await supabaseFetch(`/rest/v1/brain_chunk?id=eq.${row.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-            body: JSON.stringify({ meta: { ...meta, people } }),
-          });
+          // PATCH replaces the whole jsonb column, so the existing meta is spread back in, and
+          // only if the row is unchanged since it was read: an ingester writing it meanwhile
+          // (its meta is newer, and it resolved people itself) must not be overwritten with
+          // the copy read here. Every write and touch moves updated_at.
+          const put = await supabaseFetch(
+            `/rest/v1/brain_chunk?id=eq.${row.id}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=id`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+              body: JSON.stringify({ meta: { ...meta, people } }),
+            }
+          );
           if (!put.ok) {
             failures++;
+            continue;
+          }
+          if (((await put.json().catch(() => [])) as unknown[]).length === 0) {
+            moved++;
             continue;
           }
         }
@@ -84,13 +103,15 @@ async function main() {
     if (scanned[source]) {
       console.log(
         `  ${source.padEnd(9)} ${String(written[source] ?? 0).padStart(5)} of ${String(scanned[source]).padStart(5)} ` +
-          `chunks without \`people\` resolved${dry ? " (dry run, nothing written)" : ""}`
+          `chunks ${all ? "whose \`people\` changed" : "without \`people\` resolved"}${dry ? " (dry run, nothing written)" : ""}`
       );
     }
   }
 
   const total = Object.values(written).reduce((a, b) => a + b, 0);
   console.log(`\n  ${dry ? "would write" : "wrote"} ${total} row(s)`);
+  if (moved)
+    console.log(`  ${moved} row(s) changed while this ran and were left alone: run it again`);
   if (failures > 0) {
     console.error(`  ${failures} request(s) failed — the backfill is incomplete, re-run it`);
     process.exitCode = 1;

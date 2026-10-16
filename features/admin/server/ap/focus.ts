@@ -5,7 +5,7 @@
  */
 import type { AdCost } from "@features/brain/server/ingest/analytics";
 
-import { addDays } from "./days";
+import { addDays, shortDate } from "./days";
 import { reportingDay } from "@shared/time/reporting-day";
 
 import { FULL_PLANS, PRE_PLANS, type Facts } from "./facts";
@@ -21,6 +21,7 @@ import {
 import { linearFit, type Unit } from "./format";
 import { head, readMeanMs, readMedianMs, type PageHead, type Tile } from "./common";
 import {
+  draftsKeptFrom,
   EVENTS_COMPLETE_FROM,
   launched,
   ratio,
@@ -53,6 +54,8 @@ export interface ChartSeries {
 export interface ChartView {
   /** "15 Sep", "14 Sep" (a week's Monday), "Sep 2026". */
   labels: string[];
+  /** Each point's first and last day, for its read-out on hover. */
+  periods?: Array<{ from: string; to: string }>;
   series: ChartSeries[];
 }
 
@@ -229,6 +232,7 @@ export function buildFocus(input: {
     const bs = viewBuckets(facts.from, facts.to, grain);
     return {
       labels: bs.map((b) => b.label),
+      periods: bs.map((b) => ({ from: b.from, to: b.to })),
       series: defs.map(({ pick, ...d }) => ({ ...d, values: bs.map((b) => pick(b)) })),
     };
   };
@@ -268,10 +272,18 @@ export function buildFocus(input: {
   const startCvr: Pick = (b) => (startsOk(b) ? ratio(tot(b).starts, tot(b).visits) : null);
   const completion: Pick = (b) => (startsOk(b) ? ratio(tot(b).subs, tot(b).starts) : null);
   // A range reaching back past what survey starts still hold: those points are left out (pick
-  // gives them none) and the chart says so, rather than giving up the points it has.
+  // gives them none) and the chart says from when, rather than giving up the points it has.
+  const keptFrom =
+    scope.source === "all" && EVENTS_COMPLETE_FROM < draftsKeptFrom(today)
+      ? EVENTS_COMPLETE_FROM
+      : draftsKeptFrom(today);
   const startsNote = startsOk(range)
     ? null
-    : "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out.";
+    : `Survey starts before ${shortDate(keptFrom)} are left out: ${
+        scope.source === "all"
+          ? "until 18 Sep 2026 a start was kept only with its draft"
+          : "by source, a start is known only from its draft"
+      }, and drafts are cleared after 30 days.`;
   const preBlocked = PRE_PLANS.size
     ? null
     : "The Initial plan (the pre-unlock) isn't on sale yet, so nothing has been pre-unlocked.";

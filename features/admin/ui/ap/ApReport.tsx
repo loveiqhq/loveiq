@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
-import { delta, deltaRel, fmt, type Tone } from "@features/admin/server/ap/format";
+import { delta, deltaRel, EMPTY, fmt, type Tone } from "@features/admin/server/ap/format";
 import type {
   ChangeBox,
   ReportPayload,
@@ -14,6 +14,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { bucketTitles, IndexHover, ROW_HOVER, useRowTip } from "./hover";
 import {
   AllTraffic,
   Bar,
@@ -22,17 +23,18 @@ import {
   Card,
   Failed,
   FilterIcon,
+  ICON_BTN,
   KpiTileV2,
   Loading,
   NotTracked,
   PageHeader,
   Pills,
+  RangeLine,
   SectionHead,
   SectionNav,
   SortIcon,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -62,8 +64,8 @@ const TONE: Record<Tone, string> = {
 };
 
 /** The design's headline tile (KpiTileV2), at the tile's own decimals. */
-function ReportKpiTile({ tile }: { tile: ReportTile }) {
-  return <KpiTileV2 tile={tile} digits={tile.digits} />;
+function ReportKpiTile({ tile, range }: { tile: ReportTile; range: { from: string; to: string } }) {
+  return <KpiTileV2 tile={tile} digits={tile.digits} titles={bucketTitles(range.from, range.to)} />;
 }
 
 /**
@@ -152,7 +154,7 @@ function Th<K extends string>({
           type="button"
           aria-label={`Sort by ${label}`}
           onClick={() => onSort(col)}
-          className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${dir ? "text-ap-violet" : "text-ap-muted"}`}
+          className={`${ICON_BTN} ${dir ? "text-ap-violet" : "text-ap-muted"}`}
         >
           <SortIcon dir={dir} />
         </button>
@@ -195,7 +197,7 @@ function useColumnFilters<T, F extends string>(
       aria-label={`Filter ${labels[k]}`}
       aria-expanded={open === k}
       onClick={() => setOpen(open === k ? null : k)}
-      className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
+      className={`${ICON_BTN} ${open === k || picked[k] ? "text-ap-violet" : "text-ap-muted"}`}
     >
       <FilterIcon />
     </button>
@@ -485,7 +487,7 @@ export default function ApReport() {
           <RangeLine data={data} sources="Production database and PostHog" />
           <TileGrid min={180}>
             {data.tiles.map((t) => (
-              <ReportKpiTile key={t.key} tile={t} />
+              <ReportKpiTile key={t.key} tile={t} range={data.range} />
             ))}
           </TileGrid>
           <WizardSection data={data} />
@@ -532,7 +534,7 @@ function WizardSection({ data }: { data: ReportPayload }) {
       <SectionHead id="h-rwiz" title="Intro wizard" />
       <TileGrid min={200}>
         {w.tiles.map((t) => (
-          <ReportKpiTile key={t.key} tile={t} />
+          <ReportKpiTile key={t.key} tile={t} range={data.range} />
         ))}
       </TileGrid>
       <div className="overflow-x-auto rounded-[14px] border border-ap-line">
@@ -659,11 +661,11 @@ function TimeSection({ data }: { data: ReportPayload }) {
           Benchmark · all reports
         </span>
       </div>
-      <div className="flex h-[150px] items-end gap-2.5 border-b border-ap-line">
+      <div className="relative flex h-[150px] items-end border-b border-ap-line">
         {t.buckets.map((b) => (
           <div
             key={b.label}
-            className="relative flex h-full flex-1 flex-col items-center justify-end gap-1"
+            className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 px-[5px]"
           >
             <span className="text-xs font-bold">
               {fmt("pct", b.share, 0)}{" "}
@@ -680,10 +682,44 @@ function TimeSection({ data }: { data: ReportPayload }) {
             />
           </div>
         ))}
+        <IndexHover
+          xs={t.buckets.map((_, i) => ((i + 0.5) / t.buckets.length) * 100)}
+          label="Share of readers by total active reading time"
+          band={(i) => ({ left: (i / t.buckets.length) * 100, width: 100 / t.buckets.length })}
+          tip={(i) => {
+            const b = t.buckets[i]!;
+            return {
+              title: `${b.label}${b.label.includes("min") ? "" : " min"} of reading`,
+              sub: "Readers’ total active reading time",
+              rows: [
+                {
+                  label: "This report",
+                  value: fmt("pct", b.share, 1),
+                  color: "#795fc8",
+                  mark: "square",
+                },
+                {
+                  label: "Benchmark · all reports",
+                  value: fmt("pct", b.bench, 1),
+                  color: "#161021",
+                  mark: "dashed",
+                },
+                {
+                  label: "Difference",
+                  value: delta("pct", b.share, b.bench, "either")?.text ?? EMPTY,
+                  strong: true,
+                },
+              ],
+            };
+          }}
+        />
       </div>
-      <div className="flex gap-2.5">
+      <div className="flex">
         {t.buckets.map((b) => (
-          <span key={b.label} className="flex-1 text-center text-[11px] text-ap-muted">
+          <span
+            key={b.label}
+            className="min-w-0 flex-1 px-[5px] text-center text-[11px] text-ap-muted"
+          >
             {b.label}
           </span>
         ))}
@@ -781,38 +817,71 @@ function DepthChart({ data }: { data: ReportPayload }) {
         </NotTracked>
       ) : (
         <>
-          <div
-            role="img"
-            aria-label={`Readers by how far they got: ${d.bands.map((b, i) => `${b.label} ${totals[i]}`).join(", ")}`}
-            className="flex h-[260px] items-end gap-4 border-b border-ap-line px-1"
-          >
-            {d.bands.map((b, i) => (
-              <div key={b.label} className="flex h-full flex-1 flex-col justify-end gap-1.5">
-                <span className="text-center text-[15px] font-bold tabular-nums text-ap-ink">
-                  {totals[i]}
-                </span>
-                <div className="flex flex-col gap-0.5">
-                  {[...b.counts.keys()]
-                    .reverse()
-                    .filter((g) => b.counts[g]! > 0)
-                    .map((g) => (
-                      <span
-                        key={g}
-                        className="block rounded"
-                        style={{
-                          height: `${Math.max(3, Math.round((b.counts[g]! / top) * 200))}px`,
-                          background: DEPTH_COLOURS[g],
-                          ...(g === 4 ? { border: "1px dashed #9c95a3" } : {}),
-                        }}
-                      />
-                    ))}
+          <div className="relative h-[260px] border-b border-ap-line">
+            <div
+              role="img"
+              aria-label={`Readers by how far they got: ${d.bands.map((b, i) => `${b.label} ${totals[i]}`).join(", ")}`}
+              className="absolute inset-0 flex items-end"
+            >
+              {d.bands.map((b, i) => (
+                <div
+                  key={b.label}
+                  className="flex h-full min-w-0 flex-1 flex-col justify-end gap-1.5 px-2"
+                >
+                  <span className="text-center text-[15px] font-bold tabular-nums text-ap-ink">
+                    {totals[i]}
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    {[...b.counts.keys()]
+                      .reverse()
+                      .filter((g) => b.counts[g]! > 0)
+                      .map((g) => (
+                        <span
+                          key={g}
+                          className="block rounded"
+                          style={{
+                            height: `${Math.max(3, Math.round((b.counts[g]! / top) * 200))}px`,
+                            background: DEPTH_COLOURS[g],
+                            ...(g === 4 ? { border: "1px dashed #9c95a3" } : {}),
+                          }}
+                        />
+                      ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <IndexHover
+              xs={d.bands.map((_, i) => ((i + 0.5) / d.bands.length) * 100)}
+              label="How far into the report readers got"
+              band={(i) => ({ left: (i / d.bands.length) * 100, width: 100 / d.bands.length })}
+              tip={(i) => {
+                const b = d.bands[i]!;
+                const total = totals[i] ?? 0;
+                return {
+                  title: `${b.label}${b.label.endsWith("%") ? "" : "%"} of the report`,
+                  sub: "Readers whose deepest chapter is in this band",
+                  // Top first, as the column stacks them.
+                  rows: [
+                    ...[...shown].reverse().map(({ g, i: k }) => {
+                      const c = b.counts[k] ?? 0;
+                      return {
+                        label: g,
+                        value: `${fmt("count", c)} · ${total ? fmt("pct", c / total, 1) : EMPTY}`,
+                        color: DEPTH_COLOURS[k],
+                        ...(k === 4 ? { outline: "#9c95a3" } : {}),
+                        mark: "square" as const,
+                        muted: c === 0,
+                      };
+                    }),
+                    { label: "Readers", value: fmt("count", total), strong: true },
+                  ],
+                };
+              }}
+            />
           </div>
-          <div className="flex gap-4 px-1">
+          <div className="flex">
             {d.bands.map((b) => (
-              <span key={b.label} className="flex-1 text-center text-xs text-ap-muted">
+              <span key={b.label} className="min-w-0 flex-1 px-2 text-center text-xs text-ap-muted">
                 {b.label}
               </span>
             ))}
@@ -856,8 +925,11 @@ function TimeSplit({
   const pick = (r: TimeGroup) =>
     stat === "median" ? { v: r.medianMs, b: r.benchMedianMs } : { v: r.ms, b: r.benchMs };
   const max = Math.max(1, ...rows.map((r) => Math.max(pick(r).v ?? 0, pick(r).b ?? 0)));
+  const rowTip = useRowTip();
+  const word = stat === "median" ? "Median" : "Average";
   return (
     <div className="flex flex-col gap-2.5">
+      {rowTip.card}
       <span className="text-[13px] font-bold text-ap-body">
         {stat === "median" ? "Median" : "Avg."} total time by {title}
       </span>
@@ -868,10 +940,34 @@ function TimeSplit({
         return (
           <div
             key={r.label}
-            className="grid items-center gap-2.5 text-[13px]"
+            className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
             style={{ gridTemplateColumns: "110px minmax(0,1fr) 48px 56px" }}
+            {...rowTip.bind(() => ({
+              title: r.label,
+              sub: `${word} total reading time`,
+              rows: [
+                {
+                  label: "This report",
+                  value: fmt("mmss", v),
+                  color: GROUP_COLOURS[i % GROUP_COLOURS.length],
+                  mark: "square",
+                  muted: v === null,
+                },
+                {
+                  label: "All reports",
+                  value: fmt("mmss", b),
+                  color: "#161021",
+                  mark: "line",
+                  muted: b === null,
+                },
+                { label: "Difference", value: d?.text ?? EMPTY, strong: d !== null, muted: !d },
+              ],
+            }))}
           >
-            <span className="font-semibold">{r.label}</span>
+            <span className="font-semibold">
+              {r.label}
+              {b !== null && <span className="sr-only">, all reports {fmt("mmss", b)}</span>}
+            </span>
             <span className="relative h-3.5 rounded-full bg-ap-ground">
               <span
                 className="absolute inset-y-0 left-0 rounded-full"
@@ -941,6 +1037,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
   const topSource = Math.max(0.0001, ...(r.sources?.ok ? r.sources.value : []).map((s) => s.share));
   const [sort, setSort] = useState<Sort<CampaignKey>>(null);
   const head = { sort, onSort: (k: CampaignKey) => setSort((s) => nextSort(s, k)) };
+  const sourceTip = useRowTip();
   const filters = useColumnFilters(r.campaigns, CAMPAIGN_FILTERS, campaignValue);
   const campaigns = sortRows(
     filters.matches,
@@ -992,7 +1089,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
           {r.days.map((d) => (
             <div
               key={d.label}
-              className="grid items-center gap-2.5 text-[13px]"
+              className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
               style={{ gridTemplateColumns: "110px minmax(0,1fr) 56px 80px" }}
             >
               <span>{d.label}</span>
@@ -1015,6 +1112,7 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         <div className="flex flex-col gap-2.5">
           <span className="flex flex-col gap-1">
             <span className="text-[15px] font-bold text-ap-ink">What brought readers back</span>
+            {sourceTip.card}
             <span className="text-[13px] text-ap-muted">
               Share of the return visits PostHog saw, by how each one arrived
             </span>
@@ -1029,10 +1127,26 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
             r.sources.value.map((s) => (
               <div
                 key={s.source}
-                className="grid items-center gap-2.5 text-[13px]"
+                className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
                 style={{ gridTemplateColumns: "180px minmax(0,1fr) 56px" }}
+                {...sourceTip.bind(() => ({
+                  title: s.source,
+                  sub: "Return visits PostHog saw",
+                  rows: [
+                    {
+                      label: "Share",
+                      value: fmt("pct", s.share, 1),
+                      color: SOURCE_COLOURS[s.source] ?? "#795fc8",
+                      mark: "square",
+                    },
+                    { label: "Return visits", value: fmt("count", s.sessions), strong: true },
+                  ],
+                }))}
               >
-                <span>{s.source}</span>
+                <span>
+                  {s.source}
+                  <span className="sr-only">, {fmt("count", s.sessions)} return visits</span>
+                </span>
                 <Bar
                   pct={s.share / topSource}
                   color={SOURCE_COLOURS[s.source] ?? "#795fc8"}

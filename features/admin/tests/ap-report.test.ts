@@ -1119,7 +1119,8 @@ describe("report page, on screen", () => {
     const age = () => within(screen.getByText(/total time by age$/).parentElement!);
     expect(screen.getByText("Median total time by age")).toBeInTheDocument();
     const same = age().getByText("55+").parentElement!;
-    expect(same.textContent).toBe("55+2:10±0:00.0");
+    // The all-reports figure the tick draws is read to a screen reader in the row's name.
+    expect(same.textContent).toBe("55+, all reports 2:102:10±0:00.0");
     expect(same.lastElementChild).toHaveClass("text-ap-muted");
     expect(age().getByText("18–24").parentElement!.textContent).toBe("18–24——");
     expect(age().getByText("Not stated")).toBeInTheDocument();
@@ -1129,7 +1130,9 @@ describe("report page, on screen", () => {
     expect(group.getByRole("button", { name: "Average" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Avg. total time by age")).toBeInTheDocument();
     // (1:40 + 6:40 + 2:10) / 3 = 3:30.
-    expect(age().getByText("55+").parentElement!.textContent).toBe("55+3:30±0:00.0");
+    expect(age().getByText("55+").parentElement!.textContent).toBe(
+      "55+, all reports 3:303:30±0:00.0"
+    );
     // The boxes: no period before, so a grey dash where the change would stand.
     const box = screen.getByText("Avg. total time").parentElement!;
     expect(box.textContent).toBe("Avg. total time3:30—");
@@ -1187,6 +1190,41 @@ describe("report page, on screen", () => {
     expect(
       screen.getByRole("img", { name: /^Readers by how far they got: 0–9% \d, / })
     ).toBeInTheDocument();
+
+    // Hovering a column reads its groups: the last band's two readers, one per group.
+    if (!("PointerEvent" in window)) {
+      class PE extends MouseEvent {
+        pointerType: string;
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerType = init.pointerType ?? "mouse";
+        }
+      }
+      vi.stubGlobal("PointerEvent", PE);
+    }
+    const box = screen.getByRole("group", { name: /^How far into the report readers got\./ });
+    vi.spyOn(box, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 600,
+      bottom: 260,
+      width: 600,
+      height: 260,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.pointerMove(box, { clientX: 560, clientY: 100, pointerType: "mouse" });
+    const card = document.querySelector("[data-ap-tip]")!;
+    expect(card).toHaveTextContent("95–100% of the report");
+    expect(card).toHaveTextContent("10 min+1 · 50.0%");
+    expect(card).toHaveTextContent("Time not recorded1 · 50.0%");
+    expect(card).toHaveTextContent("< 1 min0 · 0.0%");
+    // Top first, as the column stacks them.
+    const text = card!.textContent!;
+    expect(text.indexOf("Time not recorded")).toBeLessThan(text.indexOf("< 1 min"));
+    expect(card).toHaveTextContent("Readers2");
+    vi.unstubAllGlobals();
   });
 
   it("how far readers got: says so before any reading per chapter was recorded", () => {

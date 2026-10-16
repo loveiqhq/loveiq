@@ -42,6 +42,9 @@ import { genderShort, relationshipShort } from "./traffic";
 
 export interface OverTimeRow {
   label: string;
+  /** Its first and last day, for the chart's read-out. */
+  from?: string;
+  to?: string;
   /** Cut short by the range (a part of a week or month). */
   partial: boolean;
   preSales: number;
@@ -55,6 +58,9 @@ export interface OverTimeRow {
 
 export interface CheckoutPoint {
   label: string;
+  /** Its first and last day, for the chart's read-out. */
+  from?: string;
+  to?: string;
   partial: boolean;
   reached: number;
   attempted: number;
@@ -115,7 +121,17 @@ export interface PricingArmRow {
 
 export interface Elasticity {
   /** The range's months with a full-unlock sale: average price paid and payment CVR. */
-  points: Array<{ label: string; price: number; cvr: number; sales: number; finishers: number }>;
+  points: Array<{
+    label: string;
+    price: number;
+    cvr: number;
+    sales: number;
+    finishers: number;
+    /** The month's days in the range, for its read-out. */
+    from?: string;
+    to?: string;
+    partial: boolean;
+  }>;
   /** ln(cvr) = a + e · ln(price), or null under three points. */
   fit: { a: number; e: number } | null;
   /** The best month's CVR: the model is capped there. */
@@ -408,6 +424,8 @@ export function buildPayment(input: {
     const xs = salesBetween(b.from, b.to);
     return {
       label: grain === "day" ? b.label : partialLabel(b),
+      from: b.from,
+      to: b.to,
       partial: !b.full,
       preSales: xs.filter(isPre).length,
       preRevenue: sum(xs.filter(isPre)),
@@ -423,6 +441,8 @@ export function buildPayment(input: {
     const xs = checkouts.filter((c) => c.day >= b.from && c.day <= b.to);
     return {
       label: grain === "day" ? b.label : partialLabel(b),
+      from: b.from,
+      to: b.to,
       partial: !b.full,
       reached: xs.reduce((n, c) => n + c.n, 0),
       attempted: xs.filter((c) => c.attempted).reduce((n, c) => n + c.n, 0),
@@ -684,6 +704,9 @@ export function buildPayment(input: {
         cvr: fin ? xs.length / fin : 0,
         sales: xs.length,
         finishers: fin,
+        from: b.from,
+        to: b.to,
+        partial: !b.full,
       };
     })
     .filter((p) => p.sales > 0 && p.finishers > 0);
