@@ -315,6 +315,10 @@ describe("the Dashboard as drawn", () => {
     // Each chart's figures as a table for a screen reader, its drawing hidden.
     const table = within(card).getByRole("table", { name: "Survey submissions" });
     expect(within(table).getAllByRole("row")).toHaveLength(3);
+    // Hidden in a box, not on the table itself: a table sizes to its content and would push a
+    // phone's page sideways (209px at 390px wide).
+    expect(table).not.toHaveClass("sr-only");
+    expect(table.parentElement).toHaveClass("sr-only");
     expect(card.querySelector("svg")!.closest("[aria-hidden='true']")).not.toBeNull();
   });
 

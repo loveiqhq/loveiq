@@ -198,35 +198,38 @@ function ChartCard({ chart }: { chart: FocusChart }) {
             })}
           </div>
           {/* The figures behind the lines, for a screen reader; the drawing itself is hidden. */}
-          <table className="sr-only">
-            <caption>{chart.title}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Period</th>
-                {view.series.map((s) => (
-                  <th key={s.name} scope="col">
-                    {s.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {view.labels.map((label, i) => (
-                <tr key={`${label}-${i}`}>
-                  <th scope="row">{label}</th>
+          {/* In a hidden box: a table sizes to its content whatever width it is given. */}
+          <div className="sr-only">
+            <table>
+              <caption>{chart.title}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Period</th>
                   {view.series.map((s) => (
-                    <td key={s.name}>
-                      {fmt(
-                        s.unit,
-                        s.values[i] ?? null,
-                        s.unit === "eur" || s.unit === "ratio" ? 2 : undefined
-                      )}
-                    </td>
+                    <th key={s.name} scope="col">
+                      {s.name}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {view.labels.map((label, i) => (
+                  <tr key={`${label}-${i}`}>
+                    <th scope="row">{label}</th>
+                    {view.series.map((s) => (
+                      <td key={s.name}>
+                        {fmt(
+                          s.unit,
+                          s.values[i] ?? null,
+                          s.unit === "eur" || s.unit === "ratio" ? 2 : undefined
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div
             aria-hidden="true"
             className="relative mt-2 border-b border-ap-line"
