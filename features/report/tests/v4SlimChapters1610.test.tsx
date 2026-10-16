@@ -254,8 +254,12 @@ describe("the three slimmed chapters, for all fourteen archetypes", () => {
         expect(veiled(passage.ramp)).toBe(false);
         expect(passage.rest).toEqual([]);
       }
-      // Every archetype's wall falls before CiP's "Common Challenges", drawn locked.
+      // Every archetype's wall falls before CiP's "Common Challenges", drawn locked, and the
+      // body ends on the blurred result: no tail past it (1665:7089).
       expect(cip.challenges).toBeNull();
+      expect(cip).not.toHaveProperty("tail");
+      // A reader who has paid keeps the tail where the archetype's doc sets one.
+      expect(buildPartnership(name)!.tail ?? []).toEqual(REPORT_V4_PARTNERSHIP[name]!.tail ?? []);
     }
   );
 
