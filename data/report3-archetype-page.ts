@@ -107,7 +107,12 @@ export const REPORT_V4_PART_FRAME_BY_SECTION: Readonly<
  * mid-paragraph; `V4Runs` renders it as <br>.
  */
 
-/** Part 1 · Introduction — 1:175 / 1:184. */
+/**
+ * Part 1 · Introduction — 1:175 / 1:184. The slimmed report (Figma 1665:3292, 16.10)
+ * keeps the first and last paragraphs word for word and drops the middle one ("Many
+ * people grow up absorbing narratives…"). "What shaped this report" (1:185) kept its
+ * heading and lost its paragraph in the same pass, so it has no copy here.
+ */
 export const REPORT_V4_INTRODUCTION: readonly (readonly Report3Run[])[] = [
   [
     { text: "Thank you for your trust and " },
@@ -115,24 +120,10 @@ export const REPORT_V4_INTRODUCTION: readonly (readonly Report3Run[])[] = [
   ],
   [
     {
-      text: "Many people grow up absorbing narratives about sexuality that create shame, confusion, or a sense of being “wrong.”\nWe offer you a different lens, with evidence-based insights rooted in compassion, context, and self-acceptance.",
-    },
-  ],
-  [
-    {
       text: "This report will help you understand why certain patterns feel familiar, why certain challenges keep repeating, ",
     },
     { weight: 700, text: "and what you can do, starting today, to improve." },
   ],
-];
-
-/** Part 1 · "What shaped this report" — 1:185 / 1:194. */
-export const REPORT_V4_WHAT_SHAPED: readonly Report3Run[] = [
-  { text: "To support self-understanding, we combine " },
-  { weight: 700, text: "insights from multiple disciplines" },
-  {
-    text: " such as neuroscience, psychology, and relationship research, alongside decades of therapeutic experience.",
-  },
 ];
 
 /**
@@ -147,6 +138,9 @@ export const REPORT_V4_WHAT_SHAPED: readonly Report3Run[] = [
  * copied faithfully out of the frame with a note beside it. Mark found it on his
  * phone and fixed the frame himself (Figma comment 1937155741). Copying a typo out
  * of a design and writing a note about it is not the same as asking, so: ask, or fix.
+ *
+ * The slimmed report (1665:3538, 16.10) drops the third paragraph, "With that in mind,
+ * it's time to dive into your personalised report."
  */
 export const REPORT_V4_CLOSING: readonly (readonly Report3Run[])[] = [
   [
@@ -162,11 +156,6 @@ export const REPORT_V4_CLOSING: readonly (readonly Report3Run[])[] = [
       weight: 700,
       text: "tendencies, patterns, and possible directions in your personality and sexual identity.",
     },
-  ],
-  [
-    { text: "With that in mind, it's time to dive into your " },
-    { weight: 700, text: "personalised report" },
-    { text: "." },
   ],
 ];
 
@@ -935,15 +924,8 @@ export const REPORT_V4_TOP_THREE: Readonly<Record<string, number>> = {
  * capitalised "Highest" and "Scoring" on 2026-09-24 (comment 1939883544). */
 export const REPORT_V4_TOP_THREE_HEADING = "3 Highest Scoring Archetypes";
 
-/** Part II · its lede — 1:496. Two paragraphs, one bold run. */
-export const REPORT_V4_TOP_THREE_LEDE: readonly (readonly Report3Run[])[] = [
-  [{ text: "No one fits a single sexual personality or archetype." }],
-  [
-    { text: "These are your " },
-    { weight: 700, text: "top 3 archetypes out of 14," },
-    { text: " ranked by how closely they match your profile." },
-  ],
-];
+/* Its two-paragraph lede (1:496, "No one fits a single sexual personality…") went with
+ * the slimmed report (1665:3553, 16.10): the rows follow the heading directly. */
 
 /* ───────────────────────── Parts III–VI ───────────────────────── */
 

@@ -117,10 +117,14 @@ const V4Chapter: FC<Props> = ({
             <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>{title}</h3>
           </div>
         ) : null}
-        <div className="rv4-chapter__body">
-          {children}
-          {rating}
-        </div>
+        {/* A heading-only chapter (Part I's "What Shaped This Report" since the slimmed
+         * report) draws no empty body, so it adds no gap under its title. */}
+        {children || rating ? (
+          <div className="rv4-chapter__body">
+            {children}
+            {rating}
+          </div>
+        ) : null}
       </section>
     );
   }
