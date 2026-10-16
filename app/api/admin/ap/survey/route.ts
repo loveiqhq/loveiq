@@ -47,11 +47,11 @@ export async function GET(request: Request) {
       ),
       fetchSurveyIntroClicks(filters.from, filters.to).catch(postHogFailed),
     ]);
-    // The previous period as the benchmark, whatever the comparison is set to.
+    // The previous period as the benchmark (the comparison's own facts when it has them).
     const prevRange = previousRange(filters);
     const benchmark =
       benchmarkKind === "prev"
-        ? filters.compare === "prev" && previous
+        ? previous
           ? previous
           : beforeData(prevRange)
             ? { ...facts, from: prevRange.from, to: prevRange.to, subs: [] }

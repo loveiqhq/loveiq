@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { buildDashboard, revenueByGroup } from "@features/admin/server/ap/assessment";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { ALL, comparableStarts, totals } from "@features/admin/server/ap/metrics";
-import { buildOverview, head, SOURCE_ROWS } from "@features/admin/server/ap/overview";
+import { head, SOURCE_ROWS } from "@features/admin/server/ap/common";
+import { buildFocus } from "@features/admin/server/ap/focus";
 import type { SessionTags } from "@features/admin/server/ap/posthog";
 import { buildReportPage, type ReportExtras } from "@features/admin/server/ap/report-page";
 import { buildSurveyQuestions } from "@features/admin/server/ap/survey";
@@ -187,16 +188,6 @@ describe("comparableStarts", () => {
 });
 
 describe("page builders", () => {
-  it("overview: the fixture's totals, and no comparison across the starts gap", () => {
-    const p = buildOverview({ facts, previous, ad, filters, today: TODAY, now });
-    const tile = (key: string) => p.tiles.find((t) => t.key === key)!;
-    expect(tile("visits").value).toBe(220);
-    expect(tile("starts")).toMatchObject({ value: 14, prev: null });
-    expect(tile("starts").foot).toContain("previous period not comparable");
-    expect(tile("revenue").value).toBe(6.99);
-    expect(nonFinite(p)).toEqual([]);
-  });
-
   it("dashboard: ten tiles, cost per paying customer from the ad spend", () => {
     const p = buildDashboard({
       facts,
@@ -526,25 +517,6 @@ describe("page builders", () => {
     expect(reach("google_ads")).toEqual([1, 1, 1, 1, 1, 1]);
   });
 
-  it("overview: compares spend only when both periods have every day of it", () => {
-    const full = {
-      byDay: new Map([
-        ["2026-09-25", 30],
-        ["2026-10-02", 40],
-      ]),
-      from: "2026-04-24",
-      to: "2026-10-12",
-    };
-    const spendTile = (a: typeof full) =>
-      buildOverview({ facts, previous: lastWeek, ad: a, filters, today: TODAY, now }).tiles.find(
-        (t) => t.key === "spend"
-      )!;
-    expect(spendTile(full)).toMatchObject({ value: 40, prev: 30 });
-    const partial = spendTile({ ...full, to: "2026-10-05" });
-    expect(partial.prev).toBeNull();
-    expect(partial.foot).toContain("spend recorded");
-  });
-
   it("dashboard: the cost tile's line is spend per submission, and says so", () => {
     const p = buildDashboard({
       facts,
@@ -587,41 +559,6 @@ describe("page builders", () => {
     expect(row("ROAS").note).toContain("spend recorded");
   });
 
-  it("overview: no 'Unknown source' row where starts cannot be split by source", () => {
-    const f90 = parseFilters({ period: "90d" }, TODAY);
-    const long = factsFixture({ from: f90.from, to: f90.to });
-    const p = buildOverview({ facts: long, previous: null, ad, filters: f90, today: TODAY, now });
-    expect(p.submissions.bySource.rows.map((r) => r.label)).not.toContain("Unknown source");
-    expect(p.traffic.bySource.note).toContain("older starts can't be split by source");
-    // Within the drafts' 30 days the starts no draft names stay visible as Unknown, in the
-    // table with starts; Traffic has no visitors to give it.
-    const recent = buildOverview({ facts, previous: null, ad, filters, today: TODAY, now });
-    const unknown = recent.submissions.bySource.rows.find((r) => r.label === "Unknown source");
-    expect(unknown).toMatchObject({ values: [4, 0, null, null], muted: true });
-    expect(recent.traffic.bySource.rows.map((r) => r.label)).not.toContain("Unknown source");
-  });
-
-  it("overview: counts the invites sent in the range, as the design's Report card does", () => {
-    const withInvites = factsFixture({
-      invites: [
-        { day: "2026-09-30", n: 9 },
-        { day: "2026-10-02", n: 2 },
-        { day: "2026-10-05", n: 1 },
-      ],
-    });
-    const card = (filtersX: typeof filters) =>
-      buildOverview({
-        facts: withInvites,
-        previous: null,
-        ad,
-        filters: filtersX,
-        today: TODAY,
-        now,
-      }).engagement.report.find((x) => x.label === "Invites sent")!;
-    expect(card(filters)).toMatchObject({ value: 3 });
-    expect(card({ ...filters, source: "google_ads" }).note).toBe("all traffic");
-  });
-
   it("dashboard: prices change in euros, and a lone sale draws a flat line that says when", () => {
     const p = buildDashboard({
       facts,
@@ -647,24 +584,6 @@ describe("page builders", () => {
     expect(card.rows.every((r) => r.bench === null)).toBe(true);
     expect(card.rows.at(-1)?.label).toBe("Other");
   });
-
-  it("every page notes that tier, and device before 12 Oct, cover readers only", () => {
-    const notes = (f: typeof filters) =>
-      buildOverview({ facts, previous: null, ad, filters: f, today: TODAY, now }).notes.join(" ");
-    expect(notes({ ...filters, tier: "tier_1" })).toContain("country tier is known only");
-    expect(notes({ ...filters, device: "phone" })).toContain("Before 12 Oct 2026 the device");
-    const fromOct12 = parseFilters(
-      { period: "custom", from: "2026-10-12", to: "2026-10-12", device: "phone" },
-      TODAY
-    );
-    expect(notes(fromOct12)).not.toContain("the device is known only");
-    expect(notes(filters)).not.toContain("known only for people");
-    // Tablets: told apart only from the tracking day.
-    expect(notes({ ...filters, device: "tablet" })).toContain(
-      "Tablets are told apart from 15 Oct 2026"
-    );
-    expect(notes(filters)).not.toContain("Tablets are told apart");
-  });
 });
 
 describe("visitors per source: a sample split, the totals live", () => {
@@ -685,168 +604,8 @@ describe("visitors per source: a sample split, the totals live", () => {
       tags("prod-verification", null, 100),
     ],
   };
-  const overview = (over: Partial<Parameters<typeof buildOverview>[0]> = {}) =>
-    buildOverview({ facts, previous: null, ad, filters, today: TODAY, now, sessions, ...over });
   const values = (t: { rows: Array<{ label: string; values: unknown[] }> }, label: string) =>
     t.rows.find((r) => r.label === label)?.values;
-
-  it("overview: the live 220 visits split by PostHog's shares, every source in the filter's order", () => {
-    const p = overview();
-    const traffic = p.traffic.bySource;
-    expect(traffic.sample).toBe(true);
-    expect(traffic.columns.map((c) => c.label)).toEqual([
-      "Source",
-      "Visitors",
-      "Share",
-      "Start CVR",
-    ]);
-    // A source's share in tenths of a percent, its rate in hundredths, as drawn.
-    expect(traffic.columns.slice(2)).toMatchObject([
-      { label: "Share", unit: "pct", digits: 1 },
-      { label: "Start CVR", unit: "pct", digits: 2 },
-    ]);
-    expect(traffic.rows.map((r) => r.label)).toEqual(SOURCE_ROWS.map((s) => s.label));
-    expect(values(traffic, "Google Ads")).toEqual([66, 0.3, 10 / 66]);
-    // Direct's starts can't be set against PostHog's direct visitors before the tracking day
-    // (the next test): visitors and share, no rate.
-    expect(values(traffic, "Direct / untagged")).toEqual([110, 0.5, null]);
-    expect(values(traffic, "Meta Ads")).toEqual([22, 0.1, 0]);
-    // Nobody from a source: a zero row, not a missing one, and no rate out of nothing.
-    expect(values(traffic, "Email")).toEqual([0, 0, null]);
-    const subs = p.submissions.bySource;
-    expect(subs.columns.map((c) => c.label)).toEqual([
-      "Source",
-      "Starts",
-      "Submissions",
-      "Completion",
-      "Submission CVR",
-    ]);
-    expect(values(subs, "Google Ads")).toEqual([10, 2, 1, 2 / 66]);
-    expect(subs.sample).toBe(true);
-    // Completion in tenths, the CVR in hundredths, per source and per assessment alike.
-    for (const t of [subs, p.submissions.byAssessment])
-      expect(t.columns.slice(3).map((c) => c.digits)).toEqual([1, 2]);
-    expect(p.traffic.byAssessment.columns[3]).toMatchObject({ label: "Start CVR", digits: 2 });
-    for (const t of [p.engagement.byAssessment, p.engagement.bySource])
-      expect(t.columns[1]).toMatchObject({ label: "Survey completion", digits: 1 });
-    // Engagement holds no estimate: no sample mark.
-    expect(p.engagement.bySource.sample).toBeUndefined();
-  });
-
-  it("late sources: no rate over PostHog's visitors before the tracking day, said why; from it, rates", () => {
-    const late = ["Organic search", "Direct / untagged", "Social"];
-    const rates = (p: ReturnType<typeof overview>) =>
-      Object.fromEntries(
-        p.traffic.bySource.rows.map((r) => [
-          r.label,
-          [r.values[2], values(p.submissions.bySource, r.label)?.[3]],
-        ])
-      );
-    const before = overview();
-    for (const label of late) expect(rates(before)[label]).toEqual([null, null]);
-    expect(rates(before)["Google Ads"]).toEqual([10 / 66, 2 / 66]);
-    expect(before.traffic.bySource.note).toContain(
-      "Organic search, Direct and Social rates are blank for ranges starting before 15 Oct 2026"
-    );
-    expect(before.submissions.bySource.note).toContain("rates are blank for ranges starting");
-    const d = buildDashboard({
-      facts,
-      previous: null,
-      ad,
-      filters,
-      today: TODAY,
-      now,
-      newReturning: null,
-      sessions,
-    });
-    for (const label of late) {
-      expect(d.sources.rows.find((r) => r.label === label)!.values.slice(3)).toEqual([null, null]);
-      expect(d.performance.find((r) => r.label === label)).toMatchObject({
-        surveyCvr: null,
-        perVisit: null,
-      });
-    }
-    expect(d.sources.note).toContain("rates are blank for ranges starting before 15 Oct 2026");
-
-    // A range from the tracking day: every source's rate, and no such note.
-    const after = parseFilters(
-      { period: "custom", from: "2026-10-15", to: "2026-10-21" },
-      "2026-10-22"
-    );
-    const p = overview({
-      filters: after,
-      today: "2026-10-22",
-      now: new Date("2026-10-22T10:00:00Z"),
-      facts: factsFixture({
-        from: after.from,
-        to: after.to,
-        visits: [{ day: "2026-10-16", arm: "white_card", src: null, n: 100 }],
-      }),
-    });
-    // 100 visits: 50 direct and 10 organic by PostHog's shares, with no starts from either.
-    expect(rates(p)["Direct / untagged"]).toEqual([0, 0]);
-    expect(rates(p)["Organic search"]).toEqual([0, 0]);
-    expect(p.traffic.bySource.note).not.toContain("rates are blank");
-  });
-
-  it("late sources: a filter on one says how its days before the tracking day read", () => {
-    const notes = (f: typeof filters) =>
-      buildOverview({ facts, previous: null, ad, filters: f, today: TODAY, now }).notes.join(" ");
-    expect(notes({ ...filters, source: "organic_search" })).toContain(
-      "Organic search is told apart from 15 Oct 2026: before, an untagged visit from a search engine counts as Direct / untagged, so those days read low."
-    );
-    expect(notes({ ...filters, source: "direct" })).toContain("so those days read high");
-    expect(notes({ ...filters, source: "social" })).toContain("a Meta link without tags");
-    expect(notes({ ...filters, source: "google_ads" })).not.toContain("is told apart from");
-    // After the day, compared with a period before it: part of the change is the sorting.
-    const after = parseFilters(
-      { period: "custom", from: "2026-10-15", to: "2026-10-21", source: "organic_search" },
-      "2026-10-22"
-    );
-    expect(
-      buildOverview({
-        facts: factsFixture({ from: after.from, to: after.to }),
-        previous: null,
-        ad,
-        filters: after,
-        today: "2026-10-22",
-        now: new Date("2026-10-22T10:00:00Z"),
-      }).notes.join(" ")
-    ).toContain("but the comparison period starts before then: in it, an untagged visit");
-  });
-
-  it("overview: blank with its reason under a narrowing filter, before PostHog, or when it fails", () => {
-    const blank = (p: ReturnType<typeof overview>) => {
-      expect(p.traffic.bySource.sample).toBe(false);
-      expect(p.traffic.bySource.rows.every((r) => r.values.every((v) => v === null))).toBe(true);
-      expect(p.submissions.bySource.rows.every((r) => r.values[3] === null)).toBe(true);
-      return `${p.traffic.bySource.note} | ${p.submissions.bySource.note}`;
-    };
-    expect(blank(overview({ filters: { ...filters, device: "phone" } }))).toMatch(
-      /a source, device, tier or visitor filter leaves them blank.* \| .*leaves them blank/
-    );
-    expect(blank(overview({ filters: { ...filters, source: "google_ads" } }))).toContain(
-      "estimated over all traffic"
-    );
-    expect(
-      blank(
-        overview({
-          sessions: {
-            ok: false,
-            error: "PostHog could not be read just now. Try again in a minute.",
-          },
-        })
-      )
-    ).toContain("Visitors per source: PostHog could not be read just now.");
-    const august = parseFilters({ period: "custom", from: "2026-08-10", to: "2026-08-31" }, TODAY);
-    expect(
-      blank(
-        overview({ filters: august, facts: factsFixture({ from: august.from, to: august.to }) })
-      )
-    ).toContain("PostHog, which starts on 23 Aug 2026");
-    expect(blank(overview({ sessions: { ok: true, value: [] } }))).toContain("saw no visits");
-    expect(blank(overview({ sessions: null }))).toContain("PostHog was not read");
-  });
 
   it("dashboard: Sources and Performance over the estimated visitors, as drawn", () => {
     const dash = (s: typeof sessions | null) =>
@@ -997,100 +756,11 @@ describe("visitors per source: a sample split, the totals live", () => {
       "Full All 49",
     ]);
   });
-
-  it("overview: boxes, funnel and tables say what the design's do", () => {
-    const prev = factsFixture({
-      from: "2026-09-24",
-      to: "2026-09-30",
-      subs: [sub({ id: 31, day: "2026-09-25", at: "2026-09-25T10:00:00Z" })],
-      money: [
-        { ...facts.money[0]!, sid: 31, day: "2026-09-25", amount: 12.5 },
-        { ...facts.money[0]!, sid: 32, day: "2026-09-26", amount: 12.5 },
-      ],
-    });
-    const p = buildOverview({ facts, previous: prev, ad, filters, today: TODAY, now });
-    expect(p.revenue.stats.map((s) => [s.label, s.foot])).toEqual([
-      ["Revenue", "change"],
-      ["Paid reports", "change"],
-      ["€ per visit", "prev"],
-    ]);
-    expect(p.costs.stats.map((s) => [s.label, s.foot, s.goodWhen])).toEqual([
-      ["Ad spend", "change", "down"],
-      ["Per submission", "prev-toned", "down"],
-      ["CAC (paid)", "prev-toned", "down"],
-    ]);
-    // Money with cents in the costs table; shares in whole percent.
-    expect(p.costs.byAssessment.columns.slice(1).map((c) => c.digits)).toEqual([2, 2, 2]);
-    expect(p.traffic.byAssessment.columns[2]).toMatchObject({ label: "Share", digits: 0 });
-    expect(p.submissions.funnel.map((s) => s.label)).toEqual([
-      "Visited",
-      "Started survey",
-      "Submitted",
-      "Opened report",
-      "Paid",
-    ]);
-  });
-
-  it("overview: Returns counts the readers who came back", () => {
-    const p = buildOverview({
-      facts: factsFixture({
-        subs: [
-          sub({ id: 1, visits: 3, returnedAt: "2026-10-02T09:00:00Z" }),
-          sub({ id: 2, visits: 2, returnedAt: "2026-10-03T09:00:00Z" }),
-          sub({ id: 3 }),
-          // Never opened: not a reader.
-          sub({ id: 4, openedAt: null, visits: 0 }),
-        ],
-      }),
-      previous: null,
-      ad,
-      filters,
-      today: TODAY,
-      now,
-    });
-    expect(p.engagement.byAssessment.columns[4]).toEqual({ label: "Returns", unit: "count" });
-    expect(p.engagement.byAssessment.rows[0]?.values[3]).toBe(2);
-    expect(p.engagement.bySource.rows.find((r) => r.label === "Google Ads")?.values[3]).toBe(2);
-    expect(p.engagement.bySource.rows.find((r) => r.label === "Email")?.values[3]).toBe(0);
-  });
-
-  it("overview: no read time, no note for the Report card to show in its place", () => {
-    const card = (closed: number) =>
-      buildOverview({
-        facts: factsFixture({ subs: [sub({ id: 1, closed, readMs: 120_000 })] }),
-        previous: null,
-        ad,
-        filters,
-        today: TODAY,
-        now,
-      }).engagement.report.find((s) => s.label === "Avg. read time")!;
-    expect(card(0)).toMatchObject({ value: null, note: undefined });
-    expect(card(1).value).toBe(120_000);
-    expect(card(1).note).toContain("readers whose reading time was recorded");
-  });
-
-  it("notes tablets when only the comparison period starts before they were told apart", () => {
-    const today = "2026-10-23";
-    const late = parseFilters(
-      { period: "custom", from: "2026-10-15", to: "2026-10-21", device: "tablet" },
-      today
-    );
-    const notes = (f: typeof late) => head(f, today, now).notes.join(" ");
-    expect(notes(late)).toContain(
-      "Tablets are told apart from 15 Oct 2026, but the comparison period starts before then, when nobody counts as a tablet."
-    );
-    // Phones and computers held the tablets then: part of their change is that.
-    expect(notes({ ...late, device: "phone" })).toContain("so part of the change comes from that");
-    expect(notes({ ...late, compare: "none" })).not.toContain("Tablets");
-    expect(notes({ ...late, device: "all" })).not.toContain("Tablets");
-    // A range before the day keeps its own note, once.
-    expect(notes({ ...late, from: "2026-10-10" }).match(/Tablets are told apart/g)).toHaveLength(1);
-  });
 });
 
 describe("blanks say why, and notes say what the numbers are", () => {
-  const overview = (over: Partial<Parameters<typeof buildOverview>[0]> = {}) =>
-    buildOverview({ facts, previous: null, ad, filters, today: TODAY, now, ...over });
+  const focus = (over: Partial<Parameters<typeof buildFocus>[0]> = {}) =>
+    buildFocus({ facts, previous: null, ad, filters, today: TODAY, now, ratings: null, ...over });
   const dashboard = (over: Partial<Parameters<typeof buildDashboard>[0]> = {}) =>
     buildDashboard({
       facts,
@@ -1103,20 +773,7 @@ describe("blanks say why, and notes say what the numbers are", () => {
       ...over,
     });
   const tile = (p: { tiles: Array<{ key: string }> }, key: string) =>
-    p.tiles.find((t) => t.key === key) as ReturnType<typeof overview>["tiles"][number];
-
-  it("overview: the revenue tile writes the earlier revenue with its cents", () => {
-    const prev = factsFixture({
-      from: "2026-09-24",
-      to: "2026-09-30",
-      subs: [sub({ id: 31, day: "2026-09-25", at: "2026-09-25T10:00:00Z" })],
-      money: [
-        { ...facts.money[0]!, sid: 31, day: "2026-09-25", amount: 34.95 },
-        { ...facts.money[0]!, sid: 32, day: "2026-09-26", amount: 34.95 },
-      ],
-    });
-    expect(tile(overview({ previous: prev }), "revenue").foot).toContain("prev. 2 (€69.90)");
-  });
+    p.tiles.find((t) => t.key === key) as ReturnType<typeof focus>["tiles"][number];
 
   it("dashboard: CLV equals the average order only while nobody bought twice", () => {
     const clv = (money: typeof facts.money) =>
@@ -1151,40 +808,37 @@ describe("blanks say why, and notes say what the numbers are", () => {
     // Spend is recorded from 10 Oct: none for 1 to 7 Oct.
     const later = { byDay: new Map([["2026-10-10", 30]]), from: "2026-10-10", to: "2026-10-12" };
     const why = "No ad spend recorded for these days.";
-    const o = overview({ ad: later });
+    const o = focus({ ad: later });
     expect(tile(o, "spend")).toMatchObject({ value: null, blocked: why });
-    expect(o.costs.stats.map((s) => s.note)).toEqual([why, why, why]);
-    expect(o.costs.byAssessment.note).toMatch(/refreshed every 15 minutes\. No ad spend recorded/);
+    // Cost per submission is blank too, never €0.
+    expect(o.charts[0]!.views.day.series[1]!.total).toBeNull();
     const d = dashboard({ ad: later });
     expect(tile(d, "cac").blocked).toBe(why);
     expect(d.scorecard.find((r) => r.label === "CAC")!.note).toBe(why);
     // No window at all: the read failed.
     const failed = { byDay: new Map<string, number>(), from: null, to: null };
-    expect(tile(overview({ ad: failed }), "spend").blocked).toBe(
+    expect(tile(focus({ ad: failed }), "spend").blocked).toBe(
       "Ad spend could not be read just now."
     );
-    // With its figure: no reason, and the boxes keep their lines.
-    expect(tile(overview(), "spend").blocked).toBeNull();
-    expect(overview().costs.stats[0]!.note).toBeUndefined();
+    // With its figure: no reason.
+    expect(tile(focus(), "spend").blocked).toBeNull();
   });
 
   it("the tablet filter before tablets were told apart: figures about people blank, with why", () => {
     const reason = "Tablets are told apart from 15 Oct 2026: pick a range from that day on.";
     const tablets = { ...filters, device: "tablet" as const };
-    const o = overview({ filters: tablets });
-    for (const key of ["starts", "subs", "revenue"]) expect(tile(o, key).blocked).toBe(reason);
-    expect(o.submissions.funnel.map((s) => s.value)).toEqual([null, null, null, null, null]);
-    expect(o.submissions.byAssessment.rows[0]!.values).toEqual([null, null, null, null]);
-    expect(o.submissions.byAssessment.note).toBe(reason);
-    expect(o.engagement.byAssessment.rows[0]!.values).toEqual([null, null, null, null]);
-    expect(o.engagement.report.find((s) => s.label === "Reports opened")!.value).toBeNull();
-    expect(o.revenue.stats.map((s) => [s.value, s.note])).toEqual([
-      [null, reason],
-      [null, reason],
-      [null, undefined],
+    const o = focus({ filters: tablets });
+    for (const key of ["revenue", "new-users"]) expect(tile(o, key).blocked).toBe(reason);
+    // Start CVR needs visits, which never record the device: that reason comes first.
+    expect(o.charts.map((c) => c.blocked)).toEqual([
+      reason,
+      "Visits don't record the device.",
+      reason,
+      o.charts[3]!.blocked,
+      reason,
+      reason,
     ]);
-    expect(o.revenue.byAssessment.rows[0]!.values).toEqual([null, null, null]);
-    expect(o.revenue.byAssessment.note).toBe(reason);
+    expect(o.assessments.rows[0]).toMatchObject({ submissions: null, paidCvr: null, trend: null });
     const d = dashboard({ filters: tablets });
     for (const key of ["pay-cvr", "rev-sub", "revenue", "aov", "open-rate"])
       expect(tile(d, key).blocked).toBe(reason);
@@ -1192,9 +846,8 @@ describe("blanks say why, and notes say what the numbers are", () => {
     expect(d.sources.rows.every((r) => r.values[2] === null)).toBe(true);
     expect(d.pricesBlocked).toBe(reason);
     // Phones are told apart all along: counted as before.
-    expect(tile(overview({ filters: { ...filters, device: "phone" } }), "subs")).toMatchObject({
-      value: 2,
-      blocked: null,
+    expect(focus({ filters: { ...filters, device: "phone" } }).assessments.rows[0]).toMatchObject({
+      submissions: 2,
     });
   });
 
@@ -1223,8 +876,8 @@ describe("blanks say why, and notes say what the numbers are", () => {
       money: [],
     });
     const args = { facts: facts15, previous: before, ad, filters: late, today, now: at };
-    const o = buildOverview(args);
-    expect(tile(o, "subs")).toMatchObject({ value: 1, prev: null, blocked: null });
+    const o = buildFocus({ ...args, ratings: null });
+    expect(tile(o, "new-users")).toMatchObject({ value: 1, prev: null, blocked: null });
     const d = buildDashboard({ ...args, newReturning: null });
     expect(tile(d, "open-rate")).toMatchObject({ value: 1, prev: null, blocked: null });
     // Compared, the week before would read a false €0.

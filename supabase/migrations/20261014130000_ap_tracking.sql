@@ -40,7 +40,9 @@ AS $function$
            (bool_or(e.answered IS TRUE) OR bool_or(e.direction = 'complete')) AS answered,
            CASE WHEN bool_or(e.is_tablet) THEN 'Tablet'
                 ELSE (array_agg(e.device_type ORDER BY e.created_at DESC, e.id DESC)
-                        FILTER (WHERE e.device_type IS NOT NULL))[1] END AS device
+                        FILTER (WHERE e.device_type IS NOT NULL))[1] END AS device,
+           -- A step on the email question (00000): the run reached it (the email test, #7).
+           bool_or(e.q_id = '00000') AS email_step
       FROM survey_behavior_event e
      WHERE e.session_id IN (SELECT session_id FROM cand)
      GROUP BY e.session_id
@@ -48,7 +50,9 @@ AS $function$
   dr AS (
     SELECT d.session_id, min(d.started_at) AS started_at, max(d.current_index) AS idx,
            (array_agg(d.utm_tracker ORDER BY d.saved_at DESC NULLS LAST)
-              FILTER (WHERE d.utm_tracker IS NOT NULL))[1] AS tracker
+              FILTER (WHERE d.utm_tracker IS NOT NULL))[1] AS tracker,
+           -- A draft holding an email answer reached the email question too.
+           bool_or(jsonb_typeof(d.answers) = 'object' AND d.answers ? '00000') AS email_draft
       FROM survey_partial_save d
      WHERE d.session_id IN (SELECT session_id FROM cand)
      GROUP BY d.session_id
@@ -65,7 +69,9 @@ AS $function$
            COALESCE(sb.status = 'completed', false) AS finished,
            (dr.session_id IS NOT NULL OR sb.session_id IS NOT NULL) AS known,
            COALESCE(sb.utm_tracker, dr.tracker) AS tracker,
-           ev.device
+           ev.device,
+           (COALESCE(ev.email_step, false) OR COALESCE(dr.email_draft, false)
+              OR COALESCE(sb.status = 'completed', false)) AS email_reached
       FROM cand c
       LEFT JOIN ev ON ev.session_id = c.session_id
       LEFT JOIN dr ON dr.session_id = c.session_id
@@ -74,7 +80,7 @@ AS $function$
        AND NOT EXISTS (SELECT 1 FROM staff WHERE staff.id = sb.user_id)
   ),
   start_rows AS (
-    SELECT st.day, st.finished, st.known, st.device, t.j
+    SELECT st.day, st.finished, st.known, st.device, st.email_reached, t.j
       FROM starts st, b,
            LATERAL (SELECT CASE WHEN st.tracker IS NOT NULL AND pg_input_is_valid(st.tracker, 'jsonb')
                                  AND jsonb_typeof(st.tracker::jsonb) = 'object'
@@ -164,8 +170,9 @@ AS $function$
            coalesce(sum(p.amount) FILTER (WHERE p.amount > 0), 0) AS revenue,
            bool_or(coalesce(p.amount, 0) = 0) AS gifted,
            (array_agg(p.metadata->>'plan' ORDER BY p.created_date_time) FILTER (WHERE p.amount > 0))[1] AS plan,
-           -- Bought Full or Full All, first or as an upgrade from Essentials (the plan is the first).
-           coalesce(bool_or(p.metadata->>'plan' IN ('full_report', 'all_reports')) FILTER (WHERE p.amount > 0), false) AS full_paid
+           -- A full unlock: Full, Full All or Core (the top three in full), first or as an upgrade
+           -- from Essentials (the plan above is the first).
+           coalesce(bool_or(p.metadata->>'plan' IN ('full_report', 'all_reports', 'core')) FILTER (WHERE p.amount > 0), false) AS full_paid
       FROM payment p
       JOIN personal_report pr ON pr.id = p.personal_report_id
      WHERE p.status = 'succeeded' AND coalesce(p.is_test, false) = false
@@ -214,6 +221,37 @@ AS $function$
      WHERE a.survey_submission_id IN (SELECT id FROM subs)
      ORDER BY a.survey_submission_id, a.id DESC
   ),
+  -- The report's archetype, as the pricing readers take it (20260727002336).
+  arch AS (
+    SELECT DISTINCT ON (sr.survey_submission_id) sr.survey_submission_id AS sid,
+           coalesce(sr.v5_primary_archetype, sr.primary_archetype) AS archetype
+      FROM scoring_result sr
+     WHERE sr.survey_submission_id IN (SELECT id FROM subs)
+     ORDER BY sr.survey_submission_id, sr.id DESC
+  ),
+  -- Each finisher's history, all time: their first finished survey and how many they finished,
+  -- and every sale on any of their reports (amount over 0, not a test; a full refund moves a
+  -- payment to 'refunded', which is kept here only to count it). For new users, assessments per
+  -- user, lifetime value and the cohorts. Staff never reach subs, so never these.
+  people AS (
+    SELECT s.user_id AS uid, min(s.created_date_time) AS first_at, count(*) AS subs_n
+      FROM survey_submission s
+     WHERE s.status = 'completed' AND s.user_id IN (SELECT user_id FROM subs)
+     GROUP BY 1
+  ),
+  people_pays AS (
+    SELECT s.user_id AS uid,
+           json_agg(json_build_object(
+             'at', p.created_date_time, 'amount', p.amount, 'plan', p.metadata->>'plan',
+             'refunded', (p.status = 'refunded' OR coalesce(p.refund_amount, 0) > 0))
+             ORDER BY p.created_date_time, p.id) AS pays
+      FROM payment p
+      JOIN personal_report pr ON pr.id = p.personal_report_id
+      JOIN survey_submission s ON s.id = pr.survey_submission_id
+     WHERE p.status IN ('succeeded', 'refunded') AND coalesce(p.is_test, false) = false AND p.amount > 0
+       AND s.user_id IN (SELECT user_id FROM subs)
+     GROUP BY 1
+  ),
   sub_rows AS (
     SELECT s.id, s.created_date_time, s.start_date_time, s.duration_ms, s.j, s.ph,
            (s.created_date_time AT TIME ZONE 'Europe/Berlin')::date AS day,
@@ -229,7 +267,9 @@ AS $function$
            (sh.sid IS NOT NULL) AS shared, sh.at AS shared_at, coalesce(v.n, 0) AS votes, v.at AS voted_at,
            (iv.sid IS NOT NULL) AS invited, iv.at AS invited_at,
            w.slide AS wizard_slide,
-           who.country, who.gender, who.relationship, age.age
+           who.country, who.gender, who.relationship, age.age,
+           s.user_id AS uid, pe.first_at AS user_first_at, pe.subs_n AS user_subs, pp.pays AS user_pays,
+           ar.archetype
       FROM subs s
       LEFT JOIN reading r ON r.sid = s.id
       LEFT JOIN q ON q.sid = s.id
@@ -242,10 +282,19 @@ AS $function$
       LEFT JOIN wizard w ON w.sid = s.id
       LEFT JOIN who ON who.sid = s.id
       LEFT JOIN age ON age.sid = s.id
+      LEFT JOIN people pe ON pe.uid = s.user_id
+      LEFT JOIN people_pays pp ON pp.uid = s.user_id
+      LEFT JOIN arch ar ON ar.sid = s.id
   ),
   money AS (
     SELECT (p.created_date_time AT TIME ZONE 'Europe/Berlin')::date AS day, p.amount, s.id AS sid,
-           p.metadata->>'plan' AS plan, s.posthog_session_id AS ph,
+           p.metadata->>'plan' AS plan, s.posthog_session_id AS ph, s.user_id AS uid,
+           -- The price arm the checkout was made under (stamped on the payment; a quote's own arm
+           -- can be re-synced later, a payment's never is).
+           p.metadata->>'experimentGroup' AS price_arm,
+           -- How they paid: Stripe Link or the card's brand, as Stripe reported it.
+           CASE WHEN p.payment_method_type = 'card' THEN coalesce(p.card_brand, 'card')
+                ELSE p.payment_method_type END AS method,
            CASE WHEN s.utm_tracker IS NOT NULL AND pg_input_is_valid(s.utm_tracker, 'jsonb')
                      AND jsonb_typeof(s.utm_tracker::jsonb) = 'object'
                 THEN s.utm_tracker::jsonb END AS j,
@@ -259,9 +308,29 @@ AS $function$
        AND p.created_date_time >= b.since_ts AND p.created_date_time < b.until_ts
        AND NOT EXISTS (SELECT 1 FROM staff WHERE staff.id = s.user_id)
   ),
+  -- Every paid checkout opened in the range (a Stripe Checkout session, written when it was paid,
+  -- failed or expired): a) reached the payment page; b) attempted, i.e. paid, or a payment method
+  -- or a failure is recorded; c) paid. Free (EUR 0) unlocks are left out. Opened = created.
+  checkouts AS (
+    SELECT (p.created_date_time AT TIME ZONE 'Europe/Berlin')::date AS day, p.status,
+           (p.status = 'succeeded' OR p.payment_method_type IS NOT NULL OR p.failure_code IS NOT NULL) AS attempted,
+           p.metadata->>'plan' AS plan, p.metadata->>'experimentGroup' AS price_arm,
+           CASE WHEN s.utm_tracker IS NOT NULL AND pg_input_is_valid(s.utm_tracker, 'jsonb')
+                     AND jsonb_typeof(s.utm_tracker::jsonb) = 'object'
+                THEN s.utm_tracker::jsonb END AS j,
+           CASE WHEN EXISTS (SELECT 1 FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.is_tablet) THEN 'Tablet'
+                ELSE (SELECT q2.device_type FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.device_type IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1) END AS device,
+           (SELECT q2.country_tier FROM report_price_quote q2 WHERE q2.survey_submission_id = s.id AND q2.country_tier IS NOT NULL ORDER BY q2.created_date_time DESC LIMIT 1) AS tier
+      FROM payment p
+      JOIN personal_report pr ON pr.id = p.personal_report_id
+      JOIN survey_submission s ON s.id = pr.survey_submission_id, b
+     WHERE coalesce(p.is_test, false) = false AND p.amount > 0
+       AND p.created_date_time >= b.since_ts AND p.created_date_time < b.until_ts
+       AND NOT EXISTS (SELECT 1 FROM staff WHERE staff.id = s.user_id)
+  ),
   quotes AS (
     SELECT q.id, q.survey_submission_id AS sid, q.plan, q.experiment_group AS price_arm,
-           coalesce(q.initial_price, q.current_price) AS price, q.checkout_started_at,
+           coalesce(q.initial_price, q.current_price) AS price, q.checkout_started_at, q.paywall_reached_at,
            CASE WHEN EXISTS (SELECT 1 FROM survey_behavior_event e WHERE e.session_id = s.session_id AND e.is_tablet) THEN 'Tablet'
                 ELSE q.device_type END AS device,
            q.country_tier AS tier,
@@ -357,14 +426,18 @@ AS $function$
       SELECT coalesce(json_agg(json_build_object(
                'day', g.day, 'known', g.known, 'src', g.src, 'med', g.med, 'ads', g.ads, 'arm', g.arm,
                'ref', g.ref, 'fb', g.fb,
-               'device', g.device, 'finished', g.finished, 'n', g.n)), '[]'::json)
+               'device', g.device, 'finished', g.finished,
+               'camp', g.camp, 'term', g.term, 'cq', g.cq, 'email', g.email_reached, 'n', g.n)), '[]'::json)
         FROM (
           SELECT sr.day, sr.known, sr.j->>'utm_source' AS src, sr.j->>'utm_medium' AS med,
                  (coalesce(sr.j->>'gclid', '') <> '' OR coalesce(sr.j->>'gbraid', '') <> '' OR coalesce(sr.j->>'wbraid', '') <> '') AS ads,
                  sr.j->>'referrer_host' AS ref, coalesce(sr.j->>'fbclid', '') <> '' AS fb,
-                 sr.j->>'landing_variant' AS arm, sr.device, sr.finished, count(*) AS n
+                 sr.j->>'landing_variant' AS arm, sr.device, sr.finished,
+                 -- The ad's campaign and keyword as the links tag them, and the email test's arm.
+                 sr.j->>'utm_campaign' AS camp, sr.j->>'utm_term' AS term,
+                 sr.j->>'contact_question_arm' AS cq, sr.email_reached, count(*) AS n
             FROM start_rows sr
-           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
         ) g
     ),
     'subs', (
@@ -385,7 +458,12 @@ AS $function$
                'shared', x.shared, 'sharedAt', x.shared_at, 'votes', x.votes, 'votedAt', x.voted_at,
                'invited', x.invited, 'invitedAt', x.invited_at, 'wizardSlide', x.wizard_slide,
                -- The visit the survey was finished in, for the new/returning filter (PostHog).
-               'ph', x.ph
+               'ph', x.ph,
+               'camp', x.j->>'utm_campaign', 'term', x.j->>'utm_term', 'net', x.j->>'network',
+               'cq', x.j->>'contact_question_arm', 'archetype', x.archetype,
+               -- The person (an internal id, never shown) and their history, all time.
+               'uid', x.uid, 'userFirstAt', x.user_first_at, 'userSubs', coalesce(x.user_subs, 0),
+               'userPays', coalesce(x.user_pays, '[]'::json)
              ) ORDER BY x.created_date_time), '[]'::json)
         FROM sub_rows x
     ),
@@ -395,8 +473,24 @@ AS $function$
                'src', m.j->>'utm_source', 'med', m.j->>'utm_medium',
                'ref', m.j->>'referrer_host', 'fb', coalesce(m.j->>'fbclid', '') <> '',
                'ads', (coalesce(m.j->>'gclid', '') <> '' OR coalesce(m.j->>'gbraid', '') <> '' OR coalesce(m.j->>'wbraid', '') <> ''),
-               'arm', m.j->>'landing_variant', 'device', m.device, 'tier', m.tier, 'ph', m.ph)), '[]'::json)
+               'arm', m.j->>'landing_variant', 'device', m.device, 'tier', m.tier, 'ph', m.ph,
+               'uid', m.uid, 'method', m.method, 'priceArm', m.price_arm,
+               'camp', m.j->>'utm_campaign', 'term', m.j->>'utm_term', 'net', m.j->>'network')), '[]'::json)
         FROM money m
+    ),
+    'checkouts', (
+      SELECT coalesce(json_agg(json_build_object(
+               'day', g.day, 'status', g.status, 'attempted', g.attempted, 'plan', g.plan, 'priceArm', g.price_arm,
+               'src', g.src, 'med', g.med, 'ads', g.ads, 'ref', g.ref, 'fb', g.fb, 'arm', g.arm,
+               'device', g.device, 'tier', g.tier, 'n', g.n)), '[]'::json)
+        FROM (
+          SELECT c.day, c.status, c.attempted, c.plan, c.price_arm, c.j->>'utm_source' AS src, c.j->>'utm_medium' AS med,
+                 (coalesce(c.j->>'gclid', '') <> '' OR coalesce(c.j->>'gbraid', '') <> '' OR coalesce(c.j->>'wbraid', '') <> '') AS ads,
+                 c.j->>'referrer_host' AS ref, coalesce(c.j->>'fbclid', '') <> '' AS fb,
+                 c.j->>'landing_variant' AS arm, c.device, c.tier, count(*) AS n
+            FROM checkouts c
+           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+        ) g
     ),
     'intro', (SELECT coalesce(json_agg(json_build_object('day', x.day, 'step', x.step, 'n', x.n, 'ms', x.ms, 'skipped', x.skipped,
                                                          'wentOn', x.went_on, 'left', x.exited, 'direct', x.direct)), '[]'::json) FROM intro x),
@@ -405,7 +499,7 @@ AS $function$
       SELECT coalesce(json_agg(json_build_object(
                'plan', g.plan, 'priceArm', g.price_arm, 'price', g.price, 'src', g.src, 'med', g.med, 'ads', g.ads,
                'ref', g.ref, 'fb', g.fb,
-               'device', g.device, 'tier', g.tier, 'quoted', g.quoted, 'checkouts', g.checkouts,
+               'device', g.device, 'tier', g.tier, 'quoted', g.quoted, 'paywall', g.paywall, 'checkouts', g.checkouts,
                'sales', g.sales, 'revenue', g.revenue)), '[]'::json)
         FROM (
           SELECT qu.plan, qu.price_arm, qu.price, qu.j->>'utm_source' AS src, qu.j->>'utm_medium' AS med,
@@ -413,6 +507,8 @@ AS $function$
                  qu.j->>'referrer_host' AS ref, coalesce(qu.j->>'fbclid', '') <> '' AS fb,
                  qu.device, qu.tier,
                  count(DISTINCT qu.sid) AS quoted,
+                 -- Saw the paywall (report_price_quote.paywall_reached_at), people as quoted is.
+                 count(DISTINCT qu.sid) FILTER (WHERE qu.paywall_reached_at IS NOT NULL) AS paywall,
                  count(DISTINCT qu.sid) FILTER (WHERE qu.checkout_started_at IS NOT NULL) AS checkouts,
                  -- People, as quoted and checkouts are: one person paying twice is one sale here,
                  -- so the payment CVR (sales ÷ quoted) stays a share of people.
@@ -699,6 +795,11 @@ AS $function$
                         FROM chapter_stats cs),
     -- Reach's denominator: the readers above who reached any chapter.
     'chapter_readers', (SELECT count(DISTINCT r.sid) FROM chapter_reached r),
+    -- Each of those readers' chapters reached: how far into the report they got (the page
+    -- orders the chapters, as the report's nav does).
+    'chapter_depth', (SELECT coalesce(json_agg(json_build_object('sid', d.sid, 'chapters', d.chapters)), '[]'::json)
+                        FROM (SELECT r.sid, json_agg(r.section ORDER BY r.section) AS chapters
+                                FROM chapter_reached r GROUP BY r.sid) d),
     'chapter_stats_from', (SELECT st.day FROM chapter_start st),
     'wizard_skips', (SELECT coalesce(json_agg(json_build_object('slide', k.slide, 'n', k.n, 'sids', k.sids) ORDER BY k.slide), '[]'::json)
                        FROM (SELECT x.slide, count(DISTINCT x.sid) AS n, array_agg(DISTINCT x.sid) AS sids

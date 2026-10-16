@@ -19,13 +19,6 @@ export const PERIODS = [
 ] as const;
 export type Period = (typeof PERIODS)[number]["value"];
 
-export const COMPARES = [
-  { value: "prev", label: "Previous period" },
-  { value: "yoy", label: "Same period last year" },
-  { value: "none", label: "No comparison" },
-] as const;
-export type Compare = (typeof COMPARES)[number]["value"];
-
 export const ASSESSMENTS = [
   { value: "all", label: "All assessments" },
   { value: "a", label: "Assessment A" },
@@ -103,7 +96,6 @@ export interface ApFilters {
   from: string;
   /** Last day, included. */
   to: string;
-  compare: Compare;
   assessment: AssessmentFilter;
   source: SourceFilter;
   device: DeviceFilter;
@@ -147,7 +139,6 @@ export function defaultFilters(today: string): ApFilters {
   return {
     period: "30d",
     ...periodRange("30d", today),
-    compare: "prev",
     assessment: "all",
     source: "all",
     device: "all",
@@ -185,7 +176,8 @@ export function parseFilters(
     period,
     from: range!.from,
     to: range!.to,
-    compare: oneOf(COMPARES, get("compare"), base.compare),
+    // "compare" (Previous period, Same period last year, None) was retired on 16 Oct 2026:
+    // an older link's is ignored, and every period is compared with the one before it.
     assessment: oneOf(ASSESSMENTS, get("assessment"), base.assessment),
     source: oneOf(SOURCES, get("source"), base.source),
     device: oneOf(DEVICES, get("device"), base.device),
@@ -203,7 +195,6 @@ export function filterParams(f: ApFilters): Record<string, string> {
     out.from = f.from;
     out.to = f.to;
   }
-  if (f.compare !== "prev") out.compare = f.compare;
   if (f.assessment !== "all") out.assessment = f.assessment;
   if (f.source !== "all") out.source = f.source;
   if (f.device !== "all") out.device = f.device;
@@ -218,20 +209,12 @@ export function filterQuery(f: ApFilters): string {
   return q ? `?${q}` : "";
 }
 
-/** The same calendar dates a year earlier; 29 Feb becomes 28 Feb. */
-function yearEarlier(day: string): string {
-  const [y = 1970, m = 1, d = 1] = day.split("-").map(Number);
-  const last = new Date(Date.UTC(y - 1, m, 0)).getUTCDate();
-  return `${y - 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
-}
-
 /**
- * The period the figures are compared with, or null. Never while the range includes today:
- * part of a day against whole days would read as a fall every morning.
+ * The period the figures are compared with: the same number of days just before. Never while
+ * the range includes today: part of a day against whole days would read as a fall every morning.
  */
 export function comparisonRange(f: ApFilters): { from: string; to: string } | null {
-  if (f.compare === "none" || f.period === "today" || f.running) return null;
-  if (f.compare === "yoy") return { from: yearEarlier(f.from), to: yearEarlier(f.to) };
+  if (f.period === "today" || f.running) return null;
   return previousRange(f);
 }
 
@@ -275,11 +258,7 @@ export function filterSummary(f: ApFilters, today: string): string {
   const parts = [
     (f.from === f.to ? day(f.from) : `${day(f.from)} – ${day(f.to)}`) +
       (f.to >= today ? " (today so far)" : ""),
-    comparisonRange(f)
-      ? `vs ${labelOf(COMPARES, f.compare).toLowerCase()}`
-      : f.period === "today" || f.running
-        ? "no comparison while today runs"
-        : "no comparison",
+    comparisonRange(f) ? "vs previous period" : "no comparison while today runs",
   ];
   const narrowing = [
     f.assessment !== "all" ? labelOf(ASSESSMENTS, f.assessment) : null,
@@ -319,11 +298,10 @@ export function grainOf(from: string, to: string): Grain {
 }
 
 /**
- * The points of a trend line, at grainOf's grain: Monday-to-Sunday weeks and calendar months
- * are cut at the ends of the range.
+ * The points of a trend line, at grainOf's grain (or the one asked for): Monday-to-Sunday
+ * weeks and calendar months are cut at the ends of the range.
  */
-export function buckets(from: string, to: string): Bucket[] {
-  const grain = grainOf(from, to);
+export function buckets(from: string, to: string, grain: Grain = grainOf(from, to)): Bucket[] {
   const out: Bucket[] = [];
   if (grain === "day") {
     for (let d = from; d <= to; d = addDays(d, 1)) {

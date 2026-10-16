@@ -697,3 +697,177 @@ export async function fetchLandingSectionTime(
     },
   };
 }
+
+/**
+ * The first page view of each live-site visit in a range, as a HogQL subquery: its start, the
+ * link's tags (source, medium, campaign, keyword, click ids), the referring site, the device,
+ * the country and the browser's offset from UTC. Pages the visit log leaves out (admin, Jarvis,
+ * the login) are left out, as fetchSessionSources does.
+ */
+function firstViews(from: string, to: string): string {
+  const { since, until } = windowOf({ from, to });
+  return `
+    SELECT $session_id AS sid, any(person_id) AS pid, min(timestamp) AS first_ts,
+           argMin(properties.$current_url, timestamp) AS url,
+           argMin(properties.$referring_domain, timestamp) AS first_ref,
+           argMin(properties.$device_type, timestamp) AS device,
+           argMin(properties.$geoip_country_code, timestamp) AS country,
+           argMin(properties.$timezone_offset, timestamp) AS tz_offset
+    FROM events
+    WHERE event = '$pageview' AND properties.$host = '${HOST}' AND $session_id != ''
+      AND properties.$pathname NOT LIKE '/admin%' AND properties.$pathname NOT LIKE '/jarvis%'
+      AND properties.$pathname != '/login'
+      AND timestamp >= ${at(since)} AND timestamp < ${at(until)}
+    GROUP BY sid`;
+}
+
+/** The tag columns classifySource reads, from firstViews' columns. */
+const TAGS = `lower(extract(url, '[?&]utm_source=([^&#]*)')) AS src,
+             lower(extract(url, '[?&]utm_medium=([^&#]*)')) AS med,
+             if(url LIKE '%gclid=%' OR url LIKE '%gbraid=%' OR url LIKE '%wbraid=%', 1, 0) AS ads,
+             if(url LIKE '%fbclid=%', 1, 0) AS fb,
+             lower(coalesce(first_ref, '')) AS ref`;
+/** The referring site only on an untagged visit: the one place classifySource reads it. */
+const REF = "if(src = '' AND med = '' AND ads = 0 AND fb = 0, ref, '') AS r";
+
+/** A group of visits as classifySource reads it: its tags, the referrer, the count. */
+function tagsOf(src: unknown, med: unknown, ads: unknown, fb: unknown, ref: unknown) {
+  return {
+    src: tagValue(src),
+    med: tagValue(med),
+    ads: Number(ads) === 1,
+    fb: Number(fb) === 1,
+    ref: referrer(ref),
+  };
+}
+
+/** Visits of one bucket that carried the same tags, campaign and keyword. */
+export interface SessionGroup extends SessionTags {
+  /** The first day of the bucket (a day, a week's Monday or a month's 1st, Berlin). */
+  bucket: string;
+  /** utm_campaign and utm_term of the visit's first page. */
+  camp: string | null;
+  term: string | null;
+}
+
+const BUCKET: Record<"day" | "week" | "month", string> = {
+  day: "toDate(toTimeZone(first_ts, 'Europe/Berlin'))",
+  week: "toStartOfWeek(toTimeZone(first_ts, 'Europe/Berlin'), 1)",
+  month: "toStartOfMonth(toTimeZone(first_ts, 'Europe/Berlin'))",
+};
+
+/**
+ * The live site's visits in a range, by bucket and by what their first page view carried,
+ * campaign and keyword included: visitors per channel, campaign and keyword are the live visit
+ * total split by these shares, and attribution is the share with any source at all.
+ */
+export async function fetchSessionGroups(
+  from: string,
+  to: string,
+  grain: "day" | "week" | "month"
+): Promise<PostHogResult<SessionGroup[]>> {
+  const q = `
+    SELECT bucket, src, med, ads, fb, ${REF}, camp, term, count() AS n
+    FROM (
+      SELECT ${BUCKET[grain]} AS bucket, ${TAGS},
+             lower(extract(url, '[?&]utm_campaign=([^&#]*)')) AS camp,
+             lower(extract(url, '[?&]utm_term=([^&#]*)')) AS term
+      FROM (${firstViews(from, to)})
+    )
+    GROUP BY bucket, src, med, ads, fb, r, camp, term
+    ORDER BY n DESC
+    LIMIT 5000`;
+  const r = await rows(q, 5000);
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    value: r.value.map(([bucket, src, med, ads, fb, ref, camp, term, n]) => ({
+      bucket: String(bucket).slice(0, 10),
+      ...tagsOf(src, med, ads, fb, ref),
+      camp: tagValue(camp)?.toLowerCase() ?? null,
+      term: tagValue(term)?.toLowerCase() ?? null,
+      sessions: Number(n) || 0,
+    })),
+  };
+}
+
+/** The visit dimensions the Traffic page's audience reads from PostHog. */
+export type VisitDim = "country" | "device" | "daypart" | "visitor" | "countryAll";
+
+/** Visits with the same tags and the same value of one dimension. */
+export interface VisitGroup extends SessionTags {
+  dim: VisitDim;
+  /**
+   * A country code (or "Other"), "Mobile", "Morning", "new", … ("" when PostHog had none).
+   * "countryAll" is every country by its code, over all sources (its tags are empty).
+   */
+  value: string;
+}
+
+/** How many countries are named; the rest are "Other". */
+const TOP_COUNTRIES = 12;
+
+/**
+ * Who the live site's visits were, by source: the country (PostHog's GeoIP, the most common
+ * TOP_COUNTRIES by name), the device, the time of day where the visitor was (the browser's own
+ * offset from UTC) and whether PostHog had seen the person more than half an hour before.
+ * PostHog records about half of the visits (blockers, bots), so these are shares of a sample.
+ */
+export async function fetchVisitAudience(
+  from: string,
+  to: string
+): Promise<PostHogResult<VisitGroup[]>> {
+  const views = firstViews(from, to);
+  const grouped = (value: string, source: string) => `
+    SELECT src, med, ads, fb, ${REF}, value, count() AS n
+    FROM (SELECT ${TAGS}, ${value} AS value FROM ${source})
+    GROUP BY src, med, ads, fb, r, value
+    ORDER BY n DESC
+    LIMIT 3000`;
+  const topCountries = `SELECT country FROM (${views}) WHERE country != '' GROUP BY country ORDER BY count() DESC LIMIT ${TOP_COUNTRIES}`;
+  const queries: Record<Exclude<VisitDim, "countryAll">, string> = {
+    country: grouped(
+      `if(coalesce(country, '') = '', '', if(country IN (${topCountries}), country, 'Other'))`,
+      `(${views})`
+    ),
+    device: grouped("coalesce(device, '')", `(${views})`),
+    // The browser's offset is UTC minus local time, in minutes: local = UTC - offset.
+    daypart: grouped(
+      "if(isNull(tz_offset), '', multiIf(h < 6, 'Night', h < 12, 'Morning', h < 18, 'Afternoon', 'Evening'))",
+      `(SELECT *, toHour(toTimeZone(first_ts, 'UTC') - toIntervalMinute(toInt(tz_offset))) AS h FROM (${views}))`
+    ),
+    // Returning: PostHog saw the person more than half an hour before this visit began.
+    visitor: grouped(
+      "if(isNull(f.first_seen), '', if(f.first_seen < first_ts - INTERVAL 30 MINUTE, 'returning', 'new'))",
+      `(${views}) v LEFT JOIN (SELECT person_id, min(timestamp) AS first_seen FROM events
+         WHERE properties.$host = '${HOST}' AND timestamp >= toDateTime('${POSTHOG_FROM} 00:00:00', 'UTC')
+         GROUP BY person_id) f ON f.person_id = v.pid`
+    ),
+  };
+  // Every country, for the price tiers: no tags, so a few hundred rows at most.
+  const allCountries = `
+    SELECT '' AS src, '' AS med, 0 AS ads, 0 AS fb, '' AS r, coalesce(country, '') AS value, count() AS n
+    FROM (${views})
+    GROUP BY value
+    ORDER BY n DESC
+    LIMIT 3000`;
+  const dims = [...(Object.keys(queries) as VisitDim[]), "countryAll" as const];
+  const results = await Promise.all(
+    dims.map((d) =>
+      rows(d === "countryAll" ? allCountries : queries[d as Exclude<VisitDim, "countryAll">], 3000)
+    )
+  );
+  const out: VisitGroup[] = [];
+  for (const [i, r] of results.entries()) {
+    if (!r.ok) return r;
+    for (const [src, med, ads, fb, ref, value, n] of r.value) {
+      out.push({
+        dim: dims[i]!,
+        value: value === null || value === undefined ? "" : String(value),
+        ...tagsOf(src, med, ads, fb, ref),
+        sessions: Number(n) || 0,
+      });
+    }
+  }
+  return { ok: true, value: out };
+}

@@ -23,21 +23,14 @@ export const ASSESSMENT_A = `${AP_BASE}/assessment-a`;
 export const NAV: NavGroup[] = [
   {
     title: "Reports",
-    items: [
-      { key: "overview", label: "Overview", href: AP_BASE, level: 1 },
-      { key: "o-traffic", label: "Traffic", href: AP_BASE, anchor: "traffic", level: 2 },
-      { key: "o-subs", label: "Submissions", href: AP_BASE, anchor: "submissions", level: 2 },
-      { key: "o-eng", label: "Engagement", href: AP_BASE, anchor: "engagement", level: 2 },
-      { key: "o-rev", label: "Revenue", href: AP_BASE, anchor: "revenue", level: 2 },
-      { key: "o-cost", label: "Costs & CAC", href: AP_BASE, anchor: "costs", level: 2 },
-    ],
+    items: [{ key: "focus", label: "Dashboard", href: AP_BASE, level: 1 }],
   },
   {
     title: "Assessments",
     items: [
       { key: "a", label: "Assessment A", href: ASSESSMENT_A, level: 1, badge: "live" },
       { key: "a-dashboard", label: "Dashboard", href: ASSESSMENT_A, level: 2 },
-      { key: "a-traffic", label: "Traffic", href: ASSESSMENT_A, anchor: "traffic", level: 2 },
+      { key: "a-traffic", label: "Traffic", href: `${ASSESSMENT_A}/traffic`, level: 2 },
       { key: "a-landing", label: "Landing page", href: `${ASSESSMENT_A}/landing`, level: 2 },
       {
         key: "a-page",
@@ -48,7 +41,7 @@ export const NAV: NavGroup[] = [
       },
       { key: "a-survey", label: "Survey", href: `${ASSESSMENT_A}/survey`, level: 2 },
       { key: "a-report", label: "Report", href: `${ASSESSMENT_A}/report`, level: 2 },
-      { key: "a-payment", label: "Payment", href: ASSESSMENT_A, anchor: "payment", level: 2 },
+      { key: "a-payment", label: "Payment", href: `${ASSESSMENT_A}/payment`, level: 2 },
       { key: "b", label: "Assessment B", href: "", level: 1, badge: "soon" },
       { key: "c", label: "Assessment C", href: "", level: 1, badge: "soon" },
     ],
@@ -74,8 +67,10 @@ export const NAV: NavGroup[] = [
 /** Which page a path is, for the sidebar's highlight. */
 export function activeKey(pathname: string): string {
   const p = pathname.replace(/\/+$/, "");
-  if (p === AP_BASE) return "overview";
+  if (p === AP_BASE) return "focus";
   if (p === ASSESSMENT_A) return "a-dashboard";
+  if (p === `${ASSESSMENT_A}/traffic`) return "a-traffic";
+  if (p === `${ASSESSMENT_A}/payment`) return "a-payment";
   if (p === `${ASSESSMENT_A}/landing`) return "a-landing";
   if (p === `${ASSESSMENT_A}/survey`) return "a-survey";
   if (p === `${ASSESSMENT_A}/report`) return "a-report";

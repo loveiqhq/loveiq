@@ -49,9 +49,9 @@ describe("AP readers' SQL", () => {
     }
   });
 
-  it("marks a finisher who bought Full or Full All at any point, not only first", () => {
+  it("marks a finisher who bought a full unlock (Full, Full All or Core) at any point, not only first", () => {
     expect(SQL).toMatch(
-      /coalesce\(bool_or\(p\.metadata->>'plan' IN \('full_report', 'all_reports'\)\) FILTER \(WHERE p\.amount > 0\), false\) AS full_paid/
+      /coalesce\(bool_or\(p\.metadata->>'plan' IN \('full_report', 'all_reports', 'core'\)\) FILTER \(WHERE p\.amount > 0\), false\) AS full_paid/
     );
     expect(SQL).toMatch(/'full', coalesce\(x\.full_paid, false\)/);
   });

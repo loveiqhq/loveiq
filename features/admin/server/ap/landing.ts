@@ -17,7 +17,7 @@ import { classifySource, type Facts } from "./facts";
 import { rangeLabel, type ApFilters } from "./filters";
 import { fmt } from "./format";
 import { armStartsComplete, ratio } from "./metrics";
-import { head, type PageHead } from "./overview";
+import { head, type PageHead } from "./common";
 import {
   POSTHOG_FROM,
   SECTION_TIME_FROM,
@@ -551,7 +551,7 @@ export function buildLanding(input: {
   // The page fixes the comparison and the narrowing filters (all traffic, arm against arm):
   // its notes must not describe filters a shared link carried in from another page.
   const pageHead = head(
-    { ...f, compare: "none", source: "all", device: "all", tier: "all", visitor: "all" },
+    { ...f, source: "all", device: "all", tier: "all", visitor: "all" },
     today,
     now
   );

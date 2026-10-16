@@ -680,6 +680,11 @@ function normalizeCountryCode(value: string | null | undefined) {
   return COUNTRY_NAME_TO_CODE[collapsed] ?? null;
 }
 
+/** The price tier a country (ISO code or English name) falls in, as quotes record it. */
+export function countryTierOf(code: string | null): string {
+  return getCountryPricing(code).tier;
+}
+
 function getCountryPricing(code: string | null) {
   const resolvedCode = normalizeCountryCode(code);
   return (
@@ -831,6 +836,45 @@ export function getEngagementScore({
 
 function getEngagementMultiplier(engagementScore: number) {
   return engagementScore >= 40 ? 1.1 : 1;
+}
+
+/**
+ * The per-visitor factors a quote records and, while `pricing_uplift_enabled` is on, multiplies
+ * its arm's price by. For AP-Analytics' Payment page, read off the functions that price, so the
+ * page never states a factor the pricing does not use.
+ */
+export function personalPriceFactors() {
+  const tiers = new Map<string, number>();
+  for (const { tier, multiplier } of Object.values(COUNTRY_CODE_TO_TIER))
+    tiers.set(tier, multiplier);
+  tiers.set("default", getCountryPricing(null).multiplier);
+  return {
+    country: [...tiers].map(([key, multiplier]) => ({ key, multiplier })),
+    device: (["iOS", "Desktop", "Android"] as const).map((key) => ({
+      key,
+      multiplier: getDeviceMultiplier(key),
+    })),
+    traffic: (["google", "direct", "newsletter", "instagram", "tiktok", "other"] as const).map(
+      (key) => ({ key, multiplier: getTrafficMultiplier(key) })
+    ),
+    behaviour: (
+      [
+        ["zero", "0"],
+        ["light", "50"],
+        ["moderate", "100"],
+        ["consistent", "300"],
+        ["serious", "700"],
+      ] as const
+    ).map(([key, answer]) => ({ key, multiplier: getBehavioralPricing(answer).multiplier })),
+    engagement: [
+      { key: "under 40", multiplier: getEngagementMultiplier(0) },
+      { key: "40 or more", multiplier: getEngagementMultiplier(40) },
+    ],
+    discount: PLAN_LADDERS.full_report.map((step) => ({
+      key: `step ${step.step}`,
+      multiplier: step.multiplier,
+    })),
+  };
 }
 
 export function getDiscountAdjustment({

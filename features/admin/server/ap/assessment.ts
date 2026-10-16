@@ -38,7 +38,7 @@ import {
   type PageHead,
   type Table,
   type Tile,
-} from "./overview";
+} from "./common";
 import type { NewReturning, PostHogResult, SessionTags } from "./posthog";
 
 export interface ScoreRow {

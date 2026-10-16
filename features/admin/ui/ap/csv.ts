@@ -1,6 +1,6 @@
 "use client";
 
-import type { Table, Tile } from "@features/admin/server/ap/overview";
+import type { Table, Tile } from "@features/admin/server/ap/common";
 import type { Unit } from "@features/admin/server/ap/format";
 
 /** One CSV cell, with spreadsheet formulas defused as the admin's other exports do. */

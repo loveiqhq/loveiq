@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDashboard } from "@features/admin/server/ap/assessment";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import type { QuoteFact } from "@features/admin/server/ap/facts";
-import type { Tile } from "@features/admin/server/ap/overview";
+import type { Tile } from "@features/admin/server/ap/common";
 import { buildReportPage, type ReportExtras } from "@features/admin/server/ap/report-page";
 
 import { factsFixture } from "./ap-fixtures";

@@ -20,7 +20,7 @@ import {
   trend,
   type Totals,
 } from "./metrics";
-import { head, type PageHead, type Tile } from "./overview";
+import { head, type PageHead, type Tile } from "./common";
 import type { PostHogResult, SurveyIntroClicks } from "./posthog";
 import type { SurveyQuestions } from "./survey";
 

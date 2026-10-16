@@ -216,6 +216,13 @@ export function totals(facts: Facts, scope: Scope, from = facts.from, to = facts
   };
 }
 
+/** The sales (over EUR 0) paid in [from, to] whose finisher passes the filters. */
+export function salesIn(facts: Facts, scope: Scope, from = facts.from, to = facts.to) {
+  return facts.money.filter(
+    (m) => within(m.day, from, to) && m.amount > 0 && !isTest(m) && inScope(m, scope)
+  );
+}
+
 export interface Spend {
   /** EUR, or null when the filters can't split spend or no day of the range has a figure. */
   eur: number | null;
@@ -381,6 +388,8 @@ export function ageMatched(prev: Facts, cutoff: Date): Facts {
         votes: votedAt ? s.votes : 0,
         invitedAt,
         invited: s.invited && invitedAt !== null,
+        // Their sales up to the same age, so lifetime value compares like with like.
+        userPays: s.userPays.filter((pay) => Date.parse(pay.at) <= limit),
       };
     }),
   };

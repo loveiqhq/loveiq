@@ -7,9 +7,10 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { Column, MiniStat, Table, Tile } from "@features/admin/server/ap/overview";
+import type { Column, MiniStat, PageHead, Table, Tile } from "@features/admin/server/ap/common";
 import {
   delta,
+  deltaRel,
   EMPTY,
   fmt,
   sparkPoints,
@@ -193,6 +194,52 @@ export function KpiTile({
     </a>
   ) : (
     <div className={cls}>{body}</div>
+  );
+}
+
+/**
+ * The design's headline tile since 16 Oct 2026 (Dashboard, Traffic, Payment, Landing, Survey,
+ * Report): the label, the value, the change against the period before as a percentage (green,
+ * red, or grey when flat) or the tile's own grey line, then the trend line. A blank value says
+ * why in place of the change. `level`: the parts sit on the grid's shared rows (subgrid).
+ */
+export function KpiTileV2({
+  tile,
+  level = false,
+  digits,
+}: {
+  tile: Tile;
+  level?: boolean;
+  /** Decimals for the value, where the design fixes them. */
+  digits?: number;
+}) {
+  const d =
+    tile.blocked || tile.note !== undefined ? null : deltaRel(tile.value, tile.prev, tile.goodWhen);
+  return (
+    <div
+      className={`${level ? "row-span-4 grid grid-rows-subgrid" : "flex flex-col"} gap-2 rounded-[20px] border border-ap-line bg-white px-[18px] py-4 text-ap-ink shadow-ap`}
+    >
+      <Eyebrow>{tile.label}</Eyebrow>
+      <span className="font-serif text-[28px] font-semibold leading-none tabular-nums text-ap-ink">
+        {tile.blocked ? EMPTY : fmt(tile.unit, tile.value, digits)}
+      </span>
+      {tile.blocked ? (
+        <span className="text-xs leading-snug text-ap-muted">{tile.blocked}</span>
+      ) : tile.note !== undefined ? (
+        <span
+          className={`text-sm font-bold leading-[1.4] tabular-nums ${TONE_TEXT[tile.noteTone ?? "flat"]}`}
+        >
+          {tile.note}
+        </span>
+      ) : (
+        <span
+          className={`whitespace-nowrap text-sm font-bold leading-[1.4] tabular-nums ${TONE_TEXT[d?.tone ?? "flat"]}`}
+        >
+          {d?.text ?? EMPTY}
+        </span>
+      )}
+      <Spark values={tile.blocked ? [] : tile.spark} />
+    </div>
   );
 }
 
@@ -750,5 +797,47 @@ export function BlackButton({
     >
       {children}
     </button>
+  );
+}
+
+/** The line over a page's figures: their range, comparison, sources and update time, then the notes. */
+export function RangeLine({
+  data,
+  sources = "Production database, ad spend from GA4",
+  trend,
+  withRange = true,
+}: {
+  data: Pick<PageHead, "range" | "compare" | "generatedAt" | "notes">;
+  sources?: string;
+  /** What the tiles' trend lines cover, said once here instead of under every tile. */
+  trend?: string;
+  /** Off where the header already shows the Live badge and the filter bar the range. */
+  withRange?: boolean;
+}) {
+  const at = new Date(data.generatedAt).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-ap-muted">
+        {withRange && <LiveBadge dot />}
+        <span>
+          {withRange &&
+            `Figures below: ${data.range.label}${data.compare ? ` vs ${data.compare.label}` : ""} · `}
+          {sources} · updated {at}
+          {trend ? ` · trend lines: ${trend.charAt(0).toLowerCase()}${trend.slice(1)}` : ""}
+        </span>
+      </div>
+      {data.notes.map((n) => (
+        <p
+          key={n}
+          className="m-0 rounded-[14px] bg-ap-lilac px-3.5 py-2.5 text-[13px] leading-relaxed text-ap-body"
+        >
+          {n}
+        </p>
+      ))}
+    </div>
   );
 }

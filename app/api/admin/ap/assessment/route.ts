@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { buildDashboard } from "@features/admin/server/ap/assessment";
 import { fetchFactsFor } from "@features/admin/server/ap/facts";
 import { beforeData, comparisonRange, parseFilters } from "@features/admin/server/ap/filters";
-import { splitBlocked } from "@features/admin/server/ap/overview";
+import { splitBlocked } from "@features/admin/server/ap/common";
 import {
   fetchNewReturning,
   fetchSessionSources,

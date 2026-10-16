@@ -8,7 +8,6 @@ import type { ReportPayload, ReportTile } from "@features/admin/server/ap/report
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
-import { RangeLine } from "./ApOverview";
 import { exportTables } from "./csv";
 import {
   AllTraffic,
@@ -30,6 +29,7 @@ import {
   StatBox,
   TileGrid,
   useHashScroll,
+  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 

@@ -30,17 +30,37 @@ interface Tagged {
   fb?: boolean;
 }
 
-export interface StartFact extends Tagged {
+/** What the ad links tag besides the source: the campaign, the keyword and the network. */
+interface AdTags {
+  /** utm_campaign, as the Google Ads tracking template sets it ("performance_max"). */
+  camp: string | null;
+  /** utm_term: the keyword the search ad matched (Google Search only). */
+  term: string | null;
+}
+
+export interface StartFact extends Tagged, AdTags {
   day: string;
   /** False when neither a draft nor a submission holds the session's tracker. */
   known: boolean;
   arm: string | null;
   device: string | null;
   finished: boolean;
+  /** The email test's arm (contact_question_arm), stamped from 8 Oct 2026. */
+  cq: string | null;
+  /** The run reached the email question (a step on it, an email answer, or it finished). */
+  email: boolean;
   n: number;
 }
 
-export interface SubFact extends Tagged {
+/** A sale of one of the person's reports (amount over 0, not a test), any time. */
+export interface UserPay {
+  at: string;
+  amount: number;
+  plan: string | null;
+  refunded: boolean;
+}
+
+export interface SubFact extends Tagged, AdTags {
   id: number;
   day: string;
   at: string;
@@ -86,9 +106,23 @@ export interface SubFact extends Tagged {
   ph: string | null;
   /** New or returning (markVisitors); unset until the visitor filter asks. */
   visitorNew?: boolean | null;
+  /** Google Ads' network: "g" Search, "x" Performance Max (cross-network). */
+  net: string | null;
+  /** The email test's arm (contact_question_arm). */
+  cq: string | null;
+  /** The report's archetype (scoring_result). */
+  archetype: string | null;
+  /** The person (an internal id, never shown); null for a submission without one. */
+  uid: number | null;
+  /** Their first finished survey, all time. */
+  userFirstAt: string | null;
+  /** Surveys they finished, all time. */
+  userSubs: number;
+  /** Every sale of their reports, all time, oldest first. */
+  userPays: UserPay[];
 }
 
-export interface MoneyFact extends Tagged {
+export interface MoneyFact extends Tagged, AdTags {
   day: string;
   sid: number;
   amount: number;
@@ -99,10 +133,43 @@ export interface MoneyFact extends Tagged {
   /** The finisher's visit, as on SubFact. */
   ph: string | null;
   visitorNew?: boolean | null;
+  uid: number | null;
+  /** How they paid: "link" (Stripe Link) or the card's brand ("visa"); null for a free unlock. */
+  method: string | null;
+  net: string | null;
+  /** The price arm stamped on the payment (A, B, A3, B3), or null. */
+  priceArm: string | null;
 }
 
-/** The plans that unlock the full report. */
-export const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_reports"]);
+/**
+ * A paid checkout opened in the range (a Stripe Checkout session; free unlocks are left out),
+ * grouped: it reached the payment page; `attempted`, a payment was tried (paid, or a payment
+ * method or a failure recorded); `status` "succeeded" is paid.
+ */
+export interface CheckoutFact extends Tagged {
+  day: string;
+  status: string;
+  attempted: boolean;
+  plan: string | null;
+  /** The price arm stamped on the checkout (A, B, A3, B3), or null. */
+  priceArm: string | null;
+  arm: string | null;
+  device: string | null;
+  tier: string | null;
+  n: number;
+}
+
+/**
+ * The plans that unlock a full report (Marcus's "full unlock"): Full, Full All, and Core (the
+ * top three archetypes in full, retired). Essentials (retired) had no real sale.
+ */
+export const FULL_PLANS: ReadonlySet<string> = new Set(["full_report", "all_reports", "core"]);
+
+/**
+ * The plans that pre-unlock a report (Marcus's "Initial plan", EUR 1.99): none is on sale yet.
+ * Add its plan key here when it ships; until then every pre-unlock figure says so.
+ */
+export const PRE_PLANS: ReadonlySet<string> = new Set<string>();
 
 export interface IntroFact {
   day: string;
@@ -130,6 +197,8 @@ export interface QuoteFact extends Tagged {
   device: string | null;
   tier: string | null;
   quoted: number;
+  /** Of those, saw the paywall (paywall_reached_at). */
+  paywall: number;
   checkouts: number;
   sales: number;
   revenue: number;
@@ -144,6 +213,7 @@ export interface Facts {
   starts: StartFact[];
   subs: SubFact[];
   money: MoneyFact[];
+  checkouts: CheckoutFact[];
   intro: IntroFact[];
   invites: Array<{ day: string; n: number }>;
   quotes: QuoteFact[];
@@ -181,6 +251,16 @@ export function parseFacts(
     ref: str(r.ref),
     fb: r.fb === true,
   });
+  const adTags = (r: Record<string, unknown>) => ({ camp: str(r.camp), term: str(r.term) });
+  const pays = (v: unknown): UserPay[] =>
+    Array.isArray(v)
+      ? (v as Record<string, unknown>[]).map((p) => ({
+          at: String(p.at),
+          amount: num(p.amount),
+          plan: str(p.plan),
+          refunded: p.refunded === true,
+        }))
+      : [];
   return {
     from,
     to,
@@ -193,15 +273,19 @@ export function parseFacts(
     })),
     starts: rows(o.starts, "starts").map((r) => ({
       ...tagged(r),
+      ...adTags(r),
       day: String(r.day),
       known: r.known === true,
       arm: str(r.arm),
       device: str(r.device),
       finished: r.finished === true,
+      cq: str(r.cq),
+      email: r.email === true,
       n: num(r.n),
     })),
     subs: rows(o.subs, "subs").map((r) => ({
       ...tagged(r),
+      ...adTags(r),
       id: num(r.id),
       day: String(r.day),
       at: String(r.at),
@@ -238,9 +322,17 @@ export function parseFacts(
       invitedAt: str(r.invitedAt),
       wizardSlide: numOrNull(r.wizardSlide),
       ph: str(r.ph),
+      net: str(r.net),
+      cq: str(r.cq),
+      archetype: str(r.archetype),
+      uid: numOrNull(r.uid),
+      userFirstAt: str(r.userFirstAt),
+      userSubs: num(r.userSubs),
+      userPays: pays(r.userPays),
     })),
     money: rows(o.money, "money").map((r) => ({
       ...tagged(r),
+      ...adTags(r),
       day: String(r.day),
       sid: num(r.sid),
       amount: num(r.amount),
@@ -249,6 +341,22 @@ export function parseFacts(
       device: str(r.device),
       tier: str(r.tier),
       ph: str(r.ph),
+      uid: numOrNull(r.uid),
+      method: str(r.method),
+      net: str(r.net),
+      priceArm: str(r.priceArm),
+    })),
+    checkouts: rows(o.checkouts, "checkouts").map((r) => ({
+      ...tagged(r),
+      day: String(r.day),
+      status: String(r.status),
+      attempted: r.attempted === true,
+      plan: str(r.plan),
+      priceArm: str(r.priceArm),
+      arm: str(r.arm),
+      device: str(r.device),
+      tier: str(r.tier),
+      n: num(r.n),
     })),
     intro: rows(o.intro, "intro").map((r) => ({
       day: String(r.day),
@@ -270,6 +378,7 @@ export function parseFacts(
       device: str(r.device),
       tier: str(r.tier),
       quoted: num(r.quoted),
+      paywall: num(r.paywall),
       checkouts: num(r.checkouts),
       sales: num(r.sales),
       revenue: num(r.revenue),

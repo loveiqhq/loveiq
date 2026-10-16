@@ -27,7 +27,8 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import { GET as assessmentGet } from "@/app/api/admin/ap/assessment/route";
-import { GET as overviewGet } from "@/app/api/admin/ap/overview/route";
+import { GET as focusGet } from "@/app/api/admin/ap/focus/route";
+import { GET as paymentGet } from "@/app/api/admin/ap/payment/route";
 import { GET as reportGet } from "@/app/api/admin/ap/report/route";
 import { GET as surveyGet } from "@/app/api/admin/ap/survey/route";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
@@ -43,6 +44,9 @@ const finisher = (id: number, day: string) => ({
   id,
   day,
   at: `${day}T10:00:00Z`,
+  // One person each, finishing for the first time.
+  uid: 100 + id,
+  userFirstAt: `${day}T10:00:00Z`,
   src: "google",
   med: "cpc",
   openedAt: `${day}T10:05:00Z`,
@@ -52,6 +56,7 @@ const facts = (subs: unknown[]) => ({
   starts: [],
   subs,
   money: [],
+  checkouts: [],
   intro: [],
   invites: [],
   quotes: [],
@@ -188,14 +193,22 @@ describe("the New & returning filter on every page route", () => {
   const tile = (p: { tiles: Array<{ key: string; value: number | null }> }, key: string) =>
     p.tiles.find((t) => t.key === key)?.value;
 
-  it("overview: finishers and revenue by the payer's group", async () => {
-    const all = await read(overviewGet, "overview", "all");
-    const fresh = await read(overviewGet, "overview", "new");
-    const back = await read(overviewGet, "overview", "returning");
-    expect([tile(all, "subs"), tile(fresh, "subs"), tile(back, "subs")]).toEqual([3, 1, 1]);
+  it("dashboard: new users and revenue by the payer's group", async () => {
+    const all = await read(focusGet, "focus", "all");
+    const fresh = await read(focusGet, "focus", "new");
+    const back = await read(focusGet, "focus", "returning");
+    expect([tile(all, "new-users"), tile(fresh, "new-users"), tile(back, "new-users")]).toEqual([
+      3, 1, 1,
+    ]);
     expect([tile(all, "revenue"), tile(fresh, "revenue"), tile(back, "revenue")]).toEqual([
       11.98, 6.99, 4.99,
     ]);
+  });
+
+  it("payment: paid sales by the payer's group", async () => {
+    const sales = async (visitor: string) =>
+      tile(await read(paymentGet, "payment", visitor), "sales");
+    expect([await sales("all"), await sales("new"), await sales("returning")]).toEqual([2, 1, 1]);
   });
 
   it("assessment: revenue by the payer's group, and prices said not to split", async () => {

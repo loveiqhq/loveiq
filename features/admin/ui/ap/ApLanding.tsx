@@ -10,12 +10,11 @@ import type {
   Comparison,
   LandingPayload,
 } from "@features/admin/server/ap/landing";
-import type { Table } from "@features/admin/server/ap/overview";
+import type { Table } from "@features/admin/server/ap/common";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getTrustpilotConfig } from "@shared/ui/trustpilot/config";
 
 import ApFilterBar from "./ApFilterBar";
-import { RangeLine } from "./ApOverview";
 import { exportTables } from "./csv";
 import {
   FilterIcon,
@@ -31,6 +30,7 @@ import {
   SectionHead,
   SortIcon,
   useHashScroll,
+  RangeLine,
 } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -778,7 +778,7 @@ export default function ApLanding() {
       />
       <ApFilterBar
         scope="assessment"
-        fixed={["compare", "source", "device", "tier", "visitor"]}
+        fixed={["source", "device", "tier", "visitor"]}
         fixedNote="This page compares test arms over all traffic: the visit log has no source, device, tier or visitor history, and arms are compared with each other, not with another period."
       />
       {loading && !data && <Loading label="the landing page" />}

@@ -7,7 +7,6 @@ import { fmt } from "@features/admin/server/ap/format";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
-import { RangeLine } from "./ApOverview";
 import { exportTables } from "./csv";
 import {
   AllTraffic,
@@ -30,6 +29,7 @@ import {
   SortIcon,
   TileGrid,
   useHashScroll,
+  RangeLine,
 } from "./kit";
 import { ASSESSMENT_A } from "./nav";
 import { useApFilters } from "./useApFilters";

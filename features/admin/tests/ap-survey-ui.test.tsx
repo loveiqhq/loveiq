@@ -6,7 +6,7 @@ import type { AnswerSplit } from "@features/admin/server/ap/answers";
 import { parseFilters } from "@features/admin/server/ap/filters";
 import { buildSurveyQuestions } from "@features/admin/server/ap/survey";
 import { buildSurveyPage } from "@features/admin/server/ap/survey-page";
-import type { Table } from "@features/admin/server/ap/overview";
+import type { Table } from "@features/admin/server/ap/common";
 import type { DropoffRun } from "@features/admin/server/dropoff-report";
 import { askedQuestions } from "@features/admin/server/dropoff-weekly";
 
@@ -87,7 +87,6 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 }));
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
-vi.mock("@features/admin/ui/ap/ApOverview", () => ({ RangeLine: () => null }));
 // The CSV's tables as the page hands them over, without a download.
 const exported = vi.hoisted(() => ({ sections: [] as Array<{ name: string; table: Table }> }));
 vi.mock("@features/admin/ui/ap/csv", () => ({
@@ -117,7 +116,8 @@ describe("the Survey page as drawn", () => {
     // Left before Q1: 1 − 55 answered of 100.
     expect(screen.getByText("Left before Q1").nextSibling!.textContent).toBe("45.0%");
     expect(screen.getByText("incl. 5 Return to site")).toBeTruthy();
-    expect(screen.getAllByText("Live")).toHaveLength(4);
+    // Four tiles, and the range line's own Live badge.
+    expect(screen.getAllByText("Live")).toHaveLength(5);
 
     const intro = "Intro wizard cards";
     expect(column(intro, 0)).toEqual(["1", "2", "3", "4", "5", "6"]);

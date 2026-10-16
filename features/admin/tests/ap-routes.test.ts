@@ -960,6 +960,7 @@ describe("GET /api/admin/ap/survey/answers", () => {
             finisher(4, "prod-verification"),
           ],
           money: [],
+          checkouts: [],
           intro: [],
           invites: [],
           quotes: [],
@@ -1016,6 +1017,7 @@ describe("the new/returning filter", () => {
             finisher(4, "0192f0aa-4444-7000-8000-000000000004"),
           ],
           money: [],
+          checkouts: [],
           intro: [],
           invites: [],
           quotes: [],
@@ -1218,7 +1220,16 @@ describe("fetchFacts", () => {
   it("stamps the Berlin day it read the facts on", async () => {
     clearFactsCache();
     mockSupabaseFetch.mockResolvedValue(
-      json({ visits: [], starts: [], subs: [], money: [], intro: [], invites: [], quotes: [] })
+      json({
+        visits: [],
+        starts: [],
+        subs: [],
+        money: [],
+        checkouts: [],
+        intro: [],
+        invites: [],
+        quotes: [],
+      })
     );
     // 22:30 UTC on 13 Oct is already 14 Oct in Berlin.
     const f = await fetchFacts("2026-10-01", "2026-10-07", Date.parse("2026-10-13T22:30:00Z"));

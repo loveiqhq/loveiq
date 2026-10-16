@@ -105,6 +105,31 @@ export function delta(
   return { text: `${sign}${Math.abs(rel).toFixed(1)}%`, tone: Math.abs(rel) < 1 ? "flat" : tone };
 }
 
+/**
+ * The change as the design's tiles write it since 16 Oct 2026: always relative ("+5.8%",
+ * "−7.7%"), rates and times too. From nothing to something is "New"; nothing to nothing is
+ * no change. Under 1% reads flat (grey): noise on these volumes.
+ */
+export function deltaRel(
+  now: number | null,
+  before: number | null,
+  goodWhen: GoodWhen = "up"
+): Delta | null {
+  if (now === null || before === null || !Number.isFinite(now) || !Number.isFinite(before))
+    return null;
+  const diff = now - before;
+  const tone: Tone =
+    Math.abs(diff) < 1e-12 || goodWhen === "either"
+      ? "flat"
+      : diff > 0 === (goodWhen === "up")
+        ? "good"
+        : "bad";
+  if (before === 0) return now === 0 ? { text: "±0%", tone: "flat" } : { text: "New", tone };
+  const rel = (diff / Math.abs(before)) * 100;
+  const sign = rel > 0 ? "+" : rel < 0 ? MINUS : "±";
+  return { text: `${sign}${Math.abs(rel).toFixed(1)}%`, tone: Math.abs(rel) < 1 ? "flat" : tone };
+}
+
 /** Points for an SVG polyline in a 120 × 36 box; gaps (null) are skipped. */
 export function sparkPoints(values: Array<number | null>, height = 36): string {
   const real = values.filter((v): v is number => v !== null && Number.isFinite(v));

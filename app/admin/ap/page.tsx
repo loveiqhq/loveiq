@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
 
 import DashboardErrorBoundary from "@features/admin/ui/DashboardErrorBoundary";
-import ApOverview from "@features/admin/ui/ap/ApOverview";
+import ApFocus from "@features/admin/ui/ap/ApFocus";
 
 export const metadata: Metadata = {
-  title: "AP-Analytics · Overall performance",
+  title: "AP-Analytics · Dashboard",
   robots: { index: false, follow: false },
 };
 
-export default function ApOverviewPage() {
+export default function ApDashboardPage() {
   return (
-    <DashboardErrorBoundary label="The overview">
-      <ApOverview />
+    <DashboardErrorBoundary label="The dashboard">
+      <ApFocus />
     </DashboardErrorBoundary>
   );
 }

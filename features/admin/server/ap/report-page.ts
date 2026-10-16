@@ -25,7 +25,7 @@ import {
   ageMatched,
   sameAge,
 } from "./metrics";
-import { head, readFoot, type PageHead, type Tile } from "./overview";
+import { head, readFoot, type PageHead, type Tile } from "./common";
 import type { PostHogResult, ReportReturns } from "./posthog";
 import { AGE_BANDS, ageBand, genderLabel } from "./survey-page";
 
@@ -59,6 +59,8 @@ export interface ReportExtras {
   }>;
   /** Those readers who reached any chapter: Reach's denominator. */
   chapter_readers: number;
+  /** Each of those readers' chapters reached (ids, unordered): how far into the report they got. */
+  chapter_depth: Array<{ sid: number; chapters: string[] }>;
   /** The first day (Berlin) any chapter reading was recorded; null before the first. */
   chapter_stats_from: string | null;
   /** The range's finishers who pressed Skip Intro, by the slide (0-5) they pressed it on. */
@@ -125,6 +127,12 @@ export async function fetchReportExtras(from: string, to: string): Promise<Repor
     // recorded, which the page says, never zeros.
     chapter_stats: Array.isArray(raw.chapter_stats) ? raw.chapter_stats : [],
     chapter_readers: Number(raw.chapter_readers) || 0,
+    chapter_depth: Array.isArray(raw.chapter_depth)
+      ? raw.chapter_depth.map((d) => ({
+          sid: Number(d.sid),
+          chapters: Array.isArray(d.chapters) ? d.chapters.map(String) : [],
+        }))
+      : [],
     chapter_stats_from: raw.chapter_stats_from ?? null,
     wizard_skips: Array.isArray(raw.wizard_skips)
       ? raw.wizard_skips.map((k) => ({

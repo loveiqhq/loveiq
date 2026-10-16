@@ -66,8 +66,9 @@ describe("AP filters", () => {
       source: "all",
       device: "all",
       tier: "all",
-      compare: "prev",
     });
+    // "compare" was retired on 16 Oct 2026: an older link's is ignored, never kept.
+    expect("compare" in f).toBe(false);
   });
 
   it("clamps a custom range to the data, to today and to its maximum length", () => {
@@ -94,13 +95,16 @@ describe("AP filters", () => {
     ).toBe("2026-09-13");
   });
 
-  it("compares with the period before, or the same dates a year earlier", () => {
+  it("compares with the period before, whatever an older link asked for", () => {
     const f = parseFilters({}, TODAY);
     expect(comparisonRange(f)).toEqual({ from: "2026-08-14", to: "2026-09-12" });
-    expect(comparisonRange({ ...f, compare: "yoy", from: "2028-02-29", to: "2028-03-01" })).toEqual(
-      { from: "2027-02-28", to: "2027-03-01" }
-    );
-    expect(comparisonRange({ ...f, compare: "none" })).toBeNull();
+    // Same period last year and No comparison were retired on 16 Oct 2026.
+    expect(comparisonRange(parseFilters({ compare: "yoy" }, TODAY))).toEqual({
+      from: "2026-08-14",
+      to: "2026-09-12",
+    });
+    expect(comparisonRange(parseFilters({ compare: "none" }, TODAY))).not.toBeNull();
+    expect(filterParams(parseFilters({ compare: "yoy" }, TODAY))).toEqual({});
   });
 
   it("draws days up to two weeks, weeks up to about four months, then months", () => {
@@ -121,7 +125,6 @@ describe("AP filters", () => {
     const f = parseFilters({ period: "custom", from: "2026-10-10", to: TODAY }, TODAY);
     expect(f.running).toBe(true);
     expect(comparisonRange(f)).toBeNull();
-    expect(comparisonRange({ ...f, compare: "yoy" })).toBeNull();
     expect(parseFilters({}, TODAY).running).toBe(false);
   });
 
@@ -141,15 +144,11 @@ describe("AP filters", () => {
     expect(filterSummary(parseFilters({}, TODAY), TODAY)).not.toContain("today so far");
   });
 
-  it("sums the filters up as drawn: both years, the comparison by name, no remarks", () => {
+  it("sums the filters up as drawn: both years, vs the previous period, no remarks", () => {
     const f = parseFilters({}, TODAY);
     expect(filterSummary(f, TODAY)).toBe(
       "13 Sep 2026 – 12 Oct 2026 · vs previous period · all assessments, sources and devices"
     );
-    expect(filterSummary({ ...f, compare: "yoy" }, TODAY)).toContain(
-      " · vs same period last year · "
-    );
-    expect(filterSummary({ ...f, compare: "none" }, TODAY)).toContain(" · no comparison · ");
     expect(filterSummary(parseFilters({ period: "today" }, TODAY), TODAY)).toMatch(
       /^13 Oct 2026 \(today so far\) · no comparison while today runs · /
     );
@@ -440,6 +439,7 @@ describe("AP totals", () => {
       ],
       subs: [sub({ day: "2026-10-15", src: null, med: null, ads: false, ref: "www.google.com" })],
       money: [],
+      checkouts: [],
     });
     expect(totals(later, { ...ALL, device: "tablet" })).toMatchObject({ starts: 2, subs: 0 });
     expect(totals(later, { ...ALL, device: "phone" })).toMatchObject({ starts: 0, subs: 1 });
@@ -452,6 +452,7 @@ describe("AP totals", () => {
       starts: [{ day: "2026-10-15", known: true, ref: "www.bing.com", fb: true, n: 1 }],
       subs: [],
       money: [],
+      checkouts: [],
       intro: [],
       invites: [],
       quotes: [],
@@ -468,6 +469,7 @@ describe("AP totals", () => {
       starts: [],
       subs: [],
       money: [],
+      checkouts: [],
       intro: [],
       invites: [],
       quotes: [],
@@ -480,7 +482,16 @@ describe("AP totals", () => {
   it("reads a Full purchase from its flag, or from the first plan where the function has none", () => {
     const subs = (rows: Array<Record<string, unknown>>) =>
       parseFacts(
-        { visits: [], starts: [], subs: rows, money: [], intro: [], invites: [], quotes: [] },
+        {
+          visits: [],
+          starts: [],
+          subs: rows,
+          money: [],
+          checkouts: [],
+          intro: [],
+          invites: [],
+          quotes: [],
+        },
         "2026-10-01",
         "2026-10-01"
       ).subs.map((s) => s.full);
@@ -502,6 +513,7 @@ describe("AP totals", () => {
       starts: [],
       subs: [],
       money: [],
+      checkouts: [],
       intro: [
         {
           day: "2026-10-01",

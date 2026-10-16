@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import {
   ASSESSMENTS,
-  COMPARES,
   DEVICES,
   PERIODS,
   SOURCES,
@@ -41,11 +40,12 @@ function sameFilters(a: ApFilters, b: ApFilters): boolean {
 }
 
 /**
- * The shared filter bar (the design's "Report filters"): saved filters, the period and its
- * comparison, and the narrowing filters. Collapsible; the state lives in the URL.
+ * The shared filter bar (the design's "Report filters"): saved filters, the period (always
+ * compared with the one before it), and the narrowing filters. Collapsible; the state lives in
+ * the URL.
  */
 /** Filters a page cannot apply: shown greyed at their "all" value, with the reason. */
-type Fixed = "compare" | "source" | "device" | "tier" | "visitor";
+type Fixed = "source" | "device" | "tier" | "visitor";
 
 const SAVED_PARAMS = { kind: "filter" };
 
@@ -70,7 +70,6 @@ export default function ApFilterBar({
   const filters = {
     ...chosen,
     ...(assessmentFixed ? { assessment: "a" as const } : {}),
-    ...(off("compare") ? { compare: "none" as const } : {}),
     ...(off("source") ? { source: "all" as const } : {}),
     ...(off("device") ? { device: "all" as const } : {}),
     ...(off("tier") ? { tier: "all" as const } : {}),
@@ -334,21 +333,6 @@ export default function ApFilterBar({
                 className={control}
               />
             </label>
-            <label className={`${fieldLabel} flex-[1_1_180px]`}>
-              Compare to
-              <select
-                value={filters.period === "today" || filters.running ? "none" : filters.compare}
-                disabled={off("compare") || filters.period === "today" || filters.running}
-                onChange={(e) => update({ compare: e.target.value as ApFilters["compare"] })}
-                className={control}
-              >
-                {COMPARES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -438,10 +422,6 @@ export default function ApFilterBar({
           </div>
           {/* A page's own reason for the filters it fixes stays in view. */}
           {fixedNote && <p className="m-0 text-xs text-ap-muted">{fixedNote}</p>}
-
-          <p className="m-0 text-[13px] leading-normal text-ap-body">
-            <strong>Showing</strong> {summary}
-          </p>
 
           {/* Not in the design: kept, folded away. */}
           <details className="text-xs text-ap-muted">
