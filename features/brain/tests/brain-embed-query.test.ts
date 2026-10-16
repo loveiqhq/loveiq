@@ -110,12 +110,36 @@ describe("embedQuery is on the path of every question", () => {
     expect(await embedQuery("a real question")).toBe("[0.100000,0.200000,0.300000]");
 
     respond = () => new Response(JSON.stringify({ embeddings: [] }), { status: 200 });
-    expect(await embedQuery("a real question")).toBeNull();
+    expect(await embedQuery("a different real question")).toBeNull();
   });
 
   it("does not call the edge function for a question too short to mean anything", async () => {
     expect(await embedQuery(" a ")).toBeNull();
     expect(calls).toHaveLength(0);
+  });
+
+  it("embeds a question once: the look outside a filter asks the same one again", async () => {
+    // 2026-10-05: the second search embedded the same text again, in sequence.
+    const first = await embedQuery("what did we decide about pricing");
+    expect(await embedQuery("  what did we decide about pricing ")).toBe(first);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("keeps only successes, so a failed embedding is tried afresh", async () => {
+    respond = () => new Response("WORKER_RESOURCE_LIMIT", { status: 546 });
+    expect(await embedQuery("who owns the paywall copy")).toBeNull();
+    respond = () => new Response(JSON.stringify({ embeddings: [[0.5]] }), { status: 200 });
+    expect(await embedQuery("who owns the paywall copy")).toBe("[0.500000]");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("keeps a bounded number of questions, oldest out first", async () => {
+    for (let i = 0; i < 65; i++) await embedQuery(`question number ${i}`);
+    calls.length = 0;
+    await embedQuery("question number 64");
+    expect(calls).toHaveLength(0);
+    await embedQuery("question number 0");
+    expect(calls).toHaveLength(1);
   });
 });
 

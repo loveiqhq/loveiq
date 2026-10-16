@@ -14,6 +14,10 @@
  *
  *   npx tsx scripts/walkers/walk.ts --persona "Spark Seeker" --device "Pixel 7"
  *   npx tsx scripts/walkers/walk.ts --persona "Spark Seeker" --device "Desktop Chrome" --no-pay
+ *   npx tsx scripts/walkers/walk.ts --persona "Spark Seeker" --device "Desktop Chrome" --sequence other-first
+ *
+ * --sequence other-first buys another archetype's report from the "Other Archetypes" list
+ * before the walk's own full_report, and checks each step (walk.json `sequence`).
  *
  * Writes <WALK_OUT or walks>/<slug>/walk.json plus the screenshots it names. Exit 0 when the
  * walk reached the end, whatever it found on the way; 1 when it could not finish; 2 on bad
@@ -26,6 +30,8 @@ import { stripVTControlCharacters } from "node:util";
 import { chromium, devices, webkit, type Locator, type Page } from "playwright";
 
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
+import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
+import { applyEmailQuestionArm } from "@features/survey/anonymousEmail";
 
 import { stagingCookies } from "../probes/staging-cookie.mjs";
 import personasFile from "./personas.json";
@@ -102,6 +108,13 @@ export interface Step {
   errors?: string[];
 }
 
+/** One check of the purchase sequence: what should hold, whether it did, and what was seen. */
+export interface SequenceCheck {
+  what: string;
+  ok: boolean;
+  observed: string;
+}
+
 export interface Walk {
   persona: string;
   device: string;
@@ -138,11 +151,30 @@ export interface Walk {
   /** A proof walk's planted behaviours, and any the site would not let it carry out. */
   planted?: string[];
   plantFailures?: string[];
+  /**
+   * --sequence other-first: `other` is the archetype bought first from "Other Archetypes",
+   * and each check made on the way, up to the first that failed (which stopped the walk).
+   */
+  sequence?: { mode: "other-first"; other?: string; checks: SequenceCheck[] };
 }
 
 const norm = (s: string) =>
   s.replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().toLowerCase();
-const BY_TEXT = new Map(surveyQuestions.map((q) => [norm(q.question), q]));
+/**
+ * Each question by its heading, plus the email question as the email test's anonymous arm
+ * asks it (features/survey/anonymousEmail.ts). Half of all walks draw that arm; unknown, its
+ * heading fell through to `answerGenerically`, which typed "Walker" into the email field, and
+ * the walk stopped there. Keyed to the arm's own copy, so the walker answers it as the email
+ * question and finds the field by the words the field is labelled with.
+ */
+const BY_TEXT = new Map(
+  surveyQuestions.flatMap((q) => {
+    const anonymous = applyEmailQuestionArm(q, "anonymous");
+    return anonymous === q
+      ? [[norm(q.question), q] as const]
+      : [[norm(q.question), q] as const, [norm(anonymous.question), anonymous] as const];
+  })
+);
 
 /**
  * Staging, or this machine when asked for explicitly. Never loveiq.org: a walk submits a
@@ -328,6 +360,7 @@ function parseArgs(argv: string[]) {
     proof: argv.includes("--proof"),
     seed: get("--seed"),
     quit: get("--quit") as Quit | undefined,
+    sequence: get("--sequence"),
   };
 }
 
@@ -419,6 +452,17 @@ async function main(argv: string[]): Promise<number> {
   }
   // By hand, the cheapest plan; the nightly rotation names one (scripts/walkers/rotation.ts).
   const plan: Plan = opts.plan ?? "full_report";
+  // The sequence's second purchase is the walk's own full_report, and its events would
+  // muddle a proof walk's truth.
+  if (
+    opts.sequence !== undefined &&
+    (opts.sequence !== "other-first" || plan !== "full_report" || !opts.pay || opts.proof)
+  ) {
+    console.error(
+      "--sequence other-first buys another archetype's report, then the walk's own full_report: it pays, and is not a proof walk."
+    );
+    return 2;
+  }
   const slug = slugFor(persona.archetype, opts.device);
   const dir = join(opts.out, slug);
   mkdirSync(dir, { recursive: true });
@@ -446,6 +490,7 @@ async function main(argv: string[]): Promise<number> {
     consoleErrors: [],
     failedRequests: [],
     slowRequests: [],
+    sequence: opts.sequence ? { mode: "other-first", checks: [] } : undefined,
   };
   const t0 = Date.now();
   // Stopped at its time limit, or killed: say so in the record rather than vanish.
@@ -578,11 +623,12 @@ async function main(argv: string[]): Promise<number> {
     page
       .evaluate(() => {
         const text = document.body?.innerText ?? "";
-        // The default report's locks, then V4's (staging branch): its premium content card
-        // and the lock tile on a visual. Measured 2026-10-05: 4 cards and 17 tiles on an
-        // unpaid V4 report, none once paid; with only the first two, V4 counted 0 and 0.
+        // The default report's locks, then V4's (staging branch): its premium content card,
+        // the lock tile on a visual and a locked chapter's disc. Measured 2026-10-05: 4 cards
+        // and 17 tiles on an unpaid V4 report, none once paid; with only the first two, V4
+        // counted 0 and 0.
         const badges = document.querySelectorAll(
-          '[aria-label="Unlock the full report"], .report-premium-overlay, .rv4-premium, .rv4-lockbadge'
+          '[aria-label="Unlock the full report"], .report-premium-overlay, .rv4-premium, .rv4-lockbadge, .rv4-chapter__lock'
         ).length;
         return badges + (text.match(/Unlock it to keep reading/g) ?? []).length;
       })
@@ -1133,6 +1179,216 @@ async function main(argv: string[]): Promise<number> {
       }
     }
 
+    /**
+     * --sequence other-first. On 2026-10-06 three faults in buying a SECOND report reached
+     * production (#524), because every walk bought once: "Only the X Report" also unlocked
+     * the buyer's own report; "Other Archetypes" read "View report" on every row, owned or
+     * not; and the way back from Stripe landed on that list again, not on the report bought.
+     * Each step is checked and kept in walk.json; the first that fails ends the walk there.
+     */
+    const seqCheck = (what: string, ok: boolean, observed: string) => {
+      // Long enough for all 14 rows of the list.
+      const seen = redact(observed).slice(0, 600);
+      walk.sequence!.checks.push({ what, ok, observed: seen });
+      if (!ok) throw new Error(`purchase sequence: expected ${what}; saw ${seen}`);
+    };
+    /** "Other Archetypes": each row's archetype, its pill's words, and the one on screen. */
+    const constellationRows = () =>
+      page
+        .locator(".report-constellation__row")
+        .evaluateAll((rows) =>
+          rows.map((row) => {
+            const pill = row.querySelector<HTMLElement>(".report-constellation__view");
+            return {
+              name: (row.querySelector(".report-constellation__name")?.textContent ?? "").trim(),
+              label: (pill?.innerText ?? "").replace(/\s+/g, " ").trim(),
+              // The pill of the archetype on screen is named "View your <archetype> report".
+              onScreen: /^view your /i.test(pill?.getAttribute("aria-label") ?? ""),
+            };
+          })
+        )
+        .catch(() => []);
+    /** A report just opened: drawn, and done with any scroll of its own (an anchor's, after 450 ms). */
+    const settle = async () => {
+      await page
+        .locator("html[data-hydrated]")
+        .waitFor({ state: "attached", timeout: 60_000 })
+        .catch(() => {});
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      await page
+        .locator(".report-constellation__row")
+        .first()
+        .waitFor({ state: "attached", timeout: 30_000 })
+        .catch(() => {});
+      await page.waitForTimeout(2_500);
+    };
+    const buyAnotherFirst = async () => {
+      const own = walk.serverArchetype ?? persona.archetype;
+      const list = page.locator(".report-constellation__row").first();
+      await list.waitFor({ state: "attached", timeout: 30_000 });
+      await list.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
+      // On a phone, passing Challenges in Partnership opens the plans by themselves 1.6 s
+      // later, over the list. A reader closes them, and so does the walk.
+      await page.waitForTimeout(2_500);
+      if (await pricesOpen()) {
+        mark("closed the plans the report opened by itself");
+        await page
+          .getByRole("button", { name: "Close pricing modal" })
+          .filter({ visible: true })
+          .first()
+          .click({ timeout: 10_000 });
+        await page
+          .locator(".report-pricing-modal.is-visible")
+          .waitFor({ state: "hidden", timeout: 5_000 });
+      }
+      await record("sequence-list");
+      const rows = await constellationRows();
+      const others = rows.filter((r) => r.name !== own);
+      seqCheck(
+        `"View report" on the reader's own row (${own}) and "Unlock" on every other row`,
+        others.length > 0 &&
+          rows.length - others.length === 1 &&
+          /^view report$/i.test(rows.find((r) => r.name === own)?.label ?? "") &&
+          others.every((r) => /^unlock$/i.test(r.label)),
+        rows.map((r) => `${r.name}: ${r.label || "no words"}`).join("; ") || "no rows"
+      );
+
+      const other = others[0]!.name;
+      walk.sequence!.other = other;
+      const slug = toArchetypeSlug(other) ?? "";
+      const pill = page
+        .locator(".report-constellation__row")
+        .nth(rows.findIndex((r) => r.name === other))
+        .locator(".report-constellation__view");
+      await pill.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
+      await page.waitForTimeout(400);
+      mark(`tapped ${other}'s Unlock in Other Archetypes`);
+      await pill.click({ timeout: 10_000 });
+      const paywall = page.locator(".report-pricing-modal.is-visible").first();
+      const shown = await paywall.waitFor({ timeout: 10_000 }).then(
+        () => true,
+        () => false
+      );
+      // It fades in, and the live quote replaces the fallback price: the screenshot waits.
+      await page.waitForTimeout(1_500);
+      const title = shown
+        ? (
+            await paywall
+              .locator(".rpg-card--full_report .rpg-card__title")
+              .first()
+              .innerText()
+              .catch(() => "")
+          )
+            .replace(/\s+/g, " ")
+            .trim()
+        : "";
+      await record("sequence-paywall");
+      seqCheck(
+        `the pay screen to sell "Only the ${other} Report"`,
+        title.toLowerCase() === `only the ${other} report`.toLowerCase(),
+        shown ? title || "no single-report card" : "no pay screen opened"
+      );
+      mark(`clicked Only Unlock This Report for ${other}`);
+      await paywall
+        .getByRole("button", { name: /^only unlock this report$/i })
+        .filter({ visible: true })
+        .first()
+        .click({ timeout: 15_000 });
+      await page.waitForURL(/checkout\.stripe\.com/, { timeout: 60_000 });
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForTimeout(2_500);
+      await record("sequence-stripe-checkout");
+      if (!/\/c\/pay\/cs_test_/.test(page.url()))
+        throw new Error("Stripe opened a session that is not in test mode");
+      // The return page says what it unlocked for about a second before it moves on, so the
+      // walk looks for the words from now on, through Stripe's page and back.
+      const said = page
+        .locator(".checkout-return__copy", { hasText: /unlocked/i })
+        .first()
+        .textContent({ timeout: 180_000 })
+        .catch(() => null);
+      await payWithTestCard(page, email);
+      await page.waitForURL((u) => u.origin === opts.origin, { timeout: 120_000 });
+      // The way back, as Stripe was told it: an `anchor` here is where the report would put
+      // the reader, and the report drops it from its own address once it has.
+      const wayBack = new URL(page.url());
+      const line = ((await said) ?? "").replace(/\s+/g, " ").trim();
+      await record("sequence-after-payment");
+      seqCheck(
+        `the return page to say "Your ${other} report is unlocked"`,
+        line.toLowerCase().includes(`your ${other} report is unlocked`.toLowerCase()),
+        line || "no unlocked line"
+      );
+
+      await page.waitForURL(/\/report\//, { timeout: 60_000 });
+      const landed = new URL(page.url());
+      await settle();
+      const at = await page.evaluate(() => ({
+        y: Math.round(window.scrollY),
+        h: window.innerHeight,
+      }));
+      const there = await constellationRows();
+      await record("sequence-bought-report");
+      const anchor = wayBack.searchParams.get("anchor") ?? landed.searchParams.get("anchor");
+      const onScreen = there.find((r) => r.onScreen)?.name ?? "none";
+      seqCheck(
+        `the way back to open ${other}'s report (archetype=${slug}) with no anchor`,
+        landed.searchParams.get("archetype") === slug && !anchor && onScreen === other,
+        `archetype=${landed.searchParams.get("archetype") ?? "none"}, anchor=${anchor ?? "none"}, on screen: ${onScreen}`
+      );
+      seqCheck(
+        `${other}'s report to open at its top`,
+        at.y <= at.h / 2,
+        `scrolled ${at.y}px on a ${at.h}px screen`
+      );
+      const label = there.find((r) => r.name === other)?.label || "no row";
+      seqCheck(`"View report" on ${other}'s row now`, /^view report$/i.test(label), label);
+
+      // The reader's own report, as its address has it with no archetype: still for sale.
+      const mine = new URL(page.url());
+      mine.searchParams.delete("archetype");
+      mine.searchParams.delete("anchor");
+      mark("opened the reader's own report");
+      await page.goto(mine.toString(), { waitUntil: "domcontentloaded" });
+      await settle();
+      await record("sequence-own-report");
+      const locks = await countLocks();
+      const bar =
+        (await page.locator(".report-sticky-unlock").filter({ visible: true }).count()) > 0;
+      seqCheck(
+        `the reader's own report (${own}) still locked, with the "Unlock full report" bar`,
+        locks > 0 && bar,
+        `${locks} locks, the bar ${bar ? "shown" : "not shown"}`
+      );
+    };
+    /** After the walk's own purchase: its report and the one bought first, both open. */
+    const checkBothOpen = async () => {
+      const other = walk.sequence!.other!;
+      const own = walk.serverArchetype ?? persona.archetype;
+      const ownLocks = await countLocks();
+      const ownOnScreen = (await constellationRows()).find((r) => r.onScreen)?.name ?? "none";
+      seqCheck(
+        `no locks left on the reader's own report (${own}) once bought`,
+        ownLocks === 0 && ownOnScreen === own,
+        `${ownLocks} locks, on screen: ${ownOnScreen}`
+      );
+      const theirs = new URL(page.url());
+      theirs.searchParams.set("archetype", toArchetypeSlug(other) ?? "");
+      theirs.searchParams.delete("anchor");
+      mark(`opened ${other}'s report again`);
+      await page.goto(theirs.toString(), { waitUntil: "domcontentloaded" });
+      await settle();
+      await record("sequence-other-report-again");
+      const locks = await countLocks();
+      const onScreen = (await constellationRows()).find((r) => r.onScreen)?.name ?? "none";
+      seqCheck(
+        `no locks on ${other}'s report after both purchases`,
+        locks === 0 && onScreen === other,
+        `${locks} locks, on screen: ${onScreen}`
+      );
+    };
+    if (walk.sequence) await buyAnotherFirst();
+
     // Read the report a screen at a time, as far as it lets a free reader go.
     const viewport = page.viewportSize()?.height ?? 800;
     for (let k = 1; k <= 14; k++) {
@@ -1176,9 +1432,10 @@ async function main(argv: string[]): Promise<number> {
     }
 
     // The paywall, reached the way a person reaches each plan: the sticky "Unlock full
-    // report" bar buys the default plan straight away, and the plan picker opens from a lock.
-    // The report can also open the picker by itself while the reader scrolls; then it is
-    // already in front of them, and the page behind it is out of reach.
+    // report" bar for the default plan (it opens the plan picker since 2026-10-09; it used to
+    // buy straight away), and a lock for the others, which opens the picker too. The report
+    // can also open the picker by itself while the reader scrolls; then it is already in
+    // front of them, and the page behind it is out of reach.
     if (plants && (plants.escape !== "none" || plants.quit === "paywall")) {
       await tryPlant("the paywall visit", plantPaywallVisit);
       if (plants.quit === "paywall") {
@@ -1190,13 +1447,14 @@ async function main(argv: string[]): Promise<number> {
     }
     const toStripe = () => page.url().includes("checkout.stripe.com");
     // Whichever comes first: the picker (the report can open it on a timer or on scroll), or
-    // a way in. For the default plan, the sticky bar or the "Unlock the full report" button
-    // under the archetype list, both of which go straight to Stripe. For the others, the
-    // picker: an archetype row's "Unlock report", a padlock on a locked chart, or (V4) a
-    // locked chapter's row, "Core Insecurities of the Spark Seeker Unlock Report". The padlock
-    // and that button share the name "Unlock the full report" but not the behaviour, so the
-    // padlock is found by its class. A V4 chapter that is closed keeps its "Unlock your
-    // report" in an inert body, which is why the chapter row is tried before it.
+    // a way in. For the default plan, the sticky bar, which opens the picker, or the "Unlock
+    // the full report" button under the archetype list, which goes straight to Stripe. For
+    // the others, the picker: an archetype row's "Unlock report", a padlock on a locked
+    // chart, or (V4) a locked chapter's row, "Core Insecurities of the Spark Seeker Unlock
+    // Report". The padlock and that button share the name "Unlock the full report" but not
+    // the behaviour, so the padlock is found by its class. A V4 chapter that is closed keeps
+    // its "Unlock your report" in an inert body, which is why the chapter row is tried before
+    // it.
     const ways: Array<[() => ReturnType<typeof button>, string]> =
       plan === "full_report"
         ? [
@@ -1274,11 +1532,23 @@ async function main(argv: string[]): Promise<number> {
       if (!walk.paywallOpenedBy) await page.waitForTimeout(500);
     }
     if (!walk.paywallOpenedBy) throw new Error("no way to the paywall on the report");
-    // The default plan's ways in buy straight away, so wait for Stripe rather than race the
-    // picker, which the report can open by itself in the same moment: on 2026-09-30 a walk
-    // saw the picker appear, Stripe then took the page, and it pressed a button that was no
-    // longer there. Only if no checkout opens does the walk look for the picker.
-    const direct = plan === "full_report" && walk.paywallOpenedBy !== "the report, by itself";
+    // A way in that buys straight away: wait for Stripe rather than race the picker, which
+    // the report can open by itself in the same moment: on 2026-09-30 a walk saw the picker
+    // appear, Stripe then took the page, and it pressed a button that was no longer there.
+    // Only if no checkout opens does the walk look for the picker. The sticky bar opens the
+    // picker since 2026-10-09; where it still buys straight away (a branch without that
+    // change) it says "Taking you to secure checkout...", and is then direct too.
+    const direct =
+      plan === "full_report" &&
+      (walk.paywallOpenedBy === "the Unlock the full report button" ||
+        (walk.paywallOpenedBy === "the sticky bar" &&
+          (await page
+            .locator(".report-checkout-handoff")
+            .waitFor({ state: "visible", timeout: 2_000 })
+            .then(
+              () => true,
+              () => false
+            ))));
     if (direct && plants) log.checkoutPlan = plan;
     if (direct) {
       await page.waitForURL(/checkout\.stripe\.com/, { timeout: 45_000 }).catch(() => {});
@@ -1384,6 +1654,7 @@ async function main(argv: string[]): Promise<number> {
     await page.waitForTimeout(2_000);
     walk.locksAfter = await countLocks();
     await record("unlocked-report");
+    if (walk.sequence) await checkBothOpen();
     walk.finished = true;
     return 0;
   } catch (err) {
@@ -1413,7 +1684,10 @@ async function main(argv: string[]): Promise<number> {
         `${walk.finished ? "finished" : `stopped (${walk.stoppedAt})`} in ` +
         `${Math.round((walk.durationMs ?? 0) / 1000)}s; ${walk.questionsAsked ?? 0} questions, ` +
         `report says ${walk.assignedArchetype ?? "?"}, ${walk.consoleErrors.length} console errors, ` +
-        `${walk.failedRequests.length} failed requests`
+        `${walk.failedRequests.length} failed requests` +
+        (walk.sequence
+          ? `; bought ${walk.sequence.other ?? "nothing"} first, ${walk.sequence.checks.filter((c) => c.ok).length} of ${walk.sequence.checks.length} sequence checks held`
+          : "")
     );
   }
 }

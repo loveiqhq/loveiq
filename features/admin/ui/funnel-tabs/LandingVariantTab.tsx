@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import { MIN_CELL_COUNT } from "@features/admin/server/statistics";
 
 interface VariantRow {
   variant: string;
@@ -57,8 +58,11 @@ export default function LandingVariantTab({ days }: { days: number }) {
    * not support one.
    */
   const contenders = rows.filter((r) => !r.retired && r.variant !== "unknown" && r.completed > 0);
+  // And only once each has the buyers the A/B overview needs before it compares (5): one
+  // purchase against none is noise, and in the restart's first days it can be a reader who
+  // finished before it (payments count from when they were made).
   const leader =
-    contenders.length > 1
+    contenders.length > 1 && contenders.every((r) => r.paid >= MIN_CELL_COUNT)
       ? contenders.reduce((best, r) => (r.paidRate > best.paidRate ? r : best))
       : null;
   const leaderIsClear = leader
@@ -157,10 +161,11 @@ export default function LandingVariantTab({ days }: { days: number }) {
         <p className="mt-4 text-xs leading-relaxed text-text-muted">
           Attribution is the arm stamped on the buyer&apos;s own submission, so a row with no arm
           recorded is traffic that predates the stamping or never carried the cookie — it is shown
-          for completeness and is not one of the arms under test. Landing views are not stored
-          server-side, so completed surveys stand in for the top of the funnel — full visitor counts
-          live in GA4, segmented by the <span className="font-mono">landing_variant</span> user
-          property.
+          for completeness and is not one of the arms under test. The two live versions count from
+          14 Oct, when the landing test restarted with the condensed phone hero; earlier rounds
+          count over the whole window. Landing views are not stored server-side, so completed
+          surveys stand in for the top of the funnel — full visitor counts live in GA4, segmented by
+          the <span className="font-mono">landing_variant</span> user property.
         </p>
       </div>
     </div>

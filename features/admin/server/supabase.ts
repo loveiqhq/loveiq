@@ -106,6 +106,11 @@ interface SupabaseFetchOptions {
    * everywhere else: a slow query should fail, not hang.
    */
   timeoutMs?: number;
+  /**
+   * The circuit breaker this call counts against. One breaker for every call meant three
+   * slow searches in a row opened it for 30 s, and every other read failed with them.
+   */
+  breaker?: string;
 }
 
 /**
@@ -206,7 +211,7 @@ export async function supabaseFetch(
 
   const { method = "GET", body, headers = {} } = options;
 
-  const res = await getBreaker("supabase").fire(() =>
+  const res = await getBreaker(options.breaker ?? "supabase").fire(() =>
     fetchWithTimeout(`${url}${path}`, {
       method,
       headers: {

@@ -242,6 +242,7 @@ export const WRITE_TOOLS = [
   "file_call_notes",
   "settle_decision_conflict",
   "record_experiment",
+  "export_all_data",
 ];
 
 export const researchModel = () => process.env.BRAIN_RESEARCH_MODEL?.trim() || "sonnet";

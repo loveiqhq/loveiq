@@ -166,6 +166,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
         className="rv4-learn__button"
         aria-expanded={isOpen}
         aria-controls={bodyId}
+        data-chapter-action="learn_more"
         onClick={() => setIsOpen((v) => !v)}
       >
         {/* 153:2272 — no chip since the rehaul; the title is centred on the disc. */}
@@ -201,6 +202,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
               type="button"
               className="rv4-learn__open"
               aria-label="Read all of the article"
+              data-chapter-action="learn_more"
               onClick={() => setIsOpen(true)}
             >
               Read all

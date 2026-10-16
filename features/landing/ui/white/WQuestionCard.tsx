@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore, type FC } from "react";
 import Link from "next/link";
-import { trackStartSurvey } from "@features/analytics/client";
+import { trackLandingCardAnswer, trackStartSurvey } from "@features/analytics/client";
 import { QUESTIONS_ASKED } from "@features/report/logic/reportFacts";
 import {
   LANDING_PREFILL_QID,
@@ -113,6 +113,8 @@ const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, classN
   const answer = (value: number) => {
     saveLandingPrefill(LANDING_PREFILL_QID, value);
     pickListeners.forEach((listener) => listener());
+    // The value goes to PostHog only (trackLandingCardAnswer).
+    trackLandingCardAnswer({ location, changed: selected !== null, value });
   };
 
   return (
@@ -258,7 +260,7 @@ const WQuestionCard: FC<WQuestionCardProps> = ({ size = "hero", location, classN
             tabIndex={answered ? undefined : -1}
             aria-hidden={!answered}
             aria-label="Continue to the survey"
-            onClick={() => trackStartSurvey(location)}
+            onClick={() => trackStartSurvey(location, "question_card")}
             className="focus-visible-ring group flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-br from-[#fe6839] via-[#bf66d9] via-[43%] to-[#958ef6] px-[22px] py-3.5 text-[15px] font-semibold text-white shadow-[0_10px_26px_-12px_rgba(191,102,217,0.75)] transition duration-300 hover:shadow-[0_14px_30px_-10px_rgba(191,102,217,0.85)] motion-safe:hover:-translate-y-0.5 sm:text-[16px]"
           >
             <span>Continue to the survey</span>

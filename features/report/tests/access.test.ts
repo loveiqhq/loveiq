@@ -200,13 +200,17 @@ describe("doesAccessPlanCover", () => {
  * — that hand-written list is what skipped `core`.
  */
 describe("report upsell surfaces ask about plan coverage", () => {
-  it("the sticky unlock bar and its spacer both go through doesAccessPlanCover", async () => {
+  it("the sticky unlock bar and its spacer both go through ownsFullReportFor", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const src = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
 
-    expect(src).toContain('!doesAccessPlanCover(data.accessPlan, "full_report")');
-    expect(src).toContain('doesAccessPlanCover(accessPlan, "full_report") ? ""');
+    // ownsFullReportFor asks doesAccessPlanCover first, then the tier of the archetype on
+    // screen: a single report bought for another archetype lives only in the tiers.
+    expect(src).toContain(
+      "!ownsFullReportFor(data.accessPlan, data.archetypeTiers, effectiveViewArchetype)"
+    );
+    expect(src).toContain('ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) ? ""');
     expect(src, "enumerating plan ids by hand is what hid core from this check").not.toMatch(
       /accessPlan !== "full_report" && [\w.]*accessPlan !== "all_reports"/
     );

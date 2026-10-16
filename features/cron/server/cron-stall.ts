@@ -40,6 +40,10 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // window the route itself looks back over.
   "ux-review": 90 * 60_000,
   "conversion-digest": 26 * 3_600_000,
+  // Daily at 08:30 UTC, keeping the drop-off KPI page in Notion current: summary, picture, rows.
+  "kpi-dropoff": 26 * 3_600_000,
+  // Daily at 08:15 UTC, keeping 📊 KPI in Notion live: columns, High KPI summaries, rows.
+  "kpi-weekly": 26 * 3_600_000,
   /**
    * WEEKLY, so eight days of silence is one missed run. Re-enabled 2026-09-19
    * after 2026-07-26's pause, and weekly rather than daily on purpose: the daily
@@ -71,8 +75,13 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-calendar": 3 * 3_600_000,
   // Hourly, but with a 300s ceiling — a full Drive walk is minutes, not seconds.
   "brain-drive": 3 * 3_600_000,
+  // Every ten minutes: new meeting notes ahead of the hourly walk. Thirty minutes is three
+  // missed runs, after which notes are back to arriving hourly.
+  "brain-meeting-notes": 30 * 60_000,
   // Every two hours, filing recorded calls into the Notion CRM. Five hours is two missed runs.
   "brain-crm": 5 * 3_600_000,
+  // Daily at 05:20 UTC: which Notion pages the team links to that Jarvis cannot open.
+  "brain-notion-reach": 26 * 3_600_000,
   // Daily, and the ONLY job here whose normal output is silence -- it posts
   // nothing on a routine day. That makes it the easiest one to be dead without
   // anyone noticing, which is exactly why it is watched: it records a run every
@@ -101,6 +110,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // Daily, straight after the miner in the same GitHub job: decisions that may not both
   // stand. It records a run whether or not anything changed, so a missing day shows.
   "brain-radar": 26 * 3_600_000,
+  // Every six hours in GitHub Actions: Slack screenshots described in words. It records a
+  // run whether or not anything was new, so thirteen hours is two missed runs.
+  "brain-slack-media": 13 * 3_600_000,
   // WEEKLY, Mondays in GitHub Actions: the two test batteries record their results, then
   // the brain's report on itself is written. Eight days is one missed Monday, and a missed
   // Monday means a week with no accuracy measurement at all.
@@ -157,6 +169,7 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-mine": "brain-daily.yml",
   "brain-night-shift": "brain-daily.yml",
   "brain-radar": "brain-daily.yml",
+  "brain-slack-media": "brain-daily.yml",
   // All three run in brain-daily.yml's `brain-health` job; start that one.
   "brain-health": "brain-daily.yml",
   "brain-battery-retrieval": "brain-daily.yml",
@@ -167,11 +180,12 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
 };
 
 /**
- * Crons deliberately not watched. `journey-backfill` runs once a year
- * (`0 4 1 1 *`), so "stale" is its normal state for 364 days.
+ * Crons deliberately not watched. `journey-backfill` and `brain-ga4-backfill` run once a
+ * year (`0 4 1 1 *`, `30 4 1 1 *`) and otherwise by hand, so "stale" is their normal state.
  */
 export const UNWATCHED_CRONS = new Set([
   "journey-backfill",
+  "brain-ga4-backfill",
   "purge-old-data",
   // Retired 2026-08-29: the team stopped using chapter nudges, and its schedule has
   // been removed from vercel.json. Kept in this list so that if anyone re-adds the

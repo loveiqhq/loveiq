@@ -271,6 +271,32 @@ describe("useSurveyTracking", () => {
     expect(beaconBody.events.at(-1).qId).toBe("qVis");
   });
 
+  it("sends whether the screen takes touch, in the fetch and in the beacon", async () => {
+    Object.defineProperty(globalThis.navigator, "maxTouchPoints", { value: 5, configurable: true });
+    try {
+      const { result } = renderHook(() => useSurveyTracking(0, true, makeQuestion()));
+      await act(async () => {
+        result.current.trackNavigation("complete");
+      });
+      const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.touch).toBe(true);
+
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 0, configurable: true });
+      Object.defineProperty(document, "visibilityState", {
+        value: "hidden",
+        writable: true,
+        configurable: true,
+      });
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      const beacon = JSON.parse(await (mockSendBeacon.mock.calls[0][1] as Blob).text());
+      expect(beacon.touch).toBe(false);
+    } finally {
+      delete (navigator as { maxTouchPoints?: number }).maxTouchPoints;
+    }
+  });
+
   it("does not call sendBeacon when visibilityState is visible", async () => {
     renderHook(() => useSurveyTracking(0, false, makeQuestion()));
 

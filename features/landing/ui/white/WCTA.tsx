@@ -11,7 +11,11 @@ import WQuestionCard from "./WQuestionCard";
  */
 const WCTA: FC = () => {
   return (
-    <section className="bg-white py-16 lg:py-[70px]" aria-labelledby="w-cta-heading">
+    <section
+      className="bg-white py-16 lg:py-[70px]"
+      aria-labelledby="w-cta-heading"
+      data-landing-section="closing_cta"
+    >
       <div className="content-shell flex flex-col items-center">
         <h2
           id="w-cta-heading"
@@ -20,14 +24,12 @@ const WCTA: FC = () => {
           Ready to
           <br />
           <span className="bg-gradient-to-r from-[#fe6839] from-[29%] via-[#bf66d9] via-[70%] to-[#958ef6] bg-clip-text text-transparent">
-            meet yourself?
+            better understand yourself?
           </span>
         </h2>
 
         <p className="animate-on-scroll stagger-1 mt-5 max-w-[493px] text-center text-[17px] font-medium leading-[32px] text-[#6b6678] sm:text-[18px]">
           Answer the first question right here.
-          <br />
-          One tap and your report starts building.
         </p>
 
         <div className="animate-on-scroll stagger-2 mt-9 w-full max-w-[640px]">
@@ -36,11 +38,11 @@ const WCTA: FC = () => {
 
         <Link
           href="/survey"
-          aria-label="Continue free test - closing CTA"
+          aria-label="Continue test - closing CTA"
           onClick={() => trackStartSurvey("footer")}
           className="focus-visible-ring group mt-8 inline-flex h-12 items-center justify-center gap-2.5 rounded-lg bg-black px-10 text-[16px] font-semibold text-white transition duration-300 hover:bg-gray-800 motion-safe:hover:-translate-y-0.5"
         >
-          <span>Continue free test</span>
+          <span>Continue test</span>
           <svg
             aria-hidden
             className="h-4 w-4 transition-transform duration-300 motion-safe:group-hover:translate-x-1"

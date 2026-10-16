@@ -10,6 +10,7 @@
  * work, and an alarm that fires on healthy work is muted inside a fortnight.
  */
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { MAX_BODY_CHARS } from "./ingest/upsert";
 
 /**
  * 21 days. MEASURED 2026-09-12 across the 25 open tasks: the average sits at 13 days
@@ -127,28 +128,51 @@ export function briefLine(h: PlanHealth): string | null {
   return `On the board: ${bits.join("; ")}.`;
 }
 
-/** The searchable version, so "what is slipping" is answerable without the brief. */
+/**
+ * The searchable version, so "what is slipping" is answerable without the brief.
+ *
+ * IT FITS UNDER THE WRITE PATH'S CUT, DEFINITION FIRST. `upsertChunks` cuts every body at
+ * MAX_BODY_CHARS, and on 2026-10-05 the board had 21 overdue tasks: the body ran to 2,529
+ * characters, and the cut removed the definition of "overdue" (then the last paragraph) and
+ * the tail of the list, while the heading still claimed all 21. So the definition sits under
+ * the count, and each list shows what fits and says how many it left out.
+ */
 export function healthChunkBody(h: PlanHealth): string {
   if (h.unavailable) return `The board could not be read: ${h.unavailable}.`;
-  const lines: string[] = [
-    `${h.openCount} tasks are open on the Notion board.`,
-    "",
-    `Untouched for ${STALE_DAYS} days or more (${h.stale.length}):`,
-    ...(h.stale.length
-      ? h.stale.map(
-          (s) => `  ${s.idleDays} days idle — ${s.title}${s.assignee ? ` (${s.assignee})` : ""}`
-        )
-      : ["  none — every open task has moved recently"]),
-    "",
-    `Past their due date and still open (${h.overdue.length}):`,
-    ...(h.overdue.length
-      ? h.overdue.map((s) => `  due ${s.due} — ${s.title}${s.assignee ? ` (${s.assignee})` : ""}`)
-      : ["  none"]),
-    "",
-    `"Open" is the derived state, not the raw Notion status, because the board renames its ` +
-      `columns — it moved to per-person statuses in September and a filter on the old name ` +
-      `matched one dead card. "Overdue" means open AND past its date: most tasks carrying a ` +
-      `past date are simply finished, and counting those would make this unreadable.`,
-  ];
-  return lines.join("\n");
+  const shown = (items: string[], n: number, empty: string[]) =>
+    items.length === 0
+      ? empty
+      : [...items.slice(0, n), ...(n < items.length ? [`  …and ${items.length - n} more`] : [])];
+  const stale = h.stale.map(
+    (s) => `  ${s.idleDays} days idle — ${s.title}${s.assignee ? ` (${s.assignee})` : ""}`
+  );
+  const overdue = h.overdue.map(
+    (s) => `  due ${s.due} — ${s.title}${s.assignee ? ` (${s.assignee})` : ""}`
+  );
+  const render = (nStale: number, nOverdue: number) =>
+    [
+      `${h.openCount} tasks are open on the Notion board.`,
+      `"Open" is the derived state, not the raw Notion status, because the board renames its ` +
+        `columns — it moved to per-person statuses in September and a filter on the old name ` +
+        `matched one dead card. "Overdue" means open AND past its date: most tasks carrying a ` +
+        `past date are simply finished, and counting those would make this unreadable.`,
+      "",
+      `Untouched for ${STALE_DAYS} days or more (${h.stale.length}):`,
+      ...shown(stale, nStale, ["  none — every open task has moved recently"]),
+      "",
+      `Past their due date and still open (${h.overdue.length}):`,
+      ...shown(overdue, nOverdue, ["  none"]),
+    ].join("\n");
+
+  // Drop entries from whichever list is showing more until the whole body fits.
+  // ponytail: re-renders per dropped entry (O(n²) on a list of tens); fine at board size.
+  let nStale = stale.length;
+  let nOverdue = overdue.length;
+  let body = render(nStale, nOverdue);
+  while (body.length > MAX_BODY_CHARS && nStale + nOverdue > 0) {
+    if (nStale >= nOverdue) nStale--;
+    else nOverdue--;
+    body = render(nStale, nOverdue);
+  }
+  return body;
 }

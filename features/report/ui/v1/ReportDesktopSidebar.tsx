@@ -82,7 +82,7 @@ const ReportDesktopSidebar: FC<Props> = ({
             src="/images/loveiq-mark.svg"
             width={45}
           />
-          <span className="report-sidebar__brand-text" aria-label="LoveIQ Report">
+          <span className="report-sidebar__brand-text" role="img" aria-label="LoveIQ Report">
             <span aria-hidden="true" className="report-sidebar__love">
               Love
             </span>

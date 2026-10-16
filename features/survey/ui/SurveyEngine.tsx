@@ -24,13 +24,9 @@ import {
   setEmailQuestionArm,
   trackExperimentExposure,
 } from "@features/analytics/client";
+import { funnelVisitorId } from "@features/analytics/funnelVisitor";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { EMAIL_QID, orderAskedQuestions } from "./questionOrder";
-import {
-  assignQuestionOrderArm,
-  resolveQuestionOrderOverride,
-  type QuestionOrderArm,
-} from "@shared/experiments/questionOrderArm";
 import {
   assignEmailQuestionArm,
   EMAIL_QUESTION_EXPERIMENT,
@@ -49,7 +45,6 @@ import { completedReportToken } from "./hooks/surveySession";
 import { isValidSurveyEmail, tidySurveyEmail } from "@features/survey/email";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
-import { readCookie } from "@shared/observability/cookie";
 import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
 import SurveyConfirmation from "./SurveyConfirmation";
@@ -96,6 +91,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     currentIndex,
     startedAt,
     prefilled,
+    orderArm,
     setAnswer,
     getAnswer,
     getLatestAnswers,
@@ -148,31 +144,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
   const footerRef = useRef<HTMLDivElement | null>(null);
   const [footerFloating, setFooterFloating] = useState(false);
 
-  // Questions answered before the survey opened (the landing-page card) are
-  // dropped from the flow so nobody is asked twice. Their answers stay in
-  // `answers` and submit + score exactly like the rest, so the total is
-  // unchanged — only where the question gets asked moves.
-  // `orderEmailLast` moves the email question from its generated index 0 to just
-  // before the marketing opt-in, for everyone (the email-position A/B that used
-  // to pick this per visitor was retired 2026-08-16 in favour of "last").
-  // C13 — the opening-order experiment. Resolved once, on first render, from the
-  // session id: the order must not change under a respondent who reloads or goes
-  // back, and the session id is the one value that already survives both. No
-  // session id (storage blocked) means control, because the submit path would
-  // have nothing to slice that respondent by. `?order=control|variant` previews
-  // either arm on dev and staging, never on production.
-  const [orderArm] = useState<QuestionOrderArm>(() => {
-    const devParam =
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("order");
-    return resolveQuestionOrderOverride(devParam) ?? assignQuestionOrderArm(getSessionId());
-  });
   // The email question test: today's question against Marcus's anonymous redesign
-  // (Figma 11600:15119). Drawn once from the session id like C13, with its own salt, so
-  // the two splits are independent. `?email=control|anonymous` previews either arm on
-  // dev and staging, never on production. The arm's copy goes on the question here,
-  // so the heading, the screen-reader line and the jump menu all read the same words.
+  // (Figma 11600:15119). Drawn from the session id with its own salt, so the split is
+  // independent of C13's. Unlike C13's arm it is not kept in the draft: it moves no
+  // question, so a resumed run skips nothing whichever arm it draws, and a run begun
+  // before the test launched is outside every readout by its start date.
+  // `?email=control|anonymous` previews either arm on dev and staging, never on
+  // production.
   const [emailArm] = useState<EmailQuestionArm>(() => {
     const devParam =
       typeof window === "undefined"
@@ -181,6 +159,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
     return resolveEmailQuestionOverride(devParam) ?? assignEmailQuestionArm(getSessionId());
   });
 
+  // Questions answered before the survey opened (the landing-page card) are
+  // dropped from the flow so nobody is asked twice. Their answers stay in
+  // `answers` and submit + score exactly like the rest, so the total is
+  // unchanged — only where the question gets asked moves.
+  // `orderEmailLast` moves the email question from its generated index 0 to just
+  // before the marketing opt-in, for everyone (the email-position A/B that used
+  // to pick this per visitor was retired 2026-08-16 in favour of "last").
+  // C13 — the opening-order experiment. Resolved once per run by useSurveyState and kept
+  // in the draft: the order must not change under a respondent who reloads, goes back or
+  // resumes, so a draft begun before C13 keeps the control order (its saved position
+  // would otherwise skip the questions the variant moves forward). A fresh run is
+  // bucketed by its session id; no session id (storage blocked) means control.
+  // `?order=control|variant` previews either arm on dev and staging, never on production.
+  // The email test's copy goes onto the question in the same pass, so the heading, the
+  // screen-reader line and the jump menu all read the same words.
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
@@ -247,47 +240,45 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
       hasTrackedStart.current = true;
       trackSurveyStart();
 
-      // Server-side engine-mount ping for the daily Slack digest. The
-      // funnel_event PK dedupes per (visitor_id, day) so a re-mount in the
-      // same day is a no-op server-side.
-      const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
+      // Server-side engine-mount ping for the daily Slack digest, for every visitor: the
+      // visitor cookie, or this page's own id without it (funnelVisitorId). The funnel_event
+      // PK dedupes per (visitor_id, day) so a re-mount in the same day is a no-op server-side.
+      const visitorId = funnelVisitorId();
       // The landing arm is NOT sent from here: /api/funnel-event reads the same
       // cookie server-side, so it cannot be attested by a client.
-      if (visitorId) {
-        // First-touch acquisition source, so start-rate can be split by channel
-        // (the visitor denominator carries it too — see proxy.ts/recordVisit.ts).
-        // Best-effort: empty/unparseable stored UTM just sends no source.
-        let utmSource: string | undefined;
-        try {
-          const rawUtm = getStoredUtm();
-          if (rawUtm) {
-            const parsed = JSON.parse(rawUtm) as { utm_source?: unknown };
-            if (typeof parsed.utm_source === "string") {
-              // Same normalizer as proxy.ts so both rows share one label format
-              // (this is first-touch localStorage; the visitor row is last-touch
-              // URL — per-channel start-rate is directional, not exact).
-              utmSource = sanitizeUtmSource(parsed.utm_source);
-            }
+      // First-touch acquisition source, so start-rate can be split by channel
+      // (the visitor denominator carries it too — see proxy.ts/recordVisit.ts).
+      // Best-effort: empty/unparseable stored UTM just sends no source.
+      let utmSource: string | undefined;
+      try {
+        const rawUtm = getStoredUtm();
+        if (rawUtm) {
+          const parsed = JSON.parse(rawUtm) as { utm_source?: unknown };
+          if (typeof parsed.utm_source === "string") {
+            // Same normalizer as proxy.ts so both rows share one label format
+            // (this is first-touch localStorage; the visitor row is last-touch
+            // URL — per-channel start-rate is directional, not exact).
+            utmSource = sanitizeUtmSource(parsed.utm_source);
           }
-        } catch {
-          /* no usable stored UTM */
         }
-        fetch("/api/funnel-event", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": getCsrfToken(),
-          },
-          body: JSON.stringify({
-            event: "survey_engine_mount",
-            visitor_id: visitorId,
-            ...(utmSource ? { utm_source: utmSource } : {}),
-          }),
-          keepalive: true,
-        }).catch(() => {
-          // Best-effort — failure just means the day's count is short by one.
-        });
+      } catch {
+        /* no usable stored UTM */
       }
+      fetch("/api/funnel-event", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          event: "survey_engine_mount",
+          visitor_id: visitorId,
+          ...(utmSource ? { utm_source: utmSource } : {}),
+        }),
+        keepalive: true,
+      }).catch(() => {
+        // Best-effort — failure just means the day's count is short by one.
+      });
     }
   }, []);
 
@@ -898,6 +889,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, onStartOver }
                 floating adds only the soft shadow. */}
             <div
               ref={footerRef}
+              data-survey-footer
               className={`sticky bottom-[var(--liq-consent-h,0px)] z-20 bg-white transition-shadow duration-200 sm:rounded-b-[21px] [@media(max-height:500px)]:static ${
                 footerFloating ? "shadow-[0_-12px_24px_-16px_rgba(22,16,33,0.2)]" : ""
               }`}

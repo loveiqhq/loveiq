@@ -54,19 +54,19 @@ const published = () =>
 
 describe("ReportStickyUnlockBar", () => {
   it("publishes the height of whichever bar is showing", () => {
-    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} />);
+    render(<ReportStickyUnlockBar quote={null} onUnlock={() => {}} />);
     expect(published()).toBe("71px");
   });
 
   it("follows the bar as it resizes, e.g. the desktop card taking over", () => {
-    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} />);
+    render(<ReportStickyUnlockBar quote={null} onUnlock={() => {}} />);
     heights = { mobile: 0, desktop: 160 };
     resize!();
     expect(published()).toBe("160px");
   });
 
   it("clears the variable when the bar goes, so nothing keeps clearing a ghost", () => {
-    const { unmount } = render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} />);
+    const { unmount } = render(<ReportStickyUnlockBar quote={null} onUnlock={() => {}} />);
     unmount();
     expect(published()).toBeNull();
   });
@@ -82,7 +82,7 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
   const mobile = () => document.querySelector<HTMLElement>(".report-sticky-unlock--mobile")!;
 
   it("sets the guarantee badge and the gradient pill", () => {
-    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} v4 />);
+    render(<ReportStickyUnlockBar quote={null} onUnlock={() => {}} v4 />);
     const bar = mobile();
     expect(bar).toHaveClass("is-v4");
     const badge = bar.querySelector(".report-sticky-unlock__badge")!;
@@ -106,15 +106,15 @@ describe("ReportStickyUnlockBar — V4's mobile footer (1005:411)", () => {
     expect(cta.textContent).toBe("Unlock Full Report →");
   });
 
-  it("still opens checkout from the pill", () => {
-    const onCheckout = vi.fn();
-    render(<ReportStickyUnlockBar quote={null} onCheckout={onCheckout} v4 />);
+  it("opens the plans from the pill", () => {
+    const onUnlock = vi.fn();
+    render(<ReportStickyUnlockBar quote={null} onUnlock={onUnlock} v4 />);
     fireEvent.click(within(mobile()).getByRole("button", { name: "Unlock full report" }));
-    expect(onCheckout).toHaveBeenCalledTimes(1);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps V1–V3's bar and desktop card", () => {
-    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} />);
+    render(<ReportStickyUnlockBar quote={null} onUnlock={() => {}} />);
     expect(mobile()).not.toHaveClass("is-v4");
     expect(mobile().querySelector(".report-sticky-unlock__guarantee")!.textContent).toBe(
       "14-day money-back guarantee"
@@ -207,7 +207,7 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
   const desktop = () => document.querySelector<HTMLElement>(".report-sticky-unlock--desktop")!;
 
   it("sets the guarantee box and the gradient pill, and nothing else", () => {
-    render(<ReportStickyUnlockBar quote={null} onCheckout={() => {}} v4 />);
+    render(<ReportStickyUnlockBar quote={null} onUnlock={() => {}} v4 />);
     const bar = desktop();
     expect(bar).toHaveClass("is-v4");
     const badge = bar.querySelector(".report-sticky-unlock__badge")!;
@@ -226,14 +226,12 @@ describe("ReportStickyUnlockBar — V4's desktop card (review 30.09)", () => {
     expect(cta.textContent).toBe("Unlock Full Report →");
   });
 
-  it("opens checkout from the pill and counts it as the desktop bar", async () => {
+  it("opens the plans from the pill and counts it as the desktop bar", async () => {
     const { trackStickyUnlockClicked } = await import("@features/analytics/client");
-    const onCheckout = vi.fn();
-    render(
-      <ReportStickyUnlockBar quote={null} onCheckout={onCheckout} v4 archetype="Spark Seeker" />
-    );
+    const onUnlock = vi.fn();
+    render(<ReportStickyUnlockBar quote={null} onUnlock={onUnlock} v4 archetype="Spark Seeker" />);
     fireEvent.click(within(desktop()).getByRole("button", { name: "Unlock full report" }));
-    expect(onCheckout).toHaveBeenCalledTimes(1);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
     expect(trackStickyUnlockClicked).toHaveBeenCalledWith({
       variant: "desktop",
       archetype: "Spark Seeker",

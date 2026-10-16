@@ -9,6 +9,7 @@
 # Project dictionary for cspell — domain, brand, and technical vocabulary.
 # Security / compliance / infra acronyms + terms
 # These are legitimate words (not typos). Add new terms as needed.
+Ajna
 Börner
 Clickjacking
 Contentsquare
@@ -33,6 +34,7 @@ Pitchbook
 Playwright
 PostHog
 PostgREST
+pseudonymised
 QTYY
 ROPA
 Reauthentication
@@ -46,6 +48,7 @@ Subprocessors
 Subresource
 Supabase
 Svix
+TDDDG
 trufflesecurity
 TrustBox
 Trustpilot
@@ -98,6 +101,7 @@ kubeconfig
 livemode
 loveiq
 loveiqhq
+matroska
 minimisation
 mpim
 multimethod
@@ -128,6 +132,7 @@ supa
 tappable
 teamspace
 teamspaces
+threejs
 timestamptz
 trgm
 trimable
@@ -152,3 +157,5 @@ RSES
 subscales
 Perel
 Nagoski
+Hadzic
+Hadžić

@@ -54,8 +54,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  // Login page renders without the admin shell
-  if (pathname === "/admin/login") {
+  // The login page renders without the admin shell, and AP-Analytics brings its own
+  // (app/admin/ap/layout.tsx): Marcus's light design, with its own sidebar.
+  if (
+    pathname === "/admin/login" ||
+    pathname === "/admin/ap" ||
+    pathname.startsWith("/admin/ap/")
+  ) {
     return <>{children}</>;
   }
 

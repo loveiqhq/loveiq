@@ -5,6 +5,7 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { armLabel } from "@features/attribution/server/labels";
+import { LANDING_TEST_START_AT, LANDING_VARIANT_ARMS } from "@shared/experiments/landingVariant";
 
 interface VariantRow {
   variant: string;
@@ -58,18 +59,40 @@ export async function GET(request: Request) {
       : new Date("2000-01-01").toISOString();
 
   try {
-    const res = await supabaseFetch("/rest/v1/rpc/get_landing_variant_funnel", {
-      method: "POST",
-      body: JSON.stringify({ since_ts: since }),
-    });
+    const read = async (sinceTs: string): Promise<VariantRow[] | null> => {
+      const res = await supabaseFetch("/rest/v1/rpc/get_landing_variant_funnel", {
+        method: "POST",
+        body: JSON.stringify({ since_ts: sinceTs }),
+      });
+      if (!res.ok) {
+        logger.error({ status: res.status }, "Admin landing-variant funnel query failed");
+        return null;
+      }
+      const raw = (await res.json()) as VariantRow[];
+      return Array.isArray(raw) ? raw : [];
+    };
 
-    if (!res.ok) {
-      logger.error({ status: res.status }, "Admin landing-variant funnel query failed");
+    /**
+     * The two live arms count from the landing test's restart at the condensed phone hero
+     * (LANDING_TEST_START_AT), as /admin's A/B overview counts them: before it most phone
+     * visitors never reached either slot, and this tab would otherwise crown a "leader"
+     * from readers the overview calls not attributable. Earlier rounds keep the window.
+     */
+    const windowRows = await read(since);
+    const liveRows =
+      Date.parse(since) < Date.parse(LANDING_TEST_START_AT)
+        ? await read(LANDING_TEST_START_AT)
+        : windowRows;
+    if (!windowRows || !liveRows) {
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
-
-    const raw = (await res.json()) as VariantRow[];
-    const rows = (Array.isArray(raw) ? raw : []).map((r) => {
+    const isLive = (variant: string) =>
+      (LANDING_VARIANT_ARMS as readonly string[]).includes(variant);
+    const raw = [
+      ...windowRows.filter((r) => !isLive(r.variant)),
+      ...liveRows.filter((r) => isLive(r.variant)),
+    ];
+    const rows = raw.map((r) => {
       const label = armLabel("landing", r.variant === "unknown" ? null : r.variant);
       return {
         variant: r.variant,
@@ -86,6 +109,23 @@ export async function GET(request: Request) {
         paidRate: r.completed > 0 ? Math.round((r.paid / r.completed) * 1000) / 10 : 0,
       };
     });
+
+    // The arms being tested right now always get a row, at zero until their first
+    // finished survey. The RPC's own always-show list is round 2's arms (white,
+    // white_prev, control), so without this a round-3 arm with no completion yet was
+    // missing from the comparison instead of reading 0.
+    for (const arm of LANDING_VARIANT_ARMS) {
+      if (rows.some((r) => r.variant === arm)) continue;
+      rows.push({
+        variant: arm,
+        label: armLabel("landing", arm).short,
+        retired: false,
+        completed: 0,
+        paid: 0,
+        revenue: 0,
+        paidRate: 0,
+      });
+    }
 
     // Active arms first, then retired, then the unattributed bucket last — reading
     // order matches how much the row can tell you.

@@ -24,14 +24,6 @@ countdown).
 - `ui/reportPlaceholders.ts` — `{{USER_NAME}}`-style substitution, shared by both.
 - `ui/ReportPricingModal.tsx` + `ui/paygate.css` — the Pricing 3.0 paygate (Figma 842:584 phone, 963:6 desktop).
 - `ui/unlockAnchor.ts` — returns a buyer to the spot they paid from, through Stripe's success and cancel URLs.
-- `logic/leaveIntent.ts` + `ui/hooks/useLeaveIntent.ts` — the founder-call leave offer's trigger
-  (dialog: `features/booking/ui/FounderCallDialog.tsx`). An unpaid V4 owner who just finished the
-  survey in this tab is offered their full report free for a 20-minute call, once per submission,
-  1.6 s after the first paywall card comes into view (on every device; Fatih, 14.10). Anything in
-  the way only delays it: another window, the cookie banner, a hidden tab, or the 30 s after the
-  pay pop-up test's point (`logic/plansOffer.ts` shares that test's key). Never on a return
-  visit. Off without `NEXT_PUBLIC_FOUNDER_CALL_URL`;
-  `?leave=on|off|show` previews it off production.
 - `ui/ShareReportModal.tsx`, `ui/SharedViewerBanner.tsx`, `ui/ShareVerifyGate.tsx` — share flow.
 - `ui/hooks/` — `useReportData`, `useSectionFeedback` (a thumb saves the rating at once; the
   message is optional), `useReportShares`, `useReportEngagementTimers`, `useRevealOnView` (2.0's

@@ -216,6 +216,25 @@ describe("startReportCheckout", () => {
     expect(mockCapture).not.toHaveBeenCalled();
   });
 
+  // A 409 means the reader already owns the plan (bought in another tab, say): the page
+  // reloads what they own on the way back, so it stops offering it.
+  it("says the plan is already theirs on a 409", async () => {
+    respond({ error: "You already own this plan." }, false, 409);
+
+    const result = await startReportCheckout({
+      plan: "full_report",
+      quote: QUOTE,
+      token: "rpt_x",
+    });
+
+    expect(result).toEqual({
+      status: "error",
+      message: "You already own this plan.",
+      alreadyOwned: true,
+    });
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it("survives the network being down", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("offline"));
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetSlackDedupForTests } from "@shared/observability/slack";
+import { __resetStaffEmailRegexForTests } from "@shared/env/staff-email";
 
 const mockFetchWithTimeout = vi.fn();
 
@@ -23,6 +24,16 @@ vi.mock("@features/report/server/personalReport", () => ({
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
+vi.mock("@features/analytics/server/ga4", () => ({ sendGa4PurchaseEvent: vi.fn() }));
+vi.mock("@features/analytics/server/posthog", () => ({ sendPosthogPurchaseEvent: vi.fn() }));
+
+const mockResendSend = vi.fn();
+vi.mock("resend", () => ({
+  Resend: class {
+    emails = { send: (...args: unknown[]) => mockResendSend(...args) };
+  },
+}));
+
 // Spread the real module rather than listing exports: the purchase notification
 // reads the live price catalogue (getPricingBucketsForPlan) to say which SIDE of
 // the price test the buyer was on, and a hand-listed mock silently breaks the
@@ -40,6 +51,8 @@ import {
   upsertArchetypeTierForPersonalReport,
 } from "@features/report/server/personalReport";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
+import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
+import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {
@@ -100,7 +113,8 @@ describe("checkout fulfillment", () => {
 
         if (
           url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
-          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
+          url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.")
         ) {
           return createJsonResponse([]);
         }
@@ -256,6 +270,10 @@ describe("checkout fulfillment", () => {
     );
     expect(markReportPriceQuotePurchased).toHaveBeenCalledWith({ paymentId: 41, quoteId: 8 });
     expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
+    // The server's purchase sends carry the promo, as the browser's does.
+    const promo = { promotion_code: "LOVEIQ100", coupon_percent_off: 100, discount_amount: 24.49 };
+    expect(vi.mocked(sendGa4PurchaseEvent).mock.calls[0]?.[0].params).toMatchObject(promo);
+    expect(vi.mocked(sendPosthogPurchaseEvent).mock.calls[0]?.[0].params).toMatchObject(promo);
   });
 
   it("appends unlocked archetype when full_report checkout includes metadata.archetype", async () => {
@@ -279,7 +297,8 @@ describe("checkout fulfillment", () => {
 
         if (
           url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
-          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
+          url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.")
         ) {
           return createJsonResponse([]);
         }
@@ -380,7 +399,8 @@ describe("checkout fulfillment", () => {
         }
         if (
           url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
-          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
+          url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.")
         ) {
           return createJsonResponse([]);
         }
@@ -466,7 +486,8 @@ describe("checkout fulfillment", () => {
         }
         if (
           url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
-          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
+          url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.")
         ) {
           return createJsonResponse([]);
         }
@@ -554,7 +575,8 @@ describe("checkout fulfillment", () => {
         }
         if (
           url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
-          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
+          url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.")
         ) {
           return createJsonResponse([]);
         }
@@ -634,7 +656,8 @@ describe("checkout fulfillment", () => {
         }
         if (
           url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
-          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
+          url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.")
         ) {
           return createJsonResponse([]);
         }
@@ -908,7 +931,7 @@ describe("checkout fulfillment", () => {
     }
 
     function setupHappyPathMocks(
-      opts: { existingPayment?: boolean; utmTracker?: string | null } = {}
+      opts: { existingPayment?: boolean; primary?: string; utmTracker?: string | null } = {}
     ) {
       const slackCalls: Array<{ url: string; body: string }> = [];
 
@@ -927,9 +950,18 @@ describe("checkout fulfillment", () => {
           }
           if (
             url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
-            url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+            url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.") ||
+            url.includes("/rest/v1/payment?metadata->>checkoutSessionId=eq.cs_test_slack_001")
           ) {
             return createJsonResponse(opts.existingPayment ? [{ id: 99 }] : []);
+          }
+          // The reader's own archetype, which names a single report (getPurchaseTitle).
+          if (url.includes("/rest/v1/scoring_result?survey_submission_id=eq.70")) {
+            return createJsonResponse(
+              opts.primary
+                ? [{ primary_archetype: opts.primary, v5_primary_archetype: opts.primary }]
+                : []
+            );
           }
           // Recipient lookup for the Slack payload
           if (url.includes("/rest/v1/survey_submission?id=eq.70&select=")) {
@@ -969,7 +1001,8 @@ describe("checkout fulfillment", () => {
       plan: "essentials" | "full_report" | "all_reports",
       archetype?: string,
       paymentIntent: string | null = "pi_test_slack_001",
-      landingVariant?: string
+      landingVariant?: string,
+      session: Record<string, unknown> = {}
     ) {
       return {
         charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_test_slack_001" }) },
@@ -989,6 +1022,7 @@ describe("checkout fulfillment", () => {
               payment_intent: paymentIntent,
               payment_status: "paid",
               total_details: { amount_discount: 0 },
+              ...session,
             }),
           },
         },
@@ -1007,7 +1041,7 @@ describe("checkout fulfillment", () => {
 
     it("fires one Slack ping with masked email + plan + archetype + amount on first fulfillment", async () => {
       process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
-      const slackCalls = setupHappyPathMocks();
+      const slackCalls = setupHappyPathMocks({ primary: "Relational Nurturer" });
 
       await processStripeWebhookEvent({
         event: {
@@ -1046,14 +1080,13 @@ describe("checkout fulfillment", () => {
       // No utm_tracker → Direct.
       expect(all).toContain("Direct");
       /**
-       * NO "Experiments they were in" block at all, as of 2026-09-19: the
-       * landing axis concluded in favour of V2 and was the last one being
-       * randomised. A heading over an empty field list is rejected by Slack
-       * outright, and would be wrong even if it posted.
+       * The landing test is live again (round 3), so the block is back with its
+       * landing row. This buyer's survey carried no arm, so it says so: the Stripe
+       * session's copy ("white" when there was no cookie) is not read as one.
        */
-      expect(all).not.toContain("Experiments they were in");
+      expect(all).toContain("Experiments they were in");
+      expect(all).toContain("*Landing page design*\nNot recorded");
       expect(all).not.toContain("Paywall style");
-      expect(all).not.toContain("Landing page design");
       // every arm is named in plain English, never as a raw code
       expect(all).not.toContain("white_prev");
 
@@ -1102,9 +1135,11 @@ describe("checkout fulfillment", () => {
       // and still shown in /admin's concluded section.
       expect(all).not.toContain("Forced paywall");
       expect(all).not.toContain("Paywall style");
-      // And not the landing arm either, now that nothing is randomised — see the
-      // note on the first Slack test above.
-      expect(all).not.toContain("Landing Page V2 (Survey in Hero)");
+      // The landing row is the survey's own stamp. This survey carried none, so the
+      // Stripe session's "white" (what checkout writes without a cookie) is not shown
+      // as the version the buyer saw.
+      expect(all).toContain("*Landing page design*\nNot recorded");
+      expect(all).not.toContain("Landing Page V2");
       // utm_content (base64 referrer email) must never reach Slack — in the
       // fallback text OR in any block.
       expect(all).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
@@ -1141,15 +1176,13 @@ describe("checkout fulfillment", () => {
       expect(all).toContain("Organic");
       expect(all).not.toContain("Dismissible paywall");
       /**
-       * No arm block at all, even for a buyer carrying the retired round-1
-       * "control" cookie. Nothing is randomised as of 2026-09-19, and an arm
-       * nothing randomises is a permanent constant on every purchase ping —
-       * noise, which is what the "Experiments they were in" block exists to
-       * avoid. The LABEL itself is still guaranteed, by labels.test.ts and by
-       * the survey-journey message, which does still print it.
+       * The Stripe session says "control" here, but the buyer's survey carried no
+       * arm, and the survey's stamp is the only source the purchase message reads:
+       * the session's copy defaults to "white" without a cookie, so it cannot tell
+       * an arm from none. Round 3 is live, so the row is there, saying so.
        */
       expect(all).not.toContain("Dark landing page (before V1)");
-      expect(all).not.toContain("Experiments they were in");
+      expect(all).toContain("*Landing page design*\nNot recorded");
       expect(all).not.toContain("Landing Page V1 (First Design)");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
@@ -1210,6 +1243,61 @@ describe("checkout fulfillment", () => {
       expect(slackCalls).toHaveLength(0);
     });
 
+    /**
+     * #payments announced "EUR 0.00" with no test tag, while the ops lines about
+     * the same payment already said "[internal]". The tag follows the payment's
+     * own `is_test` verdict: the address that paid.
+     */
+    describe("whose money it was", () => {
+      const purchaseBy = async (buyer: string, amountTotal: number) => {
+        process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+        delete process.env.ADMIN_TEST_EMAIL_REGEX;
+        __resetStaffEmailRegexForTests();
+        const slackCalls = setupHappyPathMocks({ primary: "Spark Seeker" });
+        await processStripeWebhookEvent({
+          event: {
+            id: `evt_slack_whose_${amountTotal}`,
+            type: "checkout.session.completed",
+            data: {
+              object: {
+                id: "cs_test_slack_001",
+                metadata: { plan: "full_report", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+              },
+            },
+          } as never,
+          stripe: buildStripe("full_report", "Spark Seeker", null, undefined, {
+            amount_total: amountTotal,
+            customer_details: { email: buyer },
+            payment_status: amountTotal === 0 ? "no_payment_required" : "paid",
+          }) as never,
+        });
+        delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+        expect(slackCalls).toHaveLength(1);
+        return JSON.parse(slackCalls[0]!.body) as {
+          text: string;
+          blocks: Array<{ type: string; text?: { text?: string } }>;
+        };
+      };
+
+      it("marks a staff €0 purchase as internal, and its Paid as no sale", async () => {
+        const body = await purchaseBy("qa@loveiq.org", 0);
+        expect(body.blocks.find((b) => b.type === "header")?.text?.text).toBe(
+          ":test_tube: [internal] 💳 EUR 0.00 — Only Your Highest Archetype"
+        );
+        expect(body.text).toMatch(
+          /^:test_tube: \[internal\] :credit_card: Purchase #70 — EUR 0\.00/
+        );
+        expect(rendered(JSON.stringify(body))).toContain(":red_circle: Paid €0 (test/comp)");
+      });
+
+      it("leaves a customer's sale untagged and green", async () => {
+        const all = rendered(JSON.stringify(await purchaseBy("buyer@gmail.com", 1999)));
+        expect(all).not.toContain("[internal]");
+        expect(all).not.toContain("€0");
+        expect(all).toContain(":large_green_circle: Paid");
+      });
+    });
+
     it("skips the Slack ping on re-delivery (existing payment row)", async () => {
       process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
       const slackCalls = setupHappyPathMocks({ existingPayment: true });
@@ -1235,6 +1323,107 @@ describe("checkout fulfillment", () => {
       expect(slackCalls).toHaveLength(0);
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    /**
+     * The return page's fallback and the Stripe webhook both fulfil a checkout the
+     * webhook has not reached yet, and Stripe re-delivers. Slack, GA4 and PostHog went
+     * out once; the buyer's email went out on every pass.
+     */
+    it("names a single report bought for another archetype in #payments", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({ primary: "Relational Nurturer" });
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_other_archetype",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: { plan: "full_report", archetype: "Spark Seeker" },
+            },
+          },
+        } as never,
+        stripe: buildStripe("full_report", "Spark Seeker") as never,
+      });
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("Only the Spark Seeker Report");
+      expect(all).not.toContain("Only Your Highest Archetype");
+    });
+
+    it("sends the buyer's confirmation email once when the same purchase is processed twice", async () => {
+      process.env.RESEND_API_KEY = "re_test_not_real";
+      mockResendSend.mockResolvedValue({ data: { id: "email_test_1" }, error: null });
+      const processSession = (eventId: string) =>
+        processStripeWebhookEvent({
+          event: {
+            id: eventId,
+            type: "checkout.session.completed",
+            data: {
+              object: {
+                id: "cs_test_slack_001",
+                metadata: { plan: "full_report", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+              },
+            },
+          } as never,
+          stripe: buildStripe("full_report", "Spark Seeker") as never,
+        });
+
+      setupHappyPathMocks();
+      await processSession("cs_status_poll_cs_test_slack_001");
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+      expect(mockResendSend.mock.calls[0]![0]).toMatchObject({ to: "eman@loveiq.org" });
+
+      // The webhook arrives after the fallback wrote the payment row.
+      setupHappyPathMocks({ existingPayment: true });
+      await processSession("evt_email_after_fallback");
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+
+      delete process.env.RESEND_API_KEY;
+    });
+
+    it("records a €0 checkout once when the return page and the webhook both process it", async () => {
+      process.env.RESEND_API_KEY = "re_test_not_real";
+      mockResendSend.mockResolvedValue({ data: { id: "email_test_1" }, error: null });
+      // A 100%-off code or a fully credited All 14: no PaymentIntent, no charge.
+      const stripe = buildStripe("full_report", "Spark Seeker", null, undefined, {
+        amount_total: 0,
+        payment_status: "no_payment_required",
+        total_details: { amount_discount: 1999 },
+      });
+      const processSession = (eventId: string) =>
+        processStripeWebhookEvent({
+          event: {
+            id: eventId,
+            type: "checkout.session.completed",
+            data: {
+              object: {
+                id: "cs_test_slack_001",
+                metadata: { plan: "full_report", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+              },
+            },
+          } as never,
+          stripe: stripe as never,
+        });
+      const paymentInserts = () =>
+        mockFetchWithTimeout.mock.calls.filter(
+          ([url, options]) =>
+            String(url).endsWith("/rest/v1/payment") &&
+            (options as { method?: string } | undefined)?.method === "POST"
+        ).length;
+
+      setupHappyPathMocks();
+      await processSession("cs_status_poll_cs_test_slack_001");
+      expect(paymentInserts()).toBe(1);
+
+      // The webhook arrives after the return page's fallback wrote the row.
+      setupHappyPathMocks({ existingPayment: true });
+      await processSession("evt_zero_after_fallback");
+      expect(paymentInserts()).toBe(1);
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+
+      delete process.env.RESEND_API_KEY;
     });
   });
 });

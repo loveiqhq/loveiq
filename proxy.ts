@@ -455,7 +455,11 @@ export async function proxy(request: NextRequest) {
     `style-src 'self' 'unsafe-inline' ${googleFontStyleSources}`, // Tailwind requires unsafe-inline for styles
     "worker-src 'self' blob:",
     `font-src 'self' data: ${googleFontSources}`,
-    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com ${GOOGLE_COUNTRY_DOMAINS} https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
+    // The Ads hosts are here as well as in connect-src: Safari sends the conversion pings
+    // to ad.doubleclick.net and pagead2.googlesyndication.com as images, and img-src alone
+    // refused them (measured on production in WebKit, 2026-10-06), so Safari buyers'
+    // conversions never reached Google Ads.
+    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://ad.doubleclick.net https://pagead2.googlesyndication.com https://www.googleadservices.com https://www.google.com ${GOOGLE_COUNTRY_DOMAINS} https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
     "media-src 'self'",
     // GA4 does not post only to www.google-analytics.com: it uses region-scoped
     // hosts (region1.google-analytics.com, analytics.google.com) and Google Ads
@@ -738,9 +742,16 @@ export async function proxy(request: NextRequest) {
   // replay (Mark, 2026-10-07), while visitors, on our origin, saw them fine. Public
   // icons, fonts and videos hold nothing to protect; pages and API responses keep
   // `same-origin`. The same header broke the email logo in Outlook (2026-10-04).
+  // The extension alone does not make a path public: `/api/admin/submissions/2373.png`
+  // is a submission (its route parseInt()s the id), so /api and /admin never relax.
+  const corpPath = request.nextUrl.pathname;
   response.headers.set(
     "Cross-Origin-Resource-Policy",
-    STATIC_MEDIA_RE.test(request.nextUrl.pathname) ? "cross-origin" : "same-origin"
+    STATIC_MEDIA_RE.test(corpPath) &&
+      !corpPath.startsWith("/api/") &&
+      !corpPath.startsWith("/admin")
+      ? "cross-origin"
+      : "same-origin"
   );
 
   // Set CSRF cookie if not present

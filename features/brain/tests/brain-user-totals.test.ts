@@ -11,6 +11,7 @@ import {
   quartiles,
   renderAnswers,
   renderEmails,
+  renderReading,
   renderTotals,
   renderTraits,
   toPerson,
@@ -553,6 +554,120 @@ describe("the other measures: traits, emails and answers", () => {
     const multi = { id: 10, qid: "16001", type: "multiple", question: "Q" };
     expect(renderAnswers(req(), many(5, { answer: ["A", "B"] }), multi)).toContain(
       "more than 100%"
+    );
+  });
+});
+
+describe("reading: time on the report", () => {
+  const req = (over: Partial<Parameters<typeof renderReading>[0]> = {}) => ({
+    groupBy: [],
+    filter: {},
+    ...over,
+  });
+  const visit = (start: string, minutes: number | null) => ({
+    started_at: start,
+    ended_at:
+      minutes === null ? null : new Date(Date.parse(start) + minutes * 60_000).toISOString(),
+  });
+  const row = (sessions: Array<{ started_at: string; ended_at: string | null }> | undefined) => ({
+    created_date_time: "2026-09-20T12:00:00Z",
+    age: [{ answer_option: { option_text: "25–34" } }],
+    app_user: { email: "reader@example.com", user_profile: null },
+    scoring_result: null,
+    personal_report: { payment: [], ...(sessions ? { report_session: sessions } : {}) },
+  });
+
+  it("adds up the visits whose end was recorded, and drops an open tab or an unclosed visit", () => {
+    const p = toPerson(
+      row([
+        visit("2026-09-20T12:00:00Z", 3),
+        visit("2026-09-21T08:00:00Z", 2),
+        // Never closed, then a tab left open overnight: neither is reading.
+        visit("2026-09-21T09:00:00Z", null),
+        visit("2026-09-21T10:00:00Z", 5 * 60),
+      ])
+    );
+    expect(p!.readingMs).toBe(5 * 60_000);
+    // No visit measured is unknown, not zero minutes.
+    expect(toPerson(row([visit("2026-09-20T12:00:00Z", null)]))!.readingMs).toBeUndefined();
+    expect(toPerson(row(undefined))!.readingMs).toBeUndefined();
+  });
+
+  it("adds a repeat finisher's reading across their reports, and keeps unknown unknown", () => {
+    const [both] = onePerPerson([
+      person({ userId: "7", readingMs: 60_000 }),
+      person({ userId: "7", readingMs: 120_000 }),
+    ]);
+    expect(both!.readingMs).toBe(180_000);
+    const [one] = onePerPerson([person({ userId: "8" }), person({ userId: "8", readingMs: 1 })]);
+    expect(one!.readingMs).toBe(1);
+    const [none] = onePerPerson([person({ userId: "9" }), person({ userId: "9" })]);
+    expect(none!.readingMs).toBeUndefined();
+  });
+
+  it("asks for the visits only when reading is the measure", async () => {
+    vi.resetModules();
+    const paths: string[] = [];
+    vi.doMock("@features/admin/server/supabase", () => ({
+      supabaseFetch: async (path: string) => {
+        paths.push(path);
+        return { ok: true, status: 200, json: async () => [{ id: 41 }] };
+      },
+    }));
+    vi.doMock("@features/brain/server/read-all", () => ({
+      readAll: async (path: string) => {
+        paths.push(path);
+        return [];
+      },
+    }));
+    const mod = await import("@features/brain/server/user-totals");
+    await mod.loadPeople("2026-10-01", "2026-10-07", { measure: "reading" });
+    await mod.loadPeople("2026-10-01", "2026-10-07", { measure: "people" });
+    const [reading, plain] = paths.filter((p) => p.startsWith("/rest/v1/survey_submission"));
+    expect(reading).toContain(",report_session(started_at,ended_at))");
+    expect(plain).not.toContain("report_session");
+    vi.doUnmock("@features/admin/server/supabase");
+    vi.doUnmock("@features/brain/server/read-all");
+  });
+
+  it("gives the median and average per reader, from twenty measured readers", () => {
+    const people = [
+      ...many(10, { readingMs: 60_000 }),
+      ...many(10, { readingMs: 600_000 }),
+      ...many(5),
+    ];
+    const text = renderReading(req(), people);
+    expect(text).toContain(
+      "- All: 25 finished, 20 with a measured visit: median 5.5 min, average 5.5 min per reader"
+    );
+    expect(renderReading(req(), many(19, { readingMs: 60_000 }))).toContain(
+      "Fewer than 20 readers have a measured visit here, so no reading time is shown"
+    );
+  });
+
+  it("withholds a group's time when everyone's and the others' would give it back", () => {
+    const people = [
+      ...many(30, { gender: "Woman", readingMs: 60_000 }),
+      ...many(25, { gender: "Man", readingMs: 120_000 }),
+      // Ten measured nonbinary readers: too few to show, and everyone minus the rest is them.
+      ...many(10, { gender: "Nonbinary", readingMs: 900_000 }),
+    ];
+    const text = renderReading(req({ groupBy: ["gender"] }), people);
+    expect(text).toContain("- Nonbinary: 10 finished; fewer than 20 with a measured visit");
+    expect(text).toContain("- Man: 25 finished; reading time withheld");
+    // Every woman measured: "all but under 5", since the rest of the group is none.
+    expect(text).toMatch(/- Woman: 30 finished, all but under 5 measured: median 1\.0 min/);
+    expect(text).not.toContain("15.0 min");
+  });
+
+  it("hides a small measured count inside a group, as every measure does", () => {
+    const people = [
+      ...many(22, { gender: "Woman", readingMs: 60_000 }),
+      ...many(3, { gender: "Woman" }),
+      ...many(40, { gender: "Man", readingMs: 60_000 }),
+    ];
+    expect(renderReading(req({ groupBy: ["gender"] }), people)).toContain(
+      "- Woman: 25 finished, all but under 5 measured"
     );
   });
 });

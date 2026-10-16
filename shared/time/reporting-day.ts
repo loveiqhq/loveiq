@@ -63,6 +63,33 @@ export function reportingHour(now: Date = new Date()): number {
 }
 
 /**
+ * "2026-10-14 09:01": a moment as the team reads a clock, in the reporting timezone.
+ *
+ * For anything a person reads a time of day from. The stored instants are UTC, and a
+ * UTC time shown bare reads as local: a WhatsApp message sent at 08:52 in Berlin was
+ * shown as "06:52". `hourCycle: "h23"` for the reason given in `zoneOffsetMs`.
+ */
+export function reportingDateTime(at: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: REPORTING_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value;
+  const [year, month, day, hour, minute] = ["year", "month", "day", "hour", "minute"].map((t) =>
+    get(t as Intl.DateTimeFormatPartTypes)
+  );
+  // Same ICU-less fallback as reportingDay: a valid UTC stamp beats "undefined".
+  if (!year || !month || !day || !hour || !minute)
+    return at.toISOString().slice(0, 16).replace("T", " ");
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
+/**
  * The instant a reporting day begins, as a UTC `Date`.
  *
  * `new Date("2026-09-14T00:00:00Z")` is 02:00 in Berlin, not midnight, so a

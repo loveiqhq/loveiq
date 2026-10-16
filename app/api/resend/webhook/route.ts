@@ -63,6 +63,26 @@ function getEngagementRedis(): Redis | null {
 }
 
 /**
+ * The tags the email was sent with, which Resend echoes back on every webhook. Resend sends
+ * them either as [{name,value}] or as a plain object, depending on the API version that
+ * created the send. Accept both rather than silently recording nothing the day they change it.
+ */
+function readTags(raw: unknown): Map<string, string> {
+  const tags = new Map<string, string>();
+  if (Array.isArray(raw)) {
+    for (const t of raw) {
+      const o = t as { name?: unknown; value?: unknown };
+      if (typeof o?.name === "string" && typeof o?.value === "string") tags.set(o.name, o.value);
+    }
+  } else if (raw && typeof raw === "object") {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof v === "string") tags.set(k, v);
+    }
+  }
+  return tags;
+}
+
+/**
  * Record one event against the A/B arm the email was sent with.
  *
  * The arm rides on the Resend `tags` set at send time (`emailExperimentTags`),
@@ -83,21 +103,7 @@ async function recordExperimentEvent(
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return;
 
-  // Resend sends tags either as [{name,value}] or as a plain object, depending
-  // on the API version that created the send. Accept both rather than silently
-  // recording nothing the day they change it.
-  const raw = payload.data?.tags;
-  const tags = new Map<string, string>();
-  if (Array.isArray(raw)) {
-    for (const t of raw) {
-      const o = t as { name?: unknown; value?: unknown };
-      if (typeof o?.name === "string" && typeof o?.value === "string") tags.set(o.name, o.value);
-    }
-  } else if (raw && typeof raw === "object") {
-    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-      if (typeof v === "string") tags.set(k, v);
-    }
-  }
+  const tags = readTags(payload.data?.tags);
   const experiment = tags.get("exp");
   const arm = tags.get("arm");
   if (!experiment || !arm) return;
@@ -137,6 +143,82 @@ async function recordExperimentEvent(
     }
   } catch (err) {
     logger.warn({ err, experiment, eventType }, "email experiment counter failed");
+  }
+}
+
+/** The events kept for each nurture email (email_message_event). */
+const PER_EMAIL_EVENTS = new Set([
+  "email.delivered",
+  "email.opened",
+  "email.clicked",
+  "email.bounced",
+]);
+
+/**
+ * Keep a nurture email's delivery, open, click or bounce: the admin's Report page counts them
+ * per campaign. The email is known by the `stage` and `sub` (submission) tags its send carried
+ * (nurture-sequence); every other email lacks them and is skipped.
+ *
+ * Ids and a time only: never the address, the IP, the user agent or the clicked link, which
+ * carries the report token and the promo code.
+ *
+ * The table's key (email, kind) keeps the first and drops the rest, so a retry or a second
+ * open adds nothing and, unlike the counter, this needs no certain claim. Best effort, like
+ * the counter: a failure is logged, never answered with an error.
+ */
+async function recordMessageEvent(payload: {
+  type?: unknown;
+  created_at?: unknown;
+  data?: { email_id?: unknown; tags?: unknown };
+}): Promise<void> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || typeof payload.type !== "string" || !PER_EMAIL_EVENTS.has(payload.type)) {
+    return;
+  }
+  const tags = readTags(payload.data?.tags);
+  const stage = tags.get("stage") ?? "";
+  const sub = tags.get("sub") ?? "";
+  const resendId = payload.data?.email_id;
+  if (
+    !/^[A-Za-z0-9_-]{1,64}$/.test(stage) ||
+    !/^[1-9][0-9]{0,14}$/.test(sub) ||
+    typeof resendId !== "string" ||
+    !/^[A-Za-z0-9_-]{1,100}$/.test(resendId)
+  ) {
+    return;
+  }
+  const eventType = payload.type.replace(/^email\./, "");
+  // When it happened: the envelope's time. data.created_at is when the EMAIL was created, the
+  // same for its delivery, opens and clicks.
+  const at = typeof payload.created_at === "string" ? Date.parse(payload.created_at) : NaN;
+  try {
+    const res = await fetchWithTimeout(`${url}/rest/v1/email_message_event`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=ignore-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        resend_id: resendId,
+        event_type: eventType,
+        stage,
+        survey_submission_id: Number(sub),
+        first_at: new Date(Number.isFinite(at) ? at : Date.now()).toISOString(),
+      }),
+      timeoutMs: 3000,
+    });
+    // Status checked for the reason the counter's is: fetchWithTimeout resolves on any HTTP code.
+    if (!res.ok) {
+      logger.warn(
+        { status: res.status, stage, eventType },
+        "email message event non-ok — is the migration applied?"
+      );
+    }
+  } catch (err) {
+    logger.warn({ err, stage, eventType }, "email message event failed");
   }
 }
 
@@ -190,8 +272,13 @@ export async function POST(request: Request) {
     "svix-signature": request.headers.get("svix-signature") ?? "",
   };
 
-  // `tags` carries the A/B arm back from the send; see recordExperimentEvent.
-  let payload: { type: string; data: { to?: string[]; tags?: unknown } };
+  // `tags` carries the A/B arm, or a nurture email's stage and submission, back from the send;
+  // see recordExperimentEvent and recordMessageEvent.
+  let payload: {
+    type: string;
+    created_at?: unknown;
+    data: { to?: string[]; tags?: unknown; email_id?: unknown };
+  };
   try {
     const wh = new Webhook(secret);
     payload = wh.verify(rawBody, svixHeaders) as typeof payload;
@@ -266,6 +353,8 @@ export async function POST(request: Request) {
   if (claimCertain && typeof payload.type === "string") {
     await recordExperimentEvent(payload, payload.type.replace(/^email\./, ""));
   }
+  // Keyed per email and kind, so a retry adds nothing: no certain claim needed.
+  await recordMessageEvent(payload);
 
   if (!email) {
     return NextResponse.json({ ok: true });

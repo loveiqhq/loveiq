@@ -2025,6 +2025,305 @@ export async function sessionQuery(query: string): Promise<unknown[][] | null> {
   return null;
 }
 
+/** PostHog's own load-shedding answers: worth one more try after a pause, unlike a bad query. */
+const HOG_RETRYABLE = new Set([429, 502, 503, 504]);
+
+/** The sentence PostHog wrote, out of the JSON it wraps around it, or the raw body. */
+function hogErrorText(body: string): string {
+  try {
+    const j = JSON.parse(body) as { detail?: unknown; error?: unknown };
+    return String(j.detail ?? j.error ?? body).slice(0, 500);
+  } catch {
+    return body.slice(0, 500);
+  }
+}
+
+/**
+ * The query with every comment blanked to spaces and every quoted string and quoted name
+ * to "~", so the checks below read only code: "-- LIMIT 500" in a comment is not a LIMIT,
+ * and a UNION inside a string is not a UNION. Same length as the query, so positions carry
+ * over.
+ * HogQL's comments are `--`, `//`, `#` and `/* … *\/`. With `keepNames`, a `quoted` or
+ * "quoted" name stays, because a table can be named that way.
+ */
+export function hogqlCodeOnly(sql: string, keepNames = false): string {
+  let out = "";
+  let i = 0;
+  while (i < sql.length) {
+    const c = sql[i]!;
+    const two = sql.slice(i, i + 2);
+    let j = i + 1;
+    if (keepNames && (c === '"' || c === "`")) {
+      out += c;
+      i += 1;
+      continue;
+    }
+    if (two === "--" || two === "//" || c === "#") {
+      const nl = sql.indexOf("\n", i);
+      j = nl === -1 ? sql.length : nl;
+    } else if (two === "/*") {
+      const close = sql.indexOf("*/", i + 2);
+      j = close === -1 ? sql.length : close + 2;
+    } else if (c === "'" || c === '"' || c === "`") {
+      while (j < sql.length && sql[j] !== c) j += sql[j] === "\\" ? 2 : 1;
+      j = Math.min(j + 1, sql.length);
+    } else {
+      out += c;
+      i += 1;
+      continue;
+    }
+    // A comment becomes space, so a trailing one is trimmed with the whitespace. A string
+    // or quoted name keeps its place as "~", so a query that ENDS with one keeps it.
+    const comment = two === "--" || two === "//" || c === "#" || two === "/*";
+    out += comment ? sql.slice(i, j).replace(/[^\n]/g, " ") : "~".repeat(j - i);
+    i = j;
+  }
+  return out;
+}
+
+/** A query's code as words, quoted names, numbers and single marks, in order. */
+function hogqlTokens(code: string): string[] {
+  return code.match(/[A-Za-z_$][\w$]*|"[^"]*"|`[^`]*`|\d+|[^\s\w]/g) ?? [];
+}
+
+/** Words that follow a table where an alias could otherwise be read. */
+const AFTER_TABLE = new Set(
+  (
+    "WHERE PREWHERE GROUP ORDER LIMIT JOIN LEFT RIGHT INNER OUTER FULL CROSS ANY ALL ASOF " +
+    "SEMI ANTI ON USING SAMPLE FINAL ARRAY HAVING WINDOW SETTINGS UNION INTERSECT EXCEPT QUALIFY"
+  ).split(" ")
+);
+
+/**
+ * How a caller-written query is capped, and what it reads, from its code alone.
+ *
+ * - `body`: the query without a trailing `;` or comment, which PostHog accepts but which
+ *   would put an appended LIMIT after the end of the statement.
+ * - `ownLimit`: the row count of the query's own trailing LIMIT (`LIMIT n`, `LIMIT n
+ *   OFFSET m`, `LIMIT m, n`), or null.
+ * - `setOperation`: a UNION, INTERSECT or EXCEPT outside any brackets. PostHog applies its
+ *   silent default of 100 rows to every part of one but the last, whatever LIMIT follows
+ *   (measured 2026-10-12: a two-part UNION ALL with LIMIT 1000 returned 101 rows of 596).
+ * - `tables`: every table a FROM or JOIN names, `FROM a, b` included (a subquery is not a
+ *   name), lower case and unquoted; `ctes`: the names a WITH gives its subqueries.
+ */
+export function hogqlShape(query: string): {
+  body: string;
+  ownLimit: number | null;
+  setOperation: string | null;
+  tables: string[];
+  ctes: string[];
+} {
+  const code = hogqlCodeOnly(query);
+  const end = code.replace(/[\s;]+$/, "").length;
+  const up = (t: string | undefined) => (t ?? "").toUpperCase();
+  const isNum = (t: string | undefined) => /^\d+$/.test(t ?? "");
+
+  const t = hogqlTokens(code.slice(0, end));
+  const n = t.length;
+  let ownLimit: number | null = null;
+  if (up(t[n - 2]) === "LIMIT" && isNum(t[n - 1])) ownLimit = Number(t[n - 1]);
+  else if (up(t[n - 4]) === "LIMIT" && isNum(t[n - 3]) && isNum(t[n - 1])) {
+    if (t[n - 2] === ",") ownLimit = Number(t[n - 1]);
+    else if (up(t[n - 2]) === "OFFSET") ownLimit = Number(t[n - 3]);
+  }
+
+  let depth = 0;
+  let setOperation: string | null = null;
+  for (const tok of t) {
+    if (tok === "(") depth += 1;
+    else if (tok === ")") depth -= 1;
+    else if (depth === 0 && !setOperation && /^(UNION|INTERSECT|EXCEPT)$/i.test(tok)) {
+      setOperation = tok.toUpperCase();
+    }
+  }
+
+  // Tables are read with quoted names kept: FROM `x` names x.
+  const w = hogqlTokens(hogqlCodeOnly(query, true).slice(0, end));
+  const unquote = (name: string) => name.replace(/["`]/g, "").toLowerCase();
+  const tables: string[] = [];
+  const ctes: string[] = [];
+  for (let i = 0; i < w.length; i += 1) {
+    if (up(w[i + 1]) === "AS" && w[i + 2] === "(" && /^[A-Za-z_]/.test(w[i]!)) {
+      ctes.push(w[i]!.toLowerCase());
+    }
+    const word = up(w[i]);
+    if (word !== "FROM" && !(word === "JOIN" && up(w[i - 1]) !== "ARRAY")) continue;
+    let j = i + 1;
+    while (j < w.length && w[j] !== "(") {
+      let name = w[j]!;
+      j += 1;
+      while (w[j] === "." && j + 1 < w.length) {
+        name += `.${w[j + 1]}`;
+        j += 2;
+      }
+      tables.push(unquote(name));
+      if (up(w[j]) === "AS") j += 2;
+      else if (/^[A-Za-z_]/.test(w[j] ?? "") && !AFTER_TABLE.has(up(w[j]))) j += 1;
+      // `FROM a, b` is a join too.
+      if (word !== "FROM" || w[j] !== ",") break;
+      j += 1;
+    }
+  }
+
+  return { body: query.slice(0, end), ownLimit, setOperation, tables, ctes };
+}
+
+/**
+ * PostHog's own analytics tables. Everything else this key can read is the data warehouse:
+ * synced copies of our database (survey answers, reports and their unlock tokens,
+ * payments, the waitlist), Stripe, Resend and Google. Those belong to query_product_data,
+ * which masks what is private, and must not come round the side through PostHog.
+ */
+export const HOGQL_TABLES = new Set(["events", "persons", "sessions"]);
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export type HogqlTable =
+  | {
+      ok: true;
+      columns: string[];
+      rows: unknown[][];
+      /** The query's own LIMIT, or null when the cap was added here. */
+      ownLimit: number | null;
+      /** Rows beyond what is returned exist, or may: cut at the cap, a filled own LIMIT, or PostHog's own cut. */
+      cut: "cap" | "own_limit" | "posthog" | null;
+    }
+  | { ok: false; error: string };
+
+/**
+ * A query someone else wrote: the brain's `query_product_analytics`. Columns and rows, or a
+ * sentence that says what went wrong. sessionQuery flattens every failure to null, which
+ * suits a caller that wrote its own query; a caller that has to FIX its query needs
+ * PostHog's own words ("Unable to resolve field: x").
+ *
+ * Capped, and never silently: a query with no LIMIT of its own is asked for `cap + 1` rows,
+ * so a longer result is KNOWN to be longer rather than guessed at; a bigger own LIMIT is
+ * refused; a filled own LIMIT, PostHog's `hasMore` and its default cut are all reported.
+ * A UNION at the top level is refused, because PostHog cuts all but its last part at 100
+ * rows whatever LIMIT follows; wrapped in SELECT * FROM (…) it is a subquery and is not cut.
+ */
+export async function hogqlTable(query: string, cap: number): Promise<HogqlTable> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return { ok: false, error: "POSTHOG_API_KEY is not set on this deployment." };
+  const { body, ownLimit, setOperation, tables, ctes } = hogqlShape(query);
+  const elsewhere = tables.filter((t) => !HOGQL_TABLES.has(t) && !ctes.includes(t));
+  if (elsewhere.length > 0) {
+    return {
+      ok: false,
+      error:
+        `Only PostHog's own events, persons and sessions are read here, and this query names ` +
+        `${[...new Set(elsewhere)].join(", ")}. Our own database (survey answers, reports, ` +
+        `payments) is query_product_data, which masks what is private.`,
+    };
+  }
+  // A count never needs a person's name, and an alias would carry one past any mask. Read
+  // in the raw text on purpose: properties['first_name'] and `first_name` are quoted, and
+  // hogqlCodeOnly blanks quoted spans (CodeRabbit on #571).
+  if (/(first|last)_?name/i.test(query)) {
+    return { ok: false, error: "Names are not read here: count people rather than naming them." };
+  }
+  if (setOperation) {
+    return {
+      ok: false,
+      error:
+        `A ${setOperation} at the top level is not run: PostHog cuts every part but the last ` +
+        `at 100 rows, whatever LIMIT follows. Wrap it: SELECT * FROM (<the ${setOperation}>) LIMIT n.`,
+    };
+  }
+  if (ownLimit !== null && ownLimit > cap) {
+    return {
+      ok: false,
+      error: `LIMIT ${ownLimit} is over the ${cap}-row maximum. Aggregate in the query instead.`,
+    };
+  }
+  const sql = ownLimit === null ? `${body}\nLIMIT ${cap + 1}` : body;
+  let failure = "";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ query: { kind: "HogQLQuery", query: sql } }),
+        timeoutMs: 15_000,
+      });
+    } catch (err) {
+      // fetchWithTimeout turns its own abort into "Request timeout after …"; anything else
+      // is a failure to connect, and calling that a timeout would send the reader the
+      // wrong way.
+      const why = err instanceof Error ? err.message : String(err);
+      failure = why.startsWith("Request timeout")
+        ? "PostHog did not answer within 15 seconds. Narrow the dates or the events the " +
+          "query scans, or ask again in a minute."
+        : `PostHog could not be reached: ${why.slice(0, 200)}`;
+      continue;
+    }
+    if (!res.ok) {
+      const detail = hogErrorText(await res.text().catch(() => ""));
+      failure = `PostHog answered ${res.status}${detail ? `: ${detail}` : "."}`;
+      // A bad query fails the same way twice; load-shedding is worth one more try.
+      if (!HOG_RETRYABLE.has(res.status)) break;
+      if (attempt === 0) await pause(2_000);
+      continue;
+    }
+    let payload: {
+      columns?: unknown;
+      results?: unknown;
+      error?: unknown;
+      hasMore?: unknown;
+      used_data_warehouse_sources?: unknown;
+    };
+    try {
+      payload = (await res.json()) as typeof payload;
+    } catch (err) {
+      // fetchWithTimeout's clock runs while the body is read, so a late answer aborts here.
+      return {
+        ok: false,
+        error:
+          err instanceof Error && err.name === "AbortError"
+            ? "PostHog's answer did not finish arriving within 15 seconds."
+            : `PostHog answered ${res.status} with something that is not JSON.`,
+      };
+    }
+    // 200-with-error is how PostHog reports some bad queries.
+    if (payload.error) return { ok: false, error: hogErrorText(String(payload.error)) };
+    // PostHog's own account of what the query read: the backstop for a warehouse table
+    // reached some way the check above does not see. Its rows are dropped, not returned.
+    const warehouse = payload.used_data_warehouse_sources;
+    if (Array.isArray(warehouse) && warehouse.length > 0) {
+      const names = warehouse.map((w) => String((w as { table_name?: unknown }).table_name ?? "?"));
+      return {
+        ok: false,
+        error:
+          `That query read the data warehouse (${names.join(", ")}), so its rows were not ` +
+          `returned. Our own database is query_product_data, which masks what is private.`,
+      };
+    }
+    // A 2xx with no results is a query that did not finish (PostHog answers 202 for one),
+    // and reading it as "no rows" would blame the query's filters for nothing.
+    if (!Array.isArray(payload.results)) {
+      return {
+        ok: false,
+        error: `PostHog answered ${res.status} without results, so the query did not finish. Ask again in a minute.`,
+      };
+    }
+    const rows = payload.results as unknown[][];
+    const columns = Array.isArray(payload.columns) ? payload.columns.map(String) : [];
+    if (ownLimit === null && rows.length > cap) {
+      return { ok: true, columns, rows: rows.slice(0, cap), ownLimit, cut: "cap" };
+    }
+    const cut =
+      payload.hasMore === true
+        ? "posthog"
+        : ownLimit !== null && ownLimit > 1 && rows.length >= ownLimit
+          ? "own_limit"
+          : null;
+    return { ok: true, columns, rows, ownLimit, cut };
+  }
+  return { ok: false, error: failure };
+}
+
 /** The first row, or null. */
 async function sessionRow(query: string): Promise<unknown[] | null> {
   const rows = await sessionQuery(query);

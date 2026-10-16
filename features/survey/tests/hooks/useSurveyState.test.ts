@@ -159,4 +159,52 @@ describe("useSurveyState", () => {
 
     expect(result.current.getAnswer("q3")).toEqual(["opt1", "opt2"]);
   });
+
+  describe("C13 arm", () => {
+    // Hashes to the variant (e2e/surveyArm.ts), so "control" below can only come from
+    // the draft rule, never from the coin.
+    const VARIANT_ID = "00000000-0000-4000-8000-000000000001";
+    const lastPersisted = () => {
+      const writes = ls.setItem.mock.calls.filter(([key]) => key === STORAGE_KEY);
+      return JSON.parse(writes.at(-1)![1] as string) as Record<string, unknown>;
+    };
+
+    beforeEach(() => {
+      sessionStorage.setItem("loveiq-survey-session", VARIANT_ID);
+    });
+
+    afterEach(() => {
+      sessionStorage.clear();
+    });
+
+    it("keeps a draft saved before C13 in the control order, and records that", () => {
+      ls.store[STORAGE_KEY] = JSON.stringify({
+        answers: { "00001": "x" },
+        currentIndex: 12,
+        startedAt: "2026-10-01T10:00:00.000Z",
+        prefilled: [],
+      });
+      const { result } = renderHook(() => useSurveyState());
+      expect(result.current.orderArm).toBe("control");
+      expect(lastPersisted().orderArm).toBe("control");
+    });
+
+    it("buckets a fresh run by its session id, and records that", () => {
+      const { result } = renderHook(() => useSurveyState());
+      expect(result.current.orderArm).toBe("variant");
+      expect(lastPersisted().orderArm).toBe("variant");
+    });
+
+    it("reopens a draft in the arm it recorded", () => {
+      ls.store[STORAGE_KEY] = JSON.stringify({
+        answers: { "00001": "x" },
+        currentIndex: 12,
+        startedAt: "2026-10-07T10:00:00.000Z",
+        prefilled: [],
+        orderArm: "variant",
+      });
+      const { result } = renderHook(() => useSurveyState());
+      expect(result.current.orderArm).toBe("variant");
+    });
+  });
 });

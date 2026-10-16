@@ -353,6 +353,10 @@ describe("the corpus reads", () => {
     expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain(
       `&fts=fts(english).${encodeURIComponent("(assigned & action & item) | (mentioned & comment)")}`
     );
+    // An ask is made of a person; the hiring inbox is nobody's, and anyone can write to it.
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain(
+      '&meta->>mailbox=not.in.("hr@loveiq.org")'
+    );
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
     expect(await googleThreads("2026-09-01")).toBeNull();
   });

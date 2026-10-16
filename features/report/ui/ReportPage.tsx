@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore,
   type FC,
+  type MutableRefObject,
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -23,8 +24,6 @@ import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
 import InviteModal from "@features/invite/ui/InviteModal";
-import FounderCallDialog from "@features/booking/ui/FounderCallDialog";
-import { getFounderCallUrl } from "@features/booking/logic/founderCall";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
 import MeansForYouSection from "./sections/MeansForYouSection";
@@ -85,14 +84,12 @@ import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
-  completedReportToken,
   getReportPricingSessionId,
   getReportSessionId,
   setReportNurturePromo,
   setReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
-import { isProbeRequest } from "@shared/http/probe-cookie";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
 import { useCloseOnBack } from "./hooks/useCloseOnBack";
@@ -161,6 +158,7 @@ import {
   isSectionIncludedInEssentials,
   isSectionUnlockedForPlan,
   doesAccessPlanCover,
+  ownsFullReportFor,
   type ReportAccessPlan,
 } from "@features/report/server/access";
 import {
@@ -171,6 +169,7 @@ import {
 import {
   setReportSubmissionContext,
   trackLockedCardPriceShown,
+  trackLockedChaptersShown,
   trackBeginCheckout,
   trackExperimentExposure,
   trackLockIconClicked,
@@ -180,10 +179,9 @@ import {
   trackReportShareOpened,
   trackReportViewed,
 } from "@features/analytics/client";
+import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
-import { isFirstVisit, leaveMode, resolveLeaveOverride } from "../logic/leaveIntent";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
-import { useLeaveIntent } from "./hooks/useLeaveIntent";
 import {
   captureUnlockAnchor,
   parseUnlockAnchor,
@@ -200,8 +198,6 @@ interface SnapshotAnswers {
 }
 
 const subscribeNoop = () => () => {};
-/** Our own probes and persona walks carry this cookie; they never get the leave offer. */
-const readProbeCookie = () => isProbeRequest(document.cookie);
 
 // Report 2.0 part dividers (Figma 8427:794 / 1440 / 1751 / 2554) — the big
 // centered "PART N" heading that opens each part.
@@ -224,6 +220,24 @@ const REPORT_PART_DIVIDER_BY_SECTION: Record<string, ReportPartDividerProps> = {
 /** The element just tapped, if the tap was recent enough to be what opened the paywall. */
 function recentTapTarget(tap: { at: number; el: Element | null }): Element | null {
   return Date.now() - tap.at < 1_500 ? tap.el : null;
+}
+
+/**
+ * Claims the plans pop-up's one offer for this submission in this tab's session; false
+ * when it was already made. Backing out of Stripe reloads the report and `?anchor` puts
+ * the reader past the pop-up point, so a per-page-load flag offered it again ~2s after
+ * they had declined it, and logged a second pop-up-test exposure.
+ */
+function claimPlansOffer(submissionId: number | null | undefined): boolean {
+  if (!submissionId) return true;
+  const key = `loveiq-report-plans-offered:${submissionId}`;
+  try {
+    if (sessionStorage.getItem(key)) return false;
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // Storage refused (private mode): once per page load, as before.
+  }
+  return true;
 }
 
 function getScalarOverlay(diagnostics: Record<string, unknown> | null, key: string) {
@@ -423,12 +437,12 @@ interface ReportExperienceProps {
   isV4: boolean;
   accessPlan: ReportAccessPlan;
   archetypeTiers: Record<string, "essentials" | "full_report">;
+  /** Archetypes a tap in the "Other Archetypes" list opens directly. */
+  unlockedArchetypes: ReadonlySet<string>;
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
   isShareModalOpen: boolean;
-  /** The founder-call leave offer is open over the report. */
-  isLeaveOfferOpen?: boolean;
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
@@ -439,6 +453,8 @@ interface ReportExperienceProps {
   ownerFirstName: string | null;
   ownerToken: string | null;
   percentages: Record<string, number>;
+  /** The visit's sent `price_shown` keys, for the pay screen (see ReportPricingModal). */
+  priceShownFiredRef: MutableRefObject<Set<string>>;
   pricingTargetArchetype: string | null;
   pricingVariant: "default" | "offer" | "recipient";
   placeholderValues: {
@@ -562,11 +578,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   isV4,
   accessPlan,
   archetypeTiers,
+  unlockedArchetypes,
   devParam,
   feedbacks,
   isPricingModalOpen,
   isShareModalOpen,
-  isLeaveOfferOpen = false,
   matchScore,
   onBeginCheckout,
   onClosePricingModal,
@@ -581,6 +597,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   submissionId,
   primaryArchetype,
   contentArchetype,
+  priceShownFiredRef,
   pricingQuotes,
   archetypeContent,
   practiceTendencies,
@@ -674,9 +691,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // The report shows locked premium cards (inline price + countdown) when it
   // isn't fully unlocked and has at least one premium section. Gates both the
   // shared countdown ticker and the price-exposure analytics event.
+  // Asked of the archetype on screen, like the unlock bar: the hand-written plan list it
+  // replaces missed `core`, and a buyer of only another archetype reads null here.
   const hasLockedPremiumCards =
-    accessPlan !== "full_report" &&
-    accessPlan !== "all_reports" &&
+    !ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) &&
     resolvedSections.some((section) => section.isPremium);
 
   // Fire one "locked chapter card price shown" event per report when the inline
@@ -686,6 +704,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   const lockedCardPriceFiredRef = useRef(false);
   useEffect(() => {
     if (lockedCardPriceFiredRef.current) return;
+    // No Report 3.0 surface puts a price on a card (V4PremiumCard), so V4 reports only that
+    // it has locked chapters: what the "CTA visibility" signal counts a visit by.
+    if (isV4) {
+      if (!hasLockedPremiumCards) return;
+      lockedCardPriceFiredRef.current = true;
+      trackLockedChaptersShown();
+      return;
+    }
     if (!hasLockedPremiumCards) return;
     if (!fullReportQuote) return;
     /**
@@ -716,7 +742,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       msrp: fullReportQuote.msrpCents / 100,
       initial_price: fullReportQuote.initialPriceCents / 100,
     });
-  }, [hasLockedPremiumCards, fullReportQuote, submissionId]);
+  }, [hasLockedPremiumCards, fullReportQuote, submissionId, isV4]);
   // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
   // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report/<token>?invite=1
   // — they would silently fail without this auto-open.
@@ -731,6 +757,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowInvite(true);
   }, [shouldAutoOpenInvite]);
+  // Time per chapter and what was opened in it, for AP-Analytics: Report 3.0, its owner only.
+  useChapterStats({
+    enabled: isV4 && viewMode === "owner",
+    chapters: navIds,
+    active: activeSection,
+    archetype: viewArchetype || null,
+    paused: isPricingModalOpen || isShareModalOpen || showInvite,
+  });
   const clickLockUntilRef = useRef(0);
 
   const handleSectionClick = (sectionId: string) => {
@@ -741,11 +775,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // Lock-icon click intent — fired BEFORE the modal opens so funnel can
   // measure pre-paywall intent vs modal-view conversion. A recipient's click is
   // not counted: only the owner can pay, so it is nobody's intent to.
+  // `sectionId` is the section that grants access; `chapterId` the chapter clicked in,
+  // where a chapter borrows another's gate (Challenges in Partnerships). Optional rather
+  // than defaulted: a default value here makes the React hooks lint skip this component.
   const trackLockClick = (
     sectionId: string,
-    planNeeded: "essentials" | "full_report" | "all_reports"
+    planNeeded: "essentials" | "full_report" | "all_reports",
+    chapterId?: string
   ) => {
     if (viewMode === "shared") return;
+    recordPaywallClick(chapterId ?? sectionId);
     trackLockIconClicked({
       section_id: sectionId,
       archetype: viewArchetype || null,
@@ -761,14 +800,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     });
   };
 
-  const unlockSection = (section: DisplayReportSection) => {
+  const unlockSection = (section: DisplayReportSection, chapterId?: string) => {
     // `plan_needed` mirrors the locked section's accessTier (free tier is always
     // unlocked so it shouldn't reach this handler).
     trackLockClick(
       section.id,
       section.accessTier === "essentials" || section.accessTier === "full_report"
         ? section.accessTier
-        : "full_report"
+        : "full_report",
+      chapterId
     );
     // Scope the upgrade modal to the archetype the user is currently viewing,
     // not the primary. Otherwise a buyer who already owns essentials/full on
@@ -950,7 +990,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}${isV3 ? " rv3" : ""}${isV4 ? " rv4" : ""}`}
+      className={`report-page${ownsFullReportFor(accessPlan, archetypeTiers, viewArchetype) ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}${isV3 ? " rv3" : ""}${isV4 ? " rv4" : ""}`}
       // V4 sets the archetype's name and accent inks too (Fatih, 03.10: its own colours).
       style={{ ...getReportThemeStyle(theme), ...(isV4 ? v4InkStyle(theme.archetype) : {}) }}
       /**
@@ -1031,8 +1071,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           correctly when a modal is open — no filter/transform here, so the
           containing-block bug stays gone. */}
       <div
-        aria-hidden={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen}
-        inert={isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen}
+        aria-hidden={isPricingModalOpen || isShareModalOpen}
+        inert={isPricingModalOpen || isShareModalOpen}
       >
         <WithActiveSection store={activeSection}>
           {(activeSectionId) => (
@@ -1064,9 +1104,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         <div
           className={[
             "report-page__shell-wrap",
-            isPricingModalOpen || isShareModalOpen || isLeaveOfferOpen
-              ? "report-page__shell-wrap--obscured"
-              : "",
+            isPricingModalOpen || isShareModalOpen ? "report-page__shell-wrap--obscured" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -1392,6 +1430,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                               mottos={constellationMottos}
                               viewArchetype={viewArchetype}
                               onViewArchetype={onUnlockArchetype}
+                              unlockedArchetypes={unlockedArchetypes}
                             />
                           </ReportSection>
                         )}
@@ -2357,6 +2396,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         mottos={constellationMottos}
                         viewArchetype={viewArchetype}
                         onViewArchetype={onUnlockArchetype}
+                        unlockedArchetypes={unlockedArchetypes}
                       />
                     </ReportSection>
                   ) : null;
@@ -2399,7 +2439,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <V4Partnership
                           view={partnership}
-                          onUnlock={() => unlockSection(partnershipGate)}
+                          onUnlock={() =>
+                            unlockSection(partnershipGate, "challenges_in_partnership")
+                          }
                         />
                       </V4Chapter>
                     </Fragment>
@@ -2434,7 +2476,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             ? partnershipLoop
                             : null
                         }
-                        onUnlock={() => unlockSection(partnershipGate)}
+                        onUnlock={() => unlockSection(partnershipGate, "challenges_in_partnership")}
                         quote={fullReportQuote}
                         sectionTitle={
                           isV4 ? "Challenges in Partnerships" : "Challenges in Partnership"
@@ -2495,6 +2537,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         open={isPricingModalOpen}
         onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
+        priceShownFiredRef={priceShownFiredRef}
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
@@ -2535,7 +2578,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     unlock: (id: string) => {
       const item = REPORT_V3_NAV_PARTS.flatMap((part) => part.items).find((i) => i.id === id);
       const section = resolvedSections.find((s) => s.id === (item?.gateId ?? id));
-      if (section) unlockSection(section);
+      if (section) unlockSection(section, id);
     },
   };
   return (
@@ -2692,6 +2735,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const [checkoutHandoff, setCheckoutHandoff] = useState<{
     status: "redirecting" | "disabled" | "error";
     message: string | null;
+    /** The plan is already theirs (a 409): going back reloads what they own. */
+    alreadyOwned?: boolean;
   } | null>(null);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
   const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "recipient">(
@@ -2704,10 +2749,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // plans pop-up is offered ONCE per report session. Without it, any re-run of
   // that effect (a data refetch, a view switch) re-arms the trigger, and the
   // reader is below the chapter by then — so the "already passed it" check would
-  // re-offer a pop-up they had already dismissed.
+  // re-offer a pop-up they had already dismissed. A reload (back from Stripe) is
+  // held to the same one offer by `claimPlansOffer`.
   const plansOfferedRef = useRef(false);
   const scrollTeaserTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPricingModalOpenRef = useRef(false);
+  // The pay screen's sent `price_shown` keys, held here because the pay screen is rebuilt
+  // whenever the report reloads its data (every archetype switch), and this page is not.
+  const priceShownFiredRef = useRef(new Set<string>());
 
   // Offer variant (Figma 6297-1431) is gated to the 24h+ ladder step. Before
   // step 1 every manual open shows the default pricing modal (Figma 6755-1035).
@@ -2726,6 +2775,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const ownerToken = viewMode === "owner" ? (token ?? data?.ownerToken ?? null) : null;
 
   const accessPlan = data?.accessPlan ?? null;
+  // "Has this reader paid for anything?" `accessPlan` answers for their own report only, so
+  // a buyer of another archetype's report reads null there and would be shown the pay
+  // screen unprompted (the pop-up test, offer links, the discount ladder).
+  const hasPurchased = accessPlan !== null || (data?.purchasedPlan ?? null) !== null;
 
   // The report token this visit is keyed on — URL token first, else the
   // server-resolved owner token — so session-based (/report?sessionId /
@@ -2774,6 +2827,33 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     });
   }, [isSharedView, resolvedReportToken, sessionId]);
 
+  const apiUnlocked = data?.unlockedArchetypes;
+  const primaryArchetypeFromData = data?.primaryArchetype;
+  const unlockedArchetypes = useMemo(() => {
+    const set = new Set<string>();
+    if (apiUnlocked) {
+      for (const name of apiUnlocked) set.add(name);
+    }
+    if (primaryArchetypeFromData) set.add(primaryArchetypeFromData);
+    return set;
+  }, [apiUnlocked, primaryArchetypeFromData]);
+
+  const archetypeSlugParam = searchParams.get("archetype");
+  const requestedArchetype = fromArchetypeSlug(archetypeSlugParam);
+  const viewArchetype =
+    requestedArchetype && unlockedArchetypes.has(requestedArchetype)
+      ? requestedArchetype
+      : (primaryArchetypeFromData ?? "");
+
+  // The report on screen, which these events describe: its archetype, and the plan behind
+  // it. `accessPlan` covers the reader's own report (and all_reports every report); another
+  // archetype's report they bought is covered by its own tier. Read as `accessPlan` and
+  // their own archetype, its buyer was counted "locked" on their own report while reading it.
+  const viewedReportPlan =
+    viewArchetype === primaryArchetypeFromData || accessPlan === "all_reports"
+      ? accessPlan
+      : (data?.archetypeTiers?.[viewArchetype] ?? null);
+
   const reportViewedFiredRef = useRef(false);
   useEffect(() => {
     if (reportViewedFiredRef.current) return;
@@ -2782,19 +2862,19 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Persisted events need a submission to count against. A recipient's visit is not the
     // owner's, so it publishes none and theirs stay out of the owner's numbers.
     setReportSubmissionContext(data.viewMode === "shared" ? null : (data.submissionId ?? null));
-    trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
-  }, [data, accessPlan]);
+    trackReportViewed(viewedReportPlan ?? "locked", viewArchetype || null);
+  }, [data, viewedReportPlan, viewArchetype]);
 
   useReportEngagementTimers({
-    reportType: data ? (accessPlan ?? "locked") : null,
-    archetype: data?.primaryArchetype ?? null,
+    reportType: data ? (viewedReportPlan ?? "locked") : null,
+    archetype: viewArchetype || null,
   });
 
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
     if (!data) return;
     if (viewMode === "shared") return;
-    if (accessPlan !== null) return;
+    if (hasPurchased) return;
     // Only auto-open when the discount ladder has progressed (24h+ since
     // survey). At step 0 (just finished the report) the modal stays closed —
     // user opens it explicitly via locked-section CTAs or archetype tiles.
@@ -2806,7 +2886,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
-  }, [accessPlan, data, viewMode]);
+  }, [accessPlan, data, hasPurchased, viewMode]);
 
   useEffect(() => {
     if (!isOfferLink) return;
@@ -2819,7 +2899,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // auto-opened. A paying customer who clicks an old nurture link from their
     // inbox lands on their report, not a checkout prompt; tier upgrades happen
     // on demand via locked-section CTAs.
-    if (!shouldAutoOpenOfferModal({ isOfferLink, accessPlan, viewMode })) {
+    if (
+      !shouldAutoOpenOfferModal({
+        isOfferLink,
+        accessPlan: hasPurchased ? (accessPlan ?? data?.purchasedPlan ?? null) : null,
+        viewMode,
+      })
+    ) {
       return;
     }
     // Intent signal — user clicked an email-deep-link to land here. Counts
@@ -2830,7 +2916,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingTargetArchetype(null);
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
-  }, [data, isOfferLink, viewMode, accessPlan]);
+  }, [data, isOfferLink, viewMode, accessPlan, hasPurchased]);
 
   useEffect(() => {
     isPricingModalOpenRef.current = isPricingModalOpen;
@@ -2879,8 +2965,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   useEffect(() => {
     if (!data) return;
-    if (accessPlan !== null) return;
+    if (hasPurchased) return;
     if (viewMode === "shared") return;
+    const submissionId = data.submissionId;
 
     // Open the plans pop-up once the reader REACHES "Attachment Style" (MO,
     // 2026-08-21). The trigger has moved three times: the first scroll event of any
@@ -2910,6 +2997,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       ) {
         return;
       }
+      // Once per submission per tab session, in both arms alike: the exposure as well.
+      if (!claimPlansOffer(submissionId)) return;
       // Both arms of the pop-up test mark this moment, so readers who got this far
       // are compared like for like; `no_popup` then stops before the pop-up.
       if (popupArm) {
@@ -3056,7 +3145,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant, isV4, popupArm]);
+  }, [
+    accessPlan,
+    hasPurchased,
+    notifyPaywallReached,
+    data,
+    viewMode,
+    shouldShowOfferVariant,
+    isV4,
+    popupArm,
+  ]);
 
   // Every other route to the paywall reports it too: an ?offer=1 email deep-link,
   // the 24h ladder auto-open, and every manual "Unlock" CTA. Whichever comes first
@@ -3065,65 +3163,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!isPricingModalOpen) return;
     notifyPaywallReached();
   }, [isPricingModalOpen, notifyPaywallReached]);
-
-  const apiUnlocked = data?.unlockedArchetypes;
-  const primaryArchetypeFromData = data?.primaryArchetype;
-  const unlockedArchetypes = useMemo(() => {
-    const set = new Set<string>();
-    if (apiUnlocked) {
-      for (const name of apiUnlocked) set.add(name);
-    }
-    if (primaryArchetypeFromData) set.add(primaryArchetypeFromData);
-    return set;
-  }, [apiUnlocked, primaryArchetypeFromData]);
-
-  const archetypeSlugParam = searchParams.get("archetype");
-  const requestedArchetype = fromArchetypeSlug(archetypeSlugParam);
-  const viewArchetype =
-    requestedArchetype && unlockedArchetypes.has(requestedArchetype)
-      ? requestedArchetype
-      : (primaryArchetypeFromData ?? "");
-
-  /**
-   * The leave offer (features/report/logic/leaveIntent.ts): an unpaid reader's full
-   * report, free for a 20-minute call with Mark and Marcus, offered once as they reach the
-   * first paywall card (1.6 s after it comes into view).
-   * Off unless the booking page is configured. The tab's survey token and the probe
-   * cookie are read from the browser like the session id above.
-   */
-  const founderCallUrl = getFounderCallUrl();
-  const completedToken = useSyncExternalStore(subscribeNoop, completedReportToken, () => null);
-  const isProbe = useSyncExternalStore(subscribeNoop, readProbeCookie, () => false);
-  const [pageOpenedAt] = useState(() => Date.now());
-  const leaveOfferMode = leaveMode({
-    override: resolveLeaveOverride(searchParams.get("leave")),
-    bookingUrl: founderCallUrl,
-    isV4,
-    viewMode,
-    // Staging has no `purchasedPlan`: a reader has paid when they hold a plan for this
-    // report, the test its own pop-ups use.
-    hasPurchased: accessPlan !== null,
-    viewingOwnArchetype:
-      Boolean(primaryArchetypeFromData) && viewArchetype === primaryArchetypeFromData,
-    submissionId: data?.submissionId,
-    userEmail: data?.userEmail,
-    firstVisit: isFirstVisit({
-      urlToken: token ?? null,
-      completedToken,
-      reportDate: data?.reportDate,
-      now: pageOpenedAt,
-      search: searchParams,
-    }),
-    isProbe,
-  });
-  const leaveOffer = useLeaveIntent({
-    mode: leaveOfferMode,
-    submissionId: data?.submissionId ?? null,
-    overlayOpen: isPricingModalOpen || isShareModalOpen || checkoutHandoff !== null,
-    plansOpen: isPricingModalOpen,
-    popupArm,
-  });
-  const { dismiss: dismissLeaveOffer } = leaveOffer;
 
   const returnToPrimaryHref = useMemo(() => {
     const params = new URLSearchParams();
@@ -3188,9 +3227,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   );
 
   /**
-   * The single door to Stripe. Every checkout surface — the pricing modal and the
-   * sticky unlock bar — ends here, and this is the only thing that pushes
-   * to /checkout, so it is the only honest place to count a checkout start.
+   * The single door to Stripe. Every checkout surface — the pricing modal and V1's
+   * "Unlock the full report" under the archetype list — ends here, and this is the
+   * only thing that pushes to /checkout, so it is the only honest place to count a
+   * checkout start. The sticky unlock bar is not one of them: it opens the pricing
+   * modal (Marcus, 09.10: the plans first, then the payment page).
    *
    * `begin_checkout` used to be fired by each of those three components instead, each
    * guarded on `if (quote)` while the navigation ran unconditionally. So a click on a
@@ -3219,15 +3260,25 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // repeated this price and then auto-forwarded anyway; it is gone, so the
     // pending state it used to show has to live here instead.
     setCheckoutHandoff({ status: "redirecting", message: null });
-    // From the pay screen, the spot it was opened from; from the sticky footer, here.
-    const anchor = serializeUnlockAnchor(
-      isPricingModalOpenRef.current
-        ? unlockAnchorRef.current
-        : captureUnlockAnchor(recentTapTarget(lastTapRef.current))
-    );
+    // Bought for a different archetype than the one on screen (its row in "Other
+    // Archetypes"): the return opens THAT report, where a spot in this one means
+    // nothing. Returning there put the buyer back on the same list, unchanged, so the
+    // purchase looked like it had not worked (production, 2026-10-06). Its top instead.
+    const opensAnotherReport =
+      Boolean(archetypeForCheckout) && archetypeForCheckout !== viewArchetype;
+    // From the pay screen, the spot it was opened from; from a button that buys
+    // straight away (V1's archetype list), here.
+    const anchor = opensAnotherReport
+      ? null
+      : serializeUnlockAnchor(
+          isPricingModalOpenRef.current
+            ? unlockAnchorRef.current
+            : captureUnlockAnchor(recentTapTarget(lastTapRef.current))
+        );
     void startReportCheckout({
       anchor,
       archetype: archetypeForCheckout,
+      viewArchetype,
       plan,
       quote: quote ?? null,
       reportSessionId: token ? null : sessionId,
@@ -3293,11 +3344,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // useCloseOnBack for the readers it was losing.
   useCloseOnBack(isPricingModalOpen, closePricingModal);
   useCloseOnBack(isShareModalOpen, closeShareModal);
-  const closeLeaveOfferOnBack = useCallback(
-    () => dismissLeaveOffer("browser_back"),
-    [dismissLeaveOffer]
-  );
-  useCloseOnBack(leaveOffer.open, closeLeaveOfferOnBack);
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
       // Scope the modal to the archetype the user is currently upgrading. If
@@ -3498,10 +3544,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             devParam={devParam}
             accessPlan={data.accessPlan}
             archetypeTiers={data.archetypeTiers ?? {}}
+            unlockedArchetypes={unlockedArchetypes}
             feedbacks={feedbacks}
             isPricingModalOpen={isPricingModalOpen}
             isShareModalOpen={isShareModalOpen}
-            isLeaveOfferOpen={leaveOffer.open}
             matchScore={matchScore}
             onBeginCheckout={beginCheckout}
             onClosePricingModal={closePricingModal}
@@ -3514,6 +3560,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
             percentages={percentages}
             placeholderValues={placeholderValues}
             primaryArchetype={primaryArchetype}
+            priceShownFiredRef={priceShownFiredRef}
             pricingQuotes={pricingQuotes}
             archetypeContent={data.archetypeContent ?? {}}
             practiceTendencies={data.practiceTendencies ?? {}}
@@ -3603,6 +3650,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           percentages={percentages}
           placeholderValues={placeholderValues}
           primaryArchetype={primaryArchetype}
+          priceShownFiredRef={priceShownFiredRef}
           pricingQuotes={pricingQuotes}
           archetypeContent={data.archetypeContent ?? {}}
           practiceTendencies={data.practiceTendencies ?? {}}
@@ -3637,7 +3685,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
                 <button
                   type="button"
                   className="report-status-card__action"
-                  onClick={() => setCheckoutHandoff(null)}
+                  onClick={() => {
+                    // "You already own this plan": bought in another tab, say, after this
+                    // page loaded. Reload the report, or it goes on offering the plan.
+                    if (checkoutHandoff.alreadyOwned) retry();
+                    setCheckoutHandoff(null);
+                  }}
                 >
                   Back to your report
                 </button>
@@ -3646,28 +3699,24 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           </div>
         </div>
       )}
-      {founderCallUrl && leaveOfferMode !== "off" && (
-        <FounderCallDialog
-          open={leaveOffer.open}
-          bookingUrl={founderCallUrl}
-          onDismiss={leaveOffer.dismiss}
-          onBook={leaveOffer.book}
-        />
-      )}
-      {/* The bar sells `full_report`, so the question is whether the reader's plan
+      {/* The bar unlocks the full report, so the question is whether the reader's plan
           already covers that tier — not whether it equals one of two named plans.
           `core` buys the top-3 archetypes AT full_report tier, so listing plans
           by hand showed a paying core buyer a permanent "Unlock full report" bar
-          whose CTA sent them to Stripe for something they already owned. */}
-      {viewMode === "owner" && !doesAccessPlanCover(data.accessPlan, "full_report") && (
-        <ReportStickyUnlockBar
-          quote={pricingQuotes?.full_report ?? null}
-          onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
-          hidden={isPricingModalOpen || isShareModalOpen || leaveOffer.open}
-          archetype={effectiveViewArchetype}
-          v4={isV4}
-        />
-      )}
+          whose CTA sent them to Stripe for something they already owned.
+          It opens the plans, as every lock does, rather than buying `full_report`
+          straight away: on 09.10 its tap went to Stripe for the single report
+          (Marcus: "should link first to the selection of the plans"). */}
+      {viewMode === "owner" &&
+        !ownsFullReportFor(data.accessPlan, data.archetypeTiers, effectiveViewArchetype) && (
+          <ReportStickyUnlockBar
+            quote={pricingQuotes?.full_report ?? null}
+            onUnlock={() => openPricingModal(effectiveViewArchetype)}
+            hidden={isPricingModalOpen || isShareModalOpen}
+            archetype={effectiveViewArchetype}
+            v4={isV4}
+          />
+        )}
     </>
   );
 };

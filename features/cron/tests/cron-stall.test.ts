@@ -220,16 +220,22 @@ describe("features/cron/AGENT_README.md says truly what runs", () => {
     );
     // The two batteries also record under brain-daily's schedule, but are not routes.
     const github = new Set(Object.keys(brainDailySchedules()).filter((j) => onDisk.includes(j)));
-    const idle = onDisk.filter((d) => !vercel.has(d) && !github.has(d));
+    // Started by a Jarvis tool: the MCP route calls it by its path.
+    const mcp = fs.readFileSync("app/api/mcp/route.ts", "utf8");
+    const onDemand = new Set(
+      onDisk.filter((d) => new RegExp(`/api/cron/${d}(?![\\w-])`).test(mcp))
+    );
+    const idle = onDisk.filter((d) => !vercel.has(d) && !github.has(d) && !onDemand.has(d));
 
     const counts =
-      /(\d+)\s+routes exist: (\d+) are scheduled in `vercel\.json`, (\d+) run in GitHub\s+Actions, and (\d+) do not run\s+at all/.exec(
+      /(\d+)\s+routes\s+exist:\s+(\d+)\s+are\s+scheduled\s+in\s+`vercel\.json`,\s+(\d+)\s+run\s+in\s+GitHub\s+Actions,\s+(\d+)\s+(?:is|are)\s+started\s+on\s+demand\s+by\s+Jarvis,\s+and\s+(\d+)\s+do\s+not\s+run\s+at\s+all/.exec(
         readme
       );
     expect(counts?.slice(1).map(Number)).toEqual([
       onDisk.length,
       vercel.size,
       github.size,
+      onDemand.size,
       idle.length,
     ]);
 
@@ -243,6 +249,7 @@ describe("features/cron/AGENT_README.md says truly what runs", () => {
       [...vercel].sort()
     );
     expect(named(bullet("Company brain, in GitHub Actions"))).toEqual([...github].sort());
+    expect(named(bullet("Started on demand by Jarvis"))).toEqual([...onDemand].sort());
     expect(named(/^\*\*The routes that do not run[\s\S]*?\n\n/m)).toEqual(idle.sort());
   });
 });

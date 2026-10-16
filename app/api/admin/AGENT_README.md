@@ -27,3 +27,4 @@ Use the domain docs in [`docs/admin/domains/AGENT_README.md`](../../../docs/admi
 - `logout/route.ts`: session teardown
 - `os/route.ts`: command-center snapshot
 - `stats/route.ts`: dedicated stats feed used by the stats dashboard component
+- `ap/**`: AP-Analytics feeds, all behind `apGuard` (see [`docs/admin-api.md`](../../../docs/admin-api.md))

@@ -64,7 +64,8 @@ describe("the archetype deck pages on desktop", () => {
 
   it("turns the four lines into dots, the current one a pill in the accent", () => {
     const row = ruleIn(".rv3.rv4 .rv3-deck__dots");
-    expect(row).toContain("gap: 7.5px");
+    // 24px centre to centre, so each dot owns a 24 x 24 target (WCAG 2.2, review 06.10).
+    expect(row).toContain("gap: 16.5px");
     expect(row).toContain("justify-content: center");
     expect(row).toContain("height: auto");
     expect(row).toContain("padding: 0");
@@ -78,10 +79,10 @@ describe("the archetype deck pages on desktop", () => {
     expect(current).toContain("width: 20px");
   });
 
-  it("gives each dot a 15 x 24 target, the dots' own pitch, so no two overlap", () => {
+  it("gives each dot a 24 x 24 target, the dots' own pitch, so no two overlap", () => {
     const target = ruleIn(".rv3.rv4 .rv3-deck__dot::after");
     expect(target).toContain('content: ""');
-    expect(target).toContain("inset: -8.25px -3.75px");
+    expect(target).toContain("inset: -8.25px;");
     expect(target).toContain("position: absolute");
     expect(ruleIn(".rv3.rv4 .rv3-deck__dot")).toContain("position: relative");
   });
@@ -89,7 +90,10 @@ describe("the archetype deck pages on desktop", () => {
   it("sets the row 14px under the cards and lets the deck grow round it", () => {
     // The cards end 22px above the viewport's foot, over their shadow; the gallery's
     // pager sits 14 under its tiles.
-    expect(ruleIn(".rv3.rv4 .rv3-deck__dots")).toContain("margin-top: -8px");
+    expect(ruleIn(".rv3.rv4 .rv3-deck__dots")).toContain(
+      "margin-top: calc(-1 * var(--rv3-deck-dots-lift))"
+    );
+    expect(ruleIn(".rv3.rv4 .rv3-deck")).toContain("--rv3-deck-dots-lift: 8px");
     expect(ruleIn(".rv3.rv4 .rv3-deck")).toContain("height: auto");
   });
 

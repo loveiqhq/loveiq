@@ -186,11 +186,16 @@ const WArchetypeCards: FC = () => {
   const cards = Array.from({ length: SETS }, () => archetypes).flat();
 
   return (
-    <section className="overflow-hidden bg-white pb-16 pt-4 lg:py-24">
+    <section
+      className="overflow-hidden bg-white pb-16 pt-4 lg:py-24"
+      data-landing-section="archetypes"
+    >
       <div className="content-shell">
-        <div className="animate-on-scroll mx-auto max-w-2xl text-center">
+        {/* 820px wide, so on a desktop the first line ends at "more than" as Figma draws
+            it (1604:8574): that line is 785px, one more word 865. */}
+        <div className="animate-on-scroll mx-auto max-w-[820px] text-center">
           <h2 className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[40px]">
-            14 personalities.{" "}
+            14 sexual personalities.{" "}
             <span className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text text-transparent">
               You are more than just one of them.
             </span>

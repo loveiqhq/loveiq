@@ -43,6 +43,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { getDelegatedToken, GMAIL_SCOPE, DRIVE_WRITE_SCOPE } from "@shared/http/google-oauth";
+import { googleAdsSearch } from "@shared/http/google-ads";
 import {
   COST_SHEET_ID,
   COST_SHEET_READ_URL,
@@ -62,20 +63,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
-
-/**
- * Google Ads bills this account by card, and a card-paid account gets no invoice by email and
- * none from the invoice API ("not on monthly invoicing"). So the line kept whatever was typed
- * last: July's EUR 1,129 stood for August and September, found only on 2026-10-04. The
- * closed month's spend now comes from the Google Ads API as a stand-in until someone enters the
- * invoice, which differs from it: lower by Google's credits (EUR 252.91 in May 2026, 405.87 in
- * June) and higher by country fees (3 to 7 a month). Read as ec@loveiq.org, a user of the
- * account; the Cloud project has had Basic access since 2026-10-04. Google retires an API
- * version about a year after it ships, so a 404 here means moving to the current one.
- */
-const GOOGLE_ADS_SEARCH =
-  "https://googleads.googleapis.com/v25/customers/3087717405/googleAds:search";
-const ADWORDS_SCOPE = "https://www.googleapis.com/auth/adwords";
 
 /** Finance / Invoices and Receipts. */
 // eslint-disable-next-line no-secrets/no-secrets -- Drive folder id, not a credential
@@ -303,27 +290,26 @@ export function adsCellTakesSpend(
 /**
  * Google Ads spend in euros for each month from `from` to `to` ("2026-08", "2026-09"), months
  * with no spend as 0; null when it cannot be read in euros.
+ *
+ * Google Ads bills this account by card, and a card-paid account gets no invoice by email and
+ * none from the invoice API ("not on monthly invoicing"). So the line kept whatever was typed
+ * last: July's EUR 1,129 stood for August and September, found only on 2026-10-04. The
+ * closed month's spend now comes from the Google Ads API as a stand-in until someone enters the
+ * invoice, which differs from it: lower by Google's credits (EUR 252.91 in May 2026, 405.87 in
+ * June) and higher by country fees (3 to 7 a month).
  */
 async function googleAdsSpend(from: string, to: string): Promise<Map<string, number> | null> {
-  const token = await getDelegatedToken("ec@loveiq.org", ADWORDS_SCOPE);
-  if (!token) return null;
   const [y = 0, m = 0] = to.split("-").map(Number);
   const lastDay = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
   try {
-    const res = await gapi<{
-      results?: Array<{
-        customer?: { currencyCode?: string };
-        segments?: { month?: string };
-        metrics?: { costMicros?: string };
-      }>;
-    }>(GOOGLE_ADS_SEARCH, token, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `SELECT customer.currency_code, segments.month, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${from}-01' AND '${lastDay}'`,
-      }),
-    });
-    const rows = res.results ?? [];
+    const rows = await googleAdsSearch<{
+      customer?: { currencyCode?: string };
+      segments?: { month?: string };
+      metrics?: { costMicros?: string };
+    }>(
+      `SELECT customer.currency_code, segments.month, metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${from}-01' AND '${lastDay}'`
+    );
+    if (!rows) return null;
     // The Costs tab is in euros, and no rate is invented here.
     if (rows.some((r) => r.customer?.currencyCode && r.customer.currencyCode !== "EUR"))
       return null;

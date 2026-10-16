@@ -164,6 +164,7 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
               type="button"
               className="rv4-trig__pill"
               aria-label={SHOW_ALL[tone]}
+              data-chapter-action="show_all"
               onClick={() => {
                 revealed.current = true;
                 setShowAll(true);

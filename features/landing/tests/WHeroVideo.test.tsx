@@ -10,6 +10,7 @@ const analytics = vi.hoisted(() => ({
   trackHeroVideoError: vi.fn(),
   trackHeroVideoPaused: vi.fn(),
   trackHeroVideoResumed: vi.fn(),
+  trackCtaSeen: vi.fn(),
 }));
 vi.mock("@features/analytics/client", () => analytics);
 
@@ -52,6 +53,13 @@ class FakeObserver {
     );
   }
 }
+
+/** The loop's observers (a quarter on screen rolls it), told apart from cta_seen's by threshold. */
+const loopObservers = () =>
+  FakeObserver.all.filter((o) => JSON.stringify(o.opts?.threshold) === "[0,0.25]");
+const loopIo = () => loopObservers()[0]!;
+/** cta_seen's observer: half of the box on screen (features/analytics/useCtaSeen.ts). */
+const seenIo = () => FakeObserver.all.find((o) => o.opts?.threshold === 0.5)!;
 
 let played: HTMLMediaElement[] = [];
 let paused: HTMLMediaElement[] = [];
@@ -169,8 +177,8 @@ describe("hero video — the silent loop", () => {
     expect(screen.getByTestId("hero-video").hasAttribute("data-ready")).toBe(true);
     const { preview } = media();
     expect(preview.getAttribute("src")).toBe(HERO_PREVIEW_SRC);
-    const [io] = FakeObserver.all;
-    expect(io!.opts?.threshold).toEqual([0, 0.25]);
+    expect(loopObservers()).toHaveLength(1);
+    const io = loopIo();
 
     act(() => io!.show(0.1));
     expect(played).not.toContain(preview);
@@ -187,7 +195,7 @@ describe("hero video — the silent loop", () => {
   it("stops in a hidden tab and rolls again when the tab comes back", () => {
     render(<WHeroVideo />);
     const { preview } = media();
-    act(() => FakeObserver.all[0]!.show(1));
+    act(() => loopIo().show(1));
     paused = [];
     played = [];
     act(() => setVisibility("hidden"));
@@ -206,7 +214,7 @@ describe("hero video — the silent loop", () => {
     render(<WHeroVideo />);
     const { preview } = media();
     expect(preview.getAttribute("src")).toBeNull();
-    expect(FakeObserver.all).toHaveLength(0);
+    expect(loopObservers()).toHaveLength(0);
     expect(screen.getByTestId("hero-video-play")).toBeTruthy();
   });
 
@@ -219,7 +227,7 @@ describe("hero video — the silent loop", () => {
   it("goes by the latest crossing when one callback carries several", () => {
     render(<WHeroVideo />);
     const { preview } = media();
-    const [io] = FakeObserver.all;
+    const io = loopIo();
     // Scrolled in and straight back out between two callbacks: off screen now.
     act(() => io!.showMany(0.6, 0));
     expect(played).not.toContain(preview);
@@ -231,7 +239,7 @@ describe("hero video — the silent loop", () => {
   it("says nothing when autoplay is refused: that is the poster doing its job", async () => {
     playResult = rejectWith("NotAllowedError");
     render(<WHeroVideo />);
-    await act(async () => FakeObserver.all[0]!.show(1));
+    await act(async () => loopIo().show(1));
     expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
     expect(screen.getByTestId("hero-video-play")).toBeTruthy();
   });
@@ -239,7 +247,7 @@ describe("hero video — the silent loop", () => {
   it("reports a loop that cannot play at all, once per page", async () => {
     playResult = rejectWith("NotSupportedError");
     render(<WHeroVideo />);
-    const [io] = FakeObserver.all;
+    const io = loopIo();
     await act(async () => io!.show(1));
     await act(async () => io!.show(0));
     await act(async () => io!.show(1));
@@ -388,6 +396,84 @@ describe("hero video — a start that fails", () => {
     expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
   });
 
+  /**
+   * Measured in Chrome, Safari and Firefox on a production build: after one failed load a
+   * media element keeps its error, and play() on it rejects at once with
+   * NotSupportedError. So the button came back, and every later tap failed too, until the
+   * page was reloaded. A failed start must leave the element as it was before any tap.
+   */
+  it("lets a second tap load the file afresh after a failed start", async () => {
+    let failNext = true;
+    playResult = (el) => {
+      if (!isFull(el)) return Promise.resolve();
+      if (failNext) {
+        failNext = false;
+        return rejectWith("NotSupportedError")();
+      }
+      return Promise.resolve();
+    };
+    const loads = vi.spyOn(HTMLMediaElement.prototype, "load");
+    render(<WHeroVideo />);
+    const { full } = media();
+    tap();
+    await act(async () => {});
+    expect(button().disabled).toBe(false);
+    // Reset: no source, and load() run to clear the error and stop any download.
+    expect(full.getAttribute("src")).toBeNull();
+    expect(loads.mock.contexts).toContain(full);
+
+    tap();
+    expect(full.getAttribute("src")).toBe(HERO_VIDEO_SRC);
+    act(() => {
+      fireEvent(full, new Event("playing"));
+    });
+    expect(full.controls).toBe(true);
+    expect(analytics.trackHeroVideoPlay.mock.calls).toEqual([[{ replay: false }]]);
+  });
+
+  /**
+   * The button is disabled while the video starts, and browsers move focus off a focused
+   * control that becomes disabled (to the page body, in Chrome, Safari and Firefox). jsdom
+   * does neither that nor blur() on a disabled button, so focus is parked on an element that
+   * is then removed, which leaves it on the body as the browsers do. A keyboard user whose
+   * start failed was left at the top of the page.
+   */
+  it("hands focus back to the button after a failed start, unless the visitor moved on", async () => {
+    playResult = (el) => (isFull(el) ? rejectWith("NotSupportedError")() : Promise.resolve());
+    render(<WHeroVideo />);
+    button().focus();
+    tap();
+    const sink = document.createElement("input");
+    document.body.appendChild(sink);
+    sink.focus();
+    sink.remove();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => {});
+    expect(document.activeElement).toBe(button());
+
+    // Moved on to another control while it was starting: left there.
+    const elsewhere = document.createElement("a");
+    elsewhere.href = "#elsewhere";
+    document.body.appendChild(elsewhere);
+    tap();
+    elsewhere.focus();
+    await act(async () => {});
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
+  });
+
+  it("resets after a timeout too, so a stalled download stops and a retry starts clean", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    playResult = (el) => (isFull(el) ? never() : Promise.resolve());
+    render(<WHeroVideo />);
+    const { full } = media();
+    tap();
+    act(() => vi.advanceTimersByTime(12_000));
+    expect(full.getAttribute("src")).toBeNull();
+    tap();
+    expect(full.getAttribute("src")).toBe(HERO_VIDEO_SRC);
+  });
+
   it("counts one failure once, whichever signals it raises", async () => {
     playResult = (el) => (isFull(el) ? rejectWith("NotSupportedError")() : Promise.resolve());
     render(<WHeroVideo />);
@@ -404,6 +490,40 @@ describe("hero video — a start that fails", () => {
       video: "full",
       reason: "media-error-4",
     });
+  });
+});
+
+describe("hero video — a failure mid-film", () => {
+  it("returns to the poster with the button, so a tap can start it again", () => {
+    render(<WHeroVideo />);
+    const full = startAndPlay();
+    expect(screen.queryByTestId("hero-video-play")).toBeNull();
+    Object.defineProperty(full, "error", { configurable: true, value: { code: 2 } });
+    act(() => {
+      fireEvent(full, new Event("error"));
+    });
+    expect(analytics.trackHeroVideoError).toHaveBeenCalledWith({
+      video: "full",
+      reason: "media-error-2",
+    });
+    const button = screen.getByTestId("hero-video-play") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(full.controls).toBe(false);
+    expect(full.getAttribute("src")).toBeNull();
+    // The video had focus while it played; it goes back to the button, not to nowhere.
+    expect(document.activeElement).toBe(button);
+    // The viewer did not pause it.
+    expect(analytics.trackHeroVideoPaused).not.toHaveBeenCalled();
+  });
+});
+
+describe("hero video — screen readers", () => {
+  it("hides the full video until it plays, and exposes it once it does", () => {
+    render(<WHeroVideo />);
+    const { full } = media();
+    expect(full.getAttribute("aria-hidden")).toBe("true");
+    startAndPlay();
+    expect(full.hasAttribute("aria-hidden")).toBe(false);
   });
 });
 
@@ -471,5 +591,43 @@ describe("hero video — what it records", () => {
       fireEvent(full, new Event("playing"));
     });
     expect(analytics.trackHeroVideoPlay).toHaveBeenLastCalledWith({ replay: true });
+  });
+});
+
+describe("hero video — whether it was seen", () => {
+  // useCtaSeen remembers what was seen per page for the life of the module, so each test
+  // stands on a page of its own.
+  const onPage = (path: string) => window.history.replaceState(null, "", path);
+  afterEach(() => onPage("/"));
+
+  it("counts it once, when half of the video is on screen", () => {
+    onPage("/seen-half");
+    render(<WHeroVideo />);
+    const io = seenIo();
+    expect(io.el).toBe(screen.getByTestId("hero-video"));
+    act(() => io.show(0.4));
+    expect(analytics.trackCtaSeen).not.toHaveBeenCalled();
+    act(() => io.show(0.5));
+    expect(analytics.trackCtaSeen.mock.calls).toEqual([[{ cta: "hero_video" }]]);
+    act(() => io.show(0));
+    act(() => io.show(1));
+    expect(analytics.trackCtaSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts it with no loop too: under reduced motion the poster and the button are seen", () => {
+    onPage("/seen-reduced-motion");
+    setReducedMotion(true);
+    render(<WHeroVideo />);
+    expect(loopObservers()).toHaveLength(0);
+    act(() => seenIo().show(1));
+    expect(analytics.trackCtaSeen.mock.calls).toEqual([[{ cta: "hero_video" }]]);
+  });
+
+  it("is not a play: seeing it sends no play and no error", () => {
+    onPage("/seen-not-play");
+    render(<WHeroVideo />);
+    act(() => seenIo().show(1));
+    expect(analytics.trackHeroVideoPlay).not.toHaveBeenCalled();
+    expect(analytics.trackHeroVideoError).not.toHaveBeenCalled();
   });
 });

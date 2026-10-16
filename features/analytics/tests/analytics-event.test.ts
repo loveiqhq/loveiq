@@ -201,23 +201,6 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       entity_type: "experiment",
       metadata: { to: "pricing", forced_paywall_arm: "treatment" },
     },
-    // The report's leave offer: paywall events, so they sit with the paywall's
-    // in the timeline and the funnel.
-    {
-      event_type: "leave_offer_shown",
-      entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "paywall_reached", armed_ms: 31000 },
-    },
-    {
-      event_type: "leave_offer_clicked",
-      entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "paywall_reached", view_duration_ms: 4000 },
-    },
-    {
-      event_type: "leave_offer_dismissed",
-      entity_type: "paywall",
-      metadata: { variant: "founder_call", trigger: "paywall_reached", source: "not_now" },
-    },
   ];
 
   it.each(cases)(
@@ -269,6 +252,55 @@ describe("POST /api/analytics-event — the wizard's report map (30.09)", () => 
       entity_type: "survey",
       metadata: { from_step: 0, to_step: 1, control: "continue" },
     });
+  });
+});
+
+describe("POST /api/analytics-event — reading per chapter and Skip Intro (14.10)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(42);
+  });
+
+  const inserted = () => {
+    const insert = mockSupabaseFetch.mock.calls.find(([url]) => url === "/rest/v1/analytics_event");
+    return JSON.parse(String(insert?.[1]?.body));
+  };
+
+  it("persists one report_chapter_stats row with every chapter's changes inside", async () => {
+    const chapters = {
+      typical_beliefs: { ms: 42000, open: 1, try_this: 1, pw_seen: 1, pw_click: 1 },
+      core_archetype: { ms: 9000, show_all: 1 },
+    };
+    const res = await POST(
+      makeRequest({
+        event_type: "report_chapter_stats",
+        submission_id: 42,
+        metadata: { archetype: "Spark Seeker", chapters },
+      })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({
+      event_type: "report_chapter_stats",
+      entity_type: "report",
+      metadata: { archetype: "Spark Seeker", chapters },
+    });
+  });
+
+  it("persists wizard_skipped against the survey, which no Slack refresh follows", async () => {
+    const res = await POST(
+      makeRequest({
+        event_type: "wizard_skipped",
+        submission_id: 42,
+        metadata: { from_slide: 1, map_step: 2 },
+      })
+    );
+    expect(res.status).toBe(204);
+    expect(inserted()).toMatchObject({
+      event_type: "wizard_skipped",
+      entity_type: "survey",
+      metadata: { from_slide: 1, map_step: 2 },
+    });
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
   });
 });
 

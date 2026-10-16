@@ -1,8 +1,12 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { DROPOFF_DATA_DATABASE_ID } from "@features/admin/server/dropoff-notion";
+import { KPI_NUMBERS_DATABASE_ID } from "@features/admin/server/kpi-notion";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   chunkPage,
+  dayOfMoment,
+  momentOf,
   recordSweep,
   shouldSweep,
   sweepMissing,
@@ -217,12 +221,39 @@ export function blocksToText(blocks: NotionBlock[], depth = 0): string {
   return lines.join("\n");
 }
 
-async function notionPost(
+/**
+ * ONE RETRY ON A 429 OR A 5xx. On 2026-10-01 at 11:41 Notion answered a crawl request with a
+ * 500 ("Cross-cell memcached access is not allowed") that nothing caught, and the whole run
+ * failed for one transient answer. A 429 says how long to wait; a 5xx says nothing, so it
+ * gets a short pause.
+ *
+ * The wait is CAPPED rather than checked against the run's clock, because the clock is
+ * checked between requests, never during one: a capped wait plus one request is what the
+ * cron's tail room after its budget has to absorb. Longer than the cap, the error stands.
+ * ponytail: pass isOutOfTime down if a retry ever needs to wait longer than the cap.
+ */
+export const NOTION_RETRY_MAX_S = 5;
+
+async function notionFetch(
+  url: string,
+  init: Parameters<typeof fetchWithTimeout>[1]
+): Promise<Response> {
+  const res = await fetchWithTimeout(url, init);
+  if (res.ok || (res.status !== 429 && res.status < 500)) return res;
+  const raw = res.headers?.get("retry-after")?.trim() ?? "";
+  const wait = /^\d+$/.test(raw) ? Number(raw) : res.status === 429 ? 1 : 0.5;
+  if (wait > NOTION_RETRY_MAX_S) return res;
+  await res.body?.cancel().catch(() => undefined);
+  await new Promise((r) => setTimeout(r, wait * 1000));
+  return fetchWithTimeout(url, init);
+}
+
+export async function notionPost(
   token: string,
   path: string,
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetchWithTimeout(`${API}${path}`, {
+  const res = await notionFetch(`${API}${path}`, {
     method: "POST",
     headers: headers(token),
     body: JSON.stringify(body),
@@ -235,8 +266,8 @@ async function notionPost(
   return (await res.json()) as Record<string, unknown>;
 }
 
-async function notionGet(token: string, path: string): Promise<Record<string, unknown>> {
-  const res = await fetchWithTimeout(`${API}${path}`, {
+export async function notionGet(token: string, path: string): Promise<Record<string, unknown>> {
+  const res = await notionFetch(`${API}${path}`, {
     headers: headers(token),
     timeoutMs: TIMEOUT_MS,
   });
@@ -266,7 +297,7 @@ const NOT_DESCENDED = new Set(["child_page", "child_database"]);
 const MAX_BLOCK_PAGES = 20;
 const MAX_CHILD_DEPTH = 4;
 
-async function attachChildren(
+export async function attachChildren(
   token: string,
   blocks: NotionBlock[],
   depth: number,
@@ -359,6 +390,7 @@ export function taskToRow(
     .join(" · ");
 
   const edited = page.last_edited_time ?? page.created_time ?? null;
+  const at = momentOf(edited);
 
   // Every property, not just the six the board happens to use. A row in
   // "Literature" or "Competitor Tracker" carries its meaning in fields this
@@ -492,11 +524,12 @@ export function taskToRow(
       completed: completed || null,
       created: page.created_time ?? null,
       edited,
+      ...(at ? { at } : {}),
     },
     updated_at: stampedAt,
     // The date this task last MOVED, so a stale backlog item does not outrank a
     // task touched today on a scoring tie.
-    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+    period_end: dayOfMoment(at),
   };
 }
 
@@ -561,6 +594,7 @@ export function pageToRow(
   const title = titleOf(page).trim();
   if (!page.id || !title) return null;
   const edited = page.last_edited_time ?? page.created_time ?? null;
+  const at = momentOf(edited);
   const author = page.created_by?.id ? people.get(page.created_by.id) : undefined;
 
   return {
@@ -574,12 +608,13 @@ export function pageToRow(
       v: BUILDER_VERSION,
       created: page.created_time ?? null,
       edited,
+      ...(at ? { at } : {}),
       // Absent rather than null when unresolved, matching `peopleIn`: a null author
       // asserts "written by nobody", which of a page someone typed is never true.
       ...(author ? { author } : {}),
     },
     updated_at: stampedAt,
-    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+    period_end: dayOfMoment(at),
   };
 }
 
@@ -607,6 +642,28 @@ const ALWAYS_EXCLUDED = [
   "candidates: ",
   "notion: hiring pipeline",
 ];
+
+/**
+ * Databases a job writes numbers into, not pages people write. The kpi-dropoff job keeps
+ * one row per week, question and segment in "Survey drop-off data", about 430 more a week;
+ * the kpi-weekly job one per KPI, week and slice in "KPI weekly numbers", about 40 a week.
+ * Both live on "KPI report data", which this connection is NOT given, and the jobs
+ * write with their own (NOTION_KPI_TOKEN): every page this connection can see is listed on
+ * each crawl, 2,500 at most, and these rows were a third of that on day one. This list is
+ * the safety net if it is ever shared here anyway: the rows are never read, so they never
+ * reach the index, and the database stays a WALKED scope with none, so anything stored
+ * from it is swept. Their listing gets room of its own (see `standalonePages`) but still
+ * costs a request per hundred rows on every crawl, so do not share it.
+ */
+const GENERATED_DATABASES = new Set(
+  [DROPOFF_DATA_DATABASE_ID, KPI_NUMBERS_DATABASE_ID].map((id) =>
+    id.replace(/-/g, "").toLowerCase()
+  )
+);
+
+export function isGeneratedDatabase(dbId: string): boolean {
+  return GENERATED_DATABASES.has(dbId.replace(/-/g, "").toLowerCase());
+}
 
 /** Titles the team has chosen to keep out, lowercased, from NOTION_EXCLUDE_TITLES. */
 export function excludedTitles(): string[] {
@@ -669,6 +726,7 @@ export async function ingestNotion(
       crawlTruncated = true;
       break;
     }
+    if (isGeneratedDatabase(dbId)) continue;
     const rowResult = await databaseRows(token, dbId, isOutOfTime);
     if (!rowResult.complete) crawlTruncated = true;
     for (const raw of rowResult.items) candidates.push({ raw, dbTitle });
@@ -677,6 +735,15 @@ export async function ingestNotion(
   // ---- standalone pages (not rows of any database) --------------------------
   const pageResult = await standalonePages(token, isOutOfTime);
   if (!pageResult.complete) crawlTruncated = true;
+  /**
+   * Said on every run that lists them, in `cron_run` and in any alert: the rows cost time
+   * on each crawl and will outgrow even the extra room. The fix is in Notion, not here.
+   */
+  const kpiRowsVisible =
+    pageResult.generatedRows > 0
+      ? ` kpiRowsVisible=${pageResult.generatedRows} (this connection can see the KPI ` +
+        `tables' rows: move "KPI report data" out from under any page shared with it)`
+      : "";
   for (const raw of pageResult.items) candidates.push({ raw, dbTitle: null });
 
   // ---- classify first, then do the cheap work before the expensive work ----
@@ -716,6 +783,24 @@ export async function ingestNotion(
     } else {
       toFetch.push({ raw, dbTitle, sourceId });
     }
+  }
+
+  /**
+   * NEVER-INDEXED PAGES TAKE EVERY OTHER SLOT. A page shared with the integration late
+   * (the 📊 KPI database, 61 rows, connected on 2026-10-11) is exactly what someone is
+   * waiting to ask about, and it used to queue behind every edited page and every
+   * builder-version rebuild in database-listing order. Alternating rather than first, so
+   * a large newly shared teamspace cannot hold every edit to an indexed page back for a
+   * day either. Listing order is kept within each half.
+   */
+  const unseen = toFetch.filter((i) => !known.has(i.sourceId));
+  const seenBefore = toFetch.filter((i) => known.has(i.sourceId));
+  toFetch.length = 0;
+  while (unseen.length || seenBefore.length) {
+    const a = unseen.shift();
+    const b = seenBefore.shift();
+    if (a) toFetch.push(a);
+    if (b) toFetch.push(b);
   }
 
   // ---- fetch what the clock allows -----------------------------------------
@@ -862,15 +947,22 @@ export async function ingestNotion(
    * a paginated crawl on a clock, it self-heals, and treating it as a fault made
    * the rebuild script stop after one pass with 1,004 pages still queued.
    */
+  // Only when there is something to say: an unchanged `detail` keeps `ingestNote`'s line.
+  const detail = kpiRowsVisible
+    ? `rows=${written + touched} swept=${swept}` +
+      (crawlComplete ? "" : " skipped=notion-crawl-incomplete") +
+      kpiRowsVisible
+    : undefined;
   if (!crawlComplete) {
     return {
       source: SOURCE,
       rows: written + touched,
       swept,
       skipped: "notion-crawl-incomplete",
+      ...(detail ? { detail } : {}),
     };
   }
-  return { source: SOURCE, rows: written + touched, swept };
+  return { source: SOURCE, rows: written + touched, swept, ...(detail ? { detail } : {}) };
 }
 
 /**
@@ -993,11 +1085,24 @@ async function databaseRows(
 async function standalonePages(
   token: string,
   isOutOfTime: () => boolean
-): Promise<{ items: NotionPage[]; complete: boolean }> {
+): Promise<{ items: NotionPage[]; complete: boolean; generatedRows: number }> {
   const out: NotionPage[] = [];
   let complete = true;
   let cursor: string | undefined;
-  for (let page = 0; page < MAX_PAGES; page++) {
+  /**
+   * THE 2,500 IS FOR PAGES PEOPLE WRITE. Search lists every page this connection can see,
+   * database rows included, newest edit first, before a row can be told from a page. Rows
+   * of a job's table (`isGeneratedDatabase`) are rewritten daily, so they head the list
+   * and took the cap from 13 Oct 2026: "KPI report data" had been moved under a page this
+   * connection sees, 1,542 of 2,981 listed pages were the KPI tables' rows, every crawl
+   * was partial and the sweep stopped. Each hundred such rows, or part of a hundred, buys one more request,
+   * up to twice the cap, and the count is reported so the move can be undone.
+   */
+  let generatedRows = 0;
+  // Rounded UP, so the job's rows never take a slot from the 2,500: 150 of them buy two
+  // requests, not one, or 50 pages people write would fall off the end.
+  const limit = () => MAX_PAGES + Math.min(2 * MAX_PAGES, Math.ceil(generatedRows / PAGE_SIZE));
+  for (let page = 0; ; page++) {
     if (isOutOfTime()) {
       complete = false;
       break;
@@ -1010,14 +1115,21 @@ async function standalonePages(
     });
     for (const raw of (json.results as NotionPage[]) ?? []) {
       if (raw.archived || raw.in_trash) continue;
-      if (raw.parent?.type === "database_id") continue;
+      if (raw.parent?.type === "database_id") {
+        if (isGeneratedDatabase(raw.parent.database_id ?? "")) generatedRows += 1;
+        continue;
+      }
       out.push(raw);
     }
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
-    if (page === MAX_PAGES - 1) complete = false;
+    // Out of requests before out of pages.
+    if (page + 1 >= limit()) {
+      complete = false;
+      break;
+    }
   }
-  return { items: out, complete };
+  return { items: out, complete, generatedRows };
 }
 
 /**

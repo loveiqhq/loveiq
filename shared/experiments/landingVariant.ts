@@ -24,6 +24,9 @@
  * would have kept every returning visitor in arm A and only new visitors could
  * reach B. New values re-roll those cookies, and keep round 2's rows from pooling
  * into round 3's (Pricing 3.0 took new letters, A3/B3, for the same reason).
+ * Its readouts restart at LANDING_TEST_START_DAY, when the phone hero was condensed
+ * so the slot is on the first screen and the page took the 12.10 copy (both arms, same
+ * arms and cookies).
  *
  * The variant flows through the funnel for attribution:
  *   - `LandingPageTracker` sets it as a GA4 user property and PostHog
@@ -48,13 +51,36 @@ export type LandingVariant = "control" | "white" | "white_prev" | "white_card" |
 export const LANDING_VARIANT_EXPERIMENT = "landing-hero-video-ab";
 
 /**
- * The day round 3 started assigning arms (Berlin day). Its readouts start here: the
- * axis trend and the conversion digest cut the landing comparison at this day, so a
- * window that reaches back before it is never read as days of a test that was not
- * running. Staging has run round 3 since it was merged; set this to the day it
- * reaches production, in the PR into main.
+ * The day round 3 started assigning arms on production (Berlin day). Its readouts
+ * start here: the axis trend and the conversion digest cut the landing comparison at
+ * this day, so a window that reaches back before it is never read as days of a test
+ * that was not running. Staging ran it from 2026-10-06. If the release lands on a
+ * later day than this, move it to that day: a day too early only shows as an empty
+ * first day, but a day too late would drop real data from the readouts.
  */
-export const LANDING_HERO_VIDEO_LAUNCH_DAY = "2026-10-06";
+export const LANDING_HERO_VIDEO_LAUNCH_DAY = "2026-10-07";
+
+/**
+ * The first whole (Berlin) reporting day of the condensed phone hero (Figma Report-3.0
+ * `1604:5505`), and where round 3's readouts restart. Until then, on a phone, the video
+ * and question 1 sat below the first screen and about 6 in 10 phone visits never reached
+ * either (Eman, 2026-10-11), so the days before it compare two things most visitors did
+ * not see. The same release puts the 12.10 copy (Figma `1604:8233`) on the whole page.
+ * Both arms changed alike; assignment and cookies did not. The axis trend and the
+ * conversion digest's landing blocks and verdict start here, and the /admin readout at
+ * LANDING_TEST_START_AT. The brain's experiments tool reads registry #6 from its own start
+ * date, which moves to this day with it. Set for a production deploy on 2026-10-13: if the
+ * release reaches production later, move this to the first whole day after its deploy,
+ * and the moment below with it.
+ */
+export const LANDING_TEST_START_DAY = "2026-10-14";
+
+/**
+ * The /admin readout's cut: the start of LANDING_TEST_START_DAY in Berlin. Not the deploy's
+ * own moment, which is not known when this is written: a cut a few hours late loses a few
+ * hours of readers, a cut too early would count readers of the old phone hero.
+ */
+export const LANDING_TEST_START_AT = "2026-10-13T22:00:00Z";
 
 /**
  * Sticky assignment cookie. `__Host-` prefix in production (requires Secure +

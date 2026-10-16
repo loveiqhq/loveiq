@@ -228,7 +228,19 @@ describe("proxy middleware", () => {
   });
 
   it("keeps pages and API responses Cross-Origin-Resource-Policy: same-origin", async () => {
-    for (const path of ["/", "/survey", "/api/report/status"]) {
+    // Signed in, so the admin paths reach the header instead of returning a 401 first.
+    mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
+    // The last two end in .png but sit under /api and /admin: the submission API
+    // parseInt()s `2373.png` to 2373 and answers with that submission.
+    for (const path of [
+      "/",
+      "/survey",
+      "/api/report/status",
+      "/api/admin/submissions/2373.png",
+      "/admin/submissions/2373.png",
+    ]) {
+      // Cleared per path: a path that never sets the header must not pass on the last one's.
+      mockResponseHeaders.clear();
       await proxy(makeNextRequest(`http://localhost:3000${path}`));
       expect(mockResponseHeaders.get("Cross-Origin-Resource-Policy"), path).toBe("same-origin");
     }
@@ -248,6 +260,7 @@ describe("proxy middleware", () => {
       "/fonts/plus-jakarta-sans.woff2",
       "/videos/landing.mp4",
     ]) {
+      mockResponseHeaders.clear();
       await proxy(makeNextRequest(`http://localhost:3000${path}`));
       expect(mockResponseHeaders.get("Cross-Origin-Resource-Policy"), path).toBe("cross-origin");
     }
@@ -384,6 +397,28 @@ describe("proxy middleware", () => {
       "https://pagead2.googlesyndication.com",
     ]) {
       expect(csp).toContain(host);
+    }
+  });
+
+  // Per directive, not anywhere in the policy: the hosts above sat in connect-src only,
+  // and Safari sends the Ads conversion pings as images, so img-src refused them.
+  it("CSP lets the Google Ads conversion hosts load as images and as requests", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    const sources = (name: string) =>
+      csp
+        .split(";")
+        .map((d) => d.trim().split(/\s+/))
+        .find(([directive]) => directive === name)
+        ?.slice(1) ?? [];
+    for (const host of [
+      "https://googleads.g.doubleclick.net",
+      "https://stats.g.doubleclick.net",
+      "https://ad.doubleclick.net",
+      "https://pagead2.googlesyndication.com",
+    ]) {
+      expect(sources("img-src")).toContain(host);
+      expect(sources("connect-src")).toContain(host);
     }
   });
 

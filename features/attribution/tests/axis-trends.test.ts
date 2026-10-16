@@ -8,8 +8,8 @@ import {
   rowsForAxis,
   type AxisFunnelRow,
 } from "@features/attribution/server/axis-trends";
-import { PRICING_3_LAUNCH_DAY } from "@features/checkout/server/reportPurchase";
-import { LANDING_HERO_VIDEO_LAUNCH_DAY } from "@shared/experiments/landingVariant";
+import { PRICE_TEST_START_DAY } from "@features/checkout/server/reportPurchase";
+import { LANDING_TEST_START_DAY } from "@shared/experiments/landingVariant";
 
 /**
  * Most tests below read ROUND 2 of the landing test (V1 vs V2, from 21 Aug): a
@@ -46,10 +46,10 @@ describe("axis trend charts — which experiments may be drawn", () => {
      * must track production rather than a fixture — an axis quietly re-added here
      * without being randomised is a chart of a test nobody is running. Pricing 3.0
      * (A3 vs B3) is live, and the landing test is live again for round 3 (V2's card
-     * vs V3's video), cut at that round's own launch day.
+     * vs V3's video), cut at its restart with the condensed phone hero.
      */
     expect([...CHART_AXES]).toEqual(["pricing", "landing"]);
-    expect(AXIS_VALID_FROM.landing!.day).toBe(LANDING_HERO_VIDEO_LAUNCH_DAY);
+    expect(AXIS_VALID_FROM.landing!.day).toBe(LANDING_TEST_START_DAY);
     const trends = buildAxisTrends(
       [
         ...rows("landing", "white", {
@@ -102,14 +102,14 @@ describe("axis trend charts — which experiments may be drawn", () => {
     }
   });
 
-  it("reads the price test from Pricing 3.0's own arms and launch day only", () => {
-    expect(AXIS_VALID_FROM.pricing?.day).toBe(PRICING_3_LAUNCH_DAY);
-    const launch = PRICING_3_LAUNCH_DAY;
+  it("reads the price test from Pricing 3.0's own arms and its lists' first whole day only", () => {
+    expect(AXIS_VALID_FROM.pricing?.day).toBe(PRICE_TEST_START_DAY);
+    const launch = PRICE_TEST_START_DAY;
     const input = [
       // The concluded 2.x arms, still in the data for everyone who bought under them.
       ...rows("pricing", "A", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
       ...rows("pricing", "B", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
-      // 3.0 arms on days BEFORE the launch: readers re-priced by the launch re-sync.
+      // 3.0 arms on days BEFORE the lists started: readers re-priced by a re-sync.
       ...rows("pricing", "A3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 4 }),
       ...rows("pricing", "B3", { days: 30, lastDay: "2026-10-20", completions: 20, checkouts: 2 }),
     ];
@@ -119,14 +119,16 @@ describe("axis trend charts — which experiments may be drawn", () => {
     expect(scoped.every((r) => r.day >= launch)).toBe(true);
     expect(scoped.length).toBeGreaterThan(0);
 
-    // 16 days from the launch to 20 Oct, 20 finished a day per arm: a chart, labelled
-    // as the 3.0 lists, off the post-launch days alone.
+    // Every day from the launch to 20 Oct, 20 finished a day per arm: a chart, labelled
+    // as the 3.0 lists, off the post-launch days alone. Counted from the launch day, so
+    // moving the launch moves the totals instead of breaking this.
+    const days = (Date.parse("2026-10-20") - Date.parse(launch)) / 86_400_000 + 1;
     const trends = buildAxisTrends(input, "2026-10-20");
     const chart = trends.charted.find((c) => c.axis === "pricing");
-    expect(chart?.legendFirst).toBe("Pricing 3.0 A");
-    expect(chart?.legendLast).toBe("Pricing 3.0 B");
-    expect(chart?.headline).toContain("64/320");
-    expect(chart?.headline).toContain("32/320");
+    expect(chart?.legendFirst).toBe("Pricing 3.0 higher");
+    expect(chart?.legendLast).toBe("Pricing 3.0 lower");
+    expect(chart?.headline).toContain(`${4 * days}/${20 * days}`);
+    expect(chart?.headline).toContain(`${2 * days}/${20 * days}`);
 
     // Only the 2.x arms: a live axis with nothing to compare says so; it is never
     // drawn from the concluded test's rows.
@@ -370,8 +372,8 @@ describe("axis trend charts — which experiments may be drawn", () => {
   });
 
   it("clips each axis to its own like-for-like window", () => {
-    // Round 3: a day before its launch day is cut, whatever arm name it carries.
-    const launch = LANDING_HERO_VIDEO_LAUNCH_DAY;
+    // Round 3: a day before its restart is cut, whatever arm name it carries.
+    const launch = LANDING_TEST_START_DAY;
     const all = [
       ...rows("landing", "white_card", {
         days: 1,
@@ -416,7 +418,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
   });
 
   it("drops unattributable and retired arms rather than charting them as arms", () => {
-    const lastDay = plusDays(LANDING_HERO_VIDEO_LAUNCH_DAY, 4);
+    const lastDay = plusDays(LANDING_TEST_START_DAY, 4);
     const scoped = rowsForAxis(
       [
         ...rows("landing", "white_card", { days: 5, lastDay, completions: 10, checkouts: 1 }),

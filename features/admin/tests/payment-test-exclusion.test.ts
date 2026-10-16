@@ -28,6 +28,10 @@ const MUST_NOT_FILTER: Array<[string, string]> = [
   ["features/checkout/server/fulfillment.ts", "fulfilment and its idempotency checks"],
   ["features/admin/server/data-subject.ts", "a DSAR must return ALL of a person's data"],
   ["features/admin/server/health.ts", "liveness probe, not a business metric"],
+  [
+    "features/attribution/server/journey.ts",
+    "the Slack journey reads is_test to LABEL a test purchase, never to sum revenue",
+  ],
 ];
 
 /** Every file that queries the payment table, found live rather than hardcoded. */

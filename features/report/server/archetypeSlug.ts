@@ -57,3 +57,19 @@ export function fromArchetypeSlug(slug: string | null | undefined): ArchetypeNam
 export function isArchetypeName(value: unknown): value is ArchetypeName {
   return typeof value === "string" && NAME_TO_SLUG.has(value);
 }
+
+/**
+ * A stored archetype string as a current (V9) name, legacy renames included
+ * ("Approval Seeker" → "Tender Devotee"). Null for anything unknown.
+ *
+ * Use this, not `isArchetypeName`, wherever a STORED name decides access: the
+ * 2026-05-21 rename migrated scoring_result only, so payments and archetype_tiers
+ * still carry the old names, and a strict check dropped them — report 165 paid
+ * twice in May for two archetypes and could open neither.
+ */
+export function normalizeArchetypeName(raw: string | null | undefined): ArchetypeName | null {
+  if (!raw) return null;
+  if (isArchetypeName(raw)) return raw;
+  const slug = toArchetypeSlug(raw);
+  return slug ? fromArchetypeSlug(slug) : null;
+}

@@ -5,6 +5,19 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 
 const mockRouterPush = vi.fn();
 const mockStartReportCheckout = vi.fn().mockResolvedValue(null);
+// jsdom measures nothing, so the real anchor is always null here. A test that needs to
+// tell "sends the anchor" from "drops it" sets a value; null falls through to the real one.
+const { mockSerializedAnchor } = vi.hoisted(() => ({
+  mockSerializedAnchor: { value: null as string | null },
+}));
+vi.mock("@features/report/ui/unlockAnchor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/report/ui/unlockAnchor")>();
+  return {
+    ...actual,
+    serializeUnlockAnchor: (anchor: Parameters<typeof actual.serializeUnlockAnchor>[0]) =>
+      mockSerializedAnchor.value ?? actual.serializeUnlockAnchor(anchor),
+  };
+});
 vi.mock("@features/checkout/ui/startReportCheckout", () => ({
   startReportCheckout: (...args: unknown[]) => mockStartReportCheckout(...args),
 }));
@@ -25,11 +38,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockGetReportSessionId = vi.fn();
-// The report token the survey left in this tab: the leave offer's "first visit" check.
-const mockCompletedReportToken = vi.fn((): string | null => null);
 vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
-  completedReportToken: () => mockCompletedReportToken(),
   getReportNurturePromo: () => null,
   getReportPricingSessionId: () => null,
   setReportNurturePromo: () => {},
@@ -80,18 +90,44 @@ vi.mock("@features/analytics/client", () => ({
   trackSectionNavigated: vi.fn(),
   trackChapterFeedbackSubmitted: vi.fn(),
   trackLockedCardPriceShown: vi.fn(),
+  trackLockedChaptersShown: vi.fn(),
   trackExperimentExposure: vi.fn(),
-  // The engagement timers' 1-minute mark: the leave-offer cases run past it.
-  trackReportEngagement: vi.fn(),
-  trackLeaveOfferShown: vi.fn(),
-  trackLeaveOfferClicked: vi.fn(),
-  trackLeaveOfferDismissed: vi.fn(),
+  // Report 3.0's reading per chapter, saved when the page goes (chapterStats).
+  persistReportChapterStats: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
+
+// The real engagement timers, with what they are told to label recorded. Transparent otherwise.
+const engagementTimers = vi.hoisted(() => ({ calls: [] as unknown[] }));
+vi.mock("@features/report/ui/hooks/useReportEngagementTimers", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@features/report/ui/hooks/useReportEngagementTimers")>();
+  return {
+    useReportEngagementTimers: (
+      args: Parameters<typeof actual.useReportEngagementTimers>[0]
+    ): void => {
+      engagementTimers.calls.push(args);
+      actual.useReportEngagementTimers(args);
+    },
+  };
+});
 
 // The real V3Chapter, counted: the scroll-spy test below checks that moving the nav's
 // highlight renders no chapter again. Transparent to every other test.
 const v3ChapterRenders = vi.hoisted(() => ({ count: 0 }));
+// The real chapter stats, with whether each render turned them on recorded.
+const chapterStats = vi.hoisted(() => ({ enabled: [] as boolean[] }));
+vi.mock("@features/analytics/chapterStats", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/analytics/chapterStats")>();
+  return {
+    ...actual,
+    useChapterStats: (options: Parameters<typeof actual.useChapterStats>[0]) => {
+      chapterStats.enabled.push(options.enabled);
+      actual.useChapterStats(options);
+    },
+  };
+});
+
 vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/report/ui/v3/V3Chapter")>();
   const { createElement } = await import("react");
@@ -378,11 +414,10 @@ describe("ReportPage", () => {
   });
 
   afterEach(() => {
-    // Unmount BEFORE the globals go. A render committed at the very end of a test
-    // leaves passive effects pending, and unmounting flushes them: with the stubs
-    // already removed, useRevealOnView then constructs an IntersectionObserver that
-    // no longer exists. On a busy machine that failed two "free sharing" tests at
-    // random (ReferenceError at useRevealOnView), and blocked the pre-push hook.
+    // Unmount BEFORE the stubs go. cleanup() flushes effects still pending from the
+    // test, and a chart's reveal effect builds an IntersectionObserver: run after
+    // unstubAllGlobals, jsdom has none, and the test fails with a ReferenceError
+    // depending on timing (seen once in CI on 2026-10-06).
     cleanup();
     vi.unstubAllGlobals();
     mockScrollTo.mockReset();
@@ -544,6 +579,36 @@ describe("ReportPage", () => {
     expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur");
   });
 
+  // `accessPlan` covers the reader's own report only (2026-10-06), so a reader who bought
+  // only another archetype's report was counted "locked" while reading it, under their own
+  // archetype: the admin timeline read "locked · Emotional Voyeur" for a bought report.
+  it.each([
+    ["the report they bought", "archetype=explorer-of-edges", "full_report", "Explorer of Edges"],
+    ["their own, still locked", "", "locked", "Emotional Voyeur"],
+  ])(
+    "labels report_viewed and the engagement timers by %s: its plan and its archetype",
+    async (_label, query, reportType, archetype) => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+      try {
+        const response = buildSuccessResponse();
+        response.data.unlockedArchetypes = ["Emotional Voyeur", "Explorer of Edges"];
+        mockUseReportData.mockReturnValue({
+          ...response,
+          data: { ...response.data, archetypeTiers: { "Explorer of Edges": "full_report" } },
+        });
+        engagementTimers.calls.length = 0;
+
+        render(<ReportPage />);
+
+        await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
+        expect(mockTrackReportViewed).toHaveBeenCalledWith(reportType, archetype);
+        expect(engagementTimers.calls.at(-1)).toEqual({ reportType, archetype });
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
+    }
+  );
+
   it(
     "surfaces pricing as unavailable when backend quotes are missing",
     () => {
@@ -703,6 +768,8 @@ describe("ReportPage", () => {
       const { anchor, ...checkout } = mockStartReportCheckout.mock.calls[0][0];
       expect(checkout).toEqual({
         archetype: "Emotional Voyeur",
+        // The archetype on screen, for Stripe's way back (cancel returns to it).
+        viewArchetype: "Emotional Voyeur",
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
@@ -712,6 +779,74 @@ describe("ReportPage", () => {
       // back (Figma 1382:2010). Nothing to measure in jsdom, but never a malformed one.
       expect(anchor === null || UNLOCK_ANCHOR_REGEX.test(anchor)).toBe(true);
       expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  // "You already own this plan" (409): bought in another tab, say. "Back to your report"
+  // only closed the card, so the page went on offering the plan it already sold.
+  it.each([
+    [
+      "reloads the report on the way back when the plan is already theirs (409)",
+      { message: "You already own this plan.", alreadyOwned: true },
+      1,
+    ],
+    ["does not reload it after any other refused checkout", { message: "Please try again." }, 0],
+  ])(
+    "%s",
+    async (_label, failure, reloads) => {
+      const user = userEvent.setup();
+      const retry = vi.fn();
+      mockUseReportData.mockReturnValue({ ...buildSuccessResponse(), retry });
+      mockStartReportCheckout.mockResolvedValue({ status: "error", ...failure });
+
+      render(<ReportPage />);
+      await user.click(
+        screen.getByRole("button", { name: /^only unlock my highest scoring report$/i })
+      );
+      await user.click(await screen.findByRole("button", { name: "Back to your report" }));
+
+      expect(retry).toHaveBeenCalledTimes(reloads);
+      expect(screen.queryByText(failure.message)).not.toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "sends each plan's price once per visit, though the pay screen is rebuilt on an archetype switch",
+    async () => {
+      // The fixture's ladder step opens the pay screen on load. An archetype switch
+      // reloads the report: the loading screen, then the report, pay screen and all, again.
+      // Report 3.0 (the default) and V1 (`?v4=0`) each hold their own pay screen.
+      for (const query of ["", "v4=0"]) {
+        mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+        try {
+          mockTrackPriceShown.mockClear();
+          const response = buildSuccessResponse();
+          mockUseReportData.mockReturnValue(response);
+          const view = render(<ReportPage />);
+          await waitFor(() => expect(mockTrackPriceShown).toHaveBeenCalled());
+          const sent = mockTrackPriceShown.mock.calls.length;
+
+          mockUseReportData.mockReturnValue({ data: null, status: "loading", error: null });
+          view.rerender(<ReportPage />);
+          expect(screen.queryByRole("dialog"), query).not.toBeInTheDocument();
+          mockUseReportData.mockReturnValue(response);
+          view.rerender(<ReportPage />);
+          await screen.findByRole("dialog");
+          expect(mockTrackPriceShown, query).toHaveBeenCalledTimes(sent);
+
+          // A new ladder step is a new price, and still counts.
+          const nextStep = buildSuccessResponse();
+          for (const quote of Object.values(nextStep.data.pricingQuotes!)) quote.discountStep = 2;
+          mockUseReportData.mockReturnValue(nextStep);
+          view.rerender(<ReportPage />);
+          await waitFor(() => expect(mockTrackPriceShown, query).toHaveBeenCalledTimes(2 * sent));
+          view.unmount();
+        } finally {
+          mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+        }
+      }
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
@@ -860,6 +995,20 @@ describe("ReportPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("does NOT open the offer modal for a buyer of ANOTHER archetype's report either", () => {
+    // `accessPlan` covers the reader's own report only, so it is null for someone who
+    // bought just another archetype. "Has paid at all" is `purchasedPlan`.
+    const paid = buildSuccessResponse();
+    paid.data.accessPlan = null;
+    (paid.data as { purchasedPlan?: string }).purchasedPlan = "full_report";
+    mockUseReportData.mockReturnValue(paid);
+    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
+
+    render(<ReportPage />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("shows no paywall on load — the forced hard wall is gone", () => {
     /**
      * A report token used to bucket the reader into the forced-paywall
@@ -935,6 +1084,21 @@ describe("ReportPage", () => {
       // Firing here would persist nothing AND mark the event done for the whole
       // pageview, which is exactly how five weeks of rows were lost.
       expect(vi.mocked(analytics.trackLockedCardPriceShown)).not.toHaveBeenCalled();
+    });
+
+    it("sends no locked-card price on Report 3.0, whose locked cards show none", async () => {
+      // V4PremiumCard has no price on it, yet every locked V4 reader sent one.
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+      try {
+        mockUseReportData.mockReturnValue(withSubmission(1920));
+        render(<ReportPage />);
+        await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalled());
+        expect(vi.mocked(analytics.trackLockedCardPriceShown)).not.toHaveBeenCalled();
+        // Only that it has locked chapters: what "CTA visibility" counts a visit by.
+        expect(vi.mocked(analytics.trackLockedChaptersShown)).toHaveBeenCalledTimes(1);
+      } finally {
+        mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      }
     });
   });
 
@@ -1120,6 +1284,56 @@ describe("ReportPage", () => {
       expect(constellation.querySelector(".report-constellation__row")).not.toBeNull();
     });
 
+    it("buying ANOTHER archetype from its row returns to that report's top, not to the list", async () => {
+      // 2026-10-06, production: the return anchor was the list row the pay screen opened
+      // from, so the buyer landed back on the same rows, unchanged, and paid again.
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+      // What the old code would have sent: the list row's own spot.
+      mockSerializedAnchor.value = "constellation~~0~0";
+      const row = screen.getByRole("button", {
+        name: "Unlock Explorer of Edges report",
+        hidden: true,
+      });
+      expect(row).toHaveTextContent(/^Unlock$/);
+      fireEvent.click(row);
+      await user.click(await screen.findByRole("button", { name: /^only unlock this report/i }));
+
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout.mock.calls[0][0]).toMatchObject({
+        plan: "full_report",
+        archetype: "Explorer of Edges",
+        anchor: null,
+      });
+      mockSerializedAnchor.value = null;
+    });
+
+    it("names the archetype a row's pay screen was for when it is closed", async () => {
+      // The page resets the screen's archetype in the same render that closes it, and the
+      // dismissal used to read it from that render: the reader's own archetype instead.
+      const user = userEvent.setup();
+      // Nothing opens on its own: no ladder step, and the pop-up test's no_popup arm.
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1&popup=off"));
+      const response = buildSuccessResponse();
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue(response);
+
+      render(<ReportPage />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Unlock Explorer of Edges report", hidden: true })
+      );
+      await user.click(await screen.findByRole("button", { name: "Close pricing modal" }));
+
+      expect(vi.mocked(analytics.trackPaywallDismissed)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(analytics.trackPaywallDismissed)).toHaveBeenCalledWith(
+        expect.objectContaining({ source: "close_button", archetype: "Explorer of Edges" })
+      );
+    });
+
     it("leaves ?v3=1 with all of them", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -1273,6 +1487,17 @@ describe("ReportPage", () => {
     const precedes = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
+    /** Paywall clicks by chapter, over every save of the reading per chapter. */
+    const savedPaywallClicks = () => {
+      const clicks: Record<string, number> = {};
+      for (const [m] of vi.mocked(analytics.persistReportChapterStats).mock.calls) {
+        for (const [chapter, tally] of Object.entries(m.chapters)) {
+          if (tally.pw_click) clicks[chapter] = (clicks[chapter] ?? 0) + tally.pw_click;
+        }
+      }
+      return clicks;
+    };
+
     it("renders it once, under the Part 5 heading and above Attachment Style", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -1297,7 +1522,7 @@ describe("ReportPage", () => {
       (response.data as Record<string, unknown>).partnershipCopy = LOCKED_PARTNERSHIP;
       mockUseReportData.mockReturnValue(response);
 
-      const { container } = render(<ReportPage />);
+      const { container, unmount } = render(<ReportPage />);
       const chapter = container.querySelector<HTMLElement>("#challenges_in_partnership")!;
       // The plans pop-up opens by itself for a locked reader and hides the report
       // from the accessibility tree, so the chapter toggle is found by its class.
@@ -1308,6 +1533,9 @@ describe("ReportPage", () => {
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
       );
+      // The reading per chapter counts the click for the chapter it was made in.
+      unmount();
+      expect(savedPaywallClicks()).toEqual({ challenges_in_partnership: 1 });
     });
 
     it("leaves ?v3=1 with it after Curiosity", () => {
@@ -1366,12 +1594,15 @@ describe("ReportPage", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(withChapter(true));
 
-      const { container } = render(<ReportPage />);
+      const { container, unmount } = render(<ReportPage />);
       await user.click(container.querySelector<HTMLElement>(".rv4-cip__gate")!);
 
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
       );
+      // Curiosity grants it, but the click was made in Challenges in Partnerships.
+      unmount();
+      expect(savedPaywallClicks()).toEqual({ challenges_in_partnership: 1 });
     });
 
     it("keeps V2's section for an archetype with no Report 3.0 chapter", () => {
@@ -1735,6 +1966,83 @@ describe("ReportPage", () => {
       mockUseReportData.mockReturnValue(view("owner"));
       const owner = render(<ReportPage />);
       expect(owner.container.querySelector(".report-sticky-unlock")).not.toBeNull();
+    });
+
+    // AP-Analytics' chapter reading is the owner's on Report 3.0: a recipient's reading,
+    // or an older report's, would count under the owner's submission.
+    it("saves the owner's chapter reading on Report 3.0, never a recipient's or an older report's", () => {
+      const read = (params: string, viewMode: "owner" | "shared") => {
+        vi.mocked(analytics.persistReportChapterStats).mockClear();
+        chapterStats.enabled.length = 0;
+        mockSearchParams.mockImplementation(() => new URLSearchParams(params));
+        mockUseReportData.mockReturnValue(view(viewMode));
+        const { container, unmount } = render(<ReportPage />);
+        const closed = container.querySelector<HTMLElement>(
+          '[data-chapter-action="open"][aria-expanded="false"]'
+        );
+        if (closed) fireEvent.click(closed);
+        window.dispatchEvent(new Event("pagehide"));
+        unmount();
+        return {
+          opened: closed !== null,
+          saved: vi.mocked(analytics.persistReportChapterStats).mock.calls,
+          on: chapterStats.enabled.at(-1),
+        };
+      };
+
+      const owner = read("v4=1", "owner");
+      expect(owner.on).toBe(true);
+      expect(owner.opened).toBe(true);
+      expect(owner.saved).toHaveLength(1);
+      expect(Object.values(owner.saved[0]![0].chapters)).toContainEqual({ open: 1 });
+
+      const shared = read("v4=1", "shared");
+      expect(shared.on).toBe(false);
+      expect(shared.opened).toBe(true);
+      expect(shared.saved).toHaveLength(0);
+
+      // No chapter there opens closed, so whether it would count shows only in the switch.
+      const older = read("v2=1", "owner");
+      expect(older.on).toBe(false);
+      expect(older.saved).toHaveLength(0);
+    });
+
+    // Marcus, 09.10, with a recording from production: the bar's "Unlock Full Report →"
+    // went straight to Stripe for the single report. It "should link first to the
+    // selection of the plans vs directly to payment page", as every lock does.
+    it("opens the plans from the sticky bar, and Stripe only from a plan", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = view("owner");
+      // No ladder discount, so nothing else opens the plans on mount.
+      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      const bar = container.querySelector<HTMLElement>(".report-sticky-unlock--mobile")!;
+      await user.click(within(bar).getByRole("button", { name: "Unlock full report" }));
+
+      const modal = container.querySelector<HTMLElement>(".report-pricing-modal")!;
+      expect(modal).toHaveAttribute("data-state", "open");
+      expect(modal.querySelector(".rpg__tiers")).not.toBeNull();
+      expect(mockStartReportCheckout).not.toHaveBeenCalled();
+      expect(screen.queryByText(/taking you to secure checkout/i)).not.toBeInTheDocument();
+      // The bar steps aside while the plans are open.
+      expect(bar).toHaveAttribute("aria-hidden", "true");
+      expect(vi.mocked(analytics.trackStickyUnlockClicked)).toHaveBeenCalledWith({
+        variant: "mobile",
+        archetype: "Spark Seeker",
+      });
+
+      await user.click(
+        within(modal).getByRole("button", { name: /^only unlock my highest scoring report$/i })
+      );
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout.mock.calls[0][0]).toMatchObject({
+        plan: "full_report",
+        archetype: "Spark Seeker",
+      });
     });
   });
 
@@ -2383,6 +2691,46 @@ describe("ReportPage", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
+    // Backing out of Stripe reloads the report, and `?anchor` puts the reader back past
+    // the pop-up point: it opened again ~2s after they had declined it, and logged a
+    // second exposure. Both arms are held to one per submission per tab session alike.
+    it.each([
+      ["popup", "&popup=on"],
+      ["no_popup", "&popup=off"],
+    ])("offers the %s arm once per tab session, not again after a reload", (_arm, query) => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      lockedV4(query);
+
+      const first = render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(1700));
+      expect(exposure()).toHaveBeenCalledTimes(1);
+      first.unmount();
+
+      // The reload: a new page in the same tab.
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(3000));
+
+      expect(exposure()).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("still makes its one offer where the browser refuses storage (private mode)", () => {
+      vi.useFakeTimers();
+      exposure().mockClear();
+      const refuse = () => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      };
+      vi.stubGlobal("sessionStorage", { getItem: refuse, setItem: refuse });
+      lockedV4("&popup=on");
+
+      render(<ReportPage />);
+      act(() => vi.advanceTimersByTime(1700));
+
+      expect(exposure()).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
     /** A window from 700px wide. */
     const stubDesktop = () =>
       vi.stubGlobal(
@@ -2462,287 +2810,6 @@ describe("ReportPage", () => {
 
       expect(exposure()).not.toHaveBeenCalled();
       expect(screen.getByRole("dialog")).toBeInTheDocument();
-    });
-  });
-
-  // Mark, #all-loveiq 08.10: the full report free for a 20-minute call with him and
-  // Marcus (features/report/logic/leaveIntent.ts). Since 14.10 it opens by scroll on every
-  // device: 1.6 s after the first paywall card comes into view. jsdom lays everything out
-  // at the top, so the card counts as reached on mount, and on a phone so does the pay
-  // pop-up test's point, whose 30 s the offer waits out.
-  describe("V4 — the founder-call leave offer", () => {
-    const LEAVE_URL = "https://calendar.app.google/e2e-founder-call";
-    const LEAVE_TOKEN = "rpt_leave_offer";
-
-    beforeEach(() => {
-      vi.useFakeTimers();
-      vi.stubEnv("NEXT_PUBLIC_FOUNDER_CALL_URL", LEAVE_URL);
-      mockCompletedReportToken.mockReturnValue(LEAVE_TOKEN);
-      vi.mocked(analytics.trackLeaveOfferShown).mockClear();
-      vi.mocked(analytics.trackLeaveOfferClicked).mockClear();
-      vi.mocked(analytics.trackLeaveOfferDismissed).mockClear();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-      vi.unstubAllEnvs();
-      mockCompletedReportToken.mockReturnValue(null);
-      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
-      document.cookie = "loveiq_probe=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
-    });
-
-    /** A locked V4 reader who just finished the survey in this tab, with nothing auto-opening. */
-    function leaveV4(query = "&popup=off", data: Record<string, unknown> = {}) {
-      mockSearchParams.mockImplementation(() => new URLSearchParams(`v4=1${query}`));
-      const response = buildSuccessResponse();
-      for (const quote of Object.values(response.data.pricingQuotes!)) quote.discountStep = 0;
-      mockUseReportData.mockReturnValue({
-        ...response,
-        data: {
-          ...response.data,
-          submissionId: 2063,
-          reportDate: new Date(Date.now() - 5 * 60_000).toISOString(),
-          ...data,
-        },
-      });
-    }
-
-    /** A window from 700px wide with a mouse: no pay pop-up test there, so no 30 s wait. */
-    const stubDesktop = () =>
-      vi.stubGlobal(
-        "matchMedia",
-        vi.fn().mockImplementation((query: string) => ({
-          matches: true,
-          media: query,
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        }))
-      );
-
-    const offer = () =>
-      screen.queryByRole("dialog", { name: "Your Full Report, Free for a 20-Minute Call" });
-    const shown = () => vi.mocked(analytics.trackLeaveOfferShown);
-    const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
-    const closePlans = () =>
-      fireEvent.click(screen.getByRole("button", { name: /close pricing modal/i }));
-
-    it("opens on a desktop 1.6 s after the paywall card comes into view", () => {
-      stubDesktop();
-      leaveV4("&popup=on");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(1_500);
-      expect(offer()).toBeNull();
-      advance(200);
-
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledTimes(1);
-      expect(shown()).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "founder_call", trigger: "paywall_reached" })
-      );
-      const link = within(offer()!).getByRole("link", { name: /Book a 20-Minute Call/ });
-      expect(link.getAttribute("href")).toBe(LEAVE_URL);
-    });
-
-    // Staging's pay pop-up test claims no key at its point (main's claimPlansOffer is not
-    // here), so on staging there is no 30 s window for the offer to keep out of.
-    it("on a phone, opens 1.6 s after the paywall card too (no pay-test window on staging)", () => {
-      leaveV4("&popup=off");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(1_500);
-      expect(offer()).toBeNull();
-      advance(200);
-
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledWith(
-        expect.objectContaining({ trigger: "paywall_reached", popup_arm: "no_popup" })
-      );
-    });
-
-    // jsdom reaches the paywall card and the pay test's point at once. On staging, with no
-    // claim to wait on, both arrive together: the plans pop-up wins and the offer gives way.
-    // A reader going in order meets the card chapters before the point.
-    it("on a phone in the popup arm, gives way to the pay test's pop-up when both arrive", () => {
-      leaveV4("&popup=on");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(1_700);
-
-      expect(offer()).toBeNull();
-      expect(document.querySelector(".report-pricing-modal")?.getAttribute("data-state")).toBe(
-        "open"
-      );
-      expect(vi.mocked(analytics.trackLeaveOfferDismissed)).toHaveBeenCalledWith(
-        expect.objectContaining({ source: "superseded" })
-      );
-    });
-
-    it("lets the reader open and close the plans window without an error", () => {
-      leaveV4("&popup=off");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-      const errors: unknown[] = [];
-      const onError = (event: ErrorEvent) => {
-        errors.push(event.error);
-        event.preventDefault();
-      };
-      window.addEventListener("error", onError);
-      try {
-        // Staging's sticky bar goes straight to Stripe; a locked chapter opens the plans.
-        fireEvent.click(
-          document.querySelector<HTMLButtonElement>(".rv4-chapter.is-locked .rv4-chapter__button")!
-        );
-        closePlans();
-      } finally {
-        window.removeEventListener("error", onError);
-      }
-      expect(errors).toEqual([]);
-    });
-
-    it("blurs the page behind it and hides the sticky bar while open", () => {
-      leaveV4("&popup=off");
-      const { container } = render(<ReportPage token={LEAVE_TOKEN} />);
-      expect(container.querySelector(".report-page__shell-wrap--obscured")).toBeNull();
-
-      advance(32_000);
-
-      expect(offer()).toBeInTheDocument();
-      expect(container.querySelector(".report-page__shell-wrap--obscured")).not.toBeNull();
-      expect(
-        container.querySelector(".report-sticky-unlock--mobile")?.getAttribute("aria-hidden"),
-        "the sticky bar stayed reachable over the offer"
-      ).toBe("true");
-    });
-
-    it("records the booking page being opened and gets out of the way", () => {
-      leaveV4("&popup=off");
-      render(<ReportPage token={LEAVE_TOKEN} />);
-      advance(32_000);
-
-      fireEvent.click(within(offer()!).getByRole("link", { name: /Book a 20-Minute Call/ }));
-
-      expect(offer()).toBeNull();
-      expect(vi.mocked(analytics.trackLeaveOfferClicked)).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: "founder_call", trigger: "paywall_reached" })
-      );
-    });
-
-    it("never shows twice for the same submission, across a reload", () => {
-      leaveV4("&popup=off");
-      const first = render(<ReportPage token={LEAVE_TOKEN} />);
-      advance(32_000);
-      fireEvent.click(within(offer()!).getByRole("button", { name: "No Thanks, Keep Reading" }));
-      expect(offer()).toBeNull();
-      expect(vi.mocked(analytics.trackLeaveOfferDismissed)).toHaveBeenCalledWith(
-        expect.objectContaining({ source: "not_now" })
-      );
-      first.unmount();
-
-      render(<ReportPage token={LEAVE_TOKEN} />);
-      advance(120_000);
-
-      expect(offer()).toBeNull();
-      expect(shown()).toHaveBeenCalledTimes(1);
-    });
-
-    it.each<[string, () => void]>([
-      ["a shared report", () => leaveV4("&popup=off", { viewMode: "shared" })],
-      ["a reader who has paid", () => leaveV4("&popup=off", { accessPlan: "full_report" })],
-      ["no email to send the code to", () => leaveV4("&popup=off", { userEmail: null })],
-      ["no submission", () => leaveV4("&popup=off", { submissionId: null })],
-      [
-        "another tab than the survey's",
-        () => {
-          leaveV4("&popup=off");
-          mockCompletedReportToken.mockReturnValue(null);
-        },
-      ],
-      [
-        "a report made days ago",
-        () => leaveV4("&popup=off", { reportDate: "2026-04-07T22:23:16.851299+00:00" }),
-      ],
-      ["an email link", () => leaveV4("&popup=off&from=email")],
-      ["a discount link", () => leaveV4("&popup=off&offer=1")],
-      ["a coupon link", () => leaveV4("&popup=off&promo=LIQ-100-abcdefgh")],
-      ["an invite link", () => leaveV4("&popup=off&invite=1")],
-      [
-        "Report 2.0",
-        () => {
-          leaveV4("&popup=off");
-          mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1&popup=off"));
-        },
-      ],
-      [
-        "no booking page configured",
-        () => {
-          vi.stubEnv("NEXT_PUBLIC_FOUNDER_CALL_URL", "");
-          leaveV4("&popup=off");
-        },
-      ],
-      [
-        "a booking page that is not Google's",
-        () => {
-          vi.stubEnv("NEXT_PUBLIC_FOUNDER_CALL_URL", "https://calendly.com/loveiq/20min");
-          leaveV4("&popup=off");
-        },
-      ],
-      ["the preview switch set to off", () => leaveV4("&popup=off&leave=off")],
-      [
-        "our own probe",
-        () => {
-          document.cookie = "loveiq_probe=1; path=/";
-          leaveV4("&popup=off");
-        },
-      ],
-    ])("never shows for %s", (_case, arrange) => {
-      arrange();
-      render(<ReportPage token={LEAVE_TOKEN} />);
-
-      advance(120_000);
-
-      expect(offer()).toBeNull();
-      expect(shown()).not.toHaveBeenCalled();
-    });
-
-    // Final review, 14.10: a purchase that lands mid-session (a 409 "already owned" from
-    // another tab, then "Back to your report" reloads the data) turns the offer off while
-    // it is armed. It must stay off, and the page must stay usable.
-    it("stays shut once the reader's purchase lands, with the page left usable", () => {
-      stubDesktop();
-      leaveV4("&popup=off");
-      const { container, rerender } = render(<ReportPage token={LEAVE_TOKEN} />);
-      advance(500);
-
-      const paid = buildSuccessResponse();
-      mockUseReportData.mockReturnValue({
-        ...paid,
-        data: {
-          ...paid.data,
-          accessPlan: "full_report",
-          submissionId: 2063,
-          reportDate: new Date(Date.now() - 5 * 60_000).toISOString(),
-        },
-      });
-      rerender(<ReportPage token={LEAVE_TOKEN} />);
-      advance(60_000);
-
-      expect(offer()).toBeNull();
-      expect(shown()).not.toHaveBeenCalled();
-      expect(container.querySelector(".report-page__shell-wrap--obscured")).toBeNull();
-    });
-
-    it("opens at once in a preview with ?leave=show, with no submission behind it", () => {
-      mockCompletedReportToken.mockReturnValue(null);
-      leaveV4("&popup=off&preview=1&leave=show", { submissionId: null, userEmail: null });
-      render(<ReportPage />);
-
-      advance(100);
-
-      expect(offer()).toBeInTheDocument();
-      expect(shown()).toHaveBeenCalledWith(expect.objectContaining({ trigger: "forced" }));
     });
   });
 

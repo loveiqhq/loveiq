@@ -25,13 +25,19 @@ import {
   trackCheckoutReturnViewed,
   trackPaywallUnlocked,
 } from "@features/analytics/client";
+import {
+  getReportNurturePromo,
+  setReportNurturePromo,
+} from "@features/survey/ui/hooks/surveySession";
 
 /** The paid line, read across the green "Payment complete." that opens it. */
 const paidLine = () =>
   screen.getByText(
     (_, el) =>
       el?.tagName === "P" &&
-      /payment complete\. your report is unlocked\. redirecting you now/i.test(el.textContent ?? "")
+      /payment complete\. (your report is|your [a-z ]+ report is|all 14 archetype reports are) unlocked\. redirecting you now/i.test(
+        el.textContent ?? ""
+      )
   );
 
 describe("CheckoutReturnPage", () => {
@@ -187,6 +193,77 @@ describe("CheckoutReturnPage", () => {
         discount_amount: 24.49,
       })
     );
+  });
+
+  it("names the archetype a single report was bought for", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        accessPlan: "full_report",
+        enabled: true,
+        paymentStatus: "paid",
+        purchaseAnalytics: { value: 14.99, currency: "EUR", transaction_id: "cs_test_other" },
+        sessionStatus: "complete",
+      }),
+    } as Response);
+
+    render(
+      <CheckoutReturnPage
+        archetype="Minimalist Companion"
+        planId="full_report"
+        sessionId="cs_test_other"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+
+    await waitFor(() => expect(paidLine()).toBeInTheDocument());
+    expect(paidLine().textContent).toMatch(/your minimalist companion report is unlocked/i);
+  });
+
+  /**
+   * An email's code redeems once. Kept in the tab, it rode along on the reader's next
+   * checkout, Stripe refused the session, and every retry failed until the code expired.
+   */
+  describe("the email's promo code", () => {
+    const token = "rpt_ABCDEFGHIJKLMNOPQRST";
+    const returnWith = (paymentStatus: string, sessionStatus: string) => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          accessPlan: paymentStatus === "paid" ? "full_report" : null,
+          enabled: true,
+          paymentStatus,
+          purchaseAnalytics: { value: 14.99, currency: "EUR", transaction_id: "cs_test_promo" },
+          sessionStatus,
+        }),
+      } as Response);
+      render(<CheckoutReturnPage planId="full_report" sessionId="cs_test_promo" token={token} />);
+    };
+
+    beforeEach(() => {
+      sessionStorage.clear();
+      setReportNurturePromo({ promoCode: "LIQ-50-Ab7K9xQ2", token });
+    });
+
+    it("is forgotten once the purchase that used it is confirmed", async () => {
+      returnWith("paid", "complete");
+      await waitFor(() => expect(paidLine()).toBeInTheDocument());
+      await waitFor(() => expect(getReportNurturePromo({ token })).toBeNull());
+    });
+
+    it("is forgotten under a report session id too, which the return page never sees", async () => {
+      const sessionId = "02d88f31-eceb-4402-940d-c8cd98d01848";
+      setReportNurturePromo({ promoCode: "LIQ-50-Zz9Y8xW7", sessionId });
+      returnWith("paid", "complete");
+      await waitFor(() => expect(paidLine()).toBeInTheDocument());
+      await waitFor(() => expect(getReportNurturePromo({ sessionId })).toBeNull());
+    });
+
+    it("is kept while the payment has not gone through", async () => {
+      returnWith("unpaid", "open");
+      await waitFor(() => expect(screen.getByText(/payment status/i)).toBeInTheDocument());
+      expect(getReportNurturePromo({ token })).toBe("LIQ-50-Ab7K9xQ2");
+    });
   });
 
   it("keeps polling while payment is complete but backend access is still syncing", async () => {

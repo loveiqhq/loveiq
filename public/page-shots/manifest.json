@@ -1,12 +1,21 @@
 {
-  "capturedAt": "2026-09-12T00:18:13.731Z",
+  "capturedAt": "2026-10-07T19:36:01.050Z",
   "origin": "https://www.loveiq.org",
   "shots": [
     {
       "name": "landing-white",
       "file": "landing-white.png",
-      "url": "https://www.loveiq.org/?variant=white",
-      "what": "the landing page, arm `white`, above the fold",
+      "url": "https://www.loveiq.org/?variant=white_card",
+      "what": "the landing page, arm `white_card` (question 1 in the hero), above the fold",
+      "width": 1280,
+      "height": 900,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "landing-white-video",
+      "file": "landing-white-video.png",
+      "url": "https://www.loveiq.org/?variant=white_video",
+      "what": "the landing page, arm `white_video` (the presenter video in the hero), above the fold",
       "width": 1280,
       "height": 900,
       "consentBannerDismissed": true
@@ -23,8 +32,17 @@
     {
       "name": "landing-white-mobile",
       "file": "landing-white-mobile.png",
-      "url": "https://www.loveiq.org/?variant=white",
-      "what": "the landing page, arm `white`, on a phone",
+      "url": "https://www.loveiq.org/?variant=white_card",
+      "what": "the landing page, arm `white_card` (question 1 in the hero), on a phone",
+      "width": 390,
+      "height": 844,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "landing-white-video-mobile",
+      "file": "landing-white-video-mobile.png",
+      "url": "https://www.loveiq.org/?variant=white_video",
+      "what": "the landing page, arm `white_video` (the presenter video in the hero), on a phone",
       "width": 390,
       "height": 844,
       "consentBannerDismissed": true

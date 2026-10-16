@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -61,10 +61,24 @@ vi.mock("@features/admin/server/supabase", () => ({
 const notionCalls: string[] = [];
 /** What Notion answers for a page's content. Anything but 200 makes pageText throw. */
 let blocksStatus = 200;
+/** Answers the DATABASE search gives first, one per call, before it answers normally. */
+let databaseSearchAnswers: Array<() => Response> = [];
+/** When set, answers the PAGE search, page by page, from the cursor it is given. */
+let pageSearch: ((cursor: string | undefined) => Response) | null = null;
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string, init?: RequestInit) => {
     notionCalls.push(url);
-    const body = JSON.parse(String(init?.body ?? "{}")) as { filter?: { value?: string } };
+    const body = JSON.parse(String(init?.body ?? "{}")) as {
+      filter?: { value?: string };
+      start_cursor?: string;
+    };
+    if (pageSearch && url.endsWith("/search") && body.filter?.value === "page") {
+      return pageSearch(body.start_cursor);
+    }
+    if (url.endsWith("/search") && body.filter?.value === "database") {
+      const next = databaseSearchAnswers.shift();
+      if (next) return next();
+    }
 
     if (url.endsWith("/search") && body.filter?.value === "database") {
       return json({
@@ -129,7 +143,13 @@ const PAGE_STANDALONE = {
   properties: { title: { type: "title", title: [{ plain_text: "Positioning" }] } },
 };
 
-import { ingestNotion, taskToRow } from "@features/brain/server/ingest/notion";
+import { DROPOFF_DATA_DATABASE_ID } from "@features/admin/server/dropoff-notion";
+import {
+  NOTION_RETRY_MAX_S,
+  ingestNotion,
+  isGeneratedDatabase,
+  taskToRow,
+} from "@features/brain/server/ingest/notion";
 
 const STAMP = "2026-08-28T12:00:00.000Z";
 
@@ -321,6 +341,36 @@ describe("a run cut short must confirm what it could not refresh", () => {
       );
   }
 
+  it("fetches a page it has never indexed before one it only has to rebuild", async () => {
+    // A database shared late (the 📊 KPI database, 2026-10-11) used to queue behind every
+    // stale and edited page in listing order. With time for ONE fetch, the never-indexed
+    // Literature row must win over the Board row whose builder version is merely old.
+    existingChunks = [
+      { source_id: "task:row-board-1", meta: { edited: ROW_BOARD.last_edited_time, v: 0 } },
+      { source_id: "page:page-1", meta: { edited: PAGE_STANDALONE.last_edited_time, v: 0 } },
+    ];
+    await ingestNotion(STAMP, outOfTimeAfterFirstFetch);
+
+    const fetched = notionCalls.filter((u) => u.includes("/blocks/"));
+    expect(fetched).toHaveLength(1);
+    expect(fetched[0]).toContain("/blocks/row-lit-1/");
+  });
+
+  it("alternates new pages with edited ones, so a big new database cannot hold edits back", async () => {
+    // Two never-indexed pages (the Literature row, the standalone page) and one indexed
+    // Board row due a rebuild. With time for two fetches, the second goes to the Board row:
+    // all-new-first would spend both on new pages and leave every edit waiting.
+    existingChunks = [
+      { source_id: "task:row-board-1", meta: { edited: ROW_BOARD.last_edited_time, v: 0 } },
+    ];
+    await ingestNotion(STAMP, () => notionCalls.filter((u) => u.includes("/blocks/")).length >= 2);
+
+    const fetched = notionCalls.filter((u) => u.includes("/blocks/"));
+    expect(fetched).toHaveLength(2);
+    expect(fetched[0]).toContain("/blocks/row-lit-1/");
+    expect(fetched[1]).toContain("/blocks/row-board-1/");
+  });
+
   it("touches the pages the clock did not reach, instead of abandoning them", async () => {
     // MEASURED: a page's content costs ~1.9s, so 45s buys ~24 pages. A run that
     // walked the list in order spent its whole budget on the first 30 and touched
@@ -494,5 +544,213 @@ describe("continuation parts must be confirmed, or the sweep eats them", () => {
     // planted orphans prove the sweep actually ran.
     expect(deleted()).not.toContain("task:row-lit-1#2");
     expect(deleted().length).toBeGreaterThan(0);
+  });
+});
+
+describe("one transient Notion answer must not fail the run", () => {
+  // 2026-10-01 11:41: a 500 ("Cross-cell memcached access is not allowed") on the crawl's
+  // search, uncaught, failed the whole run.
+  const dbSearches = () => notionCalls.filter((u) => u.endsWith("/search")).length - 1; // minus the page search
+  const answer =
+    (status: number, headers: Record<string, string> = {}) =>
+    () =>
+      new Response(JSON.stringify({ object: "error", status }), { status, headers });
+
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    existingChunks = [];
+    databaseSearchAnswers = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+  });
+
+  it("retries a 5xx once, and the crawl carries on", async () => {
+    databaseSearchAnswers = [answer(500)];
+    const res = await ingestNotion(STAMP);
+    expect(res.skipped).toBeUndefined();
+    expect(dbSearches()).toBe(2);
+    expect(written().map((r) => r.source_id)).toContain("task:row-lit-1");
+  });
+
+  it("waits out a 429's Retry-After before the one retry", async () => {
+    expect(NOTION_RETRY_MAX_S).toBe(5);
+    databaseSearchAnswers = [answer(429, { "retry-after": "2" })];
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const run = ingestNotion(STAMP);
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      const res = await run;
+      expect(res.skipped).toBeUndefined();
+      expect(dbSearches()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not wait out a long Retry-After, and never retries twice", async () => {
+    databaseSearchAnswers = [answer(429, { "retry-after": "30" })];
+    await expect(ingestNotion(STAMP)).rejects.toThrow(/\/search failed \(429\)/);
+    expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(1);
+
+    notionCalls.length = 0;
+    databaseSearchAnswers = [answer(502), answer(503)];
+    await expect(ingestNotion(STAMP)).rejects.toThrow(/\/search failed \(503\)/);
+    expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(2);
+  });
+
+  it("leaves a 4xx alone", async () => {
+    databaseSearchAnswers = [answer(400)];
+    await expect(ingestNotion(STAMP)).rejects.toThrow(/\/search failed \(400\)/);
+    expect(notionCalls.filter((u) => u.endsWith("/search"))).toHaveLength(1);
+  });
+});
+
+describe("a database a job writes numbers into is never read, and what came from it is swept", () => {
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    existingChunks = [];
+    blocksStatus = 200;
+    databaseSearchAnswers = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+    delete process.env.NOTION_EXCLUDE_TITLES;
+  });
+
+  it("knows the drop-off data table by id, however the id is written", () => {
+    expect(isGeneratedDatabase(DROPOFF_DATA_DATABASE_ID)).toBe(true);
+    expect(isGeneratedDatabase(DROPOFF_DATA_DATABASE_ID.replace(/-/g, "").toUpperCase())).toBe(
+      true
+    );
+    expect(isGeneratedDatabase("db-board")).toBe(false);
+  });
+
+  it("skips its rows but keeps it a walked scope, so a row stored from it is deleted", async () => {
+    databaseSearchAnswers = [
+      () =>
+        json({
+          results: [
+            { id: "db-lit", object: "database", title: [{ plain_text: "Literature" }] },
+            {
+              id: DROPOFF_DATA_DATABASE_ID,
+              object: "database",
+              title: [{ plain_text: "Survey drop-off data" }],
+            },
+          ],
+        }),
+    ];
+    // Two rows the crawl confirms, so deleting the third is not a "majority" sweep.
+    existingChunks = [
+      { source_id: "task:row-lit-1", meta: { edited: ROW_LIT.last_edited_time, v: CURRENT_V } },
+      {
+        source_id: "page:page-1",
+        meta: { edited: PAGE_STANDALONE.last_edited_time, v: CURRENT_V },
+      },
+      {
+        source_id: "task:dropoff-row-1",
+        meta: {
+          edited: "2026-10-12T00:00:00.000Z",
+          v: CURRENT_V,
+          database: "Survey drop-off data",
+        } as never,
+      },
+    ];
+    await ingestNotion(STAMP, () => false);
+    const bare = DROPOFF_DATA_DATABASE_ID.replace(/-/g, "");
+    expect(
+      notionCalls.some(
+        (u) =>
+          u.includes(`/databases/${DROPOFF_DATA_DATABASE_ID}/query`) ||
+          u.includes(`/databases/${bare}/query`)
+      )
+    ).toBe(false);
+    expect(notionCalls.some((u) => u.includes("/databases/db-lit/query"))).toBe(true);
+    const deletes = dbCalls.filter((c) => c.method === "DELETE");
+    expect(deletes.some((c) => c.path.includes("dropoff-row-1"))).toBe(true);
+  });
+});
+
+/**
+ * THE LISTING CAP IS FOR PAGES PEOPLE WRITE. On 13 Oct 2026 "KPI report data" sat under a
+ * page this connection sees, so the KPI tables' rows (rewritten daily, so first in a
+ * newest-first search) took 1,542 of the 2,500 the crawl lists, every crawl was partial,
+ * and the sweep stopped for two days.
+ */
+describe("rows of a job's table do not use up the listing cap", () => {
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    existingChunks = [];
+    blocksStatus = 200;
+    databaseSearchAnswers = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+    delete process.env.NOTION_EXCLUDE_TITLES;
+  });
+  afterEach(() => {
+    pageSearch = null;
+  });
+
+  /** `pages` pages of 100 results; page i is a job's rows when `generated(i)`, else untitled pages. */
+  const listing = (pages: number, generated: (i: number) => boolean) => (cursor?: string) => {
+    const i = cursor ? Number(cursor) : 0;
+    const results = Array.from({ length: 100 }, (_, k) =>
+      generated(i)
+        ? {
+            id: `kpi-${i}-${k}`,
+            parent: { type: "database_id", database_id: DROPOFF_DATA_DATABASE_ID },
+          }
+        : { id: `p-${i}-${k}`, parent: { type: "workspace" }, properties: {} }
+    );
+    const more = i + 1 < pages;
+    return json({ results, has_more: more, next_cursor: more ? String(i + 1) : null });
+  };
+
+  it("lists past 2,500 when the rest are a job's rows, completes, and says how many", async () => {
+    // 16 pages of KPI rows first (newest edits), then 14 of pages people write: 3,000.
+    pageSearch = listing(30, (i) => i < 16);
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBeUndefined();
+    expect(r.detail).toMatch(/kpiRowsVisible=1600/);
+    expect(r.detail).toMatch(/move "KPI report data"/);
+  });
+
+  /** A part of a hundred still buys a request, or those pages would come off the 2,500. */
+  it("keeps all 2,500 for pages people write when a job's rows are fewer than 100", async () => {
+    // 50 KPI rows and 2,500 pages people write, over 26 responses.
+    pageSearch = (cursor?: string) => {
+      const i = cursor ? Number(cursor) : 0;
+      const results = Array.from({ length: i === 25 ? 50 : 100 }, (_, k) =>
+        i === 0 && k < 50
+          ? {
+              id: `kpi-${k}`,
+              parent: { type: "database_id", database_id: DROPOFF_DATA_DATABASE_ID },
+            }
+          : { id: `p-${i}-${k}`, parent: { type: "workspace" }, properties: {} }
+      );
+      const more = i < 25;
+      return json({ results, has_more: more, next_cursor: more ? String(i + 1) : null });
+    };
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBeUndefined();
+    expect(r.detail).toMatch(/kpiRowsVisible=50 /);
+  });
+
+  it("still stops at 2,500 pages people write, and blames nothing else", async () => {
+    pageSearch = listing(40, () => false);
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBe("notion-crawl-incomplete");
+    expect(r.detail).toBeUndefined();
+    const searches = notionCalls.filter((u) => u.endsWith("/search")).length;
+    // One database search, 25 page searches.
+    expect(searches).toBe(26);
+  });
+
+  it("gives a job's rows at most twice the cap of extra room", async () => {
+    pageSearch = listing(500, () => true);
+    const r = await ingestNotion(STAMP, () => false);
+    expect(r.skipped).toBe("notion-crawl-incomplete");
+    expect(r.detail).toMatch(/kpiRowsVisible=7500/);
+    expect(notionCalls.filter((u) => u.endsWith("/search")).length).toBe(1 + 75);
   });
 });

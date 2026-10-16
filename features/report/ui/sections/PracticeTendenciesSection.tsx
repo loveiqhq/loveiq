@@ -79,10 +79,11 @@ function slugifyPracticeKey(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-// Maps a 1–10 score to its qualitative likelihood bucket (Figma 8146:76002).
+// Maps a 1–10 score to its qualitative likelihood bucket (Figma 8146:76002). The
+// middle bucket is "Neutral": the frame's "Neutral likely" was a template slip.
 function likelihoodLabel(value: number): string {
   if (value >= 7) return "More likely";
-  if (value >= 4) return "Neutral likely";
+  if (value >= 4) return "Neutral";
   return "Less likely";
 }
 

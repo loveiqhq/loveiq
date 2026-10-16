@@ -15,11 +15,11 @@ GDPR Art. 6(1) requires a documented lawful basis for every processing activity 
 
 LoveIQ relies on three of the six Art. 6(1) bases:
 
-| Basis                       | Used for                                                                                                                                                        | Notes                                                                                                                                                                         |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **(a) Consent**             | Survey participation, marketing emails (Q16015), analytics + tracking cookies                                                                                   | Each instance has explicit opt-in. Marketing consent is versioned (`marketing_opt_in_terms_version`, T-11). Analytics cookies gated on CookieYes "analytics" category (T-02). |
-| **(b) Contract**            | Report delivery, payment processing, transactional emails (confirmation, share-link, password-reset adjacent flows)                                             | Lawful basis is "necessary for the performance of a contract" because the user requested + paid for the deliverable.                                                          |
-| **(f) Legitimate interest** | Operational forensics (admin_action_log), abuse detection (rate limits, CSRF storm counters), email-bounce suppression, payment-fraud monitoring (Stripe Radar) | Balancing test documented per activity below. No marketing under legitimate interest — we use consent.                                                                        |
+| Basis                       | Used for                                                                                                                                                                                                    | Notes                                                                                                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **(a) Consent**             | Survey participation, marketing emails (Q16015), analytics + tracking cookies                                                                                                                               | Each instance has explicit opt-in. Marketing consent is versioned (`marketing_opt_in_terms_version`, T-11). Analytics cookies gated on CookieYes "analytics" category (T-02). |
+| **(b) Contract**            | Report delivery, payment processing, transactional emails (confirmation, share-link, password-reset adjacent flows)                                                                                         | Lawful basis is "necessary for the performance of a contract" because the user requested + paid for the deliverable.                                                          |
+| **(f) Legitimate interest** | Operational forensics (admin_action_log), abuse detection (rate limits, CSRF storm counters), email-bounce suppression, payment-fraud monitoring (Stripe Radar), each nurture email's opens and clicks (A6) | Balancing test documented per activity below. No marketing under legitimate interest — we use consent (but see the A6 correction).                                            |
 
 Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyond what Stripe handles), (d) vital interests, (e) public task.
 
@@ -34,7 +34,7 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A2 — Survey submission
 
-- **Data**: email, first_name, ~60 question answers including sensitive-by-context data, IP, session_id, duration, UTM
+- **Data**: email, first_name, ~60 question answers including sensitive-by-context data, IP, session_id, duration, UTM context (campaign tags; click ids: Google's ad click ids `gclid`/`gbraid`/`wbraid` and, from 2026-10-16, Meta's `fbclid`, which Meta adds to any link click, ad or not; from 2026-10-16 the referring site's hostname, never its full address)
 - **Basis**: (a) consent — survey landing page + intro screen make the purpose explicit
 - **Retention**: until DSAR deletion. Partial saves >30d are auto-purged (F-02).
 - **Withdraw**: DSAR delete (F-01)
@@ -57,13 +57,14 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 - **Data**: recipient email, first_name, signed unsubscribe token, content
 - **Basis**: (b) contract — the email IS what the user paid for / requested
-- **Retention**: Resend's processor-side log per its DPA; no per-message copy stored on our side. Suppression rows kept (intentional retention for compliance).
+- **Retention**: Resend's processor-side log per its DPA, opens and clicks included: Resend's tracking is set per sending domain, so these emails carry the open image and wrapped links too (owner decision 2026-10-14, see A6). On our side only daily totals of opens and clicks (Upstash, 8 days); no per-message copy. Suppression rows kept (intentional retention for compliance).
 
 ### A6 — Marketing email (nurture sequence)
 
-- **Data**: same as A5 plus a Stripe promotion code at the `72h_no_unlock` stage (the 30h/54h ladder was retired by pricing 2.0, and the `78h_no_unlock` call invite was removed with the Calendly integration on 2026-09-14 — one nurture email now goes out per unconverted reader)
-- **Basis**: (a) consent — Q16015 marketing opt-in is required for nurture to fire. RPC stamps `marketing_opt_in_terms_version` (T-11) so we can prove what consent text the user saw.
-- **Retention**: same as A5 (Resend processor) + nurture stage markers in `report_price_quote.metadata.nurtureEmailsSent[]`
+- **Data**: same as A5 plus a Stripe promotion code at the `72h_no_unlock` stage (the 30h/54h ladder was retired by pricing 2.0, and the `78h_no_unlock` call invite was removed with the Calendly integration on 2026-09-14 — one nurture email now goes out per unconverted reader). Since 2026-10-14, per email: whether and when it was delivered, opened, clicked or bounced, with its stage and the reader's submission id (`email_message_event`; Resend's id for the email, never the address, IP, user agent or clicked link)
+- **Basis**: (a) consent where the reader said Yes to Q16015. RPC stamps `marketing_opt_in_terms_version` (T-11) so we can prove what consent text the user saw. Correction 2026-10-14: the nurture cron does not check Q16015. A No keeps the emails about the reader's own report (decision "option a" in `app/api/survey/route.ts`), so for those readers the email itself has no documented basis yet.
+- **Per-email opens and clicks**: (f) legitimate interest, for every nurture email whatever the Q16015 answer (owner decision 2026-10-14): seeing which emails are useful and improving them. Balancing test: ids and a time only; disclosed in privacy policy §7.3 and the Q16015 guide line (T-11 version `2026-10-14`); turning images off stops the open record; objection by unsubscribing or by email (Art. 21). Not reviewed by a lawyer: whether the open image needs consent under ePrivacy (§25 TDDDG), the point T-13/T-14 raised in `docs/runbooks/SECURITY.md`.
+- **Retention**: same as A5 (Resend processor) + nurture stage markers in `report_price_quote.metadata.nurtureEmailsSent[]` + `email_message_event` rows: 180 days once the retention purge runs (postponed); until then until the submission is erased, which cascades
 - **Withdraw**: any unsubscribe → suppression list → the Resend contact is marked unsubscribed (R-05), so campaigns sent from Resend skip it on every list
 
 ### A7 — Payment processing
@@ -75,14 +76,14 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A8 — Engagement analytics
 
-- **Data**: analytics_event rows (event_type + metadata), scroll depth, time-on-section, click telemetry; client-side: GA4 + Microsoft Clarity
-- **Basis**: (a) consent — CookieYes "analytics" category. Visitor ID cookie (`__liq_vid`) only set after consent (T-02). Persisted analytics_event writes gated on `hasCookieYesConsent("analytics")` in client.ts.
+- **Data**: analytics_event rows (event_type + metadata; from 2026-10-16 also `report_chapter_stats`, how long each report chapter was read and which of its actions were used, and `wizard_skipped`, the pre-report slides skipped), survey_behavior_event rows (from 2026-10-16 with `is_tablet`), invite_event rows, scroll depth, time-on-section, click telemetry; funnel_event rows (unique visitor, survey start and, from 2026-10-16, each survey intro card seen and its Back and Skip); client-side: GA4, Microsoft Clarity, PostHog (from 2026-10-16 with the time spent on each landing section, also sent to GA4)
+- **Basis**: our own tables (analytics_event, survey_behavior_event, invite_event): (f) legitimate interest since 2026-09-18 (commit `60924b5ab`, privacy policy §7.4): no cookie set or read, nothing sent to a third party, so these writes no longer check the cookie choice. funnel_event: every visitor from 2026-10-16 (owner decision: measure everyone), keyed by the visitor ID cookie (`__liq_vid`, still set only after consent to the CookieYes "analytics" category, T-02) or, without it, a random id held in the page's memory and never stored (`features/analytics/funnelVisitor.ts`): (f) legitimate interest, as our own tables. GA4: from 2026-10-16 our events go to Google's tag on every visit; without consent the banner's denied signal makes them cookieless pings (Google Consent Mode), (f) legitimate interest; GA4 cookies and identifiers only with (a) consent. Microsoft Clarity and PostHog load on every visit (owner decisions, ROPA #9 note).
 - **Retention**: 180 days (F-02 purge)
 
-### A9 — Advertising tracking (Facebook Pixel, TikTok Analytics, Google Ads)
+### A9 — Advertising tracking (Google Ads; no Meta or TikTok pixel fires, checked on production 2026-10-15)
 
-- **Data**: cross-site identifiers via vendor pixels
-- **Basis**: (a) consent — CookieYes "advertisement" category. Tags marked `data-cookieyes="cookieyes-advertisement"` in `app/layout.tsx`.
+- **Data**: Google Ads conversions (value, currency, transaction id); cross-site identifiers only with consent
+- **Basis**: from 2026-10-16 a conversion is sent for every purchase (owner decision: measure everyone). Without "advertisement" consent the banner's denied signal makes it a cookieless ping (Google Consent Mode), and the server-side GA4 copy carries `ad_user_data`/`ad_personalization` DENIED: (f) legitimate interest. Identifiers and ad cookies only with (a) consent (CookieYes "advertisement" category). The tag manager's own dataLayer push (any pixel in the container) stays behind consent.
 - **Retention**: vendor-controlled
 
 ### A10 — Operational forensics (admin_action_log, cron_run)
@@ -123,13 +124,13 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 For activities under basis (a):
 
-| Activity       | Withdraw mechanism                                    | Effect                                                                                                              |
-| -------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| A1 waitlist    | DSAR delete (`/api/admin/data-subject` action=delete) | All waitlist + suppression + invite rows removed                                                                    |
-| A2 survey      | DSAR delete                                           | Full cascade across 12 PII tables, plus the Resend marketing contact                                                |
-| A6 marketing   | One-click unsubscribe in every email                  | Adds to suppression_list + marks the Resend contact unsubscribed (R-05)                                             |
-| A8 analytics   | CookieYes preference centre                           | `__liq_vid` cookie not set; `hasCookieYesConsent("analytics")` returns false; persisted analytics_event writes skip |
-| A9 advertising | CookieYes preference centre                           | Vendor tags blocked by category attribute                                                                           |
+| Activity       | Withdraw mechanism                                                                                   | Effect                                                                                                                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1 waitlist    | DSAR delete (`/api/admin/data-subject` action=delete)                                                | All waitlist + suppression + invite rows removed                                                                                                                                       |
+| A2 survey      | DSAR delete                                                                                          | Full cascade across 12 PII tables, plus the Resend marketing contact                                                                                                                   |
+| A6 marketing   | One-click unsubscribe in every email                                                                 | Adds to suppression_list + marks the Resend contact unsubscribed (R-05)                                                                                                                |
+| A8 analytics   | Art. 21 objection (privacy policy §1, §7.4); CookieYes preference centre for cookies and identifiers | Declining: `__liq_vid` and GA4 cookies are not set; funnel_event rows use a page-only id, GA4 receives cookieless events (consent mode), our own tables continue (legitimate interest) |
+| A9 advertising | Art. 21 objection; CookieYes preference centre for ad cookies and identifiers                        | Declining: Google Ads conversions are cookieless pings marked denied; the tag manager's pixels get no events                                                                           |
 
 ## Outstanding work
 

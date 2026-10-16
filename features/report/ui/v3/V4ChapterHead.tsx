@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
-import type { FC } from "react";
+import { useRef, type FC } from "react";
+import { useCtaSeen } from "@features/analytics/useCtaSeen";
 
 /**
  * The head of a Report V4 chapter row — Figma 1:863 / 1:874 — shared by V4Chapter
@@ -61,19 +64,24 @@ export const V4ChapterChevron: FC = () => (
  * are here and the stylesheet shows one: each is the frame's own drawing at its size,
  * not one scaled.
  */
-export const V4ChapterLockDisc: FC = () => (
-  <span className="rv4-chapter__lock" data-node-id="982:379">
-    <span className="rv4-chapter__lock-disc" aria-hidden="true">
-      <Image src="/report/v3/locks/lock-14.svg" alt="" width={14} height={14} unoptimized />
-      <Image
-        className="rv4-chapter__lock-17"
-        src="/report/v3/locks/lock-17.svg"
-        alt=""
-        width={17}
-        height={17}
-        unoptimized
-      />
+export const V4ChapterLockDisc: FC = () => {
+  // A locked chapter's unlock offer, reported as seen the way the premium cards' are.
+  const ref = useRef<HTMLSpanElement>(null);
+  useCtaSeen(ref, "locked_chapter");
+  return (
+    <span ref={ref} className="rv4-chapter__lock" data-node-id="982:379">
+      <span className="rv4-chapter__lock-disc" aria-hidden="true">
+        <Image src="/report/v3/locks/lock-14.svg" alt="" width={14} height={14} unoptimized />
+        <Image
+          className="rv4-chapter__lock-17"
+          src="/report/v3/locks/lock-17.svg"
+          alt=""
+          width={17}
+          height={17}
+          unoptimized
+        />
+      </span>
+      <span className="rv4-chapter__lock-label">Unlock Report</span>
     </span>
-    <span className="rv4-chapter__lock-label">Unlock Report</span>
-  </span>
-);
+  );
+};

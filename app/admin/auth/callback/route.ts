@@ -154,6 +154,17 @@ export async function GET(request: NextRequest) {
     maxAge: 7 * 24 * 60 * 60,
   });
 
+  // R-13: a sign-in is activity. A stamp left from an earlier session that idled out
+  // (the proxy keeps it 7 days) would otherwise bounce the first page after this
+  // sign-in to "idle timeout". The proxy re-stamps it on every admin request after.
+  redirectToAdmin.cookies.set("__admin_activity", String(Date.now()), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60,
+  });
+
   // R-03: rotate the CSRF cookie on privilege change. Clearing both prod and
   // dev names is a no-op for whichever one isn't present in the request. The
   // middleware re-mints a fresh CSRF value on the next request.

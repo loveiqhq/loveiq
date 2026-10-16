@@ -51,13 +51,13 @@ describe("V4 on tablet and desktop", () => {
         new RegExp(`\\.rv3\\.rv4 \\.report-content ${sel.replace(/\./g, "\\.")}[^{]*\\{[^}]*760px`)
       );
     }
-    // Only the Fantasy figures keep it (v4Desktop2809b): the table's own width, and the
-    // map's axis over the table.
+    // Not even the Fantasy table since review 06.10: it runs the column too
+    // (v4Desktop2809b), its map centred in it.
     expect(
       rules(v3)
         .filter(([, body]) => body.includes("760px"))
         .map(([selector]) => selector)
-    ).toEqual([".rv3.rv4 .rv4-fvm", ".rv3.rv4 .rv4-fvt"]);
+    ).toEqual([]);
   });
 
   it("lets every phone-width V4 block fill the column from 700px", () => {

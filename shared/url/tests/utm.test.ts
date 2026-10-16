@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   captureUtmFromUrl,
   getStoredUtm,
@@ -230,6 +230,94 @@ describe("lib/utm", () => {
         JSON.stringify({ utm_source: "newsletter", utm_medium: "email" })
       );
     });
+  });
+});
+
+describe("captureUtmFromUrl — Meta's click id and the referring site", () => {
+  let store: Record<string, string>;
+
+  beforeEach(() => {
+    store = {};
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn((key: string) => store[key] ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        store[key] = value;
+      }),
+      removeItem: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    delete (document as { referrer?: string }).referrer;
+  });
+
+  function visit(search: string, referrer = "") {
+    Object.defineProperty(window, "location", {
+      value: { search, href: `https://www.loveiq.org/${search}`, hostname: "www.loveiq.org" },
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(document, "referrer", { value: referrer, configurable: true });
+  }
+
+  it("keeps the referring site's hostname, never its address, as detail on a tagged visit", () => {
+    visit("?utm_source=newsletter&utm_medium=email", "https://mail.google.com/mail/u/0/#inbox");
+    expect(JSON.parse(captureUtmFromUrl()!)).toEqual({
+      utm_source: "newsletter",
+      utm_medium: "email",
+      referrer_host: "mail.google.com",
+    });
+  });
+
+  it("stores an untagged visit's referrer only when nothing is stored yet", () => {
+    visit("", "https://www.google.com/search?q=love+quiz");
+    expect(JSON.parse(captureUtmFromUrl()!)).toEqual({ referrer_host: "www.google.com" });
+
+    // A campaign stored earlier is never replaced by an untagged visit.
+    const earlier = JSON.stringify({ utm_source: "instagram", utm_medium: "paid" });
+    store = { [GLOBAL_UTM_KEY]: earlier };
+    vi.mocked(localStorage.setItem).mockClear();
+    visit("", "https://www.bing.com/");
+    expect(captureUtmFromUrl()).toBeNull();
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(getStoredUtm()).toBe(earlier);
+  });
+
+  it("keeps Meta's click id without faking a source, capped and cleaned", () => {
+    visit(`?fbclid=%3CIwAR2-x_Y${"z".repeat(300)}`, "https://l.facebook.com/");
+    const stored = JSON.parse(captureUtmFromUrl()!) as Record<string, string>;
+    expect(stored.utm_source).toBeUndefined();
+    expect(stored.referrer_host).toBe("l.facebook.com");
+    expect(stored.fbclid).toMatch(/^IwAR2-x_Yz+$/);
+    expect(stored.fbclid).toHaveLength(200);
+
+    // Alone it is detail too: an earlier campaign stays (pricing reads its utm_source).
+    const earlier = JSON.stringify({ utm_source: "google", utm_medium: "cpc", gclid: "a" });
+    store = { [GLOBAL_UTM_KEY]: earlier };
+    visit("?fbclid=IwAR3");
+    expect(captureUtmFromUrl()).toBeNull();
+    expect(getStoredUtm()).toBe(earlier);
+
+    // With a campaign it joins it.
+    visit("?utm_source=facebook&utm_medium=paid&fbclid=IwAR4");
+    expect(JSON.parse(captureUtmFromUrl()!)).toEqual({
+      utm_source: "facebook",
+      utm_medium: "paid",
+      fbclid: "IwAR4",
+    });
+  });
+
+  it("skips our own pages and Stripe's checkout as a referrer", () => {
+    for (const referrer of [
+      "https://www.loveiq.org/",
+      "https://staging.loveiq.org/report/x",
+      "https://checkout.stripe.com/c/pay/cs_live_x",
+      "not a url",
+    ]) {
+      store = {};
+      visit("", referrer);
+      expect(captureUtmFromUrl(), referrer).toBeNull();
+    }
   });
 });
 

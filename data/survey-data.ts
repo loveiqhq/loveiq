@@ -1473,9 +1473,9 @@ export const surveyQuestions: SurveyQuestion[] = [
     ],
     required: true,
     guide:
-      "This includes insights on sexuality, intimacy, research papers, news and future advanced tests.",
+      "This includes insights on sexuality, intimacy, research papers, news and future advanced tests. We see whether our emails are opened and which links are clicked, to make them better.",
     supportAndGuidance:
-      "This includes insights on sexuality, intimacy, research papers, news and future advanced tests.",
+      "This includes insights on sexuality, intimacy, research papers, news and future advanced tests. We see whether our emails are opened and which links are clicked, to make them better.",
     formatGuidance: "Select one option.",
   },
   {

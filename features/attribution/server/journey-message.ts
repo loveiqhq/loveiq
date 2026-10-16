@@ -179,12 +179,12 @@ export async function tryPostJourneyViaBot(input: {
  * "Report time" line would stay an em dash for precisely the reader it is most
  * interesting for: engaged, and not converting.
  *
- * Safe to leave ungated on the ADVANCE check because the caller dedupes instead:
- * `/api/analytics-event` allows one refresh per (submission, milestone) per hour.
- * That is what makes the ceiling three extra edits per submission rather than one
- * per event — the milestones themselves fire once per PAGE LOAD, not once per
- * submission (the client's dedupe set is rebuilt on every mount), and production
- * already has a submission carrying 27 of these rows.
+ * Safe to leave ungated on the ADVANCE check because the callers dedupe instead,
+ * per submission: `/api/analytics-event` one refresh per milestone an hour and one
+ * for other report activity every five minutes, `/api/report-session-end` one a
+ * minute. Without that it would be one edit per event — the milestones fire once
+ * per PAGE LOAD, not once per submission (the client's dedupe set is rebuilt on
+ * every mount), and production already has a submission carrying 27 of these rows.
  */
 export async function refreshJourneyDetail(submissionId: number): Promise<void> {
   if (!isSlackBotConfigured()) return;

@@ -3,8 +3,10 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trackStartSurvey = vi.fn();
+const trackLandingCardAnswer = vi.fn();
 vi.mock("@features/analytics/client", () => ({
   trackStartSurvey: (...args: unknown[]) => trackStartSurvey(...args),
+  trackLandingCardAnswer: (...args: unknown[]) => trackLandingCardAnswer(...args),
 }));
 vi.mock("next/link", () => ({
   default: ({ children, href, ...rest }: React.ComponentProps<"a">) => (
@@ -68,7 +70,7 @@ describe("WQuestionCard — landing question hand-off", () => {
     render(<WQuestionCard location="hero" />);
     answer(3);
     fireEvent.click(cta());
-    expect(trackStartSurvey).toHaveBeenCalledWith("hero");
+    expect(trackStartSurvey).toHaveBeenCalledWith("hero", "question_card");
   });
 
   it("lets the visitor change their mind before continuing", () => {

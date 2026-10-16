@@ -368,6 +368,9 @@ export async function GET(request: Request) {
     }
 
     let accessPlan: "essentials" | "full_report" | "core" | "all_reports" | null = null;
+    // The strongest plan across EVERY payment, whichever archetype it was for: "has bought
+    // anything". Gates the Findings and, on the client, every pay-screen auto-open.
+    let purchasedPlan: "essentials" | "full_report" | "core" | "all_reports" | null = null;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -390,8 +393,16 @@ export async function GET(request: Request) {
         submissionId: submission.id,
       });
 
-      const access = await getReportAccessPlanForSubmission(submission.id, ensuredReport);
+      // Scoped to the reader's own archetype: every gate below that falls back to
+      // `accessPlan` is gating THAT report, so a single report bought for another
+      // archetype must not open it (it opens its own archetype via the tiers).
+      const access = await getReportAccessPlanForSubmission(
+        submission.id,
+        ensuredReport,
+        scoring.v5_primary_archetype || scoring.primary_archetype
+      );
       accessPlan = access.accessPlan;
+      purchasedPlan = access.anyPlan;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
 
@@ -635,7 +646,9 @@ export async function GET(request: Request) {
     // kill-switch's all_reports) unlocks the real findings. Shared viewers
     // inherit the owner's plan here, matching the report's gift-view gating.
     const findingsSection = getReport2Section(primaryArchetype, "findings");
-    const findingsUnlocked = accessPlan !== null;
+    // Any purchase, not only the reader's own report: a single report bought for another
+    // archetype still opens the reader's own findings, as it always did.
+    const findingsUnlocked = accessPlan !== null || purchasedPlan !== null;
     const findingsCopy = {
       "f1.head": findingsSection["f1.head"] ?? null,
       "f1.body": findingsSection["f1.body"] ?? null,
@@ -1023,6 +1036,8 @@ export async function GET(request: Request) {
       stripLockedEduBodyFromPayload({
         submissionId: submission.id,
         accessPlan,
+        // A recipient never pays, so they get null and every auto-open stays off for them.
+        purchasedPlan: isShareAccess ? null : purchasedPlan,
         userName: getSubmissionUserName(submission),
         userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
         ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,

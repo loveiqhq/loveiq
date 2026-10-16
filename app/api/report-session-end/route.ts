@@ -31,7 +31,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
 import logger from "@shared/observability/logger";
 
 const schema = z.object({
@@ -103,6 +105,29 @@ export async function POST(request: Request) {
       // warn-not-error: a missed close costs precision on one reader, and
       // logger.error pages the ops channel in production.
       logger.warn({ status: patch.status, submission_id }, "report-session-end: patch non-2xx");
+    } else {
+      /**
+       * Re-draw "Report time" on the Slack journey message now that the close is
+       * on record. A visit under a minute is measured ONLY by its close, and
+       * nothing re-drew the message after one: the shared five-minute slot in
+       * /api/analytics-event is spent by the burst of events on open, so #2417
+       * read "—" for a 4-second visit and #2418 "1 min" for 98 seconds.
+       *
+       * Its own slot, keyed on the submission: one edit a minute however many
+       * beacons a tab sends (a real unload sends two).
+       *
+       * ponytail: a second close inside the same minute is not re-drawn, so a
+       * reader who glances away and then leaves within it keeps the first
+       * figure until something else refreshes. Trailing-edge debounce if it bites.
+       */
+      const fresh = await checkRateLimit(String(submission_id), {
+        bucket: "journey-close-refresh",
+        limit: 1,
+        windowMs: 60_000,
+      });
+      if (fresh.allowed) {
+        scheduleAfterResponse("journey-close-refresh", () => refreshJourneyDetail(submission_id));
+      }
     }
   } catch (err) {
     logger.warn({ err, submission_id }, "report-session-end: failed");

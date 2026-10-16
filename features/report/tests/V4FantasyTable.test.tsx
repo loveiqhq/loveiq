@@ -106,17 +106,17 @@ describe("V4FantasyTable — open (639:308)", () => {
       {
         name: "Romantic lovemaking",
         scores: ["5", "7"],
-        labels: ["Neutral likely", "More likely"],
+        labels: ["Neutral", "More likely"],
       },
       {
         name: "Slow build / extended foreplay",
         scores: ["5", "8"],
-        labels: ["Neutral likely", "More likely"],
+        labels: ["Neutral", "More likely"],
       },
       {
         name: "Passionate quickies",
         scores: ["4", "4"],
-        labels: ["Neutral likely", "Neutral likely"],
+        labels: ["Neutral", "Neutral"],
       },
     ]);
   });
@@ -130,7 +130,7 @@ describe("V4FantasyTable — open (639:308)", () => {
       (r) => r.querySelector(".rv4-fvt__name")!.textContent === "Receiving manual stimulation"
     )!;
     expect([...row.querySelectorAll(".rv4-fvt__qual")].map((n) => n.textContent)).toEqual([
-      "Neutral likely",
+      "Neutral",
       "Less likely",
     ]);
   });

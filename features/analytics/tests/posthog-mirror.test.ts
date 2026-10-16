@@ -106,4 +106,13 @@ describe("PostHog mirror of the GA4 event taxonomy", () => {
     setSurveyVariant(null);
     expect(ph.register).not.toHaveBeenCalled();
   });
+
+  it("registers the email question test's arm under the key the server stamps", async () => {
+    const { setEmailQuestionArm } = await import("@features/analytics/client");
+    setEmailQuestionArm("anonymous");
+    // contact_question_arm, the utm_tracker key too, so PostHog and the database group alike.
+    expect(ph.register).toHaveBeenCalledWith({ contact_question_arm: "anonymous" });
+    // Not a production site in this test, so nothing reaches GA4.
+    expect(window.gtag).not.toHaveBeenCalled();
+  });
 });

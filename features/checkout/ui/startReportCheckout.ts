@@ -36,11 +36,14 @@ export interface StartReportCheckoutFailure {
   /** `disabled` = checkout is switched off for this environment, not an error. */
   status: "disabled" | "error";
   message: string;
+  /** A 409: the reader already owns this plan, so the page should reload what they own. */
+  alreadyOwned?: boolean;
 }
 
 export async function startReportCheckout({
   anchor,
   archetype,
+  viewArchetype,
   plan,
   quote,
   reportSessionId,
@@ -49,6 +52,8 @@ export async function startReportCheckout({
   /** Where on the report the reader was (unlockAnchor.ts), so Stripe returns them there. */
   anchor?: string | null;
   archetype?: string | null;
+  /** The archetype on screen, for Stripe's way back when it differs from `archetype`. */
+  viewArchetype?: string | null;
   plan: ReportPurchasePlanId;
   /** The quote the reader was actually shown. */
   quote: ReportPriceQuoteSnapshot | null;
@@ -84,6 +89,7 @@ export async function startReportCheckout({
       body: JSON.stringify({
         anchor: anchor ?? undefined,
         archetype: archetype ?? undefined,
+        viewArchetype: viewArchetype || undefined,
         gaClientId: ga.clientId ?? undefined,
         gaConsent: ga.consent,
         gaSessionId: ga.sessionId ?? undefined,
@@ -123,6 +129,7 @@ export async function startReportCheckout({
         status: "error",
         message:
           serverMessage ?? "We couldn't prepare secure checkout right now. Please try again.",
+        ...(response.status === 409 ? { alreadyOwned: true } : {}),
       };
     }
 

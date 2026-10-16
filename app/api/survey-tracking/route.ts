@@ -5,6 +5,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
+import { getDeviceTypeFromUserAgent } from "@features/pricing/logic/reportPricing";
 
 const eventSchema = z.object({
   sessionId: z.string().uuid(),
@@ -26,7 +27,24 @@ const eventSchema = z.object({
 const batchSchema = z.object({
   events: z.array(eventSchema).min(1).max(20),
   _csrf: z.string().optional(),
+  // The screen takes more than one touch point: tells an iPad from a Mac, as both send a
+  // Mac User-Agent. A bad value reads as unknown and never refuses the batch.
+  touch: z.boolean().optional().catch(undefined),
 });
+
+/**
+ * A tablet: "iPad" in the User-Agent, a Mac User-Agent with touch (iPadOS Safari), or Android
+ * without "Mobile". Kept beside device_type, which stays the price quote's class (migration
+ * 20261014120100).
+ */
+function isTablet(userAgent: string, touch: boolean | undefined): boolean {
+  const ua = userAgent.toLowerCase();
+  return (
+    ua.includes("ipad") ||
+    (ua.includes("macintosh") && touch === true) ||
+    (ua.includes("android") && !ua.includes("mobile"))
+  );
+}
 
 const RATE_LIMIT_CONFIG = {
   bucket: "survey-tracking",
@@ -74,6 +92,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  // Phone or computer for the drop-off KPI: only the class the price quote uses, never the
+  // User-Agent itself (migration 20261012093000).
+  const userAgent = request.headers.get("user-agent");
+  const deviceType = userAgent ? getDeviceTypeFromUserAgent(userAgent) : null;
+  const tablet = userAgent ? isTablet(userAgent, parsed.data.touch) : null;
   const rows = parsed.data.events.map((e) => ({
     session_id: e.sessionId,
     q_id: e.qId,
@@ -84,6 +107,8 @@ export async function POST(request: Request) {
     direction: e.direction,
     client_ip: ip,
     event_time: e.timestamp,
+    device_type: deviceType,
+    is_tablet: tablet,
   }));
 
   try {
