@@ -170,6 +170,34 @@ describe("premium content bundle isolation", () => {
     ).toEqual([]);
   });
 
+  /**
+   * Added 2026-10-16. The check above reads only files that say "use client", but a module
+   * without the directive is just as much client code once a client file imports it.
+   * `features/report/ui/v3/V3EndSummary.tsx` had no directive, runtime-imported
+   * `@/data/report-archetypes`, and ReportPage imported it: every archetype's paid V1 prose,
+   * and with the slimmed report Spark Seeker's paid Summary paragraphs, rode in the report
+   * chunk's public source map. Everything under a `ui/` folder is rendered in the browser,
+   * so the rule there holds with or without the directive.
+   */
+  it("no module under a ui/ folder imports premium data at runtime, directive or not", () => {
+    const files = [
+      ...listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "features")).filter((p) =>
+        p.includes("/ui/")
+      ),
+      ...listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "shared", "ui")),
+    ].filter((p) => !/\/tests?\//.test(p) && !/\.test\.tsx?$/.test(p));
+    const offenders = files
+      .map((file) => ({
+        file,
+        violations: findRuntimePremiumImports(readFileSync(join(PROJECT_ROOT, file), "utf8")),
+      }))
+      .filter((o) => o.violations.length > 0);
+    expect(
+      offenders.map((o) => `${o.file}: ${o.violations.join(", ")}`),
+      "Premium data reaches the browser through any ui/ module: pass it in as a prop instead."
+    ).toEqual([]);
+  });
+
   it("no app-router component imports premium data at runtime", () => {
     // Pages and layouts are server components by default but easy to make
     // client-side accidentally (a single `"use client"` flips them). Apply

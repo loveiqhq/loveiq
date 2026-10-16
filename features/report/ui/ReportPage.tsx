@@ -2551,7 +2551,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   note. V4 drops it: "Take out the Summary, Sexual Stage, Importance
                   of Sexuality chapters please" (review 24.09). V4's own summary is
                   Part II's. */}
-              {isV3 && !isV4 ? <V3EndSummary archetype={viewArchetype} /> : null}
+              {isV3 && !isV4 ? (
+                <V3EndSummary
+                  archetype={viewArchetype}
+                  html={archetypeContent.core_archetype?.[viewArchetype] ?? null}
+                />
+              ) : null}
 
               {/* Report 2.0 closing note (Figma 8427:2837) — universal + free,
                   no gating, no CTA. Mounts LAST in the report content, right
