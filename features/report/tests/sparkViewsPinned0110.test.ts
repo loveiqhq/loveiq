@@ -27,7 +27,9 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
  * Challenges" split off at its inline heading), the two shared openings are Sanjin's
  * slimmed ones, and a locked view sends its wall's sample only (toSample), CiP's "Common
  * Challenges" not at all. Applied to the previous views, that mapping gives the new six
- * key for key; Fantasy vs. Reality's two hash as before.
+ * key for key; Fantasy vs. Reality's two hash as before. Then the locked CiP view lost its
+ * tail (the second example), which the slimmed page no longer draws past the blurred
+ * result: the previous locked view less `tail` equals the new one.
  */
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
@@ -37,7 +39,7 @@ const PINNED: Record<string, string> = {
   "accelerators:open": "3d26fdb63fd22af1620004c59b17a16329407087dbb8b8f1d23f1262b71ba1a2",
   "accelerators:locked": "9ffee0cb4de548ef49268a0dbe5ec0ed958b2dfeab20544fb60413dc25b233c6",
   "partnership:open": "e2a111545ca4695ca47ffe51bea333b23a26440261dd4b797b13f86fc1396df9",
-  "partnership:locked": "d17b580c069ffd538c1e2ffba9afd8cab35927d50af3e6fed31a8ab19d3c0cd2",
+  "partnership:locked": "fc332bba45e6f581cc4f44a608c4dc53ea914a5dbf1197b4a285aa28e67a0166",
   "fantasy:open": "905067e47374273b57d651b472432a8c18f74851e3e35dea20b1e8537b7afb6c",
   "fantasy:locked": "9c33a4ba206e387ddcf1fdf2f49012673f17d687debb9efdc78285c97fc9f19e",
 };
