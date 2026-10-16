@@ -9,10 +9,11 @@
 --   intro_skip_1..4   pressed Skip Intro on slide N
 --   consent_back      went back from the consent (only the browser's Back can)
 --
--- Same writer and consent posture as intro_slide_*: the browser posts them to
--- /api/funnel-event with the __liq_vid cookie, which exists only once the cookie banner is
--- accepted, so they cover the visitors who accepted. One row per visitor, UTC day and step,
--- as before. Leaving is not sent: the readers take each visitor's furthest card that day.
+-- Same writer as intro_slide_*: the browser posts them to /api/funnel-event with the visitor
+-- cookie's id or, without consent, an id for that page alone, held in memory and never stored
+-- (funnelVisitorId), so they cover every visitor (owner decision, 15 Oct 2026). One row per
+-- visitor, UTC day and step, as before. Leaving is not sent: the readers take each visitor's
+-- furthest card that day.
 --
 -- APPLY BEFORE DEPLOYING the page and route that send them: the CHECK refuses an unknown
 -- value, and the route logs a refused insert at warn only, so those rows would be lost
@@ -68,7 +69,7 @@ BEGIN
       event_type = ANY (
         ARRAY[
           'unique_visitor',
-          -- Browser-posted, needs the __liq_vid cookie, so consent-gated.
+          -- Browser-posted for every visitor (the cookie's id, or a page-only id without it).
           'survey_engine_mount',
           -- Server-written sibling of unique_visitor. Consent-independent.
           'survey_page_view',
@@ -78,7 +79,7 @@ BEGIN
           'intro_slide_4',
           'prepaid_gate_viewed',
           'prepaid_checkout_started',
-          -- The intro cards' own steps (this migration). Browser-posted, consent-gated.
+          -- The intro cards' own steps (this migration). Browser-posted, for every visitor.
           'intro_view',
           'consent_view',
           'intro_back_1',
