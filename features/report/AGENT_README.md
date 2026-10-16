@@ -27,7 +27,9 @@ countdown).
 - `logic/leaveIntent.ts` + `ui/hooks/useLeaveIntent.ts` — the founder-call leave offer's trigger
   (dialog: `features/booking/ui/FounderCallDialog.tsx`). An unpaid V4 owner who just finished the
   survey in this tab is offered their full report free for a 20-minute call, once per submission,
-  1.6 s after the first paywall card comes into view (on every device; Fatih, 14.10). Anything in
+  1.6 s after the first chapter's paywall comes into view (on every device; Fatih, 14.10): its
+  "Unlock Full Chapter" wall, or the fold that holds it (`FIRST_PAYWALL_SELECTOR`). Part II's
+  Summary gate does not count. Anything in
   the way only delays it: another window, the cookie banner, a hidden tab, or the 30 s after the
   pay pop-up test's point (`logic/plansOffer.ts` shares that test's key). Never on a return
   visit. Off without `NEXT_PUBLIC_FOUNDER_CALL_URL`;
@@ -67,6 +69,31 @@ header lists its doc ids. `data/report3-copy/index.ts` merges the files in by di
   - `tests/v4CopyArchetypes0110.test.ts` checks every archetype's merged chapters, and
     `tests/v4ChaptersRender0110.test.tsx` draws them.
   - `tests/sparkViewsPinned0110.test.ts` pins Spark Seeker's views byte for byte.
+
+**The slimmed report (2026-10-16).** Readers found V4 too long (Mark's PostHog review, 13.10), so
+it says less. Copy follows Sanjin's four `Slimmed_*` Google Docs, layout the Figma section "Report -
+Slimmed" (`1665:3278` in the Report 3.0 file), behaviour Mark's clickable prototype.
+
+- **Part I and II.** Shorter welcome copy and one-line archetype descriptions. The archetype
+  card's dimensions and the Summary are half-locked on the server (`data/report3-archetype-card.ts`,
+  `data/report3-summary.ts`, both on the premium-content bundle guard), behind the Summary's gate.
+- **Typical Beliefs, Accelerators & Brakes, Challenges in Partnerships.** A short universal
+  opening, then sections whose heading rows fold them away (`ui/v3/V4Section.tsx`). Long copy
+  shows six or seven lines under "Show all" (`ui/v3/V4Fold.tsx`). Where a locked reader's free
+  copy ends, a few lines fade out into "Unlock Full Chapter" (`ui/v3/V4UnlockSample.tsx`, laid
+  out by `ui/v3/V4Passage.tsx`) instead of a blurred passage and a card. The server sends that
+  sample and nothing past it (`toSample` in `server/gatedCopy.ts`); the walls stay where each
+  archetype's cuts put them. Fantasy vs. Reality is unchanged.
+- **Chapters.** Core Insecurities, Confidence Level and Arousal Style are out of V4
+  (`V4_REMOVED_CHAPTERS` in `ui/v3/reportV3Nav.ts`), and a V4 request is sent none of their copy.
+  The chapter count the wizard and the premium card print is derived (`REPORT_V4_CHAPTER_COUNT`).
+- **Reading time.** Every chapter head reads "Reading time: ~N min.", counted on the server from
+  the chapter's full copy (`server/chapterReadingTimes.ts`: words over 225, rounded, the rate the
+  designed articles' eyebrows were set at) and sent as `chapterReadingTimes`.
+- **Analytics.** `report_viewed` and `report_chapter_stats` carry `report_layout: "v4_slim"`
+  (`features/analytics/reportLayout.ts`).
+- **Tests.** `tests/v4Slim1610.test.tsx`, `tests/v4SlimRoutes1610.test.ts`,
+  `tests/v4SlimChapters1610.test.tsx` and `tests/chapterReadingTimes1610.test.tsx`.
 
 **Belongs:** report rendering, plan-based gating, share verification, personalization.
 
