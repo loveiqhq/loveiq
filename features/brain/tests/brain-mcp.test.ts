@@ -5288,9 +5288,27 @@ describe("/api/mcp", () => {
         latencyMs: 1,
       });
       const [, row] = writes() as [unknown, Record<string, unknown>];
-      expect(String(row.question)).toHaveLength(4000);
+      expect(String(row.question).length).toBeLessThanOrEqual(4000);
+      expect(String(row.question)).toMatch(/\[email\]$/);
       expect(JSON.stringify(row)).not.toMatch(/jane|@example/);
-      expect(String((row.args as { truncated: string }).truncated)).toHaveLength(2000);
+      expect(String((row.args as { truncated: string }).truncated).length).toBeLessThanOrEqual(
+        2000
+      );
+    });
+
+    it("never pulls a half-cut address in from past the window when addresses shrink to [email]", async () => {
+      // 95 long addresses shrink by about 3,200 characters when redacted. Cutting the redacted
+      // text at 4,000 then reached past the 4,320-character window into an address its edge
+      // had cut in half, which the pattern no longer matches.
+      const question =
+        "averyveryverylongname@example-domain.com ".repeat(95) +
+        "z".repeat(105) +
+        "w".repeat(300) +
+        " secret.person@private-mail.org";
+      await recordToolCall({ tool: "find_text", question, latencyMs: 1 });
+      const [row] = writes() as [Record<string, unknown>];
+      expect(String(row.question)).not.toMatch(/secret|private-mail|averyvery/);
+      expect(String(row.question).length).toBeLessThanOrEqual(4000);
     });
 
     it("separates battery traffic from real usage, so the log can answer what the team hits", async () => {
@@ -5961,6 +5979,7 @@ describe("/api/mcp", () => {
           card_exp_year: 2031,
           card_brand: "visa",
           posthog_session_id: "019a2b3c-session",
+          hotjar_user_id: "hj-77",
           email_position: "first",
           metadata: {
             promoCode: "LIQ-50-AB12CD",
@@ -5994,7 +6013,6 @@ describe("/api/mcp", () => {
           "9f86d081884c7d659a2feaa0c55ad015",
           "4242",
           "2031",
-          "019a2b3c-session",
           "LIQ-50-AB12CD",
           "promo_1Abc",
           "LIQ-50-ZZ99",
@@ -6006,6 +6024,9 @@ describe("/api/mcp", () => {
           expect(text, secret).not.toContain(secret);
         }
         for (const kept of [
+          // Analytics ids are Eman's call (never reduced without his go): readable for now.
+          '"posthog_session_id":"019a2b3c-session"',
+          '"hotjar_user_id":"hj-77"',
           '"card_brand":"visa"',
           '"email_position":"first"',
           '"promoStage":"30h_no_unlock"',

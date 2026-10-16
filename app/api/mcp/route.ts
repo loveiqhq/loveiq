@@ -3262,9 +3262,8 @@ const PRIVATE_SUFFIXES = [
   "card_last4",
   "card_exp_month",
   "card_exp_year",
-  // `survey_submission`: 752 PostHog session ids, whose recordings show the person.
-  "posthog_session_id",
-  "hotjar_user_id",
+  // `survey_submission`'s PostHog and Hotjar ids stay readable: they are what joins a survey
+  // to its recording, and reducing analytics is Eman's call, not a review's (2026-10-16).
   "regeneration_url",
   // Stripe's checkout payloads in `payment_webhook_event`: the buyer's name, address and
   // phone, under these containers and names (`country` inside them goes with them).

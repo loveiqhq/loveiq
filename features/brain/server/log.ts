@@ -175,10 +175,18 @@ const MAX_ARGS_CHARS = 2000;
  * longest address that could start before the cut (320 characters), are redacted.
  */
 function redactThenCut(text: string, keep: number): string {
-  return text
-    .slice(0, keep + 320)
-    .replace(EMAIL_IN_TEXT, "[email]")
-    .slice(0, keep);
+  // Kept by the ORIGINAL positions: each "[email]" is shorter than its address, so cutting
+  // the redacted text at `keep` would pull in text from past the window, and with it an
+  // address the window's edge cut in half, which the pattern no longer matches.
+  const head = text.slice(0, keep + 320);
+  let out = "";
+  let at = 0;
+  for (const m of head.matchAll(EMAIL_IN_TEXT)) {
+    if (m.index >= keep) break;
+    out += `${head.slice(at, m.index)}[email]`;
+    at = m.index + m[0].length;
+  }
+  return (out + head.slice(at, Math.max(at, keep))).slice(0, keep);
 }
 
 /**
