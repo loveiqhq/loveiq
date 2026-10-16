@@ -84,8 +84,9 @@ export interface Report3PartnershipCopy {
   practiceTeaser?: readonly Report3Block[];
   /**
    * What a chapter (Sanjin's docs) runs after the loop's result, 1 to 10 paragraphs; Spark
-   * Seeker's second example since 02.10. No frame draws it: it follows the result, blurred
-   * with it for a locked reader.
+   * Seeker's second example since 02.10. No frame draws it: it follows the result for a
+   * reader who has paid. A locked reader's page ends the body on the blurred result, as the
+   * slimmed frame does (1665:7089, 16.10), so it is never sent to one.
    */
   tail?: readonly Report3Block[];
   cuts?: Partial<Report3PartnershipCuts>;
@@ -373,7 +374,10 @@ export interface Report3PartnershipView {
   loop: readonly Report3LoopStage[];
   /** Blurred when locked (659:234): the copy itself, or its decoy (lockedBlurCopy.ts). */
   result: Report3Block;
-  /** After the result, blurred with it when locked; absent where the chapter ends on it. */
+  /**
+   * After the result, for a reader who has paid; absent where the chapter ends on it, and
+   * for a locked reader, whose page ends on the blurred result (the slimmed report, 16.10).
+   */
   tail?: readonly Report3Block[];
   practice: Report3PracticeView;
 }
@@ -455,12 +459,13 @@ const splitPracticeList = (blocks: readonly Report3Block[]): readonly Report3Blo
  *
  * `locked` is decided by the caller, from the same gate the V2 section runs through
  * (`partnershipUnlocked`, Libido's full-report gate), so nothing in the V4 tree ever
- * sees an access plan. A locked reader receives: paragraphs 1-4 verbatim; practice
- * paragraphs 1-3 and list items 1-2 verbatim; everything the page draws blurred —
- * paragraph 5 past its fade band and all after it, the loop's lines, the result, the
- * rest of the practice — as the copy itself since 26.09, decoys in the switch's
- * other position (lockedBlurCopy.ts); and the closed teaser verbatim, because it is
- * free copy.
+ * sees an access plan. A locked reader receives: paragraphs 1-4 verbatim; paragraph 5
+ * through its fade band, the wall's sample (toSample), and nothing of the body after it —
+ * no "Common Challenges" and no tail, which the slimmed page does not draw (16.10);
+ * practice paragraphs 1-3 and list items 1-2 verbatim; everything the page draws
+ * blurred — the loop's lines, the result, the rest of the practice — as the copy itself
+ * since 26.09, decoys in the switch's other position (lockedBlurCopy.ts); and the closed
+ * teaser verbatim, because it is free copy.
  */
 export function buildPartnership(
   archetype: string,
@@ -516,7 +521,7 @@ export function buildPartnership(
         : null,
     loop: locked ? copy.loop.map(veilStage) : copy.loop,
     result: locked ? veilBlock(copy.result) : copy.result,
-    ...(copy.tail?.length ? { tail: locked ? copy.tail.map(veilBlock) : copy.tail } : {}),
+    ...(copy.tail?.length && !locked ? { tail: copy.tail } : {}),
     practice: {
       eyebrow: copy.practiceEyebrow ?? PARTNERSHIP_PRACTICE_EYEBROW,
       title: copy.practiceTitle ?? PARTNERSHIP_PRACTICE_TITLE,
