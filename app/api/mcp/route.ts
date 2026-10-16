@@ -2059,8 +2059,8 @@ export const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: true },
     description:
       "Whether a day's numbers were outside their usual range, and where each move came from, " +
-      "from our own data: visitors (our count and GA4), surveys started and finished (both as " +
-      "the AP-Analytics dashboard counts them, by Berlin day), reports opened and paid, and the " +
+      "from our own data: visitors (beside GA4's) and surveys started and finished, counted as " +
+      "the AP-Analytics dashboard counts them (by Berlin day), reports opened and paid, and the " +
       "rates between them, each against the 28 days before. A move is " +
       "split by traffic source or GA4 channel, a rate into its two halves (a conversion that " +
       "'doubled' because traffic halved says so), and the day is checked for engagement, GA4 " +
