@@ -9517,3 +9517,188 @@ describe("person_activity — everything one colleague is on, in one call", () =
     expect(toolCalls()).toHaveLength(0);
   });
 });
+
+/**
+ * SEVERAL BREAKDOWNS, SEVERAL QUESTIONS, ONE CALL. 11-16 Oct 2026: seven one-thing breakdowns
+ * fetched one per call three separate times, and 61 questions one per call in 70 seconds.
+ * Each section must be exactly what its own call gives, which is what keeps every privacy
+ * rule the same: asserted by comparing the combined answer with the separate ones.
+ */
+describe("user_totals — several breakdowns and questions in one call", () => {
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 70,
+        method: "tools/call",
+        params: { name: "user_totals", arguments: args },
+      })
+    );
+    return (await res.json()).result as { isError: boolean; content: Array<{ text: string }> };
+  }
+
+  const QUESTIONS: Record<string, Record<string, unknown>> = {
+    "01002": { id: 51, frontend_qid: "01002", type: "single", question: "Is this the first?" },
+    "02001": { id: 52, frontend_qid: "02001", type: "scale", question: "How much, 1 to 7?" },
+    "08001": { id: 53, frontend_qid: "08001", type: "open", question: "In your words?" },
+  };
+  const person = (i: number, gender: string, country: string, pick: string, scale: number) => ({
+    user_id: `${gender}-${country}-${i}`,
+    created_date_time: "2026-09-10T12:00:00Z",
+    age: [{ answer_option: { option_text: i % 2 ? "25–34" : "35–44" } }],
+    app_user: {
+      email: `p${i}@example.com`,
+      user_profile: {
+        gender,
+        sexual_orientation: null,
+        relationship_status: null,
+        location_primary: country,
+      },
+    },
+    scoring_result: { v5_primary_archetype: "Spark Seeker", primary_archetype: null },
+    personal_report: null,
+    // Both questions' answers on every row, as one read of several questions returns them.
+    answer: [
+      {
+        survey_question_id: 51,
+        normalized_value: null,
+        answer_option: { option_text: pick },
+        survey_submission_answer_options: [],
+      },
+      {
+        survey_question_id: 52,
+        normalized_value: scale,
+        answer_option: null,
+        survey_submission_answer_options: [],
+      },
+    ],
+  });
+  const ROWS = [
+    ...Array.from({ length: 14 }, (_, i) =>
+      person(i, "Woman", "Canada", i % 3 ? "Yes" : "No", 1 + (i % 7))
+    ),
+    ...Array.from({ length: 9 }, (_, i) =>
+      person(i, "Man", "Germany", i % 2 ? "Yes" : "No", 7 - (i % 5))
+    ),
+    // Too few to show as a group, in every breakdown.
+    ...Array.from({ length: 3 }, (_, i) => person(i, "Other", "Canada", "Yes", 4)),
+  ];
+
+  /** As the database answers: a one-question read carries only that question's answers. */
+  const onlyAsked = (path: string) => {
+    const one = /answer\.survey_question_id=eq\.(\d+)/.exec(path)?.[1];
+    return one
+      ? ROWS.map((r) => ({
+          ...r,
+          answer: r.answer.filter((a) => a.survey_question_id === Number(one)),
+        }))
+      : ROWS;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      const qid = /frontend_qid=eq\.(\d{5})/.exec(String(path))?.[1];
+      const json =
+        qid === "15003"
+          ? [{ id: 41 }]
+          : qid
+            ? QUESTIONS[qid]
+              ? [QUESTIONS[qid]]
+              : []
+            : String(path).startsWith("/rest/v1/survey_submission")
+              ? onlyAsked(String(path))
+              : [];
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => json,
+        text: async () => "",
+      };
+    });
+  });
+
+  const submissionReads = () =>
+    toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/survey_submission"));
+
+  it("gives each breakdown on its own, exactly as one call per group_by, from one read", async () => {
+    const both = await call({ breakdowns: ["gender", "country"], since: "2026-09-01" });
+    expect(both.isError).toBe(false);
+    expect(submissionReads()).toHaveLength(1);
+    const gender = await call({ group_by: ["gender"], since: "2026-09-01" });
+    const country = await call({ group_by: ["country"], since: "2026-09-01" });
+    expect(both.content[0]!.text).toBe(
+      `${gender.content[0]!.text}\n\n---\n\n${country.content[0]!.text}`
+    );
+    // The small group stays hidden in the combined answer too.
+    expect(both.content[0]!.text).not.toContain("- Other:");
+    expect(both.content[0]!.text).toContain("By gender:");
+    expect(both.content[0]!.text).toContain("By country:");
+  });
+
+  it("gives several questions' answers, each exactly as its own call, from one read", async () => {
+    const both = await call({ questions: ["01002", "02001"], group_by: ["gender"] });
+    expect(both.isError).toBe(false);
+    const reads = submissionReads();
+    expect(reads).toHaveLength(1);
+    expect(String(reads[0]![0])).toContain("&answer.survey_question_id=in.(51,52)");
+    expect(String(reads[0]![0])).toContain("answer:survey_submission_answer(survey_question_id,");
+    // `question` alone picks the answers measure.
+    const first = await call({ question: "01002", group_by: ["gender"] });
+    const second = await call({ question: "02001", group_by: ["gender"] });
+    expect(first.content[0]!.text).toContain('Answers to 01002, "Is this the first?"');
+    expect(second.content[0]!.text).toContain('Answers to 02001, "How much, 1 to 7?"');
+    expect(both.content[0]!.text).toBe(
+      `${first.content[0]!.text}\n\n---\n\n${second.content[0]!.text}`
+    );
+  });
+
+  it("crosses several questions with several breakdowns, question by question", async () => {
+    const text = (await call({ questions: ["01002", "02001"], breakdowns: ["gender", "country"] }))
+      .content[0]!.text;
+    const sections = text.split("\n\n---\n\n");
+    expect(sections).toHaveLength(4);
+    expect(sections[0]).toMatch(/^Answers to 01002[\s\S]*By gender:/);
+    expect(sections[1]).toMatch(/^Answers to 01002[\s\S]*By country:/);
+    expect(sections[2]).toMatch(/^Answers to 02001[\s\S]*By gender:/);
+    expect(sections[3]).toMatch(/^Answers to 02001[\s\S]*By country:/);
+  });
+
+  it.each([
+    ["an empty breakdowns", { breakdowns: [] }, /needs at least one of/],
+    ["breakdowns with group_by", { breakdowns: ["gender"], group_by: ["age"] }, /not both/],
+    [
+      "a breakdown that is not a dimension",
+      { breakdowns: ["email"] },
+      /Not something to group or filter by: email/,
+    ],
+    ["question with questions", { question: "01002", questions: ["02001"] }, /not both/],
+    [
+      "questions with another measure",
+      { questions: ["01002"], measure: "people" },
+      /read only by measure answers/,
+    ],
+    ["a malformed question id", { questions: ["01002", "nope"] }, /nope is not/],
+    [
+      "too many questions",
+      { questions: Array.from({ length: 26 }, (_, i) => String(10000 + i)) },
+      /At most 25 questions/,
+    ],
+  ])("refuses %s before reading any survey data", async (_what, args, says) => {
+    const r = await call(args);
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toMatch(says);
+    expect(submissionReads()).toHaveLength(0);
+  });
+
+  it("names every question it cannot summarise, and reads no answers", async () => {
+    const r = await call({ questions: ["01002", "08001", "09999"] });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("08001 is a open question.");
+    expect(r.content[0]!.text).toContain("There is no survey question 09999.");
+    expect(submissionReads()).toHaveLength(0);
+  });
+});

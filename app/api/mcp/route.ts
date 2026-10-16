@@ -37,6 +37,7 @@ import {
   findQuestion as findSurveyQuestion,
   loadDeliveries,
   loadPeople,
+  loadPeopleByQuestion,
   renderAnswers,
   renderEmails,
   renderReading,
@@ -2346,7 +2347,10 @@ export const TOOLS = [
       "together (conditionality) is not a total: query_product_data's " +
       "rpc/get_answer_correlations. " +
       "Group by up to two of gender, age, orientation, relationship, country, archetype and " +
-      "month, and narrow with the same keys. Never a person: any group smaller than 5 is " +
+      "month, and narrow with the same keys. SEVERAL AT ONCE, in ONE call rather than one call " +
+      'each: breakdowns ["gender", "age", "country"] gives each of those on its own, exactly as ' +
+      'one call per group_by would, and questions ["01002", "02001"] gives several questions\' ' +
+      "answers (up to 25), each with the group_by or breakdowns applied. Never a person: any group smaller than 5 is " +
       "hidden, and every measure hides the same groups (decision of 26 Sep 2026). Inside a " +
       "group, traits, emails and answers show a count or share only when both it and the rest " +
       "of the group are 5 or more ('under 5' otherwise), and trait averages need 20 people; " +
@@ -2368,6 +2372,14 @@ export const TOOLS = [
           items: { type: "string", enum: [...USER_DIMENSIONS] },
           description: "Up to two of: " + USER_DIMENSIONS.join(", ") + ". Empty for one total.",
         },
+        breakdowns: {
+          type: "array",
+          items: { type: "string", enum: [...USER_DIMENSIONS] },
+          description:
+            'Several separate tables in one call, one per thing, e.g. ["gender", "age", ' +
+            '"relationship", "country"]: each is exactly what group_by with that one thing gives, ' +
+            "privacy rules included. Not a cross-tab, and not together with group_by.",
+        },
         filter: {
           type: "object",
           description:
@@ -2388,7 +2400,16 @@ export const TOOLS = [
           type: "string",
           description:
             "measure answers only: the survey question's id, e.g. 03011 or 16001. Free-text " +
-            "questions (name, email, written answers) are refused.",
+            "questions (name, email, written answers) are refused. Naming one picks measure " +
+            "answers when measure is left out.",
+        },
+        questions: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Several survey question ids in one call, up to 25, e.g. ["01002", "02001", "03011"]: ' +
+            "each question is summarised on its own, exactly as `question` would be, from one " +
+            "read. Picks measure answers; not together with `question`.",
         },
       },
     },
@@ -7191,8 +7212,24 @@ async function callTool(
         : args.filter === undefined
           ? {}
           : null;
+    /**
+     * SEVERAL BREAKDOWNS AND SEVERAL QUESTIONS IN ONE CALL, each exactly what its own call gives.
+     *
+     * 11-16 Oct 2026: the same seven one-thing breakdowns were fetched one per call, three
+     * separate times, and on 11 Oct 61 questions' answers came one per call in 70 seconds.
+     * `breakdowns` renders each thing on its own (never a cross-tab: that stays group_by's,
+     * two at most), and `questions` reads every question's answers in one read. Every section
+     * goes through the same renderer over the same people as its own call, so the minimum
+     * group, the subtraction guard and the hidden cells are unchanged.
+     */
+    const breakdowns =
+      args.breakdowns === undefined
+        ? null
+        : Array.isArray(args.breakdowns)
+          ? args.breakdowns
+          : [args.breakdowns];
     const valid = USER_DIMENSIONS.join(", ");
-    const unknown = [...groupBy, ...Object.keys(filter ?? {})].filter(
+    const unknown = [...groupBy, ...(breakdowns ?? []), ...Object.keys(filter ?? {})].filter(
       (d) => !(USER_DIMENSIONS as readonly unknown[]).includes(d)
     );
     if (filter === null || unknown.length) {
@@ -7205,6 +7242,15 @@ async function callTool(
     if (groupBy.length > 2) {
       return textResult("Group by at most two things at once, or most groups fall under 5.", true);
     }
+    if (breakdowns && (breakdowns.length === 0 || groupBy.length > 0)) {
+      return textResult(
+        breakdowns.length === 0
+          ? `\`breakdowns\` needs at least one of: ${valid}.`
+          : "Pass `group_by` for one table split by up to two things together, or `breakdowns` " +
+              "for several separate tables, one per thing, not both.",
+        true
+      );
+    }
     for (const key of ["since", "until"] as const) {
       if (args[key] !== undefined && (typeof args[key] !== "string" || !isRealDate(args[key]))) {
         return textResult(`\`${key}\` must look like 2026-09-01.`, true);
@@ -7212,20 +7258,57 @@ async function callTool(
     }
     const since = args.since as string | undefined;
     const until = args.until as string | undefined;
-    const measure = (args.measure ?? "people") as UserMeasure;
+    if (args.question !== undefined && args.questions !== undefined) {
+      return textResult(
+        "Pass `question` for one question or `questions` for several, not both.",
+        true
+      );
+    }
+    const askedIds: unknown[] =
+      args.questions !== undefined
+        ? Array.isArray(args.questions)
+          ? args.questions
+          : [args.questions]
+        : args.question !== undefined
+          ? [args.question]
+          : [];
+    // A question is read only by the answers measure, so naming one picks it.
+    const measure = (args.measure ?? (askedIds.length ? "answers" : "people")) as UserMeasure;
     if (!(USER_MEASURES as readonly unknown[]).includes(measure)) {
       return textResult(`\`measure\` is one of ${USER_MEASURES.join(", ")}.`, true);
     }
-    let question: Awaited<ReturnType<typeof findSurveyQuestion>> = null;
+    if (askedIds.length && measure !== "answers") {
+      return textResult(
+        `\`question\` and \`questions\` are read only by measure answers; with measure ${measure} ` +
+          "they would be ignored, so the call was refused.",
+        true
+      );
+    }
+    const MAX_QUESTIONS = 25;
+    let questions: Array<NonNullable<Awaited<ReturnType<typeof findSurveyQuestion>>>> = [];
     if (measure === "answers") {
-      if (typeof args.question !== "string" || !/^\d{5}$/.test(args.question.trim())) {
+      const ids = [...new Set(askedIds.map((q) => (typeof q === "string" ? q.trim() : String(q))))];
+      const bad = askedIds.filter((q) => typeof q !== "string" || !/^\d{5}$/.test(q.trim()));
+      if (ids.length === 0 || bad.length) {
         return textResult(
-          "measure answers needs `question`: a survey question id like 03011.",
+          ids.length <= 1
+            ? "measure answers needs `question`: a survey question id like 03011 (or " +
+                "`questions` for several)."
+            : `\`questions\` are survey question ids like 03011: ${bad.map(String).join(", ")} ` +
+                `${bad.length === 1 ? "is" : "are"} not.`,
           true
         );
       }
+      if (ids.length > MAX_QUESTIONS) {
+        return textResult(
+          `At most ${MAX_QUESTIONS} questions in one call, so the answer fits; ${ids.length} were ` +
+            "asked. Split them over two calls.",
+          true
+        );
+      }
+      let found: Array<{ id: string; q: Awaited<ReturnType<typeof findSurveyQuestion>> }>;
       try {
-        question = await findSurveyQuestion(args.question.trim());
+        found = await Promise.all(ids.map(async (id) => ({ id, q: await findSurveyQuestion(id) })));
       } catch (err) {
         logger.warn({ err }, "mcp: user_totals could not read the survey question");
         return textResult(
@@ -7233,39 +7316,63 @@ async function callTool(
           true
         );
       }
-      if (!question)
-        return textResult(`There is no survey question ${args.question.trim()}.`, true);
-      if (!["single", "multiple", "scale"].includes(question.type)) {
-        return textResult(
-          `${question.qid} is a ${question.type || "free-text"} question. Only questions with ` +
-            "options to pick are summarised; written answers are never read.",
-          true
-        );
-      }
+      const problems = found.flatMap(({ id, q }) => {
+        if (!q) return [`There is no survey question ${id}.`];
+        if (!["single", "multiple", "scale"].includes(q.type)) {
+          return [
+            `${q.qid} is a ${q.type || "free-text"} question. Only questions with options to ` +
+              "pick are summarised; written answers are never read.",
+          ];
+        }
+        return [];
+      });
+      if (problems.length) return textResult(problems.join(" "), true);
+      questions = found.flatMap(({ q }) => (q ? [q] : []));
     }
-    const people = await loadPeople(since, until, { measure, questionId: question?.id });
-    if (!people) {
+    const byQuestion =
+      measure === "answers"
+        ? await loadPeopleByQuestion(
+            since,
+            until,
+            questions.map((q) => q.id)
+          )
+        : null;
+    const people = measure === "answers" ? [] : await loadPeople(since, until, { measure });
+    if (!people || (measure === "answers" && !byQuestion)) {
       return textResult(
         "The survey data could not be read right now. This is an outage, not a result.",
         true
       );
     }
-    stats.sourceCount = 1;
-    const req = {
-      groupBy: groupBy as UserDimension[],
-      filter: Object.fromEntries(Object.entries(filter).map(([k, v]) => [k, String(v)])) as Partial<
-        Record<UserDimension, string>
-      >,
-      since,
-      until,
+    const deliveries = measure === "emails" ? await loadDeliveries(since, until) : null;
+    const filterValues = Object.fromEntries(
+      Object.entries(filter).map(([k, v]) => [k, String(v)])
+    ) as Partial<Record<UserDimension, string>>;
+    const render = (
+      g: UserDimension[],
+      group: typeof people,
+      q: (typeof questions)[number] | undefined
+    ): string => {
+      const req = { groupBy: g, filter: filterValues, since, until };
+      if (measure === "traits") return renderTraits(req, group);
+      if (measure === "emails") return renderEmails(req, group, deliveries);
+      if (measure === "answers" && q) return renderAnswers(req, group, q);
+      if (measure === "reading") return renderReading(req, group);
+      return renderTotals(req, group);
     };
-    if (measure === "traits") return textResult(renderTraits(req, people));
-    if (measure === "emails") {
-      return textResult(renderEmails(req, people, await loadDeliveries(since, until)));
-    }
-    if (measure === "answers" && question) return textResult(renderAnswers(req, people, question));
-    if (measure === "reading") return textResult(renderReading(req, people));
-    return textResult(renderTotals(req, people));
+    const groupings = breakdowns
+      ? [...new Set(breakdowns as UserDimension[])].map((d) => [d])
+      : [groupBy as UserDimension[]];
+    const sections =
+      measure === "answers"
+        ? questions.flatMap((q) => groupings.map((g) => render(g, byQuestion!.get(q.id)!, q)))
+        : groupings.map((g) => render(g, people, undefined));
+    stats.sourceCount = sections.length;
+    return textResult(
+      sections.join("\n\n---\n\n"),
+      false,
+      "ask for fewer questions or breakdowns in one call"
+    );
   }
 
   if (name === "cost_watch") {
@@ -7820,7 +7927,8 @@ export const MCP_INSTRUCTIONS =
   "paid, by gender, age, orientation, relationship, country, archetype or month, never a " +
   "person, with any group under 5 hidden. Its measure picks what is counted: people (who " +
   "finished and paid), traits (the user graph: the 21 trait averages), emails (reminders sent, " +
-  "unsubscribes, bounces) or answers (how a group answered one survey question).\n\n" +
+  "unsubscribes, bounces) or answers (how a group answered one survey question). Several " +
+  "breakdowns, or several questions' answers, come in one call (breakdowns, questions).\n\n" +
   "UX SIGNALS: ux_signals measures Marcus's 22 behaviour signals on real visits, and shows a " +
   "signal's number only once its measure has been proven right on the nightly persona walks.\n\n" +
   "WHAT VISITORS DID ON THE SITE: query_product_analytics counts it from PostHog with one " +
