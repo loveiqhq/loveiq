@@ -130,6 +130,37 @@ export function deltaRel(
   return { text: `${sign}${Math.abs(rel).toFixed(1)}%`, tone: Math.abs(rel) < 1 ? "flat" : tone };
 }
 
+/**
+ * Least squares over equally spaced points: the fitted line's first and last values. A null is
+ * a gap that keeps its place (a chart's missing day), so the line fits the points where they
+ * are drawn. Here rather than in focus.ts so that the pages can draw it too.
+ */
+export function linearFit(values: Array<number | null>): { from: number; to: number } | null {
+  const pts = values.flatMap((v, i) => (v === null || !Number.isFinite(v) ? [] : [{ i, v }]));
+  if (pts.length < 2) return null;
+  const mx = pts.reduce((a, p) => a + p.i, 0) / pts.length;
+  const my = pts.reduce((a, p) => a + p.v, 0) / pts.length;
+  let sxx = 0;
+  let sxy = 0;
+  for (const p of pts) {
+    sxx += (p.i - mx) ** 2;
+    sxy += (p.i - mx) * (p.v - my);
+  }
+  const b = sxx ? sxy / sxx : 0;
+  const a = my - b * mx;
+  return { from: a, to: a + b * (values.length - 1) };
+}
+
+/**
+ * An axis top, as the design's niceMax: the value rounded up to one of `steps` times a power
+ * of ten (1, 2, 2.5, 5 or 10 unless a page asks for others); 1 when there is nothing to show.
+ */
+export function niceMax(v: number, steps: readonly number[] = [1, 2, 2.5, 5, 10]): number {
+  if (!Number.isFinite(v) || v <= 0) return 1;
+  const m = 10 ** Math.floor(Math.log10(v));
+  return (steps.find((s) => v / m <= s) ?? 10) * m;
+}
+
 /** Points for an SVG polyline in a 120 × 36 box; gaps (null) are skipped. */
 export function sparkPoints(values: Array<number | null>, height = 36): string {
   const real = values.filter((v): v is number => v !== null && Number.isFinite(v));

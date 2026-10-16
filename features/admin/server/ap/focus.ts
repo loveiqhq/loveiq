@@ -17,7 +17,7 @@ import {
   type Bucket,
   type Grain,
 } from "./filters";
-import type { Unit } from "./format";
+import { linearFit, type Unit } from "./format";
 import { head, readMeanMs, readMedianMs, type PageHead, type Tile } from "./common";
 import {
   EVENTS_COMPLETE_FROM,
@@ -113,22 +113,8 @@ function viewBuckets(from: string, to: string, grain: Grain): Bucket[] {
   return full.length >= 2 ? full : all;
 }
 
-/** Least squares over equally spaced points: the fitted line's first and last values. */
-export function linearFit(values: number[]): { from: number; to: number } | null {
-  const n = values.length;
-  if (n < 2) return null;
-  const mx = (n - 1) / 2;
-  const my = values.reduce((a, b) => a + b, 0) / n;
-  let sxx = 0;
-  let sxy = 0;
-  values.forEach((v, i) => {
-    sxx += (i - mx) ** 2;
-    sxy += (i - mx) * (v - my);
-  });
-  const b = sxx ? sxy / sxx : 0;
-  const a = my - b * mx;
-  return { from: a, to: a + b * (n - 1) };
-}
+/** Least squares over equally spaced points (it lives in format.ts, so the page can draw it). */
+export { linearFit };
 
 export function buildFocus(input: {
   facts: Facts;
