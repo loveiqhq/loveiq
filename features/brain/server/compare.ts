@@ -41,6 +41,11 @@ const NUMERIC_KEYS = [
   "survey_starts",
   "intro_completed",
   "submissions",
+  // The AP-Analytics rows' own (features/brain/server/ap-numbers.ts).
+  "reports_opened",
+  "paid_so_far",
+  "paid_sales",
+  "free_unlocks",
   "reports_created",
   "reports_paid",
   "revenue",

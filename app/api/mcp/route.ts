@@ -48,6 +48,13 @@ import {
 import { loadFeedback, renderFeedback } from "@features/brain/server/feedback";
 import { SALE_GROUPS, loadSales, renderSales, type SaleGroup } from "@features/brain/server/sales";
 import {
+  AP_SALES_UNREADABLE,
+  AP_UNREADABLE,
+  apSales,
+  apView,
+  readAp,
+} from "@features/brain/server/ap-numbers";
+import {
   adsForMonth,
   lastBilledMonth,
   filingSettled,
@@ -4928,11 +4935,21 @@ async function callTool(
           true
         );
       }
+      const days = intArg(args.days, 30, 1, 4000);
+      // The dashboard's sales first; the payments' own records only when it cannot be read.
+      const ap = await apSales(
+        { since: since || null, until: until || null, days, other: null },
+        by as SaleGroup[]
+      ).catch((err) => {
+        logger.warn({ err }, "brain: the dashboard's sales could not be read");
+        return undefined;
+      });
+      if (ap) {
+        stats.sourceCount = 1;
+        return textResult(ap);
+      }
       const from =
-        since ||
-        new Date(Date.now() - (intArg(args.days, 30, 1, 4000) - 1) * 86_400_000)
-          .toISOString()
-          .slice(0, 10);
+        since || new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
       const sales = await loadSales(from, until || today);
       if (!sales) {
         return textResult(
@@ -4941,7 +4958,10 @@ async function callTool(
         );
       }
       stats.sourceCount = 1;
-      return textResult(renderSales(sales, by as SaleGroup[], from, until || today));
+      return textResult(
+        (ap === undefined ? AP_SALES_UNREADABLE : "") +
+          renderSales(sales, by as SaleGroup[], from, until || today)
+      );
     }
     // Far enough back to reach `since`, inclusive of both ends.
     /**
@@ -4975,13 +4995,27 @@ async function callTool(
      * chunks' `meta.ad_cost`; `adCostByDay` is the reader `analytics.ts` already uses,
      * paged correctly, rather than a second copy of that query.
      */
-    const [rows, ad] = await Promise.all([
+    const [rows, ad, apRead] = await Promise.all([
       brainDailyRollup(asked),
       // NON-FATAL. The funnel and revenue figures are the point; spend is an addition,
       // and a spend read that fails must not cost the caller the numbers it did get.
       // Days then carry no `ad_spend`, which already means "unknown".
       adCostByDay().catch(() => ({ byDay: new Map<string, number>(), from: null, to: null })),
+      // The AP-Analytics dashboard's own figures (features/brain/server/ap-numbers.ts), which
+      // replace the rollup's wherever the dashboard has them. Null before its records begin;
+      // undefined when it cannot be read, and the rollup's are then served, saying so.
+      readAp({
+        since: since || null,
+        until: until || null,
+        days: asked,
+        other: comparison && "period" in comparison ? comparison.period : null,
+      }).catch((err) => {
+        logger.warn({ err }, "brain: the dashboard's numbers could not be read");
+        return undefined;
+      }),
     ]);
+    const ap = apRead ? apView(apRead, rows, ad) : null;
+    const lead = ap ? ap.header : apRead === undefined ? AP_UNREADABLE : "";
     /**
      * A DAY OUTSIDE GA4'S WINDOW GETS NO `ad_spend` KEY, NOT A ZERO.
      *
@@ -4994,7 +5028,8 @@ async function callTool(
      * read as unknown rather than as a confident zero.
      */
     // The range is applied AFTER the fetch, because the rollup counts back from today.
-    const inRange = since ? rows.filter((r) => r.day >= since && (!until || r.day <= until)) : rows;
+    const inRange: Array<{ day: string }> =
+      ap?.rows ?? (since ? rows.filter((r) => r.day >= since && (!until || r.day <= until)) : rows);
     const merged = inRange.map((r) =>
       adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
     );
@@ -5010,14 +5045,14 @@ async function callTool(
         : `No ad-spend data is available, so no day carries an ad_spend field.`;
 
     if (comparison && "period" in comparison) {
-      const other = rows
-        .filter((r) => r.day >= comparison.period.since && r.day <= comparison.period.until)
-        .map(withSpend);
+      const otherRows: Array<{ day: string }> =
+        ap?.other?.rows ??
+        rows.filter((r) => r.day >= comparison.period.since && r.day <= comparison.period.until);
       return textResult(
-        `${spendNote}\n\n` +
+        `${lead}${spendNote}\n\n` +
           renderComparison(
-            { period: { since, until: until || today }, rows: merged.map(withSpend) },
-            { period: comparison.period, rows: other }
+            { period: ap?.period ?? { since, until: until || today }, rows: merged.map(withSpend) },
+            { period: ap?.other?.period ?? comparison.period, rows: otherRows.map(withSpend) }
           )
       );
     }
@@ -5042,8 +5077,9 @@ async function callTool(
         );
       });
       return textResult(
-        `${spendNote}\n\n${buckets.length} ${granularity}s from ${covered} days ` +
-          `(${since || "the last " + asked + " days"} to ${until || today}). Days are SUMMED.\n\n` +
+        `${lead}${spendNote}\n\n${buckets.length} ${granularity}s from ${covered} days ` +
+          `(${ap?.period.since ?? (since || "the last " + asked + " days")} to ` +
+          `${ap?.period.until ?? (until || today)}). Days are SUMMED.\n\n` +
           lines.join("\n")
       );
     }
@@ -5053,7 +5089,10 @@ async function callTool(
      * malformed JSON cut mid-object and the company's first month -- 2026-03-24 to
      * 2026-04-19 -- was simply unreachable through the tool that exists to serve it.
      */
-    const { text: bodyText, shown } = renderRowsForTest(merged, MAX_RESULT_CHARS - 600);
+    const { text: bodyText, shown } = renderRowsForTest(
+      merged,
+      MAX_RESULT_CHARS - 600 - lead.length
+    );
     stats.sourceCount = shown;
     const spendNoteBlock = `${spendNote}\n\n`;
     /**
@@ -5071,8 +5110,9 @@ async function callTool(
      * is SUPPOSED to be smaller, so comparing them would announce a truncation on every
      * ordinary month query.
      */
+    // The dashboard's rows do not depend on the rollup's reach; their header says what they cover.
     const clamped =
-      rows.length < asked
+      !ap && rows.length < asked
         ? `The range was also reduced before that: ${asked} days were asked for and 4000 ` +
           `is the database function's ceiling. `
         : "";
@@ -5102,14 +5142,14 @@ async function callTool(
      * correct answer about a period with no days in it, and reporting it as a database
      * fault would send someone to look at infrastructure over a date they chose.
      */
-    if (rows.length > 0 && inRange.length === 0) {
+    if (!ap && rows.length > 0 && inRange.length === 0) {
       return textResult(
         `No days fall in ${since}${until ? ` to ${until}` : " onwards"}. The rollup has ` +
           `${rows.length} days ending today, the earliest being ${rows[rows.length - 1]?.day ?? "unknown"} — ` +
           `so that range is outside the data, which is not the same as a period with no activity.`
       );
     }
-    if (rows.length === 0) {
+    if (!ap && rows.length === 0) {
       return textResult(
         "The rollup returned no rows at all. It is built to return one row per day in " +
           "range regardless of activity, so this is a fault in the query or the database, " +
@@ -5117,7 +5157,7 @@ async function callTool(
         true
       );
     }
-    return textResult(head + spendNote + bodyText);
+    return textResult(lead + head + spendNoteBlock + bodyText);
   }
 
   if (name === "list_product_tables") {

@@ -7544,7 +7544,11 @@ describe("/api/mcp", () => {
       expect(text).toContain("- all_reports: 1 sale, EUR 6.99");
       expect(text).toContain("- full_report: 1 sale, EUR 4.99 (average EUR 4.99); 1 comp");
       expect(mockRollup).not.toHaveBeenCalled();
-      expect(String(mockSupabaseFetch.mock.calls[0]![0])).toMatch(/^\/rest\/v1\/payment\?/);
+      // The dashboard's sales are asked first; this mock answers no ap_facts, so the payments'
+      // own records answer, and say they are not the dashboard's (brain-ap-numbers.test.ts).
+      expect(String(mockSupabaseFetch.mock.calls[0]![0])).toBe("/rest/v1/rpc/ap_facts");
+      expect(String(mockSupabaseFetch.mock.calls[1]![0])).toMatch(/^\/rest\/v1\/payment\?/);
+      expect(text).toContain("THE DASHBOARD'S SALES COULD NOT BE READ");
     });
 
     it("takes a single key, and two at once", async () => {
