@@ -320,9 +320,9 @@ async function ga4Days(from: string, until: string): Promise<Map<string, Ga4Day>
  */
 export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[]> {
   const from = addDays(until, -(BASELINE_DAYS + 1 + extraDays));
-  // The rollup counts back from its own UTC day; Berlin's runs ahead of it at night, and the
-  // later of the two reaches `from` either way.
-  const today = reportingDay();
+  // UTC on purpose: the rollup counts back from its own UTC day, so this reaches `from`. A
+  // Berlin day it has not reached yet is filled in below.
+  const today = new Date().toISOString().slice(0, 10);
   const span =
     Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) +
     1;
