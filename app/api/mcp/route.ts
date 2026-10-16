@@ -125,6 +125,7 @@ import {
   NOT_PROOF,
   readMetric,
   renderDay,
+  partialDay,
   renderMetric,
   rollupOnly,
   type Reading,
@@ -5075,11 +5076,16 @@ async function callTool(
             const base = wholeDays({ since, until: until || today }, utcToday);
             const before =
               base && (parseComparePeriod("previous", base) as { period: Period }).period;
-            const other =
-              base &&
-              (compareTo.toLowerCase() === "previous"
-                ? before
-                : wholeDays(comparison.period, utcToday));
+            // A range that IS the period just before the one asked is "previous", and moves
+            // with the cut as the dashboard path's does: 6 days against 6, never against 7.
+            const asked = (
+              parseComparePeriod("previous", { since, until: until || today }) as {
+                period: Period;
+              }
+            ).period;
+            const previous =
+              comparison.period.since === asked.since && comparison.period.until === asked.until;
+            const other = base && (previous ? before : wholeDays(comparison.period, utcToday));
             return base && other ? { base, other } : null;
           })()
         : null;
@@ -5223,6 +5229,18 @@ async function callTool(
      * correct answer about a period with no days in it, and reporting it as a database
      * fault would send someone to look at infrastructure over a date they chose.
      */
+    /**
+     * From 00:00 to 02:00 in Berlin, Berlin's today is a day the UTC rollup has not begun: say
+     * so, under the warning that these are not the dashboard's numbers, rather than calling it
+     * outside the data.
+     */
+    if (!ap && since && inRange.length === 0 && since >= utcToday) {
+      return textResult(
+        `${lead}The old daily rollup counts UTC days, and it is still ${utcToday} in UTC: it ` +
+          `has not reached ${since} yet, so it has no numbers for it. The dashboard's, which ` +
+          "count Berlin days, do; ask again when they can be read."
+      );
+    }
     if (!ap && rows.length > 0 && inRange.length === 0) {
       return textResult(
         `No days fall in ${since}${until ? ` to ${until}` : " onwards"}. The rollup has ` +
@@ -6629,7 +6647,9 @@ async function callTool(
         true
       );
     }
-    const partial = day === today ? "Today is still going, so its numbers are partial.\n\n" : "";
+    // Berlin's today, or, on the rollup's rows alone, a UTC day not over yet (jumps.ts).
+    const partNote = partialDay(series, day);
+    const partial = partNote ? `${partNote}\n\n` : "";
     // Said under every answer when the dashboard's facts could not be read (jumps.ts).
     const caveat = rollupOnly(series);
     if (metric) {

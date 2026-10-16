@@ -196,6 +196,14 @@ export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | nul
             );
         }
       }
+      // Before the first records there is nothing to compare with: no comparison at all,
+      // never a column of zeroes, and the asked period is then read as asked.
+      if (other && beforeData(other)) {
+        notes.push(
+          `The compared period ends before LoveIQ's records start on ${rangeLabel(DATA_START, DATA_START)}, so there is nothing to compare with.`
+        );
+        other = null;
+      }
       if (other) {
         if (wf !== f) {
           notes.push(
@@ -207,16 +215,12 @@ export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | nul
         }
         o = other;
         sameAge = previous || (o.from === before.from && o.to === before.to);
-        if (beforeData(o))
-          notes.push(
-            `The compared period ends before LoveIQ's records start on ${rangeLabel(DATA_START, DATA_START)}, so there is nothing to compare with.`
-          );
       }
     }
   }
   const [facts, otherFacts] = await Promise.all([
     fetchFacts(f.from, f.to),
-    o && !beforeData(o) ? fetchFacts(o.from, o.to) : Promise.resolve(null),
+    o ? fetchFacts(o.from, o.to) : Promise.resolve(null),
   ]);
   return {
     f,

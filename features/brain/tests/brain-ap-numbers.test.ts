@@ -305,6 +305,16 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
       "The compared period ends before LoveIQ's records start on 21 Mar 2026, so there is nothing to compare with."
     );
     expect(apCalls().length - before).toBe(1);
+    // No comparison at all, never a column of zeroes beside that note: the day rows instead.
+    expect(none.text).not.toContain(" versus ");
+    expect(rowsOf(none.text).map((r) => r.day)).toEqual(["2026-10-15", "2026-10-14", "2026-10-13"]);
+    const april = await call({
+      since: "2026-04-01",
+      until: "2026-04-30",
+      compare_to: "2026-01-01..2026-01-31",
+    });
+    expect(april.text).toContain("so there is nothing to compare with.");
+    expect(april.text).not.toMatch(/ vs +0 /);
   });
 
   it("sums weeks from the dashboard's days, and marks a week cut short", async () => {
@@ -427,6 +437,39 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     );
   });
 
+  it("says the old rollup has not reached Berlin's today yet at night, under its warning", async () => {
+    apFails = true;
+    // 00:30 in Berlin on the 17th: it is still the 16th in UTC, the rollup's newest day.
+    vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
+    const { text } = await call({ since: "2026-10-17" });
+    expect(text.startsWith("THE DASHBOARD'S NUMBERS COULD NOT BE READ")).toBe(true);
+    expect(text).toContain("it is still 2026-10-16 in UTC: it has not reached 2026-10-17 yet");
+    expect(text).not.toContain("outside the data");
+  });
+
+  it("calls explain_change's day partial on the old rollup alone while its UTC day runs", async () => {
+    apFails = true;
+    vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
+    const res = await POST(
+      new Request("https://www.loveiq.org/api/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "explain_change", arguments: {} },
+        }),
+      })
+    );
+    const text = ((await res.json()).result as { content: Array<{ text: string }> }).content[0]!
+      .text;
+    // Its default day is Berlin's yesterday, the 16th: still running in UTC.
+    expect(text).toContain(
+      "The old rollup counts UTC days, and 2026-10-16 is not over yet in UTC, so its numbers are partial."
+    );
+  });
+
   it("reads the old rollup's days as UTC days, whole ones only, when it has to fall back", async () => {
     apFails = true;
     // 00:30 in Berlin on the 17th is 22:30 UTC on the 16th: the rollup's 16th is not over.
@@ -455,6 +498,12 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
       compare_to: "2026-10-09..2026-10-16",
     });
     expect(reaching.text).toMatch(/versus 2026-10-09 to 2026-10-15 \(7 days, 7 with data\)/);
+    // The period just before, given as a range, compares as "previous" there too: 6 days with 6.
+    const justBefore = await call({ since: "2026-10-10", compare_to: "2026-10-03..2026-10-09" });
+    expect(justBefore.text).toMatch(
+      /2026-10-10 to 2026-10-15 \(6 days, 6 with data\) versus 2026-10-04 to 2026-10-09 \(6 days/
+    );
+    expect(justBefore.text).not.toContain("DIFFERENT LENGTHS");
     const today = await call({ since: "2026-10-16", compare_to: "previous" });
     expect(today.text).toContain("No comparison: the dashboard compares whole days");
     expect(today.text).not.toContain(" versus ");
