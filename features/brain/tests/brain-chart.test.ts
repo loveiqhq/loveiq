@@ -31,6 +31,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
 }));
 
+import { renderDropoutByArm } from "@/app/api/admin/digest-image/[kind]/route";
 import { CHART_METRICS, chartPng, drawChart } from "@features/brain/server/chart";
 import { METRICS } from "@features/brain/server/jumps";
 import { verifyImagePayload } from "@shared/url/signed-image-url";
@@ -43,6 +44,18 @@ const payloadOf = async (url: string) => {
     u.searchParams.get("s")
   ))!;
 };
+/** Every string the rendered picture prints (as digest-image-units.test.ts reads it). */
+function textsIn(node: unknown, out: string[] = []): string[] {
+  if (typeof node === "string" || typeof node === "number") out.push(String(node));
+  else if (Array.isArray(node)) for (const child of node) textsIn(child, out);
+  else if (node && typeof node === "object") {
+    const children = (node as { props?: { children?: unknown } }).props?.children;
+    if (children !== undefined) textsIn(children, out);
+  }
+  return out;
+}
+const pictureTexts = (payload: Record<string, unknown>) =>
+  textsIn(renderDropoutByArm(payload as never).element);
 const draw = async (req: Record<string, unknown>) => {
   const r = await drawChart(req as never, NOW);
   if (!r.ok) throw new Error(`refused: ${r.message}`);
@@ -279,6 +292,10 @@ describe("show_chart: what gets drawn", () => {
       "daily · Google Ads spend could not be read · amounts in EUR"
     );
     expect(both.text).not.toMatch(/nothing recorded/i);
+    // The picture's legend too, never "no data yet".
+    const picture = pictureTexts(both.payload);
+    expect(picture).toContain("Google Ads spend — could not be read");
+    expect(picture.join(" ")).not.toMatch(/no data/);
   });
 
   it("leaves out Google Analytics when it cannot be read, says so, and keeps our own figures", async () => {
@@ -295,6 +312,10 @@ describe("show_chart: what gets drawn", () => {
     expect(both.text).toContain("- GA4 sessions: left out, as it could not be read just now");
     expect(both.payload.headline).toBe("Over the 7 days: 1,400 · could not be read");
     expect(both.payload.footnote).toBe("daily · GA4 sessions could not be read");
+    const picture = pictureTexts(both.payload);
+    expect(picture).toContain("GA4 sessions — could not be read");
+    expect(picture).toContain("Visitors");
+    expect(picture.join(" ")).not.toMatch(/no data/);
     expect(both.text).not.toMatch(/nothing recorded|no record|decline cookies/i);
     // A chart of our own figures alone says nothing of it.
     const visitors = await draw({ metrics: ["visitors"], days: 7 });

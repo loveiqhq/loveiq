@@ -759,12 +759,32 @@ export async function noticeJumps(
     return 0;
   }
   const readings = jumpsOn(series, day, true);
-  if (readings.length === 0) return 0;
+  /**
+   * GOOGLE ANALYTICS DOWN IS SAID, AND NEVER REPLACES A WHOLE NOTICE. Its sessions and
+   * engagement go unchecked, so a day with nothing else unusual says that rather than nothing.
+   * And each notice of a run without it has its own headline, so its own id (noticeId:
+   * headline and day): it cannot overwrite an earlier run's notice that held a GA4 jump.
+   */
+  const gaDown = ga4Down(series);
+  if (readings.length === 0) {
+    if (gaDown) {
+      await record({
+        headline: `Google Analytics figures for ${longDate(day)} could not be checked`,
+        detail:
+          `At ${now.toISOString().slice(11, 16)} UTC Google Analytics could not be read, so GA4 ` +
+          `sessions and engagement for ${longDate(day)} were not checked for unusual numbers: ` +
+          "this is an outage, not a quiet day. The other numbers were checked, and none was " +
+          `unusual. explain_change with day ${day} checks GA4's once it can be read.`,
+        kind: "number-watch",
+      });
+    }
+    return 0;
+  }
   await record({
-    headline: `Unusual numbers on ${longDate(day)}`,
+    headline: `Unusual numbers on ${longDate(day)}${gaDown ? ", without Google Analytics" : ""}`,
     detail:
       `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}` +
-      (ga4Down(series) ? `\n\n${GA4_UNREAD}` : ""),
+      (gaDown ? `\n\n${GA4_UNREAD}` : ""),
     kind: "number-watch",
     evidence: `explain_change with day ${day} gives the same breakdown, and any metric in full.`,
   });

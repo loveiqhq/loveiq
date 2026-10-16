@@ -61,6 +61,41 @@ describe("digest-image: the unit a value wears", () => {
   });
 });
 
+describe("digest-image: what an empty series is said to be", () => {
+  const two = (extra: Record<string, unknown> = {}) =>
+    payload({
+      last: [null, null, null, null],
+      legendFirst: "Visitors",
+      legendLast: "GA4 sessions",
+      ...extra,
+    });
+
+  it("calls a series with no readings 'no data yet' by default, in the legend and the headline", () => {
+    const texts = textsIn(renderDropoutByArm(two()).element);
+    expect(texts).toContain("GA4 sessions — no data yet");
+    expect(texts.some((t) => /: no data yet\)$/.test(t))).toBe(true);
+  });
+
+  it("says what the payload says instead, so a failed read is never called no data", () => {
+    const texts = textsIn(renderDropoutByArm(two({ missingLast: "could not be read" })).element);
+    expect(texts).toContain("GA4 sessions — could not be read");
+    expect(texts.some((t) => /: could not be read\)$/.test(t))).toBe(true);
+    expect(texts.join(" ")).not.toMatch(/no data/);
+    const first = textsIn(
+      renderDropoutByArm(
+        payload({
+          first: [null, null, null, null],
+          last: [1, 2, 3, 4],
+          legendFirst: "Google Ads spend",
+          legendLast: "Revenue",
+          missingFirst: "could not be read",
+        })
+      ).element
+    );
+    expect(first).toContain("Google Ads spend — could not be read");
+  });
+});
+
 /**
  * The brain's show_chart links to this kind. Nothing else calls the route with it, so the
  * route itself is exercised here: dropping the kind from VALID_KINDS 400s every link, and

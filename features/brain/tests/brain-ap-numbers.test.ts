@@ -414,12 +414,18 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
       ["explain_change", { metric: "report_opens" }, "a quiet day"],
       ["show_chart", { metrics: ["visitors"] }, "a flat line"],
       ["show_chart", { metrics: ["ad_spend"] }, "a flat line"],
-      ["break_even", { days: 7 }, "a result"],
     ] as const) {
       const r = await callTool(tool, args);
       expect(r.isError, `${tool} ${JSON.stringify(args)}`).toBe(true);
       expect(r.text, `${tool} ${JSON.stringify(args)}`).toBe(outage(what));
     }
+    // break_even meets the spend first, and names it.
+    expect(await callTool("break_even", { days: 7 })).toEqual({
+      isError: true,
+      text:
+        "Google Ads spend could not be read just now, so there is no break-even to work out. " +
+        "This is an outage, not zero spend. Ask again in a few minutes.",
+    });
     // The dashboard read, the rollup's failed: the outage too, never a row of missing figures.
     vi.setSystemTime(NOW);
     clearFactsCache();

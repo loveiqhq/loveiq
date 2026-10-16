@@ -322,6 +322,9 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     headline,
     footnote,
     emptyLabel: "Nothing recorded on these days.",
+    // A series whose read failed is never called "no data yet" in the picture's legend.
+    ...(why(a) ? { missingFirst: "could not be read" } : {}),
+    ...(b && why(b) ? { missingLast: "could not be read" } : {}),
   });
   const u = new URL("/api/admin/digest-image/metric-trend", base);
   u.searchParams.set("d", d);

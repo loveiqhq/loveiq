@@ -36,6 +36,7 @@ import {
 } from "@features/brain/server/jumps";
 import { clearFactsCache } from "@features/admin/server/ap/facts";
 import { CircuitOpenError } from "@shared/http/circuit-breaker";
+import { buildNoticeRow } from "@features/brain/server/notice";
 
 const metric = (id: string) => METRICS.find((m) => m.id === id)!;
 const dayN = (i: number) =>
@@ -630,9 +631,78 @@ describe("noticeJumps", () => {
     const record = vi.fn().mockResolvedValue(true);
     expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBeGreaterThan(0);
     const input = record.mock.calls[0]![0];
-    expect(input.headline).toBe("Unusual numbers on Wednesday 23 September 2026");
+    expect(input.headline).toBe(
+      "Unusual numbers on Wednesday 23 September 2026, without Google Analytics"
+    );
     expect(input.detail).toContain("Visitors (our own count): 900 against a usual 200");
     expect(input.detail.endsWith(`\n\n${GA4_UNREAD}`)).toBe(true);
+  });
+
+  it("says GA4 went unchecked on a quiet day, and never overwrites a notice of a GA4 jump", async () => {
+    const at = new Date("2026-09-24T08:05:00Z");
+    // GA4's day records: 150 sessions a day, 900 on the day under test.
+    const ga4Rows = Array.from({ length: 40 }, (_, i) => {
+      const day = new Date(Date.UTC(2026, 8, 23) - i * 86_400_000).toISOString().slice(0, 10);
+      const n = day === "2026-09-23" ? 900 : 150;
+      return {
+        body: `Sessions: ${n} · Users: ${n} · New users: ${n - 10}\nEngaged sessions: ${n / 2}`,
+        meta: { sessions: n, users: n },
+        period_end: day,
+      };
+    });
+    const withGa4 = (up: boolean, visitors: (day: string) => number) => {
+      database(factsFor(visitors));
+      const facts = mockSupabaseFetch.getMockImplementation()!;
+      mockSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+        String(path).includes("source=eq.ga4")
+          ? up
+            ? { ok: true, status: 200, json: async () => ga4Rows }
+            : { ok: false, status: 503, json: async () => ({}) }
+          : facts(path, init)
+      );
+    };
+    const flat = () => 200;
+    mockRollup.mockResolvedValue(
+      Array.from({ length: 60 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 8, 24) - i * 86_400_000).toISOString().slice(0, 10),
+        unique_visitors: 200,
+        survey_starts: 28,
+        submissions: 10,
+        report_opens: 12,
+        reports_paid: 0,
+        top_sources: {},
+      }))
+    );
+    const runs: Array<{ headline: string; detail: string; kind: string }> = [];
+    const record = vi.fn(async (input: { headline: string; detail: string; kind: string }) => {
+      runs.push(input);
+      return true;
+    });
+    // 08:05, GA4 up: its sessions jump is the notice.
+    withGa4(true, flat);
+    expect(await noticeJumps(at, record)).toBeGreaterThan(0);
+    expect(runs[0]!.headline).toBe("Unusual numbers on Wednesday 23 September 2026");
+    expect(runs[0]!.detail).toContain("GA4 sessions: 900 against a usual 150");
+    // 09:05, GA4 down and nothing else unusual: said, and under an id of its own.
+    clearFactsCache();
+    withGa4(false, flat);
+    expect(await noticeJumps(at, record)).toBe(0);
+    expect(runs[1]!.headline).toBe(
+      "Google Analytics figures for Wednesday 23 September 2026 could not be checked"
+    );
+    expect(runs[1]!.detail).toContain("this is an outage, not a quiet day");
+    // 10:05, GA4 down and the visitors jump: its own id too.
+    clearFactsCache();
+    withGa4(false, (day) => (day === "2026-09-23" ? 900 : 200));
+    expect(await noticeJumps(at, record)).toBeGreaterThan(0);
+    const id = (i: number) => buildNoticeRow(runs[i]!, at).source_id;
+    expect(id(1)).not.toBe(id(0));
+    expect(id(2)).not.toBe(id(0));
+    // With GA4 up again, a run rewrites the first notice: one per day and headline.
+    clearFactsCache();
+    withGa4(true, flat);
+    await noticeJumps(at, record);
+    expect(id(3)).toBe(id(0));
   });
 
   it("says the day could not be checked, with no numbers, when the circuit breaker is open", async () => {

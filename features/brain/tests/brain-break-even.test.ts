@@ -290,15 +290,13 @@ describe("break_even: what it refuses", () => {
     );
   });
 
-  it("calls an ad read that failed an outage, never missing data", async () => {
+  it("calls an ad read that failed an outage of the spend, never missing data", async () => {
     standard();
     // What adCostByDay returns when its read fails (an open circuit breaker included): no window.
     ad = { byDay: new Map(), from: null, to: null };
-    const message = await refusal({ days: 10 });
-    expect(message).toBe(
-      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
-        "give, and none counted another way in their place. This is an outage, not a result. Ask " +
-        "again in a few minutes."
+    expect(await refusal({ days: 10 })).toBe(
+      "Google Ads spend could not be read just now, so there is no break-even to work out. This " +
+        "is an outage, not zero spend. Ask again in a few minutes."
     );
     expect(mockFacts).not.toHaveBeenCalled();
   });

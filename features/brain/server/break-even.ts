@@ -16,11 +16,16 @@
  * and the spend is covered when that reaches the cost per visitor.
  */
 import { fetchFacts } from "@features/admin/server/ap/facts";
-import { apFilters, apLink, apUnreadable } from "@features/brain/server/ap-numbers";
+import { apFilters, apLink } from "@features/brain/server/ap-numbers";
 import { dayCount } from "@features/admin/server/ap/filters";
 import { ALL, spend, totals } from "@features/admin/server/ap/metrics";
 import { adCostByDay } from "@features/brain/server/ingest/analytics";
 import { reportingDay } from "@shared/time/reporting-day";
+
+/** Said when Google Ads spend cannot be read: break-even is spend, so there is none to give. */
+export const AD_SPEND_UNREAD =
+  "Google Ads spend could not be read just now, so there is no break-even to work out. This " +
+  "is an outage, not zero spend. Ask again in a few minutes.";
 
 export const MIN_DAYS = 7;
 export const MAX_DAYS = 180;
@@ -180,8 +185,8 @@ export async function breakEven(
     };
   };
   // No window at all is a failed read (adCostByDay swallows its errors), as the dashboard reads
-  // it (`spend` in metrics.ts): an outage, never missing data.
-  if (ad.from === null || ad.to === null) return refuse(apUnreadable());
+  // it (`spend` in metrics.ts): an outage of the spend itself, never missing data.
+  if (ad.from === null || ad.to === null) return refuse(AD_SPEND_UNREAD);
   // The days of the window the ad data covers, which is one unbroken stretch.
   const lo = ad.from > from ? ad.from : from;
   const hi = ad.to < until ? ad.to : until;
