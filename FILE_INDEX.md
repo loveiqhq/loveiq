@@ -52,16 +52,16 @@
 
 ## Admin Panel
 
-| Task                                        | Files                                                                                                                                                                              |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin route router                          | `docs/admin/AGENT_README.md`, `docs/admin/domains/AGENT_README.md`                                                                                                                 |
-| Admin shell and command center              | `docs/admin/domains/command-center.md`, `app/admin/AGENT_README.md`, `app/api/admin/AGENT_README.md`, `features/admin/ui/AGENT_README.md`, `features/admin/server/AGENT_README.md` |
-| Admin submissions and moderation            | `docs/admin/domains/submissions.md`                                                                                                                                                |
-| Admin scoring, profiles, reports, and stats | `docs/admin/domains/scoring.md`                                                                                                                                                    |
-| Admin growth, funnels, journey, and revenue | `docs/admin/domains/growth.md`                                                                                                                                                     |
-| Admin research, strategy, and intelligence  | `docs/admin/domains/research.md`                                                                                                                                                   |
-| Admin health and operational diagnostics    | `docs/admin/domains/health.md`                                                                                                                                                     |
-| Admin auth entrypoints                      | `features/admin/ui/AdminLoginForm.tsx`, `app/admin/login/page.tsx`, `app/api/admin/login/route.ts`, `app/api/admin/logout/route.ts`, `app/admin/auth/callback/route.ts`            |
+> Since 16 Oct 2026 the admin is AP-Analytics only (`/admin/ap`).
+
+| Task                                     | Files                                                                                                                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin route router                       | `docs/admin/AGENT_README.md`, `docs/admin/domains/AGENT_README.md`                                                                                                      |
+| AP-Analytics pages and shell             | `docs/admin-dashboard.md`, `app/admin/ap/**`, `features/admin/ui/ap/**`, `features/admin/ui/ap/nav.ts`                                                                  |
+| AP-Analytics figures and API             | `features/admin/server/ap/**`, `app/api/admin/ap/**`, `docs/admin-api.md`                                                                                               |
+| One submission, GDPR, closing the survey | `docs/admin/domains/submissions.md`, `app/api/admin/submissions/[id]/route.ts`, `app/api/admin/data-subject/route.ts`                                                   |
+| Admin area indexes                       | `app/admin/AGENT_README.md`, `app/api/admin/AGENT_README.md`, `features/admin/ui/AGENT_README.md`, `features/admin/server/AGENT_README.md`                              |
+| Admin auth entrypoints                   | `features/admin/ui/AdminLoginForm.tsx`, `app/admin/login/page.tsx`, `app/api/admin/login/route.ts`, `app/api/admin/logout/route.ts`, `app/admin/auth/callback/route.ts` |
 
 ## Landing Page
 
@@ -221,7 +221,7 @@
 | Survey flow docs           | `docs/survey.md`, `app/survey/page.tsx`, `features/survey/ui/**`, `app/api/survey/route.ts`, `app/api/survey-partial/route.ts`, `app/api/survey-tracking/route.ts` |
 | Admin domain router        | `docs/admin/AGENT_README.md`, `docs/admin/domains/AGENT_README.md`                                                                                                 |
 | Admin API docs             | `docs/admin-api.md`, `app/api/admin/**/route.ts`, `features/admin/server/roles.ts`                                                                                 |
-| Admin shell/dashboard docs | `docs/admin-dashboard.md`, `app/admin/**`, `features/admin/ui/**`, `app/api/admin/os/route.ts`, `app/api/admin/stats/route.ts`                                     |
+| Admin shell/dashboard docs | `docs/admin-dashboard.md`, `app/admin/**`, `features/admin/ui/**`, `next.config.js`                                                                                |
 | Pinned versions            | `docs/versions.md`, `package.json`, `.github/workflows/ci.yml`                                                                                                     |
 | Doc inventory              | `docs/doc-inventory.md`, `.github/CODEOWNERS`                                                                                                                      |
 | Documentation ledger       | `docs/knowledge-ledger.md`                                                                                                                                         |

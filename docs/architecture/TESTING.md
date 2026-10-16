@@ -105,7 +105,7 @@ e2e/
 ├── interactions.spec.ts         # FAQ accordion, CTA hrefs, footer links
 ├── pages.spec.ts                # Static routes: status 200 + title check
 ├── a11y.spec.ts                 # Accessibility audits via axe-core
-├── admin.spec.ts                # Admin login + dashboard flows
+├── admin.spec.ts                # Admin login page + signed-out redirect
 ├── survey.spec.ts               # Survey wizard end-to-end
 ├── report-pricing-modal.spec.ts # Report paywall pricing modal
 └── visual-regression.spec.ts    # Screenshot diffs (the spec CI runs)

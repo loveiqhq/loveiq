@@ -32,10 +32,10 @@ It judges the PR's own changes (`git diff <base>...HEAD`) and is safe to run loc
 Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```text
-feat: add new admin benchmark filter
+feat: add new AP-Analytics filter
 fix: correct survey cooldown handling
 docs: update admin api reference
-test: add route coverage for survey status
+test: add route coverage for system flags
 ci: tighten docs truth workflow
 ```
 

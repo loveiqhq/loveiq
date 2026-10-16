@@ -54,17 +54,16 @@ After startup:
 
 ### Optional
 
-| Variable                    | Purpose                                                     |
-| --------------------------- | ----------------------------------------------------------- |
-| `RESEND_FROM`               | Override sender identity for LoveIQ emails                  |
-| `RESEND_REPLY_TO`           | Override reply-to address for outbound email                |
-| `CONTACT_TO_EMAIL`          | Destination inbox for `/api/contact`                        |
-| `SLACK_CONTACT_WEBHOOK_URL` | Contact form notifications                                  |
-| `SLACK_SURVEY_WEBHOOK_URL`  | Survey completion notifications                             |
-| `STAGING_PASSWORD`          | Enables the staging password gate and `/api/staging-login`  |
-| `SURVEY_CLOSE_PASSWORD`     | Required to close the survey via `/api/admin/survey-status` |
-| `NEXT_PUBLIC_GTM_ID`        | Optional Google Tag Manager container ID                    |
-| `LOG_LEVEL`                 | Pino log level override                                     |
+| Variable                    | Purpose                                                    |
+| --------------------------- | ---------------------------------------------------------- |
+| `RESEND_FROM`               | Override sender identity for LoveIQ emails                 |
+| `RESEND_REPLY_TO`           | Override reply-to address for outbound email               |
+| `CONTACT_TO_EMAIL`          | Destination inbox for `/api/contact`                       |
+| `SLACK_CONTACT_WEBHOOK_URL` | Contact form notifications                                 |
+| `SLACK_SURVEY_WEBHOOK_URL`  | Survey completion notifications                            |
+| `STAGING_PASSWORD`          | Enables the staging password gate and `/api/staging-login` |
+| `NEXT_PUBLIC_GTM_ID`        | Optional Google Tag Manager container ID                   |
+| `LOG_LEVEL`                 | Pino log level override                                    |
 
 ## Validation Commands
 

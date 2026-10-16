@@ -9,7 +9,7 @@ Human-readable developer documentation. Architecture references live in `archite
 | `api.md`                 | Public API reference for `/api/*` routes.                                                           |
 | `survey.md`              | Survey runtime, persistence, autosave, and recovery reference.                                      |
 | `admin-api.md`           | Admin API catalog for `/api/admin/*` routes.                                                        |
-| `admin-dashboard.md`     | Admin shell, command center, and stats dashboard reference.                                         |
+| `admin-dashboard.md`     | Admin pages (AP-Analytics), shell, and sign-in reference.                                           |
 | `admin/AGENT_README.md`  | Admin-local documentation router for cross-root code lookup.                                        |
 | `versions.md`            | Single source of truth for pinned toolchain and framework versions.                                 |
 | `doc-inventory.md`       | Inventory of the canonical project documentation set.                                               |

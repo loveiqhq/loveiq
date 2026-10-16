@@ -19,7 +19,7 @@
 
 - Was: `/waitlist` page + `/api/waitlist` route still live after the funnel moved to `/survey`
 - Fix: Deleted public page, API route, signup email template, and broadcast pipeline; `/waitlist` 301-redirects to `/survey` via `next.config.js`
-- `waitlist_user` table preserved for admin growth analytics (historical data only, no new inserts)
+- `waitlist_user` table preserved (historical data only, no new inserts); the digests' channel figures and the GDPR export and erasure still read it
 - Evidence: `next.config.js` redirects block, no `app/waitlist/` or `app/api/waitlist/` directories
 
 **In-memory rate limiting:** RESOLVED (2026-01)
@@ -74,6 +74,7 @@
 
 - Was: Cannot view survey submissions or waitlist signups without database access
 - Fix: Full admin panel at `/admin/*` with dashboard, submission browser, CSV export, and survey status toggle
+- Since 2026-10-16: the admin is AP-Analytics only (`/admin/ap`). The submission browser, CSV export and survey status toggle were removed; closing the survey means setting `survey.status` in the database
 - Auth: Supabase Auth magic link emails with `admin_users` email allowlist table
 - Evidence: `app/admin/`, `app/api/admin/`, `features/admin/server/`, `features/admin/ui/`
 

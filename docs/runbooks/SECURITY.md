@@ -6,7 +6,7 @@
 
 ## Environment & secrets
 
-- **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `SLACK_PAYMENTS_WEBHOOK_URL`, `STAGING_PASSWORD`, `SURVEY_CLOSE_PASSWORD`, `GA4_API_SECRET`.
+- **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `SLACK_PAYMENTS_WEBHOOK_URL`, `STAGING_PASSWORD`, `GA4_API_SECRET`.
 - **Server config** (not secret but server-only): `SUPABASE_URL`, `RESEND_FROM`, `RESEND_REPLY_TO`, `CONTACT_TO_EMAIL`.
 - **Client-safe** (`NEXT_PUBLIC_*` prefix, exposed in browser bundles by design): `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_GTM_ID`.
 - Never expose the Supabase service role key to the client; keep all DB access server-side.
@@ -20,7 +20,6 @@
 | `RECAPTCHA_SECRET_KEY`           | Annually / on incident  | Google reCAPTCHA Admin → Settings → Regenerate                                                                                                                                                                                                             |
 | `SLACK_*_WEBHOOK_URL`            | On incident only        | Slack App → Incoming Webhooks → Add new → Remove old                                                                                                                                                                                                       |
 | `STAGING_PASSWORD`               | On incident only        | Update in Vercel env vars → Redeploy                                                                                                                                                                                                                       |
-| `SURVEY_CLOSE_PASSWORD`          | On incident only        | Update in Vercel env vars → Redeploy                                                                                                                                                                                                                       |
 | `STRIPE_WEBHOOK_SECRET`          | Annually / on incident  | See §Webhook secret rotation below                                                                                                                                                                                                                         |
 | `RESEND_WEBHOOK_SECRET`          | Annually / on incident  | See §Webhook secret rotation below                                                                                                                                                                                                                         |
 | `UNSUBSCRIBE_SECRET`             | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. Existing unsubscribe links in already-sent emails break — accept that or schedule rotation to coincide with low-email-volume window.                                                     |

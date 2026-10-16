@@ -160,12 +160,8 @@
 - `/glossary/[slug]` - `app/glossary/[slug]/page.tsx` → Glossary term
 - `/trust-zone` - `app/trust-zone/page.tsx`
 - `/login` - `app/login/page.tsx` → Staging login
-- `/admin` - `app/admin/page.tsx` → Admin dashboard (Supabase Auth protected)
+- `/admin/ap` - `app/admin/ap/page.tsx` → AP-Analytics Dashboard (Supabase Auth protected), with its other pages under `app/admin/ap/`; since 2026-10-16 the admin is AP-Analytics only, and `/admin` and the old admin pages redirect here
 - `/admin/login` - `app/admin/login/page.tsx` → Admin magic link login
-- `/admin/submissions` - `app/admin/submissions/page.tsx` → Submission browser
-- `/admin/submissions/[id]` - `app/admin/submissions/[id]/page.tsx` → Submission detail
-- `/admin/survey-status` - `app/admin/survey-status/page.tsx` → Survey toggle
-- `/admin/product-kpis` - `app/admin/product-kpis/page.tsx` → Product KPIs dashboard
 - `/privacy-policy`, `/terms-of-use`, `/terms-and-conditions`, `/medical-disclaimer`, `/digital-content-terms`, `/cookies`, `/imprint` - Legal pages
 
 **API Routes:**
@@ -175,7 +171,7 @@
 - `/api/health` - `app/api/health/route.ts`
 - `/api/staging-login` - `app/api/staging-login/route.ts` (staging only)
 - `/api/staging-logout` - `app/api/staging-logout/route.ts` (staging only)
-- `/api/admin/*` - Admin API routes (login, logout, stats, submissions, export, survey-status, product-kpis)
+- `/api/admin/*` - Admin API routes (login, logout, the AP-Analytics feeds under `ap/`, and the API-only data-subject, submissions/[id], system-flags and digest-image)
 - `/admin/auth/callback` - `app/admin/auth/callback/route.ts` (Supabase Auth magic link callback)
 
 **SEO Routes:**

@@ -414,7 +414,7 @@ export async function recordExperiment(
       `${existing ? "Updated" : "Registered"} experiment #${id}: ${name} (${nextStatus}` +
       `${(axis ?? existing?.axis) ? `, ${AXIS_TITLES[(axis ?? existing?.axis) as ExperimentAxis]}` : ""}).\n` +
       `Hypothesis: ${hypothesis}\nDecided by: ${metric}\n` +
-      "It is saved in the admin panel's own experiment table. " +
+      "It is saved in the experiment registry. " +
       (nextStatus === "completed"
         ? "Record the decision it led to with record_decision, if you have not."
         : "When it ends, set its status to completed with the outcome, and record the decision with record_decision."),

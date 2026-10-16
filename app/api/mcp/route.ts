@@ -1309,7 +1309,7 @@ export const TOOLS = [
       "a hypothesis and a metric, because a test without them cannot be concluded from. Call " +
       "it again with experiment_id to change it, and when the test ends set status " +
       "'completed' with the outcome, then record the decision with record_decision. It is " +
-      "saved in the admin panel's own experiment table (admin_experiment).",
+      "saved in the experiment registry (the admin_experiment table).",
     inputSchema: {
       type: "object",
       properties: {
