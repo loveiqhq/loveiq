@@ -125,6 +125,8 @@ import { clearPeopleCache } from "@features/brain/server/people";
 import { recordToolCall } from "@features/brain/server/log";
 import { forgetSignIns } from "@features/brain/server/sign-in";
 import {
+  exactTokensForTest,
+  linesWithForTest,
   outrankingHeldBack,
   POST,
   PRODUCT_ANALYTICS_ROW_CAP,
@@ -1790,12 +1792,13 @@ describe("/api/mcp", () => {
       });
     });
 
-    it("lists exactly the twenty-one tools, each with a schema", async () => {
+    it("lists exactly the tools it serves, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
       expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
         "search_company_context",
+        "find_text",
         "fetch_document",
         "record_decision",
         "post_to_slack",
@@ -8999,5 +9002,305 @@ describe("query_product_analytics — counting what visitors did, from PostHog",
     expect(desc("query_product_analytics")).toContain("BOTH halves of the rate");
     // The filter that keeps local builds out and the days before deploy_env existed in.
     expect(desc("query_product_analytics")).toContain("properties.$host = 'www.loveiq.org'");
+  });
+});
+
+/**
+ * EXACT TEXT, EVERY RECORD THAT HOLDS IT.
+ *
+ * Over 14-16 Oct 2026 the team searched about ten times for a booking link: links on
+ * calendar.app.google sit in 44 records, mostly email, and no ranked result showed one.
+ */
+describe("find_text — every record holding an exact text", () => {
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "find_text", arguments: args },
+      })
+    );
+    return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+  }
+
+  /** The brain_chunk reads the tool made, as [decoded query, init]. */
+  const reads = () =>
+    toolCalls()
+      .filter(([p]) => String(p).startsWith("/rest/v1/brain_chunk?"))
+      .map(([p, init]) => [
+        new URLSearchParams(String(p).slice("/rest/v1/brain_chunk?".length)),
+        init as { headers?: Record<string, string>; breaker?: string; timeoutMs?: number },
+      ]) as Array<
+      [URLSearchParams, { headers?: Record<string, string>; breaker?: string; timeoutMs?: number }]
+    >;
+
+  function wire(rows: Array<Record<string, unknown>>, total = rows.length) {
+    mockSupabaseFetch.mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-range": `0-${Math.max(0, rows.length - 1)}/${total}` }),
+      json: async () => rows,
+      text: async () => JSON.stringify(rows),
+    }));
+  }
+
+  const part = (over: Record<string, unknown>) => ({
+    source: "gmail",
+    source_id: "thread:abc",
+    title: "Booking a call",
+    url: "https://mail.google.com/mail/u/0/#all/abc",
+    period_end: "2026-10-14",
+    body: "Hi,\nBook here: https://calendar.app.google/AbC123\nThanks",
+    ...over,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+  });
+
+  it("is offered as a read-only tool", () => {
+    const tool = TOOLS.find((t) => t.name === "find_text");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    expect(tool?.inputSchema.required).toEqual(["text"]);
+  });
+
+  it("narrows through the word index and decides by the literal text, on title and body", async () => {
+    wire([part({})]);
+    await call({ text: "calendar.app.google/AbC123" });
+    const [[q, init]] = reads() as [
+      [URLSearchParams, { headers?: Record<string, string>; breaker?: string }],
+    ];
+    expect(q.get("fts")).toBe("plfts(english).calendar.app.google/AbC123");
+    expect(q.get("or")).toBe(
+      '(title.ilike."*calendar.app.google/AbC123*",body.ilike."*calendar.app.google/AbC123*")'
+    );
+    expect(q.getAll("source")).toEqual(["neq.book", "neq.paper", "neq.corporate"]);
+    expect(q.get("order")).toBe("period_end.desc.nullslast,id.desc");
+    expect(q.get("limit")).toBe("1000");
+    expect(init.headers?.Prefer).toBe("count=exact");
+    expect(init.breaker).toBe("supabase-find-text");
+  });
+
+  /**
+   * ESCAPED TWICE, checked live on 2026-10-16: LIKE's own `\ % _`, then the `\` and `"` the
+   * quoted value loses when PostgREST unquotes it. One backslash before `%` let "100% off"
+   * match 185 parts as a wildcard; two gave the 69 that really hold it.
+   */
+  it("escapes the wildcards and the quoting, so the text is matched as written", async () => {
+    wire([]);
+    await call({ text: 'a_b 100% "x" c\\d, (e)' });
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.get("or")).toBe(
+      '(title.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*",' +
+        'body.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*")'
+    );
+  });
+
+  it("looks a bare host up as it is and with www., and says how email addresses are stored", async () => {
+    wire([part({ body: "Visit https://www.acme-co.example/x" })]);
+    const r = await call({ text: "acme-co.example" });
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.get("fts")).toBe("fts(english).acme-co.example | www.acme-co.example");
+    expect(r.content[0]!.text).toContain("addresses are stored whole, so mail that names it");
+    // A link with a path is no bare host.
+    wire([]);
+    await call({ text: "https://calendar.app.google/AbC123" });
+    expect(reads().at(-1)![0].get("fts")).toBe("plfts(english).https://calendar.app.google/AbC123");
+  });
+
+  it("gives one entry per document, newest first, with the lines and the true totals", async () => {
+    wire([
+      part({ source_id: "thread:abc#2", title: "Booking a call (part 2 of 2)" }),
+      part({ body: "Earlier: calendar.app.google is where Mark books calls" }),
+      part({
+        source: "drive",
+        source_id: "doc:xyz",
+        title: "Contacts",
+        url: null,
+        period_end: "2026-10-01",
+        body: "Booking: https://CALENDAR.app.google/zz",
+      }),
+    ]);
+    const r = await call({ text: "calendar.app.google" });
+    expect(r.isError).toBeFalsy();
+    const text = r.content[0]!.text;
+    expect(text).toMatch(/^UNTRUSTED DATA/);
+    expect(text).toContain('"calendar.app.google" is in 2 documents (3 stored parts; no filters)');
+    expect(text).toContain("That is all of them.");
+    expect(text).toContain("id: gmail/thread:abc\n");
+    expect(text).not.toContain("thread:abc#2");
+    expect(text).toContain("• Book here: https://calendar.app.google/AbC123");
+    expect(text).toContain("• Earlier: calendar.app.google is where Mark books calls");
+    expect(text).toContain("• Booking: https://CALENDAR.app.google/zz");
+    expect(text).toContain("(gmail) Booking a call\n");
+    // Nothing was ranked, so no score is invented.
+    expect(text).not.toContain("relevance:");
+    expect(text.indexOf("gmail/thread:abc")).toBeLessThan(text.indexOf("drive/doc:xyz"));
+    expect(text).toContain("<<<SOURCE 1>>>");
+  });
+
+  it("shows the newest documents up to the limit and says how to reach the rest", async () => {
+    wire([
+      part({ source_id: "thread:a", period_end: "2026-10-14" }),
+      part({ source_id: "thread:b", period_end: "2026-10-12" }),
+      part({ source_id: "thread:c", period_end: "2026-10-10" }),
+    ]);
+    const text = (await call({ text: "calendar.app.google", limit: 2 })).content[0]!.text;
+    expect(text).toContain("is in 3 documents");
+    expect(text).toContain(
+      "Showing the newest 2; 1 more: ask again with until=2026-10-12 for older ones"
+    );
+    expect(text).not.toContain("thread:c");
+  });
+
+  it("calls a text too common to list too common, with its count, and never a failure", async () => {
+    wire(
+      Array.from({ length: 1000 }, (_, i) => part({ source_id: `thread:${i}` })),
+      3983
+    );
+    const r = await call({ text: "google" });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0]!.text).toContain('"google" is in 3983 stored parts, too common');
+    expect(r.content[0]!.text).toContain("search_company_context");
+  });
+
+  it("reads a statement timeout as too common, and an outage as an outage", async () => {
+    mockSupabaseFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      text: async () => '{"code":"57014","message":"canceling statement due to statement timeout"}',
+    });
+    const slow = await call({ text: "loveiq" });
+    expect(slow.isError).toBeFalsy();
+    expect(slow.content[0]!.text).toContain("did not finish, too common");
+    mockSupabaseFetch.mockRejectedValue(new Error("Request timeout after 12000ms"));
+    const down = await call({ text: "loveiq" });
+    expect(down.isError).toBe(true);
+    expect(down.content[0]!.text).toContain("not an absence");
+  });
+
+  it("says plainly when nothing holds it, and what that does not mean", async () => {
+    wire([]);
+    const r = await call({ text: "zzz-not-there", sources: ["gmail"], since: "2026-10-01" });
+    expect(r.isError).toBeFalsy();
+    const text = r.content[0]!.text;
+    expect(text).toContain(
+      'Nothing indexed holds "zzz-not-there" (sources=gmail, since=2026-10-01)'
+    );
+    expect(text).toContain("Not the same as LoveIQ having no record of it");
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.getAll("source")).toEqual(["in.(gmail)", "neq.book", "neq.paper", "neq.corporate"]);
+    expect(q.getAll("period_end")).toEqual(["gte.2026-10-01"]);
+  });
+
+  it("reads books only when named", async () => {
+    wire([]);
+    await call({ text: "attachment theory", sources: ["book"] });
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.getAll("source")).toEqual(["in.(book)", "neq.paper", "neq.corporate"]);
+  });
+
+  it.each([
+    ["no text", {}],
+    ["two characters", { text: "ab" }],
+    ["too long a text", { text: "x".repeat(301) }],
+    ["a star", { text: "5* review" }],
+    ["sources as a string", { text: "calendar.app.google", sources: "gmail" }],
+    ["an impossible date", { text: "calendar.app.google", since: "2026-09-31" }],
+  ])("refuses %s before reading anything", async (_what, args) => {
+    wire([]);
+    const r = await call(args);
+    expect(r.isError).toBe(true);
+    expect(reads()).toHaveLength(0);
+  });
+
+  it("cuts a long line to a window around each occurrence, in any case, at most max", () => {
+    const long = `${"a".repeat(300)} Calendar.App.Google/x ${"b".repeat(300)}`;
+    const [w] = linesWithForTest(`title\n${long}\nnext`, "calendar.app.google", 3);
+    expect(w).toMatch(/^…a+ Calendar\.App\.Google\/x b+…$/);
+    expect(w!.length).toBeLessThan(260);
+    expect(linesWithForTest("x one\ny one\nz one\nw one", "one", 3)).toEqual([
+      "x one",
+      "y one",
+      "z one",
+    ]);
+    expect(linesWithForTest("same one\nsame one", "one", 3)).toEqual(["same one"]);
+    expect(linesWithForTest("nothing here", "one", 3)).toEqual([]);
+  });
+});
+
+describe("search_company_context — an exact text it did not return", () => {
+  const chunk = (over: Record<string, unknown> = {}) => ({
+    source: "ga4",
+    sourceId: "daily:2026-10-14",
+    title: "Google Analytics, 14 Oct",
+    url: null,
+    body: "Google sessions 412",
+    meta: {},
+    score: 3,
+    contentScore: 3,
+    periodEnd: "2026-10-14",
+    ...over,
+  });
+  async function search(query: string) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "search_company_context", arguments: { query } },
+      })
+    );
+    return ((await res.json()).result as { content: Array<{ text: string }> }).content[0]!.text;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    mockSupabaseFetch.mockResolvedValue({ ok: true, headers: new Headers(), json: async () => [] });
+  });
+
+  it("finds links, hosts, addresses, long numbers and quoted phrases, each once", () => {
+    expect(
+      exactTokensForTest(
+        "mark booking link https://calendar.app.google/AbC123, mail jane@example.test, " +
+          'host cal.com, invoice 2026004211 and "Kind regards, Jane" but not 2026 or e.g.'
+      )
+    ).toEqual([
+      "Kind regards, Jane",
+      "https://calendar.app.google/AbC123",
+      "jane@example.test",
+      "cal.com",
+      "2026004211",
+    ]);
+    expect(exactTokensForTest("how are we doing this month")).toEqual([]);
+  });
+
+  it("says when no result holds the exact text, and names find_text with it", async () => {
+    mockRetrieve.mockResolvedValue([chunk(), chunk({ sourceId: "daily:2026-10-13" })]);
+    const text = await search("Mark's booking link calendar.app.google");
+    expect(text).toContain(
+      'NOT AS WRITTEN: none of the parts shown below holds "calendar.app.google" exactly. ' +
+        'find_text with {"text": "calendar.app.google"} lists every record that does'
+    );
+  });
+
+  it("says nothing when a result does hold it, in any case", async () => {
+    mockRetrieve.mockResolvedValue([chunk({ body: "Book: https://Calendar.App.Google/x" })]);
+    expect(await search("booking link calendar.app.google")).not.toContain("NOT AS WRITTEN");
+    mockRetrieve.mockResolvedValue([chunk()]);
+    expect(await search("how many sessions did google record")).not.toContain("NOT AS WRITTEN");
+  });
+
+  it("points an empty search with an exact text at find_text", async () => {
+    mockRetrieve.mockResolvedValue([]);
+    expect(await search("who sent INV 2026004211")).toContain(
+      'For an exact text such as "2026004211", find_text lists every record that holds it.'
+    );
   });
 });
