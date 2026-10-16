@@ -44,6 +44,11 @@ Claude Code) is the door people use; the operator's guide is
 - `server/jumps.ts` — `explain_change` and the daily "Unusual numbers" notice: each metric against its
   28-day median and spread, the move split by source, channel and rate halves, and day-level rules
   (engagement, GA4 against our count, spend, campaigns, shipped, decided). No model writes a cause.
+  Visitors, survey starts, finished surveys and revenue are the AP-Analytics dashboard's per Berlin
+  day (`asDashboard`); reports opened and paid stay `brain_daily_rollup`'s, which are dated by the event
+  and left out of a UTC day not over yet (`utcOpen`). No series when the dashboard's facts or the rollup
+  cannot be read (an open circuit breaker included). Google Analytics is optional: when it
+  cannot be read its figures are left out and said so (`GA4_UNREAD`).
 - `server/check-answer.ts` — `check_answer`: every figure, day and quote in a draft looked up in its
   cited documents (rounding-aware, trailing zeros ignored, bare single digits left unchecked). No model.
 - `server/experiments.ts` — `experiments` and `record_experiment`: the `admin_experiment`
@@ -51,17 +56,20 @@ Claude Code) is the door people use; the operator's guide is
   hands back what it does not change) and live readouts from `features/admin/server/experiment-readouts.ts`.
   A running test also gets the people each arm needs (`perArmSample`: 95% confidence, 80% power)
   and the day that is reached at the pace so far.
-- `server/sales.ts` — `get_business_numbers` with `group_by`: a period's real sales, revenue and EUR 0
-  comps by plan, price list, device, source, country tier, landing arm or month, read from
-  `payment` (its metadata) the way the daily numbers count a sale. No model.
+- `server/ap-numbers.ts` — `get_business_numbers` as the AP-Analytics dashboard counts it: the
+  period read through the dashboard's own code (`fetchFacts`, `totals`, `spend`, the same-age rule,
+  `buildDashboard` for the Assessment A tiles), the day rows built from it, the figures it has none
+  for kept from `brain_daily_rollup` and labelled, a link to the matching view, and `group_by`
+  (`SALE_GROUPS`) from the dashboard's sales, with each device, source or tier group linked to the
+  Payment page under it. When the dashboard cannot be read, `apUnreadable` says so, and that is all.
 - `server/feedback.ts` — `customer_feedback`: the report's chapter votes and comments
   (`report_section_feedback`, staff left out) and the Trustpilot review emails in the index, with
   what it cannot see named every time.
-- `server/break-even.ts` — `break_even`: spend, visitors, finishers, buyers and revenue on the days
-  `adCovers` says the ad data covers (the digest's basis), the level each lever alone must reach,
+- `server/break-even.ts` — `break_even`: spend, and the dashboard's visitors, finishers, paying
+  customers and revenue, on the days the ad data covers, the level each lever alone must reach,
   and what-ifs. No model.
-- `server/chart.ts` — `show_chart`: one or two daily numbers (jumps.ts's metrics, revenue, and
-  Google Ads spend through `adCostByDay`) drawn by the digest's renderer
+- `server/chart.ts` — `show_chart`: one or two daily numbers (jumps.ts's metrics, the dashboard's
+  revenue, and Google Ads spend through `adCostByDay`) drawn by the digest's renderer
   (`/api/admin/digest-image/metric-trend`, `unit` "" for counts and money) behind a signed URL.
 - `server/promises.ts` — `meeting_promises`: every "Next steps" item in the meeting notes, parsed
   by code and grouped by owner, each looked up on the Notion board by `boardMatcher` (owner, then

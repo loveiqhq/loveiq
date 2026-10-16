@@ -10,6 +10,7 @@ import {
   type LandingVariant,
 } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
+import { safeAdminNext } from "@shared/url/admin-next";
 import { reportingDay } from "@shared/time/reporting-day";
 import { isProbeRequest } from "@shared/http/probe-cookie";
 
@@ -639,11 +640,22 @@ export async function proxy(request: NextRequest) {
       // requests we redirect to /admin/login.
       const isApiAdmin = adminPath.startsWith("/api/admin/");
 
+      // The page asked for travels through the sign-in as `next`, so a link to a view still
+      // opens that view afterwards. Only a same-site /admin/ path (safeAdminNext), never a
+      // way off the site; anything else signs in to the dashboard as before.
+      const signIn = (error?: string) => {
+        const url = new URL("/admin/login", request.url);
+        if (error) url.searchParams.set("error", error);
+        const next = safeAdminNext(`${request.nextUrl.pathname}${request.nextUrl.search}`);
+        if (next) url.searchParams.set("next", next);
+        return url;
+      };
+
       if (!user) {
         if (isApiAdmin) {
           return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
         }
-        return NextResponse.redirect(new URL("/admin/login", request.url));
+        return NextResponse.redirect(signIn());
       }
 
       // R-13: 30-min idle timeout on admin sessions. Refresh activity on
@@ -664,9 +676,7 @@ export async function proxy(request: NextRequest) {
           resp.cookies.delete("__admin_activity");
           return resp;
         }
-        const redirect = NextResponse.redirect(
-          new URL("/admin/login?error=idle_timeout", request.url)
-        );
+        const redirect = NextResponse.redirect(signIn("idle_timeout"));
         redirect.cookies.delete("__admin_activity");
         return redirect;
       }

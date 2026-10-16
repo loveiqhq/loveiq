@@ -18,13 +18,16 @@ down the list.
 So, plainly: **if the question counts people, payments, reports, emails, invites,
 shares, refunds or anyone on the waitlist, no written page is the answer.** Those
 numbers change hourly. Read them live with `list_product_tables` then
-`query_product_data`, or `get_business_numbers` for revenue, ad spend and the funnel.
-The `analytics` rows ("LoveIQ numbers — …") carry the same figures already summed by
-day, month and all-time, and each one is dated.
+`query_product_data`, or `get_business_numbers` for revenue, ad spend and the funnel,
+which gives them as the AP-Analytics dashboard counts them, with a link to the view. The
+`analytics` rows ("LoveIQ numbers — …") are the older daily rollup's figures, summed by
+day, month and all-time and each one dated. They count differently from the dashboard
+(UTC days, staff included, survey starts only after the cookie banner), so for any figure
+the dashboard shows, quote `get_business_numbers`.
 
 Traffic is the one place where two different numbers are both correct, so say which you
 mean. **Our own** visit count is live in the database like everything else
-(`brain_daily_rollup`, or `get_business_numbers`). **Google's** measurement — GA4
+(`get_business_numbers`, as the dashboard counts it). **Google's** measurement — GA4
 sessions, Search Console clicks and impressions — is not in our database at all; it
 exists only as dated `ga4` and `gsc` rows in the index.
 

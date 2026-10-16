@@ -47,7 +47,15 @@ import {
   type Measure as UserMeasure,
 } from "@features/brain/server/user-totals";
 import { loadFeedback, renderFeedback } from "@features/brain/server/feedback";
-import { SALE_GROUPS, loadSales, renderSales, type SaleGroup } from "@features/brain/server/sales";
+import {
+  SALE_GROUPS,
+  apSales,
+  apUnreadable,
+  apView,
+  beforeRecords,
+  readAp,
+  type SaleGroup,
+} from "@features/brain/server/ap-numbers";
 import {
   adsForMonth,
   lastBilledMonth,
@@ -117,7 +125,11 @@ import {
   NOT_PROOF,
   readMetric,
   renderDay,
+  partialDay,
   renderMetric,
+  utcOpen,
+  GA4_UNREAD,
+  ga4Down,
   type Reading,
 } from "@features/brain/server/jumps";
 import {
@@ -1758,9 +1770,16 @@ export const TOOLS = [
     title: "Funnel, revenue and ad spend",
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
-      "The funnel, revenue and ad-spend figures per day, straight from the " +
-      "database rather than from the search index. Use when you want exact numbers to " +
-      "compute with; use search_company_context when you want the narrative around them. " +
+      "The funnel, revenue and ad-spend figures per day AS THE AP-ANALYTICS DASHBOARD " +
+      "COUNTS THEM: read through the dashboard's own code, so a period gives the numbers " +
+      "Marcus and Mark see on it. The answer gives the dashboard's headline figures for the " +
+      "period, says they are the dashboard's, and links that view on www.loveiq.org (team " +
+      "sign-in): quote them as the dashboard's, with the link. Days are Berlin days, and " +
+      "staff and our own test traffic are left out, as there. Reports created, invites sent " +
+      "and the top traffic sources have no figure on the dashboard, so they keep the older " +
+      "daily rollup's counting and are labelled not on the dashboard. Use when you want " +
+      "exact numbers to compute with; use search_company_context when you want the " +
+      "narrative around them. " +
       "With `group_by`, it splits a period's sales and revenue instead: by plan, price list " +
       "(the price test's arm), device, traffic source, country price tier, landing arm or " +
       "month, in one call. That is the way to answer 'revenue by plan', 'which price list " +
@@ -1779,8 +1798,12 @@ export const TOOLS = [
           items: { type: "string", enum: [...SALE_GROUPS] },
           description:
             "One or two of plan, price_list, device, source, country_tier, landing, month. " +
-            "Returns the sales, revenue and EUR 0 comps of the period per group, rather than " +
-            "the day rows. Takes `since`/`until` or `days`, not `compare_to` or `granularity`.",
+            "Returns the sales, revenue and EUR 0 comps of the period per group, as the " +
+            "dashboard counts sales (by the Berlin day paid), rather than the day rows. Device, " +
+            "source and country tier are the dashboard's own filters (source as it sorts " +
+            "traffic: Google Ads, Meta Ads, organic search, direct, email, referral, social, AI " +
+            "assistants), so each of those groups links to its Payment page under that filter. " +
+            "Takes `since`/`until` or `days`, not `compare_to` or `granularity`.",
         },
         since: {
           type: "string",
@@ -1796,7 +1819,9 @@ export const TOOLS = [
           description:
             "A second period to compare this one against: a range like " +
             "`2026-08-01..2026-08-31`, or the word `previous` for the equally-long window " +
-            "immediately before `since`. Returns both totals and the difference. " +
+            "immediately before `since`, the one the dashboard compares with. Returns both " +
+            "totals and the difference, by the dashboard's rules: the earlier period's 'so far' " +
+            "figures are read at the same age, and survey starts only when both hold every one. " +
             "Periods of DIFFERENT lengths are allowed and are reported as such — a 31-day " +
             "month against a 30-day one is not a like-for-like percentage and the answer " +
             "says so. Needs `since`, since there must be a period to compare.",
@@ -1804,8 +1829,8 @@ export const TOOLS = [
         granularity: {
           type: "string",
           description:
-            "`day` (default), `week` or `month`. About 165 daily rows fit in one answer, so " +
-            "a two-year question truncates at `day` and fits at `month`. The rows are SUMMED, " +
+            "`day` (default), `week` or `month`. About 120 daily rows fit in one answer, so " +
+            "a long question truncates at `day` and fits at `month`. The rows are SUMMED, " +
             "not sampled. A bucket that is not full — the current week on a Wednesday — is " +
             "labelled partial, and a bucket containing a day GA4 did not cover reports " +
             "`ad_spend` as unknown rather than summing the days it does have.",
@@ -1813,10 +1838,14 @@ export const TOOLS = [
         days: {
           type: "number",
           description:
-            "How many days back, from today. An alternative to `since`/`until`, not a " +
-            "companion — passing both is refused. Default 30; 4000 is the hard ceiling the " +
-            "database function enforces. Days with no activity come back as zeroes rather " +
-            "than being skipped, but only about 165 days fit in one answer — the header " +
+            "The last N whole days, ending yesterday: the dashboard's 'Last N days', so today's " +
+            "unfinished day is never in them (7, 30, 90 and 365 link the dashboard's own " +
+            "presets; for today, pass `since` as today's date). An alternative to " +
+            "`since`/`until`, not a companion — passing both is refused. Default 30. The " +
+            "dashboard's figures start on " +
+            "LoveIQ's first records (21 Mar 2026) and cover at most 400 days, and the answer " +
+            "says when a request reached past that. Days with no activity come back as zeroes " +
+            "rather than being skipped, but only about 120 days fit in one answer — the header " +
             "says how many of how many were returned, so read it before treating the last " +
             "day shown as the earliest day there is. `ad_spend` appears only on days GA4 actually covers — its " +
             "absence means unknown, never zero.",
@@ -2237,8 +2266,9 @@ export const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: true },
     description:
       "Whether a day's numbers were outside their usual range, and where each move came from, " +
-      "from our own data: visitors (our count and GA4), surveys started and finished, reports " +
-      "opened and paid, and the rates between them, each against the 28 days before. A move is " +
+      "from our own data: visitors (beside GA4's) and surveys started and finished, counted as " +
+      "the AP-Analytics dashboard counts them (by Berlin day), reports opened and paid, and the " +
+      "rates between them, each against the 28 days before. A move is " +
       "split by traffic source or GA4 channel, a rate into its two halves (a conversion that " +
       "'doubled' because traffic halved says so), and the day is checked for engagement, GA4 " +
       "against our own count, ad spend and campaigns, and what shipped or was decided. Use it " +
@@ -2269,8 +2299,10 @@ export const TOOLS = [
       "easier to see than to read: 'show me visitors this month', 'chart the share of report " +
       "openers who pay since August', 'revenue against Google Ads spend'. The link opens in any " +
       "browser without a login and can be pasted into a doc or a deck. Two numbers share one " +
-      "axis, so they must be the same kind: two counts, two shares or two amounts in EUR. Days " +
-      "are UTC, and a share is left as a gap on a day with too few people to read it.",
+      "axis, so they must be the same kind: two counts, two shares or two amounts in EUR. " +
+      "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
+      "dashboard counts them, by Berlin day; reports opened and paid by UTC day. A share is " +
+      "left as a gap on a day with too few people to read it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2303,9 +2335,11 @@ export const TOOLS = [
       "over a window: the cost per visitor, the share of visitors who finish the survey, the share " +
       "of finishers who pay, the average order and the net after ad spend, then the level each of " +
       "those four alone would have to reach to break even. Give any of the four to ask 'what if': " +
-      "'what if 5% of finishers paid', 'what if a visitor cost EUR 0.05'. Counted like the digest's " +
-      "cost per paying customer: every visitor and buyer on the days the ad data covers, not only " +
-      "those who came from an ad, and it says when the purchases are too few to trust.",
+      "'what if 5% of finishers paid', 'what if a visitor cost EUR 0.05'. Counted as the " +
+      "AP-Analytics dashboard counts its visitors, finished surveys, paying customers and " +
+      "revenue, with a link to the same days there: every visitor and buyer on the days the ad " +
+      "data covers, not only those who came from an ad, and it says when the paying customers " +
+      "are too few to trust.",
     inputSchema: {
       type: "object",
       properties: {
@@ -5926,7 +5960,9 @@ async function callTool(
       );
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    // The dashboard's (Berlin) day, as every period here is read: a UTC "today" made
+    // "previous" a day short and refused a since of Berlin's today between 00:00 and 02:00.
+    const today = reportingDay(new Date());
     /**
      * A FUTURE `since` USED TO REPORT THE COMPANY AS ONE DAY OLD.
      *
@@ -5962,20 +5998,19 @@ async function callTool(
           true
         );
       }
-      const from =
-        since ||
-        new Date(Date.now() - (intArg(args.days, 30, 1, 4000) - 1) * 86_400_000)
-          .toISOString()
-          .slice(0, 10);
-      const sales = await loadSales(from, until || today);
-      if (!sales) {
-        return textResult(
-          "The payments could not be read right now. This is an outage, not a result.",
-          true
-        );
-      }
+      const days = intArg(args.days, 30, 1, 4000);
+      // The dashboard's sales, and when they cannot be read, only that: no other counting.
+      const ap = await apSales(
+        { since: since || null, until: until || null, days, other: null },
+        by as SaleGroup[]
+      ).catch((err) => {
+        logger.warn({ err }, "brain: the dashboard's sales could not be read");
+        return undefined;
+      });
+      if (ap === undefined) return textResult(apUnreadable(), true);
+      if (ap === null) return textResult(beforeRecords(since || "", until || today));
       stats.sourceCount = 1;
-      return textResult(renderSales(sales, by as SaleGroup[], from, until || today));
+      return textResult(ap);
     }
     // Far enough back to reach `since`, inclusive of both ends.
     /**
@@ -5999,6 +6034,8 @@ async function callTool(
           ) + 1
         )
       : intArg(args.days, 30, 1, 4000);
+    // `days` is the N whole days before today, so the rollup reaches one day further back.
+    const fetchDays = since ? asked : Math.min(asked + 1, 4000);
     /**
      * AD SPEND IS FETCHED SEPARATELY, BECAUSE THE ROLLUP DOES NOT HAVE IT.
      *
@@ -6009,13 +6046,41 @@ async function callTool(
      * chunks' `meta.ad_cost`; `adCostByDay` is the reader `analytics.ts` already uses,
      * paged correctly, rather than a second copy of that query.
      */
-    const [rows, ad] = await Promise.all([
-      brainDailyRollup(asked),
+    const [rows, ad, apRead] = await Promise.all([
+      // Unreadable (an open circuit breaker reads nothing), the answer is the outage, below.
+      brainDailyRollup(fetchDays).catch((err) => {
+        logger.warn({ err }, "brain: the daily rollup could not be read");
+        return null;
+      }),
       // NON-FATAL. The funnel and revenue figures are the point; spend is an addition,
       // and a spend read that fails must not cost the caller the numbers it did get.
       // Days then carry no `ad_spend`, which already means "unknown".
       adCostByDay().catch(() => ({ byDay: new Map<string, number>(), from: null, to: null })),
+      // The AP-Analytics dashboard's own figures (features/brain/server/ap-numbers.ts), which
+      // replace the rollup's wherever the dashboard has them. Null before its records begin;
+      // undefined when it cannot be read, and the rollup's are then served, saying so.
+      readAp({
+        since: since || null,
+        until: until || null,
+        days: asked,
+        // "previous" is the dashboard's own comparison, worked out from the period it reads.
+        other:
+          comparison && "period" in comparison
+            ? compareTo.toLowerCase() === "previous"
+              ? "previous"
+              : comparison.period
+            : null,
+      }).catch((err) => {
+        logger.warn({ err }, "brain: the dashboard's numbers could not be read");
+        return undefined;
+      }),
     ]);
+    // Before LoveIQ's first records there is nothing to serve, and it must not read as zeroes.
+    if (apRead === null) return textResult(beforeRecords(since, until || today));
+    // Unreadable, that is all that is said: no other counting stands in for the dashboard's.
+    if (apRead === undefined || rows === null) return textResult(apUnreadable(), true);
+    const ap = apView(apRead, rows, ad);
+    const lead = ap.header;
     /**
      * A DAY OUTSIDE GA4'S WINDOW GETS NO `ad_spend` KEY, NOT A ZERO.
      *
@@ -6027,8 +6092,7 @@ async function callTool(
      * overstates profit, which is the direction that matters, so an unknown day must
      * read as unknown rather than as a confident zero.
      */
-    // The range is applied AFTER the fetch, because the rollup counts back from today.
-    const inRange = since ? rows.filter((r) => r.day >= since && (!until || r.day <= until)) : rows;
+    const inRange: Array<{ day: string }> = ap.rows;
     const merged = inRange.map((r) =>
       adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
     );
@@ -6041,17 +6105,17 @@ async function callTool(
       ad.from && ad.to
         ? `Ad spend is known for ${ad.from} to ${ad.to}; days outside that carry no ` +
           `ad_spend field, which means unknown, not zero.`
-        : `No ad-spend data is available, so no day carries an ad_spend field.`;
+        : // No window at all is a failed read, as the dashboard says it (`spend` in metrics.ts).
+          `Ad spend could not be read just now, so no day carries an ad_spend field: unknown, ` +
+          `not zero.`;
 
-    if (comparison && "period" in comparison) {
-      const other = rows
-        .filter((r) => r.day >= comparison.period.since && r.day <= comparison.period.until)
-        .map(withSpend);
+    // No whole day to compare (the period is only today): the day rows, and the header says why.
+    if (ap.other) {
       return textResult(
-        `${spendNote}\n\n` +
+        `${lead}${spendNote}\n\n` +
           renderComparison(
-            { period: { since, until: until || today }, rows: merged.map(withSpend) },
-            { period: comparison.period, rows: other }
+            { period: ap.period, rows: merged.map(withSpend) },
+            { period: ap.other.period, rows: ap.other.rows.map(withSpend) }
           )
       );
     }
@@ -6076,8 +6140,8 @@ async function callTool(
         );
       });
       return textResult(
-        `${spendNote}\n\n${buckets.length} ${granularity}s from ${covered} days ` +
-          `(${since || "the last " + asked + " days"} to ${until || today}). Days are SUMMED.\n\n` +
+        `${lead}${spendNote}\n\n${buckets.length} ${granularity}s from ${covered} days ` +
+          `(${ap.period.since} to ${ap.period.until}). Days are SUMMED.\n\n` +
           lines.join("\n")
       );
     }
@@ -6087,71 +6151,18 @@ async function callTool(
      * malformed JSON cut mid-object and the company's first month -- 2026-03-24 to
      * 2026-04-19 -- was simply unreachable through the tool that exists to serve it.
      */
-    const { text: bodyText, shown } = renderRowsForTest(merged, MAX_RESULT_CHARS - 600);
+    const { text: bodyText, shown } = renderRowsForTest(
+      merged,
+      MAX_RESULT_CHARS - 600 - lead.length
+    );
     stats.sourceCount = shown;
     const spendNoteBlock = `${spendNote}\n\n`;
-    /**
-     * THE CLAMP AND THE CHARACTER CEILING ARE TWO DIFFERENT CUTS, and both have to be
-     * said in the SAME sentence because they compose.
-     *
-     * These used to be alternative branches, and the second one was unreachable in
-     * production: any `asked` above 4000 returns 4000 rows, 4000 rows always exceed the
-     * character ceiling, so the first branch fired every time and the clamp was never
-     * mentioned. `days: 999999` silently became 4000, then ~165, and the answer reported
-     * only the second of those two reductions.
-     *
-     * `asked` is compared against `rows.length`, the UNFILTERED fetch, never against
-     * `covered` — with a since/until range `covered` is the slice kept from the fetch and
-     * is SUPPOSED to be smaller, so comparing them would announce a truncation on every
-     * ordinary month query.
-     */
-    const clamped =
-      rows.length < asked
-        ? `The range was also reduced before that: ${asked} days were asked for and 4000 ` +
-          `is the database function's ceiling. `
-        : "";
     const head =
       shown < covered
         ? `${shown} of ${covered} days returned -- the rest did not fit the character ` +
-          `ceiling. ${clamped}Ask for a narrower period to see them.\n\n`
-        : clamped
-          ? `${clamped}This IS a truncation of the request, not the limit of the data.\n\n`
-          : "";
-    /**
-     * AN EMPTY ROLLUP IS A FAULT, NOT AN ABSENCE OF ACTIVITY.
-     *
-     * The branch here used to say "this counts only days with activity — an empty result
-     * means no recorded activity in that range". The function does not work that way: it
-     * generate_series-es every day and left-joins, so it returns exactly clamp(days,1,4000)
-     * rows whatever happened. Verified live: days=5 returns 5 rows, days=1 returns 1, and
-     * zero-activity days come back as zeroes. So the old text described behaviour that
-     * does not exist, in a branch production cannot reach — and if it ever IS reached,
-     * "no activity" is the one reading that is certainly wrong.
-     */
-    /**
-     * AN EMPTY RANGE AND AN EMPTY ROLLUP ARE DIFFERENT THINGS.
-     *
-     * A range that lands outside the data — a future month, or one before the company
-     * existed — returns rows from the rollup and nothing after the filter. That is a
-     * correct answer about a period with no days in it, and reporting it as a database
-     * fault would send someone to look at infrastructure over a date they chose.
-     */
-    if (rows.length > 0 && inRange.length === 0) {
-      return textResult(
-        `No days fall in ${since}${until ? ` to ${until}` : " onwards"}. The rollup has ` +
-          `${rows.length} days ending today, the earliest being ${rows[rows.length - 1]?.day ?? "unknown"} — ` +
-          `so that range is outside the data, which is not the same as a period with no activity.`
-      );
-    }
-    if (rows.length === 0) {
-      return textResult(
-        "The rollup returned no rows at all. It is built to return one row per day in " +
-          "range regardless of activity, so this is a fault in the query or the database, " +
-          "NOT a quiet period — do not report it as zero activity.",
-        true
-      );
-    }
-    return textResult(head + spendNote + bodyText);
+          `ceiling. Ask for a narrower period to see them.\n\n`
+        : "";
+    return textResult(lead + head + spendNoteBlock + bodyText);
   }
 
   if (name === "list_product_tables") {
@@ -7275,10 +7286,7 @@ async function callTool(
       outcome = await drawChart({ metrics: args.metrics, days: args.days, until: args.until });
     } catch (err) {
       logger.error({ err }, "brain: show_chart failed");
-      return textResult(
-        "The daily numbers could not be read right now. This is an outage, not a flat line.",
-        true
-      );
+      return textResult(apUnreadable("a flat line"), true);
     }
     if (!outcome.ok) return textResult(outcome.message, true);
     stats.sourceCount = 1;
@@ -7367,10 +7375,7 @@ async function callTool(
       });
     } catch (err) {
       logger.error({ err }, "brain: break_even failed");
-      return textResult(
-        "The live numbers could not be read right now. This is an outage, not a result.",
-        true
-      );
+      return textResult(apUnreadable(), true);
     }
     if (!outcome.ok) return textResult(outcome.message, true);
     stats.sourceCount = 1;
@@ -7632,8 +7637,11 @@ async function callTool(
   }
 
   if (name === "explain_change") {
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+    // Berlin days, as the series counts the dashboard's figures.
+    const today = reportingDay(new Date());
+    const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     const day = typeof args.day === "string" && args.day.trim() ? args.day.trim() : yesterday;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !isRealDate(day)) {
       return textResult(`\`day\` must be a real day like 2026-09-17, not "${day}".`, true);
@@ -7647,22 +7655,29 @@ async function callTool(
         true
       );
     }
-    let series;
-    try {
-      series = await loadSeries(day);
-    } catch {
-      return textResult(
-        "The daily numbers could not be read right now. This is an outage, not a quiet day.",
-        true
-      );
-    }
-    const partial = day === today ? "Today is still going, so its numbers are partial.\n\n" : "";
+    // Null for any failed read, an open circuit breaker included (jumps.ts): the one outage message.
+    const series = await loadSeries(day).catch((err) => {
+      logger.error({ err }, "brain: explain_change could not load the series");
+      return null;
+    });
+    if (!series) return textResult(apUnreadable("a quiet day"), true);
+    // Berlin's today, or reports opened and paid on a UTC day not over yet (jumps.ts).
+    const partNote = partialDay(day, !metric || metric.utc === true);
+    // Google Analytics is optional: when its read failed, its figures are left out, said so.
+    const gaNote = ga4Down(series) ? GA4_UNREAD : "";
+    if (metric?.ga4 && gaNote) return textResult(gaNote, true);
+    const partial = [partNote, gaNote]
+      .filter(Boolean)
+      .map((x) => `${x}\n\n`)
+      .join("");
     if (metric) {
       const reading = readMetric(metric, series, day);
       if (!reading) {
         return textResult(
-          `${metric.label} has no reading for ${day}: either nothing was counted that day or there ` +
-            `are fewer than two weeks of comparable days before it.`
+          metric.utc && utcOpen(day)
+            ? `${metric.label} has no reading for ${day} yet. ${partNote}`
+            : `${metric.label} has no reading for ${day}: either nothing was counted that day or ` +
+                "there are fewer than two weeks of comparable days before it."
         );
       }
       stats.sourceCount = 1;
@@ -8166,8 +8181,9 @@ export const MCP_INSTRUCTIONS =
   "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
   "prints which are reachable on this deployment and exactly what each exposes, " +
   "including ids and required parameters you cannot guess. And get_business_numbers " +
-  "returns the funnel, revenue and ad spend per day straight from the database when " +
-  "you want figures to compute with rather than narrative.\n\n" +
+  "returns the funnel, revenue and ad spend per day as the AP-Analytics dashboard counts " +
+  "them, with a link to that view, when you want figures to compute with rather than " +
+  "narrative: quote those as the dashboard's.\n\n" +
   "Which half to reach for: history for why something was decided or what a past " +
   "period looked like; live for what is true right now. Never infer a current number " +
   "from an indexed chunk when query_product_data can read it directly, and never " +
@@ -8225,7 +8241,8 @@ export const MCP_INSTRUCTIONS =
   "those functions is wrapped in a swallow-all exception handler, so a wrong one returns " +
   "a clean-looking answer rather than an error. So: use them to find WHERE to look, and " +
   "when a number is going to be repeated or acted on, confirm it against " +
-  "`get_business_numbers`, whose definition is the one that reconciles to Stripe.\n\n" +
+  "`get_business_numbers`, whose figures are the AP-Analytics dashboard's, the ones the " +
+  "team reads.\n\n" +
   "YOU CAN HELP WITH THE WRITING, NOT ONLY THE NUMBERS. LoveIQ writes the report itself, " +
   "and how it is written is in here. Two sources you will not guess the names of: " +
   '`sources: ["skill"]` holds how the team does its own work — the chapter method, the ' +

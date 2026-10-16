@@ -620,6 +620,53 @@ describe("proxy middleware", () => {
   // in the URL. It must bypass the admin session gate, or the funnel-digest
   // charts render as broken images (Slack gets 401). Regression guard for the
   // 2026-05-31 fix.
+  /**
+   * A link to an AP-Analytics view keeps its view through the sign-in: the page asked for goes
+   * to /admin/login as `next`, and only ever a same-site admin path (safeAdminNext).
+   */
+  describe("admin sign-in keeps the page the link was for", () => {
+    it("sends a signed-out visitor to the sign-in with the page as next", async () => {
+      await proxy(
+        makeNextRequest(
+          "http://localhost:3000/admin/ap/assessment-a?period=custom&from=2026-10-01&to=2026-10-07"
+        )
+      );
+      expect(mockRedirect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          href: "http://localhost:3000/admin/login?next=%2Fadmin%2Fap%2Fassessment-a%3Fperiod%3Dcustom%26from%3D2026-10-01%26to%3D2026-10-07",
+        })
+      );
+    });
+
+    it("keeps it when the idle timeout signs the admin out", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: { email: "admin@loveiq.org" } } });
+      await proxy(
+        makeNextRequest(
+          "http://localhost:3000/admin/ap?period=7d",
+          undefined,
+          undefined,
+          undefined,
+          String(Date.now() - 40 * 60 * 1000)
+        )
+      );
+      expect(mockRedirect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          href: "http://localhost:3000/admin/login?error=idle_timeout&next=%2Fadmin%2Fap%3Fperiod%3D7d",
+        })
+      );
+    });
+
+    it.each(["http://localhost:3000/admin//evil.com", "http://localhost:3000/admin"])(
+      "sends no next for a path that is not a plain admin page: %s",
+      async (url) => {
+        await proxy(makeNextRequest(url));
+        expect(mockRedirect).toHaveBeenCalledWith(
+          expect.objectContaining({ href: "http://localhost:3000/admin/login" })
+        );
+      }
+    );
+  });
+
   describe("admin gate exemption: signed digest-image route", () => {
     it("lets the anonymous Slack proxy reach /api/admin/digest-image/* (not session-gated)", async () => {
       // Default mockGetUser = anonymous; the route authorizes via the URL signature.

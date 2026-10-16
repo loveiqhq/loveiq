@@ -3,18 +3,29 @@
  * Google Ads spend buys, and the level each lever alone would have to reach for revenue to
  * cover it, from live numbers, with "what if" values in place of any of them.
  *
- * THE DIGEST'S BASIS, deliberately (analytics.ts, "cost per paying customer" and "net"):
- * every visitor and every buyer, on the days the Google Ads data covers, with spend and
- * revenue summed over exactly those days. Subtracting two numbers that describe different
- * spans is the defect analytics.ts records fixing three times. Blended, not paid traffic
- * alone: direct and organic visitors count too, so this is the funnel's cost of a customer,
- * not a campaign's.
+ * COUNTED AS THE AP-ANALYTICS DASHBOARD COUNTS (ap-numbers.ts says why): its visitors,
+ * finished surveys, paying customers and revenue, through its own facts and totals, so the
+ * average order is its CLV and spend over the payers its CAC. Every visitor and every buyer,
+ * on the days the Google Ads data covers, with spend and revenue over exactly those days:
+ * subtracting two numbers that describe different spans is the defect analytics.ts records
+ * fixing three times. Blended, not paid traffic alone: direct and organic visitors count
+ * too, so this is the funnel's cost of a customer, not a campaign's.
  *
  * The one relation everything below rests on: revenue per visitor is
  *   (visitors who finish) × (finishers who pay) × (average order),
  * and the spend is covered when that reaches the cost per visitor.
  */
-import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
+import { fetchFacts } from "@features/admin/server/ap/facts";
+import { apFilters, apLink } from "@features/brain/server/ap-numbers";
+import { dayCount } from "@features/admin/server/ap/filters";
+import { ALL, spend, totals } from "@features/admin/server/ap/metrics";
+import { adCostByDay } from "@features/brain/server/ingest/analytics";
+import { reportingDay } from "@shared/time/reporting-day";
+
+/** Said when Google Ads spend cannot be read: break-even is spend, so there is none to give. */
+export const AD_SPEND_UNREAD =
+  "Google Ads spend could not be read just now, so there is no break-even to work out. This " +
+  "is an outage, not zero spend. Ask again in a few minutes.";
 
 export const MIN_DAYS = 7;
 export const MAX_DAYS = 180;
@@ -157,35 +168,35 @@ export async function breakEven(
     Object.entries(parsed).map(([k, p]) => [k, p.ok ? p.value : undefined])
   ) as Partial<Record<keyof Levers, number>>;
 
-  const until = addDays(isoDay(now), -1);
+  // The dashboard's days: Berlin days, ending yesterday as its ranges do.
+  const until = addDays(reportingDay(new Date(now)), -1);
   const from = addDays(until, -(days - 1));
-  // The rollup counts back from today; one read covers the window and the fallback's.
-  const [rows, ad] = await Promise.all([
-    brainDailyRollup(Math.max(days, AOV_FALLBACK_DAYS) + 1),
-    adCostByDay(),
-  ]);
-  const sum = (fromDay: string, coveredOnly: boolean): Sums => {
-    const s: Sums = { days: 0, spend: 0, visitors: 0, finished: 0, paid: 0, revenue: 0 };
-    for (const r of rows) {
-      const day = String(r.day).slice(0, 10);
-      if (day < fromDay || day > until) continue;
-      if (coveredOnly && !adCovers(ad, day)) continue;
-      s.days += 1;
-      s.spend += ad.byDay.get(day) ?? 0;
-      s.visitors += Number(r.unique_visitors ?? 0);
-      s.finished += Number(r.submissions ?? 0);
-      s.paid += Number(r.reports_paid ?? 0);
-      s.revenue += Number(r.revenue ?? 0);
-    }
-    return s;
+  const ad = await adCostByDay();
+  /** The dashboard's totals over [a, b], with the ad spend of those days. */
+  const sum = async (a: string, b: string): Promise<Sums> => {
+    const t = totals(await fetchFacts(a, b), ALL);
+    return {
+      days: dayCount(a, b),
+      spend: spend(ad, ALL, a, b).eur ?? 0,
+      visitors: t.visits ?? 0,
+      finished: t.subs,
+      paid: t.payers,
+      revenue: t.revenue,
+    };
   };
-  const w = sum(from, true);
-  if (w.days === 0) {
+  // No window at all is a failed read (adCostByDay swallows its errors), as the dashboard reads
+  // it (`spend` in metrics.ts): an outage of the spend itself, never missing data.
+  if (ad.from === null || ad.to === null) return refuse(AD_SPEND_UNREAD);
+  // The days of the window the ad data covers, which is one unbroken stretch.
+  const lo = ad.from > from ? ad.from : from;
+  const hi = ad.to < until ? ad.to : until;
+  if (lo > hi) {
     return refuse(
       `The Google Ads data covers none of the ${days} days to ${longDay(until)}, so there is no ` +
         "spend to break even against. That is missing data, not zero spend."
     );
   }
+  const w = await sum(lo, hi);
   if (w.visitors === 0)
     return refuse("No visitors were recorded on those days, so there is nothing to divide.");
 
@@ -194,12 +205,12 @@ export async function breakEven(
   if (w.paid > 0) {
     averageOrder = w.revenue / w.paid;
   } else {
-    const longer = sum(addDays(until, -(AOV_FALLBACK_DAYS - 1)), false);
+    const longer = await sum(addDays(until, -(AOV_FALLBACK_DAYS - 1)), until);
     averageOrder = longer.paid > 0 ? longer.revenue / longer.paid : 0;
     notes.push(
       longer.paid > 0
         ? `Nobody paid in the window, so the average order is from the last ${AOV_FALLBACK_DAYS} days ` +
-            `(${eur(averageOrder)} over ${count(longer.paid)} purchases).`
+            `(${eur(averageOrder)} over ${count(longer.paid)} paying customers).`
         : `Nobody paid in the last ${AOV_FALLBACK_DAYS} days either, so there is no average order; ` +
             "pass average_order to model one."
     );
@@ -261,14 +272,18 @@ export async function breakEven(
   out.push(...breakEvenLines(levers, whatIf), "");
   if (w.paid < FEW_PURCHASES) {
     notes.unshift(
-      `Read with care: ${count(w.paid)} ${w.paid === 1 ? "purchase is" : "purchases are"} too few to trust ` +
+      `Read with care: ${count(w.paid)} ${w.paid === 1 ? "paying customer is" : "paying customers are"} too few to trust ` +
         "the share who pay; one more or one fewer moves every line above."
     );
   }
   notes.push(
-    "Blended, like the digest's cost per paying customer: every visitor and buyer counts, not " +
-      "only those who came from an ad. Revenue is what customers paid, before card fees and VAT. " +
-      "Only Google Ads spend is recorded; anything spent elsewhere is not in here."
+    "Counted as the AP-Analytics dashboard counts them (Berlin days; staff and our own test " +
+      "traffic left out): its visitors, finished surveys and paying customers, so the average " +
+      "order is its CLV and the spend per paying customer its CAC. The same days on the " +
+      `dashboard: ${apLink("assessment-a", apFilters(lo, hi, reportingDay(new Date(now))))} ` +
+      "(team sign-in required). Blended: every visitor and buyer counts, not only those who " +
+      "came from an ad. Revenue is what customers paid, before card fees and VAT. Only Google " +
+      "Ads spend is recorded; anything spent elsewhere is not in here."
   );
   return { ok: true, text: [...out, ...notes].join("\n") };
 }

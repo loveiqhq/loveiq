@@ -1,5 +1,9 @@
+import { fetchFacts, type Facts } from "@features/admin/server/ap/facts";
+import { ALL, startsComplete, totals } from "@features/admin/server/ap/metrics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { brainDailyRollup, longDate } from "@features/brain/server/ingest/analytics";
+import logger from "@shared/observability/logger";
+import { reportingDay } from "@shared/time/reporting-day";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 
 /**
@@ -21,7 +25,15 @@ import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
  * and the answer ends by saying none of it is proof.
  */
 
-type Rollup = Awaited<ReturnType<typeof brainDailyRollup>>[number];
+type RollupRow = Awaited<ReturnType<typeof brainDailyRollup>>[number];
+/**
+ * A day of the series: the rollup's row with the dashboard's figures in place (asDashboard).
+ * A figure is null where it has no reading: starts the dashboard does not hold every one of,
+ * or the rollup's own figures on a Berlin day the UTC rollup has not reached yet.
+ */
+type Rollup = { day: string } & {
+  [K in Exclude<keyof RollupRow, "day">]: RollupRow[K] | null;
+};
 
 /** One GA4 day, read back from the brain's own day record. */
 export interface Ga4Day {
@@ -38,7 +50,49 @@ export interface Ga4Day {
 export interface DaySeries {
   day: string;
   rollup?: Rollup;
-  ga4?: Ga4Day;
+  /** Null: Google Analytics could not be read (`GA4_UNREAD`); absent: no record that day. */
+  ga4?: Ga4Day | null;
+}
+
+/** Said wherever a Google Analytics figure would appear and its read failed (loadSeries). */
+export const GA4_UNREAD =
+  "Google Analytics could not be read just now, so its figures are left out: this is an " +
+  "outage, not zero.";
+
+/** True when the series' Google Analytics read failed: its figures are null, not zero. */
+export const ga4Down = (series: DaySeries[]): boolean => series.some((d) => d.ga4 === null);
+
+/**
+ * True when the rollup's own figures for `day` (reports opened and paid) are left out because
+ * its UTC day has not ended: Berlin's yesterday from midnight until UTC's (01:00 or 02:00 in
+ * Berlin, by the season), and Berlin's today before UTC's has begun. Berlin's today in the
+ * day keeps them, and is said to be partial.
+ */
+export function utcOpen(day: string, now = new Date()): boolean {
+  const utc = now.toISOString().slice(0, 10);
+  return day > utc || (day === utc && day !== reportingDay(now));
+}
+
+/** Said where reports opened and paid are left out for `days` (see `utcOpen`). */
+export const utcNote = (days: string[]): string =>
+  days.length === 0
+    ? ""
+    : `Reports opened and paid are counted by UTC day, and ${days.join(" and ")} ` +
+      `${days.length === 1 ? "is" : "are"} not over yet in UTC, so their figures for ` +
+      `${days.length === 1 ? "it" : "them"} are not complete and are left out.`;
+
+/**
+ * Said about `day` when some of its figures are part of a day, or "" when they are whole:
+ * Berlin's today is still going, and, where the answer shows them (`utc`), reports opened and
+ * paid wait for the UTC day to end.
+ */
+export function partialDay(day: string, utc: boolean, now = new Date()): string {
+  return [
+    day === reportingDay(now) ? "Today is still going, so its numbers are partial." : "",
+    utc && utcOpen(day, now) ? utcNote([day]) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /**
@@ -86,9 +140,15 @@ export interface Metric {
   minAbs?: number;
   /** Where a count's move can be split, e.g. by traffic source. */
   segments?: { label: string; of: (d: DaySeries) => Record<string, number> | null };
+  /** The rollup's own figure, counted by UTC day (see `utcOpen`), not the dashboard's. */
+  utc?: boolean;
+  /** Read from Google Analytics, which is optional: left out, and said so, when it fails. */
+  ga4?: boolean;
 }
 
-const r = (k: keyof Rollup) => (d: DaySeries) => (d.rollup ? Number(d.rollup[k] ?? 0) : null);
+// A null figure (starts the dashboard does not hold every one of) is no reading, never a zero.
+const r = (k: keyof Rollup) => (d: DaySeries) =>
+  d.rollup && d.rollup[k] !== null ? Number(d.rollup[k] ?? 0) : null;
 
 export const METRICS: Metric[] = [
   {
@@ -101,14 +161,15 @@ export const METRICS: Metric[] = [
   {
     id: "sessions",
     label: "GA4 sessions",
+    ga4: true,
     count: (d) => d.ga4?.sessions ?? null,
     minAbs: 50,
     segments: { label: "GA4 channel", of: (d) => d.ga4?.channels ?? null },
   },
   { id: "survey_starts", label: "Surveys started", count: r("survey_starts"), minAbs: 20 },
   { id: "submissions", label: "Surveys finished", count: r("submissions"), minAbs: 8 },
-  { id: "report_opens", label: "Reports opened", count: r("report_opens"), minAbs: 8 },
-  { id: "reports_paid", label: "Reports paid", count: r("reports_paid"), minAbs: 3 },
+  { id: "report_opens", label: "Reports opened", count: r("report_opens"), minAbs: 8, utc: true },
+  { id: "reports_paid", label: "Reports paid", count: r("reports_paid"), minAbs: 3, utc: true },
   {
     id: "start_rate",
     label: "Share of visitors who start the survey",
@@ -145,6 +206,7 @@ export const METRICS: Metric[] = [
   {
     id: "engaged_rate",
     label: "Share of GA4 sessions that engage",
+    ga4: true,
     rate: {
       num: (d) => d.ga4?.engaged ?? null,
       den: (d) => d.ga4?.sessions ?? null,
@@ -156,6 +218,7 @@ export const METRICS: Metric[] = [
   {
     id: "paid_rate",
     label: "Share of report openers who pay",
+    utc: true,
     rate: {
       num: r("reports_paid"),
       den: r("report_opens"),
@@ -291,25 +354,83 @@ async function ga4Days(from: string, until: string): Promise<Map<string, Ga4Day>
 
 /**
  * Every day from `until` back far enough for `until` and the day before it to have a full
- * baseline, oldest first. GA4 is optional: a failed read leaves the funnel metrics standing.
+ * baseline, oldest first. Null when the dashboard's facts or the rollup cannot be read (an open
+ * circuit breaker fails both): every answer built on it then says the numbers could not be
+ * read, rather than serving part of them as if whole. Google Analytics is optional: when its
+ * read fails, every day's `ga4` is null, and the answers say so (`GA4_UNREAD`).
  */
-export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[]> {
+export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[] | null> {
   const from = addDays(until, -(BASELINE_DAYS + 1 + extraDays));
+  // UTC on purpose: the rollup counts back from its own UTC day, so this reaches `from`. A
+  // Berlin day it has not reached yet is filled in below.
   const today = new Date().toISOString().slice(0, 10);
   const span =
     Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) +
     1;
-  const [rows, ga4] = await Promise.all([
-    brainDailyRollup(span),
-    ga4Days(from, until).catch(() => new Map<string, Ga4Day>()),
+  const unread = (what: string) => (err: unknown) => {
+    logger.warn({ err }, `brain: ${what} could not be read for the series`);
+    return null;
+  };
+  const [rows, ga4, facts] = await Promise.all([
+    brainDailyRollup(span).catch(unread("the daily rollup")),
+    ga4Days(from, until).catch(unread("GA4's day records")),
+    fetchFacts(from, until).catch(unread("the dashboard's facts")),
   ]);
+  if (!rows || !facts) return null;
   const byDay = new Map(rows.map((row) => [String(row.day).slice(0, 10), row]));
   const out: DaySeries[] = [];
   for (let d = from; d <= until; d = addDays(d, 1)) {
-    out.push({ day: d, rollup: byDay.get(d), ga4: ga4.get(d) });
+    const row = byDay.get(d);
+    out.push({
+      day: d,
+      /**
+       * At night Berlin's yesterday is a whole day for the dashboard, but the rollup's UTC day
+       * of that date is still running (about 13% of first report opens fall at 22:00-24:00
+       * UTC), and Berlin's today has no UTC day yet: the rollup's own figures are left out,
+       * null, no reading rather than zero. The dashboard's figures stand (utcOpen).
+       */
+      rollup: asDashboard(row && !utcOpen(d) ? row : unreached(d), facts, d),
+      ga4: ga4 ? ga4.get(d) : null,
+    });
   }
   return out;
 }
+
+/**
+ * VISITORS, SURVEY STARTS, FINISHED SURVEYS AND REVENUE AS THE AP-ANALYTICS DASHBOARD COUNTS
+ * THEM (ap-numbers.ts says why: the rollup's starts were posted only after the cookie banner,
+ * so its start rate read about 6% where the dashboard reads about 17%). Each is the
+ * dashboard's count for that one Berlin day. A day whose starts the dashboard does not hold
+ * every one of (before 18 Sep 2026 and over 30 days old) has none, rather than a low one that
+ * would read as a jump. Reports opened and paid stay the rollup's: the dashboard's are "so
+ * far" counts of a day's finishers, which grow with the day's age and so cannot be compared
+ * day against day.
+ */
+function asDashboard(row: Rollup, facts: Facts, day: string): Rollup {
+  const t = totals(facts, ALL, day, day);
+  return {
+    ...row,
+    unique_visitors: t.visits,
+    survey_starts: startsComplete(day, facts.asOf) ? t.starts : null,
+    submissions: t.subs,
+    revenue: t.revenue,
+  };
+}
+
+/** A day with no rollup row: every figure of the rollup's own unknown. */
+const unreached = (day: string): Rollup => ({
+  day,
+  unique_visitors: null,
+  survey_starts: null,
+  intro_completed: null,
+  submissions: null,
+  reports_created: null,
+  reports_paid: null,
+  revenue: null,
+  report_opens: null,
+  invites_sent: null,
+  top_sources: null,
+});
 
 /** Every metric that is unusual on `day`; with `onsetOnly`, only those that were not already unusual the day before. */
 export function jumpsOn(series: DaySeries[], day: string, onsetOnly = false): Reading[] {
@@ -384,9 +505,11 @@ export function segmentShift(
 ): Array<{ name: string; value: number; usual: number; delta: number }> {
   if (!m.segments) return [];
   const { at, before } = baselineOf(series, day);
-  const today = m.segments.of(series[at]!) ?? {};
+  // The day's own breakdown missing (its UTC day not over, or no GA4 record) is no split, never
+  // every segment at zero.
+  const today = m.segments.of(series[at]!);
   const days = before.map((d) => m.segments!.of(d)).filter((s): s is Record<string, number> => !!s);
-  if (days.length === 0) return [];
+  if (!today || days.length === 0) return [];
   const names = new Set([...Object.keys(today), ...days.flatMap((s) => Object.keys(s))]);
   return [...names]
     .map((name) => {
@@ -560,6 +683,7 @@ export function explainDay(
     evidence.push(
       `(${shipped.length - 4} more changes shipped those days: what_shipped lists them.)`
     );
+  if (around.decisions === null) evidence.push("What was decided could not be read just now.");
   for (const d of (around.decisions ?? []).slice(0, 3))
     evidence.push(`Decided ${d.date}: ${d.title} (${d.id})`);
   return { likely, evidence };
@@ -617,13 +741,50 @@ export async function noticeJumps(
 ): Promise<number> {
   const hour = now.getUTCHours();
   if (hour < 7 || hour > 10) return 0;
-  const day = addDays(now.toISOString().slice(0, 10), -1);
+  const day = addDays(reportingDay(now), -1);
   const series = await loadSeries(day);
+  if (!series) {
+    // Said, not skipped: no notice would read as "nothing unusual". The headline carries no
+    // time, so each run in the window rewrites this one. ponytail: a later run that reads the
+    // numbers does not withdraw it; it says when it was written.
+    await record({
+      headline: `The numbers for ${longDate(day)} could not be checked`,
+      detail:
+        `At ${now.toISOString().slice(11, 16)} UTC the AP-Analytics dashboard's numbers could ` +
+        `not be read, so ${longDate(day)} was not checked for unusual numbers, and no other ` +
+        "counting was used in their place. This is an outage, not a quiet day: explain_change " +
+        `with day ${day} checks it once they can be read.`,
+      kind: "number-watch",
+    });
+    return 0;
+  }
   const readings = jumpsOn(series, day, true);
-  if (readings.length === 0) return 0;
+  /**
+   * GOOGLE ANALYTICS DOWN IS SAID, AND NEVER REPLACES A WHOLE NOTICE. Its sessions and
+   * engagement go unchecked, so a day with nothing else unusual says that rather than nothing.
+   * And each notice of a run without it has its own headline, so its own id (noticeId:
+   * headline and day): it cannot overwrite an earlier run's notice that held a GA4 jump.
+   */
+  const gaDown = ga4Down(series);
+  if (readings.length === 0) {
+    if (gaDown) {
+      await record({
+        headline: `Google Analytics figures for ${longDate(day)} could not be checked`,
+        detail:
+          `At ${now.toISOString().slice(11, 16)} UTC Google Analytics could not be read, so GA4 ` +
+          `sessions and engagement for ${longDate(day)} were not checked for unusual numbers: ` +
+          "this is an outage, not a quiet day. The other numbers were checked, and none was " +
+          `unusual. explain_change with day ${day} checks GA4's once it can be read.`,
+        kind: "number-watch",
+      });
+    }
+    return 0;
+  }
   await record({
-    headline: `Unusual numbers on ${longDate(day)}`,
-    detail: `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}`,
+    headline: `Unusual numbers on ${longDate(day)}${gaDown ? ", without Google Analytics" : ""}`,
+    detail:
+      `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}` +
+      (gaDown ? `\n\n${GA4_UNREAD}` : ""),
     kind: "number-watch",
     evidence: `explain_change with day ${day} gives the same breakdown, and any metric in full.`,
   });
