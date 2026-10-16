@@ -102,6 +102,8 @@ export interface SubFact extends Tagged, AdTags {
   /** Of their paid sales, the full unlocks and those sales' revenue. */
   fullSales: number;
   fullRevenue: number;
+  /** Each paid sale, oldest first: [time (epoch seconds), amount, plan]. Null from an older reader. */
+  pays: Array<[number, number, string | null]> | null;
   shared: boolean;
   /** When the first share, vote and invite happened (for age-matched comparisons). */
   sharedAt: string | null;
@@ -336,6 +338,12 @@ export function parseFacts(
           : FULL_PLANS.has(str(r.plan) ?? "")
             ? num(r.sales)
             : 0,
+      pays: Array.isArray(r.pays)
+        ? (r.pays as unknown[]).map((x) => {
+            const a = Array.isArray(x) ? x : [];
+            return [num(a[0]), num(a[1]), str(a[2])] as [number, number, string | null];
+          })
+        : null,
       fullRevenue:
         r.fullRevenue !== undefined
           ? num(r.fullRevenue)

@@ -16,6 +16,7 @@ import {
   type ApFilters,
   type Bucket,
   type Grain,
+  rangeLabel,
 } from "./filters";
 import { linearFit, type Unit } from "./format";
 import { head, readMeanMs, readMedianMs, type PageHead, type Tile } from "./common";
@@ -143,6 +144,16 @@ export function buildFocus(input: {
   const t = totals(facts, scope);
   const p = previous && !tabletBlocked(scope, previous.from) ? totals(previous, scope) : null;
   const sNow = spend(ad, scope, facts.from, facts.to);
+  // Spend that covers only part of the range (GA4 began later) is never shown as the whole:
+  // it and the cost per submission are blank, and say why.
+  const nowSpend = sNow.complete ? sNow.eur : null;
+  const spendWhy =
+    sNow.why ??
+    (sNow.eur !== null && !sNow.complete
+      ? sNow.from
+        ? `Ad spend is recorded from ${rangeLabel(sNow.from, sNow.from)}: pick a range from that day on.`
+        : "Ad spend could not be read for every day of this range."
+      : null);
   const sPrevRaw = previous ? spend(ad, scope, previous.from, previous.to) : null;
   // Spend is compared only when both periods have every day of it: a partial total reads low.
   const sPrev = sPrevRaw && sPrevRaw.complete && sNow.complete ? sPrevRaw.eur : null;
@@ -177,7 +188,7 @@ export function buildFocus(input: {
       key: "spend",
       label: "Ad spend",
       unit: "eur",
-      value: sNow.eur,
+      value: nowSpend,
       prev: sPrev,
       // A cost that is neither good nor bad by itself: its change is grey, as drawn.
       goodWhen: "either",
@@ -186,7 +197,7 @@ export function buildFocus(input: {
         return s.complete ? s.eur : null;
       }),
       foot: "",
-      blocked: sNow.why,
+      blocked: spendWhy,
       trend: "",
     },
     {
@@ -286,7 +297,7 @@ export function buildFocus(input: {
           axis: "right",
           unit: "eur",
           lowerBetter: true,
-          total: sNow.eur === null || tablet ? null : ratio(sNow.eur, t.subs),
+          total: nowSpend === null || tablet ? null : ratio(nowSpend, t.subs),
           pick: (b) => (tablet ? null : ratio(spendOf(b), tot(b).subs)),
         },
         {
@@ -422,7 +433,7 @@ export function buildFocus(input: {
     submissions: tablet ? null : t.subs,
     paidCvr: tablet ? null : ratio(t.paidCohort, t.subs),
     revPerSub: tablet ? null : ratio(t.revenue, t.subs),
-    costPerSub: tablet || sNow.eur === null ? null : ratio(sNow.eur, t.subs),
+    costPerSub: tablet || nowSpend === null ? null : ratio(nowSpend, t.subs),
     trend: tablet || !fit ? null : { values: daily, ...fit },
   };
   const later = (label: string): AssessmentRow => ({

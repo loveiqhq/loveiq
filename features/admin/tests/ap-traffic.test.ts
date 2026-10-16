@@ -171,6 +171,46 @@ describe("Traffic page builder", () => {
     expect(p.quality.dots).toEqual([]);
   });
 
+  it("starts per row follow every filter, or are blank when they can't", () => {
+    // Starts don't record the tier: every row's starts are blank, not all tiers' starts.
+    const tier = traffic({ filters: { ...filters, tier: "tier_1" } });
+    for (const table of ["channel", "campaign", "keyword"] as const) {
+      for (const r of tier.breakdowns[table].rows) expect(r.counts.starts).toBeNull();
+    }
+  });
+
+  it("ad spend that covers part of the range is never shown as the whole", () => {
+    // GA4 begins on 3 Oct: the week's spend is partial.
+    const late = { ...ad, from: "2026-10-03" };
+    const p = traffic({ ad: late });
+    expect(p.tiles.now.spend).toBeNull();
+    expect(p.tiles.blocked.spend).toBe(
+      "Ad spend is recorded from 3 Oct 2026: pick a range from that day on."
+    );
+    expect(p.breakdowns.channel.total!.counts.spend).toBeNull();
+    expect(p.breakdowns.channel.notes).toContain(
+      "Ad spend is recorded from 3 Oct 2026: pick a range from that day on."
+    );
+  });
+
+  it("under another source's filter, Google's clicks and impressions are not shown", () => {
+    const p = traffic({ filters: { ...filters, source: "organic_search" } });
+    expect(p.tiles.now).toMatchObject({ clicks: null, impressions: null });
+    expect(p.breakdowns.channel.total!.counts).toMatchObject({ clicks: null, impressions: null });
+  });
+
+  it("the landing test's visitor figures are blank under a filter visits can't follow", () => {
+    const p = traffic({
+      filters: { ...filters, from: "2026-10-14", to: "2026-10-14", device: "phone" },
+      facts: factsFixture({ from: "2026-10-14", to: "2026-10-14" }),
+      today: "2026-10-16",
+    });
+    const hero = p.experiments.arms.filter((a) => a.test === "Landing hero");
+    for (const a of hero)
+      expect(a).toMatchObject({ visitors: null, startCvr: null, revPerVisitor: null });
+    expect(hero[1]!.why).toBe("Visits don't record the device.");
+  });
+
   it("says exactly why survey starts are blank", () => {
     expect(traffic().tiles.blocked.starts).toBeNull();
     expect(traffic({ filters: { ...filters, tier: "tier_1" } }).tiles.blocked.starts).toBe(

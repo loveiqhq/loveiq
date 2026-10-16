@@ -85,6 +85,38 @@ describe("Payment page builder", () => {
     expect(payment("2026-10-01", "2026-10-07").checkout.note).toBeNull();
   });
 
+  it("a refunded or disputed checkout was paid; under the new/returning filter checkouts are blank", () => {
+    const facts = {
+      money: [],
+      checkouts: [
+        checkout({ n: 2 }),
+        checkout({ status: "succeeded", attempted: true, n: 1 }),
+        checkout({ status: "refunded", attempted: true, n: 1 }),
+        checkout({ status: "disputed", attempted: true, n: 1 }),
+      ],
+    };
+    expect(payment("2026-10-01", "2026-10-07", facts).checkout).toMatchObject({
+      reached: 5,
+      attempted: 3,
+      paid: 3,
+    });
+    const p = buildPayment({
+      facts: factsFixture({ from: "2026-10-01", to: "2026-10-07", ...facts }),
+      filters: {
+        ...parseFilters({ period: "custom", from: "2026-10-01", to: "2026-10-07" }, TODAY),
+        visitor: "new",
+      },
+      today: TODAY,
+      now,
+      uplift: null,
+    });
+    const why =
+      "Checkouts can't be split into new and returning visitors: a checkout isn't linked to the visit PostHog saw.";
+    expect(p.checkout).toMatchObject({ reached: 0, why });
+    expect(p.tiles.find((t) => t.key === "checkout")).toMatchObject({ value: null, blocked: why });
+    expect(p.pricing.arms.every((a) => a.checkouts === null)).toBe(true);
+  });
+
   it("who pays: a segment's full-unlock average counts its full unlocks only", () => {
     const p = payment("2026-10-01", "2026-10-07", {
       subs: [

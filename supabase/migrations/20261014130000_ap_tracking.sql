@@ -186,7 +186,11 @@ AS $function$
            coalesce(bool_or(p.metadata->>'plan' IN ('full_report', 'all_reports', 'core')) FILTER (WHERE p.amount > 0), false) AS full_paid,
            -- The full unlocks among them, for an average full-unlock price per segment.
            count(*) FILTER (WHERE p.amount > 0 AND p.metadata->>'plan' IN ('full_report', 'all_reports', 'core')) AS full_sales,
-           coalesce(sum(p.amount) FILTER (WHERE p.amount > 0 AND p.metadata->>'plan' IN ('full_report', 'all_reports', 'core')), 0) AS full_revenue
+           coalesce(sum(p.amount) FILTER (WHERE p.amount > 0 AND p.metadata->>'plan' IN ('full_report', 'all_reports', 'core')), 0) AS full_revenue,
+           -- Each sale as [time (epoch s), amount, plan], so an earlier period can be read as it
+           -- stood at the same age, a later upgrade left out (ageMatched).
+           json_agg(json_build_array(floor(extract(epoch FROM p.created_date_time))::bigint, p.amount, p.metadata->>'plan')
+                    ORDER BY p.created_date_time, p.id) FILTER (WHERE p.amount > 0) AS pays
       FROM payment p
       JOIN personal_report pr ON pr.id = p.personal_report_id
      WHERE p.status = 'succeeded' AND coalesce(p.is_test, false) = false
@@ -277,7 +281,7 @@ AS $function$
            r.visits, r.returned_at, r.read_ms, r.closed, r.sessions,
            q.paywall_at, c.at AS clicked_at, q.checkout_at,
            CASE WHEN sd.tablet THEN 'Tablet' ELSE coalesce(q.device, sd.device) END AS device, q.tier, q.price_arm,
-           p.paid_at, p.sales, p.revenue, p.gifted, p.plan, p.full_paid, p.full_sales, p.full_revenue,
+           p.paid_at, p.sales, p.revenue, p.gifted, p.plan, p.full_paid, p.full_sales, p.full_revenue, p.pays,
            (sh.sid IS NOT NULL) AS shared, sh.at AS shared_at, coalesce(v.n, 0) AS votes, v.at AS voted_at,
            (iv.sid IS NOT NULL) AS invited, iv.at AS invited_at,
            w.slide AS wizard_slide,
@@ -473,6 +477,7 @@ AS $function$
                'paidAt', x.paid_at, 'sales', coalesce(x.sales, 0), 'revenue', coalesce(x.revenue, 0),
                'gifted', coalesce(x.gifted, false), 'plan', x.plan, 'full', coalesce(x.full_paid, false),
                'fullSales', coalesce(x.full_sales, 0), 'fullRevenue', coalesce(x.full_revenue, 0),
+               'pays', coalesce(x.pays, '[]'::json),
                'shared', x.shared, 'sharedAt', x.shared_at, 'votes', x.votes, 'votedAt', x.voted_at,
                'invited', x.invited, 'invitedAt', x.invited_at, 'wizardSlide', x.wizard_slide,
                -- The visit the survey was finished in, for the new/returning filter (PostHog).

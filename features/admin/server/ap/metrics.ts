@@ -8,7 +8,7 @@
 import { addDays } from "./days";
 import type { AdCost } from "@features/brain/server/ingest/analytics";
 
-import { classifySource, deviceClass, type Facts, type SubFact } from "./facts";
+import { classifySource, deviceClass, FULL_PLANS, type Facts, type SubFact } from "./facts";
 import {
   rangeLabel,
   SURVEY_TRACKING_FROM,
@@ -366,6 +366,21 @@ export function ageMatched(prev: Facts, cutoff: Date): Facts {
   return {
     ...prev,
     subs: prev.subs.map((s) => {
+      // Their sales up to the cutoff, each by its own time: a later upgrade is left out.
+      const paysKept = s.pays?.filter(([at]) => at * 1000 <= limit) ?? null;
+      const salesCut = paysKept
+        ? {
+            sales: paysKept.length,
+            revenue: Math.round(paysKept.reduce((a, p) => a + p[1], 0) * 100) / 100,
+            full: paysKept.some((p) => FULL_PLANS.has(p[2] ?? "")),
+            fullSales: paysKept.filter((p) => FULL_PLANS.has(p[2] ?? "")).length,
+            fullRevenue:
+              Math.round(
+                paysKept.filter((p) => FULL_PLANS.has(p[2] ?? "")).reduce((a, p) => a + p[1], 0) *
+                  100
+              ) / 100,
+          }
+        : null;
       const paidAt = by(s.paidAt);
       const sharedAt = by(s.sharedAt);
       const votedAt = by(s.votedAt);
@@ -389,10 +404,12 @@ export function ageMatched(prev: Facts, cutoff: Date): Facts {
         clickedAt: by(s.clickedAt),
         checkoutAt: by(s.checkoutAt),
         paidAt,
-        sales: paidAt ? s.sales : 0,
-        revenue: paidAt ? s.revenue : 0,
-        fullSales: paidAt ? s.fullSales : 0,
-        fullRevenue: paidAt ? s.fullRevenue : 0,
+        ...(salesCut ?? {
+          sales: paidAt ? s.sales : 0,
+          revenue: paidAt ? s.revenue : 0,
+          fullSales: paidAt ? s.fullSales : 0,
+          fullRevenue: paidAt ? s.fullRevenue : 0,
+        }),
         sharedAt,
         shared: s.shared && sharedAt !== null,
         votedAt,

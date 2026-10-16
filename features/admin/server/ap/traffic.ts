@@ -347,14 +347,18 @@ function perfRow(
   };
 }
 
-/** Starts in [from, to] that pass the filters and `keep`, or null when they can't be split. */
+/**
+ * Starts in [from, to] that pass the filters and `keep`, or null when the filters can't apply
+ * to starts (a tier or visitor filter, the device before 12 Oct; see startsBlocked).
+ */
 function startsWhere(
   facts: Facts,
   scope: Scope,
   keep: (s: StartFact) => boolean,
   from = facts.from,
   to = facts.to
-): number {
+): number | null {
+  if (startsBlocked(scope, from, facts.asOf)) return null;
   return facts.starts
     .filter(
       (s) =>
@@ -484,6 +488,17 @@ export function buildTraffic(input: {
   const vB = visitsBlocked(scope);
   const visits = vB ? null : visitTotal(facts);
   const s = spend(ad, scope, facts.from, facts.to);
+  // Spend that covers only part of the range (GA4 began later) is never used as the whole:
+  // the figures built on it are blank, and say why.
+  const partSpend =
+    !s.complete && s.eur !== null && s.why === null
+      ? s.from
+        ? `Ad spend is recorded from ${rangeLabel(s.from, s.from)}: pick a range from that day on.`
+        : "Ad spend could not be read for every day of this range."
+      : null;
+  const wholeSpend = s.complete ? s.eur : null;
+  // Google's clicks and impressions are all of its traffic: none of another source's.
+  const googleOk = scope.source === "all" || scope.source === "google_ads";
   const sumDays = (m: Map<string, number> | undefined, from: string, to: string) => {
     if (!m || ad.from === null || ad.to === null || from < ad.from || to > ad.to) return null;
     let n = 0;
@@ -491,17 +506,18 @@ export function buildTraffic(input: {
     return n;
   };
   const adClicks = (from: string, to: string) =>
-    s.eur === null ? null : sumDays(ad.clicksByDay, from, to);
+    s.eur === null || !googleOk ? null : sumDays(ad.clicksByDay, from, to);
   const adImpressions = (from: string, to: string) =>
-    s.eur === null ? null : sumDays(ad.impressionsByDay, from, to);
+    s.eur === null || !googleOk ? null : sumDays(ad.impressionsByDay, from, to);
 
   const periodCounts = (x: Facts, from: string, to: string, sc: Scope): Counts => {
     const sp = spend(ad, sc, from, to);
     const t = totals(x, sc, from, to);
     return countsOf(tabletBlocked(sc, x.from) ? [] : subsIn(x, sc, from, to), {
       spend: sp.complete ? sp.eur : null,
-      clicks: sp.complete && sp.eur !== null ? sumDays(ad.clicksByDay, from, to) : null,
-      impressions: sp.complete && sp.eur !== null ? sumDays(ad.impressionsByDay, from, to) : null,
+      clicks: sp.complete && sp.eur !== null && googleOk ? sumDays(ad.clicksByDay, from, to) : null,
+      impressions:
+        sp.complete && sp.eur !== null && googleOk ? sumDays(ad.impressionsByDay, from, to) : null,
       visitors: t.visits,
       starts: startsComplete(from, today, sc) ? t.starts : null,
     });
@@ -509,8 +525,6 @@ export function buildTraffic(input: {
 
   // ---- the nine figures and the scorecard
   const nowCounts = periodCounts(facts, facts.from, facts.to, scope);
-  // An incomplete spend still reads as the scorecard's first step; the tiles compare only whole.
-  if (nowCounts.spend === null && s.eur !== null) nowCounts.spend = s.eur;
   const tiles: TrafficTiles = {
     now: nowCounts,
     prev:
@@ -520,7 +534,7 @@ export function buildTraffic(input: {
     points: trendBuckets(facts.from, facts.to).map((b) => periodCounts(facts, b.from, b.to, scope)),
     blocked: {
       visitors: vB ?? tablet,
-      spend: s.why,
+      spend: s.why ?? partSpend,
       people: tablet,
       starts:
         startsBlocked(scope, facts.from, today) ??
@@ -643,7 +657,7 @@ export function buildTraffic(input: {
         visitors: total,
         starts:
           startsComplete(facts.from, today, scope) && !tablet ? totals(facts, scope).starts : null,
-        spend: s.eur,
+        spend: wholeSpend,
         clicks: adClicks(facts.from, facts.to),
         impressions: adImpressions(facts.from, facts.to),
       },
@@ -694,7 +708,8 @@ export function buildTraffic(input: {
           starts: sourceSplitOk
             ? startsWhere(facts, scope, (st) => st.known && classifySource(st) === source)
             : null,
-          spend: s.eur === null ? null : isGoogle ? s.eur : source === "meta_ads" ? null : 0,
+          spend:
+            wholeSpend === null ? null : isGoogle ? wholeSpend : source === "meta_ads" ? null : 0,
           clicks: isGoogle ? adClicks(facts.from, facts.to) : null,
           impressions: isGoogle ? adImpressions(facts.from, facts.to) : null,
         },
@@ -711,6 +726,7 @@ export function buildTraffic(input: {
         ...(splitWhy ? [`Visitors per channel: ${splitWhy}`] : []),
         ...(late ? [late] : []),
         ...(sourceSplitOk ? [] : [STARTS_BY_SOURCE]),
+        ...(partSpend ? [partSpend] : []),
         "Meta Ads spend isn't read: only Google Ads spend is. Every other channel costs nothing.",
       ],
     };
@@ -1227,8 +1243,11 @@ function buildExperiments(
   const payersOf = (xs: SubFact[]) => xs.filter((x) => x.paidAt).length;
   const revOf = (xs: SubFact[]) => round2(xs.reduce((n, x) => n + x.revenue, 0));
 
-  // #6 · the landing hero: visits per arm are counted, starts per visit decide it.
+  // #6 · the landing hero: visits per arm are counted, starts per visit decide it. Visits carry
+  // no source, device, tier or visitor history: under such a filter the visitor-based figures
+  // and the test are blank, rather than filtered starts over every visit.
   {
+    const vB = visitsBlocked(scope);
     const w = win(LANDING_TEST_START_DAY);
     const test = "Landing hero";
     const note = w
@@ -1251,7 +1270,7 @@ function buildExperiments(
             .reduce((n, v) => n + v.n, 0)
         : 0;
       const starts =
-        w && armStartsComplete(w.from, today)
+        w && !vB && armStartsComplete(w.from, today)
           ? startsWhere(facts, scope, (st) => st.arm === arm, w.from, w.to)
           : null;
       const xs = w ? subsW(w).filter((x) => x.arm === arm) : [];
@@ -1265,9 +1284,9 @@ function buildExperiments(
             lift: null,
             chance: null,
             confidence: null,
-            why: w
-              ? "Starts per version aren't complete for this range"
-              : "Not running in this range",
+            why: !w
+              ? "Not running in this range"
+              : (vB ?? "Starts per version aren't complete for this range"),
           };
     for (const [i, r] of rows.entries()) {
       arms.push({
@@ -1275,12 +1294,12 @@ function buildExperiments(
         note,
         arm: r.name,
         control: i === 0,
-        visitors: w ? r.visitors : null,
+        visitors: w && !vB ? r.visitors : null,
         startCvr: r.starts === null ? null : ratio(r.starts, r.visitors),
         submissions: w ? r.xs.length : null,
         paymentCvr: w ? ratio(payersOf(r.xs), r.xs.length) : null,
         revPerSub: w ? ratio(revOf(r.xs), r.xs.length) : null,
-        revPerVisitor: w ? ratio(revOf(r.xs), r.visitors) : null,
+        revPerVisitor: w && !vB ? ratio(revOf(r.xs), r.visitors) : null,
         metric: "Start CVR",
         ...(i === 0 ? { lift: null, chance: null, confidence: null, why: null } : t),
       });
@@ -1329,7 +1348,8 @@ function buildExperiments(
     const note = w
       ? `#7 · from ${rangeLabel(EMAIL_TEST_START_DAY, EMAIL_TEST_START_DAY)}`
       : "#7 · not in this range";
-    const ok = w !== null && startsSplit(w.from, today);
+    const startsWhy = w ? startsBlocked(scope, w.from, facts.asOf) : null;
+    const ok = w !== null && startsSplit(w.from, today) && !startsWhy;
     const rows = (
       [
         ["control", "Today's question"],
@@ -1337,16 +1357,16 @@ function buildExperiments(
       ] as const
     ).map(([arm, name]) => {
       const reached = ok
-        ? startsWhere(facts, scope, (st) => st.cq === arm && st.email, w!.from, w!.to)
+        ? (startsWhere(facts, scope, (st) => st.cq === arm && st.email, w!.from, w!.to) ?? 0)
         : 0;
       const finished = ok
-        ? startsWhere(
+        ? (startsWhere(
             facts,
             scope,
             (st) => st.cq === arm && st.email && st.finished,
             w!.from,
             w!.to
-          )
+          ) ?? 0)
         : 0;
       const xs = w ? subsW(w).filter((x) => x.cq === arm) : [];
       return { name, reached, finished, xs };
@@ -1358,7 +1378,9 @@ function buildExperiments(
           lift: null,
           chance: null,
           confidence: null,
-          why: w ? "Starts per arm are kept only 30 days" : "Not running in this range",
+          why: !w
+            ? "Not running in this range"
+            : (startsWhy ?? "Starts per arm are kept only 30 days"),
         };
     for (const [i, r] of rows.entries()) {
       arms.push({

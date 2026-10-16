@@ -102,7 +102,8 @@ export interface PricingArmRow {
   /** "€29.99 full · €39.99 all" or a range. */
   basePrice: string;
   paywallViews: number | null;
-  checkouts: number;
+  /** Null when checkouts can't follow the filters (new or returning). */
+  checkouts: number | null;
   paidSales: number;
   revenue: number;
   /** For the AOV test: each sale's amount. */
@@ -168,6 +169,12 @@ const TRAFFIC_NAMES: Record<string, string> = {
   tiktok: "TikTok",
   other: "Other",
 };
+
+/**
+ * A checkout that was paid: succeeded, or paid and later refunded or disputed (a refund or a
+ * dispute rewrites the status, but the checkout did turn into a payment).
+ */
+const PAID: ReadonlySet<string> = new Set(["succeeded", "refunded", "disputed"]);
 
 /** Paid checkout's first day: earlier checkout sessions were the team's tests. */
 export const CHECKOUT_FROM = "2026-05-01";
@@ -253,15 +260,20 @@ export function buildPayment(input: {
   const payers = subs.filter((s) => s.paidAt).length;
   // Paid checkout went live on 1 May 2026: April's checkouts were the team's tests (one
   // report opened 44 of them over two days), so they are left out, as the design counts.
-  const checkouts = tablet
+  // A checkout isn't linked to PostHog, so it can't be told new or returning: under that
+  // filter checkouts are blank with the reason, never all filtered away to 0.
+  const checkoutWhy =
+    tablet ??
+    (scope.visitor !== "all"
+      ? "Checkouts can't be split into new and returning visitors: a checkout isn't linked to the visit PostHog saw."
+      : null);
+  const checkouts = checkoutWhy
     ? []
     : facts.checkouts.filter(
         (c) => c.day >= CHECKOUT_FROM && inScope(c, scope) && classifySource(c) !== "test"
       );
   const reached = checkouts.reduce((n, c) => n + c.n, 0);
-  const paidCheckouts = checkouts
-    .filter((c) => c.status === "succeeded")
-    .reduce((n, c) => n + c.n, 0);
+  const paidCheckouts = checkouts.filter((c) => PAID.has(c.status)).reduce((n, c) => n + c.n, 0);
   const sparkOf = (pick: (from: string, to: string) => number | null) =>
     trendBuckets(facts.from, facts.to).map((b) => (tablet ? null : pick(b.from, b.to)));
   const salesBetween = (from: string, to: string) =>
@@ -372,11 +384,11 @@ export function buildPayment(input: {
       "Checkout success",
       "pct",
       ratio(paidCheckouts, reached),
-      `${count(paidCheckouts)} of ${count(reached)} reached the payment page`,
+      checkoutWhy ? "" : `${count(paidCheckouts)} of ${count(reached)} reached the payment page`,
       sparkOf((a, b) => {
         const xs = checkouts.filter((c) => c.day >= a && c.day <= b);
         return ratio(
-          xs.filter((c) => c.status === "succeeded").reduce((n, c) => n + c.n, 0),
+          xs.filter((c) => PAID.has(c.status)).reduce((n, c) => n + c.n, 0),
           xs.reduce((n, c) => n + c.n, 0)
         );
       })
@@ -385,6 +397,7 @@ export function buildPayment(input: {
   // Coloured as the design colours a month's success: green from 30%, red below.
   const success = ratio(paidCheckouts, reached);
   if (success !== null) tiles[8]!.noteTone = success >= 0.3 ? "good" : "bad";
+  if (checkoutWhy) tiles[8] = { ...tiles[8]!, value: null, blocked: checkoutWhy };
 
   // ---- over time: whole months beyond four months, weeks below, days under two weeks
   const grain = grainOf(facts.from, facts.to);
@@ -413,7 +426,7 @@ export function buildPayment(input: {
       partial: !b.full,
       reached: xs.reduce((n, c) => n + c.n, 0),
       attempted: xs.filter((c) => c.attempted).reduce((n, c) => n + c.n, 0),
-      paid: xs.filter((c) => c.status === "succeeded").reduce((n, c) => n + c.n, 0),
+      paid: xs.filter((c) => PAID.has(c.status)).reduce((n, c) => n + c.n, 0),
     };
   });
   const byMethod = new Map<string, MoneyFact[]>();
@@ -568,7 +581,7 @@ export function buildPayment(input: {
         control: i === 0,
         basePrice: a.basePrice(cs),
         paywallViews: w && paywall ? paywall(a.arm, w) : null,
-        checkouts: cs.reduce((n, c) => n + c.n, 0),
+        checkouts: checkoutWhy ? null : cs.reduce((n, c) => n + c.n, 0),
         paidSales: amounts[i]!.length,
         revenue: round2(amounts[i]!.reduce((n, v) => n + v, 0)),
         aovLift: i === 0 ? null : t.lift,
@@ -700,7 +713,7 @@ export function buildPayment(input: {
       points: checkoutPoints,
       methods,
       sales: sales.length,
-      why: tablet,
+      why: checkoutWhy,
       note:
         facts.from < CHECKOUT_FROM
           ? `Checkouts count from ${rangeLabel(CHECKOUT_FROM, CHECKOUT_FROM)}, when paid checkout went live: the earlier ones were the team's tests.`

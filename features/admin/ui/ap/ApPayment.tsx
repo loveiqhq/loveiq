@@ -81,7 +81,7 @@ const SEGMENTS = [
   { value: "source", label: "Traffic source" },
 ];
 
-const ratio = (a: number, b: number) => (b > 0 ? a / b : null);
+const ratio = (a: number, b: number | null) => (b !== null && b > 0 ? a / b : null);
 /** A count axis tops at 4 at least: an empty one reads 0 to 4, not 0, 0, 1, 1, 1. */
 const countTop = (v: number) => Math.max(4, niceMax(v, STEPS));
 
@@ -857,7 +857,7 @@ function Pricing({ d }: { d: PaymentPayload }) {
           const lift = arms.find((x) => x.test === a.test && !x.control)?.aovLift ?? null;
           const won = lift !== null && lift !== 0 && lift > 0 !== a.control;
           const stalled: Partial<Cell> =
-            a.paidSales === 0 && a.checkouts > 0 ? { weight: "bold", shade: "bad" } : {};
+            a.paidSales === 0 && (a.checkouts ?? 0) > 0 ? { weight: "bold", shade: "bad" } : {};
           return {
             key: `${a.test}-${a.arm}`,
             dashed: !first,

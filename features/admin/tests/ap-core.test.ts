@@ -626,6 +626,40 @@ describe("AP same-age comparisons", () => {
     expect(t).toMatchObject({ paidCohort: 0, sharers: 1, raters: 0, inviters: 1 });
   });
 
+  it("cuts a reader's purchases at the same age: a later upgrade is left out", () => {
+    const at = (iso: string) => Date.parse(iso) / 1000;
+    const buyer = sub({
+      paidAt: "2026-10-02T10:00:00Z",
+      sales: 2,
+      revenue: 29.98,
+      plan: "essentials",
+      full: true,
+      fullSales: 1,
+      fullRevenue: 24.99,
+      pays: [
+        [at("2026-10-02T10:00:00Z"), 4.99, "essentials"],
+        [at("2026-10-08T10:00:00Z"), 24.99, "full_report"],
+      ],
+    });
+    const prev = factsFixture({ subs: [buyer] });
+    // On 5 Oct they had bought Essentials only.
+    expect(ageMatched(prev, new Date("2026-10-05T00:00:00Z")).subs[0]).toMatchObject({
+      paidAt: "2026-10-02T10:00:00Z",
+      sales: 1,
+      revenue: 4.99,
+      full: false,
+      fullSales: 0,
+      fullRevenue: 0,
+    });
+    // Before any purchase: none.
+    expect(ageMatched(prev, new Date("2026-10-01T00:00:00Z")).subs[0]).toMatchObject({
+      paidAt: null,
+      sales: 0,
+      revenue: 0,
+      full: false,
+    });
+  });
+
   it("cuts a reader's sessions at the same age: visits, reading time and closed sessions", () => {
     const at = (iso: string) => Date.parse(iso) / 1000;
     const reader = sub({

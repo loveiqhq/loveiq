@@ -45,6 +45,7 @@ export const sub = (over: Partial<Facts["subs"][number]> = {}): Facts["subs"][nu
   full: false,
   fullSales: 0,
   fullRevenue: 0,
+  pays: null,
   shared: false,
   sharedAt: null,
   votes: 0,
