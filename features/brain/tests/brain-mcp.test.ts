@@ -7700,7 +7700,8 @@ describe("/api/mcp", () => {
           params: { name: "get_business_numbers", arguments: { days: 1200 } },
         })
       );
-      expect(mockRollup).toHaveBeenLastCalledWith(1200);
+      // The 1,200 whole days before today: the rollup reaches one day further, to include them.
+      expect(mockRollup).toHaveBeenLastCalledWith(1201);
     });
 
     it("says when fewer days came back than were asked for", async () => {

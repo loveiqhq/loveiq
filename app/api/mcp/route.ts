@@ -152,7 +152,7 @@ import { canonicalPeople } from "@features/brain/server/people";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
-import { reportingDateTime, reportingDayStart } from "@shared/time/reporting-day";
+import { reportingDateTime, reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1646,8 +1646,11 @@ export const TOOLS = [
         days: {
           type: "number",
           description:
-            "How many days back, from today. An alternative to `since`/`until`, not a " +
-            "companion — passing both is refused. Default 30. The dashboard's figures start on " +
+            "The last N whole days, ending yesterday: the dashboard's 'Last N days', so today's " +
+            "unfinished day is never in them (7, 30, 90 and 365 link the dashboard's own " +
+            "presets; for today, pass `since` as today's date). An alternative to " +
+            "`since`/`until`, not a companion — passing both is refused. Default 30. The " +
+            "dashboard's figures start on " +
             "LoveIQ's first records (21 Mar 2026) and cover at most 400 days, and the answer " +
             "says when a request reached past that. Days with no activity come back as zeroes " +
             "rather than being skipped, but only about 120 days fit in one answer — the header " +
@@ -4919,7 +4922,12 @@ async function callTool(
       );
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    // The dashboard's (Berlin) day, as every period here is read: a UTC "today" made
+    // "previous" a day short and refused a since of Berlin's today between 00:00 and 02:00.
+    const today = reportingDay(new Date());
+    const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     /**
      * A FUTURE `since` USED TO REPORT THE COMPANY AS ONE DAY OLD.
      *
@@ -4968,9 +4976,12 @@ async function callTool(
         stats.sourceCount = 1;
         return textResult(ap);
       }
+      // `days` is the dashboard's "Last N days" here too: the N whole days before today.
       const from =
-        since || new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
-      const sales = await loadSales(from, until || today);
+        since ||
+        new Date(Date.parse(`${today}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+      const to = until || (since ? today : yesterday);
+      const sales = await loadSales(from, to);
       if (!sales) {
         return textResult(
           "The payments could not be read right now. This is an outage, not a result.",
@@ -4980,7 +4991,7 @@ async function callTool(
       stats.sourceCount = 1;
       return textResult(
         (ap === undefined ? AP_SALES_UNREADABLE : "") +
-          renderSales(sales, by as SaleGroup[], from, until || today)
+          renderSales(sales, by as SaleGroup[], from, to)
       );
     }
     // Far enough back to reach `since`, inclusive of both ends.
@@ -5005,6 +5016,8 @@ async function callTool(
           ) + 1
         )
       : intArg(args.days, 30, 1, 4000);
+    // `days` is the N whole days before today, so the rollup reaches one day further back.
+    const fetchDays = since ? asked : Math.min(asked + 1, 4000);
     /**
      * AD SPEND IS FETCHED SEPARATELY, BECAUSE THE ROLLUP DOES NOT HAVE IT.
      *
@@ -5016,7 +5029,7 @@ async function callTool(
      * paged correctly, rather than a second copy of that query.
      */
     const [rows, ad, apRead] = await Promise.all([
-      brainDailyRollup(asked),
+      brainDailyRollup(fetchDays),
       // NON-FATAL. The funnel and revenue figures are the point; spend is an addition,
       // and a spend read that fails must not cost the caller the numbers it did get.
       // Days then carry no `ad_spend`, which already means "unknown".
@@ -5055,7 +5068,8 @@ async function callTool(
      */
     // The range is applied AFTER the fetch, because the rollup counts back from today.
     const inRange: Array<{ day: string }> =
-      ap?.rows ?? (since ? rows.filter((r) => r.day >= since && (!until || r.day <= until)) : rows);
+      ap?.rows ??
+      rows.filter((r) => (since ? r.day >= since && (!until || r.day <= until) : r.day < today));
     const merged = inRange.map((r) =>
       adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
     );
@@ -5139,7 +5153,7 @@ async function callTool(
      */
     // The dashboard's rows do not depend on the rollup's reach; their header says what they cover.
     const clamped =
-      !ap && rows.length < asked
+      !ap && rows.length < fetchDays
         ? `The range was also reduced before that: ${asked} days were asked for and 4000 ` +
           `is the database function's ceiling. `
         : "";
@@ -6548,8 +6562,11 @@ async function callTool(
   }
 
   if (name === "explain_change") {
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+    // Berlin days, as the series counts the dashboard's figures.
+    const today = reportingDay(new Date());
+    const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     const day = typeof args.day === "string" && args.day.trim() ? args.day.trim() : yesterday;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !isRealDate(day)) {
       return textResult(`\`day\` must be a real day like 2026-09-17, not "${day}".`, true);

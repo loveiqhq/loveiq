@@ -258,12 +258,30 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     ]);
   });
 
-  it("links a view the dashboard's filter bar opens on the same period", async () => {
+  it("reads `days` as the dashboard's Last N days, and links that preset", async () => {
+    // The 7 whole days before today, as the bar's "Last 7 days": never today's part-day.
     const { text } = await call({ days: 7 });
     const link = /https:\/\/www\.loveiq\.org\/admin\/ap\/assessment-a\?\S+/.exec(text)![0];
+    expect(link).toBe("https://www.loveiq.org/admin/ap/assessment-a?period=7d");
     const f = parseFilters(new URL(link).searchParams, TODAY);
-    expect([f.period, f.from, f.to]).toEqual(["custom", "2026-10-10", TODAY]);
-    expect(text).toContain("Today is still running, so its figures are part of a day.");
+    expect([f.period, f.from, f.to]).toEqual(["7d", "2026-10-09", "2026-10-15"]);
+    expect(rowsOf(text).map((r) => r.day)).toEqual([
+      "2026-10-15",
+      "2026-10-14",
+      "2026-10-13",
+      "2026-10-12",
+      "2026-10-11",
+      "2026-10-10",
+      "2026-10-09",
+    ]);
+    expect(text).not.toContain("Today is still running");
+    // A range that is no preset stays a custom one; "Last 30 days" is the bar's default.
+    expect((await call({ days: 5 })).text).toContain(
+      "?period=custom&from=2026-10-11&to=2026-10-15"
+    );
+    expect((await call({ days: 30 })).text).toContain(
+      "The same view: https://www.loveiq.org/admin/ap/assessment-a (team sign-in required)"
+    );
   });
 
   it("compares two periods the dashboard's way, and leaves out starts it would not compare", async () => {

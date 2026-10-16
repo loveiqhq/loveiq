@@ -257,6 +257,14 @@ describe("get_business_numbers prints what the dashboard's own route returns", (
     expect(today).not.toContain(" versus ");
   });
 
+  it("days: the dashboard's Last N days, figure for figure, as its preset link opens them", async () => {
+    const text = await tool({ days: 7 });
+    expect(linkQuery(text)).toBe("period=7d");
+    // The preset view compares with the week before; the answer was asked for no comparison.
+    for (const t of await dashboard("period=7d"))
+      expect(printed(text, t.label), t.label).toBe(expected(t, null));
+  });
+
   it("another period, earlier or later: the same figures, no change on a 'so far' one", async () => {
     for (const [args, other] of [
       [

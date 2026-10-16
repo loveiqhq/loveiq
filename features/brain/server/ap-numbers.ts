@@ -26,6 +26,7 @@ import {
   filterQuery,
   MAX_DAYS,
   parseFilters,
+  PERIODS,
   previousRange,
   rangeLabel,
   SOURCES,
@@ -82,6 +83,13 @@ export function apFilters(
   today: string,
   narrow: Record<string, string> = {}
 ): ApFilters {
+  // A period that is one of the bar's presets ("Last 7 days" and the rest) is linked as that
+  // preset, the view the team opens; any other as a custom range.
+  for (const { value } of PERIODS) {
+    if (value === "custom") continue;
+    const preset = parseFilters({ period: value, ...narrow }, today);
+    if (preset.from === from && preset.to === to) return preset;
+  }
   return parseFilters({ period: "custom", from, to, ...narrow }, today);
 }
 
@@ -94,7 +102,7 @@ export interface ApAsk {
   since: string | null;
   /** Null: up to today, the dashboard's (Berlin) today. */
   until: string | null;
-  /** Days back from today, used when there is no `since`. */
+  /** With no `since`: the last N whole days, to yesterday, as the dashboard's "Last N days". */
   days: number;
   /** compare_to: "previous" is the dashboard's own comparison, or a period of its own. */
   other: Period | "previous" | null;
@@ -123,10 +131,10 @@ export interface ApRead {
  */
 export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | null> {
   const today = reportingDay(now);
-  const asked = {
-    since: ask.since ?? addDays(today, -(ask.days - 1)),
-    until: ask.until ?? today,
-  };
+  // No `since`: the dashboard's "Last N days", the N whole days before today.
+  const asked = ask.since
+    ? { since: ask.since, until: ask.until ?? today }
+    : { since: addDays(today, -ask.days), until: addDays(today, -1) };
   let f = apFilters(asked.since, asked.until, today);
   if (beforeData(f)) return null;
   const notes: string[] = [];
