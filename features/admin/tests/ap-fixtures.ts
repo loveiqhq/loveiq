@@ -33,6 +33,7 @@ export const sub = (over: Partial<Facts["subs"][number]> = {}): Facts["subs"][nu
   returnedAt: null,
   readMs: 0,
   closed: 0,
+  sessions: null,
   paywallAt: null,
   clickedAt: null,
   checkoutAt: null,

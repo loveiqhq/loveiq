@@ -356,9 +356,9 @@ export function comparableStarts(
 
 /**
  * An earlier period's finishers as they stood at the same age as the current period's: what
- * they did after `cutoff` is left out, so a "so far" rate (paid, returned, shared) compares
- * like with like rather than with people who had weeks longer. Reading time has no per-step
- * time and is left as it is: callers do not compare it.
+ * they did after `cutoff` is left out, so a "so far" rate (paid, returned, shared) and their
+ * reading (visits, reading time, sessions) compare like with like rather than with people who
+ * had weeks longer. A reader without their sessions keeps their reading as it is.
  */
 export function ageMatched(prev: Facts, cutoff: Date): Facts {
   const limit = cutoff.getTime();
@@ -371,11 +371,20 @@ export function ageMatched(prev: Facts, cutoff: Date): Facts {
       const votedAt = by(s.votedAt);
       const invitedAt = by(s.invitedAt);
       const returnedAt = by(s.returnedAt);
+      // Their sessions up to the cutoff (a session counts whole when it began by then).
+      const kept = s.sessions?.filter(([at]) => at * 1000 <= limit) ?? null;
       return {
         ...s,
         openedAt: by(s.openedAt),
         returnedAt,
-        visits: returnedAt ? s.visits : Math.min(s.visits, 1),
+        ...(kept
+          ? {
+              sessions: kept,
+              visits: kept.filter((x) => x[3] === 1).length,
+              readMs: kept.reduce((a, x) => a + x[1], 0),
+              closed: kept.reduce((a, x) => a + x[2], 0),
+            }
+          : { visits: returnedAt ? s.visits : Math.min(s.visits, 1) }),
         paywallAt: by(s.paywallAt),
         clickedAt: by(s.clickedAt),
         checkoutAt: by(s.checkoutAt),

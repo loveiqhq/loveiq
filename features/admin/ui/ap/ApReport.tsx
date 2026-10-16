@@ -3,8 +3,13 @@
 import { useState, type ReactNode } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
-import { delta, fmt, type Tone } from "@features/admin/server/ap/format";
-import type { ReportPayload, ReportTile } from "@features/admin/server/ap/report-page";
+import { delta, deltaRel, fmt, type Tone } from "@features/admin/server/ap/format";
+import type {
+  ChangeBox,
+  ReportPayload,
+  ReportTile,
+  TimeGroup,
+} from "@features/admin/server/ap/report-page";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
@@ -15,10 +20,9 @@ import {
   BlackButton,
   Busy,
   Card,
-  Eyebrow,
   Failed,
   FilterIcon,
-  KpiTile,
+  KpiTileV2,
   Loading,
   NotTracked,
   PageHeader,
@@ -26,8 +30,6 @@ import {
   SectionHead,
   SectionNav,
   SortIcon,
-  Spark,
-  StatBox,
   TileGrid,
   useHashScroll,
   RangeLine,
@@ -50,29 +52,30 @@ const TONE: Record<Tone, string> = {
   flat: "text-ap-muted",
 };
 
-/**
- * KpiTile's "md" layout, with the value to the tile's own decimals (KpiTile takes none) and the
- * change the payload writes as the design does ("1 share", "10 users", "+1") where it has one.
- */
+/** The design's headline tile (KpiTileV2), at the tile's own decimals. */
 function ReportKpiTile({ tile }: { tile: ReportTile }) {
-  if (tile.blocked) return <KpiTile tile={tile} size="md" />;
-  const c = tile.change ?? delta(tile.unit, tile.value, tile.prev, tile.goodWhen, tile.deltaAs);
+  return <KpiTileV2 tile={tile} digits={tile.digits} />;
+}
+
+/**
+ * A box under Time in report or Returns: its value, then its change against the period before
+ * as a percentage (green, red, grey when flat) or the box's note, as drawn.
+ */
+function ChangeBoxView({ box }: { box: ChangeBox }) {
+  const d = box.note === undefined ? deltaRel(box.value, box.prev, box.goodWhen) : null;
   return (
-    <div className="flex flex-col gap-2 rounded-[20px] border border-ap-line bg-white px-[18px] py-4 text-ap-ink shadow-ap">
-      <Eyebrow>{tile.label}</Eyebrow>
-      <span className="font-serif text-[28px] font-semibold leading-none tabular-nums text-ap-ink">
-        {tile.unit === "pct" && tile.digits === 0
-          ? wholePct(tile.value)
-          : fmt(tile.unit, tile.value, tile.digits)}
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-[14px] bg-ap-ground p-3.5">
+      <span className="text-xs text-ap-muted">{box.label}</span>
+      <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">
+        {box.unit === "pct" && box.digits === 0
+          ? wholePct(box.value)
+          : fmt(box.unit, box.value, box.digits)}
       </span>
-      {/* A change never breaks inside itself ("+€3,986" may break after its sign otherwise). */}
-      <span className="text-xs leading-normal text-ap-muted">
-        {c && <strong className={`whitespace-nowrap ${TONE[c.tone]}`}>{c.text}</strong>}
-        {c ? " " : ""}
-        {tile.foot}
+      <span
+        className={`text-sm font-bold tabular-nums ${box.note !== undefined ? "text-ap-muted" : TONE[d?.tone ?? "flat"]}`}
+      >
+        {box.note ?? d?.text ?? "—"}
       </span>
-      <Spark values={tile.spark} />
-      {tile.trend && <span className="text-[11px] text-ap-muted">{tile.trend}</span>}
     </div>
   );
 }
@@ -310,16 +313,53 @@ export default function ApReport() {
                       },
                     },
                     {
-                      name: "Reading time by gender and age (mean)",
+                      name: "Time in report and returns",
+                      table: {
+                        columns: [
+                          { label: "Figure", unit: "text" },
+                          { label: "This range", unit: "text" },
+                          { label: "Period before, same age", unit: "text" },
+                          { label: "Change", unit: "text" },
+                        ],
+                        rows: [...data.time.boxes, ...data.returns.boxes].map((b) => ({
+                          label: b.label,
+                          values: [
+                            fmt(b.unit, b.value, b.digits),
+                            fmt(b.unit, b.prev, b.digits),
+                            b.note ?? deltaRel(b.value, b.prev, b.goodWhen)?.text ?? "",
+                          ],
+                        })),
+                      },
+                    },
+                    {
+                      name: "How far into the report readers got",
+                      table: {
+                        columns: [
+                          { label: "Deepest point (share of chapters)", unit: "text" },
+                          ...data.time.depth.groups.map((g) => ({
+                            label: `Readers · ${g}`,
+                            unit: "count" as const,
+                          })),
+                        ],
+                        rows: data.time.depth.bands.map((b) => ({
+                          label: b.label,
+                          values: b.counts,
+                        })),
+                      },
+                    },
+                    {
+                      name: "Reading time by gender and age",
                       table: {
                         columns: [
                           { label: "Group", unit: "text" },
-                          { label: "Reading time", unit: "mmss" },
-                          { label: "Benchmark", unit: "mmss" },
+                          { label: "Median", unit: "mmss" },
+                          { label: "Benchmark median", unit: "mmss" },
+                          { label: "Average", unit: "mmss" },
+                          { label: "Benchmark average", unit: "mmss" },
                         ],
                         rows: [...data.time.byGender, ...data.time.byAge].map((g) => ({
                           label: g.label,
-                          values: [g.ms, g.benchMs],
+                          values: [g.medianMs, g.benchMedianMs, g.ms, g.benchMs],
                         })),
                       },
                     },
@@ -476,16 +516,11 @@ function WizardSection({ data }: { data: ReportPayload }) {
               : s.exit
   );
   const skipsFrom = w.skipsFrom ? rangeLabel(w.skipsFrom, w.skipsFrom) : null;
-  const gtc =
-    "44px minmax(220px,2.2fr) 74px minmax(110px,1fr) 80px 80px 80px 70px minmax(150px,1.3fr)";
+  const gtc = "44px minmax(260px,2.6fr) 74px minmax(130px,1.2fr) 90px 90px 80px 80px";
   const head = { sort, onSort };
   return (
     <Card id="wizard" labelledBy="h-rwiz">
-      <SectionHead
-        id="h-rwiz"
-        title="Intro wizard"
-        description="The six slides between the finished survey and the report."
-      />
+      <SectionHead id="h-rwiz" title="Intro wizard" />
       <TileGrid min={200}>
         {w.tiles.map((t) => (
           <ReportKpiTile key={t.key} tile={t} />
@@ -502,7 +537,6 @@ function WizardSection({ data }: { data: ReportPayload }) {
             <Th label="Skip intro" col="skip" right {...head} />
             <Th label="Back" col="back" right {...head} />
             <Th label="Exit" col="exit" right {...head} />
-            <Th label="Engagement on slide" />
           </div>
           {slides.map((s) => (
             <div
@@ -511,10 +545,8 @@ function WizardSection({ data }: { data: ReportPayload }) {
               className="grid items-center border-t border-ap-line"
               style={{ gridTemplateColumns: gtc }}
             >
-              <span role="cell" className="px-3 py-2.5">
-                <span className="inline-flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ap-purple text-xs font-bold text-white">
-                  {s.n}
-                </span>
+              <span role="cell" className="px-3 py-2.5 text-xs tabular-nums text-ap-muted">
+                {s.n}
               </span>
               <span role="rowheader" className="flex flex-col gap-0.5 px-3 py-2.5">
                 <span className="text-sm font-bold">{s.name}</span>
@@ -553,40 +585,37 @@ function WizardSection({ data }: { data: ReportPayload }) {
               >
                 {wholePct(s.exit)}
               </span>
-              <span
-                role="cell"
-                className={`px-3 py-2.5 text-xs leading-snug ${s.engaged === null ? "text-ap-muted" : "text-ap-body"}`}
-              >
-                {s.engaged === null
-                  ? "—"
-                  : `${fmt("pct", s.engaged, 0)} stepped through the deep dives`}
-              </span>
             </div>
           ))}
         </div>
       </div>
       <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Reached, Continue, Skip intro, Exit and Engagement follow the filters; Back and Time are all
-        traffic, as the slides&rsquo; own events carry no source or device. Continue on slide 6 =
-        opened the report.{" "}
+        Reached, Continue, Skip intro and Exit follow the filters; Back and Time are all traffic, as
+        the slides&rsquo; own events carry no source or device. Continue on slide 6 = opened the
+        report.{" "}
         {skipsFrom
           ? `Skip intro = pressed Skip Intro on the slide, of its readers who finished from ${skipsFrom}, when it began to be recorded. Exit = did not go on and did not skip (closed, or still on it); before ${skipsFrom} a skip counts as an exit.`
           : "Skip intro is not recorded yet. Exit = did not go on (closed, skipped, or still on it)."}{" "}
         Back = went back from the slide, of those who reached it
         {data.narrowed ? "; with a filter on it is a count, since back clicks carry no source" : ""}
         . Time: median from arriving on a slide to going on; none on slide 6, as there is no end
-        time on the last slide. Engagement: on slide 2, readers who stepped through the deep dives
-        with its arrows, of those who reached it since 6 Oct 2026 (opening the deep dives does not
-        count); no other slide records any. In red: Skip intro from 11%, Exit from 5%.
+        time on the last slide. In red: Skip intro from 11%, Exit from 5%. The CSV also has, for
+        slide 2, the readers who stepped through the map&rsquo;s deep dives.
       </p>
     </Card>
   );
 }
 
+/** The design's colours for reading time in the depth chart, shortest palest; then "not recorded". */
+const DEPTH_COLOURS = ["#e3dff0", "#b7aade", "#8c7bcf", "#5a42a6", "#f5f6f8"];
+
+/** The design's bars for the groups, darkest first. */
+const GROUP_COLOURS = ["#5a42a6", "#795fc8", "#9d8bd8", "#c0b4e6", "#ddd5f2"];
+
 function TimeSection({ data }: { data: ReportPayload }) {
   const t = data.time;
   const max = Math.max(0.0001, ...t.buckets.map((b) => Math.max(b.share, b.bench)));
-  const vs = delta("mmss", t.avgMs, t.benchAvgMs);
+  const [stat, setStat] = useState<"median" | "avg">("median");
   return (
     <Card labelledBy="h-time">
       <h2 id="h-time" className="m-0 font-serif text-[22px] font-semibold">
@@ -596,51 +625,14 @@ function TimeSection({ data }: { data: ReportPayload }) {
         className="grid gap-3"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))" }}
       >
-        {/* StatBox's comparison reads "prev."; this one is with the benchmark. */}
-        <div className="flex min-w-0 flex-col gap-1 rounded-[14px] bg-ap-ground p-3.5">
-          <span className="text-xs text-ap-muted">Avg. total time</span>
-          <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">
-            {fmt("mmss", t.avgMs)}
-          </span>
-          <span className="text-xs text-ap-muted">
-            {vs ? (
-              <>
-                <strong className={TONE[vs.tone]}>{vs.text}</strong> vs all reports (
-                {fmt("mmss", t.benchAvgMs)})
-              </>
-            ) : (
-              "all sessions per reader"
-            )}
-          </span>
-        </div>
-        <StatBox
-          stat={{
-            label: "Median total time",
-            unit: "mmss",
-            value: t.medianMs,
-            note: "all sessions per reader",
-          }}
-        />
-        <StatBox
-          stat={{
-            label: "Avg. per session",
-            unit: "mmss",
-            value: t.perSessionMs,
-            note: "closed sessions under 4 hours, each up to 30 min",
-          }}
-        />
-        <StatBox
-          stat={{
-            label: "Readers",
-            unit: "count",
-            value: t.readers,
-            note: `reading time recorded for ${fmt("count", t.recorded)}`,
-          }}
-        />
+        {t.boxes.map((b) => (
+          <ChangeBoxView key={b.key} box={b} />
+        ))}
       </div>
-      <span className="text-[13px] text-ap-muted">
-        Share of readers by total reading time (minutes)
-      </span>
+      <SubHead
+        title="Share of readers by total active reading time"
+        description="Readers grouped by how long they actively read in total (minutes), against the average of all reports"
+      />
       <div className="flex flex-wrap gap-4 text-xs text-ap-body">
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="h-3 w-3 rounded-[3px] bg-ap-purple" />
@@ -680,38 +672,183 @@ function TimeSection({ data }: { data: ReportPayload }) {
           </span>
         ))}
       </div>
+      <DepthChart data={data} />
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ap-line pt-4">
+        <span className="text-[15px] font-bold text-ap-ink">Total reading time by group</span>
+        <div
+          role="group"
+          aria-label="Statistic"
+          className="inline-flex gap-1 rounded-full bg-ap-ground p-1"
+        >
+          {(
+            [
+              ["median", "Median"],
+              ["avg", "Average"],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={stat === k}
+              onClick={() => setStat(k)}
+              className={`min-h-9 cursor-pointer rounded-full border-0 px-4 text-[13px] font-semibold ${stat === k ? "bg-ap-ink text-white" : "bg-transparent text-ap-body"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div
-        className="grid gap-6 border-t border-ap-line pt-4"
+        className="grid gap-6"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))" }}
       >
-        <TimeSplit title="gender" rows={t.byGender} />
-        <TimeSplit title="age" rows={t.byAge} />
+        <TimeSplit title="gender" rows={t.byGender} stat={stat} />
+        <TimeSplit title="age" rows={t.byAge} stat={stat} />
       </div>
-      <span className="text-xs leading-relaxed text-ap-muted">
-        Reading time counts sessions whose end was recorded (saved since 18 Sep 2026, for about half
-        of the sessions) and under 4 hours, each counted up to 30 minutes. All reports: every reader
-        since 18 Sep 2026 whose reading was recorded, whatever the filters. Bars: this report ·
-        tick: all reports for the same group · right: the difference; “—” where a group has no
-        reader. Gender from question 15010, age from 15003 (55+ is its 55–64 and 65+).
-      </span>
+      <details className="text-xs leading-relaxed text-ap-muted">
+        <summary className="cursor-pointer font-semibold text-ap-body">
+          How these are counted
+        </summary>
+        <p className="m-0 mt-1.5">
+          Reading time counts sessions whose end was recorded (saved since 18 Sep 2026, for about
+          half of the sessions) and under 4 hours, each counted up to 30 minutes. Each box&rsquo;s
+          change is against the period before, its readers read as they stood at the same age. All
+          reports: every reader since 18 Sep 2026 whose reading was recorded, whatever the filters.
+          By group: bars are this report, the tick all reports for the same group, and the right
+          column the difference; &ldquo;—&rdquo; where a group has no reader. Gender from question
+          15010, age from 15003 (55+ is its 55–64 and 65+).
+        </p>
+      </details>
     </Card>
+  );
+}
+
+/** A figure's title and its line of description, as the design sets them under a section. */
+function SubHead({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex flex-col gap-1 border-t border-ap-line pt-4">
+      <span className="text-[15px] font-bold text-ap-ink">{title}</span>
+      <span className="text-[13px] text-ap-muted">{description}</span>
+    </div>
+  );
+}
+
+/**
+ * The design's "How far into the report readers got": a column per band of the report's
+ * length, stacked by the readers' total reading time, with its total on top.
+ */
+function DepthChart({ data }: { data: ReportPayload }) {
+  const d = data.time.depth;
+  const totals = d.bands.map((b) => b.counts.reduce((a, n) => a + n, 0));
+  const top = Math.max(1, ...totals);
+  // "Time not recorded" only where some reader has it.
+  const shown = d.groups
+    .map((g, i) => ({ g, i }))
+    .filter(({ i }) => i < 4 || d.bands.some((b) => b.counts[i]));
+  const from = d.from ? rangeLabel(d.from, d.from) : null;
+  return (
+    <figure className="m-0 flex flex-col gap-3 border-t border-ap-line pt-4">
+      <figcaption className="flex flex-col gap-1">
+        <span className="text-[15px] font-bold text-ap-ink">
+          How far into the report readers got
+        </span>
+        <span className="text-[13px] text-ap-muted">
+          Readers by the deepest chapter they reached, as a share of the report&rsquo;s {d.chapters}{" "}
+          chapters, split by their total reading time
+        </span>
+      </figcaption>
+      {d.readers === 0 ? (
+        <NotTracked>
+          {from
+            ? `No reader in this range had their reading per chapter recorded (from ${from})`
+            : "Reading per chapter is not recorded yet"}
+        </NotTracked>
+      ) : (
+        <>
+          <div
+            role="img"
+            aria-label={`Readers by how far they got: ${d.bands.map((b, i) => `${b.label} ${totals[i]}`).join(", ")}`}
+            className="flex h-[260px] items-end gap-4 border-b border-ap-line px-1"
+          >
+            {d.bands.map((b, i) => (
+              <div key={b.label} className="flex h-full flex-1 flex-col justify-end gap-1.5">
+                <span className="text-center text-[15px] font-bold tabular-nums text-ap-ink">
+                  {totals[i]}
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  {[...b.counts.keys()]
+                    .reverse()
+                    .filter((g) => b.counts[g]! > 0)
+                    .map((g) => (
+                      <span
+                        key={g}
+                        className="block rounded"
+                        style={{
+                          height: `${Math.max(3, Math.round((b.counts[g]! / top) * 200))}px`,
+                          background: DEPTH_COLOURS[g],
+                          ...(g === 4 ? { border: "1px dashed #9c95a3" } : {}),
+                        }}
+                      />
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-4 px-1">
+            {d.bands.map((b) => (
+              <span key={b.label} className="flex-1 text-center text-xs text-ap-muted">
+                {b.label}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-4 text-xs text-ap-body">
+            {shown.map(({ g, i }) => (
+              <span key={g} className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 rounded-[3px]"
+                  style={{
+                    background: DEPTH_COLOURS[i],
+                    ...(i === 4 ? { border: "1px dashed #9c95a3" } : {}),
+                  }}
+                />
+                {g}
+              </span>
+            ))}
+          </div>
+          <span className="text-xs text-ap-muted">
+            {fmt("count", d.readers)} readers whose reading per chapter was recorded (those who
+            finished from {from}). A chapter is reached once they spent a second or more in it or
+            used anything in it; the deepest is the latest in the report&rsquo;s order, which
+            readers can also jump to from the chapter list.
+          </span>
+        </>
+      )}
+    </figure>
   );
 }
 
 function TimeSplit({
   title,
   rows,
+  stat,
 }: {
   title: string;
-  rows: Array<{ label: string; ms: number | null; benchMs: number | null }>;
+  rows: TimeGroup[];
+  stat: "median" | "avg";
 }) {
-  const max = Math.max(1, ...rows.map((r) => Math.max(r.ms ?? 0, r.benchMs ?? 0)));
+  const pick = (r: TimeGroup) =>
+    stat === "median" ? { v: r.medianMs, b: r.benchMedianMs } : { v: r.ms, b: r.benchMs };
+  const max = Math.max(1, ...rows.map((r) => Math.max(pick(r).v ?? 0, pick(r).b ?? 0)));
   return (
     <div className="flex flex-col gap-2.5">
-      <span className="text-[13px] font-bold text-ap-body">Avg. total time by {title}</span>
-      {rows.map((r) => {
-        // As the average's own difference above: no difference reads "±0:00.0", grey.
-        const d = delta("mmss", r.ms, r.benchMs);
+      <span className="text-[13px] font-bold text-ap-body">
+        {stat === "median" ? "Median" : "Avg."} total time by {title}
+      </span>
+      {rows.map((r, i) => {
+        const { v, b } = pick(r);
+        // As the boxes above: no difference reads "±0:00.0", grey.
+        const d = delta("mmss", v, b);
         return (
           <div
             key={r.label}
@@ -719,20 +856,23 @@ function TimeSplit({
             style={{ gridTemplateColumns: "110px minmax(0,1fr) 48px 56px" }}
           >
             <span className="font-semibold">{r.label}</span>
-            <span className="relative h-3 rounded-full bg-ap-track">
+            <span className="relative h-3.5 rounded-full bg-ap-ground">
               <span
-                className="absolute inset-y-0 left-0 rounded-full bg-ap-purple"
-                style={{ width: `${((r.ms ?? 0) / max) * 100}%` }}
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{
+                  width: `${((v ?? 0) / max) * 100}%`,
+                  background: GROUP_COLOURS[i % GROUP_COLOURS.length],
+                }}
               />
-              {r.benchMs !== null && (
+              {b !== null && (
                 <span
                   aria-hidden="true"
-                  className="absolute -bottom-[3px] -top-[3px] w-0.5 rounded-sm bg-ap-ink"
-                  style={{ left: `${(r.benchMs / max) * 100}%` }}
+                  className="absolute -bottom-1 -top-1 -ml-px w-[3px] rounded-sm bg-ap-ink shadow-[0_0_0_1px_#ffffff]"
+                  style={{ left: `${(b / max) * 100}%` }}
                 />
               )}
             </span>
-            <span className="text-right font-bold tabular-nums">{fmt("mmss", r.ms)}</span>
+            <span className="text-right font-bold tabular-nums">{fmt("mmss", v)}</span>
             <span
               className={`text-right text-xs font-bold tabular-nums ${TONE[d?.tone ?? "flat"]}`}
             >
@@ -762,17 +902,6 @@ const CAMPAIGN_FILTERS: Record<CampaignFilter, string> = { campaign: "Campaign",
 const campaignName = (stage: string) => stage.replace(/_/g, " ");
 const campaignValue = (c: CampaignRow, k: CampaignFilter) =>
   k === "campaign" ? campaignName(c.stage) : c.status;
-
-/** StatBox's look, for a value written here: StatBox takes no decimals. */
-function ValueBox({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-[14px] bg-ap-ground p-3.5">
-      <span className="text-xs text-ap-muted">{label}</span>
-      <span className="font-serif text-2xl font-semibold tabular-nums text-ap-ink">{value}</span>
-      <span className="text-xs leading-snug text-ap-muted">{note}</span>
-    </div>
-  );
-}
 
 /** A count with its share of the emails sent under it; "—" while it is not counted. */
 function CountAndRate({ n, rate }: { n: number | null; rate: number | null }) {
@@ -823,38 +952,17 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
         className="grid gap-3"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))" }}
       >
-        {/* Whole percentages, as the design writes the returns. */}
-        <ValueBox
-          label="Came back"
-          value={wholePct(r.cameBack)}
-          note="of readers, 30+ minutes after their last visit"
-        />
-        <StatBox
-          stat={{
-            label: "Median days to return",
-            unit: "days",
-            value: r.medianDays,
-            note: "first visit to the second",
-          }}
-        />
-        <ValueBox
-          label="Returned via email"
-          value={wholePct(r.viaEmail)}
-          note="of return visits, from any email link (PostHog)"
-        />
-        <StatBox
-          stat={{
-            label: "Visits per reader",
-            unit: "ratio",
-            value: r.sessionsPerReader,
-            note: "average",
-          }}
-        />
+        {r.boxes.map((b) => (
+          <ChangeBoxView key={b.key} box={b} />
+        ))}
       </div>
       <div className="flex max-w-[880px] flex-col gap-6">
         <div className="flex flex-col gap-2.5">
-          <span className="text-[13px] font-bold text-ap-body">
-            Days until first return · % of all readers
+          <span className="flex flex-col gap-1">
+            <span className="text-[15px] font-bold text-ap-ink">Days until first return</span>
+            <span className="text-[13px] text-ap-muted">
+              Share of all readers, by days between first read and first return
+            </span>
           </span>
           <div
             className="grid items-end gap-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-ap-muted"
@@ -889,8 +997,11 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
           </span>
         </div>
         <div className="flex flex-col gap-2.5">
-          <span className="text-[13px] font-bold text-ap-body">
-            What brought readers back · % of return visits
+          <span className="flex flex-col gap-1">
+            <span className="text-[15px] font-bold text-ap-ink">What brought readers back</span>
+            <span className="text-[13px] text-ap-muted">
+              Share of the return visits PostHog saw, by how each one arrived
+            </span>
           </span>
           {r.sources === null || !r.sources.ok ? (
             <p className="m-0 text-sm text-ap-muted">
@@ -915,12 +1026,16 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
               </div>
             ))
           )}
-          <NotTracked>From PostHog: return visits whose first page it saw</NotTracked>
         </div>
       </div>
       <div className="flex flex-col gap-2.5">
-        <span className="text-[13px] font-bold text-ap-body">
-          Email campaigns that bring readers back
+        <span className="flex flex-col gap-1">
+          <span className="text-[15px] font-bold text-ap-ink">
+            Email campaigns that bring readers back
+          </span>
+          <span className="text-[13px] text-ap-muted">
+            Active campaigns and the returns they generated
+          </span>
         </span>
         {filters.choice}
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
@@ -985,18 +1100,27 @@ function ReturnsSection({ data }: { data: ReportPayload }) {
             ))}
           </div>
         </div>
-        <span className="text-xs leading-relaxed text-ap-muted">
-          Sent: emails sent in the range (marked just before sending, so a failed send still
-          counts). Opened and Clicked: of those, readers whose email was opened, or a link in it
-          clicked, as Resend reports each email; under the count, the share of the emails Resend
-          reported delivered. {r.emailEvents} Opens are inflated by Apple Mail, which loads images
-          for privacy, so clicks are the surer signal. Returned: of those sent, readers who opened
-          their report from the email&rsquo;s link after it was sent, as the report records every
-          such arrival since 18 Sep 2026. It replaces PostHog&rsquo;s count, which saw only about a
-          quarter of visits. Return rate = returned ÷ sent. Purchased: sales in the range that used
-          the email&rsquo;s code. A retired campaign that sent and sold nothing in the range reads
-          &ldquo;—&rdquo;.
-        </span>
+        <details className="text-xs leading-relaxed text-ap-muted">
+          <summary className="cursor-pointer font-semibold text-ap-body">
+            How these are counted
+          </summary>
+          <p className="m-0 mt-1.5">
+            Came back: readers who opened their report again 30+ minutes after their last visit.
+            Median days to return: from the first visit to the second. Returned via email: of the
+            return visits PostHog saw, the share from an email link. Each box&rsquo;s change is
+            against the period before, its readers read as they stood at the same age. Sent: emails
+            sent in the range (marked just before sending, so a failed send still counts). Opened
+            and Clicked: of those, readers whose email was opened, or a link in it clicked, as
+            Resend reports each email; under the count, the share of the emails Resend reported
+            delivered. {r.emailEvents} Opens are inflated by Apple Mail, which loads images for
+            privacy, so clicks are the surer signal. Returned: of those sent, readers who opened
+            their report from the email&rsquo;s link after it was sent, as the report records every
+            such arrival since 18 Sep 2026. It replaces PostHog&rsquo;s count, which saw only about
+            a quarter of visits. Return rate = returned ÷ sent. Purchased: sales in the range that
+            used the email&rsquo;s code. A retired campaign that sent and sold nothing in the range
+            reads &ldquo;—&rdquo;.
+          </p>
+        </details>
       </div>
     </Card>
   );
@@ -1214,6 +1338,17 @@ const LOG_FILTERS: Record<LogFilter, string> = {
   vote: "Vote",
   issue: "Issue",
 };
+/** A vote's time, Berlin, as the log writes it ("14 Oct 2026, 09:36"). */
+const when = (at: string) =>
+  new Date(at).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+
 const logValue = (r: LogRow, k: LogFilter) =>
   k === "submission"
     ? r.submission === null
@@ -1229,9 +1364,8 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
   const fb = data.feedback;
   const [sort, setSort] = useState<Sort<LogKey>>({ key: "at", dir: -1 });
   const [all, setAll] = useState(false);
+  const [search, setSearch] = useState("");
   const {
-    picked,
-    pick,
     matches: kept,
     funnel,
     choice,
@@ -1239,7 +1373,17 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
     fixed: { vote: ["Good", "Bad"] },
     onPick: () => setAll(false),
   });
-  const matches = sortRows(kept, sort, (r, k) => (k === "at" ? Date.parse(r.at) : r.chapter));
+  // The design's search: the submission, its date, the chapter, the vote or the issue.
+  const term = search.trim().toLowerCase();
+  const found = term
+    ? kept.filter((r) =>
+        [when(r.at), `#${r.submission ?? ""}`, r.chapter, r.vote, r.issue ?? ""]
+          .join(" ")
+          .toLowerCase()
+          .includes(term)
+      )
+    : kept;
+  const matches = sortRows(found, sort, (r, k) => (k === "at" ? Date.parse(r.at) : r.chapter));
   const shown = all ? matches : matches.slice(0, 8);
   const head = {
     sort,
@@ -1253,17 +1397,8 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
     <Card id="feedback" labelledBy="h-fb">
       <SectionHead
         id="h-fb"
-        eyebrow="Report · Engagement"
         title="Feedback"
         description="Chapter votes (report_section_feedback) given in the range."
-        right={
-          <a
-            href="/admin/ap/explorer?table=report_section_feedback"
-            className="text-[13px] font-bold text-ap-plum hover:text-ap-violet"
-          >
-            All comments in the explorer →
-          </a>
-        }
       />
       <AllTraffic note={data.narrowed} />
       <div
@@ -1309,17 +1444,19 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
           <span className="text-[13px] font-bold text-ap-body">
             Feedback log · {shown.length} of {matches.length}
           </span>
-          {/* The range's totals: the log holds only the latest votes (see the note under it). */}
-          <Pills
-            label="Filter feedback"
-            options={[
-              { value: "", label: `All · ${fmt("count", fb.total)}` },
-              { value: "Good", label: `Good · ${fmt("count", fb.good)}` },
-              { value: "Bad", label: `Bad · ${fmt("count", fb.bad)}` },
-            ]}
-            value={picked.vote}
-            onChange={(v) => pick("vote", v)}
-          />
+          <label className="flex min-w-[220px] flex-[0_1_320px]">
+            <span className="sr-only">Search feedback</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setAll(false);
+              }}
+              placeholder="Search submission, chapter, issue, good/bad"
+              className="min-h-10 w-full rounded-full border border-ap-ink/[0.18] bg-white px-4 text-sm text-ap-ink"
+            />
+          </label>
         </div>
         {choice}
         <div className="overflow-x-auto rounded-[14px] border border-ap-line">
@@ -1345,14 +1482,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                 style={{ gridTemplateColumns: gtc }}
               >
                 <span role="cell" className="px-3 py-2 tabular-nums">
-                  {new Date(r.at).toLocaleString("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: "Europe/Berlin",
-                  })}
+                  {when(r.at)}
                 </span>
                 <span role="cell" className="px-3 py-2">
                   {r.submission ? (
@@ -1399,13 +1529,12 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
             {all ? "Show fewer" : `Show all ${matches.length}`}
           </button>
         )}
-        <span className="text-xs text-ap-muted">
-          {fb.log.length < fb.total
-            ? `Latest ${fmt("count", fb.log.length)} of ${votes(fb.total)}. `
-            : ""}
-          The comment text stays in the explorer and the submission&rsquo;s own page; this log shows
-          whether one was left.
-        </span>
+        {fb.log.length < fb.total && (
+          <span className="text-xs text-ap-muted">
+            The log holds the latest {fmt("count", fb.log.length)} of the range&rsquo;s{" "}
+            {votes(fb.total)}.
+          </span>
+        )}
       </div>
     </Card>
   );

@@ -42,6 +42,7 @@ const extras: ReportExtras = {
   paywall_clicks: [],
   chapter_stats: [],
   chapter_readers: 0,
+  chapter_depth: [],
   chapter_stats_from: null,
   wizard_skips: [],
   wizard_skips_from: null,
@@ -92,14 +93,23 @@ describe("report page", () => {
     expect(foot("invite")).toBe(
       "of report openers invited a friend to the test (0 of 2) · not compared: before 18 Sep"
     );
-    // Not compared: no difference in inviters either.
-    expect(p.tiles.find((t) => t.key === "invite")!.change).toBeUndefined();
     expect(foot("read")).toMatch(
-      /^per reader, all visits, each up to 30 min( · median \d+:\d\d)? · recorded for \d+ of \d+ · not compared: earlier readers' later visits count too$/
+      /^per reader, all visits, each up to 30 min( · median \d+:\d\d)? · recorded for \d+ of \d+ · not compared: before 18 Sep$/
     );
+    // The tiles say it in grey where the change would stand, and carry no earlier figure.
+    for (const k of ["read", "median", "returned", "initiated", "invite"]) {
+      expect(p.tiles.find((t) => t.key === k)).toMatchObject({
+        prev: null,
+        note: "No comparison before 18 Sep",
+      });
+    }
+    // Opens were recorded for everyone all along: compared.
+    expect(p.tiles.find((t) => t.key === "opened")).toMatchObject({ prev: 1 });
+    expect(p.tiles.find((t) => t.key === "opened")!.note).toBeUndefined();
     expect(p.wizard.tiles.find((t) => t.key === "completed")).toMatchObject({
       prev: null,
       foot: "continued through slide 6 · not compared: before 18 Sep",
+      note: "No comparison before 18 Sep",
     });
 
     // A range before 18 Sep: the banner says what is missing, the feet do not repeat it.
@@ -135,9 +145,9 @@ describe("report page", () => {
     const tile = (k: string) => p.wizard.tiles.find((t) => t.key === k)!;
     expect(p.wizard.tiles.map((t) => t.label)).toEqual([
       "Intro started",
-      "Completed all 6",
+      "Completed",
       "Skipped intro",
-      "Left the report",
+      "Left the wizard / bounced",
     ]);
     expect(tile("intro")).toMatchObject({
       value: 2,
@@ -145,7 +155,13 @@ describe("report page", () => {
       foot: "vs 3 · everyone who finished the survey",
     });
     expect(tile("completed")).toMatchObject({ value: 0.5, prev: 1 / 3 });
-    expect(tile("skipped")).toMatchObject({ value: 7, prev: null, spark: [] });
+    // PostHog's count of sessions, not a share of our readers: said so, never compared.
+    expect(tile("skipped")).toMatchObject({
+      value: 7,
+      prev: null,
+      spark: [],
+      note: "sessions PostHog saw",
+    });
     expect(tile("left")).toMatchObject({
       value: 0.5,
       prev: 2 / 3,
@@ -155,7 +171,7 @@ describe("report page", () => {
     expect(tile("left").spark.length).toBeGreaterThan(0);
   });
 
-  it("share, rating and invite write their change as the design does, one of each singular", () => {
+  it("share, rating and invite compare as rates with the period before; their feet count people", () => {
     const cur = factsFixture({
       subs: [
         sub({ id: 1, shared: true, votes: 1, invited: true }),
@@ -175,31 +191,35 @@ describe("report page", () => {
     });
     const p = page({ facts: cur, benchmark: cur, previous: before });
     const tile = (k: string) => p.tiles.find((t) => t.key === k)!;
+    // The page draws each change as a percentage of the earlier rate (KpiTileV2).
     expect(tile("share")).toMatchObject({
-      change: { text: "1 share", tone: "flat" },
+      value: 1 / 3,
+      prev: 0,
       foot: "of report openers shared their report (1 of 3)",
     });
     expect(tile("rating")).toMatchObject({
-      change: { text: "2 users", tone: "flat" },
+      value: 2 / 3,
+      prev: 0,
       foot: "of report openers rated at least one chapter (2 of 3 · 3 votes)",
     });
-    // The inviters' difference from the earlier period, which the caption names.
     expect(tile("invite")).toMatchObject({
-      change: { text: "+1", tone: "good" },
+      value: 2 / 3,
+      prev: 1,
       foot: "of report openers invited a friend to the test (2 of 3 · prev. 1)",
     });
     const one = factsFixture({ subs: [sub({ id: 1, shared: true, votes: 1 })] });
     const q = page({ facts: one, benchmark: one });
-    expect(q.tiles.find((t) => t.key === "share")!.change).toEqual({
-      text: "1 share",
-      tone: "flat",
-    });
     expect(q.tiles.find((t) => t.key === "rating")).toMatchObject({
-      change: { text: "1 user" },
+      prev: null,
       foot: "of report openers rated at least one chapter (1 of 1 · 1 vote)",
     });
-    // No earlier period: no difference in inviters.
-    expect(q.tiles.find((t) => t.key === "invite")!.change).toBeUndefined();
+    // No earlier period: nothing compared, and no grey note either.
+    for (const t of q.tiles.filter((x) => x.key !== "pre")) expect(t.note).toBeUndefined();
+    expect(q.tiles.find((t) => t.key === "pre")).toMatchObject({
+      label: "Pre unlock rate",
+      value: null,
+      note: "Initial plan not on sale yet",
+    });
   });
 
   it("gives the headline rates two figures and the wizard's none, as the design writes them", () => {
@@ -231,7 +251,7 @@ describe("report page", () => {
     expect(p.wizard.tiles.map((t) => t.digits)).toEqual([0, 0, 0, 0]);
   });
 
-  it("Full unlock rate counts the Full and Full All plans only; Completed all 6 needs the report opened", () => {
+  it("Full unlock rate counts the full plans only; Completed needs the report opened", () => {
     const paid = "2026-10-02T10:00:00Z";
     const f = factsFixture({
       subs: [
@@ -254,7 +274,7 @@ describe("report page", () => {
     // Of the four who opened their report, two bought Full (the Full All buyer never opened it).
     expect(p.tiles.find((t) => t.key === "full")).toMatchObject({
       value: 2 / 4,
-      foot: "Full & Full All plans purchases ÷ report openers",
+      foot: "Full, Full All and Core purchases ÷ report openers",
     });
     // Both reached slide 6; only the one who then opened the report continued through it.
     expect(p.wizard.tiles.find((t) => t.key === "completed")).toMatchObject({
@@ -288,6 +308,11 @@ describe("report page", () => {
       ["Prefer not to say", null],
       ["Not stated", 250_000],
     ]);
+    // The medians beside the means, for the design's Median / Average switch.
+    expect(t.byAge.find((r) => r.label === "55+")).toMatchObject({
+      medianMs: 200_000,
+      benchMedianMs: 200_000,
+    });
   });
 
   it("Skipped intro says when PostHog failed, and that it ignores a filter", () => {
@@ -529,6 +554,58 @@ describe("report page", () => {
       });
       expect(q.chapterReading.recorded).toBe(false);
     }
+  });
+
+  it("the boxes under Time and Returns compare with the period before, cut at the same age", () => {
+    const at = (iso: string) => Date.parse(iso) / 1000;
+    const cur = factsFixture({
+      subs: [sub({ id: 1, ...day("2026-10-02"), readMs: 200_000, closed: 1, visits: 1 })],
+    });
+    // A week earlier, read on 13 Oct as it stood on 6 Oct: their visit on the 8th is left out.
+    const before = factsFixture({
+      from: "2026-09-24",
+      to: "2026-09-30",
+      visits: [],
+      starts: [],
+      money: [],
+      subs: [
+        sub({
+          id: 11,
+          ...day("2026-09-24"),
+          returnedAt: "2026-09-27T10:00:00Z",
+          visits: 3,
+          readMs: 1_000_000,
+          closed: 3,
+          sessions: [
+            [at("2026-09-24T10:05:00Z"), 300_000, 1, 1],
+            [at("2026-09-27T10:00:00Z"), 100_000, 1, 1],
+            [at("2026-10-08T10:00:00Z"), 600_000, 1, 1],
+          ],
+        }),
+      ],
+    });
+    const p = page({ facts: cur, benchmark: cur, previous: before });
+    const box = (list: typeof p.time.boxes, k: string) => list.find((b) => b.key === k)!;
+    expect(box(p.time.boxes, "avg")).toMatchObject({ value: 200_000, prev: 400_000 });
+    expect(box(p.time.boxes, "median")).toMatchObject({ value: 200_000, prev: 400_000 });
+    expect(box(p.time.boxes, "session")).toMatchObject({ value: 200_000, prev: 200_000 });
+    expect(box(p.time.boxes, "readers")).toMatchObject({ value: 1, prev: 1 });
+    expect(box(p.returns.boxes, "back")).toMatchObject({ value: 0, prev: 1, digits: 0 });
+    expect(box(p.returns.boxes, "days")).toMatchObject({ value: null, prev: 3, goodWhen: "down" });
+    expect(box(p.returns.boxes, "visits")).toMatchObject({ value: 1, prev: 2 });
+    for (const b of [...p.time.boxes, ...p.returns.boxes]) expect(b.note).toBeUndefined();
+    // No PostHog read of the period before: email's share is not compared.
+    expect(box(p.returns.boxes, "email")).toMatchObject({ prev: null });
+
+    // A period before 18 Sep: reading and returns say so; readers still compare.
+    const q = page({ facts: cur, benchmark: cur, previous: early });
+    expect(box(q.time.boxes, "avg")).toMatchObject({
+      prev: null,
+      note: "No comparison before 18 Sep",
+    });
+    expect(box(q.returns.boxes, "back")).toMatchObject({ note: "No comparison before 18 Sep" });
+    expect(box(q.time.boxes, "readers")).toMatchObject({ prev: 1 });
+    expect(box(q.time.boxes, "readers").note).toBeUndefined();
   });
 
   it("average reading time has the benchmark readers' average beside it", () => {
@@ -855,8 +932,9 @@ describe("report page, on screen", () => {
   it("draws the wizard's tiles, its Back and map columns, and sorts by a header", () => {
     screenData.payload = payload;
     render(createElement(ApReport));
-    expect(screen.getByText("Left the report")).toBeInTheDocument();
-    expect(screen.getByText("33% stepped through the deep dives")).toBeInTheDocument();
+    expect(screen.getByText("Left the wizard / bounced")).toBeInTheDocument();
+    // The engagement column is gone from the table, as redrawn (the CSV keeps the map's figure).
+    expect(screen.queryByText(/stepped through the deep dives$/)).toBeNull();
     expect(rowNames("Intro wizard slides")[0]).toContain("A note before you explore");
     // Back: slide 2 lost 1 of its 3 readers, slide 3 both of its 2.
     fireEvent.click(screen.getByRole("button", { name: "Sort by Back" }));
@@ -900,7 +978,7 @@ describe("report page, on screen", () => {
     expect(rowNames("Email campaigns")[0]).toEqual(live);
   });
 
-  it("draws the tiles' own change lines, the feedback totals and the design's highlights", () => {
+  it("draws the tiles' changes as percentages, searches the feedback, and the design's highlights", () => {
     const f = factsFixture({
       subs: [sub({ id: 1, shared: true, votes: 1, invited: true }), sub({ id: 2 })],
     });
@@ -925,7 +1003,10 @@ describe("report page, on screen", () => {
         visits: [],
         starts: [],
         money: [],
-        subs: [],
+        // One reader then, who invited and did not share.
+        subs: [
+          sub({ id: 11, ...day("2026-09-24"), invited: true, invitedAt: "2026-09-24T11:00:00Z" }),
+        ],
       }),
       extras: {
         ...extras,
@@ -959,23 +1040,39 @@ describe("report page, on screen", () => {
       },
     });
     render(createElement(ApReport));
-    expect(screen.getByText("1 share")).toHaveClass("text-ap-muted");
-    expect(screen.getByText("1 user")).toHaveClass("text-ap-muted");
-    // One inviter against none before: the difference, in green.
-    expect(screen.getByText("+1")).toHaveClass("text-ap-good");
-    expect(
-      screen.getByText(/of report openers invited a friend to the test \(1 of 2 · prev\. 0\)/)
-    ).toBeInTheDocument();
+    // The change against the period before, as a percentage: a rate from none is New, in green;
+    // one that fell, red. With no comparable earlier figure, a grey dash.
+    const change = (label: string) =>
+      screen
+        .getAllByText(label)
+        .find((e) => e.nextElementSibling?.className.includes("font-serif"))!.nextElementSibling!
+        .nextElementSibling!;
+    expect(change("Share rate").textContent).toBe("New");
+    expect(change("Share rate")).toHaveClass("text-ap-good");
+    expect(change("Invite rate").textContent).toBe("−50.0%");
+    expect(change("Invite rate")).toHaveClass("text-ap-bad");
+    expect(change("Pre unlock rate").textContent).toBe("Initial plan not on sale yet");
+    expect(change("Pre unlock rate")).toHaveClass("text-ap-muted");
 
     const fb = within(document.getElementById("feedback")!);
-    const pills = within(fb.getByRole("group", { name: "Filter feedback" }));
-    expect(pills.getAllByRole("button").map((b) => b.textContent)).toEqual([
-      "All · 300",
-      "Good · 250",
-      "Bad · 50",
-    ]);
-    expect(fb.getByText(/^Latest 2 of 300 votes\./)).toBeInTheDocument();
+    expect(fb.queryByRole("group", { name: "Filter feedback" })).toBeNull();
+    expect(fb.queryByText(/All comments in the explorer/)).toBeNull();
+    expect(
+      fb.getByText(/^The log holds the latest 2 of the range’s 300 votes\.$/)
+    ).toBeInTheDocument();
     expect(fb.getByText(/good · 250 good \/ 50 bad · 300 votes/)).toBeInTheDocument();
+    // The design's search: by vote, chapter, issue, date or submission.
+    const search = fb.getByRole("searchbox", { name: "Search feedback" });
+    fireEvent.change(search, { target: { value: "bad" } });
+    expect(fb.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "#1" } });
+    expect(fb.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "7 Oct 2026" } });
+    expect(fb.getByText("Feedback log · 1 of 1")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "nothing like it" } });
+    expect(fb.getByText("No votes match the filters.")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(fb.getByText("Feedback log · 2 of 2")).toBeInTheDocument();
 
     const chapters = within(screen.getByRole("table", { name: "Chapters" }));
     // Show more whole, as drawn (2 of 10, 1 of 30); the paywall to a tenth.
@@ -1004,23 +1101,96 @@ describe("report page, on screen", () => {
     expect(cells[3]!.textContent).toBe("0%");
   });
 
-  it("reading time: the design's legend, and every group's row, an empty one as —", () => {
-    const f = factsFixture({ subs: [sub({ id: 1, readMs: 100_000, closed: 1, age: "65+" })] });
+  it("reading time: the design's legend, every group's row, and the median or the average", () => {
+    const f = factsFixture({
+      subs: [
+        sub({ id: 1, readMs: 100_000, closed: 1, age: "65+" }),
+        sub({ id: 2, readMs: 400_000, closed: 1, age: "65+" }),
+        sub({ id: 3, readMs: 130_000, closed: 1, age: "65+" }),
+      ],
+    });
     screenData.payload = page({ facts: f, benchmark: f });
     render(createElement(ApReport));
     expect(screen.getByText("This report")).toBeInTheDocument();
     expect(screen.getByText("Benchmark · all reports")).toBeInTheDocument();
-    const age = within(screen.getByText("Avg. total time by age").parentElement!);
-    // The same as all reports: no difference, grey, as the average's own line writes it.
-    const same = age.getByText("55+").parentElement!;
-    expect(same.textContent).toBe("55+1:40±0:00.0");
+    // The median first, as drawn; the same as all reports: no difference, grey.
+    const age = () => within(screen.getByText(/total time by age$/).parentElement!);
+    expect(screen.getByText("Median total time by age")).toBeInTheDocument();
+    const same = age().getByText("55+").parentElement!;
+    expect(same.textContent).toBe("55+2:10±0:00.0");
     expect(same.lastElementChild).toHaveClass("text-ap-muted");
-    expect(same.lastElementChild).not.toHaveClass("text-ap-good");
-    expect(age.getByText("18–24").parentElement!.textContent).toBe("18–24——");
-    expect(age.getByText("Not stated")).toBeInTheDocument();
+    expect(age().getByText("18–24").parentElement!.textContent).toBe("18–24——");
+    expect(age().getByText("Not stated")).toBeInTheDocument();
+    const group = within(screen.getByRole("group", { name: "Statistic" }));
+    expect(group.getByRole("button", { name: "Median" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(group.getByRole("button", { name: "Average" }));
+    expect(group.getByRole("button", { name: "Average" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Avg. total time by age")).toBeInTheDocument();
+    // (1:40 + 6:40 + 2:10) / 3 = 3:30.
+    expect(age().getByText("55+").parentElement!.textContent).toBe("55+3:30±0:00.0");
+    // The boxes: no period before, so a grey dash where the change would stand.
+    const box = screen.getByText("Avg. total time").parentElement!;
+    expect(box.textContent).toBe("Avg. total time3:30—");
+  });
+
+  it("how far into the report readers got: by the deepest chapter, split by reading time", () => {
+    // The live report's chapters, in its order; a reader is placed by the latest they reached.
+    const order = payload.chapters.filter((c) => c.part !== "Earlier report versions");
+    const n = order.length;
+    const at = (place: number) => order[place - 1]!.id;
+    const f = factsFixture({
+      subs: [
+        sub({ id: 1, readMs: 30_000, closed: 1 }),
+        sub({ id: 2, readMs: 200_000, closed: 1 }),
+        sub({ id: 3, readMs: 700_000, closed: 2 }),
+        // Their reading time was not recorded: a group of its own, never "< 1 min".
+        sub({ id: 4, readMs: 0, closed: 0 }),
+        // Filtered out (an Instagram reader under the Google Ads filter): not counted.
+        sub({ id: 5, readMs: 700_000, closed: 1, src: "ig", ads: false }),
+      ],
+    });
+    const p = page({
+      facts: f,
+      benchmark: f,
+      filters: { ...filters, source: "google_ads" },
+      extras: {
+        ...extras,
+        chapter_stats_from: "2026-10-01",
+        chapter_depth: [
+          { sid: 1, chapters: [at(1)] },
+          // About 15% of the way in: the 10–24 band whatever the report's length.
+          { sid: 2, chapters: [at(Math.ceil(n * 0.15)), at(1)] },
+          { sid: 3, chapters: [at(1), at(n)] },
+          { sid: 4, chapters: [at(n)] },
+          { sid: 5, chapters: [at(n)] },
+          // An earlier version's chapter only: no place in today's report, not counted.
+          { sid: 6, chapters: ["summary"] },
+        ],
+      },
+    });
+    const d = p.time.depth;
+    expect(d).toMatchObject({ readers: 4, chapters: n, from: "2026-10-01" });
+    expect(d.groups).toEqual(["< 1 min", "1–5 min", "5–10 min", "10 min+", "Time not recorded"]);
+    const band = (label: string) => d.bands.find((b) => b.label === label)!.counts;
+    // Chapter 1 of n is under 10% of the report, the last is all of it.
+    expect(band("0–9%")).toEqual([1, 0, 0, 0, 0]);
+    expect(band("95–100")).toEqual([0, 0, 0, 1, 1]);
+    expect(d.bands.reduce((a, b) => a + b.counts.reduce((x, y) => x + y, 0), 0)).toBe(4);
+    expect(band("10–24")).toEqual([0, 1, 0, 0, 0]);
+
+    screenData.payload = p;
+    render(createElement(ApReport));
+    expect(screen.getByText("How far into the report readers got")).toBeInTheDocument();
+    expect(screen.getByText("Time not recorded")).toBeInTheDocument();
     expect(
-      screen.getByText("closed sessions under 4 hours, each up to 30 min")
+      screen.getByRole("img", { name: /^Readers by how far they got: 0–9% \d, / })
     ).toBeInTheDocument();
+  });
+
+  it("how far readers got: says so before any reading per chapter was recorded", () => {
+    screenData.payload = page();
+    render(createElement(ApReport));
+    expect(screen.getByText("Reading per chapter is not recorded yet")).toBeInTheDocument();
   });
 
   it("shows — for opens and clicks in a range that starts before they were counted", () => {
@@ -1132,7 +1302,6 @@ describe("report page, on screen", () => {
       "Skip intro",
       "Back",
       "Exit",
-      "Engagement on slide",
     ]);
     fireEvent.click(table.getByRole("button", { name: "Sort by Skip intro" }));
     expect(rowNames("Intro wizard slides")[0]).toContain("Report parts & chapters");
@@ -1325,7 +1494,7 @@ describe("report page, on screen", () => {
     expect(value("Rating rate")).toBe("2.0%");
     expect(value("Share rate")).toBe("0.50%");
     // The wizard's whole: 68 of 200 continued through slide 6.
-    expect(value("Completed all 6")).toBe("34%");
+    expect(value("Completed")).toBe("34%");
     // The returns whole.
     expect(value("Came back")).toBe("34%");
     expect(value("Returned via email")).toBe("75%");

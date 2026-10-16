@@ -608,4 +608,43 @@ describe("AP same-age comparisons", () => {
     const t = totals({ ...prev, subs: [aged!] }, ALL);
     expect(t).toMatchObject({ paidCohort: 0, sharers: 1, raters: 0, inviters: 1 });
   });
+
+  it("cuts a reader's sessions at the same age: visits, reading time and closed sessions", () => {
+    const at = (iso: string) => Date.parse(iso) / 1000;
+    const reader = sub({
+      openedAt: "2026-10-01T10:00:00Z",
+      returnedAt: "2026-10-03T09:00:00Z",
+      visits: 3,
+      readMs: 300_000 + 120_000 + 60_000,
+      closed: 3,
+      sessions: [
+        [at("2026-10-01T10:00:00Z"), 300_000, 1, 1],
+        // A reload a minute later: no new visit, no recorded end.
+        [at("2026-10-01T10:06:00Z"), 0, 0, 0],
+        [at("2026-10-03T09:00:00Z"), 120_000, 1, 1],
+        [at("2026-10-09T18:00:00Z"), 60_000, 1, 1],
+      ],
+    });
+    const prev = factsFixture({ subs: [reader] });
+    // At 5 Oct they had read twice: the visit on the 9th had not happened.
+    expect(ageMatched(prev, new Date("2026-10-05T00:00:00Z")).subs[0]).toMatchObject({
+      visits: 2,
+      readMs: 420_000,
+      closed: 2,
+      returnedAt: "2026-10-03T09:00:00Z",
+    });
+    // Before their first return: one visit, its five minutes.
+    expect(ageMatched(prev, new Date("2026-10-02T00:00:00Z")).subs[0]).toMatchObject({
+      visits: 1,
+      readMs: 300_000,
+      closed: 1,
+      returnedAt: null,
+    });
+    // Without their sessions, reading stays as it was (an older reader of the facts).
+    const old = factsFixture({ subs: [{ ...reader, sessions: null }] });
+    expect(ageMatched(old, new Date("2026-10-02T00:00:00Z")).subs[0]).toMatchObject({
+      visits: 1,
+      readMs: 480_000,
+    });
+  });
 });

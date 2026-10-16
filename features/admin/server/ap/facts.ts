@@ -81,6 +81,12 @@ export interface SubFact extends Tagged, AdTags {
   /** Reading time over the closed sessions (end recorded, under 4 hours), each up to 30 minutes. */
   readMs: number;
   closed: number;
+  /**
+   * Each report session, oldest first: [start (epoch seconds), its counted ms, end recorded
+   * 1/0, began a visit 1/0]. What visits, readMs and closed add up from, so an earlier period
+   * can be cut at the same age. Null from a reader without it.
+   */
+  sessions: Array<[number, number, number, number]> | null;
   paywallAt: string | null;
   /** First click on a paywall button (paywall_initiated). */
   clickedAt: string | null;
@@ -304,6 +310,12 @@ export function parseFacts(
       returnedAt: str(r.returnedAt),
       readMs: num(r.readMs),
       closed: num(r.closed),
+      sessions: Array.isArray(r.sessions)
+        ? (r.sessions as unknown[]).map((x) => {
+            const a = Array.isArray(x) ? x : [];
+            return [num(a[0]), num(a[1]), num(a[2]), num(a[3])] as [number, number, number, number];
+          })
+        : null,
       paywallAt: str(r.paywallAt),
       clickedAt: str(r.clickedAt),
       checkoutAt: str(r.checkoutAt),

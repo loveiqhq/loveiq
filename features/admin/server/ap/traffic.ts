@@ -28,7 +28,6 @@ import {
   type SubFact,
 } from "./facts";
 import {
-  buckets,
   grainOf,
   rangeLabel,
   SOURCES,
@@ -51,7 +50,6 @@ import {
   ratio,
   spend,
   STEP_DEVICE_FROM,
-  startsBlocked,
   startsComplete,
   subsIn,
   tabletBlocked,

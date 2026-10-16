@@ -7,7 +7,7 @@ import {
   comparisonRange,
   parseFilters,
 } from "@features/admin/server/ap/filters";
-import { fetchReportReturns, postHogFailed } from "@features/admin/server/ap/posthog";
+import { fetchReportReturns, POSTHOG_FROM, postHogFailed } from "@features/admin/server/ap/posthog";
 import { buildReportPage, fetchReportExtras } from "@features/admin/server/ap/report-page";
 import { apGuard, NO_STORE } from "@features/admin/server/ap/route-guard";
 import { addDays } from "@features/admin/server/dropoff-weekly";
@@ -29,21 +29,26 @@ export async function GET(request: Request) {
 
   try {
     const compared = cmp && !beforeData(cmp) ? cmp : null;
-    const [facts, previous, benchmark, extras, previousExtras, returns] = await Promise.all([
-      fetchFactsFor(filters.from, filters.to, filters),
-      compared ? fetchFactsFor(compared.from, compared.to, filters) : Promise.resolve(null),
-      fetchFacts(DATA_START, addDays(today, -1)),
-      fetchReportExtras(filters.from, filters.to),
-      // The earlier period's Skip Intro presses, for that tile's change only: without them the
-      // tile is shown uncompared rather than the page failing.
-      compared
-        ? fetchReportExtras(compared.from, compared.to).catch((err: unknown) => {
-            logger.warn({ err }, "AP report: earlier period's extras unavailable");
-            return null;
-          })
-        : Promise.resolve(null),
-      fetchReportReturns(filters.from, filters.to).catch(postHogFailed),
-    ]);
+    const [facts, previous, benchmark, extras, previousExtras, returns, previousReturns] =
+      await Promise.all([
+        fetchFactsFor(filters.from, filters.to, filters),
+        compared ? fetchFactsFor(compared.from, compared.to, filters) : Promise.resolve(null),
+        fetchFacts(DATA_START, addDays(today, -1)),
+        fetchReportExtras(filters.from, filters.to),
+        // The earlier period's Skip Intro presses, for that tile's change only: without them the
+        // tile is shown uncompared rather than the page failing.
+        compared
+          ? fetchReportExtras(compared.from, compared.to).catch((err: unknown) => {
+              logger.warn({ err }, "AP report: earlier period's extras unavailable");
+              return null;
+            })
+          : Promise.resolve(null),
+        fetchReportReturns(filters.from, filters.to).catch(postHogFailed),
+        // The period before's ways back, for "Returned via email"'s change, when PostHog saw it all.
+        compared && compared.from >= POSTHOG_FROM
+          ? fetchReportReturns(compared.from, compared.to).catch(postHogFailed)
+          : Promise.resolve(null),
+      ]);
     return NextResponse.json(
       buildReportPage({
         facts,
@@ -52,6 +57,7 @@ export async function GET(request: Request) {
         extras,
         previousExtras,
         returns,
+        previousReturns,
         filters,
         today,
         now,

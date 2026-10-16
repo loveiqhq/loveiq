@@ -10,7 +10,7 @@ import { assessmentScope } from "./assessment";
 import { shortDate } from "./days";
 import { type Facts, type SubFact } from "./facts";
 import { activeNarrowing, bucketCaption, rangeLabel, type ApFilters } from "./filters";
-import { delta, type Delta } from "./format";
+import { type GoodWhen, type Unit } from "./format";
 import {
   EVENTS_COMPLETE_FROM,
   launched,
@@ -229,12 +229,8 @@ export function prettyId(id: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/**
- * A headline tile whose change is written as the design writes it (a count of sharers or
- * raters, the difference in inviters) rather than worked out from `prev`, and whose value has
- * the design's decimals (`digits`; the page's own tile reads them, KpiTile has none).
- */
-export type ReportTile = Tile & { change?: Delta; digits?: number };
+/** A headline tile, with the design's decimals for its value (`digits`). */
+export type ReportTile = Tile & { digits?: number };
 
 /**
  * A headline rate's decimals, as the design writes them: two figures ("34%", "2.1%", "0.21%"),
@@ -244,6 +240,30 @@ export function twoFigures(v: number | null): number | undefined {
   if (v === null) return undefined;
   const p = Math.abs(v) * 100;
   return p >= 9.95 || p === 0 ? 0 : p >= 0.995 ? 1 : 2;
+}
+
+/**
+ * A box under Time in report or Returns: its value and the period before's at the same age,
+ * for the change as a percentage, or the note shown in its place.
+ */
+export interface ChangeBox {
+  key: string;
+  label: string;
+  unit: Unit;
+  value: number | null;
+  prev: number | null;
+  goodWhen: GoodWhen;
+  digits?: number;
+  note?: string;
+}
+
+/** Reading time for one group of readers: the mean and the median, and the benchmark's. */
+export interface TimeGroup {
+  label: string;
+  ms: number | null;
+  benchMs: number | null;
+  medianMs: number | null;
+  benchMedianMs: number | null;
 }
 
 export interface ReportPayload extends PageHead {
@@ -283,15 +303,31 @@ export interface ReportPayload extends PageHead {
     benchAvgMs: number | null;
     medianMs: number | null;
     perSessionMs: number | null;
+    /** Avg. and median total time, avg. per session and readers, with their change. */
+    boxes: ChangeBox[];
     buckets: Array<{ label: string; share: number; bench: number }>;
-    byGender: Array<{ label: string; ms: number | null; benchMs: number | null }>;
-    byAge: Array<{ label: string; ms: number | null; benchMs: number | null }>;
+    byGender: TimeGroup[];
+    byAge: TimeGroup[];
+    /**
+     * How far into the report readers got: each reader whose reading per chapter was recorded,
+     * by the deepest live chapter they reached (its place among the report's chapters), split
+     * by their total reading time (`groups`; the last is readers whose time was not recorded).
+     */
+    depth: {
+      from: string | null;
+      readers: number;
+      chapters: number;
+      groups: string[];
+      bands: Array<{ label: string; counts: number[] }>;
+    };
   };
   returns: {
     cameBack: number | null;
     medianDays: number | null;
     sessionsPerReader: number | null;
     viaEmail: number | null;
+    /** Came back, median days to return, returned via email and visits per reader, with their change. */
+    boxes: ChangeBox[];
     days: Array<{ label: string; share: number; cumulative: number | null }>;
     sources: PostHogResult<Array<{ source: string; share: number; sessions: number }>> | null;
     campaigns: Array<{
@@ -389,6 +425,27 @@ const DAY_BANDS: Array<[string, number, number]> = [
   ["Over 30 days", 31, Infinity],
 ];
 
+/** Bands of how far into the report a reader got, as a share of its chapters: [label, from, under]. */
+const DEPTH_BANDS: Array<[string, number, number]> = [
+  ["0–9%", 0, 10],
+  ["10–24", 10, 25],
+  ["25–49", 25, 50],
+  ["50–74", 50, 75],
+  ["75–94", 75, 95],
+  ["95–100", 95, Infinity],
+];
+
+/** A reader's total reading time, as the design splits it; the last is "not recorded". */
+const TIME_GROUPS = ["< 1 min", "1–5 min", "5–10 min", "10 min+", "Time not recorded"] as const;
+
+/** Of PostHog's return visits, the share that came through an email link; null unread or none. */
+function emailShare(r: PostHogResult<ReportReturns> | null): number | null {
+  if (!r || !r.ok) return null;
+  const by = new Map(r.value.sources.map((s) => [s.source, s.sessions]));
+  const total = RETURN_SOURCES.reduce((a, [s]) => a + (by.get(s) ?? 0), 0);
+  return total ? (by.get("Email link") ?? 0) / total : null;
+}
+
 /** Berlin calendar days between two instants. */
 function berlinDays(a: string, b: string): number {
   const day = (iso: string) =>
@@ -407,6 +464,8 @@ export function buildReportPage(input: {
    */
   previousExtras?: Pick<ReportExtras, "wizard_skips"> | null;
   returns: PostHogResult<ReportReturns> | null;
+  /** The period before's, for "Returned via email"'s change; null when it is not read. */
+  previousReturns?: PostHogResult<ReportReturns> | null;
   filters: ApFilters;
   today: string;
   now: Date;
@@ -477,17 +536,22 @@ export function buildReportPage(input: {
     trend: caption,
   });
 
-  // Reading time (the end of a session) and paywall clicks are recorded for everyone only
-  // from 18 Sep 2026: a comparison with a period before that is made of the gap. The lilac
-  // banner explains the gap, so a foot only says the comparison is withheld.
+  // Reading time (the end of a session), returns and paywall clicks are recorded for everyone
+  // only from 18 Sep 2026: a comparison with a period before that is made of the gap, so those
+  // figures say they are not compared. The earlier readers are read at the same age as these
+  // (ageMatched), their reading and visits included.
   const prevComparable = previous ? previous.from >= EVENTS_COMPLETE_FROM : false;
   const withheld = previous && !prevComparable ? " · not compared: before 18 Sep" : "";
+  const noCmp = previous && !prevComparable ? "No comparison before 18 Sep" : null;
+  const noCmpNote = noCmp ? { note: noCmp } : {};
   const sharers = readers.filter((s) => s.shared).length;
   const raters = readers.filter((s) => s.votes > 0).length;
   const inviters = readers.filter((s) => s.invited).length;
   const prevInviters = prevComparable
     ? prevSubs.filter((s) => s.openedAt && s.invited).length
     : null;
+  const readTimes = (list: SubFact[]) => recorded(list).map((s) => s.readMs);
+  const readMedian = (list: SubFact[]) => median(readTimes(list));
   const tiles: ReportTile[] = [
     tile(
       "opened",
@@ -498,65 +562,77 @@ export function buildReportPage(input: {
       `${p ? `vs ${n(p.opened)} · ` : ""}${pct(ratio(t.opened, t.subs))} of submissions`,
       trend(facts, scope, (x) => x.opened)
     ),
-    tile(
-      "read",
-      "Avg. read time",
-      "mmss",
-      readMean(subs),
-      // Reading time has no time per step, so it cannot be cut at the same age.
-      null,
-      `${readFoot(median(rec.map((s) => s.readMs)))} · recorded for ${n(rec.length)} of ${n(readers.length)}${previous ? " · not compared: earlier readers' later visits count too" : ""}`,
-      spark((l) => readMean(l))
-    ),
-    tile(
-      "returned",
-      "Returned",
-      "pct",
-      returnedShare(subs),
-      // A visit's end was recorded for everyone only from 18 Sep: before, a long read
-      // followed by a reopen could pass for a return.
-      prevComparable ? returnedShare(prevSubs) : null,
-      `opened again later${withheld}`,
-      sparkFull(returnedShare)
-    ),
-    tile(
-      "initiated",
-      "Paywall initiated",
-      "pct",
-      initiated(subs),
-      prevComparable ? initiated(prevSubs) : null,
-      `of report openers actively clicked a paywall CTA${withheld}`,
-      sparkFull(initiated)
-    ),
-    // The design's change lines here: how many shared and rated (grey), and the inviters'
-    // difference from the earlier period.
     {
       ...tile(
-        "share",
-        "Share rate",
-        "pct",
-        shareRate(subs),
-        previous ? shareRate(prevSubs) : null,
-        `of report openers shared their report (${n(sharers)} of ${n(readers.length)})`,
-        spark(shareRate)
+        "read",
+        "Avg. read time",
+        "mmss",
+        readMean(subs),
+        prevComparable ? readMean(prevSubs) : null,
+        `${readFoot(readMedian(subs))} · recorded for ${n(rec.length)} of ${n(readers.length)}${withheld}`,
+        spark((l) => readMean(l))
       ),
-      change: { text: plural(sharers, "share"), tone: "flat" },
+      ...noCmpNote,
     },
     {
       ...tile(
-        "rating",
-        "Rating rate",
-        "pct",
-        rateRate(subs),
-        previous ? rateRate(prevSubs) : null,
-        `of report openers rated at least one chapter (${n(raters)} of ${n(readers.length)} · ${plural(
-          readers.reduce((a, s) => a + s.votes, 0),
-          "vote"
-        )})`,
-        spark(rateRate)
+        "median",
+        "Median read time",
+        "mmss",
+        readMedian(subs),
+        prevComparable ? readMedian(prevSubs) : null,
+        `half of the readers read longer · recorded for ${n(rec.length)} of ${n(readers.length)}${withheld}`,
+        spark((l) => readMedian(l))
       ),
-      change: { text: plural(raters, "user"), tone: "flat" },
+      ...noCmpNote,
     },
+    {
+      ...tile(
+        "returned",
+        "Returned",
+        "pct",
+        returnedShare(subs),
+        // A visit's end was recorded for everyone only from 18 Sep: before, a long read
+        // followed by a reopen could pass for a return.
+        prevComparable ? returnedShare(prevSubs) : null,
+        `opened again later${withheld}`,
+        sparkFull(returnedShare)
+      ),
+      ...noCmpNote,
+    },
+    {
+      ...tile(
+        "initiated",
+        "Paywall initiated",
+        "pct",
+        initiated(subs),
+        prevComparable ? initiated(prevSubs) : null,
+        `of report openers actively clicked a paywall CTA${withheld}`,
+        sparkFull(initiated)
+      ),
+      ...noCmpNote,
+    },
+    tile(
+      "share",
+      "Share rate",
+      "pct",
+      shareRate(subs),
+      previous ? shareRate(prevSubs) : null,
+      `of report openers shared their report (${n(sharers)} of ${n(readers.length)})`,
+      spark(shareRate)
+    ),
+    tile(
+      "rating",
+      "Rating rate",
+      "pct",
+      rateRate(subs),
+      previous ? rateRate(prevSubs) : null,
+      `of report openers rated at least one chapter (${n(raters)} of ${n(readers.length)} · ${plural(
+        readers.reduce((a, s) => a + s.votes, 0),
+        "vote"
+      )})`,
+      spark(rateRate)
+    ),
     {
       ...tile(
         "invite",
@@ -569,25 +645,20 @@ export function buildReportPage(input: {
         })${withheld}`,
         sparkFull(inviteRate)
       ),
-      change: delta("count", inviters, prevInviters, "up", "abs") ?? undefined,
+      ...noCmpNote,
     },
-    tile(
-      "initial",
-      "Initial unlock rate",
-      "pct",
-      null,
-      null,
-      "",
-      [],
-      "No Initial plan is sold yet: the €4.99 light tier agreed on 12 Oct has not shipped."
-    ),
+    // The Initial plan (pay to start) is not on sale: no figure, and the tile says so.
+    {
+      ...tile("pre", "Pre unlock rate", "pct", null, null, "", []),
+      note: "Initial plan not on sale yet",
+    },
     tile(
       "full",
       "Full unlock rate",
       "pct",
       unlockRate(subs),
       previous ? unlockRate(prevSubs) : null,
-      "Full & Full All plans purchases ÷ report openers",
+      "Full, Full All and Core purchases ÷ report openers",
       spark(unlockRate)
     ),
   ];
@@ -672,6 +743,10 @@ export function buildReportPage(input: {
           spark((l) => skipShare(l, skippers))
         ),
         goodWhen: "down",
+        // An earlier period from before Skip Intro was recorded has no share to compare.
+        ...(previous && previous.from < skipsFrom
+          ? { note: `No comparison before ${rangeLabel(skipsFrom, skipsFrom)}` }
+          : {}),
       }
     : {
         ...tile(
@@ -688,6 +763,8 @@ export function buildReportPage(input: {
         ),
         goodWhen: "down",
         trend: "",
+        // A count of the sessions PostHog saw, not a share of our readers: said so, not compared.
+        note: "sessions PostHog saw",
       };
   // Continued through slide 6: reached it, then opened the report (its Continue).
   const completedShare = (l: SubFact[]) =>
@@ -704,20 +781,23 @@ export function buildReportPage(input: {
       `${p ? `vs ${n(p.subs)} · ` : ""}everyone who finished the survey`,
       trend(facts, scope, (x) => x.subs)
     ),
-    tile(
-      "completed",
-      "Completed all 6",
-      "pct",
-      completedShare(subs),
-      prevComparable ? completedShare(prevSubs) : null,
-      `continued through slide 6${withheld}`,
-      sparkFull(completedShare)
-    ),
+    {
+      ...tile(
+        "completed",
+        "Completed",
+        "pct",
+        completedShare(subs),
+        prevComparable ? completedShare(prevSubs) : null,
+        `continued through slide 6${withheld}`,
+        sparkFull(completedShare)
+      ),
+      ...noCmpNote,
+    },
     skippedTile,
     {
       ...tile(
         "left",
-        "Left the report",
+        "Left the wizard / bounced",
         "pct",
         leftShare(subs),
         p ? leftShare(prevSubs) : null,
@@ -733,14 +813,28 @@ export function buildReportPage(input: {
   ).filter((s) => s.day >= EVENTS_COMPLETE_FROM);
   const buckets = timeShares(rec);
   const benchBuckets = timeShares(benchRec);
-  const groupMean = (list: SubFact[], key: (s: SubFact) => string, label: string) =>
-    mean(list.filter((s) => key(s) === label).map((s) => s.readMs));
+  const groupTimes = (list: SubFact[], key: (s: SubFact) => string, label: string) =>
+    list.filter((s) => key(s) === label).map((s) => s.readMs);
+  const group = (key: (s: SubFact) => string) => (label: string) => {
+    const mine = groupTimes(rec, key, label);
+    const bench = groupTimes(benchRec, key, label);
+    return {
+      label,
+      ms: mean(mine),
+      benchMs: mean(bench),
+      medianMs: median(mine),
+      benchMedianMs: median(bench),
+    };
+  };
   // Every group, an empty one with no figure: the design draws them all.
   const genders = ["Women", "Men", "Non-binary", "Other", "Prefer not to say", "Not stated"];
   const ages = [...AGE_BANDS, "Not stated"];
 
-  const returners = readers.filter((s) => s.visits > 1 && s.returnedAt);
-  const gaps = returners.map((s) => berlinDays(s.openedAt!, s.returnedAt!));
+  const returnersOf = (l: SubFact[]) => l.filter((s) => s.openedAt && s.visits > 1 && s.returnedAt);
+  const gapsOf = (l: SubFact[]) =>
+    returnersOf(l).map((s) => berlinDays(s.openedAt!, s.returnedAt!));
+  const returners = returnersOf(readers);
+  const gaps = gapsOf(readers);
   let cum = 0;
   const days: ReportPayload["returns"]["days"] = DAY_BANDS.map(([label, lo, hi]) => {
     const share = readers.length
@@ -756,7 +850,6 @@ export function buildReportPage(input: {
   });
 
   let sources: ReportPayload["returns"]["sources"] = null;
-  let viaEmail: number | null = null;
   if (input.returns) {
     if (input.returns.ok) {
       const by = new Map(input.returns.value.sources.map((s) => [s.source, s.sessions]));
@@ -768,11 +861,11 @@ export function buildReportPage(input: {
           return { source, sessions, share: total ? sessions / total : 0 };
         }),
       };
-      viaEmail = total ? (by.get("Email link") ?? 0) / total : null;
     } else {
       sources = input.returns;
     }
   }
+  const viaEmail = emailShare(input.returns);
   // Opens and clicks are of the emails the webhook reported delivered: clicks once it kept any
   // event, opens of those delivered after open tracking was switched on (later than the rest).
   // So a range reaching back before tracking still counts right, out of the emails it saw. A
@@ -839,11 +932,144 @@ export function buildReportPage(input: {
   });
   const names = new Map(chapters.map((c) => [c.id, c.name]));
 
+  // How far each reader got: the deepest live chapter they reached, as its place among the
+  // report's chapters, and their total reading time. Readers come as submissions, so the
+  // filters apply; one whose time was not recorded has a group of their own.
+  const order = chapterList([])
+    .filter((c) => LIVE_CHAPTERS.has(c.id))
+    .map((c) => c.id);
+  const place = new Map(order.map((id, i) => [id, i + 1]));
+  const inScope = new Map(subs.map((x) => [x.id, x]));
+  const depthBands = DEPTH_BANDS.map(([label]) => ({ label, counts: TIME_GROUPS.map(() => 0) }));
+  let depthReaders = 0;
+  for (const d of readingRecorded ? extras.chapter_depth : []) {
+    const reader = inScope.get(d.sid);
+    const deepest = Math.max(0, ...d.chapters.map((id) => place.get(id) ?? 0));
+    if (!reader || !deepest) continue;
+    const share = (deepest / order.length) * 100;
+    const band = DEPTH_BANDS.findIndex(([, lo, hi]) => share >= lo && share < hi);
+    const minutes = reader.readMs / MINUTE;
+    const g = reader.closed === 0 ? 4 : minutes < 1 ? 0 : minutes < 5 ? 1 : minutes < 10 ? 2 : 3;
+    depthBands[band]!.counts[g]! += 1;
+    depthReaders += 1;
+  }
+
+  // The boxes under Time and Returns, each against the period before at the same age.
+  const prevReaders = prevSubs.filter((s) => s.openedAt);
+  const prevRec = recorded(prevSubs);
+  const perSession = (l: SubFact[]) =>
+    ratio(
+      l.reduce((a, s) => a + s.readMs, 0),
+      l.reduce((a, s) => a + s.closed, 0)
+    );
+  const visitsPer = (l: SubFact[]) =>
+    ratio(
+      l.reduce((a, s) => a + s.visits, 0),
+      l.length
+    );
+  const box = (
+    key: string,
+    label: string,
+    unit: Unit,
+    value: number | null,
+    prev: number | null,
+    comparable: boolean,
+    goodWhen: GoodWhen = "up",
+    digits?: number
+  ): ChangeBox => ({
+    key,
+    label,
+    unit,
+    value,
+    prev: previous && comparable ? prev : null,
+    goodWhen,
+    ...(digits !== undefined ? { digits } : {}),
+    ...(previous && !comparable && noCmp ? { note: noCmp } : {}),
+  });
+  const timeBoxes: ChangeBox[] = [
+    box(
+      "avg",
+      "Avg. total time",
+      "mmss",
+      mean(rec.map((s) => s.readMs)),
+      mean(prevRec.map((s) => s.readMs)),
+      prevComparable
+    ),
+    box(
+      "median",
+      "Median total time",
+      "mmss",
+      median(rec.map((s) => s.readMs)),
+      median(prevRec.map((s) => s.readMs)),
+      prevComparable
+    ),
+    box(
+      "session",
+      "Avg. per session",
+      "mmss",
+      perSession(rec),
+      perSession(prevRec),
+      prevComparable
+    ),
+    // Opens were recorded for everyone all along: compared whenever there is a period before.
+    box("readers", "Readers", "count", readers.length, prevReaders.length, true),
+  ];
+  const returnBoxes: ChangeBox[] = [
+    box(
+      "back",
+      "Came back",
+      "pct",
+      returnedShare(subs),
+      returnedShare(prevSubs),
+      prevComparable,
+      "up",
+      0
+    ),
+    box(
+      "days",
+      "Median days to return",
+      "days",
+      median(gaps),
+      median(gapsOf(prevReaders)),
+      prevComparable,
+      "down"
+    ),
+    {
+      ...box(
+        "email",
+        "Returned via email",
+        "pct",
+        viaEmail,
+        emailShare(input.previousReturns ?? null),
+        true,
+        "up",
+        0
+      ),
+      // PostHog's own reading of the period before; blank when it was not read.
+    },
+    box(
+      "visits",
+      "Visits per reader",
+      "ratio",
+      visitsPer(readers),
+      visitsPer(prevReaders),
+      prevComparable
+    ),
+  ];
+
   return {
     ...head(f, today, now),
     launched: launched(scope),
     tiles,
-    wizard: { tiles: wizardTiles.map((t) => ({ ...t, digits: 0 })), slides, skipsFrom },
+    // Whole percentages, as drawn; a share under 1% keeps a tenth so a handful never reads 0%.
+    wizard: {
+      tiles: wizardTiles.map((t) => ({
+        ...t,
+        digits: t.value !== null && t.value > 0 && t.value < 0.01 ? 1 : 0,
+      })),
+      slides,
+      skipsFrom,
+    },
     time: {
       readers: readers.length,
       recorded: rec.length,
@@ -859,16 +1085,16 @@ export function buildReportPage(input: {
         share: buckets[i]!,
         bench: benchBuckets[i]!,
       })),
-      byGender: genders.map((g) => ({
-        label: g,
-        ms: groupMean(rec, (s) => genderLabel(s.gender), g),
-        benchMs: groupMean(benchRec, (s) => genderLabel(s.gender), g),
-      })),
-      byAge: ages.map((a) => ({
-        label: a,
-        ms: groupMean(rec, (s) => ageBand(s.age), a),
-        benchMs: groupMean(benchRec, (s) => ageBand(s.age), a),
-      })),
+      boxes: timeBoxes,
+      byGender: genders.map(group((s) => genderLabel(s.gender))),
+      byAge: ages.map(group((s) => ageBand(s.age))),
+      depth: {
+        from: readingFrom,
+        readers: depthReaders,
+        chapters: order.length,
+        groups: [...TIME_GROUPS],
+        bands: depthBands,
+      },
     },
     returns: {
       cameBack: returnedShare(subs),
@@ -878,6 +1104,7 @@ export function buildReportPage(input: {
         readers.length
       ),
       viaEmail,
+      boxes: returnBoxes,
       days,
       sources,
       campaigns,

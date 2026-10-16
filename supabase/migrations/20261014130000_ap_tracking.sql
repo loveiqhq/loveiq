@@ -131,7 +131,18 @@ AS $function$
            -- read it (counting its 30 minutes lifted the average from 7:22 to 9:01, 14 Oct).
            coalesce(sum(least(extract(epoch FROM s.ended_at - s.started_at), 1800) * 1000)
                       FILTER (WHERE s.ended_at > s.started_at AND s.ended_at - s.started_at < interval '4 hours'), 0)::bigint AS read_ms,
-           count(*) FILTER (WHERE s.ended_at > s.started_at AND s.ended_at - s.started_at < interval '4 hours') AS closed
+           count(*) FILTER (WHERE s.ended_at > s.started_at AND s.ended_at - s.started_at < interval '4 hours') AS closed,
+           -- Each session as [start (epoch s), its counted ms, end recorded 1/0, began a visit 1/0],
+           -- so an earlier period can be read as it stood at the same age (ageMatched).
+           json_agg(json_build_array(
+             floor(extract(epoch FROM s.started_at))::bigint,
+             CASE WHEN s.ended_at > s.started_at AND s.ended_at - s.started_at < interval '4 hours'
+                  THEN (least(extract(epoch FROM s.ended_at - s.started_at), 1800) * 1000)::bigint
+                  ELSE 0 END,
+             CASE WHEN s.ended_at > s.started_at AND s.ended_at - s.started_at < interval '4 hours'
+                  THEN 1 ELSE 0 END,
+             CASE WHEN s.new_visit THEN 1 ELSE 0 END
+           ) ORDER BY s.started_at) AS sessions
       FROM sess s
      GROUP BY s.sid
   ),
@@ -260,7 +271,7 @@ AS $function$
            -- click, a checkout or a payment. Never later than those, so no step after "opened"
            -- outnumbers it. A price quote is no such sign: one is made at submission.
            coalesce(r.opened_at, least(q.paywall_at, c.at, q.checkout_at, p.paid_at)) AS opened_at,
-           r.visits, r.returned_at, r.read_ms, r.closed,
+           r.visits, r.returned_at, r.read_ms, r.closed, r.sessions,
            q.paywall_at, c.at AS clicked_at, q.checkout_at,
            CASE WHEN sd.tablet THEN 'Tablet' ELSE coalesce(q.device, sd.device) END AS device, q.tier, q.price_arm,
            p.paid_at, p.sales, p.revenue, p.gifted, p.plan, p.full_paid,
@@ -452,6 +463,7 @@ AS $function$
                'country', x.country, 'gender', x.gender, 'relationship', x.relationship, 'age', x.age,
                'openedAt', x.opened_at, 'visits', coalesce(x.visits, 0), 'returnedAt', x.returned_at,
                'readMs', coalesce(x.read_ms, 0), 'closed', coalesce(x.closed, 0),
+               'sessions', coalesce(x.sessions, '[]'::json),
                'paywallAt', x.paywall_at, 'clickedAt', x.clicked_at, 'checkoutAt', x.checkout_at,
                'paidAt', x.paid_at, 'sales', coalesce(x.sales, 0), 'revenue', coalesce(x.revenue, 0),
                'gifted', coalesce(x.gifted, false), 'plan', x.plan, 'full', coalesce(x.full_paid, false),
