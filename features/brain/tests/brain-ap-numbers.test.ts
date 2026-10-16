@@ -277,6 +277,17 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     const old = await call({ since: "2026-09-01", until: "2026-09-07", compare_to: "previous" });
     expect(old.text).not.toMatch(/ {2}survey_starts /);
     expect(old.text).toContain("survey_starts is not compared");
+    // A compared period before the records begin is said to be empty, and is not even read.
+    const before = apCalls().length;
+    const none = await call({
+      since: "2026-10-13",
+      until: "2026-10-15",
+      compare_to: "2025-01-01..2025-01-03",
+    });
+    expect(none.text).toContain(
+      "The compared period ends before LoveIQ's records start on 21 Mar 2026, so there is nothing to compare with."
+    );
+    expect(apCalls().length - before).toBe(1);
   });
 
   it("sums weeks from the dashboard's days, and marks a week cut short", async () => {

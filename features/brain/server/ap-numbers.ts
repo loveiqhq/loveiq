@@ -199,6 +199,11 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
           "recorded (18 Sep 2026, or within the last 30 days), as the dashboard leaves it."
       );
     }
+    if (!other.facts) {
+      notes.push(
+        `The compared period ends before LoveIQ's records start on ${rangeLabel(DATA_START, DATA_START)}, so there is nothing to compare with.`
+      );
+    }
     compared = { period: { since: other.f.from, until: other.f.to }, rows: otherRows };
   }
 
