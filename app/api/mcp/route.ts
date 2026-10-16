@@ -3765,6 +3765,17 @@ export function planSelectForTest(
   return { select: out.join(","), privateKeys: [...privateKeys] };
 }
 
+/** What an answer says when something in it was masked, the same for rows and single values. */
+function maskedNotice(redacted: string[]): string {
+  return redacted.length > 0
+    ? ` Masked as private, so the value is never pasted into a prompt: ` +
+        `${redacted.join(", ")}. The column is NOT empty and the rows are real — the same ` +
+        `underlying value always shows the same #tag, so rows can still be matched to each ` +
+        `other. Filtering and counting on these columns works normally; only reading the ` +
+        `value does not.`
+    : "";
+}
+
 /**
  * Mask private columns in place, and report WHICH -- silence would read as an empty
  * column, which is the one conclusion that is certainly wrong.
@@ -6331,6 +6342,7 @@ async function callTool(
     }
     const rows = (await res.json().catch(() => null)) as unknown;
     if (!Array.isArray(rows)) {
+      const single = redactPrivateColumns([rows]);
       return textResult(
         // NOT a 2,000-char slice. Object-returning analysis functions land here —
         // `rpc/get_funnel_sparklines_v3` is a 140,557-character payload, of which
@@ -6340,8 +6352,10 @@ async function callTool(
         // THROUGH THE GATE AND THE FENCE, like every other return from this tool. This
         // branch ran before both, so an rpc returning a jsonb object of personal data
         // would have rendered it raw.
-        `${UNTRUSTED_DATA_PREAMBLE}\n\nThat returned a single value rather than rows: ` +
-          `${JSON.stringify(redactPrivateColumns([rows]).rows[0])}`
+        // And it NAMES what it masked, as the table branch does: a tag with no notice read
+        // as a clean answer (review of #598, on rpc/get_answer_conversion_lift).
+        `${UNTRUSTED_DATA_PREAMBLE}\n\nThat returned a single value rather than rows.` +
+          `${maskedNotice(single.redacted)}\n\n${JSON.stringify(single.rows[0])}`
       );
     }
 
@@ -6381,13 +6395,7 @@ async function callTool(
                 : "Raise limit or page with offset"
             } to see the rest.`
           : ".") +
-      (redacted.length > 0
-        ? ` Masked as private, so the value is never pasted into a prompt: ` +
-          `${redacted.join(", ")}. The column is NOT empty and the rows are real — the same ` +
-          `underlying value always shows the same #tag, so rows can still be matched to each ` +
-          `other. Filtering and counting on these columns works normally; only reading the ` +
-          `value does not.`
-        : "") +
+      maskedNotice(redacted) +
       // An empty result is two different facts; say which one this is.
       (shown === 0 && (total === null || Number(total) === 0) && !isRpc
         ? await describeEmptyResult(table, hadFilters)

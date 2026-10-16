@@ -6102,6 +6102,35 @@ describe("/api/mcp", () => {
         expect(r.content[0].text).toContain('"answer":"Strongly agree"');
         expect(r.content[0].text).toContain('"q_text":"Right now, I feel satisfied"');
         expect(r.content[0].text).not.toContain("[private");
+        expect(r.content[0].text).not.toContain("Masked as private");
+      });
+
+      /**
+       * A MASKED SINGLE VALUE SAYS SO, in the table branch's own words. It used to return the
+       * tag with no notice, so a masked answer read as a clean one.
+       */
+      it("names what it masked in a function's single-value result, as it does for rows", async () => {
+        wire({
+          count: 3,
+          sample: [{ id: 7, email: "plain-sample@example.test", archetype: "Spark Seeker" }],
+          contact: { phone: "plain-phone-value" },
+        });
+        const text = (await call({ table: "rpc/get_segment_match_count", params: {} })).content[0]
+          .text;
+        expect(text).not.toMatch(/plain-sample@example|plain-phone-value/);
+        expect(text).toContain(
+          "That returned a single value rather than rows. Masked as private, so the value is " +
+            "never pasted into a prompt: email, phone. The column is NOT empty and the rows are real"
+        );
+        expect(text).toContain('"archetype":"Spark Seeker"');
+        // The same sentence as a table read of the same field.
+        wire([{ id: 7, email: "plain-sample@example.test" }]);
+        const table = (await call({ table: "payment" })).content[0].text;
+        const notice = (t: string) => {
+          const at = t.indexOf("Masked as private");
+          return t.slice(at, t.indexOf("\n\n", at));
+        };
+        expect(notice(text).replace("email, phone", "email")).toBe(notice(table));
       });
 
       it("masks an email address inside ordinary text, and keeps the sentence", async () => {
