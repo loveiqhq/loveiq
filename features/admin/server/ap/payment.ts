@@ -159,6 +159,16 @@ export interface UpliftFlag {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** The pricing code's traffic sources, as their owners write them. */
+const TRAFFIC_NAMES: Record<string, string> = {
+  google: "Google",
+  direct: "Direct",
+  newsletter: "Newsletter",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  other: "Other",
+};
+
 /** Paid checkout's first day: earlier checkout sessions were the team's tests. */
 export const CHECKOUT_FROM = "2026-05-01";
 
@@ -618,7 +628,7 @@ export function buildPayment(input: {
     {
       label: "Traffic source",
       items: factors.traffic.map((x) => ({
-        key: x.key.charAt(0).toUpperCase() + x.key.slice(1),
+        key: TRAFFIC_NAMES[x.key] ?? x.key,
         multiplier: x.multiplier,
       })),
     },

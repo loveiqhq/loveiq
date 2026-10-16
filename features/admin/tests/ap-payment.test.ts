@@ -157,6 +157,8 @@ describe("Payment page builder", () => {
     ]);
     // The per-visitor price switch is off: the page says the multipliers are not applied.
     expect(p.pricing.factors).toMatchObject({ on: false, since: "2026-08-03T18:28:00Z" });
+    const traffic = p.pricing.factors.groups.find((g) => g.label === "Traffic source")!;
+    expect(traffic.items.map((i) => i.key)).toContain("TikTok");
   });
 
   it("the elasticity model: a straight line in logs, and only with three months", () => {
