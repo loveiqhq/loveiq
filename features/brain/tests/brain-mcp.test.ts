@@ -6209,7 +6209,7 @@ describe("/api/mcp", () => {
         expect(list[0]!.n).toBe(2);
         expect(list[0]!.email).toMatch(/^\[private #[0-9a-f]{4}\]$/);
         expect(text).toMatch(
-          /Masked as private, so the value is never pasted into a prompt: email, requestIp, texts\./
+          /Masked as private, so the value is never pasted into a prompt: email, list, requestIp, texts, x\./
         );
       });
 
@@ -7543,6 +7543,104 @@ describe("/api/mcp", () => {
      * (100% codes among them) and a customer's `name`. The card's brand and `fingerprint`, the
      * amount and a coupon's own name stay readable.
      */
+    /** Serve one JSON body for one path through the gateway, and read the answer back. */
+    async function stripe(path: string, body: unknown) {
+      mockFetch.mockImplementation(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(body),
+      }));
+      return (await call({ service: "stripe", path })).content[0]!.text;
+    }
+
+    /**
+     * A STRIPE ERROR'S `code` STAYS READABLE (third review of #598). The bare `code` rule is
+     * for promo codes; every Stripe error is typed `…_error`, and its code says why a payment
+     * failed. Main showed it, so masking it would reduce analytics.
+     */
+    it("keeps a Stripe error's code readable, and still masks a promotion code", async () => {
+      const intents = await stripe("/payment_intents", {
+        data: [
+          {
+            object: "payment_intent",
+            last_payment_error: {
+              type: "card_error",
+              code: "card_declined",
+              decline_code: "generic_decline",
+            },
+          },
+          {
+            object: "setup_intent",
+            last_setup_error: {
+              type: "invalid_request_error",
+              code: "setup_intent_authentication_failure",
+            },
+          },
+          { object: "promotion_code", code: "plain-promo-value" },
+        ],
+      });
+      expect(intents).toContain('"code":"card_declined"');
+      expect(intents).toContain('"code":"setup_intent_authentication_failure"');
+      expect(intents).not.toContain("plain-promo-value");
+    });
+
+    /**
+     * A MASKED JSON-TEXT ARRAY NAMES ITS FIELD (reproduced by the third review). Only a change
+     * by the email or link pass used to name it, so a string holding a JSON array of links was
+     * masked inside, nothing was named, and the gateway sent the raw body, token included.
+     */
+    it("names a field whose JSON-text array was masked, so the raw body never goes out", async () => {
+      const text = await stripe("/customers", {
+        data: [
+          {
+            object: "customer",
+            id: "cus_1",
+            metadata: { links: '["https://www.loveiq.org/report/rpt_abcdefghij0123456789"]' },
+          },
+        ],
+      });
+      expect(text).not.toContain("rpt_abcdefghij0123456789");
+      expect(text).toMatch(/Masked as private[^\n]*links/);
+    });
+
+    /** A customer update keeps the old name beside the new one, under `previous_attributes`. */
+    it("masks the previous name in a customer update event, and keeps other old values", async () => {
+      const text = await stripe("/events", {
+        data: [
+          {
+            object: "event",
+            type: "customer.updated",
+            data: {
+              object: { object: "customer", id: "cus_1", name: "plain-new-name" },
+              previous_attributes: { name: "plain-old-name", description: "kept description" },
+            },
+          },
+          {
+            object: "event",
+            type: "product.updated",
+            data: {
+              object: { object: "product", name: "Full report" },
+              previous_attributes: { name: "Old product" },
+            },
+          },
+        ],
+      });
+      expect(text).not.toMatch(/plain-new-name|plain-old-name/);
+      expect(text).toContain('"description":"kept description"');
+      expect(text).toContain('"name":"Full report"');
+      expect(text).toContain('"name":"Old product"');
+    });
+
+    /** No gap for a result that is one string or a list of strings: the same text pass. */
+    it("masks a result that is a bare string or a list of strings", async () => {
+      expect(
+        await stripe("/a", "https://www.loveiq.org/report/rpt_abcdefghij0123456789")
+      ).not.toContain("rpt_abcdefghij0123456789");
+      const list = await stripe("/b", ["write to plain.person@example.test", "nothing"]);
+      expect(list).not.toContain("plain.person@example.test");
+      expect(list).toMatch(/Masked as private[^\n]*result/);
+    });
+
     it("masks a card's digits, a promotion code and a customer's name in Stripe's payloads", async () => {
       const payloads: Record<string, unknown> = {
         "/charges": {

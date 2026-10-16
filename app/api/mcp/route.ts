@@ -3306,8 +3306,10 @@ const PRIVATE_SUFFIXES = [
  * credential list already states.
  */
 const PRIVATE_EXACT = [
-  // A promo code, which is all a bare `code` holds in this database (checked 2026-10-16:
-  // the nurture stages' codes and Stripe's promotion codes, 100% codes among them).
+  // A promo code: in this database a bare `code` holds nothing else (checked 2026-10-16: the
+  // nurture stages' codes and Stripe's promotion codes, 100% codes among them). Stripe's
+  // replies also carry an ERROR's `code` (card_declined), which stays readable: see the
+  // `_error` rule in redactPrivateColumns.
   "code",
   "api_key",
   "apikey",
@@ -3828,12 +3830,14 @@ function redactPrivateColumns(
    * secret in a link. `owner` is the column or key it sits under, named in the notice.
    */
   const maskText = (text: string, depth: number, owner?: string): string => {
-    const structured = walkText(text, depth);
-    const masked = redactUrlSecrets(maskEmailsInText(structured));
-    if (masked !== structured && owner) hit.add(owner);
+    const masked = redactUrlSecrets(maskEmailsInText(walkText(text, depth)));
+    // Against the text as it came: a change made inside JSON text names its owner too, or a
+    // masked string array went unnamed and query_external_service sent the raw body.
+    if (masked !== text && owner) hit.add(owner);
     return masked;
   };
-  const walk = (value: unknown, depth: number, owner?: string): unknown => {
+  /** `customer`: this object describes a Stripe customer even without its own `object`. */
+  const walk = (value: unknown, depth: number, owner?: string, customer = false): unknown => {
     if (depth > 8 || value === null || typeof value !== "object") return value;
     if (Array.isArray(value)) {
       return value.map((v) =>
@@ -3841,14 +3845,25 @@ function redactPrivateColumns(
       );
     }
     const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+    /**
+     * Stripe names a customer `name` beside `object: "customer"`, and an update event's
+     * `previous_attributes` beside a customer `object`; elsewhere a `name` is a thing's (a
+     * campaign, a segment). And a bare `code` is a promo code except in Stripe's errors, each
+     * typed `…_error` (`card_error`, `invalid_request_error`), whose code (card_declined)
+     * says why a payment failed and stays readable.
+     */
+    const isCustomer = customer || copy.object === "customer";
+    const describesCustomer =
+      typeof copy.object === "object" &&
+      copy.object !== null &&
+      (copy.object as Record<string, unknown>).object === "customer";
+    const stripeError = typeof copy.type === "string" && copy.type.endsWith("_error");
     for (const key of Object.keys(copy)) {
       if (copy[key] === null || copy[key] === undefined) continue;
-      // Stripe names a customer `name` beside `object: "customer"`; elsewhere a `name` is a
-      // thing's (a campaign, a segment), so only that object's is a person's.
       if (
-        isPrivateName(key) ||
+        (isPrivateName(key) && !(key === "code" && stripeError)) ||
         (depth === 0 && alsoPrivate.has(key)) ||
-        (key === "name" && copy.object === "customer")
+        (key === "name" && isCustomer)
       ) {
         hit.add(key);
         copy[key] = privateTag(copy[key]);
@@ -3870,11 +3885,19 @@ function redactPrivateColumns(
         copy[key] = maskText(copy[key] as string, depth, key);
         continue;
       }
-      copy[key] = walk(copy[key], depth + 1, key);
+      copy[key] = walk(
+        copy[key],
+        depth + 1,
+        key,
+        key === "previous_attributes" && describesCustomer
+      );
     }
     return copy;
   };
-  const out = rows.map((row) => walk(row, 0));
+  // A result that is one string goes through the same text pass as a field.
+  const out = rows.map((row) =>
+    typeof row === "string" ? maskText(row, 0, "result") : walk(row, 0, "result")
+  );
   return { rows: out, redacted: [...hit].sort() };
 }
 
