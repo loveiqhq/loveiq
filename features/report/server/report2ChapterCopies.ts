@@ -792,3 +792,21 @@ export function buildReport2ChapterCopies(
     confidenceStrip,
   };
 }
+
+/**
+ * A V4 page's share of the chapters (`v4=1`). The slimmed report (16.10) carries no Core
+ * Insecurities, Confidence Level or Arousal Style (V4_REMOVED_CHAPTERS, reportV3Nav.ts),
+ * so it is sent none of their copy or charts. Every other version keeps all three.
+ */
+export function forV4Page(copies: ReturnType<typeof buildReport2ChapterCopies>) {
+  return {
+    ...copies,
+    insecuritiesCopy: null,
+    insecurityCueFamily: null,
+    insecurityGraph: null,
+    arousalCopy: null,
+    arousalConfig: null,
+    confidenceCopy: null,
+    confidenceStrip: null,
+  };
+}

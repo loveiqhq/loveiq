@@ -22,15 +22,17 @@ import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
  */
 
 const V3_CSS = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
-const INSECURITIES: ReportV3Chapter = {
-  id: "core_insecurities",
+// A Report 2.0 chapter V4 still carries, with a teaser: Core Insecurities was the sample
+// until the slimmed report took it out of V4 (16.10).
+const POWER: ReportV3Chapter = {
+  id: "power_orientation",
   number: "2.2",
-  title: "Core Insecurities",
+  title: "Power Orientation",
 };
 
 afterEach(cleanup);
 
-const renderV4 = (chapter: ReportV3Chapter = INSECURITIES) =>
+const renderV4 = (chapter: ReportV3Chapter = POWER) =>
   render(
     <V3ModeProvider>
       <V4ModeProvider>
@@ -62,9 +64,9 @@ describe("V3Chapter under ?v4=1", () => {
     // longer carries `.rv3-chapter`, whose frozen catch-alls restyled the 2.0 body.
     expect(section).not.toHaveClass("rv3-chapter");
     expect(section).toHaveClass("rv4-chapter");
-    expect(section.id).toBe("core_insecurities");
+    expect(section.id).toBe("power_orientation");
     const title = container.querySelector(".rv4-chapter__button .rv4-chapter__title.has-suffix")!;
-    expect(title.textContent).toBe("Core Insecurities of the Spark Seeker");
+    expect(title.textContent).toBe("Power Orientation of the Spark Seeker");
     expect(container.querySelector(".rv4-chapter__archetype")!.textContent).toBe("Spark Seeker");
     expect(container.querySelector(".rv4-chapter__button .rv4-chapter__chev svg")).not.toBeNull();
     expect(container.querySelector(".rv3-chapter__title, .rv3-chapter__chev")).toBeNull();
@@ -142,8 +144,8 @@ describe("V3Chapter under ?v3=1", () => {
     const { container } = render(
       <V3ModeProvider>
         <V3Chapter
-          chapter={INSECURITIES}
-          sectionId="core_insecurities"
+          chapter={POWER}
+          sectionId="power_orientation"
           archetype="Spark Seeker"
           feedbackWidget={<span className="fb">Does this resonate?</span>}
         >
@@ -152,7 +154,7 @@ describe("V3Chapter under ?v3=1", () => {
       </V3ModeProvider>
     );
     expect(container.querySelector(".rv3-chapter__number")!.textContent).toBe("Chapter 2.2");
-    expect(container.querySelector(".rv3-chapter__title")!.textContent).toBe("Core Insecurities");
+    expect(container.querySelector(".rv3-chapter__title")!.textContent).toBe("Power Orientation");
     expect(container.querySelector(".rv3-chapter__button")!.getAttribute("aria-expanded")).toBe(
       "true"
     );
@@ -238,7 +240,7 @@ describe("V3Chapter under V4 — the teaser while closed (1:862)", () => {
     const { container } = renderV4();
     expect(container.querySelector("section")).toHaveClass("has-teaser");
     const teaser = container.querySelector(".rv4-chapter__tease .rv4-chapter__teaser")!;
-    expect(teaser.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.core_insecurities);
+    expect(teaser.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.power_orientation);
     // Not inside any `[class$="__body"]`: the frozen catch-all would set it 17/28.
     expect(teaser.closest(".rv3-chapter__body, [class$='__body']")).toBeNull();
     // Not inside the button, so it is not part of the heading's accessible name.
@@ -321,7 +323,7 @@ describe("V3Chapter — opened from a nudge", () => {
     const { container } = renderV4();
     const button = container.querySelector(".rv4-chapter__button")!;
     expect(button.getAttribute("aria-expanded")).toBe("false");
-    act(() => openV4Chapter("core_insecurities"));
+    act(() => openV4Chapter("power_orientation"));
     expect(button.getAttribute("aria-expanded")).toBe("true");
   });
 
@@ -330,7 +332,7 @@ describe("V3Chapter — opened from a nudge", () => {
     const { openV4Chapter } = await import("@features/report/ui/v3/v4OpenChapter");
     const { container } = render(
       <V3ModeProvider>
-        <V3Chapter chapter={INSECURITIES} sectionId="core_insecurities">
+        <V3Chapter chapter={POWER} sectionId="power_orientation">
           <p>body</p>
         </V3Chapter>
       </V3ModeProvider>
@@ -338,7 +340,7 @@ describe("V3Chapter — opened from a nudge", () => {
     const button = container.querySelector(".rv3-chapter__button")!;
     fireEvent.click(button);
     expect(button.getAttribute("aria-expanded")).toBe("false");
-    act(() => openV4Chapter("core_insecurities"));
+    act(() => openV4Chapter("power_orientation"));
     expect(button.getAttribute("aria-expanded")).toBe("false");
   });
 });
@@ -361,11 +363,11 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
       <V3ModeProvider>
         <V4ModeProvider>
           <V4ChapterLockProvider
-            value={{ isLocked: (id) => locked && id === "core_insecurities", unlock: onUnlock }}
+            value={{ isLocked: (id) => locked && id === "power_orientation", unlock: onUnlock }}
           >
             <V3Chapter
-              chapter={INSECURITIES}
-              sectionId="core_insecurities"
+              chapter={POWER}
+              sectionId="power_orientation"
               archetype="Spark Seeker"
               feedbackWidget={<span className="fb">Does this resonate?</span>}
             >
@@ -381,7 +383,7 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     const section = container.querySelector("section")!;
     expect(section).toHaveClass("rv4-chapter", "is-locked");
     expect(section).not.toHaveClass("is-open");
-    expect(section.querySelector(".rv4-chapter__name")!.textContent).toBe("Core Insecurities");
+    expect(section.querySelector(".rv4-chapter__name")!.textContent).toBe("Power Orientation");
     // Mark, 29.09 (1945269177): "Updated Lock icon + Text." — 982:379: the frame's 14px
     // lock on a 28px disc over "Unlock Report".
     const lock = section.querySelector(".rv4-chapter__button .rv4-chapter__lock")!;
@@ -401,7 +403,7 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     expect(Array.from(glyphs, (img) => img.getAttribute("alt"))).toEqual(["", ""]);
     expect(section.querySelector(".rv4-chapter__chev")).toBeNull();
     const tease = section.querySelector(".rv4-chapter__tease")!;
-    expect(tease.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.core_insecurities);
+    expect(tease.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.power_orientation);
     expect(tease.getAttribute("aria-hidden")).not.toBe("true");
     expect(tease.hasAttribute("inert")).toBe(false);
   });
@@ -423,7 +425,7 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     // says what the hidden "Locked — unlock to read" used to. The space is for
     // assistive tech, as the title's own runs have one.
     expect(button.querySelector(".rv3-sr")).toBeNull();
-    expect(button.textContent).toBe("Core Insecurities of the Spark Seeker Unlock Report");
+    expect(button.textContent).toBe("Power Orientation of the Spark Seeker Unlock Report");
     fireEvent.click(button);
     expect(onUnlock).toHaveBeenCalledTimes(1);
     // The paywall decides what opens, not the tap.
@@ -434,7 +436,7 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     const { act } = await import("@testing-library/react");
     const { openV4Chapter } = await import("@features/report/ui/v3/v4OpenChapter");
     const { container } = renderLocked();
-    act(() => openV4Chapter("core_insecurities"));
+    act(() => openV4Chapter("power_orientation"));
     expect(container.querySelector("section")).not.toHaveClass("is-open");
     expect(container.querySelector(".rv3-chapter__body")).toBeNull();
   });
@@ -453,7 +455,7 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     const { container } = render(
       <V3ModeProvider>
         <V4ChapterLockProvider value={{ isLocked: () => true, unlock: vi.fn() }}>
-          <V3Chapter chapter={INSECURITIES} sectionId="core_insecurities">
+          <V3Chapter chapter={POWER} sectionId="power_orientation">
             <p className="body">body</p>
           </V3Chapter>
         </V4ChapterLockProvider>
@@ -542,11 +544,7 @@ describe("V3Chapter under V4 — Report 2.0's own look (review 27.09)", () => {
       <V3ModeProvider>
         <V4ModeProvider>
           <V4ChapterLockProvider value={{ isLocked: () => true, unlock: () => {} }}>
-            <V3Chapter
-              chapter={INSECURITIES}
-              sectionId="core_insecurities"
-              archetype="Spark Seeker"
-            >
+            <V3Chapter chapter={POWER} sectionId="power_orientation" archetype="Spark Seeker">
               <p>body</p>
             </V3Chapter>
           </V4ChapterLockProvider>
@@ -562,11 +560,7 @@ describe("V3Chapter under V4 — Report 2.0's own look (review 27.09)", () => {
       <main className="rv3 rv4">
         <V3ModeProvider>
           <V4ModeProvider>
-            <V3Chapter
-              chapter={INSECURITIES}
-              sectionId="power_orientation"
-              archetype="Spark Seeker"
-            >
+            <V3Chapter chapter={POWER} sectionId="power_orientation" archetype="Spark Seeker">
               <TwoPointOh />
             </V3Chapter>
           </V4ModeProvider>
@@ -586,7 +580,7 @@ describe("V3Chapter under V4 — Report 2.0's own look (review 27.09)", () => {
     const v3 = render(
       <main className="rv3">
         <V3ModeProvider>
-          <V3Chapter chapter={INSECURITIES} sectionId="power_orientation">
+          <V3Chapter chapter={POWER} sectionId="power_orientation">
             <TwoPointOh />
           </V3Chapter>
         </V3ModeProvider>
@@ -674,10 +668,10 @@ describe("V3Chapter under V4 — Report 2.0's own look (review 27.09)", () => {
 describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)", () => {
   const CARDS = new Map([
     [
-      "core_insecurities",
+      "power_orientation",
       {
         practice: {
-          eyebrow: "Working with your sensitivity: three moves",
+          eyebrow: "A stand-in practice label",
           title: "Try This & See What Shifts",
           locked: false,
           free: [{ kind: "para" as const, runs: [{ text: "Three small moves." }] }],
@@ -702,21 +696,21 @@ describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)
           <V4ModeProvider>
             <V4ChapterCardsProvider value={CARDS}>
               <V3Chapter
-                chapter={INSECURITIES}
-                sectionId="core_insecurities"
+                chapter={POWER}
+                sectionId="power_orientation"
                 archetype="Spark Seeker"
                 feedbackWidget={<span className="fb">Does this resonate?</span>}
               >
-                <div className="report-insecurities">
-                  <h3 className="report-insecurities__heading">Core Insecurities</h3>
+                <div className="report-power">
+                  <h3 className="report-power__heading">Power Orientation</h3>
                 </div>
               </V3Chapter>
             </V4ChapterCardsProvider>
           </V4ModeProvider>
         ) : (
           <V4ChapterCardsProvider value={CARDS}>
-            <V3Chapter chapter={INSECURITIES} sectionId="core_insecurities">
-              <div className="report-insecurities">body</div>
+            <V3Chapter chapter={POWER} sectionId="power_orientation">
+              <div className="report-power">body</div>
             </V3Chapter>
           </V4ChapterCardsProvider>
         )}
@@ -727,7 +721,7 @@ describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)
     const { container } = renderWithCards();
     const inner = container.querySelector(".rv3-chapter__body-inner")!;
     const rows = [...inner.children].map((el) => el.className.split(" ")[0]);
-    expect(rows).toEqual(["report-insecurities", "rv4-chapter__extras", "rv4-rating"]);
+    expect(rows).toEqual(["report-power", "rv4-chapter__extras", "rv4-rating"]);
     const extras = inner.querySelector(".rv4-chapter__extras")!;
     expect([...extras.children].map((el) => el.className.split(" ")[0])).toEqual([
       "rv4-try",
@@ -751,7 +745,7 @@ describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)
       <V3ModeProvider>
         <V4ModeProvider>
           <V4ChapterCardsProvider value={CARDS}>
-            <V3Chapter chapter={INSECURITIES} sectionId="growth" archetype="Spark Seeker">
+            <V3Chapter chapter={POWER} sectionId="growth" archetype="Spark Seeker">
               <p>body</p>
             </V3Chapter>
           </V4ChapterCardsProvider>

@@ -2111,7 +2111,7 @@ describe("ReportPage", () => {
       expect([...REPORT_V4_DESIGNED_CHAPTER_IDS].sort()).toEqual([...DESIGNED].sort());
       const locked = lockedIds(container);
       expect(locked).toContain("biochemical_reward_system_dynamics");
-      expect(locked).toContain("core_insecurities");
+      expect(locked).toContain("power_orientation");
       expect(locked).not.toContain("constellation");
       for (const id of DESIGNED) expect(locked).not.toContain(id);
       // The fixture sends no V4 chapter, as for a name with no V4 copy: its designed
@@ -2129,10 +2129,24 @@ describe("ReportPage", () => {
 
       const locked = lockedIds(container);
       expect(locked).toContain(LIBIDO);
-      expect(locked).not.toContain("core_insecurities");
-      expect(locked).not.toContain("confidence_level");
+      expect(locked).toContain("power_orientation");
+      // Of Essentials' chapters V4 still carries Attachment Style (and the designed two);
+      // Core Insecurities and Confidence Level left it with the slimmed report (16.10).
       expect(locked).not.toContain("attachment_style");
-      expect(container.querySelector("#core_insecurities [aria-expanded]")).not.toBeNull();
+      expect(container.querySelector("#attachment_style [aria-expanded]")).not.toBeNull();
+    });
+
+    it("draws none of the three chapters the slimmed report took out (16.10)", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      for (const plan of [null, "essentials", "full_report"]) {
+        mockUseReportData.mockReturnValue(withPlan(plan));
+        const { container, unmount } = render(<ReportPage />);
+        for (const id of ["core_insecurities", "confidence_level", "arousal_style"]) {
+          expect(container.querySelector(`#${id}`), `${plan} ${id}`).toBeNull();
+          expect(container.querySelector(`a[href="#${id}"]`), `${plan} ${id}`).toBeNull();
+        }
+        unmount();
+      }
     });
 
     it("locks nothing for a full-report reader", () => {
@@ -2176,7 +2190,7 @@ describe("ReportPage", () => {
       }
       // The four designed chapters open, in part, to every reader.
       for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
-      for (const id of ["core_insecurities", LIBIDO, "biochemical_reward_system_dynamics"]) {
+      for (const id of ["power_orientation", LIBIDO, "biochemical_reward_system_dynamics"]) {
         expect(tier.get(id), id).toBe("locked");
       }
       // Other Archetypes opens for everyone (above), so its badge says so.
@@ -2194,7 +2208,7 @@ describe("ReportPage", () => {
       const tier = tiers(container);
 
       expect([...tier.values()]).not.toContain("locked");
-      expect(tier.get("core_insecurities")).toBe("unlocked");
+      expect(tier.get("power_orientation")).toBe("unlocked");
       expect(tier.get(LIBIDO)).toBe("unlocked");
       expect(tier.get("introduction")).toBe("free");
     });
@@ -2206,9 +2220,9 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
       const tier = tiers(container);
 
-      expect(tier.get("core_insecurities")).toBe("unlocked");
       expect(tier.get("attachment_style")).toBe("unlocked");
       expect(tier.get(LIBIDO)).toBe("locked");
+      expect(tier.get("power_orientation")).toBe("locked");
       for (const id of DESIGNED) expect(tier.get(id), id).toBe("unlocked");
     });
   });
@@ -2240,6 +2254,16 @@ describe("ReportPage", () => {
       "learn.body": "What sexual insecurity is.",
       locked: false,
     };
+    // Initiation Style: a 2.0 practice chapter V4 still carries (Insecurities left it,
+    // 16.10). V2 and V3 keep Insecurities, and its own panel below.
+    const INITIATION = {
+      "practical.label": "The fix: one conversation",
+      "practical.teaser": "One small conversation.",
+      "practical.line1": "1. Ask it.",
+      "learn.eyebrow": "What you will learn",
+      "learn.body": "How you start.",
+      locked: false,
+    };
     const withCopies = (
       plan: string | null = "full_report",
       extra: Record<string, unknown> = {}
@@ -2249,6 +2273,7 @@ describe("ReportPage", () => {
         accessPlan: plan,
         powerCopy: POWER,
         insecuritiesCopy: INSECURITIES,
+        initiationCopy: INITIATION,
         ...extra,
       });
       return response;
@@ -2278,20 +2303,19 @@ describe("ReportPage", () => {
       ]);
     });
 
-    it("gives Insecurities a Try this card, its 2.0 label for the eyebrow", () => {
+    it("gives Initiation Style a Try this card, its 2.0 label for the eyebrow", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       mockUseReportData.mockReturnValue(withCopies());
 
       const { container } = render(<ReportPage />);
 
-      const chapter = container.querySelector("#core_insecurities")!;
-      expect(chapter.querySelector(".report-insecurities__details")).toBeNull();
+      const chapter = container.querySelector("#initiation_style")!;
       const practice = chapter.querySelector(".rv4-chapter__extras .rv4-try")!;
       expect(practice.querySelector(".rv4-try__label")!.textContent).toBe(
         "Try This & See What Shifts"
       );
       expect(practice.querySelector(".rv4-try__eyebrow")!.textContent).toBe(
-        INSECURITIES["practical.label"]
+        INITIATION["practical.label"]
       );
     });
 
