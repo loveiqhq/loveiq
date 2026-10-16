@@ -375,4 +375,81 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     expect(text).not.toContain("COULD NOT BE READ");
     expect(apCalls()).toHaveLength(0);
   });
+
+  it("says a period before the records is no data, never a row of zeroes", async () => {
+    // The old rollup has every one of these days, as zeroes: they must not be served.
+    for (const args of [
+      { since: "2026-01-01", until: "2026-01-31" },
+      { since: "2026-01-01", until: "2026-01-31", granularity: "week" },
+      { since: "2026-01-01", until: "2026-01-31", compare_to: "previous" },
+      { group_by: ["plan"], since: "2026-01-01", until: "2026-01-31" },
+    ]) {
+      const { text } = await call(args);
+      expect(text, JSON.stringify(args)).toContain(
+        "No numbers for 2026-01-01 to 2026-01-31: that range is outside the data. LoveIQ's records start on 21 Mar 2026"
+      );
+      expect(text).not.toContain('"day":');
+    }
+  });
+
+  it("compares only once there is a comparison to make, and says what it did", async () => {
+    // A compared period with no whole day yet: nothing is compared, so the period is read as
+    // asked, today included, with the one note that says why.
+    const later = await call({ since: "2026-10-10", compare_to: "2026-10-16..2026-10-20" });
+    expect(later.text).toContain("AP-ANALYTICS NUMBERS for 2026-10-10 to 2026-10-16");
+    expect(later.text).toContain(
+      "Nothing to compare with: the compared period has no whole day yet."
+    );
+    expect(later.text).toContain("Today is still running, so its figures are part of a day.");
+    expect(later.text).not.toMatch(
+      /compared over its whole days|the comparison is of the whole days/
+    );
+    expect(later.text).not.toContain(" versus ");
+    // Another period: "this period is compared over its whole days", never "the same number
+    // of days before", which only "previous" is.
+    const other = await call({ since: "2026-10-01", compare_to: "2026-09-01..2026-09-30" });
+    expect(other.text).toContain(
+      "Today is still running, so this period is compared over its whole days, 2026-10-01 to 2026-10-15: today's part-day is left out."
+    );
+    expect(other.text).not.toContain("against the same number of days before");
+    // The period just before, given as a range, is "previous": it moves with the cut.
+    const before = await call({ since: "2026-10-10", compare_to: "2026-10-03..2026-10-09" });
+    expect(before.text).toMatch(
+      /2026-10-10 to 2026-10-15 \(6 days, 6 with data\) versus 2026-10-04 to 2026-10-09 \(6 days/
+    );
+    expect(before.text).toContain("against the same number of days before");
+    expect(before.text).not.toContain("DIFFERENT LENGTHS");
+  });
+
+  it("links a year of days as the bar's Last 12 months while it reaches before the records", async () => {
+    expect((await call({ days: 365 })).text).toContain(
+      "https://www.loveiq.org/admin/ap/assessment-a?period=12m"
+    );
+  });
+
+  it("reads the old rollup's days as UTC days, whole ones only, when it has to fall back", async () => {
+    apFails = true;
+    // 00:30 in Berlin on the 17th is 22:30 UTC on the 16th: the rollup's 16th is not over.
+    vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
+    const week = await call({ days: 7 });
+    expect(week.text.startsWith("THE DASHBOARD'S NUMBERS COULD NOT BE READ")).toBe(true);
+    expect(rowsOf(week.text).map((r) => r.day)).toEqual([
+      "2026-10-15",
+      "2026-10-14",
+      "2026-10-13",
+      "2026-10-12",
+      "2026-10-11",
+      "2026-10-10",
+      "2026-10-09",
+    ]);
+    // A comparison of whole UTC days, both of them, as the dashboard compares whole days.
+    vi.setSystemTime(NOW);
+    const compared = await call({ since: "2026-10-10", compare_to: "previous" });
+    expect(compared.text).toMatch(
+      /2026-10-10 to 2026-10-15 \(6 days, 6 with data\) versus 2026-10-04 to 2026-10-09 \(6 days, 6 with data\)/
+    );
+    const today = await call({ since: "2026-10-16", compare_to: "previous" });
+    expect(today.text).toContain("No comparison: the dashboard compares whole days");
+    expect(today.text).not.toContain(" versus ");
+  });
 });

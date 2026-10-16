@@ -126,6 +126,20 @@ export interface Period {
 }
 
 /**
+ * A period's whole days: those before `today`, which is still running. Null when it has none.
+ * `today` is the day the figures are counted in: Berlin's for the dashboard's, UTC's for the
+ * daily rollup's own rows.
+ */
+export function wholeDays(p: Period, today: string): Period | null {
+  const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return p.since > yesterday
+    ? null
+    : { since: p.since, until: p.until < today ? p.until : yesterday };
+}
+
+/**
  * `compare_to`, as either an explicit range or the word `previous`.
  *
  * `previous` is the equally-long window ending the day before `since` — the comparison

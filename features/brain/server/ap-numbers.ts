@@ -44,7 +44,7 @@ import {
   tabletBlocked,
   totals,
 } from "@features/admin/server/ap/metrics";
-import type { DayRow, Period } from "@features/brain/server/compare";
+import { wholeDays, type DayRow, type Period } from "@features/brain/server/compare";
 import type { AdCost } from "@features/brain/server/ingest/analytics";
 import type { SaleGroup } from "@features/brain/server/sales";
 import { reportingDay } from "@shared/time/reporting-day";
@@ -76,6 +76,19 @@ export const AP_SALES_UNREADABLE =
   "the payments' own records (UTC days, staff included, net of refunds): never quote them as " +
   "the dashboard's.\n\n";
 
+/**
+ * Said for a period that ends before LoveIQ's first records: there is nothing to count, and a
+ * row of zeroes would read as "nothing happened" (the old rollup generates every day it is asked
+ * for, so it would have served exactly that).
+ */
+export function beforeRecords(since: string, until: string): string {
+  return (
+    `No numbers for ${since} to ${until}: that range is outside the data. LoveIQ's records ` +
+    `start on ${rangeLabel(DATA_START, DATA_START)}, so nothing was counted before then. That ` +
+    "is no data, not a quiet period: never report it as zero activity."
+  );
+}
+
 /** The period, and any narrowing filters, as the dashboard's filter bar reads them from a link. */
 export function apFilters(
   from: string,
@@ -84,13 +97,15 @@ export function apFilters(
   narrow: Record<string, string> = {}
 ): ApFilters {
   // A period that is one of the bar's presets ("Last 7 days" and the rest) is linked as that
-  // preset, the view the team opens; any other as a custom range.
+  // preset, the view the team opens; any other as a custom range. Matched on the range the bar
+  // reads, so 365 days that reach before the first records are its "Last 12 months".
+  const custom = parseFilters({ period: "custom", from, to, ...narrow }, today);
   for (const { value } of PERIODS) {
     if (value === "custom") continue;
     const preset = parseFilters({ period: value, ...narrow }, today);
-    if (preset.from === from && preset.to === to) return preset;
+    if (preset.from === custom.from && preset.to === custom.to) return preset;
   }
-  return parseFilters({ period: "custom", from, to, ...narrow }, today);
+  return custom;
 }
 
 /** A link that opens that dashboard page on that period with those filters. */
@@ -138,50 +153,65 @@ export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | nul
   let f = apFilters(asked.since, asked.until, today);
   if (beforeData(f)) return null;
   const notes: string[] = [];
-  const yesterday = addDays(today, -1);
   let o: ApFilters | null = null;
   let sameAge = false;
   if (ask.other) {
     /**
      * A COMPARISON IS OF WHOLE DAYS. The dashboard compares nothing while today runs, because
-     * part of a day against whole ones reads as a fall every morning (comparisonRange), so a
-     * period reaching today is compared over its days to yesterday, and so is the other one.
+     * part of a day against whole ones reads as a fall every morning (comparisonRange). So the
+     * compared period is worked out first, and only once a comparison is made is the asked
+     * period, if it reaches today, read to yesterday. With none, it is read as asked.
      */
-    if (f.to >= today) {
-      if (f.from > yesterday) {
-        notes.push(
-          "No comparison: the period is only today, which is still running, and the " +
-            "dashboard compares whole days only."
-        );
-      } else {
-        notes.push(
-          `Today is still running, so the comparison is of the whole days, ${f.from} to ` +
-            `${yesterday}, against the same number of days before: today's part-day is left out.`
-        );
-        f = apFilters(f.from, yesterday, today);
-      }
-    }
-    if (f.to < today) {
-      const before = previousRange(f);
-      if (ask.other === "previous") {
+    const explicit = ask.other === "previous" ? null : ask.other;
+    // A range that IS the period just before the one asked counts as "previous", and moves
+    // with it when today is cut off: 10 to 16 Oct against 3 to 9 Oct compares 10 to 15 Oct
+    // with 4 to 9 Oct, never 6 days with 7.
+    const justBefore = previousRange(f);
+    const previous =
+      !explicit || (explicit.since === justBefore.from && explicit.until === justBefore.to);
+    const whole = wholeDays({ since: f.from, until: f.to }, today);
+    if (!whole) {
+      notes.push(
+        "No comparison: the period is only today, which is still running, and the " +
+          "dashboard compares whole days only."
+      );
+    } else {
+      const wf = whole.until === f.to ? f : apFilters(whole.since, whole.until, today);
+      const before = previousRange(wf);
+      let other: ApFilters | null = null;
+      if (previous) {
         // The dashboard's own comparison (comparisonRange), worked out from the period it
-        // reads rather than the one asked for: until the 31st asked on the 16th compares 1 to
-        // 15 Oct with 16 to 30 Sep. Unclamped, as its route reads it.
-        o = { ...f, period: "custom", from: before.from, to: before.to, running: false };
-        sameAge = true;
-      } else if (ask.other.since > yesterday) {
-        notes.push("Nothing to compare with: the compared period has no whole day yet.");
+        // reads rather than the one asked for: until the 31st asked on the 16th compares 1
+        // to 15 Oct with 16 to 30 Sep. Unclamped, as its route reads it.
+        other = { ...wf, period: "custom", from: before.from, to: before.to, running: false };
       } else {
-        const until = ask.other.until < today ? ask.other.until : yesterday;
-        o = apFilters(ask.other.since, until, today);
-        sameAge = o.from === before.from && o.to === before.to;
-        if (ask.other.until >= today)
-          notes.push(`The compared period is read to yesterday, ${yesterday}: today is running.`);
+        const theirs = wholeDays(explicit!, today);
+        if (!theirs) {
+          notes.push("Nothing to compare with: the compared period has no whole day yet.");
+        } else {
+          other = apFilters(theirs.since, theirs.until, today);
+          if (theirs.until !== explicit!.until)
+            notes.push(
+              `The compared period is read to yesterday, ${theirs.until}: today is running.`
+            );
+        }
       }
-      if (o && beforeData(o))
-        notes.push(
-          `The compared period ends before LoveIQ's records start on ${rangeLabel(DATA_START, DATA_START)}, so there is nothing to compare with.`
-        );
+      if (other) {
+        if (wf !== f) {
+          notes.push(
+            `Today is still running, so ${previous ? "the comparison is of the whole days" : "this period is compared over its whole days"}, ` +
+              `${wf.from} to ${wf.to}${previous ? ", against the same number of days before" : ""}: ` +
+              "today's part-day is left out."
+          );
+          f = wf;
+        }
+        o = other;
+        sameAge = previous || (o.from === before.from && o.to === before.to);
+        if (beforeData(o))
+          notes.push(
+            `The compared period ends before LoveIQ's records start on ${rangeLabel(DATA_START, DATA_START)}, so there is nothing to compare with.`
+          );
+      }
     }
   }
   const [facts, otherFacts] = await Promise.all([

@@ -240,6 +240,14 @@ describe("get_business_numbers prints what the dashboard's own route returns", (
       expect(printed(text, t.label), t.label).toBe(expected(t));
   });
 
+  it("the period just before, given as a range, moves with the cut and compares as the dashboard does", async () => {
+    // 10 to 16 Oct against 3 to 9 Oct, asked on the 16th: 10 to 15 Oct against 4 to 9 Oct.
+    const text = await tool({ since: "2026-10-10", compare_to: "2026-10-03..2026-10-09" });
+    expect(linkQuery(text)).toBe("period=custom&from=2026-10-10&to=2026-10-15");
+    for (const t of await dashboard(linkQuery(text)))
+      expect(printed(text, t.label), t.label).toBe(expected(t));
+  });
+
   it("a period still running: the figures so far, and a comparison of its whole days only", async () => {
     // As it stands, today included: the dashboard's running view, which compares nothing.
     const running = await tool({ since: "2026-10-10" });

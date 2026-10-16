@@ -14,7 +14,9 @@ import {
   bucketRows,
   parseComparePeriod,
   renderComparison,
+  wholeDays,
   type DayRow,
+  type Period,
 } from "@features/brain/server/compare";
 import { listPageShots, renderPageShot } from "@features/brain/server/see/pages";
 import {
@@ -52,6 +54,7 @@ import {
   AP_UNREADABLE,
   apSales,
   apView,
+  beforeRecords,
   readAp,
 } from "@features/brain/server/ap-numbers";
 import {
@@ -4976,6 +4979,7 @@ async function callTool(
         stats.sourceCount = 1;
         return textResult(ap);
       }
+      if (ap === null) return textResult(beforeRecords(since || "", until || today));
       // `days` is the dashboard's "Last N days" here too: the N whole days before today.
       const from =
         since ||
@@ -5053,8 +5057,34 @@ async function callTool(
         return undefined;
       }),
     ]);
+    // Before LoveIQ's first records there is nothing to serve, and it must not read as zeroes.
+    if (apRead === null) return textResult(beforeRecords(since, until || today));
     const ap = apRead ? apView(apRead, rows, ad) : null;
-    const lead = ap ? ap.header : apRead === undefined ? AP_UNREADABLE : "";
+    /**
+     * THE FALLBACK'S DAYS ARE THE ROLLUP'S, WHICH ARE UTC DAYS. `days` is the N whole ones
+     * before the UTC today (Berlin's runs two hours ahead of it at night), and a comparison is
+     * of whole days, as the dashboard's is: today's part-day is in neither period.
+     */
+    const utcToday = new Date().toISOString().slice(0, 10);
+    const fallback =
+      !ap && comparison && "period" in comparison
+        ? (() => {
+            const base = wholeDays({ since, until: until || today }, utcToday);
+            const before =
+              base && (parseComparePeriod("previous", base) as { period: Period }).period;
+            const other =
+              base &&
+              (compareTo.toLowerCase() === "previous"
+                ? before
+                : wholeDays(comparison.period, utcToday));
+            return base && other ? { base, other } : null;
+          })()
+        : null;
+    const lead =
+      (ap ? ap.header : AP_UNREADABLE) +
+      (!ap && comparison && "period" in comparison && !fallback
+        ? "No comparison: the dashboard compares whole days, and one of these periods has none yet.\n\n"
+        : "");
     /**
      * A DAY OUTSIDE GA4'S WINDOW GETS NO `ad_spend` KEY, NOT A ZERO.
      *
@@ -5069,7 +5099,13 @@ async function callTool(
     // The range is applied AFTER the fetch, because the rollup counts back from today.
     const inRange: Array<{ day: string }> =
       ap?.rows ??
-      rows.filter((r) => (since ? r.day >= since && (!until || r.day <= until) : r.day < today));
+      rows.filter((r) =>
+        fallback
+          ? r.day >= fallback.base.since && r.day <= fallback.base.until
+          : since
+            ? r.day >= since && (!until || r.day <= until)
+            : r.day < utcToday
+      );
     const merged = inRange.map((r) =>
       adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
     );
@@ -5085,15 +5121,16 @@ async function callTool(
         : `No ad-spend data is available, so no day carries an ad_spend field.`;
 
     // No whole day to compare (the period is only today): the day rows, and the header says why.
-    if (comparison && "period" in comparison && (!ap || ap.other)) {
+    const compared = ap ? ap.other && { base: ap.period, other: ap.other.period } : fallback;
+    if (compared) {
       const otherRows: Array<{ day: string }> =
         ap?.other?.rows ??
-        rows.filter((r) => r.day >= comparison.period.since && r.day <= comparison.period.until);
+        rows.filter((r) => r.day >= compared.other.since && r.day <= compared.other.until);
       return textResult(
         `${lead}${spendNote}\n\n` +
           renderComparison(
-            { period: ap?.period ?? { since, until: until || today }, rows: merged.map(withSpend) },
-            { period: ap?.other?.period ?? comparison.period, rows: otherRows.map(withSpend) }
+            { period: compared.base, rows: merged.map(withSpend) },
+            { period: compared.other, rows: otherRows.map(withSpend) }
           )
       );
     }
