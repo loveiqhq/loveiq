@@ -341,7 +341,9 @@ describe("V4 — the finalised nav (961:333)", () => {
   const ACCESS: ReadonlyMap<string, ReportNavAccess> = new Map<string, ReportNavAccess>([
     ["core_archetype", "free"],
     ["typical_beliefs", "unlocked"],
-    ["core_insecurities", "locked"],
+    // Power Orientation: a locked Part 3 row V4 still carries (the slimmed report, 16.10,
+    // took Core Insecurities out).
+    ["power_orientation", "locked"],
   ]);
   const row = (id: string) => document.querySelector<HTMLElement>(`a[href="#${id}"]`)!;
   const parts = () =>
@@ -414,7 +416,7 @@ describe("V4 — the finalised nav (961:333)", () => {
     expect(img.getAttribute("height")).toBe("14");
     expect(img.getAttribute("alt")).toBe("");
     expect(open.querySelector(".sr-only")?.textContent).toBe("Unlocked chapter");
-    const shut = row("core_insecurities").querySelector(".report-nav-badge--locked")!;
+    const shut = row("power_orientation").querySelector(".report-nav-badge--locked")!;
     expect(shut.querySelector("svg")).not.toBeNull();
     expect(shut.querySelector(".sr-only")?.textContent).toBe("Locked chapter");
   });
@@ -435,13 +437,13 @@ describe("V4 — the finalised nav (961:333)", () => {
     );
     expect(row("core_archetype").dataset.access).toBe("free");
     expect(row("typical_beliefs").dataset.access).toBe("unlocked");
-    expect(row("core_insecurities").dataset.access).toBe("locked");
+    expect(row("power_orientation").dataset.access).toBe("locked");
     unmount();
 
     await inV4(<ReportMobileNav activeSectionId="core_archetype" accessById={ACCESS} />);
     fireEvent.click(screen.getByRole("button", { name: /^chapter:/i }));
     expect(row("typical_beliefs").dataset.access).toBe("unlocked");
-    expect(row("core_insecurities").dataset.access).toBe("locked");
+    expect(row("power_orientation").dataset.access).toBe("locked");
     // An id the map does not list is free, as its badge is.
     expect(row("introduction").dataset.access).toBe("free");
   });

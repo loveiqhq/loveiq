@@ -88,8 +88,6 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
     label: "How Your Archetype Works",
     rows: [
       row("typical_beliefs", "Typical Beliefs"),
-      row("core_insecurities", "Core Insecurities"),
-      row("confidence_level", "Confidence Level"),
       row("power_orientation", "Power Orientation"),
     ],
   },
@@ -100,7 +98,6 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
       row("typical_arousal_accelerators_turn_ons_of_the_core_archetype", "Accelerators & Brakes"),
       row("libido_challenges_in_relationships", "Libido Challenges"),
       row("biochemical_reward_system_dynamics", "Reward System"),
-      row("arousal_style", "Arousal Style"),
       row("initiation_style", "Initiation Style"),
       row("energy_level", "Energy & Risk"),
     ],
@@ -126,3 +123,15 @@ export const WIZARD_DRAWER: readonly WizardDrawerPart[] = [
     ],
   },
 ];
+
+/**
+ * The map's pitch, "6 Parts, 17 Chapters" (1049:1637): the parts, and the chapters as
+ * the report counts them, every row from Part 2 on (Part 1 is its welcome). Derived, so
+ * the pitch follows the drawer: the frame's 20 went to 17 when the slimmed report took
+ * out Core Insecurities, Confidence Level and Arousal Style (16.10).
+ */
+export const WIZARD_PART_COUNT: number = WIZARD_DRAWER.length;
+export const WIZARD_CHAPTER_COUNT: number = WIZARD_DRAWER.slice(1).reduce(
+  (count, part) => count + part.rows.length,
+  0
+);

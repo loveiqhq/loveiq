@@ -261,7 +261,9 @@ describe("v4CardsFromV2 — against the real copy", () => {
     "partnershipCopy",
   ] as const;
 
-  it("makes one non-empty card for each of the fifteen chapters, for all fourteen archetypes", async () => {
+  // Fifteen chapters until the slimmed report (16.10): a V4 page is no longer sent Core
+  // Insecurities, Confidence Level or Arousal Style, so their cards are never made.
+  it("makes one non-empty card for each of V4's twelve chapters, for all fourteen archetypes", async () => {
     for (const archetype of KNOWN_ARCHETYPES) {
       const res = await GET(
         new Request(
@@ -271,7 +273,10 @@ describe("v4CardsFromV2 — against the real copy", () => {
       const json = (await res.json()) as Record<string, unknown>;
       const input = Object.fromEntries(KEYS.map((key) => [key, json[key] ?? null]));
       const { cards } = v4CardsFromV2(input);
-      expect(cards.size, archetype).toBe(15);
+      expect(cards.size, archetype).toBe(12);
+      for (const gone of ["core_insecurities", "confidence_level", "arousal_style"]) {
+        expect(cards.has(gone), `${archetype} ${gone}`).toBe(false);
+      }
       for (const [chapter, set] of cards) {
         expect(REPORT_V4_CHAPTER_BY_ID.has(chapter), chapter).toBe(true);
         const blocks = set.practice?.free ?? set.article?.free ?? [];

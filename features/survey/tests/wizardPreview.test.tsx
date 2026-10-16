@@ -72,7 +72,7 @@ describe("/wizard-preview", () => {
     act(() => {
       vi.advanceTimersByTime(300);
     });
-    expect(heading()).toBe("6 Parts, 20 Chapters");
+    expect(heading()).toBe("6 Parts, 17 Chapters");
     // SKIP INTRO ends the wizard; the real flow would open the report.
     fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
     act(() => {

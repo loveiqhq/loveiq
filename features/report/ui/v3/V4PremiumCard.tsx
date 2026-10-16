@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRef, type FC } from "react";
 import { useCtaSeen } from "@features/analytics/useCtaSeen";
+import { REPORT_V4_CHAPTER_COUNT } from "./reportV3Nav";
 
 /**
  * The paywall card that floats over a gated chapter, practice or article.
@@ -45,10 +46,13 @@ interface Props {
   placement?: "chapter" | "summary";
 }
 
-/** 1015:1186 / 1015:1192 / 1015:1199. */
+/**
+ * 1015:1186 / 1015:1192 / 1015:1199. The frame's "+20 chapters" counts the report's
+ * chapters, so the number is the nav's (17 since the slimmed report, 16.10).
+ */
 const FEATURES = [
   "Your complete archetype report",
-  "+20 chapters and personalised growth",
+  `+${REPORT_V4_CHAPTER_COUNT} chapters and personalised growth`,
   "Finally understand old patterns and learn how to move past them",
 ] as const;
 

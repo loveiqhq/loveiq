@@ -33,7 +33,7 @@ import { splitArticleForReader } from "@features/report/server/contentGating";
 import { isSectionUnlockedForPlan } from "@features/report/server/access";
 import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
 import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
-import { buildReport2ChapterCopies } from "@features/report/server/report2ChapterCopies";
+import { buildReport2ChapterCopies, forV4Page } from "@features/report/server/report2ChapterCopies";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import type { ReportPriceQuotes } from "@features/pricing/logic/reportPricing";
@@ -838,6 +838,8 @@ export async function GET(request: Request) {
         isPremium: true,
         sectionId,
       });
+    // A V4 page draws three of them no longer (forV4Page), and is sent none of their copy.
+    const report2Copies = buildReport2ChapterCopies(contentArchetype, unlockedChapter);
     const {
       attachmentCopy,
       attachmentFamily,
@@ -866,7 +868,7 @@ export async function GET(request: Request) {
       loveLanguageOrder,
       confidenceCopy,
       confidenceStrip,
-    } = buildReport2ChapterCopies(contentArchetype, unlockedChapter);
+    } = isV4Request ? forV4Page(report2Copies) : report2Copies;
 
     // Report 2.0 Accelerators & Brakes section copy — a Part II, essentials-tier
     // PREMIUM section. The educational slots (`edu.*`, `learn.*`)
