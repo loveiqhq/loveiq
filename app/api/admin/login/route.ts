@@ -4,6 +4,7 @@ import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { adminMagicLinkEmail } from "@features/admin/server/emails/admin-magic-link";
+import { safeAdminNext } from "@shared/url/admin-next";
 import logger from "@shared/observability/logger";
 import { z } from "zod";
 
@@ -142,7 +143,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
-    const callbackUrl = `${siteUrl}/admin/auth/callback?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink`;
+    // The page the sign-in was for rides on the link, when it is a same-site admin page; the
+    // callback checks it again before it redirects there (safeAdminNext).
+    const next = safeAdminNext((body as { next?: unknown } | null)?.next);
+    const callbackUrl =
+      `${siteUrl}/admin/auth/callback?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink` +
+      (next ? `&next=${encodeURIComponent(next)}` : "");
     const { subject, html } = adminMagicLinkEmail({ magicLink: callbackUrl });
 
     const from = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";

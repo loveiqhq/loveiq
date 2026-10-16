@@ -271,6 +271,23 @@ detail is in `docs/runbooks/COMPANY_BRAIN.md` ("Connecting Claude to it").
 - **The shared `LOVEIQ_MCP_TOKEN`** remains for the unattended jobs. Rotate it after
   everyone has connected as themselves. Its calls log as `actor = 'shared'`.
 
+## Admin sign-in return path (`next`)
+
+Since 2026-10-16 a link to an AP-Analytics view keeps its view through the sign-in. `proxy.ts`
+sends a signed-out (or idle) visitor to `/admin/login?next=<the page>`, the login page posts
+`next` with the email, `/api/admin/login` puts it on the magic link, and
+`/admin/auth/callback` redirects there after the usual session, allowlist and audit checks.
+
+- **Every hop reads it through `safeAdminNext` (`shared/url/admin-next.ts`)**, so it cannot
+  become an open redirect. Only a same-site path passes: it starts with `/admin/`, uses only
+  letters, digits and `- . _ ~ / ? & = #`, and has no `//` and no `..` segment. That leaves out
+  backslashes, schemes, `@`, whitespace and all percent-encoding (an encoded `//` or `\`).
+  Anything else is dropped and the sign-in lands on `/admin/ap`, as before.
+- `shared/url/tests/admin-next.test.ts` lists the hostile forms it refuses (`//evil.com`,
+  `/\evil.com`, `/admin/..//evil`, `%2F%2F`, `https://…`, `/admin@evil.com` and more), and the
+  login, callback and proxy tests check each hop. The login's CSRF check, rate limit and
+  allowlist are unchanged; a bad `next` never fails a sign-in, it is only left off the link.
+
 ## Abuse protection
 
 - Rate limit and cooldown on `/api/survey` and `/api/contact` (in place).

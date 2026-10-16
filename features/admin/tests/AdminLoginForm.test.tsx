@@ -35,6 +35,20 @@ describe("AdminLoginForm", () => {
     );
   });
 
+  it("sends the page the sign-in is for with the email", async () => {
+    search = "next=%2Fadmin%2Fap%2Fassessment-a%3Fperiod%3D7d";
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) } as Response);
+    const user = userEvent.setup();
+    render(<AdminLoginForm />);
+    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
+    await user.click(screen.getByRole("button", { name: /send magic link/i }));
+    await screen.findByText(/check your email/i);
+    expect(JSON.parse(String(mockFetch.mock.calls[0]![1].body))).toEqual({
+      email: "admin@test.com",
+      next: "/admin/ap/assessment-a?period=7d",
+    });
+  });
+
   it("renders email input and submit button", () => {
     render(<AdminLoginForm />);
     expect(screen.getByPlaceholderText(/enter your email/i)).toBeInTheDocument();

@@ -61,6 +61,38 @@ describe("GET /admin/auth/callback", () => {
     expect(res.cookies.get("__admin_activity")).toBeUndefined();
   });
 
+  const callbackTo = (next: string) =>
+    GET(
+      new NextRequest(
+        `http://localhost/admin/auth/callback?token_hash=abc&type=magiclink&next=${encodeURIComponent(next)}`
+      )
+    );
+
+  it("lands on the page the sign-in was for", async () => {
+    const res = await callbackTo("/admin/ap/assessment-a?period=7d&device=phone");
+    expect(res.headers.get("location")).toBe(
+      "http://localhost/admin/ap/assessment-a?period=7d&device=phone"
+    );
+    // A link that was already used still lands there, when the session is valid.
+    auth.verifyOtp.mockResolvedValue({ error: { message: "used" } });
+    const again = await callbackTo("/admin/ap/assessment-a?period=7d");
+    expect(again.headers.get("location")).toBe("http://localhost/admin/ap/assessment-a?period=7d");
+  });
+
+  it.each([
+    "//evil.com",
+    "/\\evil.com",
+    "/admin/..//evil",
+    "%2F%2Fevil.com",
+    "/admin/%2F%2Fevil.com",
+    "https://evil.com",
+    "/admin@evil.com",
+    "javascript:alert(1)",
+  ])("never follows a next off the admin: %j", async (next) => {
+    const res = await callbackTo(next);
+    expect(res.headers.get("location")).toBe("http://localhost/admin/ap");
+  });
+
   it("stamps nothing for someone not on the admin list", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
     const res = await callback();

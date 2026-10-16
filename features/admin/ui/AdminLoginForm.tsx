@@ -26,6 +26,7 @@ function getInitialError(searchParams: URLSearchParams): string {
 
 export default function AdminLoginForm() {
   const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState(() => getInitialError(searchParams));
@@ -51,7 +52,8 @@ export default function AdminLoginForm() {
           "Content-Type": "application/json",
           "x-csrf-token": getCsrfToken(),
         },
-        body: JSON.stringify({ email }),
+        // The page the sign-in is for; the server keeps it only if it is an admin page.
+        body: JSON.stringify(next ? { email, next } : { email }),
       });
 
       const body = await res.json().catch(() => null);
