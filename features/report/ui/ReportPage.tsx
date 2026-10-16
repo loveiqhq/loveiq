@@ -185,6 +185,7 @@ import {
   trackReportViewed,
 } from "@features/analytics/client";
 import { recordPaywallClick, useChapterStats } from "@features/analytics/chapterStats";
+import { REPORT_LAYOUT_V4_SLIM } from "@features/analytics/reportLayout";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import {
   FIRST_PAYWALL_SELECTOR,
@@ -2914,8 +2915,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Persisted events need a submission to count against. A recipient's visit is not the
     // owner's, so it publishes none and theirs stay out of the owner's numbers.
     setReportSubmissionContext(data.viewMode === "shared" ? null : (data.submissionId ?? null));
-    trackReportViewed(viewedReportPlan ?? "locked", viewArchetype || null);
-  }, [data, viewedReportPlan, viewArchetype]);
+    trackReportViewed(
+      viewedReportPlan ?? "locked",
+      viewArchetype || null,
+      isV4 ? REPORT_LAYOUT_V4_SLIM : null
+    );
+  }, [data, viewedReportPlan, viewArchetype, isV4]);
 
   useReportEngagementTimers({
     reportType: data ? (viewedReportPlan ?? "locked") : null,

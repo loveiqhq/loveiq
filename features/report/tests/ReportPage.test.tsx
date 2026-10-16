@@ -584,7 +584,20 @@ describe("ReportPage", () => {
     render(<ReportPage />);
 
     await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
-    expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur");
+    // ?v2=1 here: an older layout sends none.
+    expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur", null);
+  });
+
+  it("tags report_viewed with the slimmed layout on a V4 page (16.10)", async () => {
+    mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+    try {
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      render(<ReportPage />);
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
+      expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur", "v4_slim");
+    } finally {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    }
   });
 
   // `accessPlan` covers the reader's own report only (2026-10-06), so a reader who bought
@@ -609,7 +622,8 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
-        expect(mockTrackReportViewed).toHaveBeenCalledWith(reportType, archetype);
+        // No ?v2=1: the default, V4, which is the slimmed report.
+        expect(mockTrackReportViewed).toHaveBeenCalledWith(reportType, archetype, "v4_slim");
         expect(engagementTimers.calls.at(-1)).toEqual({ reportType, archetype });
       } finally {
         mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
