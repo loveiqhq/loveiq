@@ -349,6 +349,19 @@ function buildProbes(f: LiveFigures): Probe[] {
  * asserting things — the same reason the /survey contrast pin in `e2e/a11y.spec.ts`
  * fails when its gap disappears.
  */
+/** "October 2026|September 2026": this Berlin month and the one before, as titles spell them. */
+function thisOrLastMonth(now = new Date()): RegExp {
+  const label = (d: Date) =>
+    new Intl.DateTimeFormat("en-GB", {
+      month: "long",
+      year: "numeric",
+      timeZone: "Europe/Berlin",
+    }).format(d);
+  const berlin = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+  const last = new Date(berlin.getFullYear(), berlin.getMonth() - 1, 15);
+  return new RegExp(`${label(now)}|${label(last)}`);
+}
+
 const KNOWN_RED: Record<string, string> = {
   "decision-pivot":
     "red again 2026-09-27, the same gauge as before: decision records went from 82 to 267, " +
@@ -356,9 +369,6 @@ const KNOWN_RED: Record<string, string> = {
     "at 2.37/2.35 with the full recency bonus, above the meeting summary this wants. The " +
     "phrase 'what did we decide' favours decision records by design; fixing the crowding " +
     "needs a measured ranking sweep, not a threshold.",
-  "record-beats-transcript":
-    "red since 2026-09-20: no meeting SUMMARY chunk mentions pricing, so only transcripts " +
-    "match at all. Two fixes measured and rejected — see the comment on the probe.",
   "dr-record-label":
     "red since 2026-09-23, and it is the first-pass slot rule, not missing content: the " +
     "answering meeting summary scores 2.52 behind a drive doc at 2.66, the drive bucket is " +
@@ -368,18 +378,6 @@ const KNOWN_RED: Record<string, string> = {
     "two runs. The reservation protects which rows are CHOSEN, not where they SIT: the page " +
     "is sorted by score, so any rule admitting a stronger second row from one source pushes " +
     "the reserved rows down. The tool now names the held-back row by id and score instead.",
-  "dc-env-purge":
-    "red again 2026-09-23, same class as dr-record-label: the answering CLAUDE.md section " +
-    "is the third doc row and doc holds one reserved slot. Proven at three limits " +
-    "(2026-09-19); narrowing to sources:[doc] returns it at #3. See dr-record-label for why " +
-    "the ranking is left alone.",
-  "ga4-brand":
-    "the brand campaign stopped running on 2026-08-31, so only August records name it. " +
-    "Its month chunk scores 1.692 and the CURRENT partial month scores 1.724 — grainCap " +
-    "gives the single ga4:month slot to the winner, and 0.03 decides it. Measured " +
-    "2026-09-22: five other historical-analytics questions return their record at #1, so " +
-    "this is not a current-period bias, and narrowing to sources:[ga4] finds it at #1. " +
-    "Re-tuning global ranking on a 0.03 margin would risk the other 228 probes.",
   "cm-marcus-line":
     "a pressure gauge, not a regression signal: reddens on corpus growth, recovers on " +
     "shrinkage. Measured 2026-09-21 — the answer is #2 WITHIN `doc` at 2.00 against " +
@@ -1137,7 +1135,10 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       "how many paying customers have we had in total",
       customersNear(live.allTimeCustomers)
     ),
-    P("fact-sept-revenue", "what is our revenue this month", bodyHas(/September 2026/)),
+    // "This month" follows the calendar: it was written in September and asserted "September
+    // 2026" until October made it red. The month before is accepted too, for the first days
+    // of a month before its monthly total exists.
+    P("fact-this-month-revenue", "what is our revenue this month", bodyHas(thisOrLastMonth())),
     P("fact-visits-aug", "how many people visited the site in august", bodyHas(/11147/)),
 
     // ── MEDIUM: named entities inside a source ────────────────────────────────
@@ -1363,9 +1364,15 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
      * question, and on CLAUDE.md listing AWS among the secret types it scans for.
      * A passing mention is not a claim. What would actually be wrong is a FIGURE.
      */
+    // An AWS amount that is a CREDITS offer is not a bill: on 2026-10-16 the grants list
+    // ("AWS Activate Founders | $1,000 to $5,000") turned this red with nothing billed.
     P("absent-aws", "what is our AWS bill", (h) =>
       at(h, 5)
-        .filter((x) => /(aws|amazon web services)[^.]{0,40}(EUR|USD|[$€])\s?[0-9]/i.test(x.body))
+        .filter((x) =>
+          [...x.body.matchAll(/(aws|amazon web services)[^.]{0,40}(EUR|USD|[$€])\s?[0-9]/gi)].some(
+            (m) => !/activate|credits?/i.test(m[0])
+          )
+        )
         .map((x) => `states an AWS amount: ${describe(x)}`)
     ),
     /**
