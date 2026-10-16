@@ -19,6 +19,7 @@ import {
   useRowTip,
 } from "@features/admin/ui/ap/hover";
 import { KpiTileV2, Spark } from "@features/admin/ui/ap/kit";
+import { scatter } from "@features/admin/ui/ap/traffic-view";
 
 /** jsdom lays nothing out: the hover box gets a 200 × 100 plot at the window's corner. */
 function sized(el: Element, width = 200, height = 100) {
@@ -110,6 +111,36 @@ describe("the read-out's arithmetic", () => {
         const q = t / 4 / unit;
         expect(Math.abs(q - Math.round(q))).toBeLessThan(1e-6);
       }
+    }
+  });
+
+  it("the cost chart's conversion axis steps evenly; each CAC label has spots along its curve", () => {
+    const dot = (
+      name: string,
+      cpc: number,
+      clickToPaid: number,
+      payers: number,
+      spend: number
+    ) => ({
+      name,
+      spend,
+      clicks: 100,
+      cpc,
+      clickToPaid,
+      payers,
+    });
+    // As on the long Traffic range: one outlier, so the axis runs to twice the second best.
+    const s = scatter([
+      dot("A", 0.54, 0.000143, 2, 3711),
+      dot("B", 4.75, 0.03846, 1, 124),
+      dot("C", 0.7, 0, 0, 1627),
+    ]);
+    // 0.000, 0.010, 0.020, 0.030 (not 0.000, 0.010, 0.019, 0.029).
+    expect(s.yTicks.map((t) => t.toFixed(3))).toEqual(["0.000", "0.010", "0.020", "0.030"]);
+    expect(s.iso.length).toBeGreaterThan(0);
+    for (const c of s.iso) {
+      expect(c.spots[0]).toEqual([c.lx, c.ly]);
+      expect(c.spots.length).toBeGreaterThan(1);
     }
   });
 

@@ -2,7 +2,9 @@
 
 import {
   Fragment,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -1797,10 +1799,110 @@ function AudienceDetail({ d }: { d: AudienceDim }) {
 // ---------------------------------------------------------------------------------------------
 // Cost vs quality
 
+/**
+ * Where a bubble's name may sit, by its radius: right of it, left, above, over its top right
+ * and top left corners, below, under its corners.
+ */
+const NAME_SIDES = (r: number) => [
+  `translate(${r + 6}px, 50%)`,
+  `translate(calc(-100% - ${r + 6}px), 50%)`,
+  `translate(-50%, -${r + 4}px)`,
+  `translate(${r * 0.7 + 2}px, -${r * 0.7 + 2}px)`,
+  `translate(calc(-100% - ${r * 0.7 + 2}px), -${r * 0.7 + 2}px)`,
+  `translate(-50%, calc(100% + ${r + 4}px))`,
+  `translate(${r * 0.7 + 2}px, calc(100% + ${r * 0.7 + 2}px))`,
+  `translate(calc(-100% - ${r * 0.7 + 2}px), calc(100% + ${r * 0.7 + 2}px))`,
+];
+
+/**
+ * Keeps the scatter's words apart once drawn. A corner's word gives way to a bubble on it.
+ * Each bubble's name takes the first side clear of the plot's edge, the corners, the names
+ * before it and the other bubbles; failing that, the first clear of all but the corners,
+ * whose words then give way (the campaigns before the decoration); failing that, it hides
+ * (the card and the list under the chart still name it). An equal-CAC label takes the first
+ * of its spots clear of everything, or hides.
+ */
+function declutter(plot: HTMLElement) {
+  const box = plot.getBoundingClientRect();
+  const all = (k: string) => [...plot.querySelectorAll<HTMLElement>(`[data-ap-label="${k}"]`)];
+  const drawn = (el: HTMLElement) => el.getClientRects().length > 0;
+  const touch = (a: DOMRect, b: DOMRect, pad = 3) =>
+    a.left < b.right + pad &&
+    b.left < a.right + pad &&
+    a.top < b.bottom + pad &&
+    b.top < a.bottom + pad;
+  const inside = (r: DOMRect) =>
+    r.left >= box.left - 1 &&
+    r.right <= box.right + 1 &&
+    r.top >= box.top - 1 &&
+    r.bottom <= box.bottom + 1;
+  const bubbles = [...plot.querySelectorAll<HTMLElement>("[data-ap-bubble]")].map((b) =>
+    b.getBoundingClientRect()
+  );
+  const corners = all("corner").map((el) => ({ el, r: el.getBoundingClientRect(), on: true }));
+  for (const c of corners) c.on = !bubbles.some((b) => touch(c.r, b, 0));
+  const names: DOMRect[] = [];
+  const clear = (r: DOMRect, others: DOMRect[], withCorners: boolean) =>
+    inside(r) &&
+    !names.some((p) => touch(r, p)) &&
+    !others.some((b) => touch(r, b, 0)) &&
+    !(withCorners && corners.some((c) => c.on && touch(r, c.r)));
+  for (const el of all("name")) {
+    if (!drawn(el)) continue;
+    const own = Number(el.dataset.bubble);
+    const others = bubbles.filter((_, i) => i !== own);
+    const sides = NAME_SIDES(Number(el.dataset.r));
+    let at: DOMRect | null = null;
+    for (const withCorners of [true, false]) {
+      for (const side of sides) {
+        el.style.transform = side;
+        const r = el.getBoundingClientRect();
+        if (clear(r, others, withCorners)) {
+          at = r;
+          break;
+        }
+      }
+      if (at) break;
+    }
+    el.style.visibility = at ? "" : "hidden";
+    if (!at) continue;
+    names.push(at);
+    for (const c of corners) if (c.on && touch(at, c.r)) c.on = false;
+  }
+  for (const c of corners) c.el.style.visibility = c.on ? "" : "hidden";
+  const words = [...names, ...corners.filter((c) => c.on).map((c) => c.r)];
+  for (const el of all("iso")) {
+    const spots = JSON.parse(el.dataset.spots ?? "[]") as Array<[number, number]>;
+    let at: DOMRect | null = null;
+    for (const [x, y] of spots) {
+      el.style.left = `${x.toFixed(1)}%`;
+      el.style.bottom = `${y.toFixed(1)}%`;
+      const r = el.getBoundingClientRect();
+      if (inside(r) && !words.some((p) => touch(r, p)) && !bubbles.some((b) => touch(r, b, 0))) {
+        at = r;
+        break;
+      }
+    }
+    el.style.visibility = at ? "" : "hidden";
+    if (at) words.push(at);
+  }
+}
+
 function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
   const s = scatter(quality.dots);
   const nobodyPaid = s.dots.every((p) => p.d.payers === 0);
   const corner = "absolute max-w-[45%] text-[11px] font-bold uppercase tracking-[0.08em]";
+  const plot = useRef<HTMLDivElement>(null);
+  // After every draw, and whenever the plot's size changes.
+  useLayoutEffect(() => {
+    const el = plot.current;
+    if (!el) return;
+    declutter(el);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => declutter(el));
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   return (
     <Card id="quality" labelledBy="h-q">
       <SectionHead
@@ -1813,6 +1915,7 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
       ) : (
         <div className="flex min-w-0 flex-col gap-1.5">
           <div
+            ref={plot}
             className="relative ml-11 h-[340px] border-b border-l border-ap-line"
             style={{ background: "linear-gradient(to right, transparent 50%, #f5f6f8 50%)" }}
           >
@@ -1837,29 +1940,39 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
               {s.iso.map((c) => (
                 <span
                   key={c.cac}
+                  data-ap-label="iso"
+                  data-spots={JSON.stringify(c.spots)}
                   className="absolute whitespace-nowrap text-[11px] font-bold text-ap-plum"
                   style={{ left: `${c.lx.toFixed(1)}%`, bottom: `${c.ly.toFixed(1)}%` }}
                 >
                   CAC {fmt("eur", c.cac)}
                 </span>
               ))}
-              <span className={`${corner} left-2 top-1.5 text-ap-good`}>
+              <span data-ap-label="corner" className={`${corner} left-2 top-1.5 text-ap-good`}>
                 Cheap &amp; converting
               </span>
-              <span className={`${corner} right-2 top-1.5 text-right text-ap-muted`}>
+              <span
+                data-ap-label="corner"
+                className={`${corner} right-2 top-1.5 text-right text-ap-muted`}
+              >
                 Expensive &amp; converting
               </span>
-              <span className={`${corner} bottom-1.5 left-2 text-ap-muted`}>Cheap curiosity</span>
-              <span className={`${corner} bottom-1.5 right-2 text-right text-ap-bad`}>
+              <span data-ap-label="corner" className={`${corner} bottom-1.5 left-2 text-ap-muted`}>
+                Cheap curiosity
+              </span>
+              <span
+                data-ap-label="corner"
+                className={`${corner} bottom-1.5 right-2 text-right text-ap-bad`}
+              >
                 Expensive &amp; weak
               </span>
               {s.dots.map((p, i) => {
-                // Right of the bubble, as drawn; on the bottom line, where the corner labels
-                // are, over it. A phone names the bubbles in the list under the chart.
-                const low = p.y < 5;
+                // Right of the bubble, as drawn, until declutter finds it a clear side. A phone
+                // names the bubbles in the list under the chart.
                 return (
                   <Fragment key={`${p.name}-${i}`}>
                     <span
+                      data-ap-bubble=""
                       className="absolute rounded-full opacity-90 shadow-[0_0_0_2px_#ffffff]"
                       style={{
                         left: `${p.x.toFixed(1)}%`,
@@ -1871,12 +1984,14 @@ function Quality({ quality }: { quality: TrafficPayload["quality"] }) {
                       }}
                     />
                     <span
-                      className={`absolute whitespace-nowrap text-xs font-bold max-sm:hidden ${low ? "-translate-x-1/2" : "-translate-y-1 translate-x-[10px]"}`}
+                      data-ap-label="name"
+                      data-bubble={i}
+                      data-r={p.size / 2}
+                      className="absolute whitespace-nowrap text-xs font-bold max-sm:hidden"
                       style={{
                         left: `${p.x.toFixed(1)}%`,
-                        bottom: low
-                          ? `calc(${p.y.toFixed(1)}% + ${p.size / 2 + 4}px)`
-                          : `${p.y.toFixed(1)}%`,
+                        bottom: `${p.y.toFixed(1)}%`,
+                        transform: NAME_SIDES(p.size / 2)[0],
                       }}
                     >
                       {p.name}

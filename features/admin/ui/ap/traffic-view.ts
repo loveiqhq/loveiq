@@ -6,7 +6,14 @@
  */
 import type { Table, Tile } from "@features/admin/server/ap/common";
 import type { Grain } from "@features/admin/server/ap/filters";
-import { EMPTY, fmt, quarterTop, type GoodWhen, type Unit } from "@features/admin/server/ap/format";
+import {
+  EMPTY,
+  fmt,
+  quarterTop,
+  roundStep,
+  type GoodWhen,
+  type Unit,
+} from "@features/admin/server/ap/format";
 import type {
   IntentRow,
   PerfRow,
@@ -650,7 +657,11 @@ export interface Scatter {
   yMax: number;
   yTicks: number[];
   dots: Array<{ name: string; x: number; y: number; size: number; color: string; d: QualityDot }>;
-  iso: Array<{ cac: number; pts: string; lx: number; ly: number }>;
+  /**
+   * The curves of equal CAC; `spots` are where its label may sit (left and bottom, percent),
+   * best first: just inside where the curve leaves the plot, then beside it lower down.
+   */
+  iso: Array<{ cac: number; pts: string; lx: number; ly: number; spots: Array<[number, number]> }>;
 }
 
 const DOT_SHADES = ["#5a42a6", "#6a51b8", "#795fc8", "#8c76d1"];
@@ -669,7 +680,9 @@ export function scatter(all: QualityDot[]): Scatter {
   const cvr = (d: QualityDot) => (d.clickToPaid ?? 0) * 100;
   const best = dots.map(cvr).sort((a, b) => b - a);
   const ref = (best[1] ?? 0) > 0 ? best[1]! : (best[0] ?? 0);
-  const yMax = ref > 0 ? Math.ceil(ref * 2 * 1000) / 1000 : 0;
+  // Three steps a round number of thousandths of a point, so every line is written exactly.
+  const yStep = ref > 0 ? roundStep((ref * 2) / 3, 0.001) : 0;
+  const yMax = Number((3 * yStep).toPrecision(12));
   const yOf = (pct: number) => (yMax > 0 ? (Math.min(pct, yMax) / yMax) * 100 : 0);
   const cacs = dots
     .filter((d) => d.payers > 0)
@@ -687,19 +700,21 @@ export function scatter(all: QualityDot[]): Scatter {
             );
           }
           const cpcAtTop = Math.min(xMax, (yMax / 100) * cac);
-          return {
-            cac,
-            pts: pts.join(" "),
-            lx: (cpcAtTop / xMax) * 100 - (cpcAtTop >= xMax ? 14 : 2),
-            ly: yOf((xMax / cac) * 100) - 6,
-          };
+          const lx = (cpcAtTop / xMax) * 100 - (cpcAtTop >= xMax ? 14 : 2);
+          const ly = yOf((xMax / cac) * 100) - 6;
+          // Right of the curve where it crosses 80%, 60%, 40% and 20% of the plot's height.
+          const beside = [80, 60, 40, 20]
+            .map((h): [number, number] => [((((h / 100) * yMax) / 100) * cac * 100) / xMax + 1, h])
+            .filter(([x]) => x <= 86);
+          const spots: Array<[number, number]> = [[lx, ly], ...beside];
+          return { cac, pts: pts.join(" "), lx, ly, spots };
         })
       : [];
   return {
     xMax,
     xTicks: Array.from({ length: k + 1 }, (_, i) => i * step),
     yMax,
-    yTicks: yMax > 0 ? [0, yMax / 3, (yMax * 2) / 3, yMax] : [0],
+    yTicks: yMax > 0 ? [0, 1, 2, 3].map((i) => Number((i * yStep).toPrecision(12))) : [0],
     dots: dots.map((d, i) => ({
       name: d.name,
       x: (d.cpc! / xMax) * 100,
