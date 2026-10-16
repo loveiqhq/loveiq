@@ -5631,6 +5631,7 @@ describe("/api/mcp", () => {
           },
         },
         "/rpc/get_report_counts": { post: { parameters: [{ in: "body", schema: {} }] } },
+        "/rpc/get_segment_match_count": { post: { parameters: [{ in: "body", schema: {} }] } },
         // A writer, to prove the catalogue never advertises one.
         "/rpc/submit_survey": { post: { parameters: [{ in: "body", schema: {} }] } },
         // The three read-only non-get_* functions the gate allows by name.
@@ -5801,23 +5802,97 @@ describe("/api/mcp", () => {
        * was indistinguishable from a clean answer. The same trick reached 1,933 live
        * report-unlock tokens, each of which opens a paid personal report with no login.
        */
-      it("refuses a select that renames, casts or embeds", async () => {
-        wire(ROWS);
-        for (const select of [
-          "id,e:email",
-          "id,email::text",
-          "id,user_profile(sexual_orientation)",
-          "id,user_profile(*)",
-        ]) {
+      /**
+       * NOW A RENAME IS MASKED BY WHAT IT READS. Each case returns the row under the key the
+       * select names, as PostgREST would, and the private value must not come back.
+       */
+      it.each([
+        ["a rename", "id,e:email", { id: 1, e: "someone@example.com" }, "e"],
+        ["a cast", "id,email::text", { id: 1, email: "someone@example.com" }, "email"],
+        [
+          "a rename with a cast",
+          "id,who:email::text",
+          { id: 1, who: "someone@example.com" },
+          "who",
+        ],
+        [
+          "a jsonb key that is private",
+          "id,from:metadata->>requestIp",
+          { id: 1, from: "109.175.96.167" },
+          "from",
+        ],
+        [
+          "a jsonb path into a private column",
+          "id,answers->01002",
+          { id: 1, answers: "someone@example.com" },
+          "answers",
+        ],
+      ])("masks a private column read through %s", async (_how, select, row, key) => {
+        wire([row]);
+        const r = await call({ table: "payment", select });
+        expect(r.isError).toBeFalsy();
+        const text = r.content[0].text;
+        expect(text).not.toContain("someone@example.com");
+        expect(text).not.toContain("109.175.96.167");
+        expect(text).toMatch(new RegExp(`"${key}":"\\[private #[0-9a-f]{4}\\]"`));
+        expect(text).toContain(
+          `Masked as private, so the value is never pasted into a prompt: ${key}.`
+        );
+      });
+
+      it("sends a private column under an alias it chose, so the masked key is the returned one", async () => {
+        wire([{ id: 1 }]);
+        await call({ table: "payment", select: "id,answers->01002,metadata->>requestIp" });
+        const [path] = toolCalls().at(-1) as [string];
+        expect(decodeURIComponent(/select=([^&]+)/.exec(path)![1]!)).toBe(
+          "id,answers:answers->01002,requestIp:metadata->>requestIp"
+        );
+      });
+
+      it("passes a rename or cast of an ordinary column through untouched, and unmasked", async () => {
+        wire([{ id: 1, arm: "email_first", amount: "14.99" }]);
+        const r = await call({
+          table: "payment",
+          select: "id,arm:utm_tracker->>contact_question_arm,amount::text",
+        });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0].text).toContain('"arm":"email_first"');
+        expect(r.content[0].text).not.toMatch(/Masked as private/);
+        const [path] = toolCalls().at(-1) as [string];
+        expect(decodeURIComponent(/select=([^&]+)/.exec(path)![1]!)).toBe(
+          "id,arm:utm_tracker->>contact_question_arm,amount::text"
+        );
+      });
+
+      it.each([
+        ["an embedded table", "id,user_profile(sexual_orientation)", /may not embed.*user_profile/],
+        ["an embed of everything", "id,user_profile(*)", /may not embed/],
+        [
+          "an inner join",
+          "id,payment_item!inner(total_price)",
+          /Read `payment_item` in its own call/,
+        ],
+        ["a count", "device_type,count()", /cannot count or add up.*limit 1/],
+        [
+          "an average of a jsonb field",
+          "x:percentages->Spark Seeker.avg()",
+          /cannot count or add up/,
+        ],
+        ["an empty entry", "id,,amount", /could not be read at ""/],
+        ["a cast it cannot read", "id,amount::text;drop", /could not be read/],
+        ["a quoted key", 'id,metadata->>"plan"', /could not be read/],
+      ])(
+        "refuses %s before asking the database, and says how to rewrite it",
+        async (_what, select, says) => {
+          wire(ROWS);
           const r = await call({ table: "payment", select });
           expect(r.isError, `not refused: ${select}`).toBe(true);
-          expect(r.content[0].text).toMatch(/may not rename a column/);
-          expect(r.content[0].text).toMatch(/masked by NAME/);
+          expect(r.content[0].text).toMatch(says);
+          expect(
+            toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/payment"))
+          ).toHaveLength(0);
         }
-        // The plain form still works.
-        const ok = await call({ table: "payment", select: "id,amount,status" });
-        expect(ok.isError).toBeFalsy();
-      });
+      );
 
       /**
        * A NESTED VALUE WAS COPIED THROUGH WHOLE. The mask iterated top-level keys only,
@@ -5848,6 +5923,52 @@ describe("/api/mcp", () => {
         const text = (await call({ table: "payment", limit: 1 })).content[0].text;
         expect(text).not.toMatch(/Masked as private/);
       });
+    });
+
+    /**
+     * SIX FAILED GUESSES IN A ROW on 2026-10-14, because the `p_rules` format was written
+     * down nowhere: `op`, then `rules`, then `q_id`, then `equals`. The format is now in the
+     * description and in every failure of the two functions that take it.
+     */
+    it("answers a failed segment call with the rules format, and documents it up front", async () => {
+      wire(
+        { code: "P0001", message: 'Invalid logic: must be "and" or "or"' },
+        { ok: false, status: 400 }
+      );
+      const r = await call({
+        table: "rpc/get_segment_match_count",
+        params: { p_rules: { op: "and", rules: [] } },
+      });
+      expect(r.isError).toBe(true);
+      for (const text of [
+        r.content[0].text,
+        TOOLS.find((t) => t.name === "query_product_data")!.description,
+      ]) {
+        expect(text).toContain(
+          'p_rules: {"logic": "and" or "or", "conditions": [{"field", "operator", "value"}'
+        );
+        expect(text).toMatch(/gender.*text \(eq, neq, contains, lt, gt, lte, gte/);
+        expect(text).toContain("has_report and has_payment are true or false (eq, neq)");
+        expect(text).toContain("staff included");
+      }
+      // Only those two functions: another rpc's failure is not about rules.
+      wire({ code: "P0001", message: "boom" }, { ok: false, status: 400 });
+      const other = await call({ table: "rpc/get_report_counts", params: {} });
+      expect(other.content[0].text).not.toContain("p_rules");
+    });
+
+    it("says how to match a jsonb field when a filter casts a column", async () => {
+      wire({ code: "PGRST100", message: "failed to parse logic tree" }, { ok: false, status: 400 });
+      const r = await call({
+        table: "payment",
+        filters: ["or=(utm_tracker::text.ilike.*chatgpt*,utm_tracker::text.ilike.*openai*)"],
+      });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain('"utm_tracker->>utm_source=ilike.*gpt*"');
+      // A PGRST100 with no cast in the filters is some other mistake.
+      wire({ code: "PGRST100", message: "failed to parse filter" }, { ok: false, status: 400 });
+      const plain = await call({ table: "payment", filters: ["status=eq.paid"] });
+      expect(plain.content[0].text).not.toContain("cannot cast a column");
     });
 
     it("refuses a table name that is not a plain identifier", async () => {

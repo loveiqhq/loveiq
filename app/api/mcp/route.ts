@@ -695,6 +695,31 @@ const NEVER_LIST = new Set([
  */
 export const PRODUCT_ANALYTICS_ROW_CAP = 1_000;
 
+/**
+ * THE RULES FORMAT FOR THE TWO SEGMENT FUNCTIONS, read off `admin_segment_where_clause` in
+ * production on 2026-10-16, because it was written down nowhere a caller could see.
+ *
+ * On 2026-10-14 six calls in a row guessed it and each failed on the next rule ("Invalid
+ * logic: must be and/or", "missing conditions", "Unknown field", "Unsupported operator
+ * equals for field gender"). Both functions read `admin_submission_facts`, a view of
+ * finished submissions that pg_cron refreshes every five minutes and that keeps staff in,
+ * and its `has_payment` is any succeeded payment, tests and EUR 0 unlocks included.
+ */
+const SEGMENT_RULES =
+  "rpc/get_segment_match_count (how many match, with the ten newest) and " +
+  "rpc/get_segment_metrics_by_rules (how many, their average duration and the archetype mix) " +
+  'take one argument, p_rules: {"logic": "and" or "or", "conditions": [{"field", "operator", ' +
+  '"value"}, …]}, with at least one condition. archetype, v5_archetype, gender, ' +
+  "sexual_orientation, relationship_status, country, status, utm_source and utm_medium are " +
+  "text (eq, neq, contains, lt, gt, lte, gte, in any case); duration_ms is milliseconds (eq, " +
+  "neq, lt, gt, lte, gte); created_date_time takes the same six, and a bare YYYY-MM-DD means " +
+  "that whole Berlin day; has_report and has_payment are true or false (eq, neq). Example: " +
+  '{"p_rules": {"logic": "and", "conditions": [{"field": "gender", "operator": "eq", "value": ' +
+  '"Woman"}, {"field": "created_date_time", "operator": "gte", "value": "2026-10-01"}]}}. ' +
+  "They count finished submissions with staff included, and has_payment is any succeeded " +
+  "payment, tests and EUR 0 unlocks too. A survey answer is not a field: how a group answered " +
+  "is user_totals' answers measure, which leaves staff out and hides small groups.";
+
 export const TOOLS = [
   {
     name: "search_company_context",
@@ -1690,7 +1715,8 @@ export const TOOLS = [
       "and min_r: every pair of scale questions, correlated over the people who answered " +
       "both. funnel_event's unique_visitor rows are the server's daily visit count (see " +
       "get_business_numbers), so they are never the bottom of a rate of something done on a " +
-      "page: that comes whole from query_product_analytics.",
+      "page: that comes whole from query_product_analytics. " +
+      SEGMENT_RULES,
     inputSchema: {
       type: "object",
       properties: {
@@ -1702,7 +1728,12 @@ export const TOOLS = [
           type: "string",
           description:
             "PostgREST select list, e.g. 'id,created_date_time,amount'. Default '*'. " +
-            "Naming columns rather than '*' keeps large tables inside the result cap.",
+            "Naming columns rather than '*' keeps large tables inside the result cap. Renames " +
+            "('arm:utm_tracker->>contact_question_arm'), casts ('amount::text') and jsonb fields " +
+            "('metadata->>plan') work, and a private column stays masked whatever it is called. " +
+            "Two things do not: embedding a related table ('payment_item(…)'), so read that " +
+            "table in its own call, and count()/sum()/avg(), which this database switches off, so " +
+            "count with limit 1 and read how many match on the first line.",
         },
         filters: {
           type: "array",
@@ -2749,6 +2780,12 @@ function isReadOnlyRpc(fn: string): boolean {
   return fn.startsWith("get_") || READ_ONLY_RPCS.has(fn);
 }
 
+/** The two functions that take `p_rules`; a failed call to either is answered with SEGMENT_RULES. */
+const SEGMENT_FUNCTIONS = new Set([
+  "rpc/get_segment_match_count",
+  "rpc/get_segment_metrics_by_rules",
+]);
+
 let schemaCache: Map<string, string[]> | null = null;
 
 async function productSchema(): Promise<Map<string, string[]> | null> {
@@ -3247,11 +3284,110 @@ function privateTag(value: unknown): string {
   return `[private #${(h >>> 0).toString(16).padStart(8, "0").slice(0, 4)}]`;
 }
 
+/** A column or jsonb key the name denylist covers, in either spelling. */
+const isPrivateName = (name: string) =>
+  PRIVATE_COLUMN.test(name) || PRIVATE_COLUMN.test(snakeCase(name));
+
+const SELECT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * A `select` THE PRIVACY GATE CAN FOLLOW: every output column traced back to the column it
+ * reads, so a private column stays masked whatever the caller names it.
+ *
+ * Renames and casts used to be refused outright, because the mask matched the KEY a row
+ * came back under and `e:email` renamed the key past it (measured 2026-09-10: the real
+ * address, with no notice). That refusal also cost every legitimate rename: 11-16 Oct 2026,
+ * `arm:utm_tracker->>contact_question_arm` and four other selects were refused, and two
+ * casts in filters failed besides. Now each item is read here, a private SOURCE (the column,
+ * or any jsonb key on the way into it) marks its output key private, and that item is sent
+ * under an alias chosen here, so the key the mask looks for is the key PostgREST returns.
+ *
+ * Embedding stays refused: a related table's rows arrive nested and unannounced. And
+ * count()/sum() are refused with the way round them, because PostgREST's aggregates are off
+ * on this database (no `pgrst.db_aggregates_enabled` on any role, checked 2026-10-16) and
+ * the call could only fail. Anything this cannot read is refused, never guessed at.
+ *
+ * Exported for test, in the house style of `parseFiltersForTest`.
+ */
+export function planSelectForTest(
+  select: string
+): { select: string; privateKeys: string[] } | { refusal: string } {
+  if (/[()]/.test(select)) {
+    if (/(?:^|[,:.\s])(?:count|sum|avg|min|max)\(\s*\)/i.test(select)) {
+      return {
+        refusal:
+          "`select` cannot count or add up (count(), sum(), avg(), min(), max()): aggregates " +
+          "are switched off on this database, so PostgREST would refuse the call. For HOW " +
+          "MANY, keep the filters and pass limit 1: the first line of the answer says how many " +
+          "match. For sums, averages and breakdowns use an rpc/get_* function, " +
+          "get_business_numbers (sales and revenue) or user_totals (people, by group).",
+      };
+    }
+    const embedded = /([A-Za-z_]\w*)[\w!]*\(/.exec(select)?.[1];
+    return {
+      refusal:
+        `\`select\` may not embed a related table (\`${embedded ?? "table"}(…)\`): its rows ` +
+        "would arrive nested inside each row, and that path once carried private columns past " +
+        `the mask. Read \`${embedded ?? "the related table"}\` in its own call, filtered on the ` +
+        "column that links the two (for payment and payment_item that is payment_item's " +
+        'payment_id: filters ["payment_id=in.(101,102)"]). list_product_tables shows each ' +
+        "table's columns.",
+    };
+  }
+  const out: string[] = [];
+  const privateKeys = new Set<string>();
+  for (const raw of select.split(",")) {
+    const item = raw.trim();
+    const unreadable = {
+      refusal:
+        `\`select\` could not be read at ${JSON.stringify(item)}. Write each column as name, ` +
+        "alias:name, name::type or a jsonb field such as metadata->>plan, separated by commas. " +
+        "Refused rather than guessed at, because a column the privacy mask cannot trace " +
+        "could come back unmasked.",
+    };
+    const castAt = item.indexOf("::");
+    const cast = castAt >= 0 ? item.slice(castAt + 2) : null;
+    if (cast !== null && !/^[A-Za-z_][A-Za-z0-9_]*(\[\])?$/.test(cast)) return unreadable;
+    let source = castAt >= 0 ? item.slice(0, castAt) : item;
+    const aliased = /^([A-Za-z_][A-Za-z0-9_]*):(.+)$/.exec(source);
+    if (aliased) source = aliased[2]!;
+    const [column = "", ...keys] = source.split(/->>?/);
+    if (column === "*") {
+      if (keys.length || aliased || cast !== null) return unreadable;
+      out.push(item);
+      continue;
+    }
+    if (!SELECT_NAME.test(column) || keys.some((k) => !k.trim() || /[:"]/.test(k))) {
+      return unreadable;
+    }
+    if (!isPrivateName(column) && !keys.some((k) => isPrivateName(k.trim()))) {
+      out.push(item);
+      continue;
+    }
+    // PostgREST names a jsonb field after its last key that is not an array index, and a
+    // column after itself. An alias set here makes that certain rather than predicted.
+    const last = [...keys]
+      .reverse()
+      .map((k) => k.trim())
+      .find((k) => !/^[+-]?\d+$/.test(k));
+    const key = aliased?.[1] ?? (last && SELECT_NAME.test(last) ? last : column);
+    privateKeys.add(key);
+    out.push(`${key}:${source}${cast !== null ? `::${cast}` : ""}`);
+  }
+  return { select: out.join(","), privateKeys: [...privateKeys] };
+}
+
 /**
  * Mask private columns in place, and report WHICH -- silence would read as an empty
  * column, which is the one conclusion that is certainly wrong.
+ *
+ * `alsoPrivate` names output keys whose SOURCE is private (see `planSelectForTest`): a
+ * renamed column is masked by what it reads, not by what it was called.
  */
-function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: string[] } {
+function redactPrivateColumns(
+  rows: unknown[],
+  alsoPrivate: ReadonlySet<string> = new Set()
+): { rows: unknown[]; redacted: string[] } {
   const hit = new Set<string>();
   /**
    * RECURSIVE, because the flat version was walked around twice on 2026-09-10.
@@ -3272,7 +3408,7 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
     const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
     for (const key of Object.keys(copy)) {
       if (copy[key] === null || copy[key] === undefined) continue;
-      if (PRIVATE_COLUMN.test(key) || PRIVATE_COLUMN.test(snakeCase(key))) {
+      if (isPrivateName(key) || (depth === 0 && alsoPrivate.has(key))) {
         hit.add(key);
         copy[key] = privateTag(copy[key]);
         continue;
@@ -5197,32 +5333,21 @@ async function callTool(
       );
     }
     /**
-     * A `select` MAY NOT RENAME OR EMBED, because the privacy gate matches key names.
+     * A RENAMED COLUMN IS MASKED BY WHAT IT READS, because the gate used to match key names.
      *
      * Measured 2026-09-10: `select: "id,email"` returned `[private #08e1]`, and
      * `select: "id,e:email"` -- one character more -- returned the real address with no
      * mask and no notice, so the output was indistinguishable from a clean answer. The
      * same trick reached 1,933 live report-unlock tokens, each of which opens a paid
-     * personal report with no login.
-     *
-     * Refused rather than mask-by-position, because an alias has no legitimate use here
-     * and a rule that has to model PostgREST's whole select grammar is a rule that will
-     * be walked around again. Embedded resources (`user_profile(*)`) are refused for the
-     * same reason even though the redactor now recurses: two guards, because this one is
-     * the class of bug that keeps recurring.
+     * personal report with no login. Renames were refused for that; `planSelectForTest`
+     * now traces each output column to its source instead, and embedding stays refused.
      */
-    if (typeof args.select === "string" && /[:(]/.test(args.select)) {
-      return textResult(
-        "`select` may not rename a column (`alias:column`), cast it (`column::type`) or " +
-          "embed a related table (`table(columns)`). Ask for the columns plainly, e.g. " +
-          '"id,created_date_time,amount". Renaming is refused because private columns are ' +
-          "masked by NAME, so a renamed column would come back unmasked and the answer " +
-          "would look exactly like a clean one.",
-        true
-      );
-    }
-    const selectList =
-      typeof args.select === "string" && args.select.trim() ? args.select.trim() : "*";
+    const plan =
+      typeof args.select === "string" && args.select.trim()
+        ? planSelectForTest(args.select.trim())
+        : { select: "*", privateKeys: [] };
+    if ("refusal" in plan) return textResult(plan.refusal, true);
+    const selectList = plan.select;
     const limit = intArg(args.limit, 100, 1, MAX_PRODUCT_ROWS);
     const offset = intArg(args.offset, 0, 0, Number.MAX_SAFE_INTEGER);
     const isRpc = table.startsWith("rpc/");
@@ -5307,8 +5432,27 @@ async function callTool(
     const res = await supabaseFetch(path, init);
     if (!res.ok) {
       const detail = (await res.text().catch(() => "")).slice(0, 400);
+      /**
+       * A CAST IN A FILTER IS A SYNTAX ERROR TO POSTGREST, and the error does not say so.
+       * Two calls on 2026-10-14 sent `or=(utm_tracker::text.ilike.*chatgpt*,…)` and got
+       * PGRST100 "unexpected ':'". `->>` already reads a jsonb field as text.
+       */
+      const castInFilter =
+        /"code"\s*:\s*"PGRST100"/.test(detail) &&
+        (Array.isArray(args.filters) ? args.filters : [args.filters]).some(
+          (f) => typeof f === "string" && f.includes("::")
+        )
+          ? "\n\nA filter cannot cast a column (`utm_tracker::text`): PostgREST reads `::` there " +
+            "as a syntax error. Inside a jsonb column `->>` already gives text, so match the " +
+            'field itself: "utm_tracker->>utm_source=ilike.*gpt*", or in an or-list ' +
+            '"or=(utm_tracker->>utm_source.ilike.*gpt*,utm_tracker->>utm_medium.ilike.*gpt*)". ' +
+            "A cast in `select` works."
+          : "";
+      const segmentHint = SEGMENT_FUNCTIONS.has(table) ? `\n\n${SEGMENT_RULES}` : "";
       return textResult(
-        `Query failed (${res.status}): ${detail}${schemaHint(detail, table, spec)}`,
+        `Query failed (${res.status}): ${detail}${schemaHint(detail, table, spec)}` +
+          castInFilter +
+          segmentHint,
         true
       );
     }
@@ -5339,7 +5483,7 @@ async function callTool(
     // BEFORE rendering, so no path can print a raw value: the rpc branch and the table
     // branch both land here, which is why the gate is at the render step rather than in
     // the two request builders.
-    const { rows: safeRows, redacted } = redactPrivateColumns(rows);
+    const { rows: safeRows, redacted } = redactPrivateColumns(rows, new Set(plan.privateKeys));
     // Reserve room for the header itself so the notice never gets cut off.
     const { text: bodyText, shown } = renderRowsForTest(safeRows, MAX_RESULT_CHARS - 600);
     const dropped = rows.length - shown;
