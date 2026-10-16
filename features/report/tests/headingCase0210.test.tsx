@@ -84,9 +84,18 @@ describe.each(Object.keys(REPORT_V4_TYPICAL_BELIEFS))(
   (name) => {
     const open = { locked: false };
     const chapters: [string, () => ReactElement][] = [
-      ["Typical Beliefs", () => <V4TypicalBeliefs view={buildTypicalBeliefs(name, open)!} />],
-      ["Accelerators & Brakes", () => <V4Accelerators view={buildAccelerators(name, open)!} />],
-      ["Challenges in Partnerships", () => <V4Partnership view={buildPartnership(name, open)!} />],
+      [
+        "Typical Beliefs",
+        () => <V4TypicalBeliefs view={buildTypicalBeliefs(name, open)!} archetype={name} />,
+      ],
+      [
+        "Accelerators & Brakes",
+        () => <V4Accelerators view={buildAccelerators(name, open)!} archetype={name} />,
+      ],
+      [
+        "Challenges in Partnerships",
+        () => <V4Partnership view={buildPartnership(name, open)!} archetype={name} />,
+      ],
       ["Fantasy vs. Reality", () => <V4Fantasy view={buildFantasy(name, open)!} />],
     ];
     it.each(chapters)("in every heading of %s", (_, chapter) => {

@@ -205,16 +205,23 @@ describe("/report-v4-preview — Challenges in Partnerships", () => {
     expect(chapter.textContent).not.toContain("[Chapter Copy]");
   });
 
-  it("opens the pricing modal from the gated prose", () => {
+  it("opens the pricing modal from the wall's sample", () => {
     const { container } = renderWithCip(null);
-    fireEvent.click(container.querySelector(".rv4-cip__gate")!);
+    fireEvent.click(container.querySelector(".rv4-cip .rv4-unlock")!);
     expect(modalState(container)).toBe("open");
   });
 
-  it("draws no gate for a reader who has paid", () => {
+  it("opens the pricing modal from the locked Common Challenges row", () => {
+    const { container } = renderWithCip(null);
+    fireEvent.click(container.querySelector(".rv4-cip .rv4-sect.is-locked .rv4-sect__head")!);
+    expect(modalState(container)).toBe("open");
+  });
+
+  it("draws no wall and no locked section for a reader who has paid", () => {
     const { container } = renderWithCip("full_report");
     expect(container.querySelector(".rv4-cip")).not.toBeNull();
-    expect(container.querySelector(".rv4-cip__gate")).toBeNull();
+    expect(container.querySelector(".rv4-cip .rv4-unlock")).toBeNull();
+    expect(container.querySelector(".rv4-cip .rv4-sect.is-locked")).toBeNull();
   });
 
   it("gives every chapter row its section id, so a nudge can land on it", () => {

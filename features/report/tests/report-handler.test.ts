@@ -607,14 +607,18 @@ describe("GET /api/report", () => {
  * data/report3-copy). A name with no V4 copy gets null: the builders' own tests.
  */
 describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
-  const AB_PROBES = [
+  /** What a locked reader's page draws blurred: the locked rows, the practice past its ramp. */
+  const AB_BLURRED = [
     "Low-energy, passive encounters",
     "Spontaneity and controlled unpredictability",
-    // Common challenges past its ramp paragraph, which fades in whole and is sent as
-    // written since 314:284 (29.09): the probe sits in the paragraph after it.
-    "common brakes is sex that feels predictable",
     "Respect brakes that are protecting something real.",
   ];
+  /**
+   * Common challenges past its sample, which the slimmed page draws nothing of for a locked
+   * reader (16.10): never sent to one, whichever way the blur switch is set.
+   */
+  const AB_PAST_WALL = ["common brakes is sex that feels predictable"];
+  const AB_PROBES = [...AB_BLURRED, ...AB_PAST_WALL];
 
   const queueSubmission = (primary: string) => {
     mockFetchWithTimeout
@@ -692,7 +696,8 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
       expect(json.accelerators.lockedFrom).toBe(2);
       expect(json.accelerators.practice.locked).toBe(true);
       const body = JSON.stringify(json);
-      for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
+      for (const probe of AB_BLURRED) expect(body, probe).toContain(probe);
+      for (const probe of AB_PAST_WALL) expect(body, probe).not.toContain(probe);
     } finally {
       blurCopy.mode = "decoy";
     }

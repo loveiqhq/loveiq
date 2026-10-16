@@ -20,6 +20,13 @@ const V3_CSS = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "
 const VIEW = buildTypicalBeliefs("Spark Seeker")!;
 const LOCKED = buildTypicalBeliefs("Spark Seeker", { locked: true })!;
 
+const firstClass = (el: Element) => el.className.split(" ")[0];
+/** The slimmed chapter's three sections (16.10), in order. */
+const sections = (container: HTMLElement) =>
+  [...container.querySelector(".rv4-tb")!.children].filter((el) =>
+    el.classList.contains("rv4-sect")
+  );
+
 /** Where every row's top sits, in viewport coordinates. */
 let rowTop = 9999;
 /** A collapsed chapter (`display: none`) lays nothing out: every box is 0×0 at 0. */
@@ -49,30 +56,40 @@ afterEach(() => {
 });
 
 describe("the chapter body — 304:256", () => {
-  it("runs prose, both panels and the H2 in the frame's order", () => {
-    const { container } = render(<V4TypicalBeliefs view={VIEW} />);
-    const order = [...container.querySelectorAll(".rv4-prose__p, .rv4-turn, .rv4-sun, .rv4-tb__h2")]
-      .map((el) => el.className.split(" ")[0])
-      .filter((c, i, all) => c !== all[i - 1]);
-    expect(order).toEqual([
-      "rv4-prose__p", // the four intro paragraphs and the belief-map lede
-      "rv4-turn",
-      "rv4-sun",
-      "rv4-tb__h2",
-      "rv4-prose__p", // the two worked examples
+  it("runs the opening, then its three sections, the panels in the archetype's (1686:10036)", () => {
+    const { container } = render(<V4TypicalBeliefs view={VIEW} archetype="Spark Seeker" />);
+    const body = container.querySelector(".rv4-tb")!;
+    expect([...body.children].map(firstClass)).toEqual([
+      "rv4-tb__intro",
+      "rv4-sect",
+      "rv4-sect",
+      "rv4-sect",
     ]);
+    // Sanjin's slimmed opening is one paragraph.
+    expect(body.querySelectorAll(".rv4-tb__intro .rv4-prose__p")).toHaveLength(1);
+    const [sunShadow, own, challenges] = sections(container);
+    expect(
+      [sunShadow, own, challenges].map((el) => el!.querySelector(".rv4-sect__name")!.textContent)
+    ).toEqual(["Sun and Shadow Beliefs", "The Spark Seeker", "Common Challenges"]);
+    // The example and the framework, folded; the lede, folded, over the two panels.
+    const inner = (el: Element) => el.querySelector(".rv4-sect__inner")!;
+    expect([...inner(sunShadow!).children].map(firstClass)).toEqual(["rv4-fold"]);
+    expect(inner(sunShadow!).querySelectorAll(".rv4-prose__p")).toHaveLength(2);
+    expect([...inner(own!).children].map(firstClass)).toEqual(["rv4-fold", "rv4-turn", "rv4-sun"]);
+    // The first challenge sharp, the rest folded.
+    expect([...inner(challenges!).children].map(firstClass)).toEqual(["rv4-prose__p", "rv4-fold"]);
   });
 
   // Figma 304:277 headed the lede with "The Spark Seeker belief map" (Mark, 28.09: "H2").
   // Sanjin's doc has no such heading (02.10), so the lede follows the intro directly.
   it("runs the lede straight after the intro, with no belief-map heading", () => {
-    const { container } = render(<V4TypicalBeliefs view={VIEW} />);
+    const { container } = render(<V4TypicalBeliefs view={VIEW} archetype="Spark Seeker" />);
     expect(container.querySelector(".rv4-prose__h.is-h2")).toBeNull();
     expect(screen.queryByText(/Belief Map/i)).toBeNull();
   });
 
   it("carries its headings: Common Challenges, and no subheadings under it (Sanjin's doc)", () => {
-    const { container } = render(<V4TypicalBeliefs view={VIEW} />);
+    const { container } = render(<V4TypicalBeliefs view={VIEW} archetype="Spark Seeker" />);
     expect(screen.getByText("Common Challenges")).toBeInTheDocument();
     expect(container.querySelectorAll(".rv4-prose__h:not(.is-h2)")).toHaveLength(0);
   });
@@ -80,7 +97,7 @@ describe("the chapter body — 304:256", () => {
 
 describe("the belief panels", () => {
   it("draws ten rows in each", () => {
-    const { container } = render(<V4TypicalBeliefs view={VIEW} />);
+    const { container } = render(<V4TypicalBeliefs view={VIEW} archetype="Spark Seeker" />);
     expect(container.querySelectorAll(".rv4-turn__row")).toHaveLength(10);
     expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
   });
@@ -230,7 +247,7 @@ describe("the sun ticks — 368:5623, drawn at the coral panel's scroll line", (
 describe("the paywalled chapter — 348:213", () => {
   it("turns the first three rows and locks the other seven", () => {
     // 381:222: krow/1-3 are "turned (p=1)", krow/4-10 "at rest (p=0) · LOCKED".
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
     expect(container.querySelectorAll(".rv4-turn__row")).toHaveLength(10);
     expect(container.querySelectorAll(".rv4-turn__row.is-locked")).toHaveLength(7);
     const locked = [...container.querySelectorAll(".rv4-turn__row")].map((el) =>
@@ -240,13 +257,13 @@ describe("the paywalled chapter — 348:213", () => {
   });
 
   it("locks the sun panel at the same row, as 381:362 draws it", () => {
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
     expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
     expect(container.querySelectorAll(".rv4-sun__row.is-locked")).toHaveLength(7);
   });
 
   it("withholds the shift on every locked row of the coral panel", () => {
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
     // Three shifts survive, one per turned row. The other seven never left the
     // server: a locked row cannot turn, so its shift had no visual job and would
     // have been pure leak.
@@ -262,7 +279,7 @@ describe("the paywalled chapter — 348:213", () => {
     // scrambled every row only ever seen under the full blur; since review 26.09
     // ("the unlocked content but blurred", Fatih's call) it sends them as written
     // (lockedBlurCopy.ts), and the blur is what hides them. Row 4 is the ramp.
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
     const green = container.querySelector(".rv4-sun")!;
     VIEW.panels.sun.forEach((belief) => expect(green.textContent).toContain(belief));
     const coral = container.querySelector(".rv4-turn")!;
@@ -272,16 +289,16 @@ describe("the paywalled chapter — 348:213", () => {
   it("puts the gradient lock on both panels, and only when locked", () => {
     // Figma comments, 2026-09-22: the lock sits on top of VISUALS only — the two
     // belief panels, never the blurred prose.
-    const locked = render(<V4TypicalBeliefs view={LOCKED} />);
+    const locked = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
     expect(locked.container.querySelectorAll(".rv4-lockbadge")).toHaveLength(2);
     expect(locked.container.querySelectorAll(".rv4-tb__gate .rv4-lockbadge")).toHaveLength(0);
     cleanup();
-    const open = render(<V4TypicalBeliefs view={VIEW} />);
+    const open = render(<V4TypicalBeliefs view={VIEW} archetype="Spark Seeker" />);
     expect(open.container.querySelectorAll(".rv4-lockbadge")).toHaveLength(0);
   });
 
   it("keeps the locked rows out of reach and the lock itself reachable", () => {
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
     for (const list of container.querySelectorAll(
       ".rv4-turn__list.is-locked, .rv4-sun__list.is-locked"
     )) {
@@ -292,22 +309,25 @@ describe("the paywalled chapter — 348:213", () => {
     for (const group of container.querySelectorAll(".rv4-tb-lock")) {
       expect(group.hasAttribute("inert")).toBe(false);
     }
-    // The two tiles, and the paywall card's "Unlock Report →" pill (29.09) under the gate.
+    // The two tiles, and the wall's "Unlock Full Chapter" where the paywall card was (16.10).
     expect(container.querySelectorAll("button.rv4-lockbadge")).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Unlock Report" })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Unlock Report" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Unlock Full Chapter" })).toHaveLength(1);
   });
 
   it("opens the paywall once from every locked surface", () => {
     const onUnlock = vi.fn();
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} onUnlock={onUnlock} />);
-    // The tiles and the paywall card's pill all read "Unlock Report" since 29.09.
+    const { container } = render(
+      <V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" onUnlock={onUnlock} />
+    );
+    // The tiles read "Unlock Report" since 29.09; the wall, its faded lines and its pill.
     const targets = [
       ...screen.getAllByRole("button", { name: "Unlock Report" }),
       container.querySelector(".rv4-turn__lock")!,
       container.querySelector(".rv4-sun__lock")!,
-      container.querySelector(".rv4-tb__gate")!,
+      container.querySelector(".rv4-tb .rv4-unlock__sample")!,
+      screen.getByRole("button", { name: "Unlock Full Chapter" }),
     ];
-    expect(targets).toContain(container.querySelector(".rv4-tb__gate .rv4-premium__cta"));
     for (const target of targets) {
       onUnlock.mockClear();
       fireEvent.click(target);
@@ -316,35 +336,45 @@ describe("the paywalled chapter — 348:213", () => {
   });
 
   it("keeps both panels at full height, so the wall costs no room", () => {
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
     expect(container.querySelectorAll(".rv4-turn__row")).toHaveLength(10);
     expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
   });
 
-  it("holds Common challenges open for three blocks, then ramps into the blur", () => {
-    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
-    // 348:221 and Mark's Paywall on the doc keep three paragraphs sharp; the next block is
-    // the ramp and everything after it sits under the full blur, with the card on it.
+  it("folds Common Challenges' free copy over the wall, as 1686:10619 draws 'Show All'", () => {
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} archetype="Spark Seeker" />);
+    const inner = sections(container)[2]!.querySelector(".rv4-sect__inner")!;
+    // 348:221 and Mark's Paywall on the doc keep three paragraphs free: the first sharp,
+    // the other two folded, the wall closing the fold rather than sitting under its pill.
+    expect([...inner.children].map(firstClass)).toEqual(["rv4-prose__p", "rv4-fold"]);
+    const fold = inner.querySelector(".rv4-fold")!;
+    expect(fold).toHaveClass("has-wall");
+    const copy = fold.querySelector(".rv4-fold__copy")!;
+    expect([...copy.children].map(firstClass)).toEqual([
+      "rv4-prose__p",
+      "rv4-prose__p",
+      "rv4-unlock",
+    ]);
     expect(screen.getByText("But the belief changes its meaning.")).toBeInTheDocument();
-    const gated = container.querySelector(".rv4-tb__gated");
-    expect(gated).not.toBeNull();
-    expect(gated!.getAttribute("aria-hidden")).toBe("true");
-    expect(gated!.hasAttribute("inert")).toBe(true);
-    // The ramp, then the rest under the full blur: since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
-    expect(container.querySelector(".rv4-tb__ramp")!.textContent).toContain(
+    // The ramp's real head under the fade; nothing past it, and no card.
+    const sample = copy.querySelector(".rv4-unlock__sample")!;
+    expect(sample.getAttribute("aria-hidden")).toBe("true");
+    expect(sample.hasAttribute("inert")).toBe(true);
+    expect(sample.textContent).toContain(
       "For the Spark Seeker, planning may begin to feel like evidence"
     );
-    expect(container.querySelector(".rv4-tb__blurred")!.textContent).toContain("Now consider");
-    expect(container.querySelectorAll(".rv4-tb__gate .rv4-premium")).toHaveLength(1);
+    expect(container.textContent).not.toContain("Now consider");
+    expect(container.querySelector(".rv4-tb__gated, .rv4-premium")).toBeNull();
   });
 
   it("blurs nothing at all for a reader who has paid", () => {
-    const { container } = render(<V4TypicalBeliefs view={VIEW} />);
+    const { container } = render(<V4TypicalBeliefs view={VIEW} archetype="Spark Seeker" />);
     expect(container.querySelectorAll(".is-locked")).toHaveLength(0);
     expect(container.querySelector(".rv4-tb__gated")).toBeNull();
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelectorAll(".rv4-turn__shift-text")).toHaveLength(10);
     expect(container.querySelector(".rv4-tb__gate")).toBeNull();
+    expect(container.querySelector(".rv4-unlock, .rv4-fold.has-wall")).toBeNull();
   });
 });
 

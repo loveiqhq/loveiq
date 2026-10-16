@@ -1595,7 +1595,8 @@ describe("ReportPage", () => {
       mockUseReportData.mockReturnValue(withChapter(true));
 
       const { container, unmount } = render(<ReportPage />);
-      await user.click(container.querySelector<HTMLElement>(".rv4-cip__gate")!);
+      // The slimmed chapter's wall (16.10): its "Unlock Full Chapter".
+      await user.click(container.querySelector<HTMLElement>(".rv4-cip .rv4-unlock__pill")!);
 
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
         expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
