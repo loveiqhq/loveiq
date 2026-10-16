@@ -53,6 +53,8 @@ export interface Tile {
   note?: string;
   /** That line's colour, where the design colours it (checkout success in red). */
   noteTone?: "good" | "bad" | "flat";
+  /** What the trend line draws, where it isn't the tile's own figure ("€ per submission"). */
+  line?: string;
 }
 
 export interface Column {
