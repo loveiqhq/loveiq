@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChartSeries, FocusChart, FocusPayload } from "@features/admin/server/ap/focus";
 
@@ -11,6 +11,7 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 
+import { fmt } from "@features/admin/server/ap/format";
 import ApFocus, { trendText } from "@features/admin/ui/ap/ApFocus";
 
 const DAYS = ["1 Oct", "2 Oct", "3 Oct", "4 Oct", "5 Oct", "6 Oct", "7 Oct"];
@@ -290,11 +291,10 @@ describe("the Dashboard as drawn", () => {
     const points = () =>
       card.querySelector('polyline[data-series="Survey submissions"]')!.getAttribute("points")!;
     expect(points().split(" ")).toHaveLength(7);
-    // Every day's label on a wide screen; three on a phone, where seven would collide.
-    const xLabels = (only: string) =>
-      [...card.querySelectorAll(`span.${only.replace(":", "\\:")}`)].map((e) => e.textContent);
-    expect(xLabels("max-sm:hidden")).toEqual(DAYS);
-    expect(xLabels("sm:hidden")).toEqual(["1 Oct", "4 Oct", "7 Oct"]);
+    // Every day's label where they fit (jsdom lays nothing out: the row counts as 420px).
+    const xLabels = (c = card) =>
+      [...c.querySelectorAll("[data-ap-ticks] > span")].map((e) => e.textContent);
+    expect(xLabels()).toEqual(DAYS);
     expect(
       within(card).getByText(
         "Survey submissions, per day · thin dashed lines show the linear trend"
@@ -305,13 +305,11 @@ describe("the Dashboard as drawn", () => {
       target: { value: "week" },
     });
     expect(points().split(" ")).toHaveLength(2);
-    expect(xLabels("max-sm:hidden")).toEqual(["Wk 28 Sep", "Wk 5 Oct"]);
+    expect(xLabels()).toEqual(["Wk 28 Sep", "Wk 5 Oct"]);
     expect(within(card).getByText(/Survey submissions, per week/)).toBeTruthy();
     // The other charts keep their own grain.
     const completion = region("Survey completion");
-    expect(
-      [...completion.querySelectorAll("span.max-sm\\:hidden")].map((e) => e.textContent)
-    ).toEqual(DAYS);
+    expect(xLabels(completion)).toEqual(DAYS);
     // Each chart's figures as a table for a screen reader, its drawing hidden.
     const table = within(card).getByRole("table", { name: "Survey submissions" });
     expect(within(table).getAllByRole("row")).toHaveLength(3);
@@ -324,16 +322,17 @@ describe("the Dashboard as drawn", () => {
 
   it("draws axes as drawn: counts left, euros right, a floor of 100% for completion", () => {
     render(<ApFocus />);
-    // Submissions top at 22 × 1.1 → 25; the right axis at €2.60 × 1.1 → €5.
+    // Each top puts every quarter line on a figure written exactly: submissions at 22 × 1.1
+    // → 32 (not 25, whose lines would read 6, 13, 19), the right axis at €2.60 × 1.1 → €3.
     const subs = region("Survey submissions");
-    for (const t of ["0", "6", "13", "19", "25", "€0.00", "€1.25", "€2.50", "€3.75", "€5.00"])
+    for (const t of ["0", "8", "16", "24", "32", "€0.00", "€0.75", "€1.50", "€2.25", "€3.00"])
       expect(within(subs).getAllByText(t).length).toBeGreaterThan(0);
     const completion = region("Survey completion");
     for (const t of ["0%", "25%", "50%", "75%", "100%"])
       expect(within(completion).getAllByText(t).length).toBeGreaterThan(0);
     // A rate under 10% writes a tenth; the unlock chart's euros are whole.
     const full = region("Completion → full unlock");
-    for (const t of ["0.0%", "0.6%", "1.3%", "1.9%", "2.5%", "€0", "€13", "€25", "€38", "€50"])
+    for (const t of ["0.0%", "0.6%", "1.2%", "1.8%", "2.4%", "€0", "€10", "€20", "€30", "€40"])
       expect(within(full).getAllByText(t).length).toBeGreaterThan(0);
     // Every series has its dashed least-squares line; a gap breaks the line into runs.
     expect(subs.querySelectorAll("polyline[data-trend]")).toHaveLength(3);
@@ -421,5 +420,122 @@ describe("the Dashboard as drawn", () => {
     expect(trendText(5, 5, [5, 5])).toEqual({ text: "→ flat", tone: "flat" });
     // Lower is better: a fall is good.
     expect(trendText(4, 2, [4, 2], true)).toEqual({ text: "↘ −50% trend", tone: "good" });
+  });
+});
+
+describe("the charts read out their points and say where they have none", () => {
+  beforeEach(() => {
+    // jsdom has no PointerEvent: one that carries its pointerType and position, as a browser's.
+    if (!("PointerEvent" in window)) {
+      class PE extends MouseEvent {
+        pointerType: string;
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerType = init.pointerType ?? "mouse";
+        }
+      }
+      vi.stubGlobal("PointerEvent", PE);
+    }
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  const NOTE =
+    "Survey starts before 18 Sep 2026 are incomplete once their drafts are cleared, so those points are left out.";
+  const gappy = (values = [null, null, null, 0.1, 0.12, 0.14, 0.16]): FocusPayload => {
+    const c = chart(
+      "start-cvr",
+      "Visitor → survey start",
+      [
+        s({
+          name: "Start CVR",
+          unit: "pct",
+          values,
+          total: 0.13,
+        }),
+      ],
+      { note: NOTE }
+    );
+    const periods = DAYS.map((_, i) => ({ from: `2026-10-0${i + 1}`, to: `2026-10-0${i + 1}` }));
+    return {
+      ...payload,
+      charts: [{ ...c, views: { ...c.views, day: { ...c.views.day, periods } } }],
+    };
+  };
+  const plot = () =>
+    within(region("Visitor → survey start")).getByRole("group", {
+      name: /^Visitor → survey start\./,
+    });
+  const sized = (el: Element) =>
+    vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 300,
+      bottom: 100,
+      width: 300,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+  const card = () => document.querySelector("[data-ap-tip]");
+
+  it("shades the empty start and names it, and draws the trend over the points that exist", () => {
+    view.payload = gappy();
+    render(<ApFocus />);
+    const r = region("Visitor → survey start");
+    const gap = r.querySelector("[data-ap-gap]") as HTMLElement;
+    expect(gap).toHaveTextContent("No figures before 4 Oct");
+    // From the left edge to half way between the last empty day and the first with a figure.
+    expect(gap.style.left).toBe("0%");
+    expect(parseFloat(gap.style.width)).toBeCloseTo(41.67, 1);
+    // The trend runs from the first point with a figure (x = 50%) to the last.
+    const trend = r.querySelector('[data-trend="Start CVR"]')!.getAttribute("points")!;
+    expect(trend.startsWith("50.00,")).toBe(true);
+    expect(trend.split(" ")[1]!.startsWith("100.00,")).toBe(true);
+    // And its change is read over those points: 10% to 16%, not "rising" from nothing.
+    expect(legend("Visitor → survey start", "Start CVR")).toHaveTextContent("↗ +60% trend");
+  });
+
+  it("a point reads its day and figure; the empty stretch says why it has none", () => {
+    view.payload = gappy();
+    render(<ApFocus />);
+    const box = plot();
+    sized(box);
+    // Day 5 (Mon 5 Oct) sits at two thirds of the 300px plot.
+    fireEvent.pointerMove(box, { clientX: 200, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent("Mon 5 Oct 2026");
+    expect(card()).toHaveTextContent(`Start CVR${fmt("pct", 0.12)}`);
+    // Day 2 (Fri 2 Oct, no figure) sits at a sixth of it.
+    fireEvent.pointerMove(box, { clientX: 50, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent("Fri 2 Oct 2026");
+    expect(card()).toHaveTextContent("Start CVR—");
+    expect(card()).toHaveTextContent(NOTE);
+    fireEvent.pointerLeave(box, { pointerType: "mouse" });
+    expect(card()).toBeNull();
+  });
+
+  it("the chart's note explains only the points before its first figure", () => {
+    view.payload = gappy([null, null, null, 0.1, null, 0.14, 0.16]);
+    render(<ApFocus />);
+    const box = plot();
+    sized(box);
+    // Day 5 (Mon 5 Oct) has no figure, after the first one: not the early days' reason.
+    fireEvent.pointerMove(box, { clientX: 200, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent("Mon 5 Oct 2026");
+    expect(card()).toHaveTextContent("No figure for this day.");
+    expect(card()).not.toHaveTextContent(NOTE);
+    fireEvent.pointerMove(box, { clientX: 50, clientY: 50, pointerType: "mouse" });
+    expect(card()).toHaveTextContent(NOTE);
+  });
+
+  it("every chart and trend line can be read with the keyboard", () => {
+    // A tile's line has a point per day of the range, as the server builds it.
+    view.payload = { ...payload, tiles: payload.tiles.map((t) => ({ ...t, spark: line(1, 1) })) };
+    render(<ApFocus />);
+    // Five charts (one is blocked), the 30-day trend, and each tile's line.
+    const groups = screen.getAllByRole("group", { name: /Use the left and right arrow keys/ });
+    expect(groups.length).toBe(5 + 1 + payload.tiles.length);
   });
 });

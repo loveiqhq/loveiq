@@ -8,8 +8,28 @@ type Call = { path: string; init?: { method?: string; body?: string } };
 const calls: Call[] = [];
 let rows: Array<Record<string, unknown>> = [];
 let upsertStatus = 200;
+/** get_price_list_changes as production returns it: the pinned 2.x changes, then the history's. */
+const list = (changed_at: string, arm: string, prices: Record<string, number>) =>
+  Object.entries(prices).map(([plan, starting_price]) => ({
+    changed_at,
+    arm,
+    plan,
+    starting_price,
+  }));
+const PRICE_LISTS = [
+  ...list("2026-08-03T20:09:45+00:00", "A", { full_report: 9.99, core: 19.99, all_reports: 29.99 }),
+  ...list("2026-08-03T20:09:45+00:00", "B", { full_report: 29, core: 39, all_reports: 49 }),
+  ...list("2026-08-24T02:43:12+00:00", "A", { full_report: 39.99, core: 49.99, all_reports: 59 }),
+  ...list("2026-08-31T10:09:20+00:00", "A", { full_report: 29, core: 39, all_reports: 49 }),
+  ...list("2026-10-06T18:18:28.684862+00:00", "A3", { full_report: 29.99, all_reports: 39.99 }),
+  ...list("2026-10-06T18:18:28.684862+00:00", "B3", { full_report: 14.99, all_reports: 19.99 }),
+  ...list("2026-10-08T15:23:00.289392+00:00", "B3", { full_report: 4.99, all_reports: 6.99 }),
+];
 const mockSupabaseFetch = vi.fn(async (path: string, init?: { method?: string; body?: string }) => {
   calls.push({ path, init });
+  if (path.startsWith("/rest/v1/rpc/get_price_list_changes")) {
+    return { ok: true, status: 200, json: async () => PRICE_LISTS, text: async () => "" };
+  }
   if (path.startsWith("/rest/v1/rpc/admin_upsert_experiment")) {
     // The upsert returns the id it wrote: the one it was given, or a new one.
     const id =
@@ -55,6 +75,7 @@ vi.mock("@features/brain/server/people", () => {
 import {
   listExperiments,
   perArmSample,
+  priceStretches,
   recordExperiment,
 } from "@features/brain/server/experiments";
 import type { ArmOutcomes } from "@features/admin/server/experiment-readouts";
@@ -204,6 +225,139 @@ describe("experiments: the registry, read", () => {
     );
     expect(text).toMatch(/RUNNING NOW\n- #6 .*\(paused, Report pricing, 2026-09-22 onwards\)/);
     expect(text).toMatch(/ {2}So far: .*Pricing 3\.0 lower 1 of 3 bought \(33\.3%\)/);
+  });
+
+  /** Readers dealt `arm`, `bought` of them buying: what `load` returns for one stretch. */
+  const dealtOutcomes = (groups: Array<[string | null, number, number]>): ArmOutcomes => {
+    const dealt = groups.flatMap(([arm, n, bought]) =>
+      Array.from({ length: n }, (_, i): [string | null, boolean] => [arm, i < bought])
+    );
+    return {
+      submissions: dealt.map((_, i) => ({
+        id: i + 1,
+        created_date_time: "2026-08-10T10:00:00Z",
+        utm_tracker: null,
+      })),
+      bySubmission: new Map(
+        dealt.map(([pricing, bought], i) => [
+          i + 1,
+          { pricing, purchased: bought, startedCheckout: bought, revenue: bought ? 29 : 0 },
+        ])
+      ),
+      truncated: false,
+    };
+  };
+
+  it("splits a finished pricing test where a list changed, naming each letter's prices then", async () => {
+    rows = [
+      row({
+        id: 11,
+        status: "completed",
+        axis: "pricing",
+        start_date: "2026-08-03",
+        decision_date: "2026-08-31",
+        outcome: "Dropped the dearer list.",
+      }),
+    ];
+    // Before list A rose, after it: the readers each stretch dealt, one with no quote.
+    const load = vi.fn(async (since: string) =>
+      since.startsWith("2026-08-24")
+        ? dealtOutcomes([
+            ["A", 60, 0],
+            ["B", 64, 1],
+          ])
+        : dealtOutcomes([
+            ["A", 98, 2],
+            ["B", 101, 3],
+            [null, 1, 0],
+          ])
+    );
+    const text = await listExperiments(NOW, load);
+    // From the 2.0 deploy (a change on its first day starts it) to the retirement deploy (one
+    // on its last day ends it), split where list A rose; not 3 Aug to 1 Sep, Berlin midnights.
+    expect(load).toHaveBeenCalledWith("2026-08-03T20:09:45.000Z", "2026-08-24T02:43:12.000Z");
+    expect(load).toHaveBeenCalledWith("2026-08-24T02:43:12.000Z", "2026-08-31T10:09:20.000Z");
+    expect(load).not.toHaveBeenCalledWith("2026-08-02T22:00:00.000Z", expect.anything());
+    const finished = text.slice(text.indexOf("- #11 "));
+    expect(finished).toContain(
+      "  Outcome: Dropped the dearer list.\n" +
+        "  Final numbers, each reader on the price list they were dealt (Berlin time):\n" +
+        "  - 2026-08-03 22:09 to 2026-08-24 04:43, when Pricing A was full_report €9.99, core " +
+        "€19.99, all_reports €29.99; Pricing B was full_report €29, core €39, all_reports €49: " +
+        "Pricing A 2 of 98 bought (2%); Pricing B 3 of 101 bought (3%)."
+    );
+    expect(finished).toContain(
+      "  - 2026-08-24 04:43 to 2026-08-31 12:09, when Pricing A was full_report €39.99, core " +
+        "€49.99, all_reports €59; Pricing B was full_report €29, core €39, all_reports €49: " +
+        "Pricing A 0 of 60 bought (0%); Pricing B 1 of 64 bought (1.6%)."
+    );
+    expect(finished).toContain("1 person is not attributable to an arm.");
+    // The 2.x test from before the registry is read the same way, over its recorded dates.
+    expect(text).toMatch(
+      /- Report pricing \(A vs B\) \(before the registry\): [^\n]*\n {2}Final numbers, each reader on the price list they were dealt \(Berlin time\):\n {2}- 2026-08-03 22:09 to 2026-08-24 04:43, when Pricing A was full_report €9\.99/
+    );
+  });
+
+  it("starts a finished pricing test where its list began, not before (registry #5)", async () => {
+    // #5 starts on 8 Oct, but list B3 took its new prices at 15:23 UTC that day: the 13
+    // readers who finished that morning saw the old ones, so they are not in its numbers.
+    rows = [
+      row({
+        id: 5,
+        status: "completed",
+        axis: "pricing",
+        start_date: "2026-10-08",
+        decision_date: "2026-10-20",
+      }),
+    ];
+    const load = vi.fn(async () =>
+      dealtOutcomes([
+        ["A3", 40, 1],
+        ["B3", 41, 2],
+      ])
+    );
+    const text = await listExperiments(NOW, load);
+    expect(load).toHaveBeenCalledWith("2026-10-08T15:23:00.289Z", "2026-10-20T22:00:00.000Z");
+    expect(load).not.toHaveBeenCalledWith("2026-10-07T22:00:00.000Z", expect.anything());
+    expect(text).toContain(
+      "  - 2026-10-08 17:23 to 2026-10-21 00:00, when Pricing 3.0 higher was full_report " +
+        "€29.99, all_reports €39.99; Pricing 3.0 lower was full_report €4.99, all_reports €6.99: "
+    );
+  });
+
+  it("gives no final numbers to a finished test on another axis or without its dates", async () => {
+    rows = [
+      row({ id: 12, status: "completed", axis: "landing", decision_date: "2026-09-25" }),
+      row({ id: 13, status: "completed", axis: "pricing", decision_date: null }),
+    ];
+    const load = vi.fn(async () => nobody());
+    const text = await listExperiments(NOW, load);
+    expect(text).not.toMatch(/- #1[23] [^\n]*\n {2}Outcome: [^\n]*\n {2}Final numbers/);
+    // Only the 2.x test's own two stretches were read, beside the live split's last 30 days.
+    expect(load.mock.calls.filter((c) => (c as unknown[]).length === 2)).toEqual([
+      ["2026-08-03T20:09:45.000Z", "2026-08-24T02:43:12.000Z"],
+      ["2026-08-24T02:43:12.000Z", "2026-08-31T10:09:20.000Z"],
+    ]);
+  });
+
+  describe("priceStretches: a finished test's stretches of unchanged prices", () => {
+    const at = (iso: string) => Date.parse(iso);
+    it("keeps the whole window when no list changed in it", () => {
+      expect(priceStretches("2026-10-10", "2026-10-20", PRICE_LISTS)).toEqual([
+        [at("2026-10-09T22:00:00Z"), at("2026-10-20T22:00:00Z")],
+      ]);
+    });
+    it("splits at a change in the middle, and only there", () => {
+      expect(priceStretches("2026-08-10", "2026-08-28", PRICE_LISTS)).toEqual([
+        [at("2026-08-09T22:00:00Z"), at("2026-08-24T02:43:12Z")],
+        [at("2026-08-24T02:43:12Z"), at("2026-08-28T22:00:00Z")],
+      ]);
+    });
+    it("starts at a change on the first day and ends at one on the last day", () => {
+      expect(priceStretches("2026-10-06", "2026-10-08", PRICE_LISTS)).toEqual([
+        [at("2026-10-06T18:18:28.684Z"), at("2026-10-08T15:23:00.289Z")],
+      ]);
+    });
   });
 
   it("says why a running test has no live numbers when it has no axis, or one nothing stamps", async () => {

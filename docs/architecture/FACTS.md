@@ -204,6 +204,22 @@ List B3 was EUR 19.99 (strike 29.99) and EUR 14.99 until 2026-10-08, when the
 `Pricing_3.0` tab lowered it; every unpaid B3 quote was moved to the new prices
 (migration 20261008120000). List A3 has not changed.
 
+**Which list a reader was on during a test that has ended.** A quote's
+`experiment_group` is the list it is on now. A re-sync moves every unpaid quote to the
+next test's lists: on 2026-10-06 the 2.x test's unpaid A and B quotes became A3 and B3.
+So the stamp alone cannot measure an ended test. That is why the 2.x split read as "can't
+be measured" on 2026-10-14. Since 2026-10-16 a trigger keeps every change to a quote's
+arm or list price in `report_price_quote_arm_history`, one row each. The table is
+backfilled from the 2026-10-06 and 2026-10-08 re-syncs. The list a quote was dealt is the
+`old_experiment_group` of its earliest row (by `changed_at`), else its own
+`experiment_group`. `experiments` and the digest's arm readouts read it that way. A
+finished price test is read one stretch of unchanged prices at a time, because list A
+changed its prices in the middle of the 2.x test, on 2026-08-24. `rpc/get_price_list_changes`
+lists every change: the three 2.x ones are pinned there, with the deploy each moment comes
+from, and the history records every later one. A payment's own
+`metadata.experimentGroup` is stamped at checkout and never changes, so sales by price
+list (`get_business_numbers` with `group_by: price_list`) were always right.
+
 `essentials` (EUR 9.99) and `core` (EUR 39) are no longer sold; their buyers keep what they
 bought. Before 3.0, `full_report` was EUR 29 and `all_reports` EUR 49 for everyone.
 

@@ -176,7 +176,7 @@ export function buildDashboard(input: {
     trend: opts.trend ?? caption,
     ...(opts.deltaAs ? { deltaAs: opts.deltaAs } : {}),
   });
-  // A sale is rare: with one period holding all of them, the line is flat and says which.
+  // A sale is rare: with one period holding them all, the line is that one point and says which.
   const aovSpark = trend(facts, scope, (x) => ratio(x.revenue, x.sales));
   const saleBuckets = trendBuckets(facts.from, facts.to).filter((_b, i) => aovSpark[i] != null);
   const onlyBucket = saleBuckets.length === 1 ? saleBuckets[0]! : null;
@@ -263,7 +263,6 @@ export function buildDashboard(input: {
         deltaAs: "abs",
         ...(onlyBucket
           ? {
-              spark: aovSpark.map(() => aovSpark.find((v) => v != null) ?? null),
               trend: `${caption.split(" · ")[0]} · only ${
                 grain === "day"
                   ? shortDate(onlyBucket.from)
@@ -308,8 +307,10 @@ export function buildDashboard(input: {
       { goodWhen: "either" }
     ),
   ];
-  // The CAC tile's line is spend per submission (a sale is too rare to draw), so its caption says so.
-  tiles[8]!.trend = `${caption} · line: € per submission`;
+  // The CAC tile's line is spend per submission (a sale is too rare to draw), so its caption,
+  // and the line's read-out, say so.
+  tiles[8]!.trend = `${caption} · line: ad spend per submission`;
+  tiles[8]!.line = "Ad spend per submission";
 
   const read = readMedianMs(facts, scope);
   const subs = subsIn(facts, scope);

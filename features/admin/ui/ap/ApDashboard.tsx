@@ -8,6 +8,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { bucketTitles, ROW_HOVER, useRowTip } from "./hover";
 import {
   AllTraffic,
   Bar,
@@ -19,17 +20,18 @@ import {
   Failed,
   FilterIcon,
   HeaderFilter,
+  ICON_BTN,
   KpiTile,
   LiveBadge,
   Loading,
   NotTracked,
   PageHeader,
   Pills,
+  RangeLine,
   SectionHead,
   SortIcon,
   TileGrid,
   useHashScroll,
-  RangeLine,
 } from "./kit";
 import { ASSESSMENT_A } from "./nav";
 import { useApFilters } from "./useApFilters";
@@ -134,7 +136,13 @@ export default function ApDashboard() {
             </h2>
             <TileGrid min={200}>
               {data.tiles.map((t) => (
-                <KpiTile key={t.key} tile={t} size="md" level />
+                <KpiTile
+                  key={t.key}
+                  tile={t}
+                  size="md"
+                  level
+                  titles={bucketTitles(data.range.from, data.range.to)}
+                />
               ))}
             </TileGrid>
 
@@ -300,7 +308,7 @@ function SourceBars({
       {rows.map((r) => (
         <div
           key={r.label}
-          className="grid items-center gap-2.5 text-[13px]"
+          className={`grid items-center gap-2.5 py-0.5 text-[13px] ${ROW_HOVER}`}
           style={{ gridTemplateColumns: "120px minmax(0,1fr) 64px" }}
         >
           <span>{r.label}</span>
@@ -313,6 +321,7 @@ function SourceBars({
 }
 
 function NewReturningPanel({ data }: { data: DashboardPayload }) {
+  const segTip = useRowTip();
   const nr = data.newReturning;
   if (!nr || !nr.ok) {
     return (
@@ -329,20 +338,34 @@ function NewReturningPanel({ data }: { data: DashboardPayload }) {
   const revenue = data.newReturningRevenue;
   const perVisit = (group: "new" | "returning", visitors: number) =>
     revenue?.ok && visitors ? revenue.value[group] / visitors : null;
+  const segment = (label: string, g: { visitors: number; completed: number }, color: string) =>
+    segTip.bind(() => ({
+      title: `${label} visitors`,
+      rows: [
+        { label: "Share", value: fmt("pct", share(g.visitors), 1), color, mark: "square" },
+        { label: "Visitors", value: fmt("count", g.visitors), strong: true },
+        { label: "Finished the survey", value: fmt("count", g.completed) },
+      ],
+    }));
   return (
     <div className="flex flex-col gap-4">
+      {segTip.card}
       <h3 className="m-0 font-serif text-lg font-semibold">New &amp; returning visitors</h3>
       <NotTracked>From PostHog · sees about a quarter of our visits · from 23 Aug 2026</NotTracked>
       <AllTraffic note={data.narrowed} />
       <div className="flex h-[18px] overflow-hidden rounded-full" aria-hidden="true">
         <span
+          className="hover:brightness-110"
           style={{ width: `${(share(nr.value.new.visitors) ?? 0) * 100}%`, background: "#795fc8" }}
+          {...segment("New", nr.value.new, "#795fc8")}
         />
         <span
+          className="hover:brightness-110"
           style={{
             width: `${(share(nr.value.returning.visitors) ?? 0) * 100}%`,
             background: "#fe6839",
           }}
+          {...segment("Returning", nr.value.returning, "#fe6839")}
         />
       </div>
       <div
@@ -452,7 +475,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                           if (open === k) setFilter((f) => ({ ...f, [k]: "" }));
                           setOpen(open === k ? null : k);
                         }}
-                        className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${open === k || filter[k] ? "text-ap-violet" : "text-ap-muted"}`}
+                        className={`${ICON_BTN} ${open === k || filter[k] ? "text-ap-violet" : "text-ap-muted"}`}
                       >
                         <FilterIcon />
                       </button>
@@ -469,7 +492,7 @@ function PricesTable({ rows: all }: { rows: DashboardPayload["prices"] }) {
                           : { key, dir: key === "planLabel" ? 1 : -1 }
                       )
                     }
-                    className={`inline-flex cursor-pointer border-0 bg-transparent p-0.5 ${sort?.key === key ? "text-ap-violet" : "text-ap-muted"}`}
+                    className={`${ICON_BTN} ${sort?.key === key ? "text-ap-violet" : "text-ap-muted"}`}
                   >
                     <SortIcon dir={sort?.key === key ? sort.dir : null} />
                   </button>
