@@ -128,6 +128,8 @@ import {
   exactTokensForTest,
   linesWithForTest,
   outrankingHeldBack,
+  maskEmailsInTextForTest,
+  planSelectForTest,
   POST,
   PRODUCT_ANALYTICS_ROW_CAP,
   RELEVANCE_FLOOR,
@@ -5264,6 +5266,33 @@ describe("/api/mcp", () => {
       expect(JSON.stringify(row.args)).toContain("[email]");
     });
 
+    /**
+     * CUT, THEN REDACT. The email pattern backtracks quadratically on a long run with no `@`,
+     * and it ran over the whole question and the whole argument JSON: 120 KB of "a1-" took
+     * 6.2 s each (review of #598). Only what is stored is redacted now, plus one address's
+     * width past the cut, so an address straddling the cut is still caught whole.
+     */
+    it("redacts a long question and argument in bounded time, an address across the cut too", async () => {
+      const t = performance.now();
+      await recordToolCall({
+        tool: "search_company_context",
+        question: "a1-".repeat(40_000),
+        args: { query: "a1-".repeat(40_000) },
+        latencyMs: 1,
+      });
+      expect(performance.now() - t).toBeLessThan(500);
+      await recordToolCall({
+        tool: "find_text",
+        question: `${"x".repeat(3990)} jane.doe@example.test ${"y".repeat(500)}`,
+        args: { text: `${"x".repeat(1985)} jane.doe@example.test ${"y".repeat(5000)}` },
+        latencyMs: 1,
+      });
+      const [, row] = writes() as [unknown, Record<string, unknown>];
+      expect(String(row.question)).toHaveLength(4000);
+      expect(JSON.stringify(row)).not.toMatch(/jane|@example/);
+      expect(String((row.args as { truncated: string }).truncated)).toHaveLength(2000);
+    });
+
     it("separates battery traffic from real usage, so the log can answer what the team hits", async () => {
       /**
        * The batteries drive these same handlers over the same corpus and write the
@@ -5882,6 +5911,150 @@ describe("/api/mcp", () => {
         );
       });
 
+      /**
+       * A SECOND SELECT, SMUGGLED AS A FILTER, beside the one the privacy plan built. Which of
+       * two `select` params PostgREST reads was never tested here, so neither is ever sent.
+       */
+      it.each([
+        ["a select", "select=email"],
+        ["a select in the dot form", "select.eq.email"],
+        ["an order", "order=email.asc"],
+        ["a limit", "limit=1000"],
+        ["an offset", "offset=5"],
+        ["a write's columns", "columns=email"],
+        ["a write's on_conflict", "on_conflict=id"],
+      ])("refuses %s passed as a filter, and names the argument to use", async (_what, filter) => {
+        wire(ROWS);
+        const r = await call({
+          table: "payment",
+          select: "id",
+          filters: ["status=eq.paid", filter],
+        });
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toContain(
+          `${JSON.stringify(filter)} is PostgREST's own parameter`
+        );
+        expect(r.content[0].text).toContain(
+          "Pass select, order, limit and offset as the tool's own arguments"
+        );
+        expect(toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/payment"))).toHaveLength(
+          0
+        );
+      });
+
+      /**
+       * FOUND ON PRODUCTION 2026-10-16 (review of #598): names that hold someone's details and
+       * that the list did not match, and spellings it did not read. Each value here would have
+       * come back as it is; the business fields beside them must come back untouched.
+       */
+      it("masks the names production showed were missed, in any spelling, and keeps business fields", async () => {
+        const row = {
+          id: 1,
+          "request-ip": "10.1.2.3x",
+          $ip: "10.4.5.6x",
+          email_address: "by-name-only",
+          subscriber_emails: ["by-name-only"],
+          email_normalized: "by-name-only",
+          email_sha256: "9f86d081884c7d659a2feaa0c55ad015",
+          card_last4: "4242",
+          card_exp_month: 12,
+          card_exp_year: 2031,
+          card_brand: "visa",
+          posthog_session_id: "019a2b3c-session",
+          email_position: "first",
+          metadata: {
+            promoCode: "LIQ-50-AB12CD",
+            promotionCode: "promo_1Abc",
+            promoStage: "30h_no_unlock",
+            promoPercentOff: 50,
+            couponName: "nurture_50",
+            plan: "full_report",
+            countryTier: "tier_1",
+            nurtureEmailsSent: ["6h_no_view"],
+            nurturePromoCodes: {
+              "30h_no_unlock": { code: "LIQ-50-ZZ99", stripePromotionCodeId: "promo_9" },
+            },
+            answer: "a changed survey answer",
+            arm: "white_video",
+          },
+          event_data: {
+            amount_total: 699,
+            customer_details: { name: "Jane Doe", address: { line1: "1 Main St", country: "DE" } },
+            collected_information: { individual_name: "Jane Doe" },
+            discounts: [{ promotion_code: "promo_7" }],
+          },
+        };
+        wire([row]);
+        const r = await call({ table: "payment" });
+        const text = r.content[0].text;
+        for (const secret of [
+          "10.1.2.3x",
+          "10.4.5.6x",
+          "by-name-only",
+          "9f86d081884c7d659a2feaa0c55ad015",
+          "4242",
+          "2031",
+          "019a2b3c-session",
+          "LIQ-50-AB12CD",
+          "promo_1Abc",
+          "LIQ-50-ZZ99",
+          "a changed survey answer",
+          "Jane Doe",
+          "1 Main St",
+          "promo_7",
+        ]) {
+          expect(text, secret).not.toContain(secret);
+        }
+        for (const kept of [
+          '"card_brand":"visa"',
+          '"email_position":"first"',
+          '"promoStage":"30h_no_unlock"',
+          '"promoPercentOff":50',
+          '"couponName":"nurture_50"',
+          '"plan":"full_report"',
+          '"countryTier":"tier_1"',
+          '"nurtureEmailsSent":["6h_no_view"]',
+          '"arm":"white_video"',
+          '"amount_total":699',
+        ]) {
+          expect(text, kept).toContain(kept);
+        }
+      });
+
+      it("masks an email address inside ordinary text, and keeps the sentence", async () => {
+        wire([
+          {
+            id: 1,
+            error_message: "brain-gmail: mailbox hr@loveiq.org failed for Jane.Doe@example.test.",
+            note: "no address here, only @channel and a@b",
+          },
+        ]);
+        // Any table: the address is found by its shape, whatever the column is called.
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toMatch(/hr@loveiq|Jane\.Doe@example/);
+        expect(text).toMatch(
+          /"error_message":"brain-gmail: mailbox \[private #[0-9a-f]{4}\] failed for \[private #[0-9a-f]{4}\]\."/
+        );
+        expect(text).toContain('"note":"no address here, only @channel and a@b"');
+        expect(text).toMatch(/Masked as private[^\n]*error_message/);
+      });
+
+      it("finds addresses by position, in bounded time on input built to backtrack", () => {
+        expect(
+          maskEmailsInTextForTest("write to jane@example.test, or J.Doe+x@mail.example.co.uk.")
+        ).toMatch(/^write to \[private #[0-9a-f]{4}\], or \[private #[0-9a-f]{4}\]\.$/);
+        // The same address always gets the same tag.
+        const [a, b] = maskEmailsInTextForTest("x@y.co and x@y.co").split(" and ");
+        expect(a).toBe(b);
+        for (const plain of ["@channel", "a@b", "user@localhost", "no at sign", "two@@signs.com"]) {
+          expect(maskEmailsInTextForTest(plain), plain).toBe(plain);
+        }
+        const t = performance.now();
+        maskEmailsInTextForTest(`${"a1-".repeat(40_000)}@${"b".repeat(40_000)}`);
+        maskEmailsInTextForTest("a@".repeat(60_000));
+        expect(performance.now() - t).toBeLessThan(200);
+      });
+
       /** The rendered rows, parsed back: the body after the header is a JSON array. */
       const rowsOf = (text: string) =>
         JSON.parse(text.slice(text.indexOf("\n\n[") + 2)) as Array<Record<string, unknown>>;
@@ -5924,7 +6097,7 @@ describe("/api/mcp", () => {
         expect(list[0]!.n).toBe(2);
         expect(list[0]!.email).toMatch(/^\[private #[0-9a-f]{4}\]$/);
         expect(text).toMatch(
-          /Masked as private, so the value is never pasted into a prompt: email, requestIp\./
+          /Masked as private, so the value is never pasted into a prompt: email, requestIp, texts\./
         );
       });
 
@@ -8114,7 +8287,27 @@ describe("an oversized result must announce that it was cut", () => {
     expect(parseFiltersForTest(["status=eq.paid"])).toEqual({
       parts: ["status=eq.paid"],
       rejected: [],
+      reserved: [],
     });
+    // PostgREST's own parameters are never filters, in either form or any case.
+    for (const f of [
+      "select=email",
+      "SELECT=id,email",
+      "order=id.desc",
+      "limit=5",
+      "offset=10",
+      "columns=a,b",
+      "on_conflict=id",
+      "select.eq.email",
+      " select =email",
+    ]) {
+      expect(parseFiltersForTest([f]), f).toEqual({ parts: [], rejected: [], reserved: [f] });
+    }
+    // A column that merely starts like one is a column.
+    expect(parseFiltersForTest(["order_id=eq.7", "selected=is.true"]).parts).toEqual([
+      "order_id=eq.7",
+      "selected=is.true",
+    ]);
     expect(parseFiltersForTest(["created_date_time.gte.2026-08-01"]).parts).toEqual([
       "created_date_time=gte.2026-08-01",
     ]);
@@ -9712,5 +9905,108 @@ describe("user_totals — several breakdowns and questions in one call", () => {
     expect(r.content[0]!.text).toContain("08001 is a open question.");
     expect(r.content[0]!.text).toContain("There is no survey question 09999.");
     expect(submissionReads()).toHaveLength(0);
+  });
+});
+
+/**
+ * NO INPUT MAY COST THE CALL'S TIME. Review of #598 measured two blow-ups on input that is
+ * never refused early: the embed-name pattern on a select (8 KB took 85 s, past this route's
+ * 60 s) and the exact-text scan of a search question (120 KB of "a1-" took 13 s). Each guard
+ * is checked here by the clock, with limits far above what the linear code needs and far below
+ * what the old patterns took.
+ */
+describe("long input is refused or read in bounded time", () => {
+  const ms = (fn: () => unknown) => {
+    const t = performance.now();
+    fn();
+    return performance.now() - t;
+  };
+  async function tool(name: string, args: Record<string, unknown>) {
+    const t = performance.now();
+    const res = await POST(
+      rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } })
+    );
+    const result = (await res.json()).result as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+    return { ...result, ms: performance.now() - t };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    mockSupabaseFetch.mockImplementation(
+      async (_path: string, init?: { headers?: Record<string, string> }) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        // The schema names `payment`, so a select reaches the plan rather than "No such table".
+        json: async () =>
+          init?.headers?.Accept === "application/openapi+json"
+            ? { definitions: { payment: { properties: { id: {}, amount: {} } } }, paths: {} }
+            : [],
+      })
+    );
+    mockRetrieve.mockResolvedValue([]);
+  });
+
+  it("refuses an 8 KB select at once, before any pattern runs", async () => {
+    const select = `${"a".repeat(8000)}-(`;
+    let plan: ReturnType<typeof planSelectForTest> | undefined;
+    expect(ms(() => (plan = planSelectForTest(select)))).toBeLessThan(50);
+    expect(plan).toEqual({
+      refusal: expect.stringContaining("`select` is 8002 characters, and at most 1000 are read"),
+    });
+    const r = await tool("query_product_data", { table: "payment", select });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("at most 1000 are read");
+    expect(r.ms).toBeLessThan(1000);
+  });
+
+  it("reads the longest select it accepts, built to backtrack, in bounded time", () => {
+    // The old pattern took about 0.25 s on exactly this; the cap alone would let it through.
+    for (const select of [
+      `${"a".repeat(997)}-(`,
+      `id,${"a".repeat(990)}!x(`,
+      `${"a,".repeat(499)}(`,
+    ]) {
+      let plan: ReturnType<typeof planSelectForTest> | undefined;
+      expect(
+        ms(() => (plan = planSelectForTest(select))),
+        select.slice(-12)
+      ).toBeLessThan(100);
+      expect(plan && "refusal" in plan).toBe(true);
+    }
+    // The name before the bracket is still read, so the refusal still says what to read instead.
+    expect(planSelectForTest("id,x:payment_item!inner(total_price)")).toEqual({
+      refusal: expect.stringContaining("Read `payment_item` in its own call"),
+    });
+  });
+
+  it("scans only the start of a long search question for exact text", async () => {
+    const query = "a1-".repeat(40_000);
+    expect(ms(() => exactTokensForTest(query))).toBeLessThan(100);
+    // What sits past the scanned start is not looked for.
+    expect(exactTokensForTest(`${"x ".repeat(1100)}jane@example.test`)).toEqual([]);
+    expect(exactTokensForTest(`find jane@example.test ${"x ".repeat(1100)}`)).toEqual([
+      "jane@example.test",
+    ]);
+    const r = await tool("search_company_context", { query });
+    expect(r.ms).toBeLessThan(1000);
+  });
+
+  it("refuses an over-long exact text or person name before reading anything", async () => {
+    const huge = "a1-".repeat(400_000);
+    const text = await tool("find_text", { text: huge });
+    expect(text.isError).toBe(true);
+    expect(text.content[0]!.text).toContain("too long for an exact lookup");
+    expect(text.ms).toBeLessThan(1000);
+    const person = await tool("person_activity", { person: huge });
+    expect(person.isError).toBe(true);
+    expect(person.content[0]!.text).not.toContain(huge.slice(0, 50));
+    expect(person.ms).toBeLessThan(1000);
+    expect(toolCalls()).toHaveLength(0);
   });
 });

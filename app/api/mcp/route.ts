@@ -294,10 +294,20 @@ const PGRST_OPS = new Set([
  * rejecting it would only make the bug loud.
  *
  * Exported for test, in the house style of `renderRowsForTest`.
+ *
+ * A FILTER NAMED LIKE ONE OF POSTGREST'S OWN PARAMETERS IS REFUSED (`reserved`). Sent on, a
+ * `select=` filter would arrive as a second `select` beside the one the privacy plan built,
+ * and which of the two PostgREST reads was never tested here (review of #598). The real
+ * arguments do that job, so nothing is lost by refusing.
  */
-export function parseFiltersForTest(filters: unknown[]): { parts: string[]; rejected: string[] } {
+export function parseFiltersForTest(filters: unknown[]): {
+  parts: string[];
+  rejected: string[];
+  reserved: string[];
+} {
   const parts: string[] = [];
   const rejected: string[] = [];
+  const reserved: string[] = [];
   for (const f of filters) {
     if (typeof f !== "string" || !f.trim()) {
       rejected.push(String(f));
@@ -310,6 +320,10 @@ export function parseFiltersForTest(filters: unknown[]): { parts: string[]; reje
       const value = f.slice(eq + 1);
       if (!col) {
         rejected.push(f);
+        continue;
+      }
+      if (POSTGREST_PARAMS.has(col.toLowerCase())) {
+        reserved.push(f);
         continue;
       }
       parts.push(`${encodeURIComponent(col)}=${encodeURIComponent(value)}`);
@@ -325,12 +339,19 @@ export function parseFiltersForTest(filters: unknown[]): { parts: string[]; reje
       rejected.push(f);
       continue;
     }
+    if (POSTGREST_PARAMS.has(col.toLowerCase())) {
+      reserved.push(f);
+      continue;
+    }
     const value = seg.slice(opAt + 1).join(".");
     const rendered = negated ? `not.${op}.${value}` : `${op}.${value}`;
     parts.push(`${encodeURIComponent(col)}=${encodeURIComponent(rendered)}`);
   }
-  return { parts, rejected };
+  return { parts, rejected, reserved };
 }
+
+/** PostgREST's own query parameters: never a column, so never a filter. */
+const POSTGREST_PARAMS = new Set(["select", "order", "limit", "offset", "columns", "on_conflict"]);
 
 /**
  * One entry in a tool result. Text or an image; never both in one block.
@@ -3227,6 +3248,50 @@ const PRIVATE_SUFFIXES = [
   // which is the same protection without the cost.
   "answers",
   "raw",
+  /**
+   * FOUND ON PRODUCTION 2026-10-16 (review of #598), read-only: columns and jsonb keys that
+   * hold someone's details and that nothing above matched. Most are what the team export
+   * already masks by the owner's decision of 2026-10-11 (features/admin/server/team-export.ts).
+   * `subscriber_emails`, and the deletion log's `email_normalized` and `email_sha256`:
+   * addresses and a hash of one. */
+  "emails",
+  "email_address",
+  "email_normalized",
+  "email_sha256",
+  // `payment`: 31 rows carry the card's last four digits and expiry. `card_brand` stays.
+  "card_last4",
+  "card_exp_month",
+  "card_exp_year",
+  // `survey_submission`: 752 PostHog session ids, whose recordings show the person.
+  "posthog_session_id",
+  "hotjar_user_id",
+  "regeneration_url",
+  // Stripe's checkout payloads in `payment_webhook_event`: the buyer's name, address and
+  // phone, under these containers and names (`country` inside them goes with them).
+  "address",
+  "customer_details",
+  "billing_details",
+  "shipping_details",
+  "collected_information",
+  "individual_name",
+  "business_name",
+  "cardholder_name",
+  "billing_name",
+  "contact_name",
+  "partner_name",
+  "recipient_name",
+  "sender_name",
+  "phone_number",
+  "city",
+  "street",
+  // A person's own discount code: `payment.metadata.promoCode`, the webhooks' promotion
+  // codes and `report_price_quote.metadata.nurturePromoCodes` (834 rows). `promoStage`,
+  // `promoPercentOff` and `couponName` say which offer it was, and stay.
+  "promo_code",
+  "promotion_code",
+  "nurture_promo_codes",
+  // `admin_audit_log.metadata.answer`: 20 survey answers an admin changed.
+  "answer",
 ];
 
 /**
@@ -3445,8 +3510,14 @@ export function outrankingHeldBack(
  * the results of one such search were Google Analytics days, matched on the word "Google".
  * A ranked search cannot promise a literal match, so when none of its results holds one of
  * these, it says so and names find_text. Exported for test.
+ *
+ * Reads the first EXACT_SCAN_CHARS only: the address and host patterns backtrack
+ * quadratically on a long run with no `@` or `.` (review of #598: 120 KB of "a1-" took
+ * 13 s), and no real question is that long (the longest search ever logged is 187
+ * characters, checked 2026-10-16).
  */
-export function exactTokensForTest(query: string): string[] {
+export function exactTokensForTest(fullQuery: string): string[] {
+  const query = fullQuery.slice(0, EXACT_SCAN_CHARS);
   const found: string[] = [];
   const add = (raw: string) => {
     const t = raw.trim().replace(/[).,;:!?]+$/, "");
@@ -3460,6 +3531,9 @@ export function exactTokensForTest(query: string): string[] {
   for (const m of query.matchAll(/(?<![\w.])\d{5,}(?![\w.])/g)) add(m[0]);
   return found;
 }
+
+/** How much of a question exactTokensForTest reads. */
+const EXACT_SCAN_CHARS = 2000;
 
 /**
  * The lines a text is on: each occurrence's own line, cut to a window around it when the
@@ -3555,11 +3629,24 @@ function privateTag(value: unknown): string {
   return `[private #${(h >>> 0).toString(16).padStart(8, "0").slice(0, 4)}]`;
 }
 
-/** A column or jsonb key the name denylist covers, in either spelling. */
-const isPrivateName = (name: string) =>
-  PRIVATE_COLUMN.test(name) || PRIVATE_COLUMN.test(snakeCase(name));
+/**
+ * A column or jsonb key the name denylist covers, in any spelling: as written, camelCase as
+ * snake_case, and any other punctuation as an underscore, so `request-ip`, `$ip` and
+ * `Email Address` are read as `request_ip`, `_ip` and `email_address` (review of #598).
+ */
+const isPrivateName = (name: string) => {
+  const snake = snakeCase(name);
+  return (
+    PRIVATE_COLUMN.test(name) ||
+    PRIVATE_COLUMN.test(snake) ||
+    PRIVATE_COLUMN.test(snake.replace(/[^a-z0-9]+/g, "_"))
+  );
+};
 
 const SELECT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** The longest `select` read at all; see planSelectForTest. */
+const MAX_SELECT_CHARS = 1000;
 
 /**
  * A `select` THE PRIVACY GATE CAN FOLLOW: every output column traced back to the column it
@@ -3586,6 +3673,19 @@ const SELECT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export function planSelectForTest(
   select: string
 ): { select: string; privateKeys: string[] } | { refusal: string } {
+  /**
+   * LENGTH FIRST, before any pattern runs. Review of #598 measured the old embed-name regex
+   * on an unmatched select at 0.24 s for 1 KB and 85 s for 8 KB, past this route's 60 s.
+   * No real select comes near the cap: the longest ever logged is 454 characters (checked
+   * 2026-10-16 in brain_query).
+   */
+  if (select.length > MAX_SELECT_CHARS) {
+    return {
+      refusal:
+        `\`select\` is ${select.length} characters, and at most ${MAX_SELECT_CHARS} are read. ` +
+        "Name the columns you need, or use '*' for all of them.",
+    };
+  }
   if (/[()]/.test(select)) {
     if (/(?:^|[,:.\s])(?:count|sum|avg|min|max)\(\s*\)/i.test(select)) {
       return {
@@ -3597,7 +3697,13 @@ export function planSelectForTest(
           "get_business_numbers (sales and revenue) or user_totals (people, by group).",
       };
     }
-    const embedded = /([A-Za-z_]\w*)[\w!]*\(/.exec(select)?.[1];
+    // The name before the first bracket, read by position: a pattern here backtracked cubically.
+    const head = select.slice(0, select.indexOf("("));
+    const named = head
+      .slice(Math.max(head.lastIndexOf(","), head.lastIndexOf(":")) + 1)
+      .split("!")[0]!
+      .trim();
+    const embedded = SELECT_NAME.test(named) ? named : undefined;
     return {
       refusal:
         `\`select\` may not embed a related table (\`${embedded ?? "table"}(…)\`): its rows ` +
@@ -3702,11 +3808,21 @@ function redactPrivateColumns(
     const masked = JSON.stringify(walk(parsed, depth + 1));
     return masked === JSON.stringify(parsed) ? text : masked;
   };
-  const walk = (value: unknown, depth: number): unknown => {
+  /**
+   * A text value, masked: JSON inside it by its keys, then any email address in it and any
+   * secret in a link. `owner` is the column or key it sits under, named in the notice.
+   */
+  const maskText = (text: string, depth: number, owner?: string): string => {
+    const structured = walkText(text, depth);
+    const masked = redactUrlSecrets(maskEmailsInText(structured));
+    if (masked !== structured && owner) hit.add(owner);
+    return masked;
+  };
+  const walk = (value: unknown, depth: number, owner?: string): unknown => {
     if (depth > 8 || value === null || typeof value !== "object") return value;
     if (Array.isArray(value)) {
       return value.map((v) =>
-        typeof v === "string" ? redactUrlSecrets(walkText(v, depth)) : walk(v, depth + 1)
+        typeof v === "string" ? maskText(v, depth, owner) : walk(v, depth + 1, owner)
       );
     }
     const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
@@ -3729,19 +3845,50 @@ function redactPrivateColumns(
        * brain now recognise the same secrets.
        */
       if (typeof copy[key] === "string") {
-        // The keys masked inside JSON text name themselves; a secret in plain text names its column.
-        const structured = walkText(copy[key] as string, depth);
-        const masked = redactUrlSecrets(structured);
-        if (masked !== structured) hit.add(key);
-        copy[key] = masked;
+        // Keys masked inside JSON text name themselves; an address or secret names its column.
+        copy[key] = maskText(copy[key] as string, depth, key);
         continue;
       }
-      copy[key] = walk(copy[key], depth + 1);
+      copy[key] = walk(copy[key], depth + 1, key);
     }
     return copy;
   };
   const out = rows.map((row) => walk(row, 0));
   return { rows: out, redacted: [...hit].sort() };
+}
+
+/**
+ * EVERY EMAIL ADDRESS INSIDE A TEXT, as its tag, found by position rather than by pattern.
+ *
+ * A name denylist cannot see an address sitting in ordinary text: 21 `cron_run` error
+ * messages hold one (checked 2026-10-16, review of #598), under a column nobody would call
+ * private. The usual pattern backtracks quadratically on a long run with no `@` (it is what
+ * made the call log take 6.2 s on 120 KB), so this walks out from each `@` instead: the local
+ * part to the left, the domain to the right, a dot and a two-letter ending required. Each
+ * character is looked at a bounded number of times.
+ */
+export function maskEmailsInTextForTest(text: string): string {
+  return maskEmailsInText(text);
+}
+function maskEmailsInText(text: string): string {
+  if (!text.includes("@")) return text;
+  let out = "";
+  let from = 0;
+  for (let at = text.indexOf("@"); at >= 0; at = text.indexOf("@", at + 1)) {
+    let start = at;
+    while (start > from && /[A-Za-z0-9._%+-]/.test(text[start - 1]!)) start -= 1;
+    let end = at + 1;
+    while (end < text.length && /[A-Za-z0-9.-]/.test(text[end]!)) end += 1;
+    // A full stop after an address ends the sentence, not the domain.
+    while (end > at + 1 && text[end - 1] === ".") end -= 1;
+    const domain = text.slice(at + 1, end);
+    const dot = domain.lastIndexOf(".");
+    if (start === at || dot <= 0 || !/^[A-Za-z]{2,}$/.test(domain.slice(dot + 1))) continue;
+    out += text.slice(from, start) + privateTag(text.slice(start, end));
+    from = end;
+    at = end - 1;
+  }
+  return out + text.slice(from);
 }
 
 /** An email address anywhere in a value: for a reader who gave one, distinct_id IS it. */
@@ -5429,7 +5576,8 @@ async function callTool(
    */
   if (name === "person_activity") {
     const asked = typeof args.person === "string" ? args.person.trim() : "";
-    if (!asked) {
+    // A name is short; a longer value would only be echoed back in the refusal below.
+    if (!asked || asked.length > 200) {
       return textResult(
         '`person` is required: their full name as on the people list, e.g. {"person": "Jane Doe"}.',
         true
@@ -6107,13 +6255,26 @@ async function callTool(
       if (typeof args.order === "string" && args.order.trim()) {
         parts.push(`order=${encodeURIComponent(args.order.trim())}`);
       }
-      const { parts: filterParts, rejected } = parseFiltersForTest(
+      const {
+        parts: filterParts,
+        rejected,
+        reserved,
+      } = parseFiltersForTest(
         Array.isArray(args.filters)
           ? args.filters
           : args.filters === undefined
             ? []
             : [args.filters]
       );
+      if (reserved.length > 0) {
+        return textResult(
+          `${reserved.map((f) => JSON.stringify(f)).join(", ")} ${reserved.length === 1 ? "is" : "are"} ` +
+            "PostgREST's own parameter, not a filter, so the query was NOT run. Pass select, " +
+            "order, limit and offset as the tool's own arguments of those names; columns and " +
+            "on_conflict belong to writes, which this tool never makes.",
+          true
+        );
+      }
       if (rejected.length > 0) {
         // Refused BEFORE the request, not inferred from a failure — the same rule
         // the rpc writer gate and the external-service path already follow. Running

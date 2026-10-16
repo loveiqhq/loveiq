@@ -369,6 +369,23 @@ the snake_case column was masked while its copy in the metadata printed in full.
 `chart_key` and eleven more) are deliberately NOT masked: they are business
 identifiers, and masking them would break the KPI tables to protect nothing.
 
+Since 2026-10-16 (#598) the gate also:
+
+- **Follows a rename.** `alias:column` and jsonb paths are traced to the column and keys they read, so
+  `e:email` or `from:metadata->>requestIp` is masked under its new name. Casts (`::`) stay refused: a cast
+  turns a whole jsonb column into one string. JSON text inside a value (`metadata->>contact`) is masked
+  by its keys.
+- **Masks what production showed it missed.** A review found card details on `payment`, PostHog session
+  ids on `survey_submission`, the deletion log's email columns, `subscriber_emails`, Stripe's buyer name
+  and address in `payment_webhook_event`, personal promo codes (`promoCode`, `nurturePromoCodes`) and
+  `admin_audit_log.metadata.answer`, as the team export already masks them. `request-ip`, `$ip` and
+  `Email Address` are read as `request_ip`, `ip` and `email_address`. Plan, amount, arm, `couponName`,
+  `promoStage` and `email_position` stay readable.
+- **Masks an email address inside ordinary text,** for example in 21 `cron_run` error messages, found
+  by walking out from each `@`.
+- **Refuses a filter named like PostgREST's own parameters** (`select=`, `order=`, `limit=`, `offset=`,
+  `columns=`, `on_conflict=`), and a `select` over 1,000 characters.
+
 ### Environment variables
 
 Required for it to answer at all: `BRAIN_LLM_KEY`,

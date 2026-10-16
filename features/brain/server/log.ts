@@ -166,6 +166,22 @@ const EMAIL_IN_TEXT = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
 const MAX_ARGS_CHARS = 2000;
 
 /**
+ * CUT FIRST, THEN REDACT, with room for one address across the cut.
+ *
+ * EMAIL_IN_TEXT backtracks quadratically on a long run with no `@`, and it ran over the
+ * whole argument and the whole question before either was cut: 120 KB of "a1-" took 6.2 s
+ * each (measured 2026-10-16, review of #598), after the response but in the same
+ * invocation. Only the first `keep` characters are ever stored, so only they, plus the
+ * longest address that could start before the cut (320 characters), are redacted.
+ */
+function redactThenCut(text: string, keep: number): string {
+  return text
+    .slice(0, keep + 320)
+    .replace(EMAIL_IN_TEXT, "[email]")
+    .slice(0, keep);
+}
+
+/**
  * Tool arguments, redacted and capped, as something `jsonb` will accept.
  *
  * Returns a `{ truncated }` wrapper rather than repairing cut JSON. A half-object
@@ -180,6 +196,9 @@ function safeArgs(args: Record<string, unknown> | null | undefined): unknown {
   } catch {
     // Circular or otherwise unserialisable. Say so rather than dropping the row.
     return { unserialisable: true };
+  }
+  if (json.length > MAX_ARGS_CHARS + 320) {
+    return { truncated: redactThenCut(json, MAX_ARGS_CHARS) };
   }
   const redacted = json.replace(EMAIL_IN_TEXT, "[email]");
   if (redacted.length > MAX_ARGS_CHARS) {
@@ -257,7 +276,7 @@ export async function recordToolCall(input: {
         // Redacted like `args`, and for the same reason: `question` is a copy of
         // the search query or the table name, so redacting one and not the other
         // would store the address anyway and the promise would be theatre.
-        question: input.question.replace(EMAIL_IN_TEXT, "[email]").slice(0, 4000),
+        question: redactThenCut(input.question, 4000),
         args: safeArgs(input.args),
         source_count: input.sourceCount ?? null,
         /**
