@@ -9143,18 +9143,29 @@ describe("find_text — every record holding an exact text", () => {
     expect(text).toContain("<<<SOURCE 1>>>");
   });
 
-  it("shows the newest documents up to the limit and says how to reach the rest", async () => {
+  /**
+   * PAGED BY POSITION, because paging by date loops: one day can hold more matches than a
+   * page shows, and "ask again with until=<that day>" would return the same page forever.
+   */
+  it("shows the newest documents up to the limit, and pages the rest by offset", async () => {
     wire([
       part({ source_id: "thread:a", period_end: "2026-10-14" }),
-      part({ source_id: "thread:b", period_end: "2026-10-12" }),
-      part({ source_id: "thread:c", period_end: "2026-10-10" }),
+      part({ source_id: "thread:b", period_end: "2026-10-14" }),
+      part({ source_id: "thread:c", period_end: "2026-10-14" }),
     ]);
-    const text = (await call({ text: "calendar.app.google", limit: 2 })).content[0]!.text;
-    expect(text).toContain("is in 3 documents");
-    expect(text).toContain(
-      "Showing the newest 2; 1 more: ask again with until=2026-10-12 for older ones"
-    );
-    expect(text).not.toContain("thread:c");
+    const first = (await call({ text: "calendar.app.google", limit: 2 })).content[0]!.text;
+    expect(first).toContain("is in 3 documents");
+    expect(first).toContain("Showing 1-2; 1 more: call again with offset=2.");
+    expect(first).not.toContain("thread:c");
+    const next = (await call({ text: "calendar.app.google", limit: 2, offset: 2 })).content[0]!
+      .text;
+    expect(next).toContain("Showing 3-3. That is all of them.");
+    expect(next).toContain("id: gmail/thread:c");
+    expect(next).not.toContain("thread:a");
+    const past = await call({ text: "calendar.app.google", limit: 2, offset: 3 });
+    expect(past.isError).toBeFalsy();
+    expect(past.content[0]!.text).toContain("There is no page at offset 3");
+    expect(past.content[0]!.text).toContain("the last page starts at offset 1");
   });
 
   it("calls a text too common to list too common, with its count, and never a failure", async () => {
@@ -9676,6 +9687,7 @@ describe("user_totals — several breakdowns and questions in one call", () => {
       /Not something to group or filter by: email/,
     ],
     ["question with questions", { question: "01002", questions: ["02001"] }, /not both/],
+    ["an empty questions list", { questions: [] }, /needs at least one survey question id/],
     [
       "questions with another measure",
       { questions: ["01002"], measure: "people" },

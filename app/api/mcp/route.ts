@@ -996,15 +996,15 @@ export const TOOLS = [
             "YYYY-MM-DD: the earliest day a record DESCRIBES. Any date leaves out repository " +
             "documentation, which carries none.",
         },
-        until: {
-          type: "string",
-          description:
-            "YYYY-MM-DD, inclusive. When the answer shows only the newest documents, pass the " +
-            "date of the last one shown to see older ones.",
-        },
+        until: { type: "string", description: "YYYY-MM-DD, inclusive." },
         limit: {
           type: "number",
           description: "Documents to show, 1 to 30, default 15. Every match is counted.",
+        },
+        offset: {
+          type: "number",
+          description:
+            "Skip this many documents, to see the next page; the answer says which number to pass.",
         },
       },
       required: ["text"],
@@ -4668,19 +4668,25 @@ async function callTool(
           "matches meaning and wording."
       );
     }
-    const shown = [...docs.values()].slice(0, limit);
+    // Paged by position, not by date: one day can hold more matches than a page shows.
+    const offset = intArg(args.offset, 0, 0, FIND_TEXT_READ);
+    const shown = [...docs.values()].slice(offset, offset + limit);
+    if (shown.length === 0) {
+      return textResult(
+        `There is no page at offset ${offset}: "${text}" is in ${docs.size} document` +
+          `${docs.size === 1 ? "" : "s"} (${applied}). Nothing is missing; the last page starts ` +
+          `at offset ${Math.max(0, docs.size - limit)}.`
+      );
+    }
     stats.sourceCount = shown.length;
-    const more = docs.size - shown.length;
-    const last = shown.at(-1)?.periodEnd;
+    const more = docs.size - offset - shown.length;
     const head =
       `"${text}" is in ${docs.size} document${docs.size === 1 ? "" : "s"} (${rows.length} stored ` +
       `part${rows.length === 1 ? "" : "s"}; ${applied}), newest first, each with the lines it is ` +
-      "on, at most three. " +
+      `on, at most three. Showing ${offset + 1}-${offset + shown.length}` +
       (more > 0
-        ? `Showing the newest ${shown.length}; ${more} more` +
-          (last ? `: ask again with until=${last} for older ones (that day's may repeat),` : ":") +
-          " or narrow with sources."
-        : "That is all of them.") +
+        ? `; ${more} more: call again with offset=${offset + shown.length}.`
+        : ". That is all of them.") +
       domainNote;
     const chunks = shown.map((d) => ({
       source: d.source,
@@ -7263,6 +7269,10 @@ async function callTool(
         "Pass `question` for one question or `questions` for several, not both.",
         true
       );
+    }
+    // An empty list would otherwise be read as no question at all, and answer people totals.
+    if (Array.isArray(args.questions) && args.questions.length === 0) {
+      return textResult("`questions` needs at least one survey question id, like 03011.", true);
     }
     const askedIds: unknown[] =
       args.questions !== undefined
