@@ -18,15 +18,17 @@ import {
   liveArmReader,
   liveReadouts,
   loadArmOutcomes,
+  loadPriceListChanges,
   tallyAxis,
   type ArmOutcomes,
   type ArmStat,
   type ExperimentReadout,
+  type PriceListChange,
 } from "@features/admin/server/experiment-readouts";
 import { MIN_CELL_COUNT } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
-import { AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
+import { reportingDateTime, reportingDay, reportingDayStart } from "@shared/time/reporting-day";
+import { AXIS_TITLES, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
 import { loadPeople } from "@features/brain/server/people";
 
 export const AXES: ExperimentAxis[] = ["landing", "survey", "pricing", "paywall"];
@@ -198,12 +200,93 @@ export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: nu
   return `${head} ${when(need, hi > lo)}${short.length ? ` Also, ${buyers}.` : ""}`;
 }
 
+/** Reads a window's finishers: from `since`, and before `until` when the test has ended. */
+type LoadOutcomes = (since: string, until?: string) => Promise<ArmOutcomes>;
+type LoadPriceLists = () => Promise<PriceListChange[]>;
+
+const nextDay = (day: string) => isoDay(Date.parse(`${day}T00:00:00Z`) + DAY_MS);
+const euros = (n: number) => (Number.isInteger(n) ? `€${n}` : `€${n.toFixed(2)}`);
+
+/**
+ * The stretches of a finished test over which no price list changed, as [from, to) instants.
+ *
+ * The registry dates a test by the day, so a list change on its first day is where the test
+ * began and one on its last day where it ended: registry #5 starts on 2026-10-08, but list
+ * B3 took its new prices at 15:23 UTC that day, and the readers before then saw the old
+ * ones. That is the cut the live readout makes at PRICE_TEST_START_AT. A change in between
+ * splits the test, so one letter never pools two lists: list A rose on 24 Aug, mid-2.x.
+ */
+export function priceStretches(
+  from: string,
+  to: string,
+  changes: PriceListChange[]
+): Array<[number, number]> {
+  const firstDayEnd = reportingDayStart(nextDay(from)).getTime();
+  const lastDayStart = reportingDayStart(to).getTime();
+  const end = reportingDayStart(nextDay(to)).getTime();
+  const moments = [...new Set(changes.map((c) => Date.parse(c.changed_at)))].sort((a, b) => a - b);
+  const opening = moments.filter((m) => m < firstDayEnd).pop();
+  const start = Math.max(reportingDayStart(from).getTime(), opening ?? -Infinity);
+  const closing = moments.find((m) => m >= lastDayStart && m > start);
+  const until = Math.min(end, closing ?? Infinity);
+  const cuts = [start, ...moments.filter((m) => m > start && m < until), until];
+  return cuts.slice(1).map((b, i) => [cuts.at(i)!, b] as [number, number]);
+}
+
+/** "Pricing A was full_report €9.99, core €19.99", each arm's list as it stood at `at`. */
+function listsAt(changes: PriceListChange[], at: number, arms: string[]): string {
+  return arms
+    .map((arm) => {
+      const latest = new Map<string, number>();
+      for (const c of changes) {
+        if (c.arm === arm && Date.parse(c.changed_at) <= at)
+          latest.set(c.plan, Number(c.starting_price));
+      }
+      const label = armLabel("pricing", arm).short;
+      // Cheapest plan first, as the paygate lists them.
+      const plans = [...latest].sort(([, x], [, y]) => x - y);
+      return plans.length
+        ? `${label} was ${plans.map(([plan, price]) => `${plan} ${euros(price)}`).join(", ")}`
+        : `${label}'s prices are not on record`;
+    })
+    .join("; ");
+}
+
+/**
+ * A finished pricing test's numbers over its own dates, one line per stretch of unchanged
+ * prices, each reader on the price list their quote was dealt then, not the one a later
+ * re-sync moved it to (`dealtArm`): on 14 Oct the 2.x test read as unmeasurable because its
+ * unpaid quotes now carry Pricing 3.0's arms. Nothing for any other axis, or a test without
+ * both dates.
+ */
+async function finalLines(
+  axis: ExperimentAxis | null,
+  from: string | null,
+  to: string | null,
+  load: LoadOutcomes,
+  lists: LoadPriceLists
+): Promise<string[]> {
+  if (axis !== "pricing" || !from || !to) return [];
+  const changes = await lists();
+  const lines = ["  Final numbers, each reader on the price list they were dealt (Berlin time):"];
+  for (const [a, b] of priceStretches(from, to, changes)) {
+    const outcomes = await load(new Date(a).toISOString(), new Date(b).toISOString());
+    const armOf = (id: number) => outcomes.bySubmission.get(id)?.pricing ?? null;
+    // A finished test's arms are retired ones, so they are named rather than left out.
+    const arms = [...new Set(outcomes.submissions.map((s) => armOf(s.id)))]
+      .filter((x): x is string => x !== null)
+      .sort();
+    const r = tallyAxis(outcomes, axis, armOf, { arms });
+    lines.push(
+      `  - ${reportingDateTime(new Date(a))} to ${reportingDateTime(new Date(b))}, when ` +
+        `${listsAt(changes, a, arms)}: ${armsLine(r)}. ${r.verdict}`
+    );
+  }
+  return lines;
+}
+
 /** A running test's readout since its own start, by the same code /admin's overview runs. */
-async function liveLine(
-  e: Row,
-  now: number,
-  load: (since: string) => Promise<ArmOutcomes>
-): Promise<string> {
+async function liveLine(e: Row, now: number, load: LoadOutcomes): Promise<string> {
   if (!e.axis) {
     return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was recorded with it.";
   }
@@ -223,7 +306,8 @@ async function liveLine(
 
 export async function listExperiments(
   now = Date.now(),
-  load: (since: string) => Promise<ArmOutcomes> = loadArmOutcomes
+  load: LoadOutcomes = loadArmOutcomes,
+  lists: LoadPriceLists = loadPriceListChanges
 ): Promise<string> {
   const rows = await readRows("status=neq.archived&order=id.desc&limit=100");
   const running = rows.filter((e) => e.status === "active" || e.status === "paused");
@@ -253,9 +337,14 @@ export async function listExperiments(
   out.push("", "FINISHED");
   for (const e of done) {
     out.push(describe(e), `  Outcome: ${e.outcome ?? e.result_summary ?? "not recorded"}`);
+    out.push(...(await finalLines(e.axis, e.start_date, e.decision_date, load, lists)));
   }
   // The tests that ended before the registry existed, in the words /admin prints for them.
-  for (const c of CONCLUDED) out.push(`- ${c.title} (before the registry): ${c.outcome}`);
+  for (const c of CONCLUDED) {
+    out.push(`- ${c.title} (before the registry): ${c.outcome}`);
+    const w = c.window;
+    if (w) out.push(...(await finalLines(w.axis, w.from, w.to, load, lists)));
+  }
   out.push(
     "",
     "Before the next test starts, record it with record_experiment: what it should change and " +

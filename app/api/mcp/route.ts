@@ -1675,8 +1675,11 @@ export const TOOLS = [
       "waitlist, marketing spend, and the admin tables. WHAT WE CHARGE LIVES HERE TOO " +
       "(report_price_quote: plan, current_price, and the multipliers that produced it) " +
       "— prices are computed per visitor, so they are state, not a document, and no " +
-      "search of the written record can answer 'what do we charge'. Read-only by " +
-      "construction. " +
+      "search of the written record can answer 'what do we charge'. A quote's " +
+      "experiment_group is the price list it is on NOW: a re-sync moves unpaid quotes to the " +
+      "next test's lists, so the list a reader saw in an ended price test is in " +
+      "report_price_quote_arm_history (the old_experiment_group of the quote's earliest row, " +
+      "else its own). Read-only by construction. " +
       "Prefer an rpc/get_* function when one matches the question \u2014 they encode the " +
       "business logic already. Use search_company_context instead for anything written " +
       "down or historical narrative. To hand someone the data itself (whole tables for an " +

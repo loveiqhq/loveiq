@@ -93,7 +93,9 @@ const PRICING_SIGNAL_SELECT = [
  * independently pin an existing row to its old price. Every change here
  * therefore needs a matching re-sync of unpurchased rows, or it silently does
  * nothing for everyone who already has a quote (see
- * supabase/migrations/*_pricing_3_*.sql).
+ * supabase/migrations/*_pricing_3_*.sql). The arm and list price a re-sync moves
+ * a quote from are kept by report_price_quote_arm_history's trigger
+ * (20261016170000), so an ended test is still read in the list each quote was dealt.
  *
  * `essentials` and `core` are no longer offered (REPORT_PURCHASE_PLANS); their one
  * bucket stays so a historical row still rehydrates, and a fresh quote for either
