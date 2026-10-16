@@ -200,6 +200,16 @@ describe("get_business_numbers prints what the dashboard's own route returns", (
     // The dashboard compares this period with the one before, and so must the answer.
     expect(tiles.filter((t) => t.prev !== null).length).toBeGreaterThan(5);
     for (const t of tiles) expect(printed(text, t.label), t.label).toBe(expected(t));
+    // The comparison's rows for the earlier period are read at the dashboard's same age too:
+    // its open rate and Payment CVR are those counts over the same submissions.
+    const row = (k: string) =>
+      new RegExp(`^ {2}${k} +(\\d+) {2}vs +(\\d+) `, "m").exec(text)!.slice(1).map(Number);
+    const before = row("submissions")[1]!;
+    const prev = (key: string) => tiles.find((t) => t.key === key)!.prev!;
+    expect(row("reports_opened")[1]).toBe(Math.round(prev("open-rate") * before));
+    expect(row("paid_so_far")[1]).toBe(Math.round(prev("pay-cvr") * before));
+    // Read at the same age, the earlier period's openers are fewer than they are by now.
+    expect(row("reports_opened")[1]).toBeLessThan(before);
   });
 
   it("takes 'previous' from the period the dashboard reads, not the one asked for", async () => {
