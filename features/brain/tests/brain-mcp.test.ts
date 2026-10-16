@@ -125,7 +125,11 @@ import { clearPeopleCache } from "@features/brain/server/people";
 import { recordToolCall } from "@features/brain/server/log";
 import { forgetSignIns } from "@features/brain/server/sign-in";
 import {
+  exactTokensForTest,
+  linesWithForTest,
   outrankingHeldBack,
+  maskEmailsInTextForTest,
+  planSelectForTest,
   POST,
   PRODUCT_ANALYTICS_ROW_CAP,
   RELEVANCE_FLOOR,
@@ -1827,12 +1831,13 @@ describe("/api/mcp", () => {
       });
     });
 
-    it("lists exactly the twenty-one tools, each with a schema", async () => {
+    it("lists exactly the tools it serves, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
       expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
         "search_company_context",
+        "find_text",
         "fetch_document",
         "record_decision",
         "post_to_slack",
@@ -1847,6 +1852,7 @@ describe("/api/mcp", () => {
         "export_status",
         "count_context",
         "browse_context",
+        "person_activity",
         "get_business_numbers",
         "list_product_tables",
         "query_product_data",
@@ -5297,6 +5303,51 @@ describe("/api/mcp", () => {
       expect(JSON.stringify(row.args)).toContain("[email]");
     });
 
+    /**
+     * CUT, THEN REDACT. The email pattern backtracks quadratically on a long run with no `@`,
+     * and it ran over the whole question and the whole argument JSON: 120 KB of "a1-" took
+     * 6.2 s each (review of #598). Only what is stored is redacted now, plus one address's
+     * width past the cut, so an address straddling the cut is still caught whole.
+     */
+    it("redacts a long question and argument in bounded time, an address across the cut too", async () => {
+      const t = performance.now();
+      await recordToolCall({
+        tool: "search_company_context",
+        question: "a1-".repeat(40_000),
+        args: { query: "a1-".repeat(40_000) },
+        latencyMs: 1,
+      });
+      expect(performance.now() - t).toBeLessThan(500);
+      await recordToolCall({
+        tool: "find_text",
+        question: `${"x".repeat(3990)} jane.doe@example.test ${"y".repeat(500)}`,
+        args: { text: `${"x".repeat(1985)} jane.doe@example.test ${"y".repeat(5000)}` },
+        latencyMs: 1,
+      });
+      const [, row] = writes() as [unknown, Record<string, unknown>];
+      expect(String(row.question).length).toBeLessThanOrEqual(4000);
+      expect(String(row.question)).toMatch(/\[email\]$/);
+      expect(JSON.stringify(row)).not.toMatch(/jane|@example/);
+      expect(String((row.args as { truncated: string }).truncated).length).toBeLessThanOrEqual(
+        2000
+      );
+    });
+
+    it("never pulls a half-cut address in from past the window when addresses shrink to [email]", async () => {
+      // 95 long addresses shrink by about 3,200 characters when redacted. Cutting the redacted
+      // text at 4,000 then reached past the 4,320-character window into an address its edge
+      // had cut in half, which the pattern no longer matches.
+      const question =
+        "averyveryverylongname@example-domain.com ".repeat(95) +
+        "z".repeat(105) +
+        "w".repeat(300) +
+        " secret.person@private-mail.org";
+      await recordToolCall({ tool: "find_text", question, latencyMs: 1 });
+      const [row] = writes() as [Record<string, unknown>];
+      expect(String(row.question)).not.toMatch(/secret|private-mail|averyvery/);
+      expect(String(row.question).length).toBeLessThanOrEqual(4000);
+    });
+
     it("separates battery traffic from real usage, so the log can answer what the team hits", async () => {
       /**
        * The batteries drive these same handlers over the same corpus and write the
@@ -5671,6 +5722,7 @@ describe("/api/mcp", () => {
           },
         },
         "/rpc/get_report_counts": { post: { parameters: [{ in: "body", schema: {} }] } },
+        "/rpc/get_segment_match_count": { post: { parameters: [{ in: "body", schema: {} }] } },
         // A writer, to prove the catalogue never advertises one.
         "/rpc/submit_survey": { post: { parameters: [{ in: "body", schema: {} }] } },
         // The three read-only non-get_* functions the gate allows by name.
@@ -5841,23 +5893,409 @@ describe("/api/mcp", () => {
        * was indistinguishable from a clean answer. The same trick reached 1,933 live
        * report-unlock tokens, each of which opens a paid personal report with no login.
        */
-      it("refuses a select that renames, casts or embeds", async () => {
+      /**
+       * NOW A RENAME IS MASKED BY WHAT IT READS. Each case returns the row under the key the
+       * select names, as PostgREST would, and the private value must not come back.
+       */
+      it.each([
+        ["a rename", "id,e:email", { id: 1, e: "someone@example.com" }, "e"],
+        [
+          "a jsonb key that is private",
+          "id,from:metadata->>requestIp",
+          { id: 1, from: "109.175.96.167" },
+          "from",
+        ],
+        [
+          "a jsonb path into a private column",
+          "id,answers->01002",
+          { id: 1, answers: "someone@example.com" },
+          "answers",
+        ],
+      ])("masks a private column read through %s", async (_how, select, row, key) => {
+        wire([row]);
+        const r = await call({ table: "payment", select });
+        expect(r.isError).toBeFalsy();
+        const text = r.content[0].text;
+        expect(text).not.toContain("someone@example.com");
+        expect(text).not.toContain("109.175.96.167");
+        expect(text).toMatch(new RegExp(`"${key}":"\\[private #[0-9a-f]{4}\\]"`));
+        expect(text).toContain(
+          `Masked as private, so the value is never pasted into a prompt: ${key}.`
+        );
+      });
+
+      it("sends a private column under an alias it chose, so the masked key is the returned one", async () => {
+        wire([{ id: 1 }]);
+        await call({ table: "payment", select: "id,answers->01002,metadata->>requestIp" });
+        const [path] = toolCalls().at(-1) as [string];
+        expect(decodeURIComponent(/select=([^&]+)/.exec(path)![1]!)).toBe(
+          "id,answers:answers->01002,requestIp:metadata->>requestIp"
+        );
+      });
+
+      it("passes a rename of an ordinary column through untouched, and unmasked", async () => {
+        wire([{ id: 1, arm: "email_first", amount: "14.99" }]);
+        const r = await call({
+          table: "payment",
+          select: "id,arm:utm_tracker->>contact_question_arm,amount",
+        });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0].text).toContain('"arm":"email_first"');
+        expect(r.content[0].text).not.toMatch(/Masked as private/);
+        const [path] = toolCalls().at(-1) as [string];
+        expect(decodeURIComponent(/select=([^&]+)/.exec(path)![1]!)).toBe(
+          "id,arm:utm_tracker->>contact_question_arm,amount"
+        );
+      });
+
+      /**
+       * A CAST MADE A WHOLE JSONB COLUMN ONE STRING, and the mask reads keys, not strings
+       * (review, 2026-10-16): `metadata::text` would have carried `requestIp` and `email`
+       * out inside it. Refused again, with the rewrite.
+       */
+      it.each([
+        ["a cast of a jsonb column", "id,metadata::text"],
+        ["a renamed cast", "id,x:metadata::text"],
+        ["a cast of an ordinary column", "id,amount::text"],
+        ["a cast of a jsonb field", "id,metadata->>plan::int"],
+      ])("refuses %s, and says ->> already gives text", async (_what, select) => {
         wire(ROWS);
-        for (const select of [
-          "id,e:email",
-          "id,email::text",
-          "id,user_profile(sexual_orientation)",
-          "id,user_profile(*)",
+        const r = await call({ table: "payment", select });
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toContain("`select` may not cast a column (`::`)");
+        expect(r.content[0].text).toContain("`->>` already gives it as text");
+        expect(toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/payment"))).toHaveLength(
+          0
+        );
+      });
+
+      /**
+       * A SECOND SELECT, SMUGGLED AS A FILTER, beside the one the privacy plan built. Which of
+       * two `select` params PostgREST reads was never tested here, so neither is ever sent.
+       */
+      it.each([
+        ["a select", "select=email"],
+        ["a select in the dot form", "select.eq.email"],
+        ["an order", "order=email.asc"],
+        ["a limit", "limit=1000"],
+        ["an offset", "offset=5"],
+        ["a write's columns", "columns=email"],
+        ["a write's on_conflict", "on_conflict=id"],
+      ])("refuses %s passed as a filter, and names the argument to use", async (_what, filter) => {
+        wire(ROWS);
+        const r = await call({
+          table: "payment",
+          select: "id",
+          filters: ["status=eq.paid", filter],
+        });
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toContain(
+          `${JSON.stringify(filter)} is PostgREST's own parameter`
+        );
+        expect(r.content[0].text).toContain(
+          "Pass select, order, limit and offset as the tool's own arguments"
+        );
+        expect(toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/payment"))).toHaveLength(
+          0
+        );
+      });
+
+      /**
+       * FOUND ON PRODUCTION 2026-10-16 (review of #598): names that hold someone's details and
+       * that the list did not match. ONE CASE PER NAME, each with its own value and nothing
+       * else private in the row, so deleting any one name from the list fails its own case.
+       * Values are plain words: an address or a token would be masked by its shape anyway.
+       */
+      it.each([
+        ["emails", "subscriber_emails"],
+        ["email_normalized", "email_normalized"],
+        ["email_sha256", "email_sha256"],
+        ["last4", "card_last4"],
+        ["exp_month", "card_exp_month"],
+        ["exp_year", "card_exp_year"],
+        ["regeneration_url", "regeneration_url"],
+        ["address", "address"],
+        ["address, as email_address", "email_address"],
+        ["customer_details", "customer_details"],
+        ["billing_details", "billing_details"],
+        ["shipping_details", "shipping_details"],
+        ["collected_information", "collected_information"],
+        ["individual_name", "individual_name"],
+        ["business_name", "business_name"],
+        ["cardholder_name", "cardholder_name"],
+        ["billing_name", "billing_name"],
+        ["contact_name", "contact_name"],
+        ["partner_name", "partner_name"],
+        ["recipient_name", "recipient_name"],
+        ["sender_name", "sender_name"],
+        ["phone_number", "phone_number"],
+        ["city", "city"],
+        ["street", "street"],
+        ["promo_code, as camelCase", "promoCode"],
+        ["promotion_code, as camelCase", "promotionCode"],
+        ["code, matched whole", "code"],
+        ["ip, spelled with a hyphen", "request-ip"],
+        ["ip, spelled with a dollar", "$ip"],
+        ["address, spelled with a space", "Email Address"],
+      ])("masks %s", async (_name, key) => {
+        const value = `plain-value-of-${key.replace(/\W/g, "")}`;
+        wire([{ id: 1, plan: "full_report", [key]: value }]);
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toContain(value);
+        expect(text).toContain(`${JSON.stringify(key)}:"[private #`);
+        expect(text).toContain('"plan":"full_report"');
+      });
+
+      it("masks a Stripe customer's name, and only a customer's", async () => {
+        wire([
+          { id: 1, object: "customer", name: "plain-customer-name" },
+          { id: 2, object: "campaign", name: "Spring sale" },
+        ]);
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toContain("plain-customer-name");
+        expect(text).toContain('"name":"Spring sale"');
+      });
+
+      /**
+       * WHAT STAYS READABLE. Reducing analytics is Eman's decision, never a review's: the
+       * answer labels of the lift analysis, each promo stage's terms, the plan, amount, arm and
+       * utm fields, and the ids that join a survey to its recording.
+       */
+      it("keeps the analytics fields beside them readable", async () => {
+        wire([
+          {
+            id: 1,
+            plan: "full_report",
+            amount: 6.99,
+            arm: "white_video",
+            utm_source: "google",
+            utm_medium: "cpc",
+            utm_campaign: "men_25_44",
+            posthog_session_id: "019a2b3c-session",
+            hotjar_user_id: "hj-77",
+            card_brand: "visa",
+            email_position: "first",
+            metadata: {
+              promoStage: "30h_no_unlock",
+              promoPercentOff: 50,
+              couponName: "nurture_50",
+              nurtureEmailsSent: ["6h_no_view"],
+              nurturePromoCodes: {
+                "30h_no_unlock": {
+                  code: "plain-stage-code",
+                  percentOff: 50,
+                  expiresAt: "2026-10-18T10:00:00Z",
+                  stripePromotionCodeId: "promo_9",
+                },
+              },
+            },
+          },
+        ]);
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toContain("plain-stage-code");
+        for (const kept of [
+          '"plan":"full_report"',
+          '"amount":6.99',
+          '"arm":"white_video"',
+          '"utm_source":"google"',
+          '"utm_medium":"cpc"',
+          '"utm_campaign":"men_25_44"',
+          '"posthog_session_id":"019a2b3c-session"',
+          '"hotjar_user_id":"hj-77"',
+          '"card_brand":"visa"',
+          '"email_position":"first"',
+          '"promoStage":"30h_no_unlock"',
+          '"promoPercentOff":50',
+          '"couponName":"nurture_50"',
+          '"nurtureEmailsSent":["6h_no_view"]',
+          '"percentOff":50',
+          '"expiresAt":"2026-10-18T10:00:00Z"',
+          '"stripePromotionCodeId":"promo_9"',
         ]) {
+          expect(text, kept).toContain(kept);
+        }
+      });
+
+      /**
+       * A FUNCTION'S RESULT IS ONE VALUE, read through the same gate. `answer` was a private
+       * name for a day and hid this analysis's answer labels (review of #598, 2026-10-16).
+       */
+      it("keeps get_answer_conversion_lift's answer labels readable", async () => {
+        wire({
+          baseline_pct: 2.1,
+          baseline_n: 900,
+          baseline_paid: 19,
+          pairs: [
+            {
+              q_id: "01002",
+              q_text: "Right now, I feel satisfied",
+              answer: "Strongly agree",
+              n: 40,
+              paid_n: 4,
+              rate_pct: 10,
+              lift_pct: 376,
+            },
+          ],
+        });
+        const r = await call({ table: "rpc/get_report_counts", params: {} });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0].text).toContain('"answer":"Strongly agree"');
+        expect(r.content[0].text).toContain('"q_text":"Right now, I feel satisfied"');
+        expect(r.content[0].text).not.toContain("[private");
+        expect(r.content[0].text).not.toContain("Masked as private");
+      });
+
+      /**
+       * A MASKED SINGLE VALUE SAYS SO, in the table branch's own words. It used to return the
+       * tag with no notice, so a masked answer read as a clean one.
+       */
+      it("names what it masked in a function's single-value result, as it does for rows", async () => {
+        wire({
+          count: 3,
+          sample: [{ id: 7, email: "plain-sample@example.test", archetype: "Spark Seeker" }],
+          contact: { phone: "plain-phone-value" },
+        });
+        const text = (await call({ table: "rpc/get_segment_match_count", params: {} })).content[0]
+          .text;
+        expect(text).not.toMatch(/plain-sample@example|plain-phone-value/);
+        expect(text).toContain(
+          "That returned a single value rather than rows. Masked as private, so the value is " +
+            "never pasted into a prompt: email, phone. The column is NOT empty and the rows are real"
+        );
+        expect(text).toContain('"archetype":"Spark Seeker"');
+        // The same sentence as a table read of the same field.
+        wire([{ id: 7, email: "plain-sample@example.test" }]);
+        const table = (await call({ table: "payment" })).content[0].text;
+        const notice = (t: string) => {
+          const at = t.indexOf("Masked as private");
+          return t.slice(at, t.indexOf("\n\n", at));
+        };
+        expect(notice(text).replace("email, phone", "email")).toBe(notice(table));
+      });
+
+      it("masks an email address inside ordinary text, and keeps the sentence", async () => {
+        wire([
+          {
+            id: 1,
+            error_message: "brain-gmail: mailbox hr@loveiq.org failed for Jane.Doe@example.test.",
+            note: "no address here, only @channel and a@b",
+          },
+        ]);
+        // Any table: the address is found by its shape, whatever the column is called.
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toMatch(/hr@loveiq|Jane\.Doe@example/);
+        expect(text).toMatch(
+          /"error_message":"brain-gmail: mailbox \[private #[0-9a-f]{4}\] failed for \[private #[0-9a-f]{4}\]\."/
+        );
+        expect(text).toContain('"note":"no address here, only @channel and a@b"');
+        expect(text).toMatch(/Masked as private[^\n]*error_message/);
+      });
+
+      it("finds addresses by position, in bounded time on input built to backtrack", () => {
+        expect(
+          maskEmailsInTextForTest("write to jane@example.test, or J.Doe+x@mail.example.co.uk.")
+        ).toMatch(/^write to \[private #[0-9a-f]{4}\], or \[private #[0-9a-f]{4}\]\.$/);
+        // The same address always gets the same tag.
+        const [a, b] = maskEmailsInTextForTest("x@y.co and x@y.co").split(" and ");
+        expect(a).toBe(b);
+        for (const plain of ["@channel", "a@b", "user@localhost", "no at sign", "two@@signs.com"]) {
+          expect(maskEmailsInTextForTest(plain), plain).toBe(plain);
+        }
+        const t = performance.now();
+        maskEmailsInTextForTest(`${"a1-".repeat(40_000)}@${"b".repeat(40_000)}`);
+        maskEmailsInTextForTest("a@".repeat(60_000));
+        expect(performance.now() - t).toBeLessThan(200);
+      });
+
+      /** The rendered rows, parsed back: the body after the header is a JSON array. */
+      const rowsOf = (text: string) =>
+        JSON.parse(text.slice(text.indexOf("\n\n[") + 2)) as Array<Record<string, unknown>>;
+
+      /**
+       * JSON TEXT IS MASKED BY ITS KEYS. `metadata->>contact` returns an object as one string,
+       * so the walk parses it, masks what is private inside, and writes it back.
+       */
+      it("masks the private keys inside JSON text, and keeps the rest", async () => {
+        wire([
+          {
+            id: 1,
+            x: '{"requestIp":"1.2.3.4","email":"a@b.co","plan":"x"}',
+            list: '[{"email":"c@d.co","n":2}]',
+            // Strings inside an array: JSON text, and a report link carrying its token.
+            texts: ['{"email":"e@f.co"}', "https://www.loveiq.org/report/rpt_abcdefghij0123456789"],
+          },
+        ]);
+        const r = await call({
+          table: "payment",
+          select: "id,x:metadata->>contact,list:metadata->>list",
+        });
+        expect(r.isError).toBeFalsy();
+        const text = r.content[0].text;
+        for (const secret of [
+          "1.2.3.4",
+          "a@b.co",
+          "c@d.co",
+          "e@f.co",
+          "rpt_abcdefghij0123456789",
+        ]) {
+          expect(text).not.toContain(secret);
+        }
+        const [row] = rowsOf(text);
+        const x = JSON.parse(String(row!.x)) as Record<string, unknown>;
+        expect(x.plan).toBe("x");
+        expect(x.requestIp).toMatch(/^\[private #[0-9a-f]{4}\]$/);
+        expect(x.email).toMatch(/^\[private #[0-9a-f]{4}\]$/);
+        const list = JSON.parse(String(row!.list)) as Array<Record<string, unknown>>;
+        expect(list[0]!.n).toBe(2);
+        expect(list[0]!.email).toMatch(/^\[private #[0-9a-f]{4}\]$/);
+        expect(text).toMatch(
+          /Masked as private, so the value is never pasted into a prompt: email, list, requestIp, texts, x\./
+        );
+      });
+
+      it("leaves a string that is not JSON, or JSON with nothing private, exactly as it was", async () => {
+        const kept = {
+          id: 1,
+          a: "{not json",
+          b: "[draft] the plan",
+          c: '{"plan": "x", "n": 1}',
+          d: "  [1, 2, 3]",
+        };
+        wire([kept]);
+        const r = await call({ table: "payment", select: "id,a,b,c,d" });
+        expect(rowsOf(r.content[0].text)[0]).toEqual(kept);
+        expect(r.content[0].text).not.toMatch(/Masked as private/);
+      });
+
+      it.each([
+        ["an embedded table", "id,user_profile(sexual_orientation)", /may not embed.*user_profile/],
+        ["an embed of everything", "id,user_profile(*)", /may not embed/],
+        [
+          "an inner join",
+          "id,payment_item!inner(total_price)",
+          /Read `payment_item` in its own call/,
+        ],
+        ["a count", "device_type,count()", /cannot count or add up.*limit 1/],
+        [
+          "an average of a jsonb field",
+          "x:percentages->Spark Seeker.avg()",
+          /cannot count or add up/,
+        ],
+        ["an empty entry", "id,,amount", /could not be read at ""/],
+        ["a name it cannot read", "id,amount;drop", /could not be read/],
+        ["a quoted key", 'id,metadata->>"plan"', /could not be read/],
+      ])(
+        "refuses %s before asking the database, and says how to rewrite it",
+        async (_what, select, says) => {
+          wire(ROWS);
           const r = await call({ table: "payment", select });
           expect(r.isError, `not refused: ${select}`).toBe(true);
-          expect(r.content[0].text).toMatch(/may not rename a column/);
-          expect(r.content[0].text).toMatch(/masked by NAME/);
+          expect(r.content[0].text).toMatch(says);
+          expect(
+            toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/payment"))
+          ).toHaveLength(0);
         }
-        // The plain form still works.
-        const ok = await call({ table: "payment", select: "id,amount,status" });
-        expect(ok.isError).toBeFalsy();
-      });
+      );
 
       /**
        * A NESTED VALUE WAS COPIED THROUGH WHOLE. The mask iterated top-level keys only,
@@ -5888,6 +6326,52 @@ describe("/api/mcp", () => {
         const text = (await call({ table: "payment", limit: 1 })).content[0].text;
         expect(text).not.toMatch(/Masked as private/);
       });
+    });
+
+    /**
+     * SIX FAILED GUESSES IN A ROW on 2026-10-14, because the `p_rules` format was written
+     * down nowhere: `op`, then `rules`, then `q_id`, then `equals`. The format is now in the
+     * description and in every failure of the two functions that take it.
+     */
+    it("answers a failed segment call with the rules format, and documents it up front", async () => {
+      wire(
+        { code: "P0001", message: 'Invalid logic: must be "and" or "or"' },
+        { ok: false, status: 400 }
+      );
+      const r = await call({
+        table: "rpc/get_segment_match_count",
+        params: { p_rules: { op: "and", rules: [] } },
+      });
+      expect(r.isError).toBe(true);
+      for (const text of [
+        r.content[0].text,
+        TOOLS.find((t) => t.name === "query_product_data")!.description,
+      ]) {
+        expect(text).toContain(
+          'p_rules: {"logic": "and" or "or", "conditions": [{"field", "operator", "value"}'
+        );
+        expect(text).toMatch(/gender.*text \(eq, neq, contains, lt, gt, lte, gte/);
+        expect(text).toContain("has_report and has_payment are true or false (eq, neq)");
+        expect(text).toContain("staff included");
+      }
+      // Only those two functions: another rpc's failure is not about rules.
+      wire({ code: "P0001", message: "boom" }, { ok: false, status: 400 });
+      const other = await call({ table: "rpc/get_report_counts", params: {} });
+      expect(other.content[0].text).not.toContain("p_rules");
+    });
+
+    it("says how to match a jsonb field when a filter casts a column", async () => {
+      wire({ code: "PGRST100", message: "failed to parse logic tree" }, { ok: false, status: 400 });
+      const r = await call({
+        table: "payment",
+        filters: ["or=(utm_tracker::text.ilike.*chatgpt*,utm_tracker::text.ilike.*openai*)"],
+      });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain('"utm_tracker->>utm_source=ilike.*gpt*"');
+      // A PGRST100 with no cast in the filters is some other mistake.
+      wire({ code: "PGRST100", message: "failed to parse filter" }, { ok: false, status: 400 });
+      const plain = await call({ table: "payment", filters: ["status=eq.paid"] });
+      expect(plain.content[0].text).not.toContain("cannot cast a column");
     });
 
     it("refuses a table name that is not a plain identifier", async () => {
@@ -7093,10 +7577,223 @@ describe("/api/mcp", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    /**
+     * STRIPE'S OWN KEY NAMES, through this gateway and in the refund webhooks that store a
+     * whole charge (review of #598): a card's `last4` and expiry, a promotion code's `code`
+     * (100% codes among them) and a customer's `name`. The card's brand and `fingerprint`, the
+     * amount and a coupon's own name stay readable.
+     */
+    /** Serve one JSON body for one path through the gateway, and read the answer back. */
+    async function stripe(path: string, body: unknown) {
+      mockFetch.mockImplementation(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(body),
+      }));
+      return (await call({ service: "stripe", path })).content[0]!.text;
+    }
+
+    /**
+     * A STRIPE ERROR'S `code` STAYS READABLE (third review of #598). The bare `code` rule is
+     * for promo codes; every Stripe error is typed `…_error`, and its code says why a payment
+     * failed. Main showed it, so masking it would reduce analytics.
+     */
+    it("keeps a Stripe error's code readable, and still masks a promotion code", async () => {
+      const intents = await stripe("/payment_intents", {
+        data: [
+          {
+            object: "payment_intent",
+            last_payment_error: {
+              type: "card_error",
+              code: "card_declined",
+              decline_code: "generic_decline",
+            },
+          },
+          {
+            object: "setup_intent",
+            last_setup_error: {
+              type: "invalid_request_error",
+              code: "setup_intent_authentication_failure",
+            },
+          },
+          { object: "promotion_code", code: "plain-promo-value" },
+        ],
+      });
+      expect(intents).toContain('"code":"card_declined"');
+      expect(intents).toContain('"code":"setup_intent_authentication_failure"');
+      expect(intents).not.toContain("plain-promo-value");
+    });
+
+    /**
+     * A MASKED JSON-TEXT ARRAY NAMES ITS FIELD (reproduced by the third review). Only a change
+     * by the email or link pass used to name it, so a string holding a JSON array of links was
+     * masked inside, nothing was named, and the gateway sent the raw body, token included.
+     */
+    it("names a field whose JSON-text array was masked, so the raw body never goes out", async () => {
+      const text = await stripe("/customers", {
+        data: [
+          {
+            object: "customer",
+            id: "cus_1",
+            metadata: { links: '["https://www.loveiq.org/report/rpt_abcdefghij0123456789"]' },
+          },
+        ],
+      });
+      expect(text).not.toContain("rpt_abcdefghij0123456789");
+      expect(text).toMatch(/Masked as private[^\n]*links/);
+    });
+
+    /** A customer update keeps the old name beside the new one, under `previous_attributes`. */
+    it("masks the previous name in a customer update event, and keeps other old values", async () => {
+      const text = await stripe("/events", {
+        data: [
+          {
+            object: "event",
+            type: "customer.updated",
+            data: {
+              object: { object: "customer", id: "cus_1", name: "plain-new-name" },
+              previous_attributes: { name: "plain-old-name", description: "kept description" },
+            },
+          },
+          {
+            object: "event",
+            type: "product.updated",
+            data: {
+              object: { object: "product", name: "Full report" },
+              previous_attributes: { name: "Old product" },
+            },
+          },
+        ],
+      });
+      expect(text).not.toMatch(/plain-new-name|plain-old-name/);
+      expect(text).toContain('"description":"kept description"');
+      expect(text).toContain('"name":"Full report"');
+      expect(text).toContain('"name":"Old product"');
+    });
+
+    /** No gap for a result that is one string or a list of strings: the same text pass. */
+    it("masks a result that is a bare string or a list of strings", async () => {
+      expect(
+        await stripe("/a", "https://www.loveiq.org/report/rpt_abcdefghij0123456789")
+      ).not.toContain("rpt_abcdefghij0123456789");
+      const list = await stripe("/b", ["write to plain.person@example.test", "nothing"]);
+      expect(list).not.toContain("plain.person@example.test");
+      expect(list).toMatch(/Masked as private[^\n]*result/);
+    });
+
+    it("masks a card's digits, a promotion code and a customer's name in Stripe's payloads", async () => {
+      const payloads: Record<string, unknown> = {
+        "/charges": {
+          object: "list",
+          data: [
+            {
+              object: "charge",
+              amount: 699,
+              payment_method_details: {
+                type: "card",
+                card: {
+                  brand: "visa",
+                  last4: "4111",
+                  exp_month: 11,
+                  exp_year: 2039,
+                  fingerprint: "Fp123",
+                },
+              },
+            },
+          ],
+        },
+        "/customers": {
+          data: [
+            {
+              object: "customer",
+              id: "cus_1",
+              name: "plain-customer-name",
+              metadata: { plan: "full_report" },
+            },
+          ],
+        },
+        "/promotion_codes": {
+          data: [
+            {
+              object: "promotion_code",
+              id: "promo_1",
+              code: "FREE100",
+              coupon: { name: "Partner 100", percent_off: 100 },
+            },
+          ],
+        },
+      };
+      mockFetch.mockImplementation(async (url: string) => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(payloads[new URL(String(url)).pathname.replace(/^\/v1/, "")]),
+      }));
+      const charges = (await call({ service: "stripe", path: "/charges" })).content[0]!.text;
+      expect(charges).not.toMatch(/4111|2039|"exp_month":11/);
+      expect(charges).toMatch(/"last4":"\[private #/);
+      for (const kept of ['"brand":"visa"', '"fingerprint":"Fp123"', '"amount":699']) {
+        expect(charges, kept).toContain(kept);
+      }
+      const customers = (await call({ service: "stripe", path: "/customers" })).content[0]!.text;
+      expect(customers).not.toContain("plain-customer-name");
+      expect(customers).toContain('"id":"cus_1"');
+      expect(customers).toContain('"plan":"full_report"');
+      const codes = (await call({ service: "stripe", path: "/promotion_codes" })).content[0]!.text;
+      expect(codes).not.toContain("FREE100");
+      expect(codes).toContain('"name":"Partner 100"');
+      expect(codes).toContain('"percent_off":100');
+    });
+
     it("rejects an unknown service rather than guessing a base URL", async () => {
       const r = await call({ service: "mystery", path: "/x" });
       expect(r.isError).toBe(true);
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    /**
+     * 8 OF 13 FAILED GATEWAY CALLS 11-16 Oct 2026 WERE THESE PATHS: a 403 for the query
+     * endpoint over GET with a personal key, 404s for the retired insight endpoints, and the
+     * `@current` form. Each could only fail, so each is answered here with the HogQL route.
+     */
+    it.each([
+      ["the query endpoint", "/projects/244778/query/"],
+      ["the query endpoint, environments form", "/environments/244778/query"],
+      ["a retired trend insight", "/projects/244778/insights/trend"],
+      ["the @current form, before the path check refuses it", "/projects/@current/insights/trend/"],
+      [
+        "a retired funnel, with the base's /api written twice",
+        "/api/projects/244778/insights/funnel",
+      ],
+    ])(
+      "answers PostHog's %s with query_product_analytics, without asking PostHog",
+      async (_what, path) => {
+        process.env.POSTHOG_API_KEY = "phx_test";
+        const r = await call({ service: "posthog", path, params: { query: "{}" } });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("Count with query_product_analytics instead");
+        expect(r.content[0]!.text).not.toMatch(/smuggle a different host/);
+        expect(mockFetch).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([
+      [
+        "saved insights",
+        "/projects/244778/insights/",
+        "https://eu.posthog.com/api/projects/244778/insights/",
+      ],
+      [
+        "one saved insight",
+        "/projects/244778/insights/42/",
+        "https://eu.posthog.com/api/projects/244778/insights/42/",
+      ],
+      ["events", "/projects/244778/events", "https://eu.posthog.com/api/projects/244778/events"],
+    ])("still reads PostHog's %s", async (_what, path, url) => {
+      process.env.POSTHOG_API_KEY = "phx_test";
+      const r = await call({ service: "posthog", path });
+      expect(r.isError).toBeFalsy();
+      expect(String(mockFetch.mock.calls[0]![0])).toBe(url);
     });
 
     it("never returns the API key to the caller", async () => {
@@ -7808,7 +8505,27 @@ describe("an oversized result must announce that it was cut", () => {
     expect(parseFiltersForTest(["status=eq.paid"])).toEqual({
       parts: ["status=eq.paid"],
       rejected: [],
+      reserved: [],
     });
+    // PostgREST's own parameters are never filters, in either form or any case.
+    for (const f of [
+      "select=email",
+      "SELECT=id,email",
+      "order=id.desc",
+      "limit=5",
+      "offset=10",
+      "columns=a,b",
+      "on_conflict=id",
+      "select.eq.email",
+      " select =email",
+    ]) {
+      expect(parseFiltersForTest([f]), f).toEqual({ parts: [], rejected: [], reserved: [f] });
+    }
+    // A column that merely starts like one is a column.
+    expect(parseFiltersForTest(["order_id=eq.7", "selected=is.true"]).parts).toEqual([
+      "order_id=eq.7",
+      "selected=is.true",
+    ]);
     expect(parseFiltersForTest(["created_date_time.gte.2026-08-01"]).parts).toEqual([
       "created_date_time=gte.2026-08-01",
     ]);
@@ -8612,7 +9329,39 @@ describe("query_product_analytics — counting what visitors did, from PostHog",
     const r = await call({ query: "SELECT nope FROM events" });
     expect(r.isError).toBe(true);
     expect(r.content[0]!.text).toContain("PostHog answered 400: Unable to resolve field: nope");
+    // An error with no known rewrite gets no invented one.
+    expect(r.content[0]!.text).not.toContain("How to write it in HogQL");
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * THE THREE REAL 400s 11-16 Oct 2026, and two more Postgres habits PostHog refuses, each
+   * with PostHog's own sentence (captured 2026-10-16) and the rewrite that then ran.
+   */
+  it.each([
+    ["Function 'greatest' expects 2 arguments, found 3", "greatest(a, greatest(b, c))"],
+    ["Function 'least' expects 2 arguments, found 3", "greatest(a, greatest(b, c))"],
+    ["Function 'toDate' expects 1 argument, found 2", "toDate(toTimeZone(timestamp, 'UTC'))"],
+    [
+      "Aggregate function countIf(started) AS started is found in WHERE in query.",
+      "Name each result apart from the columns (AS n_started)",
+    ],
+    [
+      "Aggregation 'percentile_cont' with WITHIN GROUP is not supported in ClickHouse dialect",
+      "median(x) or quantile(0.5)(x)",
+    ],
+    ["Unsupported type cast to 'numeric'", "round(toFloat(x), 2)"],
+  ])("says how to write it when PostHog answers %s", async (detail, fix) => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ type: "validation_error", detail }),
+    });
+    const r = await call({ query: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain(`PostHog answered 400: ${detail}`);
+    expect(r.content[0]!.text).toContain("How to write it in HogQL:");
+    expect(r.content[0]!.text).toContain(fix);
   });
 
   it("treats a 200 that carries an error as the error it is", async () => {
@@ -8665,5 +9414,817 @@ describe("query_product_analytics — counting what visitors did, from PostHog",
     expect(desc("query_product_analytics")).toContain("BOTH halves of the rate");
     // The filter that keeps local builds out and the days before deploy_env existed in.
     expect(desc("query_product_analytics")).toContain("properties.$host = 'www.loveiq.org'");
+  });
+});
+
+/**
+ * EXACT TEXT, EVERY RECORD THAT HOLDS IT.
+ *
+ * Over 14-16 Oct 2026 the team searched about ten times for a booking link: links on
+ * calendar.app.google sit in 44 records, mostly email, and no ranked result showed one.
+ */
+describe("find_text — every record holding an exact text", () => {
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "find_text", arguments: args },
+      })
+    );
+    return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+  }
+
+  /** The brain_chunk reads the tool made, as [decoded query, init]. */
+  const reads = () =>
+    toolCalls()
+      .filter(([p]) => String(p).startsWith("/rest/v1/brain_chunk?"))
+      .map(([p, init]) => [
+        new URLSearchParams(String(p).slice("/rest/v1/brain_chunk?".length)),
+        init as { headers?: Record<string, string>; breaker?: string; timeoutMs?: number },
+      ]) as Array<
+      [URLSearchParams, { headers?: Record<string, string>; breaker?: string; timeoutMs?: number }]
+    >;
+
+  function wire(rows: Array<Record<string, unknown>>, total = rows.length) {
+    mockSupabaseFetch.mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-range": `0-${Math.max(0, rows.length - 1)}/${total}` }),
+      json: async () => rows,
+      text: async () => JSON.stringify(rows),
+    }));
+  }
+
+  const part = (over: Record<string, unknown>) => ({
+    source: "gmail",
+    source_id: "thread:abc",
+    title: "Booking a call",
+    url: "https://mail.google.com/mail/u/0/#all/abc",
+    period_end: "2026-10-14",
+    body: "Hi,\nBook here: https://calendar.app.google/AbC123\nThanks",
+    ...over,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+  });
+
+  it("is offered as a read-only tool", () => {
+    const tool = TOOLS.find((t) => t.name === "find_text");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    expect(tool?.inputSchema.required).toEqual(["text"]);
+  });
+
+  it("narrows through the word index and decides by the literal text, on title and body", async () => {
+    wire([part({})]);
+    await call({ text: "calendar.app.google/AbC123" });
+    const [[q, init]] = reads() as [
+      [URLSearchParams, { headers?: Record<string, string>; breaker?: string }],
+    ];
+    expect(q.get("fts")).toBe("plfts(english).calendar.app.google/AbC123");
+    expect(q.get("or")).toBe(
+      '(title.ilike."*calendar.app.google/AbC123*",body.ilike."*calendar.app.google/AbC123*")'
+    );
+    expect(q.getAll("source")).toEqual(["neq.book", "neq.paper", "neq.corporate"]);
+    expect(q.get("order")).toBe("period_end.desc.nullslast,id.desc");
+    expect(q.get("limit")).toBe("1000");
+    expect(init.headers?.Prefer).toBe("count=exact");
+    expect(init.breaker).toBe("supabase-find-text");
+  });
+
+  /**
+   * ESCAPED TWICE, checked live on 2026-10-16: LIKE's own `\ % _`, then the `\` and `"` the
+   * quoted value loses when PostgREST unquotes it. One backslash before `%` let "100% off"
+   * match 185 parts as a wildcard; two gave the 69 that really hold it.
+   */
+  it("escapes the wildcards and the quoting, so the text is matched as written", async () => {
+    wire([]);
+    await call({ text: 'a_b 100% "x" c\\d, (e)' });
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.get("or")).toBe(
+      '(title.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*",' +
+        'body.ilike."*a\\\\_b 100\\\\% \\"x\\" c\\\\\\\\d, (e)*")'
+    );
+  });
+
+  it("looks a bare host up as it is and with www., and says how email addresses are stored", async () => {
+    wire([part({ body: "Visit https://www.acme-co.example/x" })]);
+    const r = await call({ text: "acme-co.example" });
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.get("fts")).toBe("fts(english).acme-co.example | www.acme-co.example");
+    expect(r.content[0]!.text).toContain("addresses are stored whole, so mail that names it");
+    // A link with a path is no bare host.
+    wire([]);
+    await call({ text: "https://calendar.app.google/AbC123" });
+    expect(reads().at(-1)![0].get("fts")).toBe("plfts(english).https://calendar.app.google/AbC123");
+  });
+
+  it("gives one entry per document, newest first, with the lines and the true totals", async () => {
+    wire([
+      part({ source_id: "thread:abc#2", title: "Booking a call (part 2 of 2)" }),
+      part({ body: "Earlier: calendar.app.google is where Mark books calls" }),
+      part({
+        source: "drive",
+        source_id: "doc:xyz",
+        title: "Contacts",
+        url: null,
+        period_end: "2026-10-01",
+        body: "Booking: https://CALENDAR.app.google/zz",
+      }),
+    ]);
+    const r = await call({ text: "calendar.app.google" });
+    expect(r.isError).toBeFalsy();
+    const text = r.content[0]!.text;
+    expect(text).toMatch(/^UNTRUSTED DATA/);
+    expect(text).toContain('"calendar.app.google" is in 2 documents (3 stored parts; no filters)');
+    expect(text).toContain("That is all of them.");
+    expect(text).toContain("id: gmail/thread:abc\n");
+    expect(text).not.toContain("thread:abc#2");
+    expect(text).toContain("• Book here: https://calendar.app.google/AbC123");
+    expect(text).toContain("• Earlier: calendar.app.google is where Mark books calls");
+    expect(text).toContain("• Booking: https://CALENDAR.app.google/zz");
+    expect(text).toContain("(gmail) Booking a call\n");
+    // Nothing was ranked, so no score is invented.
+    expect(text).not.toContain("relevance:");
+    expect(text.indexOf("gmail/thread:abc")).toBeLessThan(text.indexOf("drive/doc:xyz"));
+    expect(text).toContain("<<<SOURCE 1>>>");
+  });
+
+  /**
+   * PAGED BY POSITION, because paging by date loops: one day can hold more matches than a
+   * page shows, and "ask again with until=<that day>" would return the same page forever.
+   */
+  it("shows the newest documents up to the limit, and pages the rest by offset", async () => {
+    wire([
+      part({ source_id: "thread:a", period_end: "2026-10-14" }),
+      part({ source_id: "thread:b", period_end: "2026-10-14" }),
+      part({ source_id: "thread:c", period_end: "2026-10-14" }),
+    ]);
+    const first = (await call({ text: "calendar.app.google", limit: 2 })).content[0]!.text;
+    expect(first).toContain("is in 3 documents");
+    expect(first).toContain("Showing 1-2; 1 more: call again with offset=2.");
+    expect(first).not.toContain("thread:c");
+    const next = (await call({ text: "calendar.app.google", limit: 2, offset: 2 })).content[0]!
+      .text;
+    expect(next).toContain("Showing 3-3. That is all of them.");
+    expect(next).toContain("id: gmail/thread:c");
+    expect(next).not.toContain("thread:a");
+    const past = await call({ text: "calendar.app.google", limit: 2, offset: 3 });
+    expect(past.isError).toBeFalsy();
+    expect(past.content[0]!.text).toContain("There is no page at offset 3");
+    expect(past.content[0]!.text).toContain("the last page starts at offset 1");
+  });
+
+  it("calls a text too common to list too common, with its count, and never a failure", async () => {
+    wire(
+      Array.from({ length: 1000 }, (_, i) => part({ source_id: `thread:${i}` })),
+      3983
+    );
+    const r = await call({ text: "google" });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0]!.text).toContain('"google" is in 3983 stored parts, too common');
+    expect(r.content[0]!.text).toContain("search_company_context");
+  });
+
+  it("reads a statement timeout as too common, and an outage as an outage", async () => {
+    mockSupabaseFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      text: async () => '{"code":"57014","message":"canceling statement due to statement timeout"}',
+    });
+    const slow = await call({ text: "loveiq" });
+    expect(slow.isError).toBeFalsy();
+    expect(slow.content[0]!.text).toContain("did not finish, too common");
+    mockSupabaseFetch.mockRejectedValue(new Error("Request timeout after 12000ms"));
+    const down = await call({ text: "loveiq" });
+    expect(down.isError).toBe(true);
+    expect(down.content[0]!.text).toContain("not an absence");
+  });
+
+  it("says plainly when nothing holds it, and what that does not mean", async () => {
+    wire([]);
+    const r = await call({ text: "zzz-not-there", sources: ["gmail"], since: "2026-10-01" });
+    expect(r.isError).toBeFalsy();
+    const text = r.content[0]!.text;
+    expect(text).toContain(
+      'Nothing indexed holds "zzz-not-there" (sources=gmail, since=2026-10-01)'
+    );
+    expect(text).toContain("Not the same as LoveIQ having no record of it");
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.getAll("source")).toEqual(["in.(gmail)", "neq.book", "neq.paper", "neq.corporate"]);
+    expect(q.getAll("period_end")).toEqual(["gte.2026-10-01"]);
+  });
+
+  it("reads books only when named", async () => {
+    wire([]);
+    await call({ text: "attachment theory", sources: ["book"] });
+    const [[q]] = reads() as [[URLSearchParams]];
+    expect(q.getAll("source")).toEqual(["in.(book)", "neq.paper", "neq.corporate"]);
+  });
+
+  it.each([
+    ["no text", {}],
+    ["two characters", { text: "ab" }],
+    ["too long a text", { text: "x".repeat(301) }],
+    ["a star", { text: "5* review" }],
+    ["sources as a string", { text: "calendar.app.google", sources: "gmail" }],
+    ["an impossible date", { text: "calendar.app.google", since: "2026-09-31" }],
+  ])("refuses %s before reading anything", async (_what, args) => {
+    wire([]);
+    const r = await call(args);
+    expect(r.isError).toBe(true);
+    expect(reads()).toHaveLength(0);
+  });
+
+  it("cuts a long line to a window around each occurrence, in any case, at most max", () => {
+    const long = `${"a".repeat(300)} Calendar.App.Google/x ${"b".repeat(300)}`;
+    const [w] = linesWithForTest(`title\n${long}\nnext`, "calendar.app.google", 3);
+    expect(w).toMatch(/^…a+ Calendar\.App\.Google\/x b+…$/);
+    expect(w!.length).toBeLessThan(260);
+    expect(linesWithForTest("x one\ny one\nz one\nw one", "one", 3)).toEqual([
+      "x one",
+      "y one",
+      "z one",
+    ]);
+    expect(linesWithForTest("same one\nsame one", "one", 3)).toEqual(["same one"]);
+    expect(linesWithForTest("nothing here", "one", 3)).toEqual([]);
+  });
+});
+
+describe("search_company_context — an exact text it did not return", () => {
+  const chunk = (over: Record<string, unknown> = {}) => ({
+    source: "ga4",
+    sourceId: "daily:2026-10-14",
+    title: "Google Analytics, 14 Oct",
+    url: null,
+    body: "Google sessions 412",
+    meta: {},
+    score: 3,
+    contentScore: 3,
+    periodEnd: "2026-10-14",
+    ...over,
+  });
+  async function search(query: string) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "search_company_context", arguments: { query } },
+      })
+    );
+    return ((await res.json()).result as { content: Array<{ text: string }> }).content[0]!.text;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    mockSupabaseFetch.mockResolvedValue({ ok: true, headers: new Headers(), json: async () => [] });
+  });
+
+  it("finds links, hosts, addresses, long numbers and quoted phrases, each once", () => {
+    expect(
+      exactTokensForTest(
+        "mark booking link https://calendar.app.google/AbC123, mail jane@example.test, " +
+          'host cal.com, invoice 2026004211 and "Kind regards, Jane" but not 2026 or e.g.'
+      )
+    ).toEqual([
+      "Kind regards, Jane",
+      "https://calendar.app.google/AbC123",
+      "jane@example.test",
+      "cal.com",
+      "2026004211",
+    ]);
+    expect(exactTokensForTest("how are we doing this month")).toEqual([]);
+  });
+
+  it("says when no result holds the exact text, and names find_text with it", async () => {
+    mockRetrieve.mockResolvedValue([chunk(), chunk({ sourceId: "daily:2026-10-13" })]);
+    const text = await search("Mark's booking link calendar.app.google");
+    expect(text).toContain(
+      'NOT AS WRITTEN: none of the parts shown below holds "calendar.app.google" exactly. ' +
+        'find_text with {"text": "calendar.app.google"} lists every record that does'
+    );
+  });
+
+  it("says nothing when a result does hold it, in any case", async () => {
+    mockRetrieve.mockResolvedValue([chunk({ body: "Book: https://Calendar.App.Google/x" })]);
+    expect(await search("booking link calendar.app.google")).not.toContain("NOT AS WRITTEN");
+    mockRetrieve.mockResolvedValue([chunk()]);
+    expect(await search("how many sessions did google record")).not.toContain("NOT AS WRITTEN");
+  });
+
+  it("points an empty search with an exact text at find_text", async () => {
+    mockRetrieve.mockResolvedValue([]);
+    expect(await search("who sent INV 2026004211")).toContain(
+      'For an exact text such as "2026004211", find_text lists every record that holds it.'
+    );
+  });
+});
+
+/**
+ * ONE PERSON'S PERIOD IN ONE CALL. On 12 Oct 2026 a review of one colleague's month made 230+
+ * calls in seven minutes; this is one read of the records the people list ties to them.
+ */
+describe("person_activity — everything one colleague is on, in one call", () => {
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "person_activity", arguments: args },
+      })
+    );
+    return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+  }
+
+  const REGISTRY = [
+    { canonical: "Jane Doe", aliases: ["Jane", "jane@example.test"], kind: "person" },
+    { canonical: "Ops Bot", aliases: [], kind: "bot" },
+    { canonical: "Team Inbox", aliases: ["team@example.test"], kind: "shared" },
+  ];
+  const doc = (kind: string, source: string, i: number, over: Record<string, unknown> = {}) => ({
+    source,
+    source_id: `${kind}:${i}`,
+    title: `${kind} ${i}`,
+    period_end: `2026-10-${String(15 - i).padStart(2, "0")}`,
+    at: null,
+    kind,
+    ...over,
+  });
+
+  /** The brain_chunk reads the tool made, decoded. */
+  const reads = () =>
+    toolCalls()
+      .filter(([p]) => String(p).startsWith("/rest/v1/brain_chunk?"))
+      .map(([p]) => new URLSearchParams(String(p).slice("/rest/v1/brain_chunk?".length)));
+
+  function wire(
+    rows: Array<Record<string, unknown>>,
+    opts: { total?: number; registry?: unknown } = {}
+  ) {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (String(path).startsWith("/rest/v1/brain_person")) {
+        return opts.registry === null
+          ? { ok: false, status: 503, headers: new Headers(), json: async () => ({}) }
+          : {
+              ok: true,
+              status: 200,
+              headers: new Headers(),
+              json: async () => opts.registry ?? REGISTRY,
+            };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          "content-range": `0-${Math.max(0, rows.length - 1)}/${opts.total ?? rows.length}`,
+        }),
+        json: async () => rows,
+      };
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPeopleCache();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+  });
+
+  it("is offered as a read-only tool that needs a person", () => {
+    const tool = TOOLS.find((t) => t.name === "person_activity");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    expect(tool?.inputSchema.required).toEqual(["person"]);
+  });
+
+  it("reads the person's records in the window in ONE read, by their name on the list", async () => {
+    wire([doc("gmail-thread", "gmail", 1)]);
+    // An alias the list knows reads as the person, and the answer says which.
+    const r = await call({ person: "jane@example.test", since: "2026-10-01", until: "2026-10-16" });
+    expect(r.isError).toBeFalsy();
+    const qs = reads();
+    expect(qs).toHaveLength(1);
+    const [q] = qs as [URLSearchParams];
+    expect(q.get("meta")).toBe('cs.{"people":["Jane Doe"]}');
+    expect(q.getAll("period_end")).toEqual(["gte.2026-10-01", "lte.2026-10-16"]);
+    expect(q.get("or")).toBe("(meta->>part.is.null,meta->>part.eq.1)");
+    expect(q.get("source")).toBe("not.in.(book,paper,corporate)");
+    expect(q.get("limit")).toBe("1000");
+    expect(r.content[0]!.text).toContain(
+      'Jane Doe (asked as "jane@example.test"), 2026-10-01 to 2026-10-16'
+    );
+  });
+
+  it("defaults to the last 30 days, ending today in Berlin", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-16T22:30:00Z"), toFake: ["Date"] });
+    try {
+      wire([]);
+      await call({ person: "Jane Doe" });
+      // 00:30 on the 17th in Berlin: today there is the 17th.
+      expect(reads()[0]!.getAll("period_end")).toEqual(["gte.2026-09-17", "lte.2026-10-17"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts each group whole, shows the newest per group, and says how to list the rest", async () => {
+    wire([
+      ...Array.from({ length: 5 }, (_, i) => doc("gmail-thread", "gmail", i)),
+      doc("calendar-event", "calendar", 1, { at: "2026-10-14T08:00:00Z" }),
+      doc("task", "notion", 1),
+      doc("some-new-kind", "plan", 1),
+    ]);
+    const text = (
+      await call({ person: "Jane Doe", since: "2026-10-01", until: "2026-10-16", per_group: 2 })
+    ).content[0]!.text;
+    expect(text).toMatch(/^UNTRUSTED DATA/);
+    expect(text).toContain(
+      "Everything the people list ties to Jane Doe, 2026-10-01 to 2026-10-16: 8 records"
+    );
+    expect(text).toContain("Email threads: 5\n");
+    expect(text).toContain("gmail-thread 0");
+    expect(text).toContain("gmail-thread 1");
+    expect(text).not.toContain("gmail-thread 2");
+    expect(text).toContain(
+      '3 more: browse_context with {"sources":["gmail"],"meta":{"people":"Jane Doe","kind":"gmail-thread"},"since":"2026-10-01","until":"2026-10-16"}.'
+    );
+    // A meeting shows its time, in Berlin time.
+    expect(text).toContain("Meetings: 1\n  2026-10-14 10:00");
+    expect(text).toContain("id: calendar/calendar-event:1");
+    // A kind nobody listed is shown, never dropped.
+    expect(text).toContain("Other records (some-new-kind): 1");
+    // Groups come in their own order, and the empty ones are named.
+    expect(text.indexOf("Meetings:")).toBeLessThan(text.indexOf("Email threads:"));
+    expect(text.indexOf("Email threads:")).toBeLessThan(text.indexOf("Notion tasks:"));
+    expect(text).toMatch(
+      /None in this period: Meeting notes, WhatsApp conversations, .*Documents\./
+    );
+  });
+
+  it("says when the window holds more than one read, and the counts are of the newest", async () => {
+    wire(
+      Array.from({ length: 3 }, (_, i) => doc("gmail-thread", "gmail", i)),
+      { total: 1500 }
+    );
+    const text = (await call({ person: "Jane Doe" })).content[0]!.text;
+    expect(text).toContain("1500 records");
+    expect(text).toContain("The groups below count the newest 3 of the 1500");
+  });
+
+  it("says plainly when the person is not on the people list, and reads nothing else", async () => {
+    wire([doc("gmail-thread", "gmail", 1)]);
+    const r = await call({ person: "John Smith" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain('"John Smith" is not on the people list');
+    expect(r.content[0]!.text).toContain("find_text");
+    expect(reads()).toHaveLength(0);
+  });
+
+  it("says a bot or a shared mailbox carries no people tags", async () => {
+    wire([]);
+    const bot = await call({ person: "Ops Bot" });
+    expect(bot.isError).toBe(true);
+    expect(bot.content[0]!.text).toContain('"Ops Bot" is a bot on the people list');
+    const shared = await call({ person: "team@example.test" });
+    expect(shared.content[0]!.text).toContain("is a shared mailbox on the people list");
+    expect(reads()).toHaveLength(0);
+  });
+
+  it("calls an unreadable list or corpus an outage, never a quiet month", async () => {
+    wire([], { registry: null });
+    const noList = await call({ person: "Jane Doe" });
+    expect(noList.isError).toBe(true);
+    expect(noList.content[0]!.text).toContain("not a sign that they did nothing");
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      String(path).startsWith("/rest/v1/brain_person")
+        ? { ok: true, status: 200, headers: new Headers(), json: async () => REGISTRY }
+        : { ok: false, status: 500, headers: new Headers(), json: async () => ({}) }
+    );
+    const down = await call({ person: "Jane Doe" });
+    expect(down.isError).toBe(true);
+    expect(down.content[0]!.text).toContain("not a quiet month");
+  });
+
+  it("says what nothing in the window does and does not mean", async () => {
+    wire([]);
+    const r = await call({ person: "Jane", since: "2026-10-01", until: "2026-10-02" });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0]!.text).toContain(
+      'Nothing on record is tied to Jane Doe (asked as "Jane") from 2026-10-01 to 2026-10-02'
+    );
+    expect(r.content[0]!.text).toContain("not proof they did nothing");
+  });
+
+  it.each([
+    ["no person", {}],
+    ["a day that does not exist", { person: "Jane Doe", since: "2026-09-31" }],
+    ["a number for a day", { person: "Jane Doe", until: 20261016 }],
+    [
+      "a window that ends before it starts",
+      { person: "Jane Doe", since: "2026-10-10", until: "2026-10-01" },
+    ],
+  ])("refuses %s before reading anything", async (_what, args) => {
+    wire([]);
+    const r = await call(args);
+    expect(r.isError).toBe(true);
+    // The call log's own write aside, nothing is read.
+    expect(toolCalls()).toHaveLength(0);
+  });
+});
+
+/**
+ * SEVERAL BREAKDOWNS, SEVERAL QUESTIONS, ONE CALL. 11-16 Oct 2026: seven one-thing breakdowns
+ * fetched one per call three separate times, and 61 questions one per call in 70 seconds.
+ * Each section must be exactly what its own call gives, which is what keeps every privacy
+ * rule the same: asserted by comparing the combined answer with the separate ones.
+ */
+describe("user_totals — several breakdowns and questions in one call", () => {
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 70,
+        method: "tools/call",
+        params: { name: "user_totals", arguments: args },
+      })
+    );
+    return (await res.json()).result as { isError: boolean; content: Array<{ text: string }> };
+  }
+
+  const QUESTIONS: Record<string, Record<string, unknown>> = {
+    "01002": { id: 51, frontend_qid: "01002", type: "single", question: "Is this the first?" },
+    "02001": { id: 52, frontend_qid: "02001", type: "scale", question: "How much, 1 to 7?" },
+    "08001": { id: 53, frontend_qid: "08001", type: "open", question: "In your words?" },
+  };
+  const person = (i: number, gender: string, country: string, pick: string, scale: number) => ({
+    user_id: `${gender}-${country}-${i}`,
+    created_date_time: "2026-09-10T12:00:00Z",
+    age: [{ answer_option: { option_text: i % 2 ? "25–34" : "35–44" } }],
+    app_user: {
+      email: `p${i}@example.com`,
+      user_profile: {
+        gender,
+        sexual_orientation: null,
+        relationship_status: null,
+        location_primary: country,
+      },
+    },
+    scoring_result: { v5_primary_archetype: "Spark Seeker", primary_archetype: null },
+    personal_report: null,
+    // Both questions' answers on every row, as one read of several questions returns them.
+    answer: [
+      {
+        survey_question_id: 51,
+        normalized_value: null,
+        answer_option: { option_text: pick },
+        survey_submission_answer_options: [],
+      },
+      {
+        survey_question_id: 52,
+        normalized_value: scale,
+        answer_option: null,
+        survey_submission_answer_options: [],
+      },
+    ],
+  });
+  const ROWS = [
+    ...Array.from({ length: 14 }, (_, i) =>
+      person(i, "Woman", "Canada", i % 3 ? "Yes" : "No", 1 + (i % 7))
+    ),
+    ...Array.from({ length: 9 }, (_, i) =>
+      person(i, "Man", "Germany", i % 2 ? "Yes" : "No", 7 - (i % 5))
+    ),
+    // Too few to show as a group, in every breakdown.
+    ...Array.from({ length: 3 }, (_, i) => person(i, "Other", "Canada", "Yes", 4)),
+  ];
+
+  /** As the database answers: a one-question read carries only that question's answers. */
+  const onlyAsked = (path: string) => {
+    const one = /answer\.survey_question_id=eq\.(\d+)/.exec(path)?.[1];
+    return one
+      ? ROWS.map((r) => ({
+          ...r,
+          answer: r.answer.filter((a) => a.survey_question_id === Number(one)),
+        }))
+      : ROWS;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      const qid = /frontend_qid=eq\.(\d{5})/.exec(String(path))?.[1];
+      const json =
+        qid === "15003"
+          ? [{ id: 41 }]
+          : qid
+            ? QUESTIONS[qid]
+              ? [QUESTIONS[qid]]
+              : []
+            : String(path).startsWith("/rest/v1/survey_submission")
+              ? onlyAsked(String(path))
+              : [];
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => json,
+        text: async () => "",
+      };
+    });
+  });
+
+  const submissionReads = () =>
+    toolCalls().filter(([p]) => String(p).startsWith("/rest/v1/survey_submission"));
+
+  it("gives each breakdown on its own, exactly as one call per group_by, from one read", async () => {
+    const both = await call({ breakdowns: ["gender", "country"], since: "2026-09-01" });
+    expect(both.isError).toBe(false);
+    expect(submissionReads()).toHaveLength(1);
+    const gender = await call({ group_by: ["gender"], since: "2026-09-01" });
+    const country = await call({ group_by: ["country"], since: "2026-09-01" });
+    expect(both.content[0]!.text).toBe(
+      `${gender.content[0]!.text}\n\n---\n\n${country.content[0]!.text}`
+    );
+    // The small group stays hidden in the combined answer too.
+    expect(both.content[0]!.text).not.toContain("- Other:");
+    expect(both.content[0]!.text).toContain("By gender:");
+    expect(both.content[0]!.text).toContain("By country:");
+  });
+
+  it("gives several questions' answers, each exactly as its own call, from one read", async () => {
+    const both = await call({ questions: ["01002", "02001"], group_by: ["gender"] });
+    expect(both.isError).toBe(false);
+    const reads = submissionReads();
+    expect(reads).toHaveLength(1);
+    expect(String(reads[0]![0])).toContain("&answer.survey_question_id=in.(51,52)");
+    expect(String(reads[0]![0])).toContain("answer:survey_submission_answer(survey_question_id,");
+    // `question` alone picks the answers measure.
+    const first = await call({ question: "01002", group_by: ["gender"] });
+    const second = await call({ question: "02001", group_by: ["gender"] });
+    expect(first.content[0]!.text).toContain('Answers to 01002, "Is this the first?"');
+    expect(second.content[0]!.text).toContain('Answers to 02001, "How much, 1 to 7?"');
+    expect(both.content[0]!.text).toBe(
+      `${first.content[0]!.text}\n\n---\n\n${second.content[0]!.text}`
+    );
+  });
+
+  it("crosses several questions with several breakdowns, question by question", async () => {
+    const text = (await call({ questions: ["01002", "02001"], breakdowns: ["gender", "country"] }))
+      .content[0]!.text;
+    const sections = text.split("\n\n---\n\n");
+    expect(sections).toHaveLength(4);
+    expect(sections[0]).toMatch(/^Answers to 01002[\s\S]*By gender:/);
+    expect(sections[1]).toMatch(/^Answers to 01002[\s\S]*By country:/);
+    expect(sections[2]).toMatch(/^Answers to 02001[\s\S]*By gender:/);
+    expect(sections[3]).toMatch(/^Answers to 02001[\s\S]*By country:/);
+  });
+
+  it.each([
+    ["an empty breakdowns", { breakdowns: [] }, /needs at least one of/],
+    ["breakdowns with group_by", { breakdowns: ["gender"], group_by: ["age"] }, /not both/],
+    [
+      "a breakdown that is not a dimension",
+      { breakdowns: ["email"] },
+      /Not something to group or filter by: email/,
+    ],
+    ["question with questions", { question: "01002", questions: ["02001"] }, /not both/],
+    ["an empty questions list", { questions: [] }, /needs at least one survey question id/],
+    [
+      "questions with another measure",
+      { questions: ["01002"], measure: "people" },
+      /read only by measure answers/,
+    ],
+    ["a malformed question id", { questions: ["01002", "nope"] }, /nope is not/],
+    [
+      "too many questions",
+      { questions: Array.from({ length: 26 }, (_, i) => String(10000 + i)) },
+      /At most 25 questions/,
+    ],
+  ])("refuses %s before reading any survey data", async (_what, args, says) => {
+    const r = await call(args);
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toMatch(says);
+    expect(submissionReads()).toHaveLength(0);
+  });
+
+  it("names every question it cannot summarise, and reads no answers", async () => {
+    const r = await call({ questions: ["01002", "08001", "09999"] });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("08001 is a open question.");
+    expect(r.content[0]!.text).toContain("There is no survey question 09999.");
+    expect(submissionReads()).toHaveLength(0);
+  });
+});
+
+/**
+ * NO INPUT MAY COST THE CALL'S TIME. Review of #598 measured two blow-ups on input that is
+ * never refused early: the embed-name pattern on a select (8 KB took 85 s, past this route's
+ * 60 s) and the exact-text scan of a search question (120 KB of "a1-" took 13 s). Each guard
+ * is checked here by the clock, with limits far above what the linear code needs and far below
+ * what the old patterns took.
+ */
+describe("long input is refused or read in bounded time", () => {
+  const ms = (fn: () => unknown) => {
+    const t = performance.now();
+    fn();
+    return performance.now() - t;
+  };
+  async function tool(name: string, args: Record<string, unknown>) {
+    const t = performance.now();
+    const res = await POST(
+      rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } })
+    );
+    const result = (await res.json()).result as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+    return { ...result, ms: performance.now() - t };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+    mockSupabaseFetch.mockImplementation(
+      async (_path: string, init?: { headers?: Record<string, string> }) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        // The schema names `payment`, so a select reaches the plan rather than "No such table".
+        json: async () =>
+          init?.headers?.Accept === "application/openapi+json"
+            ? { definitions: { payment: { properties: { id: {}, amount: {} } } }, paths: {} }
+            : [],
+      })
+    );
+    mockRetrieve.mockResolvedValue([]);
+  });
+
+  it("refuses an 8 KB select at once, before any pattern runs", async () => {
+    const select = `${"a".repeat(8000)}-(`;
+    let plan: ReturnType<typeof planSelectForTest> | undefined;
+    expect(ms(() => (plan = planSelectForTest(select)))).toBeLessThan(50);
+    expect(plan).toEqual({
+      refusal: expect.stringContaining("`select` is 8002 characters, and at most 1000 are read"),
+    });
+    const r = await tool("query_product_data", { table: "payment", select });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("at most 1000 are read");
+    expect(r.ms).toBeLessThan(1000);
+  });
+
+  it("reads the longest select it accepts, built to backtrack, in bounded time", () => {
+    // The old pattern took about 0.25 s on exactly this; the cap alone would let it through.
+    for (const select of [
+      `${"a".repeat(997)}-(`,
+      `id,${"a".repeat(990)}!x(`,
+      `${"a,".repeat(499)}(`,
+    ]) {
+      let plan: ReturnType<typeof planSelectForTest> | undefined;
+      expect(
+        ms(() => (plan = planSelectForTest(select))),
+        select.slice(-12)
+      ).toBeLessThan(100);
+      expect(plan && "refusal" in plan).toBe(true);
+    }
+    // The name before the bracket is still read, so the refusal still says what to read instead.
+    expect(planSelectForTest("id,x:payment_item!inner(total_price)")).toEqual({
+      refusal: expect.stringContaining("Read `payment_item` in its own call"),
+    });
+  });
+
+  it("scans only the start of a long search question for exact text", async () => {
+    const query = "a1-".repeat(40_000);
+    expect(ms(() => exactTokensForTest(query))).toBeLessThan(100);
+    // What sits past the scanned start is not looked for.
+    expect(exactTokensForTest(`${"x ".repeat(1100)}jane@example.test`)).toEqual([]);
+    expect(exactTokensForTest(`find jane@example.test ${"x ".repeat(1100)}`)).toEqual([
+      "jane@example.test",
+    ]);
+    const r = await tool("search_company_context", { query });
+    expect(r.ms).toBeLessThan(1000);
+  });
+
+  it("refuses an over-long exact text or person name before reading anything", async () => {
+    const huge = "a1-".repeat(400_000);
+    const text = await tool("find_text", { text: huge });
+    expect(text.isError).toBe(true);
+    expect(text.content[0]!.text).toContain("too long for an exact lookup");
+    expect(text.ms).toBeLessThan(1000);
+    const person = await tool("person_activity", { person: huge });
+    expect(person.isError).toBe(true);
+    expect(person.content[0]!.text).not.toContain(huge.slice(0, 50));
+    expect(person.ms).toBeLessThan(1000);
+    expect(toolCalls()).toHaveLength(0);
   });
 });

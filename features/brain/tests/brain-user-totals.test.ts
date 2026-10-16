@@ -347,6 +347,69 @@ describe("the other measures: traits, emails and answers", () => {
     expect(typeof loadPeople).toBe("function");
   });
 
+  it("reads several questions in one query, and builds each question's people as its own read would", async () => {
+    vi.resetModules();
+    const paths: string[] = [];
+    const row = (user: string, answers: Array<[number, string]>) => ({
+      user_id: user,
+      created_date_time: "2026-09-10T12:00:00Z",
+      age: [{ answer_option: { option_text: "25-34" } }],
+      app_user: { email: `${user}@example.com`, user_profile: null },
+      scoring_result: null,
+      personal_report: null,
+      answer: answers.map(([q, text]) => ({
+        survey_question_id: q,
+        normalized_value: null,
+        answer_option: { option_text: text },
+        survey_submission_answer_options: [],
+      })),
+    });
+    // The same user twice: the latest finish's answers count, per question, as onePerPerson says.
+    const rows = [
+      row("u1", [
+        [77, "No"],
+        [78, "Seven"],
+      ]),
+      row("u1", [[77, "Yes"]]),
+      row("u2", [[78, "Two"]]),
+    ];
+    vi.doMock("@features/admin/server/supabase", () => ({
+      supabaseFetch: async (path: string) => {
+        paths.push(path);
+        return { ok: true, status: 200, json: async () => [{ id: 41 }] };
+      },
+    }));
+    vi.doMock("@features/brain/server/read-all", () => ({
+      readAll: async (path: string) => {
+        paths.push(path);
+        // A one-question read returns only that question's answers.
+        const one = /answer\.survey_question_id=eq\.(\d+)/.exec(path)?.[1];
+        return one
+          ? rows.map((r) => ({
+              ...r,
+              answer: r.answer.filter((a) => a.survey_question_id === Number(one)),
+            }))
+          : rows;
+      },
+    }));
+    const mod = await import("@features/brain/server/user-totals");
+    const both = await mod.loadPeopleByQuestion("2026-09-01", "2026-09-30", [77, 78]);
+    const main = paths.filter((p) => p.startsWith("/rest/v1/survey_submission"));
+    expect(main).toHaveLength(1);
+    expect(main[0]).toContain("&answer.survey_question_id=in.(77,78)");
+    for (const q of [77, 78]) {
+      const alone = await mod.loadPeople("2026-09-01", "2026-09-30", {
+        measure: "answers",
+        questionId: q,
+      });
+      expect(both!.get(q)).toEqual(alone);
+    }
+    expect(both!.get(77)!.map((p) => p.answer)).toEqual([["Yes"], undefined]);
+    expect(both!.get(78)!.map((p) => p.answer)).toEqual([["Seven"], ["Two"]]);
+    vi.doUnmock("@features/admin/server/supabase");
+    vi.doUnmock("@features/brain/server/read-all");
+  });
+
   it("files a paying user's traits and answers with the finish they paid under", () => {
     const [p] = onePerPerson([
       person({

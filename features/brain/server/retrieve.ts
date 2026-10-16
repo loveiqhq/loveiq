@@ -255,7 +255,7 @@ export class CorpusUnavailableError extends Error {
  * never knowingly typed. Everything else — bidi overrides, U+FFFD, ordinary control
  * characters — was measured to pass through Postgres untouched and is left alone.
  */
-function sanitiseQuery(q: string): string {
+export function sanitiseQuery(q: string): string {
   return q
     .replace(/\u0000/g, " ")
     .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");

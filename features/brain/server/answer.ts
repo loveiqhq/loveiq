@@ -147,6 +147,8 @@ export function renderSources(
     forAgent?: boolean;
     /** The search's `until`: decisions are described as they stood on that day. */
     asOf?: string;
+    /** No relevance line: an exact lookup ranks nothing, so a score would be invented. */
+    unranked?: boolean;
   } = {}
 ): string {
   // Chunks were previously joined by "---", the SAME token that fenced the
@@ -178,7 +180,7 @@ export function renderSources(
       // Defenced like every other quoted field: `source` and `sourceId` are corpus
       // text. A mangled handle fails to fetch, which is the safe direction.
       const handle = opts.forAgent ? `id: ${defence(c.source)}/${defence(c.sourceId)}` : null;
-      const relevance = opts.forAgent ? `relevance: ${c.score.toFixed(2)}` : null;
+      const relevance = opts.forAgent && !opts.unranked ? `relevance: ${c.score.toFixed(2)}` : null;
       /**
        * SAY WHEN A DECISION HAS BEEN REPLACED, on the decision itself.
        *
