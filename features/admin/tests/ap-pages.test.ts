@@ -348,7 +348,7 @@ describe("page builders", () => {
     // record themselves only from SURVEY_TRACKING_FROM, after this range.
     expect(p.intro.cards.map((s) => s.medianMs)).toEqual([null, 5000, 8000, null, 40_000, null]);
     expect(p.intro.cards.map((s) => s.reached)).toEqual([null, 4, 4, 0, 2, null]);
-    expect(p.intro.recordedFrom).toBe("15 Oct 2026");
+    expect(p.intro.recordedFrom).toBe("17 Oct 2026");
     // Skip, Back and Exit say when they start rather than read zero.
     expect(p.intro.cards.every((c) => c.skip === null && c.back === null && c.exit === null)).toBe(
       true
@@ -408,7 +408,7 @@ describe("page builders", () => {
       left: number | null = 0,
       direct = 0
     ) => ({
-      day: "2026-10-15",
+      day: "2026-10-17",
       step,
       n,
       ms: [],
@@ -419,16 +419,16 @@ describe("page builders", () => {
     });
     const page = (intro: Array<ReturnType<typeof row>>) =>
       buildSurveyPage({
-        facts: factsFixture({ from: "2026-10-15", to: "2026-10-16", intro }),
+        facts: factsFixture({ from: "2026-10-17", to: "2026-10-18", intro }),
         previous: null,
         benchmark: facts,
         benchmarkKind: "all",
         filters: parseFilters(
-          { period: "custom", from: "2026-10-15", to: "2026-10-16" },
-          "2026-10-17"
+          { period: "custom", from: "2026-10-17", to: "2026-10-18" },
+          "2026-10-19"
         ),
-        today: "2026-10-17",
-        now: new Date("2026-10-17T10:00:00Z"),
+        today: "2026-10-19",
+        now: new Date("2026-10-19T10:00:00Z"),
         questions: null,
         questionsError: null,
         introClicks: null,
@@ -495,17 +495,17 @@ describe("page builders", () => {
     const before = device(facts);
     expect(before.rows.map((r) => r.label)).toEqual(["Mobile", "Desktop", "Tablet"]);
     expect(before.rows[0]).toMatchObject({ share: 1, bench: 1 });
-    expect(before.rows[2]).toMatchObject({ bench: null, pending: "Recorded from 15 Oct 2026" });
+    expect(before.rows[2]).toMatchObject({ bench: null, pending: "Recorded from 17 Oct 2026" });
     // The iPhone and Android split of Mobile stays in the note.
     expect(before.note).toContain("here 100% iPhone, 0% Android");
     const after = factsFixture({
-      from: "2026-10-15",
-      to: "2026-10-16",
+      from: "2026-10-17",
+      to: "2026-10-18",
       subs: [
-        sub({ id: 1, day: "2026-10-15", device: "Tablet" }),
-        sub({ id: 2, day: "2026-10-15", device: "Android" }),
-        sub({ id: 3, day: "2026-10-15", device: "Desktop" }),
-        sub({ id: 4, day: "2026-10-15", device: null }),
+        sub({ id: 1, day: "2026-10-17", device: "Tablet" }),
+        sub({ id: 2, day: "2026-10-17", device: "Android" }),
+        sub({ id: 3, day: "2026-10-17", device: "Desktop" }),
+        sub({ id: 4, day: "2026-10-17", device: null }),
       ],
     });
     const now15 = device(after, facts);
@@ -904,7 +904,7 @@ describe("blanks say why, and notes say what the numbers are", () => {
   });
 
   it("the tablet filter before tablets were told apart: figures about people blank, with why", () => {
-    const reason = "Tablets are told apart from 15 Oct 2026: pick a range from that day on.";
+    const reason = "Tablets are told apart from 17 Oct 2026: pick a range from that day on.";
     const tablets = { ...filters, device: "tablet" as const };
     const o = focus({ filters: tablets });
     for (const key of ["revenue", "new-users"]) expect(tile(o, key).blocked).toBe(reason);
@@ -931,27 +931,27 @@ describe("blanks say why, and notes say what the numbers are", () => {
   });
 
   it("the tablet filter from the day tablets are told apart: counted, but not compared with before", () => {
-    const today = "2026-10-23";
+    const today = "2026-10-25";
     const late = parseFilters(
-      { period: "custom", from: "2026-10-15", to: "2026-10-21", device: "tablet" },
+      { period: "custom", from: "2026-10-17", to: "2026-10-23", device: "tablet" },
       today
     );
-    const at = new Date("2026-10-23T10:00:00Z");
+    const at = new Date("2026-10-25T10:00:00Z");
     const tablet = (id: number, day: string) =>
       sub({ id, day, at: `${day}T10:00:00Z`, device: "Tablet" });
     const facts15 = factsFixture({
       from: late.from,
       to: late.to,
       asOf: today,
-      subs: [tablet(1, "2026-10-16")],
+      subs: [tablet(1, "2026-10-18")],
       money: [],
     });
     // The week before holds days before tablets were told apart: nothing to compare with.
     const before = factsFixture({
-      from: "2026-10-08",
-      to: "2026-10-14",
+      from: "2026-10-10",
+      to: "2026-10-16",
       asOf: today,
-      subs: [sub({ id: 2, day: "2026-10-09", at: "2026-10-09T10:00:00Z" })],
+      subs: [sub({ id: 2, day: "2026-10-11", at: "2026-10-11T10:00:00Z" })],
       money: [],
     });
     const args = { facts: facts15, previous: before, ad, filters: late, today, now: at };

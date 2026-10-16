@@ -151,13 +151,13 @@ describe("the Survey page as drawn", () => {
     // 1 to 7 Oct is before the tracking day: no zeros, a note saying when they start.
     for (const i of [4, 5, 6]) expect(new Set(column(intro, i))).toEqual(new Set(["—"]));
     expect(
-      screen.getByText(/recorded from 15 Oct 2026: pick a range from that day on/)
+      screen.getByText(/recorded from 17 Oct 2026: pick a range from that day on/)
     ).toBeTruthy();
     // Before the consent recorded itself, its continue is PostHog's: 60 agreed of 100 sessions,
     // in whole percentages as drawn.
     expect(column(intro, 3)[5]).toBe("60%");
     // The device card: tablets are recorded from the same day.
-    expect(screen.getByText("Recorded from 15 Oct 2026")).toBeTruthy();
+    expect(screen.getByText("Recorded from 17 Oct 2026")).toBeTruthy();
   });
 
   it("intro CSV: the consent's Continue as the table shows it, PostHog's before our own", () => {
@@ -172,7 +172,7 @@ describe("the Survey page as drawn", () => {
 
   it("intro from the tracking day: our own first two boxes, kept when PostHog fails, and the reds", () => {
     const row = (step: string, n: number, wentOn: number, left: number, direct = 0) => ({
-      day: "2026-10-15",
+      day: "2026-10-17",
       step,
       n,
       ms: [],
@@ -183,8 +183,8 @@ describe("the Survey page as drawn", () => {
     });
     view.payload = buildSurveyPage({
       facts: factsFixture({
-        from: "2026-10-15",
-        to: "2026-10-16",
+        from: "2026-10-17",
+        to: "2026-10-18",
         intro: [
           row("intro_view", 10, 8, 2),
           row("intro_slide_1", 8, 6, 0),
@@ -200,11 +200,11 @@ describe("the Survey page as drawn", () => {
       benchmark: factsFixture(),
       benchmarkKind: "all",
       filters: parseFilters(
-        { period: "custom", from: "2026-10-15", to: "2026-10-16" },
-        "2026-10-17"
+        { period: "custom", from: "2026-10-17", to: "2026-10-18" },
+        "2026-10-19"
       ),
-      today: "2026-10-17",
-      now: new Date("2026-10-17T10:00:00Z"),
+      today: "2026-10-19",
+      now: new Date("2026-10-19T10:00:00Z"),
       questions,
       questionsError: null,
       introClicks: { ok: false, error: "PostHog could not be read just now." },

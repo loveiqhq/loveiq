@@ -260,9 +260,9 @@ describe("AP blanks that say why", () => {
   });
 
   it("the tablet filter blanks every figure about people before tablets were told apart", () => {
-    const reason = "Tablets are told apart from 15 Oct 2026: pick a range from that day on.";
-    expect(tabletBlocked({ device: "tablet" }, "2026-10-14")).toBe(reason);
-    expect(tabletBlocked({ device: "tablet" }, "2026-10-15")).toBeNull();
+    const reason = "Tablets are told apart from 17 Oct 2026: pick a range from that day on.";
+    expect(tabletBlocked({ device: "tablet" }, "2026-10-16")).toBe(reason);
+    expect(tabletBlocked({ device: "tablet" }, "2026-10-17")).toBeNull();
     expect(tabletBlocked({ device: "phone" }, "2026-10-01")).toBeNull();
     // Starts follow the same rule, even before the steps recorded any device.
     expect(startsBlocked({ ...ALL, device: "tablet" }, "2026-10-01", TODAY)).toBe(reason);
@@ -433,16 +433,16 @@ describe("AP totals", () => {
   });
 
   it("splits by tablet only from the tracking day, and by the referrer the tracker kept", () => {
-    // 13 to 14 Oct: steps carry the device, but tablets are not told apart until the 15th.
+    // 13 to 14 Oct: steps carry the device, but tablets are not told apart until the 17th.
     const oct13 = factsFixture({ from: "2026-10-13", to: "2026-10-14" });
     expect(totals(oct13, { ...ALL, device: "tablet" }).starts).toBeNull();
     expect(totals(oct13, { ...ALL, device: "phone" }).starts).not.toBeNull();
     const later = factsFixture({
-      from: "2026-10-15",
-      to: "2026-10-16",
+      from: "2026-10-17",
+      to: "2026-10-18",
       starts: [
         {
-          day: "2026-10-15",
+          day: "2026-10-17",
           known: true,
           src: null,
           med: null,
@@ -454,7 +454,7 @@ describe("AP totals", () => {
           n: 2,
         },
       ],
-      subs: [sub({ day: "2026-10-15", src: null, med: null, ads: false, ref: "www.google.com" })],
+      subs: [sub({ day: "2026-10-17", src: null, med: null, ads: false, ref: "www.google.com" })],
       money: [],
       checkouts: [],
     });
@@ -466,7 +466,7 @@ describe("AP totals", () => {
     });
     const raw = {
       visits: [],
-      starts: [{ day: "2026-10-15", known: true, ref: "www.bing.com", fb: true, n: 1 }],
+      starts: [{ day: "2026-10-17", known: true, ref: "www.bing.com", fb: true, n: 1 }],
       subs: [],
       money: [],
       checkouts: [],
@@ -474,7 +474,7 @@ describe("AP totals", () => {
       invites: [],
       quotes: [],
     };
-    expect(parseFacts(raw, "2026-10-15", "2026-10-15").starts[0]).toMatchObject({
+    expect(parseFacts(raw, "2026-10-17", "2026-10-17").starts[0]).toMatchObject({
       ref: "www.bing.com",
       fb: true,
     });

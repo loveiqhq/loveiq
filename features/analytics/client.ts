@@ -387,8 +387,8 @@ const getLandingVariant = (): LandingVariant | null => {
 
 /**
  * Mirror the white-landing arm into GA4 as a user-scoped property so every GA4
- * event is segmentable by it in Explorations (no per-event wiring). Consent-
- * gated like all GA4 traffic. Call once on landing-page mount. NOTE: register a
+ * event is segmentable by it in Explorations (no per-event wiring). Sent on
+ * every visit like all GA4 traffic, cookieless without consent. Call once on landing-page mount. NOTE: register a
  * custom dimension "landing_variant" (user-scoped) in GA4 Admin → Custom
  * definitions to surface it in reports (one-time config, not code).
  */
@@ -403,7 +403,7 @@ export const setLandingVariant = (variant: LandingVariant | null) => {
 /**
  * The email question test's arm (`survey-email-anonymous`), set the first time the
  * email question shows. PostHog carries it on every later event and GA4 takes it as a
- * user property (consent-gated like all GA4 traffic; register a user-scoped custom
+ * user property (cookieless without consent, like all GA4 traffic; register a user-scoped custom
  * dimension `contact_question_arm` to see it in GA4 reports). Same key as the server's
  * utm_tracker stamp, so every source groups by one name.
  */

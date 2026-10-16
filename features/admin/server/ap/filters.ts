@@ -29,11 +29,11 @@ export const ASSESSMENTS = [
 export type AssessmentFilter = (typeof ASSESSMENTS)[number]["value"];
 
 /**
- * The day the survey's new tracking went live: the intro cards' own steps (the intro, the
- * consent, Back and Skip), tablets, and the referrer and Meta's click id in the tracker.
- * A placeholder until the deploy: set it to the day those shipped.
+ * The first whole day of the survey's new tracking: the intro cards' own steps (the intro,
+ * the consent, Back and Skip), tablets, and the referrer and Meta's click id in the tracker.
+ * They went live mid-morning on 16 Oct 2026, so that day holds only part of them.
  */
-export const SURVEY_TRACKING_FROM = "2026-10-15";
+export const SURVEY_TRACKING_FROM = "2026-10-17";
 
 /**
  * Where a person came from, read off the survey's tracker (the first page they landed on).
