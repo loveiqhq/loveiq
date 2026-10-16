@@ -213,10 +213,38 @@ describe("get_business_numbers prints what the dashboard's own route returns", (
   });
 
   it("takes 'previous' from the period the dashboard reads, not the one asked for", async () => {
-    // Asked to the 31st on the 16th: the dashboard reads 6 to 16 Oct, and the 11 days before.
+    // Asked to the 31st on the 16th: the dashboard reads 6 to 16 Oct, and compares the whole
+    // days of it, 6 to 15 Oct, with the ten days before, as its own view of them does.
     const text = await tool({ since: "2026-10-06", until: "2026-10-31", compare_to: "previous" });
-    expect(text).toMatch(/versus 2026-09-25 to 2026-10-05 \(11 days/);
+    expect(text).toMatch(/versus 2026-09-26 to 2026-10-05 \(10 days/);
     expect(text).toContain("the period just before, as the dashboard compares it");
+    expect(linkQuery(text)).toBe("period=custom&from=2026-10-06&to=2026-10-15");
+    for (const t of await dashboard(linkQuery(text)))
+      expect(printed(text, t.label), t.label).toBe(expected(t));
+  });
+
+  it("a period still running: the figures so far, and a comparison of its whole days only", async () => {
+    // As it stands, today included: the dashboard's running view, which compares nothing.
+    const running = await tool({ since: "2026-10-10" });
+    expect(linkQuery(running)).toBe("period=custom&from=2026-10-10&to=2026-10-16");
+    const now = await dashboard(linkQuery(running));
+    expect(now.every((t) => t.prev === null)).toBe(true);
+    for (const t of now) expect(printed(running, t.label), t.label).toBe(expected(t));
+    // Compared: today's part-day is left out of both, and the dashboard's own view of those
+    // whole days shows the same comparison.
+    const compared = await tool({ since: "2026-10-10", compare_to: "previous" });
+    expect(compared).toContain("Today is still running, so the comparison is of the whole days");
+    expect(compared).toMatch(
+      /2026-10-10 to 2026-10-15 \(6 days, 6 with data\) versus 2026-10-04 to 2026-10-09/
+    );
+    expect(linkQuery(compared)).toBe("period=custom&from=2026-10-10&to=2026-10-15");
+    const whole = await dashboard(linkQuery(compared));
+    expect(whole.filter((t) => t.prev !== null).length).toBeGreaterThan(5);
+    for (const t of whole) expect(printed(compared, t.label), t.label).toBe(expected(t));
+    // Only today: no whole day to compare, so none is, and the answer says so.
+    const today = await tool({ since: "2026-10-16", compare_to: "previous" });
+    expect(today).toContain("No comparison: the period is only today");
+    expect(today).not.toContain(" versus ");
   });
 
   it("another period, earlier or later: the same figures, no change on a 'so far' one", async () => {
@@ -228,6 +256,11 @@ describe("get_business_numbers prints what the dashboard's own route returns", (
       [
         { since: "2026-09-20", until: "2026-09-30", compare_to: "2026-10-01..2026-10-12" },
         "period=custom&from=2026-10-01&to=2026-10-12",
+      ],
+      // One that reaches today is read to yesterday, its whole days.
+      [
+        { since: "2026-09-26", until: "2026-10-05", compare_to: "2026-10-06..2026-10-16" },
+        "period=custom&from=2026-10-06&to=2026-10-15",
       ],
     ] as const) {
       const text = await tool(args);

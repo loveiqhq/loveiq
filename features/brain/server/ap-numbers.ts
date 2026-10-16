@@ -111,6 +111,8 @@ export interface ApRead {
    * one whose "so far" figures can be read at the same age.
    */
   other: { f: ApFilters; facts: Facts | null; sameAge: boolean } | null;
+  /** What the reading left out of the comparison, and why. */
+  notes: string[];
   today: string;
   now: Date;
 }
@@ -125,19 +127,68 @@ export async function readAp(ask: ApAsk, now = new Date()): Promise<ApRead | nul
     since: ask.since ?? addDays(today, -(ask.days - 1)),
     until: ask.until ?? today,
   };
-  const f = apFilters(asked.since, asked.until, today);
+  let f = apFilters(asked.since, asked.until, today);
   if (beforeData(f)) return null;
-  // "previous" is the period just before the one the dashboard reads, not the one asked for:
-  // until 2026-10-31 asked on the 16th reads 1 to 16 Oct, and its previous is 15 to 30 Sep.
-  const before = previousRange(f);
-  const want = ask.other === "previous" ? { since: before.from, until: before.to } : ask.other;
-  const o = want ? apFilters(want.since, want.until, today) : null;
+  const notes: string[] = [];
+  const yesterday = addDays(today, -1);
+  let o: ApFilters | null = null;
+  let sameAge = false;
+  if (ask.other) {
+    /**
+     * A COMPARISON IS OF WHOLE DAYS. The dashboard compares nothing while today runs, because
+     * part of a day against whole ones reads as a fall every morning (comparisonRange), so a
+     * period reaching today is compared over its days to yesterday, and so is the other one.
+     */
+    if (f.to >= today) {
+      if (f.from > yesterday) {
+        notes.push(
+          "No comparison: the period is only today, which is still running, and the " +
+            "dashboard compares whole days only."
+        );
+      } else {
+        notes.push(
+          `Today is still running, so the comparison is of the whole days, ${f.from} to ` +
+            `${yesterday}, against the same number of days before: today's part-day is left out.`
+        );
+        f = apFilters(f.from, yesterday, today);
+      }
+    }
+    if (f.to < today) {
+      const before = previousRange(f);
+      if (ask.other === "previous") {
+        // The dashboard's own comparison (comparisonRange), worked out from the period it
+        // reads rather than the one asked for: until the 31st asked on the 16th compares 1 to
+        // 15 Oct with 16 to 30 Sep. Unclamped, as its route reads it.
+        o = { ...f, period: "custom", from: before.from, to: before.to, running: false };
+        sameAge = true;
+      } else if (ask.other.since > yesterday) {
+        notes.push("Nothing to compare with: the compared period has no whole day yet.");
+      } else {
+        const until = ask.other.until < today ? ask.other.until : yesterday;
+        o = apFilters(ask.other.since, until, today);
+        sameAge = o.from === before.from && o.to === before.to;
+        if (ask.other.until >= today)
+          notes.push(`The compared period is read to yesterday, ${yesterday}: today is running.`);
+      }
+      if (o && beforeData(o))
+        notes.push(
+          `The compared period ends before LoveIQ's records start on ${rangeLabel(DATA_START, DATA_START)}, so there is nothing to compare with.`
+        );
+    }
+  }
   const [facts, otherFacts] = await Promise.all([
     fetchFacts(f.from, f.to),
     o && !beforeData(o) ? fetchFacts(o.from, o.to) : Promise.resolve(null),
   ]);
-  const sameAge = o !== null && o.from === before.from && o.to === before.to;
-  return { f, facts, asked, other: o ? { f: o, facts: otherFacts, sameAge } : null, today, now };
+  return {
+    f,
+    facts,
+    asked,
+    other: o ? { f: o, facts: otherFacts, sameAge } : null,
+    notes,
+    today,
+    now,
+  };
 }
 
 /** The part of a `brain_daily_rollup` row read here. */
@@ -198,7 +249,7 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
   const extras = new Map(rollup.map((r) => [String(r.day).slice(0, 10), r]));
   const rows = dayRows(facts, extras);
   const period = { since: f.from, until: f.to };
-  const notes: string[] = [];
+  const notes: string[] = [...read.notes];
 
   let compared: ApView["other"] = null;
   if (other) {
@@ -230,11 +281,6 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
       notes.push(
         "survey_starts is not compared: one of the periods starts before every start was " +
           "recorded (18 Sep 2026, or within the last 30 days), as the dashboard leaves it."
-      );
-    }
-    if (!other.facts) {
-      notes.push(
-        `The compared period ends before LoveIQ's records start on ${rangeLabel(DATA_START, DATA_START)}, so there is nothing to compare with.`
       );
     }
     compared = { period: { since: other.f.from, until: other.f.to }, rows: otherRows };
@@ -305,10 +351,7 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
             "reports_opened and paid_so_far are read at the same age as this one's, and ad " +
             "spend only when both have every day of it."
           : ".") +
-        ` That period on the dashboard: ${apLink("assessment-a", other.f)}` +
-        (f.running
-          ? ". The dashboard shows no comparison while today is still running: today is part of a day."
-          : ".")
+        ` That period on the dashboard: ${apLink("assessment-a", other.f)}.`
       : null,
     ...notes,
     "",

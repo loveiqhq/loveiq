@@ -5070,7 +5070,8 @@ async function callTool(
           `ad_spend field, which means unknown, not zero.`
         : `No ad-spend data is available, so no day carries an ad_spend field.`;
 
-    if (comparison && "period" in comparison) {
+    // No whole day to compare (the period is only today): the day rows, and the header says why.
+    if (comparison && "period" in comparison && (!ap || ap.other)) {
       const otherRows: Array<{ day: string }> =
         ap?.other?.rows ??
         rows.filter((r) => r.day >= comparison.period.since && r.day <= comparison.period.until);
