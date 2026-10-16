@@ -198,12 +198,41 @@ export function sampleLine(r: ExperimentReadout, firstAt: number | null, now: nu
   return `${head} ${when(need, hi > lo)}${short.length ? ` Also, ${buyers}.` : ""}`;
 }
 
+/** Reads a window's finishers: from `since`, and before `until` when the test has ended. */
+type LoadOutcomes = (since: string, until?: string) => Promise<ArmOutcomes>;
+
+/**
+ * A finished pricing test's numbers over its own dates, each reader on the price list their
+ * quote was dealt then, not the one a later re-sync moved it to (`dealtArm`): on 14 Oct the
+ * 2.x test read as unmeasurable because its unpaid quotes now carry Pricing 3.0's arms.
+ * Null for any other axis, or a test without both dates.
+ */
+async function finalLine(
+  axis: ExperimentAxis | null,
+  from: string | null,
+  to: string | null,
+  load: LoadOutcomes
+): Promise<string | null> {
+  if (axis !== "pricing" || !from || !to) return null;
+  // Berlin days, as the registry reads them; `to` is the last day counted.
+  const outcomes = await load(
+    reportingDayStart(from).toISOString(),
+    reportingDayStart(isoDay(Date.parse(`${to}T00:00:00Z`) + DAY_MS)).toISOString()
+  );
+  const armOf = (id: number) => outcomes.bySubmission.get(id)?.pricing ?? null;
+  // A finished test's arms are retired ones, so they are named rather than left out.
+  const arms = [...new Set(outcomes.submissions.map((s) => armOf(s.id)))]
+    .filter((a): a is string => a !== null)
+    .sort();
+  const r = tallyAxis(outcomes, axis, armOf, { arms });
+  return (
+    `  Final numbers, ${from} to ${to}, each reader on the price list they were dealt then: ` +
+    `${armsLine(r)}. ${r.verdict}`
+  );
+}
+
 /** A running test's readout since its own start, by the same code /admin's overview runs. */
-async function liveLine(
-  e: Row,
-  now: number,
-  load: (since: string) => Promise<ArmOutcomes>
-): Promise<string> {
+async function liveLine(e: Row, now: number, load: LoadOutcomes): Promise<string> {
   if (!e.axis) {
     return "  No axis is recorded for it, so there are no stamped arms to read; its numbers are whatever was recorded with it.";
   }
@@ -223,7 +252,7 @@ async function liveLine(
 
 export async function listExperiments(
   now = Date.now(),
-  load: (since: string) => Promise<ArmOutcomes> = loadArmOutcomes
+  load: LoadOutcomes = loadArmOutcomes
 ): Promise<string> {
   const rows = await readRows("status=neq.archived&order=id.desc&limit=100");
   const running = rows.filter((e) => e.status === "active" || e.status === "paused");
@@ -253,9 +282,16 @@ export async function listExperiments(
   out.push("", "FINISHED");
   for (const e of done) {
     out.push(describe(e), `  Outcome: ${e.outcome ?? e.result_summary ?? "not recorded"}`);
+    const final = await finalLine(e.axis, e.start_date, e.decision_date, load);
+    if (final) out.push(final);
   }
   // The tests that ended before the registry existed, in the words /admin prints for them.
-  for (const c of CONCLUDED) out.push(`- ${c.title} (before the registry): ${c.outcome}`);
+  for (const c of CONCLUDED) {
+    out.push(`- ${c.title} (before the registry): ${c.outcome}`);
+    const w = c.window;
+    const final = w ? await finalLine(w.axis, w.from, w.to, load) : null;
+    if (final) out.push(final);
+  }
   out.push(
     "",
     "Before the next test starts, record it with record_experiment: what it should change and " +
