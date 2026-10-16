@@ -1,9 +1,5 @@
 import type { FC } from "react";
-import {
-  REPORT_V4_INTRODUCTION,
-  REPORT_V4_PARTS,
-  REPORT_V4_WHAT_SHAPED,
-} from "@/data/report3-archetype-page";
+import { REPORT_V4_INTRODUCTION, REPORT_V4_PARTS } from "@/data/report3-archetype-page";
 import V3Methodology from "./V3Methodology";
 import V4Chapter from "./V4Chapter";
 import V4PartHeading from "./V4PartHeading";
@@ -45,16 +41,13 @@ const V4Part1: FC = () => (
       </div>
     </V4Chapter>
 
-    {/* 1:185 */}
+    {/* 1:185 — the slimmed report (1665:3300, 16.10) keeps only the heading: the deck
+     * below says what shaped the report. */}
     <V4Chapter
       title="What Shaped This Report"
       collapsible={false}
       sectionId="what_shaped_this_report"
-    >
-      <p className="rv3-prose">
-        <V4Runs runs={REPORT_V4_WHAT_SHAPED} />
-      </p>
-    </V4Chapter>
+    />
 
     {/* 1:195 — the card deck, source cards and closing paragraph. `chrome="deck"`
      * drops this component's own heading and intro, which V4 promotes into the

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  REPORT_V4_SUMMARY,
-  REPORT_V4_TOP_THREE_HEADING,
-  REPORT_V4_TOP_THREE_LEDE,
-} from "@/data/report3-archetype-page";
+import { REPORT_V4_SUMMARY, REPORT_V4_TOP_THREE_HEADING } from "@/data/report3-archetype-page";
 import { REPORT_V4_TYPICAL_BELIEFS } from "@/data/report3-typical-beliefs";
 
 /**
@@ -16,12 +12,7 @@ describe("top-three heading (1:494, comment 1939883544)", () => {
     expect(REPORT_V4_TOP_THREE_HEADING).toBe("3 Highest Scoring Archetypes");
   });
 
-  it("keeps the lede 1:496 as drawn, one bold run", () => {
-    expect(REPORT_V4_TOP_THREE_LEDE.map((p) => p.map((r) => r.text).join(""))).toEqual([
-      "No one fits a single sexual personality or archetype.",
-      "These are your top 3 archetypes out of 14, ranked by how closely they match your profile.",
-    ]);
-  });
+  // Its lede (1:496) went with the slimmed report, 16.10: v4Slim1610.test.tsx.
 });
 
 describe("Part II summary (1:741, comment 1939884155)", () => {

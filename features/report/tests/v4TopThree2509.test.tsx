@@ -9,51 +9,45 @@ import { reportThemes } from "@features/report/ui/reportTheme";
 import { report3ArchetypeBlurbs, report4ArchetypeBlurbs } from "@/data/report3-archetype-blurbs";
 
 /**
- * "3 Highest Scoring Archetypes" (Figma 1:493), review round 25.09.
+ * "3 Highest Scoring Archetypes" (Figma 1:493), review round 25.09, slimmed 16.10.
  *
  * Sanjin wrote a description for every archetype (Google Doc
  * "Archetype_Descriptions_Constellations", 1fZDo_fH…, 25.09) and Mark put them in the
  * frame: "Updated text and had to increase the size of some elements to have more
- * space for text" (1941922555, Fatih tagged 1941968008). The frame's three rows are
- * 191 / 184.08 / 184 tall, 10 apart, with the description at 12/19.2 in a 100px
- * track (five lines).
+ * space for text" (1941922555, Fatih tagged 1941968008). The slimmed report cut each
+ * to one line (Sanjin's "Slimmed_Archetype_Descriptions_Constellations", 1ON0pxZ1…,
+ * 16.10; frame 1665:3553): the lead row is 141 tall, the description at 12/19.2 in a
+ * 50px track (two lines), rows 10 apart.
  */
 
 const V3_CSS = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
 
 afterEach(cleanup);
 
-/** The doc, word for word. Emotional Voyeur follows the doc, not the older draft
- * still standing in 1:553 (ruling 1). */
+/** The slimmed doc, word for word: each line is the first sentence of the 25.09
+ * description it replaces. Emotional Voyeur follows the doc, not the shorter line in
+ * the slimmed frame (1665:3553) or the older draft in 1:553 (ruling 1). */
 const DOC: Record<string, string> = {
-  "Sensual Connector":
-    "Closeness, trust, and slow, attentive touch make sex feel most satisfying. Desire grows from feeling safe and connected, and tends to fade when sex feels rushed or distant.",
-  "Spark Seeker":
-    "Sex comes alive through play, tension, and novelty. Flirting, pursuit, and surprise build desire, while routine or predictability can quickly dull it.",
-  "Relational Nurturer":
-    "Sex feels most fulfilling when care, warmth, and pleasure go both ways. Desire grows through giving and receiving attentive care, and fades when they feel taken for granted.",
-  "Radiant Performer":
-    "Feeling seen, desired, and admired is central to satisfying sex. Attention, praise, and visible enthusiasm build desire, while indifference or disengagement can quickly diminish it.",
+  "Sensual Connector": "Closeness, trust, and slow, attentive touch make sex feel most satisfying.",
+  "Spark Seeker": "Sex comes alive through play, tension, and novelty.",
+  "Relational Nurturer": "Sex feels most fulfilling when care, warmth, and pleasure go both ways.",
+  "Radiant Performer": "Feeling seen, desired, and admired is central to satisfying sex.",
   "Explorer of Edges":
-    "Intensity, exploration, and experiences a little outside the ordinary are where sex feels most exciting. Desire builds through novelty, power, and pushing boundaries, and fades when sex feels tame or repetitive.",
-  "Curious Apprentice":
-    "Curiosity, openness, and room to learn make sex feel most rewarding. Guidance and exploration strengthen desire, while judgment or pressure to already know can shut it down.",
-  "Spiritual Lover":
-    "Sex feels most meaningful when it carries emotional depth and significance. Presence, vulnerability, and mindful touch deepen desire, while mechanical or disconnected sex tends to weaken it.",
-  "Minimalist Companion":
-    "Simple, calm, pressure-free sex feels most natural. Desire emerges through comfort and gentle closeness, and retreats when sex begins to feel demanding or overly intense.",
+    "Intensity, exploration, and experiences a little outside the ordinary are where sex feels most exciting.",
+  "Curious Apprentice": "Curiosity, openness, and room to learn make sex feel most rewarding.",
+  "Spiritual Lover": "Sex feels most meaningful when it carries emotional depth and significance.",
+  "Minimalist Companion": "Simple, calm, pressure-free sex feels most natural.",
   "Emotional Voyeur":
-    "Anticipation, fantasy, and room to observe are at the heart of what makes sex compelling. Watching and imagining build desire, while having attention turned too directly onto them can make it fade.",
+    "Anticipation, fantasy, and room to observe are at the heart of what makes sex compelling.",
   "Authority Conductor":
-    "Clear structure and defined power dynamics make sex feel most satisfying. Desire strengthens through leading and directing, and weakens when the dynamic feels chaotic or out of their hands.",
+    "Clear structure and defined power dynamics make sex feel most satisfying.",
   "Loyal Ritualist":
-    "Familiarity, stability, and a trusted rhythm create the conditions where sex feels best. Consistency and shared rituals support desire, while sudden or pressured change can disrupt it.",
-  "Tender Devotee":
-    "Feeling wanted, reassured, and appreciated makes sex feel deeply satisfying. Praise and affection nourish desire, while judgment or rejection can quickly diminish it.",
+    "Familiarity, stability, and a trusted rhythm create the conditions where sex feels best.",
+  "Tender Devotee": "Feeling wanted, reassured, and appreciated makes sex feel deeply satisfying.",
   "Analytical Sexualist":
-    "Sex is most satisfying when there is space to understand what works and improve it together. Feedback and experimentation build desire, while confusion or difficulty reading what is happening can dampen it.",
+    "Sex is most satisfying when there is space to understand what works and improve it together.",
   "Quiet Withdrawer":
-    "Patience, gentleness, and freedom from pressure create the conditions where sex feels best. Safety and quiet closeness allow desire to emerge, while feeling pushed or overwhelmed makes it recede.",
+    "Patience, gentleness, and freedom from pressure create the conditions where sex feels best.",
 };
 
 describe("report4ArchetypeBlurbs — Sanjin's descriptions, all fourteen", () => {
@@ -131,15 +125,15 @@ describe("reportV3.css — the rows Mark enlarged (1:498)", () => {
     expect(blurb).toMatch(/line-height:\s*19\.2px/);
   });
 
-  it("gives every row the frame's tracks: 26, at least 100 for five lines, 17.08", () => {
+  it("gives every row the slimmed frame's tracks: 26, at least 50 for two lines, 17.08", () => {
     expect(last(".rv3 .rv4-top3 .rv3-top3__row {")).toMatch(
-      /grid-template-rows:\s*26px minmax\(100px, auto\) 17\.08px/
+      /grid-template-rows:\s*26px minmax\(50px, auto\) 17\.08px/
     );
   });
 
   it("pads the rows as drawn and keeps them 10 apart", () => {
     expect(last(".rv3 .rv4-top3 .rv3-top3__row {")).toMatch(/padding:\s*14px 12px 15px/);
-    // The lead row is fixed at 191 in the frame: 14 + 1px ring on top, the rest below.
+    // The lead row is fixed at 141 in the slimmed frame: 14 + 1px ring on top, the rest below.
     expect(last(".rv3 .rv4-top3 .rv3-top3__row.is-lead {")).toMatch(
       /padding:\s*14px 12px 19\.92px/
     );
