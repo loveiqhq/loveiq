@@ -5,12 +5,24 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
-function getSafeNextPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+/**
+ * Where to go after signing in: a path on this site, or "/". Browsers read "/\evil.com" as
+ * "//evil.com" and strip tabs and newlines, so a prefix check let those leave the site. The
+ * path is resolved against a fixed origin, and the RESOLVED path must itself be a plain path:
+ * dot segments can resolve to one that starts with "//" ("/.//evil.com" becomes "//evil.com"),
+ * which router.push reads as another site.
+ */
+export function getSafeNextPath(value: string | null) {
+  const base = "https://staging.invalid";
+  if (!value || !value.startsWith("/")) return "/";
+  try {
+    const url = new URL(value, base);
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    const plain = url.origin === base && !path.startsWith("//") && !path.includes("\\");
+    return plain && new URL(path, base).origin === base ? path : "/";
+  } catch {
     return "/";
   }
-
-  return value;
 }
 
 export default function StagingLoginForm() {
