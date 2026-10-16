@@ -42,17 +42,36 @@ const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
  * A series' trend as the design words it: the least-squares line's change over the range,
  * grey under 3%, else green or red by which way is good (down, for a cost).
  */
+/**
+ * The fitted line's change as the design writes it ("↗ +12% trend"): its end over its start.
+ * A line that starts at or near nothing (under a tenth of the series' average, as a range
+ * reaching back before launch does) has no meaningful percentage: it says rising or falling.
+ */
+export function trendText(
+  from: number,
+  to: number,
+  values: Array<number | null>,
+  lowerBetter = false
+): { text: string; tone: Tone } {
+  if (Math.abs(to - from) < 1e-9) return { text: "→ flat", tone: "flat" };
+  const up = to > from;
+  const tone: Tone = up !== lowerBetter ? "good" : "bad";
+  const known = values.filter((v): v is number => v !== null && Number.isFinite(v));
+  const mean = known.length ? known.reduce((a, v) => a + v, 0) / known.length : 0;
+  if (from <= 0 || from < Math.abs(mean) * 0.1) {
+    return { text: up ? "↗ rising" : "↘ falling", tone };
+  }
+  const change = ((to - from) / from) * 100;
+  return {
+    text: `${up ? "↗ +" : "↘ −"}${Math.abs(change).toFixed(0)}% trend`,
+    tone: Math.abs(change) < 3 ? "flat" : tone,
+  };
+}
+
 function trendOf(s: ChartSeries): { text: string; tone: Tone } {
   const f = linearFit(s.values);
   if (!f) return { text: "", tone: "flat" };
-  const base = Math.abs(f.from) > 1e-9 ? Math.abs(f.from) : null;
-  if (base === null || Math.abs(f.to - f.from) < 1e-9) return { text: "→ flat", tone: "flat" };
-  const change = ((f.to - f.from) / base) * 100;
-  const up = change > 0;
-  return {
-    text: `${up ? "↗ +" : "↘ −"}${Math.abs(change).toFixed(0)}% trend`,
-    tone: Math.abs(change) < 3 ? "flat" : up !== Boolean(s.lowerBetter) ? "good" : "bad",
-  };
+  return trendText(f.from, f.to, s.values, Boolean(s.lowerBetter));
 }
 
 /** A rate is scaled in percent, as the design draws it (an empty rate axis tops at 1%, not 100%). */
@@ -368,8 +387,7 @@ function TrendCell({ row }: { row: AssessmentRow }) {
   const top = Math.max(...values) || 1;
   const X = (i: number) => (k > 1 ? (i / (k - 1)) * 120 : 60).toFixed(1);
   const Y = (v: number) => (30 - (Math.max(0, Math.min(v, top)) / top) * 28).toFixed(1);
-  const change = from ? ((to - from) / Math.abs(from)) * 100 : 0;
-  const tone: Tone = Math.abs(change) < 3 ? "flat" : change > 0 ? "good" : "bad";
+  const t = trendText(from, to, values);
   return (
     <span role="cell" className="flex flex-col justify-center gap-0.5 px-3.5 py-2">
       <svg
@@ -397,9 +415,8 @@ function TrendCell({ row }: { row: AssessmentRow }) {
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <span className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>
-        {change >= 0 ? "↗ +" : "↘ −"}
-        {Math.abs(change).toFixed(0)}% trend · {fmt("count", from)} → {fmt("count", to)} / day
+      <span className={`text-[11px] font-bold ${TONE_TEXT[t.tone]}`}>
+        {t.text} · {fmt("count", from)} → {fmt("count", to)} / day
       </span>
     </span>
   );

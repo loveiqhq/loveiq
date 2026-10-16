@@ -11,7 +11,7 @@ vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
 vi.mock("@features/admin/ui/ap/useApFilters", () => ({ useApFilters: () => ({ params: {} }) }));
 vi.mock("@features/admin/ui/ap/ApFilterBar", () => ({ default: () => null }));
 
-import ApFocus from "@features/admin/ui/ap/ApFocus";
+import ApFocus, { trendText } from "@features/admin/ui/ap/ApFocus";
 
 const DAYS = ["1 Oct", "2 Oct", "3 Oct", "4 Oct", "5 Oct", "6 Oct", "7 Oct"];
 const line = (from: number, step: number) => DAYS.map((_, i) => from + i * step);
@@ -410,5 +410,16 @@ describe("the Dashboard as drawn", () => {
         fireEvent.change(select, { target: { value: grain } });
       expect(container.innerHTML).not.toMatch(/NaN|undefined|Infinity/);
     }
+  });
+
+  it("a trend that starts at or near nothing says rising or falling, not a percentage", () => {
+    expect(trendText(10, 12, [10, 11, 12])).toEqual({ text: "↗ +20% trend", tone: "good" });
+    expect(trendText(10, 10.2, [10, 10, 10])).toEqual({ text: "↗ +2% trend", tone: "flat" });
+    // A range from before launch: the line starts near nothing.
+    expect(trendText(0.03, 20, [0, 0, 0, 30, 30])).toEqual({ text: "↗ rising", tone: "good" });
+    expect(trendText(-2, 20, [0, 30])).toEqual({ text: "↗ rising", tone: "good" });
+    expect(trendText(5, 5, [5, 5])).toEqual({ text: "→ flat", tone: "flat" });
+    // Lower is better: a fall is good.
+    expect(trendText(4, 2, [4, 2], true)).toEqual({ text: "↘ −50% trend", tone: "good" });
   });
 });
