@@ -46,7 +46,6 @@ import {
 } from "@features/admin/server/ap/metrics";
 import { wholeDays, type DayRow, type Period } from "@features/brain/server/compare";
 import type { AdCost } from "@features/brain/server/ingest/analytics";
-import type { SaleGroup } from "@features/brain/server/sales";
 import { reportingDay } from "@shared/time/reporting-day";
 
 /** Where the team reads it. Every page asks for the team's sign-in. */
@@ -64,17 +63,15 @@ export const NOT_ON_DASHBOARD = ["reports_created", "invites_sent", "top_sources
 const AGE_KEYS = ["reports_opened", "paid_so_far"] as const;
 const AGE_TILES: ReadonlySet<string> = new Set(["pay-cvr", "open-rate"]);
 
-/** Said in place of the dashboard's figures when they could not be read. */
-export const AP_UNREADABLE =
-  "THE DASHBOARD'S NUMBERS COULD NOT BE READ just now, so these are the old daily rollup's. " +
-  "They count differently from AP-Analytics (UTC days, staff included, survey starts only " +
-  "after the cookie banner, so the visit-to-start rate reads far lower), so never quote them " +
-  "as the dashboard's. Asking again in a minute may reach the dashboard's.\n\n";
-
-export const AP_SALES_UNREADABLE =
-  "THE DASHBOARD'S SALES COULD NOT BE READ just now, so these are counted the old way, from " +
-  "the payments' own records (UTC days, staff included, net of refunds): never quote them as " +
-  "the dashboard's.\n\n";
+/**
+ * Said, and nothing else, when the dashboard's numbers cannot be read. No other counting stands
+ * in for them: one counted another way reads as the dashboard's, and a wrong number is worse
+ * than none when the team decides from it. `what` is what the outage must not be taken for.
+ */
+export const apUnreadable = (what = "a result"): string =>
+  "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+  `give, and none counted another way in their place. This is an outage, not ${what}. Ask ` +
+  "again in a few minutes.";
 
 /**
  * Said for a period that ends before LoveIQ's first records: there is nothing to count, and a
@@ -414,6 +411,22 @@ export function apView(read: ApRead, rollup: RollupDay[], ad: AdCost): ApView {
     header: lines.filter((l): l is string => l !== null).join("\n") + "\n",
   };
 }
+
+/**
+ * What get_business_numbers' `group_by` splits a period's sales by. A sale's plan, price list,
+ * device and source live in its payment's metadata, which query_product_data cannot select, so
+ * "revenue by plan" had no answer before this (asked four times, Mark's first session included).
+ */
+export const SALE_GROUPS = [
+  "plan",
+  "price_list",
+  "device",
+  "source",
+  "country_tier",
+  "landing",
+  "month",
+] as const;
+export type SaleGroup = (typeof SALE_GROUPS)[number];
 
 /** What each sale is grouped by, as the dashboard names it. */
 const GROUP_LABEL: Record<SaleGroup, (m: Facts["money"][number]) => string> = {

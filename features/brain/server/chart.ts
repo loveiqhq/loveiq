@@ -14,13 +14,15 @@
  * signature, so it opens in any browser without a login and pastes into a doc or a deck,
  * and it is exactly the picture the tool attaches.
  */
+import { apUnreadable } from "@features/brain/server/ap-numbers";
 import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
 import {
   BASELINE_DAYS,
   METRICS,
   loadSeries,
   partialDay,
-  rollupOnly,
+  utcNote,
+  utcOpen,
   type DaySeries,
 } from "@features/brain/server/jumps";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -46,6 +48,8 @@ export interface ChartMetric {
   };
   /** Read from GA4, which misses visitors who decline cookies. */
   ga4?: boolean;
+  /** The rollup's own figure, by UTC day: blank while that day runs (jumps.ts utcOpen). */
+  utc?: boolean;
 }
 
 /** Legend names in the reader's words, like the digest's titles: no arrows, no "CVR". */
@@ -73,6 +77,7 @@ export const CHART_METRICS: ChartMetric[] = [
     of: m.rate ? m.rate.num : (m.count ?? (() => null)),
     rate: m.rate && { den: m.rate.den, minDen: m.rate.minDen, denLabel: m.rate.denLabel },
     ga4: FROM_GA4.has(m.id),
+    utc: m.utc,
   })),
   {
     id: "revenue",
@@ -236,6 +241,7 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     loadSeries(until, Math.max(0, days - BASELINE_DAYS - 1)),
     wantsAds ? adCostByDay().catch(() => null) : null,
   ]);
+  if (!loaded) return refuse(apUnreadable("a flat line"));
   const series: ChartDay[] = loaded
     .slice(-days)
     .map((d) =>
@@ -255,8 +261,15 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
     : figA
       ? `Over the ${days} days: ${figA.full}`
       : "Nothing recorded on these days";
+  // Reports opened and paid are blank on a day whose UTC day runs on: said as that, not a gap.
+  const at = new Date(now);
+  const open = metrics.some((m) => m.utc)
+    ? series.filter((d) => utcOpen(d.day, at)).map((d) => d.day)
+    : [];
   // Only a chart that has a gap explains one: our own counts cover every day.
-  const hasGap = [first, second ?? []].some((pts) => pts.some((p) => p.value === null));
+  const hasGap = [first, second ?? []].some((pts) =>
+    pts.some((p) => p.value === null && !open.includes(p.day))
+  );
   const gap = !hasGap
     ? ""
     : a.rate
@@ -265,12 +278,10 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
         : `a gap is a day with fewer than ${a.rate.minDen} ${a.rate.denLabel}`
       : "a gap is a day with no record";
   const ga4 = metrics.some((m) => m.ga4);
-  // What was served: the dashboard's counts by Berlin day, or, when its facts could not be
-  // read, the old rollup's alone, by UTC day (jumps.ts rollupOnly).
-  const fallback = rollupOnly(loaded).trim();
   const footnote = [
-    fallback ? "daily, UTC" : "daily",
+    "daily",
     gap,
+    open.length ? "a day not over yet in UTC is left blank" : "",
     a.unit === "money" ? "amounts in EUR" : "",
     ga4 ? "GA4 misses visitors who decline cookies" : "",
   ]
@@ -299,11 +310,11 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
   const url = u.toString();
 
   const notes = [
-    fallback ||
-      "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
-        "dashboard counts them, by Berlin day; reports opened and paid are the daily rollup's, " +
-        "by UTC day.",
-    partialDay(loaded, until, new Date(now)),
+    "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
+      "dashboard counts them, by Berlin day; reports opened and paid are the daily rollup's, " +
+      "by UTC day.",
+    partialDay(until, false, at),
+    utcNote(open),
     wantsAds && !ad ? "Google Ads spend could not be read just now, so it is left blank." : "",
     ga4
       ? "GA4 misses visitors who decline cookies, so it reads lower than our own visitor count."

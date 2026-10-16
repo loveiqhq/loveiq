@@ -183,6 +183,29 @@ function writes(): Array<Record<string, unknown>> {
     );
 }
 
+/**
+ * The database with the AP-Analytics dashboard's facts in it (ap_facts): `visitors` a day and
+ * nothing else counted, every other read an empty list. Without them the numbers tools say the
+ * dashboard could not be read, and serve nothing else.
+ */
+function withFacts(visitors: (day: string) => number = () => 200) {
+  return async (path: string, init?: RequestInit) => {
+    if (path !== "/rest/v1/rpc/ap_facts")
+      return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
+    const { p_from, p_to } = JSON.parse(String(init?.body));
+    const days: string[] = [];
+    for (let t = Date.parse(`${p_from}T00:00:00Z`); t <= Date.parse(`${p_to}T00:00:00Z`);)
+      (days.push(new Date(t).toISOString().slice(0, 10)), (t += 86_400_000));
+    const facts = {
+      visits: days.map((day) => ({ day, src: null, n: visitors(day) })),
+      ...{ starts: [], subs: [], money: [], checkouts: [], intro: [], invites: [], quotes: [] },
+    };
+    return { ok: true, status: 200, headers: new Headers(), json: async () => facts };
+  };
+}
+/** The facts are cached for five minutes per range: none may reach another test. */
+const forgetFacts = async () => (await import("@features/admin/server/ap/facts")).clearFactsCache();
+
 function rpc(body: unknown, token: string | null = TOKEN): Request {
   return new Request("https://www.loveiq.org/api/mcp", {
     method: "POST",
@@ -1070,12 +1093,7 @@ describe("/api/mcp", () => {
       beforeEach(() => {
         process.env.NEXT_PUBLIC_SITE_URL = "https://loveiq.example";
         process.env.STRATEGY_DIGEST_SIGNING_SECRET = "a-test-secret-of-some-length";
-        mockSupabaseFetch.mockResolvedValue({
-          ok: true,
-          status: 200,
-          headers: new Headers(),
-          json: async () => [],
-        });
+        mockSupabaseFetch.mockImplementation(withFacts());
         mockRollup.mockResolvedValue(
           Array.from({ length: 60 }, (_, i) => ({
             day: new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10),
@@ -1089,12 +1107,13 @@ describe("/api/mcp", () => {
           }))
         );
       });
-      afterEach(() => {
+      afterEach(async () => {
         restore("NEXT_PUBLIC_SITE_URL", saved.site);
         restore("STRATEGY_DIGEST_SIGNING_SECRET", saved.secret);
         mockSupabaseFetch.mockReset();
         mockFetch.mockReset();
         mockRollup.mockReset();
+        await forgetFacts();
       });
 
       it("answers with the numbers and the link first, then the picture the link names", async () => {
@@ -1492,24 +1511,26 @@ describe("/api/mcp", () => {
             top_sources: { direct: day === spike ? 860 : 160, google: 40 },
           };
         });
-      const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      // In the day, Berlin's yesterday and UTC's are one day.
+      const yesterday = "2026-10-15";
 
       beforeEach(() => {
-        mockSupabaseFetch.mockResolvedValue({
-          ok: true,
-          status: 200,
-          headers: new Headers(),
-          json: async () => [],
-        });
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-10-16T10:00:00Z"));
+        mockSupabaseFetch.mockImplementation(withFacts());
         mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => [] });
       });
-      afterEach(() => {
+      afterEach(async () => {
+        vi.useRealTimers();
         mockSupabaseFetch.mockReset();
         mockFetch.mockReset();
         mockRollup.mockReset();
+        await forgetFacts();
       });
 
       it("finds yesterday's jump by default and says where it came from, and that it is not proof", async () => {
+        // The dashboard's visitors jump; the rollup's sources say where from.
+        mockSupabaseFetch.mockImplementation(withFacts((day) => (day === yesterday ? 900 : 200)));
         mockRollup.mockResolvedValue(rollup(yesterday));
         const r = await call({});
         expect(r.isError).toBeFalsy();
@@ -5347,6 +5368,7 @@ describe("/api/mcp", () => {
     it("records a non-search tool too, keyed on its own meaningful argument", async () => {
       // Every tool is recorded, not just the one that happens to have a `query`.
       mockRollup.mockResolvedValue([{ day: "2026-09-01", revenue: 10 }]);
+      mockSupabaseFetch.mockImplementation(withFacts());
       await POST(
         rpc({
           jsonrpc: "2.0",
@@ -5361,9 +5383,11 @@ describe("/api/mcp", () => {
       // No query/id/table/path on this tool, so the name is the legible fallback.
       expect(row.question).toBe("get_business_numbers");
       // Counted for every tool that has a natural count, so the column does not
-      // read as "this call returned nothing" when it means "nobody recorded it".
-      expect(row.source_count).toBe(1);
+      // read as "this call returned nothing" when it means "nobody recorded it": a day row
+      // for each of the 7 days.
+      expect(row.source_count).toBe(7);
       expect(row.top_score).toBeNull();
+      await forgetFacts();
     });
   });
 
@@ -7412,6 +7436,11 @@ describe("/api/mcp", () => {
     beforeEach(() => {
       mockRollup.mockReset().mockResolvedValue(daysBack(120));
       mockAdCost = { byDay: new Map(), from: null, to: null };
+      mockSupabaseFetch.mockImplementation(withFacts());
+    });
+    afterEach(async () => {
+      mockSupabaseFetch.mockReset();
+      await forgetFacts();
     });
 
     /**
@@ -7428,22 +7457,6 @@ describe("/api/mcp", () => {
       // A day just outside the range must not be in the payload.
       const outside = new Date(Date.now() - 11 * 86_400_000).toISOString().slice(0, 10);
       expect(text).not.toContain(`"${outside}"`);
-    });
-
-    /**
-     * THE CLAMP WARNING MUST NOT FIRE FOR AN ORDINARY MONTH.
-     *
-     * `asked` is how many days back the rollup was told to go; with a range, the kept
-     * slice is SUPPOSED to be smaller. Comparing the two would announce "the range was
-     * reduced — this IS a truncation of the request" on every month query, which is a
-     * confident false alarm about the one thing that branch exists to report honestly.
-     */
-    it("does not cry truncation when a range is simply narrower than the fetch", async () => {
-      const since = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
-      const until = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
-      const text = (await call({ since, until })).content[0].text;
-      expect(text).not.toMatch(/IS a truncation/);
-      expect(text).not.toMatch(/ceiling/);
     });
 
     /** A range outside the data is a correct answer about an empty period, not a fault. */
@@ -7473,13 +7486,6 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toMatch(/says nothing about how much history exists/);
       // The one sentence that was false, in the words it was false in.
       expect(r.content[0].text).not.toMatch(/rollup has 1 days/);
-    });
-
-    it("still reports a genuinely empty rollup as a fault", async () => {
-      mockRollup.mockResolvedValue([]);
-      const r = await call({ days: 30 });
-      expect(r.isError).toBe(true);
-      expect(r.content[0].text).toMatch(/fault in the query/);
     });
 
     /**
@@ -7522,63 +7528,12 @@ describe("/api/mcp", () => {
             content: Array<{ text: string }>;
           }>
       );
-    const payment = (day: string, plan: string, amount: string, device = "iOS") => ({
-      amount,
-      refund_amount: null,
-      currency: "EUR",
-      payment_date_time: `${day}T12:00:00Z`,
-      created_date_time: `${day}T11:00:00Z`,
-      plan,
-      price_list: "B3",
-      device,
-      source: "google",
-      country_tier: "tier_1",
-      landing: null,
-    });
 
     beforeEach(() => {
       mockRollup.mockReset();
-      mockSupabaseFetch.mockReset().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => [
-          payment("2026-10-02", "full_report", "4.99"),
-          payment("2026-10-03", "all_reports", "6.99", "Desktop"),
-          payment("2026-10-03", "full_report", "0"),
-          payment("2026-08-01", "full_report", "29.00"),
-        ],
-      });
+      mockSupabaseFetch.mockReset().mockImplementation(withFacts());
     });
-
-    it("answers 'revenue by plan' for a period in one call, from the payments, not the day rows", async () => {
-      const r = await call({ group_by: ["plan"], since: "2026-10-01", until: "2026-10-31" });
-      expect(r.isError).toBeFalsy();
-      const text = r.content[0]!.text;
-      expect(text).toContain(
-        "Sales by plan, 2026-10-01 to 2026-10-31 (UTC days, by the day paid): 2 sales, EUR 11.98, and 1 EUR 0 comp."
-      );
-      expect(text).toContain("- all_reports: 1 sale, EUR 6.99");
-      expect(text).toContain("- full_report: 1 sale, EUR 4.99 (average EUR 4.99); 1 comp");
-      expect(mockRollup).not.toHaveBeenCalled();
-      // The dashboard's sales are asked first; this mock answers no ap_facts, so the payments'
-      // own records answer, and say they are not the dashboard's (brain-ap-numbers.test.ts).
-      expect(String(mockSupabaseFetch.mock.calls[0]![0])).toBe("/rest/v1/rpc/ap_facts");
-      expect(String(mockSupabaseFetch.mock.calls[1]![0])).toMatch(/^\/rest\/v1\/payment\?/);
-      expect(text).toContain("THE DASHBOARD'S SALES COULD NOT BE READ");
-    });
-
-    it("takes a single key, and two at once", async () => {
-      const one = await call({ group_by: "device", since: "2026-10-01" });
-      expect(one.content[0]!.text).toContain("- Desktop: 1 sale, EUR 6.99");
-      const two = await call({ group_by: ["plan", "device"], since: "2026-10-01" });
-      expect(two.content[0]!.text).toContain("- all_reports · Desktop: 1 sale");
-    });
-
-    it("counts back from today by `days` when no range is given", async () => {
-      const r = await call({ group_by: ["plan"], days: 3650 });
-      // The August sale is inside ten years; a 30-day default would have dropped it.
-      expect(r.content[0]!.text).toContain("3 sales, EUR 40.98");
-    });
+    afterEach(forgetFacts);
 
     it("refuses an unknown key, three keys, or a comparison, before reading anything", async () => {
       for (const args of [
@@ -7596,7 +7551,7 @@ describe("/api/mcp", () => {
       );
       // The only reads are the call log's own writes.
       expect(
-        mockSupabaseFetch.mock.calls.some(([p]) => String(p).startsWith("/rest/v1/payment"))
+        mockSupabaseFetch.mock.calls.some(([p]) => String(p) === "/rest/v1/rpc/ap_facts")
       ).toBe(false);
     });
 
@@ -7688,6 +7643,20 @@ describe("/api/mcp", () => {
   });
 
   describe("get_business_numbers must not truncate silently", () => {
+    // The dashboard's Berlin days, i whole days before today.
+    const berlinDay = (i: number) =>
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(
+        new Date(Date.now() - i * 86_400_000)
+      );
+    beforeEach(() => {
+      mockSupabaseFetch.mockImplementation(withFacts());
+    });
+    afterEach(async () => {
+      mockSupabaseFetch.mockReset();
+      mockAdCost = { byDay: new Map(), from: null, to: null };
+      await forgetFacts();
+    });
+
     it("passes the full requested range through, with no 120-day ceiling", async () => {
       // The old code did Math.min(120, ...), so a caller asking for a year got 120
       // days and no indication — which reads as "that is all the history there is".
@@ -7704,56 +7673,6 @@ describe("/api/mcp", () => {
       expect(mockRollup).toHaveBeenLastCalledWith(1201);
     });
 
-    it("says when fewer days came back than were asked for", async () => {
-      mockRollup.mockResolvedValue([{ day: "2026-08-28" }, { day: "2026-08-27" }]);
-      const res = await POST(
-        rpc({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "get_business_numbers", arguments: { days: 400 } },
-        })
-      );
-      const text = (await res.json()).result.content[0].text as string;
-      expect(text).toMatch(/400 days were asked for and 4000 is the database/);
-      // It used to assert "Not a truncation". That sentence was false in the only case
-      // that reaches it: the rollup returns one row per day in range whatever the
-      // activity, so a short count means the 4000-day ceiling fired, and telling the
-      // caller there is simply no older data makes the company look younger than it is.
-      expect(text).toMatch(/IS a truncation of the request/);
-      expect(text).not.toMatch(/Not a truncation/);
-    });
-
-    /**
-     * THE CLAMP USED TO BE UNREACHABLE, so the one thing it had to report never appeared.
-     *
-     * It was an ALTERNATIVE branch to the character-ceiling notice, and in production the
-     * two always compose: `asked` above 4000 returns 4000 rows, and 4000 rows never fit
-     * the character ceiling. So `days: 999999` was reduced twice and the answer mentioned
-     * only the second reduction.
-     */
-    it("names BOTH reductions when the range was clamped and then truncated", async () => {
-      // 4000 rows: past the clamp, and far past the character ceiling.
-      mockRollup.mockResolvedValue(
-        Array.from({ length: 4000 }, (_, i) => ({
-          day: `2026-08-${String((i % 28) + 1).padStart(2, "0")}`,
-          visitors: 1,
-          revenue: 0,
-        }))
-      );
-      const res = await POST(
-        rpc({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "get_business_numbers", arguments: { since: "2000-01-01" } },
-        })
-      );
-      const text = (await res.json()).result.content[0].text as string;
-      expect(text).toMatch(/did not fit the character ceiling/);
-      expect(text).toMatch(/4000 is the database function's ceiling/);
-    });
-
     /**
      * THE TOOL IS TITLED "Funnel, revenue and ad spend" AND RETURNED NO SPEND.
      *
@@ -7763,12 +7682,9 @@ describe("/api/mcp", () => {
      * the `ga4` day chunks the corpus already holds.
      */
     it("returns ad spend for days GA4 covers", async () => {
-      mockRollup.mockResolvedValue([{ day: "2026-08-28" }, { day: "2026-08-27" }]);
-      mockAdCost = {
-        byDay: new Map([["2026-08-28", 41.5]]),
-        from: "2026-08-01",
-        to: "2026-08-31",
-      };
+      const [d1, d2] = [berlinDay(1), berlinDay(2)];
+      mockRollup.mockResolvedValue([{ day: d1 }, { day: d2 }]);
+      mockAdCost = { byDay: new Map([[d1, 41.5]]), from: berlinDay(30), to: d1 };
       const res = await POST(
         rpc({
           jsonrpc: "2.0",
@@ -7778,10 +7694,10 @@ describe("/api/mcp", () => {
         })
       );
       const text = (await res.json()).result.content[0].text as string;
-      expect(text).toMatch(/"ad_spend":41\.5/);
+      expect(text).toMatch(new RegExp(`"day":"${d1}"[^}]*"ad_spend":41\\.5`));
       // A covered day with no recorded spend is genuinely zero, not unknown.
-      expect(text).toMatch(/"day":"2026-08-27"[^}]*"ad_spend":0/);
-      expect(text).toMatch(/Ad spend is known for 2026-08-01 to 2026-08-31/);
+      expect(text).toMatch(new RegExp(`"day":"${d2}"[^}]*"ad_spend":0`));
+      expect(text).toContain(`Ad spend is known for ${berlinDay(30)} to ${d1}`);
     });
 
     /**
@@ -7793,8 +7709,8 @@ describe("/api/mcp", () => {
      * "Net: EUR 519.00" where the truth was -1581. Understating spend overstates profit.
      */
     it("omits ad_spend entirely for days outside GA4's window rather than reporting zero", async () => {
-      mockRollup.mockResolvedValue([{ day: "2026-01-05" }]);
-      mockAdCost = { byDay: new Map(), from: "2026-08-01", to: "2026-08-31" };
+      mockRollup.mockResolvedValue([{ day: berlinDay(1) }]);
+      mockAdCost = { byDay: new Map(), from: berlinDay(40), to: berlinDay(20) };
       const res = await POST(
         rpc({
           jsonrpc: "2.0",
@@ -7812,7 +7728,7 @@ describe("/api/mcp", () => {
     });
 
     it("still returns the funnel numbers when the ad-spend read fails", async () => {
-      mockRollup.mockResolvedValue([{ day: "2026-08-28", submissions: 7 }]);
+      mockRollup.mockResolvedValue([{ day: berlinDay(1) }]);
       mockAdCost = { byDay: new Map(), from: null, to: null };
       const res = await POST(
         rpc({
@@ -7823,11 +7739,11 @@ describe("/api/mcp", () => {
         })
       );
       const text = (await res.json()).result.content[0].text as string;
-      expect(text).toMatch(/"submissions":7/);
+      expect(text).toContain(`"day":"${berlinDay(1)}","unique_visitors":200`);
       expect(text).toMatch(/No ad-spend data is available/);
     });
 
-    it("calls an empty rollup a fault, not a quiet period", async () => {
+    it("calls an empty rollup a fault, not zero, beside the dashboard's own numbers", async () => {
       mockRollup.mockResolvedValue([]);
       const res = await POST(
         rpc({
@@ -7838,12 +7754,13 @@ describe("/api/mcp", () => {
         })
       );
       const text = (await res.json()).result.content[0].text as string;
-      // Was /not a missing data source/, attached to text claiming the rollup "counts
-      // only days with activity". It does not — it generate_series-es every day, so an
-      // empty result cannot mean a quiet period and saying so would be the one reading
-      // guaranteed to be wrong.
-      expect(text).toMatch(/fault in the query or the database/);
-      expect(text).toMatch(/do not report it as zero activity/);
+      // The rollup generate_series-es every day, so an empty result is a fault: the three
+      // figures only it has are missing, said so, and never zero.
+      expect(text).toContain(
+        "The old daily rollup returned no rows, so reports_created, invites_sent, top_sources " +
+          "are missing: a fault in the query or the database, not zero."
+      );
+      expect(text).not.toMatch(/"reports_created":/);
     });
   });
 

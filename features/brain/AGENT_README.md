@@ -45,7 +45,9 @@ Claude Code) is the door people use; the operator's guide is
   28-day median and spread, the move split by source, channel and rate halves, and day-level rules
   (engagement, GA4 against our count, spend, campaigns, shipped, decided). No model writes a cause.
   Visitors, survey starts, finished surveys and revenue are the AP-Analytics dashboard's per Berlin
-  day (`asDashboard`); reports opened and paid stay `brain_daily_rollup`'s, which are dated by the event.
+  day (`asDashboard`); reports opened and paid stay `brain_daily_rollup`'s, which are dated by the event
+  and left out of a UTC day not over yet (`utcOpen`). No series at all when the dashboard's facts
+  cannot be read: nothing else is served in their place.
 - `server/check-answer.ts` — `check_answer`: every figure, day and quote in a draft looked up in its
   cited documents (rounding-aware, trailing zeros ignored, bare single digits left unchecked). No model.
 - `server/experiments.ts` — `experiments` and `record_experiment`: the `admin_experiment`
@@ -56,11 +58,9 @@ Claude Code) is the door people use; the operator's guide is
 - `server/ap-numbers.ts` — `get_business_numbers` as the AP-Analytics dashboard counts it: the
   period read through the dashboard's own code (`fetchFacts`, `totals`, `spend`, the same-age rule,
   `buildDashboard` for the Assessment A tiles), the day rows built from it, the figures it has none
-  for kept from `brain_daily_rollup` and labelled, a link to the matching view, and `group_by` from
-  the dashboard's sales, with each device, source or tier group linked to the Payment page under it.
-- `server/sales.ts` — `get_business_numbers` with `group_by` when the dashboard's sales cannot be
-  read: a period's real sales, revenue and EUR 0 comps by plan, price list, device, source, country
-  tier, landing arm or month, read from `payment` (its metadata). Said not to be the dashboard's.
+  for kept from `brain_daily_rollup` and labelled, a link to the matching view, and `group_by`
+  (`SALE_GROUPS`) from the dashboard's sales, with each device, source or tier group linked to the
+  Payment page under it. When the dashboard cannot be read, `apUnreadable` says so, and that is all.
 - `server/feedback.ts` — `customer_feedback`: the report's chapter votes and comments
   (`report_section_feedback`, staff left out) and the Trustpilot review emails in the index, with
   what it cannot see named every time.

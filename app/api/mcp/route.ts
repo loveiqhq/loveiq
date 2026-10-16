@@ -14,9 +14,7 @@ import {
   bucketRows,
   parseComparePeriod,
   renderComparison,
-  wholeDays,
   type DayRow,
-  type Period,
 } from "@features/brain/server/compare";
 import { listPageShots, renderPageShot } from "@features/brain/server/see/pages";
 import {
@@ -48,14 +46,14 @@ import {
   type Measure as UserMeasure,
 } from "@features/brain/server/user-totals";
 import { loadFeedback, renderFeedback } from "@features/brain/server/feedback";
-import { SALE_GROUPS, loadSales, renderSales, type SaleGroup } from "@features/brain/server/sales";
 import {
-  AP_SALES_UNREADABLE,
-  AP_UNREADABLE,
+  SALE_GROUPS,
   apSales,
+  apUnreadable,
   apView,
   beforeRecords,
   readAp,
+  type SaleGroup,
 } from "@features/brain/server/ap-numbers";
 import {
   adsForMonth,
@@ -127,7 +125,7 @@ import {
   renderDay,
   partialDay,
   renderMetric,
-  rollupOnly,
+  utcOpen,
   type Reading,
 } from "@features/brain/server/jumps";
 import {
@@ -4932,9 +4930,6 @@ async function callTool(
     // The dashboard's (Berlin) day, as every period here is read: a UTC "today" made
     // "previous" a day short and refused a since of Berlin's today between 00:00 and 02:00.
     const today = reportingDay(new Date());
-    const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
-      .toISOString()
-      .slice(0, 10);
     /**
      * A FUTURE `since` USED TO REPORT THE COMPANY AS ONE DAY OLD.
      *
@@ -4971,7 +4966,7 @@ async function callTool(
         );
       }
       const days = intArg(args.days, 30, 1, 4000);
-      // The dashboard's sales first; the payments' own records only when it cannot be read.
+      // The dashboard's sales, and when they cannot be read, only that: no other counting.
       const ap = await apSales(
         { since: since || null, until: until || null, days, other: null },
         by as SaleGroup[]
@@ -4979,28 +4974,10 @@ async function callTool(
         logger.warn({ err }, "brain: the dashboard's sales could not be read");
         return undefined;
       });
-      if (ap) {
-        stats.sourceCount = 1;
-        return textResult(ap);
-      }
+      if (ap === undefined) return textResult(apUnreadable(), true);
       if (ap === null) return textResult(beforeRecords(since || "", until || today));
-      // `days` is the dashboard's "Last N days" here too: the N whole days before today.
-      const from =
-        since ||
-        new Date(Date.parse(`${today}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
-      const to = until || (since ? today : yesterday);
-      const sales = await loadSales(from, to);
-      if (!sales) {
-        return textResult(
-          "The payments could not be read right now. This is an outage, not a result.",
-          true
-        );
-      }
       stats.sourceCount = 1;
-      return textResult(
-        (ap === undefined ? AP_SALES_UNREADABLE : "") +
-          renderSales(sales, by as SaleGroup[], from, to)
-      );
+      return textResult(ap);
     }
     // Far enough back to reach `since`, inclusive of both ends.
     /**
@@ -5063,37 +5040,10 @@ async function callTool(
     ]);
     // Before LoveIQ's first records there is nothing to serve, and it must not read as zeroes.
     if (apRead === null) return textResult(beforeRecords(since, until || today));
-    const ap = apRead ? apView(apRead, rows, ad) : null;
-    /**
-     * THE FALLBACK'S DAYS ARE THE ROLLUP'S, WHICH ARE UTC DAYS. `days` is the N whole ones
-     * before the UTC today (Berlin's runs two hours ahead of it at night), and a comparison is
-     * of whole days, as the dashboard's is: today's part-day is in neither period.
-     */
-    const utcToday = new Date().toISOString().slice(0, 10);
-    const fallback =
-      !ap && comparison && "period" in comparison
-        ? (() => {
-            const base = wholeDays({ since, until: until || today }, utcToday);
-            const before =
-              base && (parseComparePeriod("previous", base) as { period: Period }).period;
-            // A range that IS the period just before the one asked is "previous", and moves
-            // with the cut as the dashboard path's does: 6 days against 6, never against 7.
-            const asked = (
-              parseComparePeriod("previous", { since, until: until || today }) as {
-                period: Period;
-              }
-            ).period;
-            const previous =
-              comparison.period.since === asked.since && comparison.period.until === asked.until;
-            const other = base && (previous ? before : wholeDays(comparison.period, utcToday));
-            return base && other ? { base, other } : null;
-          })()
-        : null;
-    const lead =
-      (ap ? ap.header : AP_UNREADABLE) +
-      (!ap && comparison && "period" in comparison && !fallback
-        ? "No comparison: the dashboard compares whole days, and one of these periods has none yet.\n\n"
-        : "");
+    // Unreadable, that is all that is said: no other counting stands in for the dashboard's.
+    if (apRead === undefined) return textResult(apUnreadable(), true);
+    const ap = apView(apRead, rows, ad);
+    const lead = ap.header;
     /**
      * A DAY OUTSIDE GA4'S WINDOW GETS NO `ad_spend` KEY, NOT A ZERO.
      *
@@ -5105,16 +5055,7 @@ async function callTool(
      * overstates profit, which is the direction that matters, so an unknown day must
      * read as unknown rather than as a confident zero.
      */
-    // The range is applied AFTER the fetch, because the rollup counts back from today.
-    const inRange: Array<{ day: string }> =
-      ap?.rows ??
-      rows.filter((r) =>
-        fallback
-          ? r.day >= fallback.base.since && r.day <= fallback.base.until
-          : since
-            ? r.day >= since && (!until || r.day <= until)
-            : r.day < utcToday
-      );
+    const inRange: Array<{ day: string }> = ap.rows;
     const merged = inRange.map((r) =>
       adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
     );
@@ -5130,16 +5071,12 @@ async function callTool(
         : `No ad-spend data is available, so no day carries an ad_spend field.`;
 
     // No whole day to compare (the period is only today): the day rows, and the header says why.
-    const compared = ap ? ap.other && { base: ap.period, other: ap.other.period } : fallback;
-    if (compared) {
-      const otherRows: Array<{ day: string }> =
-        ap?.other?.rows ??
-        rows.filter((r) => r.day >= compared.other.since && r.day <= compared.other.until);
+    if (ap.other) {
       return textResult(
         `${lead}${spendNote}\n\n` +
           renderComparison(
-            { period: compared.base, rows: merged.map(withSpend) },
-            { period: compared.other, rows: otherRows.map(withSpend) }
+            { period: ap.period, rows: merged.map(withSpend) },
+            { period: ap.other.period, rows: ap.other.rows.map(withSpend) }
           )
       );
     }
@@ -5165,8 +5102,7 @@ async function callTool(
       });
       return textResult(
         `${lead}${spendNote}\n\n${buckets.length} ${granularity}s from ${covered} days ` +
-          `(${ap?.period.since ?? (since || "the last " + asked + " days")} to ` +
-          `${ap?.period.until ?? (until || today)}). Days are SUMMED.\n\n` +
+          `(${ap.period.since} to ${ap.period.until}). Days are SUMMED.\n\n` +
           lines.join("\n")
       );
     }
@@ -5182,80 +5118,11 @@ async function callTool(
     );
     stats.sourceCount = shown;
     const spendNoteBlock = `${spendNote}\n\n`;
-    /**
-     * THE CLAMP AND THE CHARACTER CEILING ARE TWO DIFFERENT CUTS, and both have to be
-     * said in the SAME sentence because they compose.
-     *
-     * These used to be alternative branches, and the second one was unreachable in
-     * production: any `asked` above 4000 returns 4000 rows, 4000 rows always exceed the
-     * character ceiling, so the first branch fired every time and the clamp was never
-     * mentioned. `days: 999999` silently became 4000, then ~165, and the answer reported
-     * only the second of those two reductions.
-     *
-     * `asked` is compared against `rows.length`, the UNFILTERED fetch, never against
-     * `covered` — with a since/until range `covered` is the slice kept from the fetch and
-     * is SUPPOSED to be smaller, so comparing them would announce a truncation on every
-     * ordinary month query.
-     */
-    // The dashboard's rows do not depend on the rollup's reach; their header says what they cover.
-    const clamped =
-      !ap && rows.length < fetchDays
-        ? `The range was also reduced before that: ${asked} days were asked for and 4000 ` +
-          `is the database function's ceiling. `
-        : "";
     const head =
       shown < covered
         ? `${shown} of ${covered} days returned -- the rest did not fit the character ` +
-          `ceiling. ${clamped}Ask for a narrower period to see them.\n\n`
-        : clamped
-          ? `${clamped}This IS a truncation of the request, not the limit of the data.\n\n`
-          : "";
-    /**
-     * AN EMPTY ROLLUP IS A FAULT, NOT AN ABSENCE OF ACTIVITY.
-     *
-     * The branch here used to say "this counts only days with activity — an empty result
-     * means no recorded activity in that range". The function does not work that way: it
-     * generate_series-es every day and left-joins, so it returns exactly clamp(days,1,4000)
-     * rows whatever happened. Verified live: days=5 returns 5 rows, days=1 returns 1, and
-     * zero-activity days come back as zeroes. So the old text described behaviour that
-     * does not exist, in a branch production cannot reach — and if it ever IS reached,
-     * "no activity" is the one reading that is certainly wrong.
-     */
-    /**
-     * AN EMPTY RANGE AND AN EMPTY ROLLUP ARE DIFFERENT THINGS.
-     *
-     * A range that lands outside the data — a future month, or one before the company
-     * existed — returns rows from the rollup and nothing after the filter. That is a
-     * correct answer about a period with no days in it, and reporting it as a database
-     * fault would send someone to look at infrastructure over a date they chose.
-     */
-    /**
-     * From 00:00 to 02:00 in Berlin, Berlin's today is a day the UTC rollup has not begun: say
-     * so, under the warning that these are not the dashboard's numbers, rather than calling it
-     * outside the data.
-     */
-    if (!ap && since && inRange.length === 0 && since >= utcToday) {
-      return textResult(
-        `${lead}The old daily rollup counts UTC days, and it is still ${utcToday} in UTC: it ` +
-          `has not reached ${since} yet, so it has no numbers for it. The dashboard's, which ` +
-          "count Berlin days, do; ask again when they can be read."
-      );
-    }
-    if (!ap && rows.length > 0 && inRange.length === 0) {
-      return textResult(
-        `No days fall in ${since}${until ? ` to ${until}` : " onwards"}. The rollup has ` +
-          `${rows.length} days ending today, the earliest being ${rows[rows.length - 1]?.day ?? "unknown"} — ` +
-          `so that range is outside the data, which is not the same as a period with no activity.`
-      );
-    }
-    if (!ap && rows.length === 0) {
-      return textResult(
-        "The rollup returned no rows at all. It is built to return one row per day in " +
-          "range regardless of activity, so this is a fault in the query or the database, " +
-          "NOT a quiet period — do not report it as zero activity.",
-        true
-      );
-    }
+          `ceiling. Ask for a narrower period to see them.\n\n`
+        : "";
     return textResult(lead + head + spendNoteBlock + bodyText);
   }
 
@@ -6445,10 +6312,7 @@ async function callTool(
       });
     } catch (err) {
       logger.error({ err }, "brain: break_even failed");
-      return textResult(
-        "The live numbers could not be read right now. This is an outage, not a result.",
-        true
-      );
+      return textResult(apUnreadable(), true);
     }
     if (!outcome.ok) return textResult(outcome.message, true);
     stats.sourceCount = 1;
@@ -6647,17 +6511,18 @@ async function callTool(
         true
       );
     }
-    // Berlin's today, or, on the rollup's rows alone, a UTC day not over yet (jumps.ts).
-    const partNote = partialDay(series, day);
+    if (!series) return textResult(apUnreadable("a quiet day"), true);
+    // Berlin's today, or reports opened and paid on a UTC day not over yet (jumps.ts).
+    const partNote = partialDay(day, !metric || metric.utc === true);
     const partial = partNote ? `${partNote}\n\n` : "";
-    // Said under every answer when the dashboard's facts could not be read (jumps.ts).
-    const caveat = rollupOnly(series);
     if (metric) {
       const reading = readMetric(metric, series, day);
       if (!reading) {
         return textResult(
-          `${metric.label} has no reading for ${day}: either nothing was counted that day or there ` +
-            `are fewer than two weeks of comparable days before it.${caveat}`
+          metric.utc && utcOpen(day)
+            ? `${metric.label} has no reading for ${day} yet. ${partNote}`
+            : `${metric.label} has no reading for ${day}: either nothing was counted that day or ` +
+                "there are fewer than two weeks of comparable days before it."
         );
       }
       stats.sourceCount = 1;
@@ -6665,7 +6530,7 @@ async function callTool(
         partial +
           `${isJump(reading) ? "Outside its usual range" : "Within its usual range"} on ${day}.\n\n` +
           renderDay(day, [reading], series, await loadAround(day)) +
-          `\n\n${NOT_PROOF}${caveat}`
+          `\n\n${NOT_PROOF}`
       );
     }
     const jumps = jumpsOn(series, day);
@@ -6677,15 +6542,14 @@ async function callTool(
       return textResult(
         partial +
           `Nothing on ${day} was outside its usual range (each metric against the 28 days before).` +
-          (lines.length ? `\n\n${lines.join("\n")}` : "") +
-          caveat
+          (lines.length ? `\n\n${lines.join("\n")}` : "")
       );
     }
     return textResult(
       partial +
         `${jumps.length} unusual on ${day}.\n\n` +
         renderDay(day, jumps, series, await loadAround(day)) +
-        `\n\n${NOT_PROOF}${caveat}`
+        `\n\n${NOT_PROOF}`
     );
   }
 

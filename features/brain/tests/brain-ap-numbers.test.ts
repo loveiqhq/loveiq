@@ -24,7 +24,8 @@ vi.mock("@features/ux-review/server/review", () => ({
 }));
 const mockRollup = vi.fn();
 let mockAdCost: { byDay: Map<string, number>; from: string | null; to: string | null };
-vi.mock("@features/brain/server/ingest/analytics", () => ({
+vi.mock("@features/brain/server/ingest/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/ingest/analytics")>()),
   brainDailyRollup: (...a: unknown[]) => mockRollup(...(a as [])),
   adCostByDay: async () => mockAdCost,
   adCovers: (ad: { from: string | null; to: string | null }, day: string) =>
@@ -150,6 +151,22 @@ async function call(args: Record<string, unknown>) {
         id: 1,
         method: "tools/call",
         params: { name: "get_business_numbers", arguments: args },
+      }),
+    })
+  );
+  const r = (await res.json()).result as { isError?: boolean; content: Array<{ text: string }> };
+  return { isError: r.isError, text: r.content[0]!.text };
+}
+async function callTool(name: string, args: Record<string, unknown>) {
+  const res = await POST(
+    new Request("https://www.loveiq.org/api/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name, arguments: args },
       }),
     })
   );
@@ -339,30 +356,40 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     expect(byPlan.text).toMatch(
       /^- full_report: 1 sale, €29\.99 \(average €29\.99\); 1 free unlock$/m
     );
+    // Two keys at once, and `days` as the dashboard's Last N days.
+    const two = await call({ group_by: ["plan", "device"], days: 3 });
+    expect(two.text).toContain("Sales by plan and device, 2026-10-13 to 2026-10-15 (Berlin days");
+    expect(two.text).toMatch(/^- full_report · Mobile: 1 sale, €29\.99 \(average €29\.99\)$/m);
+    expect(two.text).toMatch(/^- full_report · Desktop: 0 sales, €0\.00; 1 free unlock$/m);
   });
 
-  it("says so, and serves the old rollup's numbers, when the dashboard's cannot be read", async () => {
+  it("says the dashboard's numbers could not be read, and serves none counted another way", async () => {
     apFails = true;
-    const { isError, text } = await call({ since: "2026-10-13", until: "2026-10-15" });
-    expect(isError).toBeFalsy();
-    expect(text.startsWith("THE DASHBOARD'S NUMBERS COULD NOT BE READ")).toBe(true);
-    expect(text).toContain('"unique_visitors":999');
-    expect(text).not.toContain("AP-ANALYTICS NUMBERS");
-    // `days` keeps the dashboard's meaning there too: the N whole days before today.
-    const week = await call({ days: 7 });
-    expect(rowsOf(week.text).map((r) => r.day)).toEqual([
-      "2026-10-15",
-      "2026-10-14",
-      "2026-10-13",
-      "2026-10-12",
-      "2026-10-11",
-      "2026-10-10",
-      "2026-10-09",
-    ]);
-    // And so does the old reading of the sales.
-    const sales = await call({ group_by: ["plan"], days: 7 });
-    expect(sales.text).toContain("THE DASHBOARD'S SALES COULD NOT BE READ");
-    expect(sales.text).toContain("Sales by plan, 2026-10-09 to 2026-10-15 (UTC days");
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    const outage = (what: string) =>
+      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+      `give, and none counted another way in their place. This is an outage, not ${what}. Ask ` +
+      "again in a few minutes.";
+    for (const args of [
+      { since: "2026-10-13", until: "2026-10-15" },
+      { days: 7 },
+      { since: "2026-10-01", compare_to: "previous" },
+      { since: "2026-09-01", until: "2026-10-15", granularity: "week" },
+      { group_by: ["plan"], days: 7 },
+    ]) {
+      const { isError, text } = await call(args);
+      expect(isError, JSON.stringify(args)).toBe(true);
+      expect(text, JSON.stringify(args)).toBe(outage("a result"));
+    }
+    for (const [tool, what] of [
+      ["explain_change", "a quiet day"],
+      ["show_chart", "a flat line"],
+      ["break_even", "a result"],
+    ] as const) {
+      const r = await callTool(tool, tool === "show_chart" ? { metrics: ["visitors"] } : {});
+      expect(r.isError, tool).toBe(true);
+      expect(r.text, tool).toBe(outage(what));
+    }
   });
 
   it("takes the dashboard's Berlin day, not UTC's, between midnight in Berlin and in London", async () => {
@@ -437,75 +464,28 @@ describe("get_business_numbers counts as the AP-Analytics dashboard does", () =>
     );
   });
 
-  it("says the old rollup has not reached Berlin's today yet at night, under its warning", async () => {
-    apFails = true;
-    // 00:30 in Berlin on the 17th: it is still the 16th in UTC, the rollup's newest day.
+  it("says reports opened and paid are not in yet for a day still running in UTC", async () => {
+    // 22:30 UTC on the 16th is 00:30 on the 17th in Berlin: explain_change's default day is the
+    // 16th, whole for the dashboard, but the rollup's UTC 16th runs on.
     vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
-    const { text } = await call({ since: "2026-10-17" });
-    expect(text.startsWith("THE DASHBOARD'S NUMBERS COULD NOT BE READ")).toBe(true);
-    expect(text).toContain("it is still 2026-10-16 in UTC: it has not reached 2026-10-17 yet");
-    expect(text).not.toContain("outside the data");
-  });
-
-  it("calls explain_change's day partial on the old rollup alone while its UTC day runs", async () => {
-    apFails = true;
-    vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
-    const res = await POST(
-      new Request("https://www.loveiq.org/api/mcp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name: "explain_change", arguments: {} },
-        }),
-      })
-    );
-    const text = ((await res.json()).result as { content: Array<{ text: string }> }).content[0]!
-      .text;
-    // Its default day is Berlin's yesterday, the 16th: still running in UTC.
-    expect(text).toContain(
-      "The old rollup counts UTC days, and 2026-10-16 is not over yet in UTC, so its numbers are partial."
-    );
-  });
-
-  it("reads the old rollup's days as UTC days, whole ones only, when it has to fall back", async () => {
-    apFails = true;
-    // 00:30 in Berlin on the 17th is 22:30 UTC on the 16th: the rollup's 16th is not over.
-    vi.setSystemTime(new Date("2026-10-16T22:30:00Z"));
-    const week = await call({ days: 7 });
-    expect(week.text.startsWith("THE DASHBOARD'S NUMBERS COULD NOT BE READ")).toBe(true);
-    expect(rowsOf(week.text).map((r) => r.day)).toEqual([
-      "2026-10-15",
-      "2026-10-14",
-      "2026-10-13",
-      "2026-10-12",
-      "2026-10-11",
-      "2026-10-10",
-      "2026-10-09",
-    ]);
-    // A comparison of whole UTC days, both of them, as the dashboard compares whole days.
-    vi.setSystemTime(NOW);
-    const compared = await call({ since: "2026-10-10", compare_to: "previous" });
-    expect(compared.text).toMatch(
-      /2026-10-10 to 2026-10-15 \(6 days, 6 with data\) versus 2026-10-04 to 2026-10-09 \(6 days, 6 with data\)/
-    );
-    // A compared range that reaches today is read to yesterday too.
-    const reaching = await call({
-      since: "2026-10-01",
-      until: "2026-10-07",
-      compare_to: "2026-10-09..2026-10-16",
-    });
-    expect(reaching.text).toMatch(/versus 2026-10-09 to 2026-10-15 \(7 days, 7 with data\)/);
-    // The period just before, given as a range, compares as "previous" there too: 6 days with 6.
-    const justBefore = await call({ since: "2026-10-10", compare_to: "2026-10-03..2026-10-09" });
-    expect(justBefore.text).toMatch(
-      /2026-10-10 to 2026-10-15 \(6 days, 6 with data\) versus 2026-10-04 to 2026-10-09 \(6 days/
-    );
-    expect(justBefore.text).not.toContain("DIFFERENT LENGTHS");
-    const today = await call({ since: "2026-10-16", compare_to: "previous" });
-    expect(today.text).toContain("No comparison: the dashboard compares whole days");
-    expect(today.text).not.toContain(" versus ");
+    const utc16 =
+      "Reports opened and paid are counted by UTC day, and 2026-10-16 is not over yet in UTC, " +
+      "so their figures for it are not complete and are left out.";
+    for (const [metric, label] of [
+      ["report_opens", "Reports opened"],
+      ["reports_paid", "Reports paid"],
+      ["paid_rate", "Share of report openers who pay"],
+    ]) {
+      const { text } = await callTool("explain_change", { metric });
+      expect(text).toBe(`${label} has no reading for 2026-10-16 yet. ${utc16}`);
+    }
+    // Without a metric those three drop out of the day, and it says why at the top.
+    expect((await callTool("explain_change", {})).text.startsWith(`${utc16}\n\n`)).toBe(true);
+    // The dashboard's own figures are whole that night, and a UTC day that has ended reads.
+    const visitors = (await callTool("explain_change", { metric: "visitors" })).text;
+    expect(visitors).toMatch(/^Within its usual range on 2026-10-16/);
+    expect(visitors).not.toContain("not over yet in UTC");
+    const ended = await callTool("explain_change", { metric: "report_opens", day: "2026-10-15" });
+    expect(ended.text).toMatch(/^Within its usual range on 2026-10-15/);
   });
 });

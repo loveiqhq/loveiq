@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DaySeries } from "@features/brain/server/jumps";
 
-type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown>; dashboard?: boolean };
+type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown> };
 
 /**
  * loadSeries(until, extra) returns every day from `until - (29 + extra)` to `until`, oldest
  * first. The fake honours exactly that, so the slice to `days` is exercised for real.
  */
 let dayOf: (day: string) => Day = () => ({});
-const mockLoad = vi.fn(async (until: string, extra = 0): Promise<DaySeries[]> => {
+const mockLoad = vi.fn(async (until: string, extra = 0): Promise<DaySeries[] | null> => {
   const out: DaySeries[] = [];
   const end = Date.parse(`${until}T00:00:00Z`);
   for (let i = 29 + extra; i >= 0; i -= 1) {
@@ -193,18 +193,18 @@ describe("show_chart: what gets drawn", () => {
     expect(both.text).toContain("revenue are counted as the AP-Analytics dashboard counts them");
   });
 
-  it("says which counting it drew: the dashboard's, or the old rollup's when that was all", async () => {
-    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: true });
+  it("says it drew the dashboard's counting, and draws nothing when that cannot be read", async () => {
+    dayOf = () => ({ rollup: { unique_visitors: 120 } });
     const drawn = await draw({ metrics: ["visitors"], days: 7 });
     expect(drawn.text).toContain("counted as the AP-Analytics dashboard counts them");
     expect(drawn.payload.footnote).toBe("daily");
-    // The dashboard's facts could not be read: the rollup's own figures, by UTC day, and only
-    // that said, never that they are the dashboard's.
-    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: false });
-    const old = await draw({ metrics: ["visitors"], days: 7 });
-    expect(old.text).toContain("The dashboard's numbers could not be read just now");
-    expect(old.text).not.toContain("counted as the AP-Analytics dashboard counts them");
-    expect(old.payload.footnote).toBe("daily, UTC");
+    // The dashboard's facts could not be read: no chart, and no other counting in its place.
+    mockLoad.mockResolvedValueOnce(null);
+    expect(await refusal({ metrics: ["visitors"], days: 7 })).toBe(
+      "The AP-Analytics dashboard's numbers could not be read right now, so there are none to " +
+        "give, and none counted another way in their place. This is an outage, not a flat " +
+        "line. Ask again in a few minutes."
+    );
   });
 
   it("ends on Berlin's day, not UTC's, between midnight in Berlin and in London", async () => {
@@ -224,18 +224,33 @@ describe("show_chart: what gets drawn", () => {
     expect(today.ok && today.text).toContain("Today is still going, so its numbers are partial.");
   });
 
-  it("calls the last day partial, on the old rollup alone, while its UTC day runs", async () => {
-    // 00:30 in Berlin on 27 Sep: the default chart ends on the 26th, whole for the dashboard.
+  it("says reports opened are not in for a day still running in UTC, not that it had no record", async () => {
+    // 22:30 UTC on 26 Sep is 00:30 on 27 Sep in Berlin: the 26th is whole for the dashboard,
+    // and its UTC day runs on, so the rollup's reports opened are blank (as loadSeries leaves them).
     const night = Date.parse("2026-09-26T22:30:00Z");
-    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: true });
-    const whole = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
-    expect(whole.ok && whole.text).not.toContain("partial");
-    // With the dashboard down, the 26th is the rollup's UTC day, still running.
-    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: false });
-    const old = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
-    expect(old.ok && old.text).toContain(
-      "The old rollup counts UTC days, and 2026-09-26 is not over yet in UTC, so its numbers are partial."
+    dayOf = (day) => ({
+      rollup: { report_opens: day >= "2026-09-26" ? null : 10, unique_visitors: 200 },
+    });
+    const opened = await drawChart({ metrics: ["report_opens"], days: 7 } as never, night);
+    if (!opened.ok) throw new Error(opened.message);
+    expect(opened.text).toContain(
+      "Reports opened and paid are counted by UTC day, and 2026-09-26 is not over yet in UTC, " +
+        "so their figures for it are not complete and are left out."
     );
+    expect((await payloadOf(opened.url)).footnote).toBe(
+      "daily · a day not over yet in UTC is left blank"
+    );
+    // To Berlin's today: two days the UTC rollup has not finished.
+    const today = await drawChart(
+      { metrics: ["report_opens"], days: 7, until: "2026-09-27" } as never,
+      night
+    );
+    expect(today.ok && today.text).toContain("2026-09-26 and 2026-09-27 are not over yet in UTC");
+    // A chart of the dashboard's own figures is whole that night, and in the day so is this one.
+    const visitors = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
+    expect(visitors.ok && visitors.text).not.toContain("not over yet in UTC");
+    const day = await drawChart({ metrics: ["report_opens"], days: 7 } as never, NOW);
+    expect(day.ok && day.text).not.toContain("not over yet in UTC");
   });
 
   it("groups thousands in an amount, as the reader would write it", async () => {

@@ -2,6 +2,7 @@ import { fetchFacts, type Facts } from "@features/admin/server/ap/facts";
 import { ALL, startsComplete, totals } from "@features/admin/server/ap/metrics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { brainDailyRollup, longDate } from "@features/brain/server/ingest/analytics";
+import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
 import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 
@@ -50,35 +51,40 @@ export interface DaySeries {
   day: string;
   rollup?: Rollup;
   ga4?: Ga4Day;
-  /** False: the dashboard's facts could not be read, so the row is the rollup's alone. */
-  dashboard?: boolean;
 }
 
 /**
- * Said about `day` when its figures are part of a day: it is Berlin's today, or the answer has
- * only the rollup's rows (the dashboard could not be read) and the rollup's UTC day of that date
- * has not ended. "" when the day is whole.
+ * True when the rollup's own figures for `day` (reports opened and paid) are left out because
+ * its UTC day has not ended: Berlin's yesterday from midnight until UTC's (01:00 or 02:00 in
+ * Berlin, by the season), and Berlin's today before UTC's has begun. Berlin's today in the
+ * day keeps them, and is said to be partial.
  */
-export function partialDay(series: DaySeries[], day: string, now = new Date()): string {
-  if (day === reportingDay(now)) return "Today is still going, so its numbers are partial.";
-  if (rollupOnly(series) && day >= now.toISOString().slice(0, 10)) {
-    return (
-      `The old rollup counts UTC days, and ${day} is not over yet in UTC, so its numbers ` +
-      "are partial."
-    );
-  }
-  return "";
+export function utcOpen(day: string, now = new Date()): boolean {
+  const utc = now.toISOString().slice(0, 10);
+  return day > utc || (day === utc && day !== reportingDay(now));
 }
 
-/** Said under an answer built from rollup-only rows (see `asDashboard`). */
-export const ROLLUP_ONLY =
-  "The dashboard's numbers could not be read just now, so visitors, survey starts, finished " +
-  "surveys and revenue here are the old daily rollup's (UTC days, staff included, starts only " +
-  "after the cookie banner), not the dashboard's.";
+/** Said where reports opened and paid are left out for `days` (see `utcOpen`). */
+export const utcNote = (days: string[]): string =>
+  days.length === 0
+    ? ""
+    : `Reports opened and paid are counted by UTC day, and ${days.join(" and ")} ` +
+      `${days.length === 1 ? "is" : "are"} not over yet in UTC, so their figures for ` +
+      `${days.length === 1 ? "it" : "them"} are not complete and are left out.`;
 
-/** The caveat a series needs, or "". */
-export const rollupOnly = (series: DaySeries[]): string =>
-  series.some((d) => d.dashboard === false) ? `\n\n${ROLLUP_ONLY}` : "";
+/**
+ * Said about `day` when some of its figures are part of a day, or "" when they are whole:
+ * Berlin's today is still going, and, where the answer shows them (`utc`), reports opened and
+ * paid wait for the UTC day to end.
+ */
+export function partialDay(day: string, utc: boolean, now = new Date()): string {
+  return [
+    day === reportingDay(now) ? "Today is still going, so its numbers are partial." : "",
+    utc && utcOpen(day, now) ? utcNote([day]) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /**
  * Parse the GA4 day record the Google ingester writes (`renderGa4` in ingest/google.ts).
@@ -125,6 +131,8 @@ export interface Metric {
   minAbs?: number;
   /** Where a count's move can be split, e.g. by traffic source. */
   segments?: { label: string; of: (d: DaySeries) => Record<string, number> | null };
+  /** The rollup's own figure, counted by UTC day (see `utcOpen`), not the dashboard's. */
+  utc?: boolean;
 }
 
 // A null figure (starts the dashboard does not hold every one of) is no reading, never a zero.
@@ -148,8 +156,8 @@ export const METRICS: Metric[] = [
   },
   { id: "survey_starts", label: "Surveys started", count: r("survey_starts"), minAbs: 20 },
   { id: "submissions", label: "Surveys finished", count: r("submissions"), minAbs: 8 },
-  { id: "report_opens", label: "Reports opened", count: r("report_opens"), minAbs: 8 },
-  { id: "reports_paid", label: "Reports paid", count: r("reports_paid"), minAbs: 3 },
+  { id: "report_opens", label: "Reports opened", count: r("report_opens"), minAbs: 8, utc: true },
+  { id: "reports_paid", label: "Reports paid", count: r("reports_paid"), minAbs: 3, utc: true },
   {
     id: "start_rate",
     label: "Share of visitors who start the survey",
@@ -197,6 +205,7 @@ export const METRICS: Metric[] = [
   {
     id: "paid_rate",
     label: "Share of report openers who pay",
+    utc: true,
     rate: {
       num: r("reports_paid"),
       den: r("report_opens"),
@@ -333,8 +342,9 @@ async function ga4Days(from: string, until: string): Promise<Map<string, Ga4Day>
 /**
  * Every day from `until` back far enough for `until` and the day before it to have a full
  * baseline, oldest first. GA4 is optional: a failed read leaves the funnel metrics standing.
+ * Null when the dashboard's facts cannot be read: no other counting stands in for them.
  */
-export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[]> {
+export async function loadSeries(until: string, extraDays = 0): Promise<DaySeries[] | null> {
   const from = addDays(until, -(BASELINE_DAYS + 1 + extraDays));
   // UTC on purpose: the rollup counts back from its own UTC day, so this reaches `from`. A
   // Berlin day it has not reached yet is filled in below.
@@ -345,28 +355,26 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
   const [rows, ga4, facts] = await Promise.all([
     brainDailyRollup(span),
     ga4Days(from, until).catch(() => new Map<string, Ga4Day>()),
-    // Unreadable, the rollup's rows stand alone, and every answer built on them says so.
-    fetchFacts(from, until).catch(() => null),
+    fetchFacts(from, until).catch((err) => {
+      logger.warn({ err }, "brain: the dashboard's facts could not be read for the series");
+      return null;
+    }),
   ]);
+  if (!facts) return null;
   const byDay = new Map(rows.map((row) => [String(row.day).slice(0, 10), row]));
-  const berlinToday = reportingDay();
   const out: DaySeries[] = [];
   for (let d = from; d <= until; d = addDays(d, 1)) {
     const row = byDay.get(d);
-    /**
-     * From 00:00 to 02:00 in Berlin, Berlin's yesterday is a whole day for the dashboard but
-     * the rollup's UTC day of that date is still running, so its own figures (reports opened
-     * and paid) are part of a day: they are left out like a day it has not reached (about 13%
-     * of first report opens fall at 22:00-24:00 UTC). The dashboard's figures stand.
-     */
-    const running = d >= today && d !== berlinToday;
     out.push({
       day: d,
-      // A Berlin day the UTC rollup has not reached (today, before 02:00) still has the
-      // dashboard's figures; its own are null, no reading rather than zero.
-      rollup: facts ? asDashboard(row && !running ? row : unreached(d), facts, d) : row,
+      /**
+       * At night Berlin's yesterday is a whole day for the dashboard, but the rollup's UTC day
+       * of that date is still running (about 13% of first report opens fall at 22:00-24:00
+       * UTC), and Berlin's today has no UTC day yet: the rollup's own figures are left out,
+       * null, no reading rather than zero. The dashboard's figures stand (utcOpen).
+       */
+      rollup: asDashboard(row && !utcOpen(d) ? row : unreached(d), facts, d),
       ga4: ga4.get(d),
-      dashboard: facts !== null,
     });
   }
   return out;
@@ -386,7 +394,7 @@ function asDashboard(row: Rollup, facts: Facts, day: string): Rollup {
   const t = totals(facts, ALL, day, day);
   return {
     ...row,
-    unique_visitors: t.visits ?? row.unique_visitors,
+    unique_visitors: t.visits,
     survey_starts: startsComplete(day, facts.asOf) ? t.starts : null,
     submissions: t.subs,
     revenue: t.revenue,
@@ -481,9 +489,11 @@ export function segmentShift(
 ): Array<{ name: string; value: number; usual: number; delta: number }> {
   if (!m.segments) return [];
   const { at, before } = baselineOf(series, day);
-  const today = m.segments.of(series[at]!) ?? {};
+  // The day's own breakdown missing (its UTC day not over, or no GA4 record) is no split, never
+  // every segment at zero.
+  const today = m.segments.of(series[at]!);
   const days = before.map((d) => m.segments!.of(d)).filter((s): s is Record<string, number> => !!s);
-  if (days.length === 0) return [];
+  if (!today || days.length === 0) return [];
   const names = new Set([...Object.keys(today), ...days.flatMap((s) => Object.keys(s))]);
   return [...names]
     .map((name) => {
@@ -716,11 +726,26 @@ export async function noticeJumps(
   if (hour < 7 || hour > 10) return 0;
   const day = addDays(reportingDay(now), -1);
   const series = await loadSeries(day);
+  if (!series) {
+    // Said, not skipped: no notice would read as "nothing unusual". The headline carries no
+    // time, so each run in the window rewrites this one. ponytail: a later run that reads the
+    // numbers does not withdraw it; it says when it was written.
+    await record({
+      headline: `The numbers for ${longDate(day)} could not be checked`,
+      detail:
+        `At ${now.toISOString().slice(11, 16)} UTC the AP-Analytics dashboard's numbers could ` +
+        `not be read, so ${longDate(day)} was not checked for unusual numbers, and no other ` +
+        "counting was used in their place. This is an outage, not a quiet day: explain_change " +
+        `with day ${day} checks it once they can be read.`,
+      kind: "number-watch",
+    });
+    return 0;
+  }
   const readings = jumpsOn(series, day, true);
   if (readings.length === 0) return 0;
   await record({
     headline: `Unusual numbers on ${longDate(day)}`,
-    detail: `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}${rollupOnly(series)}`,
+    detail: `${renderDay(day, readings, series, await loadAround(day))}\n\n${NOT_PROOF}`,
     kind: "number-watch",
     evidence: `explain_change with day ${day} gives the same breakdown, and any metric in full.`,
   });
