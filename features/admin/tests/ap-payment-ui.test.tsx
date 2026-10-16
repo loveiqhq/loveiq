@@ -545,6 +545,22 @@ describe("the Payment page as drawn", () => {
     expect(document.querySelector("[data-ap-tip]")).toHaveTextContent("At €3.50");
     fireEvent.keyDown(chart, { key: "Enter" });
     expect(within(card).getByLabelText("Test a price · €3.50")).toBeTruthy();
+    // The pointer finds the same stops: €20 sits 17/37 of the way along a €3–€40 axis.
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 740,
+      bottom: 280,
+      width: 740,
+      height: 280,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.pointerMove(chart, { clientX: (17 / 37) * 740, clientY: 100, pointerType: "mouse" });
+    expect(document.querySelector("[data-ap-tip]")).toHaveTextContent("At €20.00");
+    fireEvent.click(chart);
+    expect(within(card).getByLabelText("Test a price · €20.00")).toBeTruthy();
   });
 
   it("price elasticity: says why in place of the model when there is no fit", () => {
