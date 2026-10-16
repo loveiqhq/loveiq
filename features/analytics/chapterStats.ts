@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { isBodyScrollLocked } from "@shared/ui/body-scroll-lock";
 
 import { persistReportChapterStats } from "./client";
+import { REPORT_LAYOUT_V4_SLIM } from "./reportLayout";
 
 /**
  * Reading per Report 3.0 chapter, for AP-Analytics' Report page (14 Oct 2026): how long each
@@ -162,7 +163,12 @@ export function useChapterStats({
       const changed = takePending();
       if (!changed) return;
       savedAt = Date.now();
-      persistReportChapterStats({ ...(archetype ? { archetype } : {}), chapters: changed });
+      // Chapter stats are counted on V4 alone, which is the slimmed report since 16.10.
+      persistReportChapterStats({
+        ...(archetype ? { archetype } : {}),
+        report_layout: REPORT_LAYOUT_V4_SLIM,
+        chapters: changed,
+      });
     };
     // `pagehide` unguarded, as useReportEngagementTimers explains: on a real unload it can
     // come while the page still reads visible.
