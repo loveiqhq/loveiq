@@ -1,6 +1,7 @@
 import type { FC } from "react";
-import { REPORT_V4_PARTS, REPORT_V4_SUMMARY } from "@/data/report3-archetype-page";
-import type { Report3CardCopy } from "@/data/report3-archetype-card";
+import { REPORT_V4_PARTS } from "@/data/report3-archetype-page";
+import type { Report3CardView } from "@/data/report3-archetype-card";
+import type { Report3SummaryView } from "@/data/report3-summary";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import V3ArchetypeCard from "./V3ArchetypeCard";
 import V4CoreArchetypeHeading from "./V4CoreArchetypeHeading";
@@ -24,13 +25,22 @@ import V4SummaryChapter from "./V4SummaryChapter";
 interface Props {
   archetype: ArchetypeName;
   matchStrength: number;
-  card: Report3CardCopy;
+  card: Report3CardView;
+  /** Built on the server (buildSummary): its copy is paid since the slimmed report. */
+  summary: Report3SummaryView | null;
   initialDeckIndex?: number;
+  /** Opens the paywall, from the card's dimension locks and the Summary's gate. */
+  onUnlock?: () => void;
 }
 
-const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex = 0 }) => {
-  const summary = REPORT_V4_SUMMARY[archetype];
-
+const V4Part2: FC<Props> = ({
+  archetype,
+  matchStrength,
+  card,
+  summary,
+  initialDeckIndex = 0,
+  onUnlock,
+}) => {
   return (
     <section className="rv4-partblock" data-node-id="1:483" data-name="Part 2 - Your Constellation">
       {/* 1:484 */}
@@ -62,6 +72,7 @@ const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex =
           matchStrength={matchStrength}
           copy={card}
           initialDeckIndex={initialDeckIndex}
+          onUnlock={onUnlock}
         />
       </div>
 
@@ -69,7 +80,9 @@ const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex =
       <div className="rv4-sep" aria-hidden="true" />
 
       {/* 1:736 — omitted, not faked, for an archetype with no summary (none since 03.10). */}
-      {summary ? <V4SummaryChapter archetype={archetype} summary={summary} /> : null}
+      {summary ? (
+        <V4SummaryChapter archetype={archetype} summary={summary} onUnlock={onUnlock} />
+      ) : null}
     </section>
   );
 };

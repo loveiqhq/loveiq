@@ -6060,27 +6060,19 @@ html {
 .rv3:is(.rv4, .rv4-doc) .rv3-arch {
   padding: 18px 0 44px;
 }
-/* 15:816 is a fixed 191: the match row (15:819) grows into the slack and the tagline
- * sits in a fixed 70px box (15:828), so the core motivation panel starts at y=210.
- * Minimums, so a longer tagline grows the header instead of spilling out of it.
+/* 15:816 was a fixed 191 with the motto line in a 70px box (15:828); the slimmed report
+ * (1665:3642, 16.10) took the motto out and the header is 111: the match row (15:819)
+ * grows into the slack, so the core motivation panel starts at the same place on every
+ * card. A minimum, so a long name grows the header instead of spilling out of it.
  *
- * Both rows are 323 wide in the frame, 8px into the header's right padding. Fixed,
- * they ran out of the card below 393, which clips: at 360 "43%" lost its last 19px
- * and the tagline 13. 100% + 8 is exactly 323 at 393 and keeps the 15px inset below. */
+ * The match row is 323 wide in the frame, 8px into the header's right padding. Fixed,
+ * it ran out of the card below 393, which clips: at 360 "43%" lost its last 19px.
+ * 100% + 8 is exactly 323 at 393 and keeps the 15px inset below. */
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__head {
-  min-height: 191px;
+  min-height: 111px;
 }
 .rv3:is(.rv4, .rv4-doc) .rv3-arch__match {
   flex-grow: 1;
-  width: min(323px, calc(100% + 8px));
-}
-/* Mark, 28.09 (1943978527): "Decreased Font size here". 15:829 is Lora 16/24, and
- * sets no tracking. */
-.rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline {
-  font-size: 16px;
-  letter-spacing: 0;
-  line-height: 24px;
-  min-height: 70px;
   width: min(323px, calc(100% + 8px));
 }
 /* Mark, 30.09 (1947975917): "We have update the Core Motivation card". 870:7166 is a
@@ -8368,11 +8360,6 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   transition: width 1800ms cubic-bezier(0.645, 0.045, 0.355, 1);
   width: var(--rv3-arch-match);
 }
-.rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__tagline {
-  transition:
-    opacity 600ms ease-out 500ms,
-    transform 600ms ease-out 500ms;
-}
 .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__motive-wrap {
   transition:
     opacity 600ms ease-out 800ms,
@@ -8381,7 +8368,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
 .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__bar-fill {
   width: 0;
 }
-.rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending :is(.rv3-arch__tagline, .rv3-arch__motive-wrap) {
+.rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__motive-wrap {
   opacity: 0;
   transform: translateY(8px);
 }
@@ -8412,7 +8399,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
   .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__bar-fill {
     width: var(--rv3-arch-match);
   }
-  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending :is(.rv3-arch__tagline, .rv3-arch__motive-wrap) {
+  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__motive-wrap {
     opacity: 1;
     transform: none;
   }
@@ -8423,7 +8410,7 @@ body:has(.rv3.rv4) .report-sticky-unlock--desktop.is-v4 .report-sticky-unlock__b
     color: var(--rv3-accent-ink);
   }
   .rv3:is(.rv4, .rv4-doc) .rv3-arch__bar-fill,
-  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated :is(.rv3-arch__tagline, .rv3-arch__motive-wrap),
+  .rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__motive-wrap,
   .rv3:is(.rv4, .rv4-doc) .rv3-arch__seg.is-on::after,
   .rv3:is(.rv4, .rv4-doc) .rv3-arch__stop.is-current {
     transition: none;
@@ -8641,6 +8628,135 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   }
 }
 
+/* ══ The slimmed report — 16.10 (Figma 1665:3278 · Sanjin's Slimmed_* docs) ═════════════
+ * Readers found V4 too long (Mark's PostHog review, 13.10; the 14.10 sync), so the report
+ * says less: shorter Part I and II copy, fewer chapters, folds instead of blurred walls,
+ * and Part II's own locks. These are the phone's and the 393 preview's rules; the desktop
+ * tail below (700px) keeps its own. */
+
+/* 1665:9806 / 9830 / 9853 / 9876 — a locked dimension card: its first sentence, then the
+ * rest on a line of its own under the veil with the 38px brand lock (1665:9910) over it,
+ * centred on the blurred lines. The lead gives its foot to the lock below it. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card .rv3-deck__body.is-lead {
+  padding-bottom: 0;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__lock {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  margin: 0;
+  padding: 0 0 13.5px;
+  position: relative;
+  text-align: left;
+  user-select: none;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__lock {
+  cursor: inherit;
+  padding-bottom: 12.69px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__lock:focus-visible {
+  border-radius: 10px;
+  outline: 2px solid var(--rv3-arch-glyph, #ff6a3d);
+  outline-offset: 4px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__veil {
+  color: var(--rv3-muted);
+  display: block;
+  filter: blur(var(--rv4-veil, 5px));
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__veil {
+  font-size: 14px;
+  line-height: 22.4px;
+  width: 230px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__veil {
+  font-size: 12px;
+  line-height: 19.2px;
+  width: 216.2px;
+}
+/* The lock tile's own disc (979:510): the brand gradient under the frame's shadow, the
+ * 17px lock 10 in. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__disc {
+  background: linear-gradient(135deg, #fb683e 14.644%, #e88c8c 51.414%, #ac88ed 85.356%);
+  border-radius: 50%;
+  box-shadow: 0 3.294px 4.941px rgba(168, 90, 76, 0.3);
+  height: 38px;
+  left: 50%;
+  position: absolute;
+  top: calc(50% - 6.75px);
+  transform: translate(-50%, -50%);
+  width: 38px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__disc img {
+  display: block;
+  left: 10.5px;
+  position: absolute;
+  top: 10.5px;
+}
+@media (hover: hover) {
+  .rv3:is(.rv4, .rv4-doc) .rv3-deck__lock:hover .rv3-deck__disc {
+    filter: brightness(1.06);
+  }
+}
+
+/* 1665:3796 — the half-locked Summary: two paragraphs and a sentence, then the rest of
+ * the third under the veil, three lines of it fading out (1665:9926), and the gate card
+ * under them, in the flow rather than over the blur (1757:4263). The veil is the third
+ * paragraph's continuation, so nothing separates it from the sentence above. */
+.rv3 .rv4-summary.is-locked .rv4-summary__body {
+  gap: 0;
+}
+.rv3 .rv4-summary__gate {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  width: 356px;
+}
+.rv3 .rv4-summary__veil {
+  max-height: 76.8px;
+  overflow-x: visible;
+  overflow-y: clip;
+  position: relative;
+  user-select: none;
+  width: 100%;
+}
+.rv3 .rv4-summary__veil p {
+  color: var(--rv3-copy);
+  filter: blur(var(--rv4-veil, 5px));
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+}
+.rv3 .rv4-summary__veil-fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.7) 40%,
+    #fff 85%
+  );
+  bottom: 0;
+  height: 64px;
+  left: -16px;
+  pointer-events: none;
+  position: absolute;
+  right: -16px;
+}
+.rv3 .rv4-summary__gate .rv4-premium {
+  flex: none;
+  left: auto;
+  position: relative;
+  top: auto;
+  transform: none;
+}
+
 /* ══ Desktop touch-up — 28.09 (c) ═══════════════════════════════════════════════════
  * Fatih, 28.09: "just touch up the desktop version so please can you just scale it
  * properly to not have these huge gaps and spaces". Production's column (991cb18c) is
@@ -8655,18 +8771,13 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
  * now, at the end of the file.) The live page only (`.rv3.rv4`) and only from 700px, so
  * the phone and the 393 preview are exactly as before. */
 @media (min-width: 700px) {
-  /* 15:815 — the match row, the tagline and the motivation body run the card rather
-   * than the phone's 323 and 281. The header and the panel size to their content: the
-   * phone frame's fixed 191 and 197 (and the 70 under the tagline) left white under a
-   * one-line tagline and a one-line body here. */
+  /* 15:815 — the match row and the motivation body run the card rather than the phone's
+   * 323 and 281. The header and the panel size to their content: the phone frame's fixed
+   * header and 197 panel left white under a one-line body here. */
   .rv3.rv4 .rv3-arch__head {
     min-height: 0;
   }
   .rv3.rv4 .rv3-arch__match {
-    width: 100%;
-  }
-  .rv3.rv4 .rv3-arch__tagline {
-    min-height: 0;
     width: 100%;
   }
   .rv3.rv4 .rv3-arch__motive {

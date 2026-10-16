@@ -136,14 +136,12 @@ describe("reportV3.css — the archetype card's entrance", () => {
     );
   });
 
-  it("raises the tagline, then the core motivation panel, in behind the bar", () => {
-    const tagline = rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__tagline");
-    expect(tagline).toMatch(/opacity 600ms ease-out 500ms/);
+  // The motto line that rose in first went with the slimmed report (16.10); the panel
+  // keeps its own beat.
+  it("raises the core motivation panel in behind the bar", () => {
     const panel = rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch.is-animated .rv3-arch__motive-wrap");
     expect(panel).toMatch(/opacity 600ms ease-out 800ms/);
-    const pending = rule(
-      ".rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending :is(.rv3-arch__tagline, .rv3-arch__motive-wrap)"
-    );
+    const pending = rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch.is-pending .rv3-arch__motive-wrap");
     expect(pending).toMatch(/opacity: 0/);
     expect(pending).toMatch(/transform: translateY\(8px\)/);
   });

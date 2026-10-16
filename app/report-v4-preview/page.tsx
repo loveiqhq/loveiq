@@ -6,7 +6,8 @@
 // Nothing here is wired into the real report: ReportPage.tsx imports none of these
 // components, so this page is the only thing that renders them today.
 import { notFound } from "next/navigation";
-import { report3ArchetypeCard } from "@/data/report3-archetype-card";
+import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { buildSummary } from "@/data/report3-summary";
 import {
   REPORT_V4_PART3_CHAPTERS,
   REPORT_V4_PART4_CHAPTERS,
@@ -50,9 +51,6 @@ export default async function ReportV4PreviewPage({
     notFound();
   }
 
-  const copy = report3ArchetypeCard[ARCHETYPE];
-  if (!copy) throw new Error(`No Report V4 card copy for ${ARCHETYPE}`);
-
   // `?plan=` simulates a reader so all three states of the learn-more article are
   // checkable: no plan shows 153:2280 (the paywall), any paid plan shows 153:2260.
   // It is a query param rather than a control inside the 393px canvas so the report
@@ -60,6 +58,12 @@ export default async function ReportV4PreviewPage({
   const raw = (await searchParams).plan;
   const planParam = typeof raw === "string" ? raw : "";
   const accessPlan: ReportAccessPlan = isReportPurchasePlan(planParam) ? planParam : null;
+
+  // Part II's card and Summary, half-locked behind the Summary's gate since the slimmed
+  // report (16.10), as the real route builds them.
+  const part2Locked = isLearnMoreArticleLocked({ article: { chapterId: "summary" }, accessPlan });
+  const copy = buildArchetypeCard(ARCHETYPE, { locked: part2Locked });
+  if (!copy) throw new Error(`No Report V4 card copy for ${ARCHETYPE}`);
 
   // Built here, on the server, so the gate is decided before anything reaches the
   // browser — and so a locked reader's payload has already been stripped.
@@ -74,6 +78,7 @@ export default async function ReportV4PreviewPage({
       archetype={ARCHETYPE}
       matchStrength={MATCH_STRENGTH}
       copy={copy}
+      summary={buildSummary(ARCHETYPE, { locked: part2Locked })}
       learnMore={learnMore}
       accessPlan={accessPlan}
       accessPlanLabel={accessPlan ?? "no purchase"}

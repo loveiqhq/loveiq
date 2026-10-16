@@ -8,7 +8,8 @@ import V4Part2 from "@features/report/ui/v3/V4Part2";
 import V4ChapterPart from "@features/report/ui/v3/V4ChapterPart";
 import V4Report from "@features/report/ui/v3/V4Report";
 import V3Methodology from "@features/report/ui/v3/V3Methodology";
-import { report3ArchetypeCard } from "@/data/report3-archetype-card";
+import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { buildSummary, missingReport3Summary } from "@/data/report3-summary";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 import {
@@ -17,7 +18,6 @@ import {
   REPORT_V4_PART4_CHAPTERS,
   REPORT_V4_PART5_CHAPTERS,
   REPORT_V4_PART6_CHAPTERS,
-  missingReport3Summary,
   REPORT_V4_PARTS,
   TEASER_PLACEHOLDER,
 } from "@/data/report3-archetype-page";
@@ -30,7 +30,9 @@ import {
  */
 
 const V3_CSS = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
-const card = report3ArchetypeCard["Spark Seeker"]!;
+// The views the server builds (buildArchetypeCard / buildSummary), unlocked.
+const card = buildArchetypeCard("Spark Seeker")!;
+const summary = buildSummary("Spark Seeker");
 
 afterEach(cleanup);
 
@@ -97,7 +99,7 @@ describe("V3Methodology chrome", () => {
 
 describe("V4Part2", () => {
   const renderPart2 = () =>
-    render(<V4Part2 archetype="Spark Seeker" matchStrength={43} card={card} />);
+    render(<V4Part2 archetype="Spark Seeker" matchStrength={43} card={card} summary={summary} />);
 
   it("renders every block the frame lists, in order", () => {
     const { container } = renderPart2();
@@ -115,7 +117,12 @@ describe("V4Part2", () => {
 
   it("draws every archetype's own summary, from Sanjin's docs (03.10)", () => {
     const { container } = render(
-      <V4Part2 archetype="Quiet Withdrawer" matchStrength={12} card={card} />
+      <V4Part2
+        archetype="Quiet Withdrawer"
+        matchStrength={12}
+        card={card}
+        summary={buildSummary("Quiet Withdrawer")}
+      />
     );
     expect(container.querySelector(".rv4-summary")).toBeInTheDocument();
     expect(container.querySelector(".rv4-nudges")).toBeNull();
@@ -242,7 +249,7 @@ describe("Parts IV, V and VI", () => {
 
 describe("V4Report — the whole page", () => {
   const renderAll = () =>
-    render(<V4Report archetype="Spark Seeker" matchStrength={43} card={card} />);
+    render(<V4Report archetype="Spark Seeker" matchStrength={43} card={card} summary={summary} />);
 
   it("renders all six parts as one continuous flow, not tabs", () => {
     const { container } = renderAll();

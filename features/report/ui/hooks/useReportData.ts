@@ -99,6 +99,16 @@ export interface ReportData {
    */
   beliefsCopy: import("../sections/BeliefsSection").BeliefsCopy | null;
   /**
+   * Part II's archetype card for `?v4=1`, half-locked behind the Summary's gate since the
+   * slimmed report (16.10). NULL for a name with no card copy: ReportPage keeps V2's card.
+   */
+  archetypeCard?: import("@/data/report3-archetype-card").Report3CardView | null;
+  /**
+   * Part II's "Summary of the <archetype>" for `?v4=1`, half-locked since the slimmed
+   * report (16.10). NULL for a name with no summary: ReportPage keeps V2's section.
+   */
+  summaryChapter?: import("@/data/report3-summary").Report3SummaryView | null;
+  /**
    * Report 3.0's Typical Beliefs chapter, for `?v4=1`. NULL for any archetype the
    * content has not been scaled to yet, which is what ReportPage falls back on.
    */

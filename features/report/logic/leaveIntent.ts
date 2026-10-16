@@ -30,8 +30,13 @@ export const FIRST_VISIT_WINDOW_MS = 2 * 60 * 60 * 1000;
 /** A report date this far ahead of the device clock still counts as now. */
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
-/** The first paywall card: the same selector the page reports the paywall with. */
-export const FIRST_PAYWALL_SELECTOR = ".report-premium-overlay, .rv4-premium";
+/**
+ * The first paywall card: the same selector the page reports the paywall with. The slimmed
+ * report's Summary gate (16.10) sits in Part II, above every chapter, and is left out, so
+ * the offer and "paywall reached" still wait for the first chapter's card (Fatih, 16.10).
+ */
+export const FIRST_PAYWALL_SELECTOR =
+  ".report-premium-overlay, .rv4-premium:not(.rv4-premium--summary)";
 /** Where a report has no card (it draws one only with its new copy): the first lock. */
 export const LOCKED_CHAPTER_SELECTOR = ".rv4-chapter.is-locked";
 

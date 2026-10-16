@@ -37,7 +37,11 @@ export function useCtaSeen(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting && e.intersectionRatio >= 0.5)) return;
         observer.disconnect();
-        if (cta === "locked_chapter") recordPaywallSeen(el);
+        // Every report paywall is its chapter's paywall seen: Part II's two count for the
+        // chapter they sit in (core_archetype) like a locked chapter's card does.
+        if (cta === "locked_chapter" || cta === "summary_gate" || cta === "archetype_card_lock") {
+          recordPaywallSeen(el);
+        }
         if (seen.has(key)) return;
         seen.add(key);
         trackCtaSeen({ cta });

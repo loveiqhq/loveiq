@@ -5,6 +5,8 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { buildArchetypeCard } from "@/data/report3-archetype-card";
+import { buildSummary } from "@/data/report3-summary";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -103,6 +105,9 @@ export async function GET(request: Request) {
   const unlocked = (sectionId: string, isPremium = true) =>
     isSectionUnlockedForPlan({ accessPlan, archetypeTier, isPremium, sectionId });
 
+  // Part II of the slimmed report: the card and the Summary, half-locked behind the
+  // Summary's own gate (Essentials), as on the real route.
+  const summaryUnlocked = unlocked("summary");
   const beliefsUnlocked = unlocked("typical_beliefs");
   const beliefsSection = getReport2Section(archetype, "beliefs");
   const accelUnlocked = unlocked("typical_arousal_accelerators_turn_ons_of_the_core_archetype");
@@ -157,6 +162,9 @@ export async function GET(request: Request) {
       unlockedArchetypes,
       archetypeTiers
     ),
+
+    archetypeCard: isV4Request ? buildArchetypeCard(archetype, { locked: !summaryUnlocked }) : null,
+    summaryChapter: isV4Request ? buildSummary(archetype, { locked: !summaryUnlocked }) : null,
 
     beliefsCopy: {
       "edu.eyebrow": beliefsSection["edu.eyebrow"] ?? null,
