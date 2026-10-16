@@ -598,6 +598,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
             <SubHead title="Checkout success">
               Paid checkouts in this range: a) reached the payment page, b) filled in their details
               and attempted to pay, c) payment succeeded. Free (€0) unlocks are left out.
+              {c.note ? ` ${c.note}` : ""}
             </SubHead>
             {steps.map((s) => (
               <div
@@ -632,43 +633,34 @@ function Checkout({ d }: { d: PaymentPayload }) {
 
 /**
  * The rows shown: all of them, but for countries the 12 largest and the rest added up as
- * "Other countries". Rates add up through their counts (buyers = rate × finishers); the
- * full-unlock average only where each country's sales are all full unlocks (average × sales =
- * revenue, as today), since its parts are not in the payload otherwise.
+ * "Other countries", from the counts behind each rate.
  */
-function shownRows(t: SegmentTable): { rows: SegmentRow[]; merged: number; avgBlank: boolean } {
-  if (t.key !== "country" || t.rows.length <= 12)
-    return { rows: t.rows, merged: 0, avgBlank: false };
+function shownRows(t: SegmentTable): { rows: SegmentRow[]; merged: number } {
+  if (t.key !== "country" || t.rows.length <= 12) return { rows: t.rows, merged: 0 };
   const sorted = [...t.rows].sort((a, b) => b.finishers - a.finishers);
   const rest = sorted.slice(12);
-  const sum = (xs: SegmentRow[], f: (r: SegmentRow) => number) => xs.reduce((n, r) => n + f(r), 0);
-  const finishers = sum(rest, (r) => r.finishers);
-  const priced = rest.filter((r) => r.fullAvg !== null);
-  const whole = priced.every((r) => Math.abs((r.fullAvg ?? 0) * r.sales - r.revenue) < 0.005);
+  const sum = (f: (r: SegmentRow) => number) => rest.reduce((n, r) => n + f(r), 0);
+  const finishers = sum((r) => r.finishers);
+  const fullSales = sum((r) => r.fullSales);
+  const fullRevenue = Math.round(sum((r) => r.fullRevenue) * 100) / 100;
   const other: SegmentRow = {
     label: "Other countries",
     finishers,
-    sales: sum(rest, (r) => r.sales),
-    preCvr: rest.some((r) => r.preCvr === null)
-      ? null
-      : ratio(
-          sum(rest, (r) => Math.round((r.preCvr ?? 0) * r.finishers)),
-          finishers
-        ),
+    sales: sum((r) => r.sales),
+    // Pre-unlock is not on sale: blank, or 0 for every row once it is (see buildPayment).
+    preCvr: rest.some((r) => r.preCvr === null) ? null : 0,
     preAvg: null,
     fullCvr: ratio(
-      sum(rest, (r) => Math.round((r.fullCvr ?? 0) * r.finishers)),
+      sum((r) => r.fullBuyers),
       finishers
     ),
-    fullAvg: whole
-      ? ratio(
-          sum(priced, (r) => r.revenue),
-          sum(priced, (r) => r.sales)
-        )
-      : null,
-    revenue: Math.round(sum(rest, (r) => r.revenue) * 100) / 100,
+    fullAvg: ratio(fullRevenue, fullSales),
+    revenue: Math.round(sum((r) => r.revenue) * 100) / 100,
+    fullBuyers: sum((r) => r.fullBuyers),
+    fullSales,
+    fullRevenue,
   };
-  return { rows: [...sorted.slice(0, 12), other], merged: rest.length, avgBlank: !whole };
+  return { rows: [...sorted.slice(0, 12), other], merged: rest.length };
 }
 
 const SEGMENT_COLUMNS = "minmax(200px, 1.8fr) repeat(8, minmax(92px, 1fr))";
@@ -683,7 +675,7 @@ function Segments({
   onSegKey: (k: string) => void;
 }) {
   const t = d.segments.find((s) => s.key === segKey);
-  const { rows, merged, avgBlank } = t ? shownRows(t) : { rows: [], merged: 0, avgBlank: false };
+  const { rows, merged } = t ? shownRows(t) : { rows: [], merged: 0 };
   const allSales = (t?.rows ?? []).reduce((n, r) => n + r.sales, 0);
   const cv = rows.map((r) => r.fullCvr);
   const av = rows.map((r) => r.fullAvg);
@@ -763,8 +755,7 @@ function Segments({
         {(t?.note || merged > 0) && (
           <p className="m-0">
             {t?.note}
-            {merged > 0 &&
-              ` Other countries: the ${merged} smaller countries added together${avgBlank ? "; their full-unlock average cannot be added up from the countries' figures, so it is left blank" : ""}.`}
+            {merged > 0 && ` Other countries: the ${merged} smaller countries added together.`}
           </p>
         )}
         {!d.overTime.preOnSale && <p className="m-0">{NOT_ON_SALE}</p>}

@@ -80,6 +80,10 @@ export interface SegmentRow {
   fullCvr: number | null;
   fullAvg: number | null;
   revenue: number;
+  /** The counts behind the rates, so rows can be added up exactly. */
+  fullBuyers: number;
+  fullSales: number;
+  fullRevenue: number;
 }
 
 export interface SegmentTable {
@@ -132,6 +136,8 @@ export interface PaymentPayload extends PageHead {
     methods: MethodRow[];
     sales: number;
     why: string | null;
+    /** Why checkouts before a day are left out, when the range reaches back to them. */
+    note: string | null;
   };
   segments: SegmentTable[];
   pricing: {
@@ -152,6 +158,9 @@ export interface UpliftFlag {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Paid checkout's first day: earlier checkout sessions were the team's tests. */
+export const CHECKOUT_FROM = "2026-05-01";
 
 const METHOD_NAMES: Record<string, string> = {
   link: "Stripe Link",
@@ -232,9 +241,13 @@ export function buildPayment(input: {
   const sum = (ms: MoneyFact[]) => round2(ms.reduce((n, m) => n + m.amount, 0));
   const count = (n: number) => n.toLocaleString("en-US");
   const payers = subs.filter((s) => s.paidAt).length;
+  // Paid checkout went live on 1 May 2026: April's checkouts were the team's tests (one
+  // report opened 44 of them over two days), so they are left out, as the design counts.
   const checkouts = tablet
     ? []
-    : facts.checkouts.filter((c) => inScope(c, scope) && classifySource(c) !== "test");
+    : facts.checkouts.filter(
+        (c) => c.day >= CHECKOUT_FROM && inScope(c, scope) && classifySource(c) !== "test"
+      );
   const reached = checkouts.reduce((n, c) => n + c.n, 0);
   const paidCheckouts = checkouts
     .filter((c) => c.status === "succeeded")
@@ -432,7 +445,8 @@ export function buildPayment(input: {
       rows: keys.map((k) => {
         const xs = groups.get(k)!;
         const fullBuyers = xs.filter((s) => s.full);
-        const fullSalesN = fullBuyers.reduce((n, s) => n + s.sales, 0);
+        // Their full unlocks only: a buyer's other sale is no full-unlock price.
+        const fullSalesN = fullBuyers.reduce((n, s) => n + s.fullSales, 0);
         return {
           label: k,
           finishers: xs.length,
@@ -440,8 +454,11 @@ export function buildPayment(input: {
           preCvr: preOnSale ? 0 : null,
           preAvg: null,
           fullCvr: ratio(fullBuyers.length, xs.length),
-          fullAvg: ratio(round2(fullBuyers.reduce((n, s) => n + s.revenue, 0)), fullSalesN),
+          fullAvg: ratio(round2(fullBuyers.reduce((n, s) => n + s.fullRevenue, 0)), fullSalesN),
           revenue: round2(xs.reduce((n, s) => n + s.revenue, 0)),
+          fullBuyers: fullBuyers.length,
+          fullSales: fullSalesN,
+          fullRevenue: round2(fullBuyers.reduce((n, s) => n + s.fullRevenue, 0)),
         };
       }),
       note: "",
@@ -664,6 +681,10 @@ export function buildPayment(input: {
       methods,
       sales: sales.length,
       why: tablet,
+      note:
+        facts.from < CHECKOUT_FROM
+          ? `Checkouts count from ${rangeLabel(CHECKOUT_FROM, CHECKOUT_FROM)}, when paid checkout went live: the earlier ones were the team's tests.`
+          : null,
     },
     segments,
     pricing: {

@@ -391,6 +391,8 @@ export function ageMatched(prev: Facts, cutoff: Date): Facts {
         paidAt,
         sales: paidAt ? s.sales : 0,
         revenue: paidAt ? s.revenue : 0,
+        fullSales: paidAt ? s.fullSales : 0,
+        fullRevenue: paidAt ? s.fullRevenue : 0,
         sharedAt,
         shared: s.shared && sharedAt !== null,
         votedAt,

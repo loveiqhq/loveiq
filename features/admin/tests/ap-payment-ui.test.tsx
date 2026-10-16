@@ -53,6 +53,9 @@ const seg = (label: string, finishers: number, sales: number, revenue: number): 
   fullCvr: finishers ? sales / finishers : null,
   fullAvg: sales ? revenue / sales : null,
   revenue,
+  fullBuyers: sales,
+  fullSales: sales,
+  fullRevenue: revenue,
 });
 
 // Fourteen countries: the twelve largest are shown, the last two are added up.

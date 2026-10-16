@@ -97,8 +97,11 @@ export interface SubFact extends Tagged, AdTags {
   gifted: boolean;
   /** The first paid plan. */
   plan: string | null;
-  /** Bought Full or Full All, first or as an upgrade later. */
+  /** Bought a full unlock (Full, Full All or Core), first or as an upgrade later. */
   full: boolean;
+  /** Of their paid sales, the full unlocks and those sales' revenue. */
+  fullSales: number;
+  fullRevenue: number;
   shared: boolean;
   /** When the first share, vote and invite happened (for age-matched comparisons). */
   sharedAt: string | null;
@@ -326,6 +329,19 @@ export function parseFacts(
       plan: str(r.plan),
       // An ap_facts from before the flag: the first plan, as it was read then.
       full: typeof r.full === "boolean" ? r.full : FULL_PLANS.has(str(r.plan) ?? ""),
+      // A reader of the facts without them: its first plan, when that was a full unlock.
+      fullSales:
+        r.fullSales !== undefined
+          ? num(r.fullSales)
+          : FULL_PLANS.has(str(r.plan) ?? "")
+            ? num(r.sales)
+            : 0,
+      fullRevenue:
+        r.fullRevenue !== undefined
+          ? num(r.fullRevenue)
+          : FULL_PLANS.has(str(r.plan) ?? "")
+            ? num(r.revenue)
+            : 0,
       shared: r.shared === true,
       sharedAt: str(r.sharedAt),
       votes: num(r.votes),
