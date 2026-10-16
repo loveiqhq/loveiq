@@ -671,6 +671,7 @@ export async function directoryPeopleReading(request: Request): Promise<Reading 
     const res = await fetchWithTimeout(
       "https://admin.googleapis.com/admin/directory/v1/users" +
         // The whole customer, not one domain: a secondary domain's accounts count too.
+        // eslint-disable-next-line no-secrets/no-secrets -- query string, not a secret
         `?customer=my_customer&maxResults=200&query=isSuspended=false` +
         `&fields=${encodeURIComponent("nextPageToken,users(primaryEmail,name(fullName),archived,suspended)")}` +
         (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
