@@ -19,6 +19,7 @@ import {
   BASELINE_DAYS,
   METRICS,
   loadSeries,
+  partialDay,
   rollupOnly,
   type DaySeries,
 } from "@features/brain/server/jumps";
@@ -302,7 +303,7 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
       "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
         "dashboard counts them, by Berlin day; reports opened and paid are the daily rollup's, " +
         "by UTC day.",
-    until === today ? "Today is still going, so its numbers are partial." : "",
+    partialDay(loaded, until, new Date(now)),
     wantsAds && !ad ? "Google Ads spend could not be read just now, so it is left blank." : "",
     ga4
       ? "GA4 misses visitors who decline cookies, so it reads lower than our own visitor count."

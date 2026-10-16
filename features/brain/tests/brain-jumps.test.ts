@@ -25,6 +25,7 @@ import {
   noticeJumps,
   parseGa4Day,
   readMetric,
+  partialDay,
   renderDay,
   rollupOnly,
   type Around,
@@ -616,6 +617,33 @@ describe("loadSeries counts as the AP-Analytics dashboard does", () => {
     // The rollup's own figures for it are unknown, never zero.
     expect(metric("report_opens").count!(today)).toBeNull();
     expect(metric("reports_paid").count!(today)).toBeNull();
+  });
+
+  it("leaves out the rollup's own figures for a UTC day still running, Berlin's yesterday at night", async () => {
+    // 00:30 in Berlin on the 26th: the 25th is a whole Berlin day, but its UTC day runs on.
+    vi.setSystemTime(new Date("2026-09-25T22:30:00Z"));
+    const s = await loadSeries("2026-09-25");
+    const yesterday = s.find((d) => d.day === "2026-09-25")!;
+    expect(yesterday.rollup).toMatchObject({ unique_visitors: 200, submissions: 4 });
+    expect(metric("report_opens").count!(yesterday)).toBeNull();
+    expect(metric("reports_paid").count!(yesterday)).toBeNull();
+    // A UTC day that has ended keeps them.
+    expect(metric("report_opens").count!(s.find((d) => d.day === "2026-09-24")!)).toBe(12);
+  });
+
+  it("says when a day is part of one: Berlin's today, or a UTC day not over on the rollup alone", () => {
+    const dashboard: DaySeries[] = [{ day: "2026-09-25", dashboard: true }];
+    const rollupOnlySeries: DaySeries[] = [{ day: "2026-09-25", dashboard: false }];
+    const night = new Date("2026-09-25T22:30:00Z"); // 00:30 on the 26th in Berlin
+    expect(partialDay(dashboard, "2026-09-26", night)).toBe(
+      "Today is still going, so its numbers are partial."
+    );
+    // Berlin's yesterday: whole for the dashboard, not over in UTC for the rollup alone.
+    expect(partialDay(dashboard, "2026-09-25", night)).toBe("");
+    expect(partialDay(rollupOnlySeries, "2026-09-25", night)).toBe(
+      "The old rollup counts UTC days, and 2026-09-25 is not over yet in UTC, so its numbers are partial."
+    );
+    expect(partialDay(rollupOnlySeries, "2026-09-24", night)).toBe("");
   });
 
   it("serves the rollup's rows, and says so, when the dashboard's facts cannot be read", async () => {

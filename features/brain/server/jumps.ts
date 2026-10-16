@@ -54,6 +54,22 @@ export interface DaySeries {
   dashboard?: boolean;
 }
 
+/**
+ * Said about `day` when its figures are part of a day: it is Berlin's today, or the answer has
+ * only the rollup's rows (the dashboard could not be read) and the rollup's UTC day of that date
+ * has not ended. "" when the day is whole.
+ */
+export function partialDay(series: DaySeries[], day: string, now = new Date()): string {
+  if (day === reportingDay(now)) return "Today is still going, so its numbers are partial.";
+  if (rollupOnly(series) && day >= now.toISOString().slice(0, 10)) {
+    return (
+      `The old rollup counts UTC days, and ${day} is not over yet in UTC, so its numbers ` +
+      "are partial."
+    );
+  }
+  return "";
+}
+
 /** Said under an answer built from rollup-only rows (see `asDashboard`). */
 export const ROLLUP_ONLY =
   "The dashboard's numbers could not be read just now, so visitors, survey starts, finished " +
@@ -333,14 +349,22 @@ export async function loadSeries(until: string, extraDays = 0): Promise<DaySerie
     fetchFacts(from, until).catch(() => null),
   ]);
   const byDay = new Map(rows.map((row) => [String(row.day).slice(0, 10), row]));
+  const berlinToday = reportingDay();
   const out: DaySeries[] = [];
   for (let d = from; d <= until; d = addDays(d, 1)) {
     const row = byDay.get(d);
+    /**
+     * From 00:00 to 02:00 in Berlin, Berlin's yesterday is a whole day for the dashboard but
+     * the rollup's UTC day of that date is still running, so its own figures (reports opened
+     * and paid) are part of a day: they are left out like a day it has not reached (about 13%
+     * of first report opens fall at 22:00-24:00 UTC). The dashboard's figures stand.
+     */
+    const running = d >= today && d !== berlinToday;
     out.push({
       day: d,
       // A Berlin day the UTC rollup has not reached (today, before 02:00) still has the
       // dashboard's figures; its own are null, no reading rather than zero.
-      rollup: facts ? asDashboard(row ?? unreached(d), facts, d) : row,
+      rollup: facts ? asDashboard(row && !running ? row : unreached(d), facts, d) : row,
       ga4: ga4.get(d),
       dashboard: facts !== null,
     });

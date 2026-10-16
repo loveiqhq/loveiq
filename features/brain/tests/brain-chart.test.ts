@@ -224,6 +224,20 @@ describe("show_chart: what gets drawn", () => {
     expect(today.ok && today.text).toContain("Today is still going, so its numbers are partial.");
   });
 
+  it("calls the last day partial, on the old rollup alone, while its UTC day runs", async () => {
+    // 00:30 in Berlin on 27 Sep: the default chart ends on the 26th, whole for the dashboard.
+    const night = Date.parse("2026-09-26T22:30:00Z");
+    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: true });
+    const whole = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
+    expect(whole.ok && whole.text).not.toContain("partial");
+    // With the dashboard down, the 26th is the rollup's UTC day, still running.
+    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: false });
+    const old = await drawChart({ metrics: ["visitors"], days: 7 } as never, night);
+    expect(old.ok && old.text).toContain(
+      "The old rollup counts UTC days, and 2026-09-26 is not over yet in UTC, so its numbers are partial."
+    );
+  });
+
   it("groups thousands in an amount, as the reader would write it", async () => {
     dayOf = () => ({ rollup: { revenue: "250" } });
     const { payload, text } = await draw({ metrics: ["revenue"], days: 7 });
