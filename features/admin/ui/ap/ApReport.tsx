@@ -589,19 +589,26 @@ function WizardSection({ data }: { data: ReportPayload }) {
           ))}
         </div>
       </div>
-      <p className="m-0 text-xs leading-relaxed text-ap-muted">
-        Reached, Continue, Skip intro and Exit follow the filters; Back and Time are all traffic, as
-        the slides&rsquo; own events carry no source or device. Continue on slide 6 = opened the
-        report.{" "}
-        {skipsFrom
-          ? `Skip intro = pressed Skip Intro on the slide, of its readers who finished from ${skipsFrom}, when it began to be recorded. Exit = did not go on and did not skip (closed, or still on it); before ${skipsFrom} a skip counts as an exit.`
-          : "Skip intro is not recorded yet. Exit = did not go on (closed, skipped, or still on it)."}{" "}
-        Back = went back from the slide, of those who reached it
-        {data.narrowed ? "; with a filter on it is a count, since back clicks carry no source" : ""}
-        . Time: median from arriving on a slide to going on; none on slide 6, as there is no end
-        time on the last slide. In red: Skip intro from 11%, Exit from 5%. The CSV also has, for
-        slide 2, the readers who stepped through the map&rsquo;s deep dives.
-      </p>
+      <details className="text-xs leading-relaxed text-ap-muted">
+        <summary className="cursor-pointer font-semibold text-ap-body">
+          How these are counted
+        </summary>
+        <p className="m-0 mt-1.5">
+          Reached, Continue, Skip intro and Exit follow the filters; Back and Time are all traffic,
+          as the slides&rsquo; own events carry no source or device. Continue on slide 6 = opened
+          the report.{" "}
+          {skipsFrom
+            ? `Skip intro = pressed Skip Intro on the slide, of its readers who finished from ${skipsFrom}, when it began to be recorded. Exit = did not go on and did not skip (closed, or still on it); before ${skipsFrom} a skip counts as an exit.`
+            : "Skip intro is not recorded yet. Exit = did not go on (closed, skipped, or still on it)."}{" "}
+          Back = went back from the slide, of those who reached it
+          {data.narrowed
+            ? "; with a filter on it is a count, since back clicks carry no source"
+            : ""}
+          . Time: median from arriving on a slide to going on; none on slide 6, as there is no end
+          time on the last slide. In red: Skip intro from 11%, Exit from 5%. The CSV also has, for
+          slide 2, the readers who stepped through the map&rsquo;s deep dives.
+        </p>
+      </details>
     </Card>
   );
 }
@@ -631,7 +638,7 @@ function TimeSection({ data }: { data: ReportPayload }) {
       </div>
       <SubHead
         title="Share of readers by total active reading time"
-        description="Readers grouped by how long they actively read in total (minutes), against the average of all reports"
+        description="Readers grouped by how long they actively read in total, against the average of all reports"
       />
       <div className="flex flex-wrap gap-4 text-xs text-ap-body">
         <span className="inline-flex items-center gap-1.5">
@@ -1234,12 +1241,9 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
               <span role="cell" className="px-3 py-2 text-xs tabular-nums text-ap-muted">
                 {c.n}
               </span>
-              {/* A long id wraps inside its column rather than running into Reach. */}
-              <span role="rowheader" className="flex min-w-0 flex-col gap-px px-3 py-2">
-                <span className="text-[13px] font-bold">{c.name}</span>
-                <span className="font-mono text-[11px] text-ap-muted [overflow-wrap:anywhere]">
-                  {c.part} · {c.id}
-                </span>
+              {/* The name alone, as redrawn on 16 Oct; the CSV keeps its id. */}
+              <span role="rowheader" className="min-w-0 px-3 py-2 text-[13px] font-bold">
+                {c.name}
               </span>
               <span role="cell" className="flex items-center gap-2 px-3 py-2">
                 <span className="flex-1">
@@ -1425,9 +1429,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[13px] font-bold text-ap-body">
-            Issues reported with a bad vote
-          </span>
+          <span className="text-[13px] font-bold text-ap-body">Issues reported</span>
           {fb.issues.map((i) => (
             <div
               key={i.label}

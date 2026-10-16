@@ -362,7 +362,12 @@ function EngagementTable({ data }: { data: LandingPayload }) {
       {rows.length === 0 && !avg ? (
         <p className="m-0 text-sm text-ap-muted">No landing test ran in this range.</p>
       ) : (
-        <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Engagement per landing page, scrolls sideways"
+          className="overflow-x-auto rounded-[14px] border border-ap-line"
+        >
           <div role="table" aria-label="Engagement per landing page" style={{ minWidth: 900 }}>
             <div
               role="row"

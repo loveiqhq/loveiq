@@ -156,7 +156,13 @@ function PayTable({
   rowHeaders?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+    // A tab stop and a name, so a keyboard can scroll it sideways (nothing in it takes focus).
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label={`${label}, scrolls sideways`}
+      className="overflow-x-auto rounded-[14px] border border-ap-line"
+    >
       <div role="table" aria-label={label} style={{ minWidth }}>
         {group}
         <div role="row" className="grid bg-ap-ground" style={{ gridTemplateColumns: columns }}>
@@ -230,7 +236,12 @@ function SalesChart({ rows }: { rows: OverTimeRow[] }) {
   const fy = (v: number) => (Math.min(v, fTop) / fTop) * 100;
   const margin = "0 56px 0 40px";
   return (
-    <div className="overflow-x-auto">
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label="Paid sales over time, chart"
+      className="overflow-x-auto"
+    >
       <div className="pt-2" style={{ minWidth: n * 56 + 96 }}>
         <div className="relative border-b border-ap-line" style={{ height: H, margin }}>
           {QUARTERS.map((f) => (
@@ -373,7 +384,12 @@ function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
   const H = 180;
   const top = countTop(Math.max(...points.flatMap((p) => [p.reached, p.attempted, p.paid])));
   return (
-    <div className="overflow-x-auto">
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label="Checkouts over time, chart"
+      className="overflow-x-auto"
+    >
       <div style={{ minWidth: points.length * 96 + 40 }}>
         <div
           className="relative border-b border-ap-line"
@@ -480,7 +496,12 @@ function Methods({ c }: { c: PaymentPayload["checkout"] }) {
               />
             ))}
           </div>
-          <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Payment methods, scrolls sideways"
+            className="overflow-x-auto rounded-[14px] border border-ap-line"
+          >
             <div role="table" aria-label="Payment methods" className="min-w-[440px]">
               <div
                 role="row"
@@ -1057,7 +1078,12 @@ function ElasticityModel({
           Observed months
         </span>
       </div>
-      <div className="overflow-x-auto">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Price elasticity, chart"
+        className="overflow-x-auto"
+      >
         <div className="pt-2" style={{ minWidth: 520 }}>
           <div
             className="relative border-b border-l border-ap-line"

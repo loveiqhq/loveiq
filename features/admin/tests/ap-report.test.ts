@@ -1511,7 +1511,7 @@ describe("report page, on screen", () => {
     expect(bar("Bookmark or direct")).toBeCloseTo(33.33);
   });
 
-  it("gives the feedback log's comment the room left, and keeps a long chapter id in its column", () => {
+  it("gives the feedback log's comment the room left, and names each chapter alone", () => {
     screenData.payload = payload;
     render(createElement(ApReport));
     const log = screen.getByRole("table", { name: "Feedback log" });
@@ -1519,11 +1519,11 @@ describe("report page, on screen", () => {
       "170px 100px minmax(220px,2fr) 90px 140px minmax(160px,1.6fr)"
     );
     expect(log.style.minWidth).toBe("880px");
-    // A chapter's name and id may be wider than the column: they wrap inside it.
+    // The name alone, as redrawn on 16 Oct: no part or id under it.
     const head = within(screen.getByRole("table", { name: "Chapters" })).getAllByRole(
       "rowheader"
     )[0]!;
+    expect(head.textContent).toBe(payload.chapters[0]!.name);
     expect(head).toHaveClass("min-w-0");
-    expect(head.lastElementChild).toHaveClass("[overflow-wrap:anywhere]");
   });
 });

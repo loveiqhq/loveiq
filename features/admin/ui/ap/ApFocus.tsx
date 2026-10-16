@@ -432,7 +432,12 @@ function Assessments({ a }: { a: FocusPayload["assessments"] }) {
           </div>
         ))}
       </div>
-      <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Assessments, scrolls sideways"
+        className="overflow-x-auto rounded-[14px] border border-ap-line"
+      >
         <div role="table" aria-label="Assessments" className="min-w-[1150px]">
           <div
             role="row"

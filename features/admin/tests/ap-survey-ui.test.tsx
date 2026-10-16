@@ -120,9 +120,10 @@ describe("the Survey page as drawn", () => {
     // skipped, 60 agreed, 55 answered question 1. No period before, so no change.
     const tile = (label: string) => screen.getByText(label).nextSibling!.textContent;
     expect(tile("Saw the intro")).toBe("100");
-    expect(tile("Agreed to consent")).toBe("60.0%");
-    expect(tile("Skipped slides")).toBe("20.0%");
-    expect(tile("Left before Q1")).toBe("45.0%");
+    // Whole percentages, as drawn.
+    expect(tile("Agreed to consent")).toBe("60%");
+    expect(tile("Skipped slides")).toBe("20%");
+    expect(tile("Left before Q1")).toBe("45%");
     expect(screen.queryByText(/The engagement column is blank/)).toBeNull();
 
     const intro = "Intro wizard cards";
@@ -211,10 +212,10 @@ describe("the Survey page as drawn", () => {
     render(<ApSurvey />);
     expect(screen.getByText("Saw the intro").nextSibling!.textContent).toBe("10");
     // 4 agreed and went on, of the 12 who began on the intro or the consent.
-    expect(screen.getByText("Agreed to consent").nextSibling!.textContent).toBe("33.3%");
+    expect(screen.getByText("Agreed to consent").nextSibling!.textContent).toBe("33%");
     // Our own skips and exits: 2 of the intro's 10 skipped; 2 + 1 + 2 of the 12 left on a card.
-    expect(screen.getByText("Skipped slides").nextSibling!.textContent).toBe("20.0%");
-    expect(screen.getByText("Left before Q1").nextSibling!.textContent).toBe("41.7%");
+    expect(screen.getByText("Skipped slides").nextSibling!.textContent).toBe("20%");
+    expect(screen.getByText("Left before Q1").nextSibling!.textContent).toBe("42%");
     // PostHog failed: the engagement column says why it is blank.
     expect(
       screen.getByText("The engagement column is blank: PostHog could not be read just now.")

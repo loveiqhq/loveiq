@@ -342,7 +342,18 @@ function IntroSection({ data }: { data: SurveyPayload }) {
       <AllTraffic note={data.narrowed} />
       <TileGrid min={200}>
         {data.intro.tiles.map((t) => (
-          <KpiTileV2 key={t.key} tile={t} />
+          // Whole percentages, as drawn; a share under 1% keeps a tenth so a handful never reads 0%.
+          <KpiTileV2
+            key={t.key}
+            tile={t}
+            digits={
+              t.unit !== "pct"
+                ? undefined
+                : t.value !== null && t.value > 0 && t.value < 0.01
+                  ? 1
+                  : 0
+            }
+          />
         ))}
       </TileGrid>
       {c && !c.ok && (
@@ -791,6 +802,8 @@ function FunnelSection({
           {shown.map((x) => {
             const on = x.r.id === selected;
             const dropRed = x.drop !== null && x.drop > 0.05;
+            // The picked row's purple tint leaves the brighter red under 4.5:1; its ink passes.
+            const red = on ? "text-ap-bad-ink" : "text-ap-bad";
             return (
               // The question's button stretches over its row, so a click anywhere on the row
               // picks it while the table keeps its rows and cells for a screen reader.
@@ -848,7 +861,7 @@ function FunnelSection({
                 </span>
                 <span
                   role="cell"
-                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${x.heavy ? "font-bold text-ap-bad" : "text-ap-body"}`}
+                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${x.heavy ? `font-bold ${red}` : "text-ap-body"}`}
                 >
                   {fmt("pct", x.ofPrev, 1)}
                 </span>
@@ -860,7 +873,7 @@ function FunnelSection({
                 </span>
                 <span
                   role="cell"
-                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${dropRed ? "font-bold text-ap-bad" : "text-ap-body"}`}
+                  className={`px-3 py-2 text-right text-[13px] tabular-nums ${dropRed ? `font-bold ${red}` : "text-ap-body"}`}
                 >
                   {fmt("pct", x.drop, 2)}
                 </span>

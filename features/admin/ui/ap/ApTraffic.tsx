@@ -254,7 +254,13 @@ function HeadRow({ labels, gtc }: { labels: string[]; gtc: string }) {
 /** A wide table in its own sideways-scrolling box. */
 function Wide({ label, min, children }: { label: string; min: number; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-[14px] border border-ap-line">
+    // A tab stop and a name, so a keyboard can scroll it sideways (nothing in it takes focus).
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label={`${label}, scrolls sideways`}
+      className="overflow-x-auto rounded-[14px] border border-ap-line"
+    >
       <div role="table" aria-label={label} style={{ minWidth: min }}>
         {children}
       </div>
