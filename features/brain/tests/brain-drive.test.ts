@@ -388,6 +388,21 @@ describe("docToRows", () => {
     for (const r of rows) expect(r.body.length).toBeLessThanOrEqual(2400);
   });
 
+  it("gives every part the owner, edit time and name that search collapses copies on", () => {
+    // brain_search keeps one copy of a file per owner and name (" (part N of M)" stripped),
+    // the most recently edited (migration 20261016150000). A part that spelled any of the
+    // three differently would let every saved copy back into the results, silently.
+    const long = Array.from({ length: 10 }, (_, i) => `Point ${i} ` + "y".repeat(400)).join("\n\n");
+    const rows = docToRows({ ...FILE, name: "LoveIQ_Grants_Workbook" }, long, STAMP);
+    expect(rows.length).toBeGreaterThan(1);
+    const names = new Set(rows.map((r) => r.title.replace(/ \(part \d+ of \d+\)$/, "")));
+    expect([...names]).toEqual(["Drive: LoveIQ_Grants_Workbook"]);
+    expect(new Set(rows.map((r) => r.meta?.owner))).toEqual(
+      new Set([FILE.owners[0]!.emailAddress])
+    );
+    expect(new Set(rows.map((r) => r.meta?.edited))).toEqual(new Set([FILE.modifiedTime]));
+  });
+
   it("skips a document with no id or no name", () => {
     expect(docToRows({ ...FILE, id: undefined }, "x", STAMP)).toEqual([]);
     expect(docToRows({ ...FILE, name: "   " }, "x", STAMP)).toEqual([]);
