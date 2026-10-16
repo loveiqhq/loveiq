@@ -206,6 +206,65 @@ describe("experiments: the registry, read", () => {
     expect(text).toMatch(/ {2}So far: .*Pricing 3\.0 lower 1 of 3 bought \(33\.3%\)/);
   });
 
+  it("gives a finished pricing test its final numbers, each reader in the list they were dealt", async () => {
+    rows = [
+      row({
+        id: 11,
+        status: "completed",
+        axis: "pricing",
+        start_date: "2026-08-03",
+        decision_date: "2026-08-31",
+        outcome: "Dropped the dearer list.",
+      }),
+    ];
+    // Readers of the 2.x test, by the arm their quotes were dealt (A/B), not the A3/B3
+    // a later re-sync stamped on them; one never opened their report.
+    const dealt: Array<[string | null, boolean]> = [
+      ...Array.from({ length: 30 }, (_, i): [string, boolean] => ["A", i < 2]),
+      ...Array.from({ length: 30 }, (_, i): [string, boolean] => ["B", i < 4]),
+      [null, false],
+    ];
+    const load = vi.fn(async (): Promise<ArmOutcomes> => ({
+      submissions: dealt.map((_, i) => ({
+        id: i + 1,
+        created_date_time: "2026-08-10T10:00:00Z",
+        utm_tracker: null,
+      })),
+      bySubmission: new Map(
+        dealt.map(([pricing, bought], i) => [
+          i + 1,
+          { pricing, purchased: bought, startedCheckout: bought, revenue: bought ? 29 : 0 },
+        ])
+      ),
+      truncated: false,
+    }));
+    const text = await listExperiments(NOW, load);
+    // Its own dates as Berlin days: from 3 Aug, up to the start of 1 Sep (CEST, UTC+2).
+    expect(load).toHaveBeenCalledWith("2026-08-02T22:00:00.000Z", "2026-08-31T22:00:00.000Z");
+    expect(text).toMatch(
+      /- #11 .*2026-08-03 to 2026-08-31\)[^\n]*\n {2}Outcome: Dropped the dearer list\.\n {2}Final numbers, 2026-08-03 to 2026-08-31, each reader on the price list they were dealt then: Pricing A 2 of 30 bought \(6\.7%\); Pricing B 4 of 30 bought \(13\.3%\)\. Not enough purchases yet to compare/
+    );
+    expect(text).toContain("1 person is not attributable to an arm.");
+    // The 2.x test from before the registry is read the same way, over its recorded dates.
+    expect(text).toMatch(
+      /- Report pricing \(A vs B\) \(before the registry\): [^\n]*\n {2}Final numbers, 2026-08-03 to 2026-08-31,/
+    );
+  });
+
+  it("gives no final numbers to a finished test on another axis or without its dates", async () => {
+    rows = [
+      row({ id: 12, status: "completed", axis: "landing", decision_date: "2026-09-25" }),
+      row({ id: 13, status: "completed", axis: "pricing", decision_date: null }),
+    ];
+    const load = vi.fn(async () => nobody());
+    const text = await listExperiments(NOW, load);
+    expect(text).not.toMatch(/- #1[23] [^\n]*\n {2}Outcome: [^\n]*\n {2}Final numbers/);
+    // Only the 2.x test's own window was read, beside the live split's last 30 days.
+    expect(load.mock.calls.filter((c) => (c as unknown[]).length === 2)).toEqual([
+      ["2026-08-02T22:00:00.000Z", "2026-08-31T22:00:00.000Z"],
+    ]);
+  });
+
   it("says why a running test has no live numbers when it has no axis, or one nothing stamps", async () => {
     rows = [row({ id: 4, axis: null }), row({ id: 5, axis: "paywall" })];
     const text = await listExperiments(
