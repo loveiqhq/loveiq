@@ -629,6 +629,11 @@ describe("loadSeries counts as the AP-Analytics dashboard does", () => {
     expect(metric("reports_paid").count!(yesterday)).toBeNull();
     // A UTC day that has ended keeps them.
     expect(metric("report_opens").count!(s.find((d) => d.day === "2026-09-24")!)).toBe(12);
+    // In the day, today is Berlin's and UTC's at once: it keeps them, and is said to be partial.
+    vi.setSystemTime(new Date("2026-09-25T10:00:00Z"));
+    clearFactsCache();
+    const day = (await loadSeries("2026-09-25")).find((d) => d.day === "2026-09-25")!;
+    expect(metric("report_opens").count!(day)).toBe(12);
   });
 
   it("says when a day is part of one: Berlin's today, or a UTC day not over on the rollup alone", () => {
