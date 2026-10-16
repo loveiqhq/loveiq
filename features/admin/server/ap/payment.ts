@@ -42,6 +42,9 @@ import { genderShort, relationshipShort } from "./traffic";
 
 export interface OverTimeRow {
   label: string;
+  /** Its first and last day, for the chart's read-out. */
+  from?: string;
+  to?: string;
   /** Cut short by the range (a part of a week or month). */
   partial: boolean;
   preSales: number;
@@ -55,6 +58,9 @@ export interface OverTimeRow {
 
 export interface CheckoutPoint {
   label: string;
+  /** Its first and last day, for the chart's read-out. */
+  from?: string;
+  to?: string;
   partial: boolean;
   reached: number;
   attempted: number;
@@ -408,6 +414,8 @@ export function buildPayment(input: {
     const xs = salesBetween(b.from, b.to);
     return {
       label: grain === "day" ? b.label : partialLabel(b),
+      from: b.from,
+      to: b.to,
       partial: !b.full,
       preSales: xs.filter(isPre).length,
       preRevenue: sum(xs.filter(isPre)),
@@ -423,6 +431,8 @@ export function buildPayment(input: {
     const xs = checkouts.filter((c) => c.day >= b.from && c.day <= b.to);
     return {
       label: grain === "day" ? b.label : partialLabel(b),
+      from: b.from,
+      to: b.to,
       partial: !b.full,
       reached: xs.reduce((n, c) => n + c.n, 0),
       attempted: xs.filter((c) => c.attempted).reduce((n, c) => n + c.n, 0),

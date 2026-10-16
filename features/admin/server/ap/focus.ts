@@ -53,6 +53,8 @@ export interface ChartSeries {
 export interface ChartView {
   /** "15 Sep", "14 Sep" (a week's Monday), "Sep 2026". */
   labels: string[];
+  /** Each point's first and last day, for its read-out on hover. */
+  periods?: Array<{ from: string; to: string }>;
   series: ChartSeries[];
 }
 
@@ -229,6 +231,7 @@ export function buildFocus(input: {
     const bs = viewBuckets(facts.from, facts.to, grain);
     return {
       labels: bs.map((b) => b.label),
+      periods: bs.map((b) => ({ from: b.from, to: b.to })),
       series: defs.map(({ pick, ...d }) => ({ ...d, values: bs.map((b) => pick(b)) })),
     };
   };

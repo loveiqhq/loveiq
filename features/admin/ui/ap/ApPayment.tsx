@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import type { Column, Table } from "@features/admin/server/ap/common";
-import { rangeLabel, type Grain } from "@features/admin/server/ap/filters";
+import { rangeLabel, trendBuckets, type Grain } from "@features/admin/server/ap/filters";
 import { EMPTY, fmt, niceMax } from "@features/admin/server/ap/format";
 import type {
   CheckoutPoint,
@@ -18,6 +18,7 @@ import { reportingDay } from "@shared/time/reporting-day";
 
 import ApFilterBar from "./ApFilterBar";
 import { exportTables } from "./csv";
+import { IndexHover, periodTitle, ROW_HOVER } from "./hover";
 import {
   Bar,
   BlackButton,
@@ -227,7 +228,11 @@ function SubHead({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Paid sales stacked by unlock (bars, left axis) under the finishers (dotted, right axis). */
-function SalesChart({ rows }: { rows: OverTimeRow[] }) {
+/** A point's period as its read-out's title: its days where the server sent them. */
+const pointTitle = (p: { label: string; from?: string; to?: string; partial: boolean }) =>
+  p.from && p.to ? periodTitle({ from: p.from, to: p.to }, p.partial) : p.label;
+
+function SalesChart({ rows, preOnSale }: { rows: OverTimeRow[]; preOnSale: boolean }) {
   const n = rows.length;
   const H = 240;
   const sTop = countTop(Math.max(...rows.map((r) => r.preSales + r.fullSales)) * 1.1);
@@ -309,6 +314,43 @@ function SalesChart({ rows }: { rows: OverTimeRow[] }) {
               {fmt("count", r.finishers)}
             </span>
           ))}
+          <IndexHover
+            xs={rows.map((_, i) => x(i))}
+            label="Paid sales over time"
+            band={(i) => ({ left: (i / n) * 100, width: 100 / n })}
+            markers={(i) => [{ y: fy(rows[i]!.finishers), color: INK }]}
+            tip={(i) => {
+              const r = rows[i]!;
+              const paid = r.preSales + r.fullSales;
+              return {
+                title: pointTitle(r),
+                rows: [
+                  {
+                    label: "Pre-unlock sales",
+                    value: preOnSale ? fmt("count", r.preSales) : "not on sale",
+                    color: PRE,
+                    mark: "square",
+                    muted: !preOnSale,
+                  },
+                  {
+                    label: "Full-unlock sales",
+                    value: fmt("count", r.fullSales),
+                    color: FULL,
+                    mark: "square",
+                  },
+                  { label: "Paid sales", value: fmt("count", paid), strong: true },
+                  { label: "Revenue", value: fmt("eur", r.revenue, 2) },
+                  {
+                    label: "Survey submissions",
+                    value: fmt("count", r.finishers),
+                    color: INK,
+                    mark: "dotted",
+                  },
+                  { label: "Payment CVR", value: fmt("pct", ratio(paid, r.finishers), 2) },
+                ],
+              };
+            }}
+          />
         </div>
         <div className="flex" style={{ margin: "18px 56px 0 40px" }}>
           {rows.map((r) => (
@@ -343,7 +385,7 @@ function OverTime({ d }: { d: PaymentPayload }) {
           Survey submissions
         </span>
       </div>
-      {rows.length > 0 && <SalesChart rows={rows} />}
+      {rows.length > 0 && <SalesChart rows={rows} preOnSale={preOnSale} />}
       <PayTable
         label="Payments over time"
         columns="minmax(120px, 1.2fr) repeat(7, minmax(90px, 1fr))"
@@ -410,11 +452,11 @@ function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
               </span>
             </Fragment>
           ))}
-          <div className="absolute inset-0 flex items-end gap-6 px-3">
+          <div className="absolute inset-0 flex items-end">
             {points.map((p) => (
               <div
                 key={p.label}
-                className="flex h-full min-w-0 flex-1 items-end justify-center gap-1"
+                className="flex h-full min-w-0 flex-1 items-end justify-center gap-1 px-3"
               >
                 {[
                   { v: p.reached, color: PRE },
@@ -437,14 +479,45 @@ function CheckoutBars({ points }: { points: CheckoutPoint[] }) {
               </div>
             ))}
           </div>
+          <IndexHover
+            xs={points.map((_, i) => ((i + 0.5) / points.length) * 100)}
+            label="Checkouts over time"
+            band={(i) => ({ left: (i / points.length) * 100, width: 100 / points.length })}
+            tip={(i) => {
+              const p = points[i]!;
+              return {
+                title: pointTitle(p),
+                rows: [
+                  {
+                    label: "Reached checkout",
+                    value: fmt("count", p.reached),
+                    color: PRE,
+                    mark: "square",
+                  },
+                  {
+                    label: "Attempted payment",
+                    value: fmt("count", p.attempted),
+                    color: ATTEMPTED,
+                    mark: "square",
+                  },
+                  { label: "Paid", value: fmt("count", p.paid), color: GREEN, mark: "square" },
+                  {
+                    label: "Checkout success",
+                    value: fmt("pct", ratio(p.paid, p.reached), 0),
+                    strong: true,
+                  },
+                ],
+              };
+            }}
+          />
         </div>
-        <div className="flex gap-6 px-3" style={{ margin: "10px 0 0 40px" }}>
+        <div className="flex" style={{ margin: "10px 0 0 40px" }}>
           {points.map((p) => {
             const s = ratio(p.paid, p.reached);
             return (
               <span
                 key={p.label}
-                className="min-w-0 flex-1 text-center text-xs leading-[1.4] text-ap-muted"
+                className="min-w-0 flex-1 px-3 text-center text-xs leading-[1.4] text-ap-muted"
               >
                 {p.label}
                 <br />
@@ -624,7 +697,7 @@ function Checkout({ d }: { d: PaymentPayload }) {
             {steps.map((s) => (
               <div
                 key={s.label}
-                className="grid grid-cols-[minmax(0,1fr)_minmax(44px,auto)_minmax(84px,auto)] items-center gap-x-3 gap-y-1 text-[13px] sm:grid-cols-[230px_minmax(0,1fr)_70px_120px]"
+                className={`grid grid-cols-[minmax(0,1fr)_minmax(44px,auto)_minmax(84px,auto)] items-center gap-x-3 gap-y-1 py-0.5 text-[13px] sm:grid-cols-[230px_minmax(0,1fr)_70px_120px] ${ROW_HOVER}`}
               >
                 <span className="col-span-3 font-semibold text-ap-ink sm:col-span-1">
                   {s.label}
@@ -982,7 +1055,7 @@ function Elasticity({ el }: { el: PaymentPayload["elasticity"] }) {
         }
       />
       {model ? (
-        <ElasticityModel el={el} m={model} probe={probe} />
+        <ElasticityModel el={el} m={model} probe={probe} onProbe={setProbe} />
       ) : (
         <p className="m-0 text-[13px] leading-relaxed text-ap-muted">
           {el.why ?? "The model could not be fitted to this range."}
@@ -996,10 +1069,13 @@ function ElasticityModel({
   el,
   m,
   probe,
+  onProbe,
 }: {
   el: PaymentPayload["elasticity"];
   m: Model;
   probe: number;
+  /** A click on the chart tests that price, as the slider does. */
+  onProbe: (price: number) => void;
 }) {
   const { e, cvrAt, netAt, best, cvrTop, netTop } = m;
   const n = el.points.length;
@@ -1165,6 +1241,43 @@ function ElasticityModel({
                 </span>
               </Fragment>
             ))}
+            <IndexHover
+              xs={PRICES.map(xP)}
+              label="Price elasticity"
+              onPick={(i) => onProbe(Math.round(PRICES[i]! * 2) / 2)}
+              markers={(i) => [
+                { y: yC(cvrAt(PRICES[i]!)), color: "#795fc8" },
+                { y: yN(netAt(PRICES[i]!)), color: GREEN },
+              ]}
+              tip={(i) => {
+                const p = PRICES[i]!;
+                const seen = el.points.filter((o) => Math.abs(o.price - p) < 0.125);
+                return {
+                  title: `At ${fmt("eur", p, 2)}`,
+                  rows: [
+                    {
+                      label: "Predicted payment CVR",
+                      value: fmt("pct", cvrAt(p), 2),
+                      color: "#795fc8",
+                      mark: "line",
+                    },
+                    {
+                      label: "Net revenue per submission",
+                      value: fmt("eur", netAt(p), 3),
+                      color: GREEN,
+                      mark: "line",
+                    },
+                    ...seen.map((o) => ({
+                      label: `Observed, ${o.label}`,
+                      value: fmt("pct", o.cvr, 2),
+                      color: INK,
+                      mark: "dot" as const,
+                    })),
+                  ],
+                  note: "Click or tap to test this price.",
+                };
+              }}
+            />
           </div>
           <div className="relative h-4" style={{ margin: "18px 56px 0 44px" }}>
             {[5, 10, 15, 20, 25, 30, 35, 40].map((p) => (
@@ -1402,7 +1515,12 @@ export default function ApPayment() {
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
           >
             {data.tiles.map((t) => (
-              <KpiTileV2 key={t.key} tile={t} digits={TILE_DIGITS[t.key]} />
+              <KpiTileV2
+                key={t.key}
+                tile={t}
+                digits={TILE_DIGITS[t.key]}
+                titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+              />
             ))}
           </div>
           <OverTime d={data} />

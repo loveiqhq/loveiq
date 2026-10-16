@@ -13,10 +13,12 @@ import {
   deltaRel,
   EMPTY,
   fmt,
-  sparkPoints,
+  sparkGeometry,
   type Tone,
   type Unit,
 } from "@features/admin/server/ap/format";
+
+import { IndexHover } from "./hover";
 
 const TONE_TEXT: Record<Tone, string> = {
   good: "text-ap-good",
@@ -93,35 +95,93 @@ export function SectionHead({
 }
 
 /** A trend line in a 120 × 36 box. */
+/**
+ * A trend line: broken where a point has no figure. Given each point's title, it reads out
+ * its point on hover, tap or (when focusable) the arrow keys.
+ */
 export function Spark({
   values,
   color = "#795fc8",
   height = 36,
+  titles,
+  name = "Value",
+  unit = "count",
+  digits,
+  focusable = true,
+  onPick,
 }: {
   values: Array<number | null>;
   color?: string;
   height?: number;
+  /** Each point's period ("6 – 12 Oct 2026"), for the read-out; none, no read-out. */
+  titles?: string[];
+  /** The figure in the read-out ("Revenue"). */
+  name?: string;
+  unit?: Unit;
+  digits?: number;
+  /** Off inside a link or a picked row, which keep the keyboard. */
+  focusable?: boolean;
+  onPick?: (i: number) => void;
 }) {
-  const points = sparkPoints(values, height);
-  if (!points) return <div aria-hidden="true" style={{ height }} />;
+  const g = sparkGeometry(values, height);
+  if (!g) return <div aria-hidden="true" style={{ height }} />;
+  const n = values.length;
+  const read = Boolean(titles && titles.length === n && n > 0);
+  const xs = values.map((_, i) => (g.x(i) / 120) * 100);
+  const yPct = (v: number) => ((height - g.y(v)) / height) * 100;
   return (
-    <svg
-      viewBox={`0 0 120 ${height}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-      className="w-full"
-      style={{ height }}
-    >
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+    <div className="relative" style={{ height }}>
+      <svg
+        viewBox={`0 0 120 ${height}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full overflow-visible"
+      >
+        {g.runs.map((points) => (
+          <polyline
+            key={points}
+            points={points}
+            fill="none"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+      {read && (
+        <IndexHover
+          xs={xs}
+          label={`${name}, trend`}
+          focusable={focusable}
+          onPick={onPick}
+          tip={(i) => {
+            const v = values[i];
+            const has = v !== null && v !== undefined && Number.isFinite(v);
+            return {
+              title: titles![i]!,
+              rows: [
+                {
+                  label: name,
+                  value: has ? fmt(unit, v, digits) : EMPTY,
+                  color,
+                  mark: "line",
+                  muted: !has,
+                },
+              ],
+              note: has ? null : "No figure for this point.",
+            };
+          }}
+          markers={(i) => {
+            const v = values[i];
+            return v !== null && v !== undefined && Number.isFinite(v)
+              ? [{ y: yPct(v), color }]
+              : [];
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -136,10 +196,13 @@ export function KpiTile({
   tile,
   size = "lg",
   level = false,
+  titles,
 }: {
   tile: Tile;
   size?: "lg" | "md";
   level?: boolean;
+  /** Each trend point's period, for its read-out. */
+  titles?: string[];
 }) {
   const d = tile.blocked
     ? null
@@ -164,7 +227,13 @@ export function KpiTile({
             </span>
           )}
         </span>
-        <Spark values={tile.blocked ? [] : tile.spark} />
+        <Spark
+          values={tile.blocked ? [] : tile.spark}
+          titles={titles}
+          name={tile.label}
+          unit={tile.unit}
+          focusable={!tile.href}
+        />
         <span className="text-xs leading-normal text-ap-muted">{tile.blocked ?? tile.foot}</span>
       </>
     ) : (
@@ -176,7 +245,13 @@ export function KpiTile({
           {d ? " " : ""}
           {tile.blocked ?? tile.foot}
         </span>
-        <Spark values={tile.blocked ? [] : tile.spark} />
+        <Spark
+          values={tile.blocked ? [] : tile.spark}
+          titles={titles}
+          name={tile.label}
+          unit={tile.unit}
+          focusable={!tile.href}
+        />
         {!tile.blocked && tile.trend && (
           <span className="text-[11px] text-ap-muted">{tile.trend}</span>
         )}
@@ -209,6 +284,7 @@ export function KpiTileV2({
   digits,
   suffix = "",
   negativeBad = false,
+  titles,
 }: {
   tile: Tile;
   level?: boolean;
@@ -218,6 +294,8 @@ export function KpiTileV2({
   suffix?: string;
   /** A value below zero in red, as the design draws a loss. */
   negativeBad?: boolean;
+  /** Each trend point's period, for its read-out. */
+  titles?: string[];
 }) {
   const d =
     tile.blocked || tile.note !== undefined ? null : deltaRel(tile.value, tile.prev, tile.goodWhen);
@@ -248,7 +326,13 @@ export function KpiTileV2({
           {d?.text ?? EMPTY}
         </span>
       )}
-      <Spark values={tile.blocked ? [] : tile.spark} />
+      <Spark
+        values={tile.blocked ? [] : tile.spark}
+        titles={titles}
+        name={tile.label}
+        unit={tile.unit}
+        digits={digits}
+      />
     </div>
   );
 }

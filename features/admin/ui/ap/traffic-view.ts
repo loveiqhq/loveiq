@@ -483,6 +483,8 @@ export interface StackChart {
   /** Each point's total over the stack (Total only). */
   tops: ChartMark[];
   totals: number[];
+  /** The plot's top, in the scale's unit (counts, or 100 for shares). */
+  max: number;
 }
 
 /** 1, 2, 2.5, 5 or 10 times a power of ten, at least `v`. */
@@ -506,7 +508,7 @@ export const xOf = (w: number, n: number) => (n > 1 ? (w / (n - 1)) * 100 : 50);
  */
 export function stackChart(series: number[][], scale: Scale): StackChart {
   const n = series[0]?.length ?? 0;
-  if (n === 0) return { grid: [], layers: [], tops: [], totals: [] };
+  if (n === 0) return { grid: [], layers: [], tops: [], totals: [], max: 1 };
   const totals = Array.from({ length: n }, (_, w) =>
     series.reduce((s, row) => s + (row[w] ?? 0), 0)
   );
@@ -582,6 +584,7 @@ export function stackChart(series: number[][], scale: Scale): StackChart {
             label: fmt("count", t),
           })),
     totals,
+    max,
   };
 }
 

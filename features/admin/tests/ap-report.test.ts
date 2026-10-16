@@ -1119,7 +1119,8 @@ describe("report page, on screen", () => {
     const age = () => within(screen.getByText(/total time by age$/).parentElement!);
     expect(screen.getByText("Median total time by age")).toBeInTheDocument();
     const same = age().getByText("55+").parentElement!;
-    expect(same.textContent).toBe("55+2:10±0:00.0");
+    // The all-reports figure the tick draws is read to a screen reader in the row's name.
+    expect(same.textContent).toBe("55+, all reports 2:102:10±0:00.0");
     expect(same.lastElementChild).toHaveClass("text-ap-muted");
     expect(age().getByText("18–24").parentElement!.textContent).toBe("18–24——");
     expect(age().getByText("Not stated")).toBeInTheDocument();
@@ -1129,7 +1130,7 @@ describe("report page, on screen", () => {
     expect(group.getByRole("button", { name: "Average" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Avg. total time by age")).toBeInTheDocument();
     // (1:40 + 6:40 + 2:10) / 3 = 3:30.
-    expect(age().getByText("55+").parentElement!.textContent).toBe("55+3:30±0:00.0");
+    expect(age().getByText("55+").parentElement!.textContent).toBe("55+, all reports 3:303:30±0:00.0");
     // The boxes: no period before, so a grey dash where the change would stand.
     const box = screen.getByText("Avg. total time").parentElement!;
     expect(box.textContent).toBe("Avg. total time3:30—");

@@ -2,7 +2,8 @@
 
 import { Fragment, useState } from "react";
 
-import type { Grain } from "@features/admin/server/ap/filters";
+import { addDays } from "@features/admin/server/ap/days";
+import { trendBuckets, type Grain } from "@features/admin/server/ap/filters";
 import type {
   AssessmentRow,
   ChartColor,
@@ -21,6 +22,7 @@ import {
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 import ApFilterBar from "./ApFilterBar";
+import { GapBands, gapSpans, IndexHover, isCutShort, periodTitle, type Tip } from "./hover";
 import { Busy, Eyebrow, Failed, KpiTileV2, Loading, PageHeader, RangeLine } from "./kit";
 import { useApFilters } from "./useApFilters";
 
@@ -135,6 +137,38 @@ function ChartCard({ chart }: { chart: FocusChart }) {
   const h = (s: ChartSeries, v: number) =>
     (Math.max(0, Math.min(v * per(s.unit), topOf(s))) / topOf(s)) * 100;
   const axisColor = (side: ChartSeries[]) => (side.length === 1 ? COLOR[side[0]!.color] : MUTED);
+  const xs = view.labels.map((_, i) => x(i));
+  const gaps = gapSpans(
+    view.series.map((s) => s.values),
+    xs,
+    view.labels.map((l) => (grain === "week" ? `Wk ${l}` : l))
+  );
+  const noun = { day: "day", week: "week", month: "month" }[grain];
+  const tipAt = (i: number): Tip => {
+    const period = view.periods?.[i];
+    const empty = view.series.every((s) => s.values[i] === null || !Number.isFinite(s.values[i]!));
+    return {
+      title: period
+        ? periodTitle(period, isCutShort(period, grain))
+        : grain === "week"
+          ? `Week of ${view.labels[i]}`
+          : view.labels[i]!,
+      rows: view.series.map((s) => {
+        const v = s.values[i];
+        const has = v !== null && v !== undefined && Number.isFinite(v);
+        return {
+          label: s.name,
+          value: has
+            ? fmt(s.unit, v, s.unit === "eur" || s.unit === "ratio" ? 2 : undefined)
+            : EMPTY,
+          color: COLOR[s.color],
+          mark: s.dotted ? ("dotted" as const) : ("line" as const),
+          muted: !has,
+        };
+      }),
+      note: empty ? (chart.note ?? `No figure for this ${noun}.`) : null,
+    };
+  };
   const marginRight = right.length ? 52 : 12;
   const height = chart.wide ? 280 : 220;
   // About seven labels (three on a phone), the last one always; one too close to it gives way.
@@ -250,93 +284,106 @@ function ChartCard({ chart }: { chart: FocusChart }) {
             </table>
           </div>
           <div
-            aria-hidden="true"
             className="relative mt-2 border-b border-ap-line"
             style={{ height, marginLeft: 48, marginRight }}
           >
-            {QUARTERS.map((f) => (
-              <Fragment key={f}>
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-x-0 border-t border-ap-track"
-                  style={{ bottom: `${f * 100}%` }}
-                />
-                <span
-                  className="absolute -left-12 w-[42px] translate-y-1/2 text-right text-[11px] tabular-nums"
-                  style={{ bottom: `${f * 100}%`, color: axisColor(left) }}
-                >
-                  {axisLabel(lUnit, f * lTop, lTop, false)}
-                </span>
-                {right.length > 0 && (
+            <div aria-hidden="true" className="absolute inset-0">
+              <GapBands spans={gaps} />
+              {QUARTERS.map((f) => (
+                <Fragment key={f}>
                   <span
-                    className="absolute left-full ml-1.5 translate-y-1/2 whitespace-nowrap text-[11px] tabular-nums"
-                    style={{ bottom: `${f * 100}%`, color: axisColor(right) }}
+                    className="absolute inset-x-0 border-t border-ap-track"
+                    style={{ bottom: `${f * 100}%` }}
+                  />
+                  <span
+                    className="absolute -left-12 w-[42px] translate-y-1/2 text-right text-[11px] tabular-nums"
+                    style={{ bottom: `${f * 100}%`, color: axisColor(left) }}
                   >
-                    {axisLabel(rUnit, f * rTop, rTop, wholeEuros)}
+                    {axisLabel(lUnit, f * lTop, lTop, false)}
                   </span>
+                  {right.length > 0 && (
+                    <span
+                      className="absolute left-full ml-1.5 translate-y-1/2 whitespace-nowrap text-[11px] tabular-nums"
+                      style={{ bottom: `${f * 100}%`, color: axisColor(right) }}
+                    >
+                      {axisLabel(rUnit, f * rTop, rTop, wholeEuros)}
+                    </span>
+                  )}
+                </Fragment>
+              ))}
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className="absolute inset-0 h-full w-full overflow-visible"
+              >
+                {view.series.map((s, k) =>
+                  runs(s.values, (i, v) => `${x(i).toFixed(2)},${(100 - h(s, v)).toFixed(2)}`).map(
+                    (points, r) => (
+                      <polyline
+                        key={`${s.name}-${r}`}
+                        data-series={s.name}
+                        points={points}
+                        fill="none"
+                        stroke={COLOR[s.color]}
+                        strokeWidth={chart.wide && k === 0 ? 2.8 : 2.4}
+                        strokeDasharray={s.dotted ? "2 5" : undefined}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    )
+                  )
                 )}
-              </Fragment>
-            ))}
-            <svg
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-              className="absolute inset-0 h-full w-full overflow-visible"
-            >
-              {view.series.map((s, k) =>
-                runs(s.values, (i, v) => `${x(i).toFixed(2)},${(100 - h(s, v)).toFixed(2)}`).map(
-                  (points, r) => (
+                {view.series.map((s) => {
+                  // Over the points that have a figure only: never across a stretch without.
+                  const f = linearFit(s.values);
+                  if (!f) return null;
+                  const y = (v: number) => (100 - h(s, v)).toFixed(2);
+                  return (
                     <polyline
-                      key={`${s.name}-${r}`}
-                      data-series={s.name}
-                      points={points}
+                      key={`${s.name}-trend`}
+                      data-trend={s.name}
+                      points={`${x(f.i0).toFixed(2)},${y(f.from)} ${x(f.i1).toFixed(2)},${y(f.to)}`}
                       fill="none"
                       stroke={COLOR[s.color]}
-                      strokeWidth={chart.wide && k === 0 ? 2.8 : 2.4}
-                      strokeDasharray={s.dotted ? "2 5" : undefined}
+                      strokeWidth={1.6}
+                      strokeDasharray="7 5"
+                      strokeOpacity={0.55}
                       strokeLinecap="round"
-                      strokeLinejoin="round"
                       vectorEffect="non-scaling-stroke"
                     />
-                  )
-                )
-              )}
+                  );
+                })}
+              </svg>
               {view.series.map((s) => {
-                const f = linearFit(s.values);
-                if (!f) return null;
-                const y = (v: number) => (100 - h(s, v)).toFixed(2);
+                const last = s.values.findLastIndex((v) => v !== null && Number.isFinite(v));
+                if (last < 0) return null;
                 return (
-                  <polyline
-                    key={`${s.name}-trend`}
-                    data-trend={s.name}
-                    points={`${x(0).toFixed(2)},${y(f.from)} ${x(n - 1).toFixed(2)},${y(f.to)}`}
-                    fill="none"
-                    stroke={COLOR[s.color]}
-                    strokeWidth={1.6}
-                    strokeDasharray="7 5"
-                    strokeOpacity={0.55}
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
+                  <span
+                    key={`${s.name}-end`}
+                    className="absolute -mb-1 -ml-1 h-2 w-2 rounded-full shadow-[0_0_0_2px_#ffffff]"
+                    style={{
+                      left: `${x(last)}%`,
+                      bottom: `${h(s, s.values[last]!)}%`,
+                      background: COLOR[s.color],
+                    }}
                   />
                 );
               })}
-            </svg>
-            {view.series.map((s) => {
-              const last = s.values.findLastIndex((v) => v !== null && Number.isFinite(v));
-              if (last < 0) return null;
-              return (
-                <span
-                  key={`${s.name}-end`}
-                  aria-hidden="true"
-                  className="absolute -mb-1 -ml-1 h-2 w-2 rounded-full shadow-[0_0_0_2px_#ffffff]"
-                  style={{
-                    left: `${x(last)}%`,
-                    bottom: `${h(s, s.values[last]!)}%`,
-                    background: COLOR[s.color],
-                  }}
-                />
-              );
-            })}
+            </div>
+            <IndexHover
+              xs={xs}
+              label={chart.title}
+              tip={tipAt}
+              markers={(i) =>
+                view.series.flatMap((s) => {
+                  const v = s.values[i];
+                  return v === null || v === undefined || !Number.isFinite(v)
+                    ? []
+                    : [{ y: h(s, v), color: COLOR[s.color] }];
+                })
+              }
+            />
           </div>
           <div aria-hidden="true" className="relative h-4" style={{ marginLeft: 48, marginRight }}>
             {[
@@ -371,7 +418,7 @@ const minutes = (ms: number | null, digits: number) =>
 const ASM_COLUMNS = "minmax(180px, 1.5fr) repeat(7, minmax(96px, 1fr)) minmax(170px, 1.4fr)";
 
 /** The row's submissions per day, its fitted line dashed, and the change the line makes. */
-function TrendCell({ row }: { row: AssessmentRow }) {
+function TrendCell({ row, from: first }: { row: AssessmentRow; from: string }) {
   if (!row.trend) {
     return (
       <span
@@ -388,33 +435,57 @@ function TrendCell({ row }: { row: AssessmentRow }) {
   const X = (i: number) => (k > 1 ? (i / (k - 1)) * 120 : 60).toFixed(1);
   const Y = (v: number) => (30 - (Math.max(0, Math.min(v, top)) / top) * 28).toFixed(1);
   const t = trendText(from, to, values);
+  const xs = values.map((_, i) => (k > 1 ? (i / (k - 1)) * 100 : 50));
   return (
     <span role="cell" className="flex flex-col justify-center gap-0.5 px-3.5 py-2">
-      <svg
-        viewBox="0 0 120 32"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-        className="h-[30px] w-full overflow-visible"
-      >
-        <polyline
-          points={values.map((v, i) => `${X(i)},${Y(v)}`).join(" ")}
-          fill="none"
-          stroke="#795fc8"
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
+      <span className="relative block h-[30px]">
+        <svg
+          viewBox="0 0 120 32"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full overflow-visible"
+        >
+          <polyline
+            points={values.map((v, i) => `${X(i)},${Y(v)}`).join(" ")}
+            fill="none"
+            stroke="#795fc8"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={`${X(0)},${Y(from)} ${X(k - 1)},${Y(to)}`}
+            fill="none"
+            stroke="#795fc8"
+            strokeWidth={1.4}
+            strokeDasharray="6 4"
+            strokeOpacity={0.6}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        <IndexHover
+          xs={xs}
+          label={`${row.label}, survey submissions per day`}
+          tip={(i) => ({
+            title: periodTitle({ from: addDays(first, i), to: addDays(first, i) }),
+            rows: [
+              {
+                label: "Survey submissions",
+                value: fmt("count", values[i] ?? null),
+                color: "#795fc8",
+                mark: "line",
+              },
+            ],
+          })}
+          markers={(i) => [
+            {
+              y: ((32 - Number(Y(values[i] ?? 0))) / 32) * 100,
+              color: "#795fc8",
+            },
+          ]}
         />
-        <polyline
-          points={`${X(0)},${Y(from)} ${X(k - 1)},${Y(to)}`}
-          fill="none"
-          stroke="#795fc8"
-          strokeWidth={1.4}
-          strokeDasharray="6 4"
-          strokeOpacity={0.6}
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
+      </span>
       <span className={`text-[11px] font-bold ${TONE_TEXT[t.tone]}`}>
         {t.text} · {fmt("count", from)} → {fmt("count", to)} / day
       </span>
@@ -422,7 +493,7 @@ function TrendCell({ row }: { row: AssessmentRow }) {
   );
 }
 
-function Assessments({ a }: { a: FocusPayload["assessments"] }) {
+function Assessments({ a, from }: { a: FocusPayload["assessments"]; from: string }) {
   const tiles = [
     {
       label: "Best performing assessment",
@@ -543,7 +614,7 @@ function Assessments({ a }: { a: FocusPayload["assessments"] }) {
                     ) : null}
                   </span>
                 ))}
-                <TrendCell row={r} />
+                <TrendCell row={r} from={from} />
               </div>
             );
           })}
@@ -578,7 +649,12 @@ export default function ApFocus() {
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))" }}
           >
             {data.tiles.map((t) => (
-              <KpiTileV2 key={t.key} tile={t} digits={t.unit === "eur" ? 0 : undefined} />
+              <KpiTileV2
+                key={t.key}
+                tile={t}
+                digits={t.unit === "eur" ? 0 : undefined}
+                titles={trendBuckets(data.range.from, data.range.to).map((b) => periodTitle(b))}
+              />
             ))}
           </div>
           <div
@@ -589,7 +665,7 @@ export default function ApFocus() {
               <ChartCard key={c.key} chart={c} />
             ))}
           </div>
-          <Assessments a={data.assessments} />
+          <Assessments a={data.assessments} from={data.range.from} />
         </Busy>
       )}
     </>

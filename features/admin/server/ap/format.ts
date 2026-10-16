@@ -133,11 +133,16 @@ export function deltaRel(
 }
 
 /**
- * Least squares over equally spaced points: the fitted line's first and last values. A null is
- * a gap that keeps its place (a chart's missing day), so the line fits the points where they
- * are drawn. Here rather than in focus.ts so that the pages can draw it too.
+ * Least squares over equally spaced points. A null is a gap that keeps its place (a chart's
+ * missing day), so the line fits the points where they are drawn, and it is read over the
+ * points that exist: `from` and `to` are its values at the first and last of them (`i0`, `i1`).
+ * A range reaching back before the data no longer stretches the line, or its change, across
+ * days with no figure (where the extrapolated start sat near nothing and read "rising"). Here
+ * rather than in focus.ts so that the pages can draw it too.
  */
-export function linearFit(values: Array<number | null>): { from: number; to: number } | null {
+export function linearFit(
+  values: Array<number | null>
+): { from: number; to: number; i0: number; i1: number } | null {
   const pts = values.flatMap((v, i) => (v === null || !Number.isFinite(v) ? [] : [{ i, v }]));
   if (pts.length < 2) return null;
   const mx = pts.reduce((a, p) => a + p.i, 0) / pts.length;
@@ -150,7 +155,9 @@ export function linearFit(values: Array<number | null>): { from: number; to: num
   }
   const b = sxx ? sxy / sxx : 0;
   const a = my - b * mx;
-  return { from: a, to: a + b * (values.length - 1) };
+  const i0 = pts[0]!.i;
+  const i1 = pts[pts.length - 1]!.i;
+  return { from: a + b * i0, to: a + b * i1, i0, i1 };
 }
 
 /**
@@ -163,22 +170,32 @@ export function niceMax(v: number, steps: readonly number[] = [1, 2, 2.5, 5, 10]
   return (steps.find((s) => v / m <= s) ?? 10) * m;
 }
 
-/** Points for an SVG polyline in a 120 × 36 box; gaps (null) are skipped. */
-export function sparkPoints(values: Array<number | null>, height = 36): string {
+/**
+ * A sparkline in a 120 × `height` box: a line per run of points, so a gap (null) breaks it
+ * rather than being bridged by a straight line across days with no figure (a lone point is a
+ * dot), and the scale, so a page can mark a point on it. Null when there is nothing to draw.
+ */
+export function sparkGeometry(
+  values: Array<number | null>,
+  height = 36
+): { runs: string[]; x: (i: number) => number; y: (v: number) => number } | null {
   const real = values.filter((v): v is number => v !== null && Number.isFinite(v));
-  if (real.length === 0) return "";
+  if (real.length === 0) return null;
   const max = Math.max(...real);
   const min = Math.min(...real);
   const range = max - min || 1;
   const step = values.length > 1 ? 120 / (values.length - 1) : 0;
   const top = 4;
   const usable = height - top * 2;
-  return values
-    .map((v, i) =>
-      v === null || !Number.isFinite(v)
-        ? null
-        : `${(i * step).toFixed(1)},${(height - top - ((v - min) / range) * usable).toFixed(1)}`
-    )
-    .filter((p): p is string => p !== null)
-    .join(" ");
+  const x = (i: number) => (values.length > 1 ? i * step : 60);
+  const y = (v: number) => height - top - ((v - min) / range) * usable;
+  const out: string[][] = [[]];
+  values.forEach((v, i) => {
+    if (v === null || !Number.isFinite(v)) out.push([]);
+    else out[out.length - 1]!.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  });
+  const runs = out
+    .filter((r) => r.length)
+    .map((r) => (r.length === 1 ? `${r[0]} ${r[0]}` : r.join(" ")));
+  return { runs, x, y };
 }
