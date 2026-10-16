@@ -100,7 +100,7 @@ describe("report page", () => {
     for (const k of ["read", "median", "returned", "initiated", "invite"]) {
       expect(p.tiles.find((t) => t.key === k)).toMatchObject({
         prev: null,
-        note: "No comparison before 18 Sep",
+        note: "No comparison before 18\u00a0Sep",
       });
     }
     // Opens were recorded for everyone all along: compared.
@@ -109,7 +109,7 @@ describe("report page", () => {
     expect(p.wizard.tiles.find((t) => t.key === "completed")).toMatchObject({
       prev: null,
       foot: "continued through slide 6 · not compared: before 18 Sep",
-      note: "No comparison before 18 Sep",
+      note: "No comparison before 18\u00a0Sep",
     });
 
     // A range before 18 Sep: the banner says what is missing, the feet do not repeat it.
@@ -601,9 +601,11 @@ describe("report page", () => {
     const q = page({ facts: cur, benchmark: cur, previous: early });
     expect(box(q.time.boxes, "avg")).toMatchObject({
       prev: null,
-      note: "No comparison before 18 Sep",
+      note: "No comparison before 18\u00a0Sep",
     });
-    expect(box(q.returns.boxes, "back")).toMatchObject({ note: "No comparison before 18 Sep" });
+    expect(box(q.returns.boxes, "back")).toMatchObject({
+      note: "No comparison before 18\u00a0Sep",
+    });
     expect(box(q.time.boxes, "readers")).toMatchObject({ prev: 1 });
     expect(box(q.time.boxes, "readers").note).toBeUndefined();
   });

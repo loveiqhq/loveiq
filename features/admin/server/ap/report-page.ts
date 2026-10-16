@@ -542,7 +542,8 @@ export function buildReportPage(input: {
   // (ageMatched), their reading and visits included.
   const prevComparable = previous ? previous.from >= EVENTS_COMPLETE_FROM : false;
   const withheld = previous && !prevComparable ? " · not compared: before 18 Sep" : "";
-  const noCmp = previous && !prevComparable ? "No comparison before 18 Sep" : null;
+  // "18 Sep" kept on one line in a narrow tile.
+  const noCmp = previous && !prevComparable ? "No comparison before 18\u00a0Sep" : null;
   const noCmpNote = noCmp ? { note: noCmp } : {};
   const sharers = readers.filter((s) => s.shared).length;
   const raters = readers.filter((s) => s.votes > 0).length;

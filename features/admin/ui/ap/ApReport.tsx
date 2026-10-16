@@ -817,10 +817,10 @@ function DepthChart({ data }: { data: ReportPayload }) {
             ))}
           </div>
           <span className="text-xs text-ap-muted">
-            {fmt("count", d.readers)} readers whose reading per chapter was recorded (those who
-            finished from {from}). A chapter is reached once they spent a second or more in it or
-            used anything in it; the deepest is the latest in the report&rsquo;s order, which
-            readers can also jump to from the chapter list.
+            {fmt("count", d.readers)} {d.readers === 1 ? "reader" : "readers"} whose reading per
+            chapter was recorded (those who finished from {from}). A chapter is reached once they
+            spent a second or more in it or used anything in it; the deepest is the latest in the
+            report&rsquo;s order, which readers can also jump to from the chapter list.
           </span>
         </>
       )}
@@ -1196,16 +1196,16 @@ function ChaptersSection({ data }: { data: ReportPayload }) {
       <p className="m-0 text-[13px] leading-relaxed text-ap-muted">
         All {data.chapters.length} chapters, in the live report&rsquo;s order, then chapters of
         earlier report versions that were voted on. Reach: of the range&rsquo;s{" "}
-        {fmt("count", reading.readers)} readers whose reading per chapter was recorded (those who
-        finished from {from ?? "the day it starts"}), the ones who spent a second or more in the
-        chapter or used anything in it. Avg. time: their mean time with it as the chapter on screen,
-        up to 30 minutes each. Show more, Learn more and Exercise CTR: of those readers, the share
-        who opened its Show all, Learn More &amp; Go Deeper or Try This &amp; See What Shifts; a
-        dash where nobody did or the chapter has none. Paywall CTR: of the readers who saw a paywall
-        in the chapter, the share who clicked one (under it, how many clicked of how many saw).
-        Feedback: votes given in the range; the bar is relative to the most-voted chapter, green
-        good and red bad. Green: Show more 18% or more, Paywall 5% or more; red: Show more 4% or
-        less.
+        {fmt("count", reading.readers)} {reading.readers === 1 ? "reader" : "readers"} whose reading
+        per chapter was recorded (those who finished from {from ?? "the day it starts"}), the ones
+        who spent a second or more in the chapter or used anything in it. Avg. time: their mean time
+        with it as the chapter on screen, up to 30 minutes each. Show more, Learn more and Exercise
+        CTR: of those readers, the share who opened its Show all, Learn More &amp; Go Deeper or Try
+        This &amp; See What Shifts; a dash where nobody did or the chapter has none. Paywall CTR: of
+        the readers who saw a paywall in the chapter, the share who clicked one (under it, how many
+        clicked of how many saw). Feedback: votes given in the range; the bar is relative to the
+        most-voted chapter, green good and red bad. Green: Show more 18% or more, Paywall 5% or
+        more; red: Show more 4% or less.
         {reading.recorded
           ? ""
           : " With no reading recorded in this range, Paywall shows the readers who clicked a paywall or lock button in the chapter, as a count."}
@@ -1453,7 +1453,7 @@ function FeedbackSection({ data }: { data: ReportPayload }) {
                 setSearch(e.target.value);
                 setAll(false);
               }}
-              placeholder="Search submission, chapter, issue, good/bad"
+              placeholder="Search #id, chapter, issue, good/bad"
               className="min-h-10 w-full rounded-full border border-ap-ink/[0.18] bg-white px-4 text-sm text-ap-ink"
             />
           </label>
