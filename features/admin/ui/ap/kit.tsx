@@ -207,21 +207,31 @@ export function KpiTileV2({
   tile,
   level = false,
   digits,
+  suffix = "",
+  negativeBad = false,
 }: {
   tile: Tile;
   level?: boolean;
   /** Decimals for the value, where the design fixes them. */
   digits?: number;
+  /** After the value, where the design writes one ("0.02×"). */
+  suffix?: string;
+  /** A value below zero in red, as the design draws a loss. */
+  negativeBad?: boolean;
 }) {
   const d =
     tile.blocked || tile.note !== undefined ? null : deltaRel(tile.value, tile.prev, tile.goodWhen);
+  const value = tile.blocked ? EMPTY : fmt(tile.unit, tile.value, digits);
+  const red = negativeBad && !tile.blocked && tile.value !== null && tile.value < 0;
   return (
     <div
       className={`${level ? "row-span-4 grid grid-rows-subgrid" : "flex flex-col"} gap-2 rounded-[20px] border border-ap-line bg-white px-[18px] py-4 text-ap-ink shadow-ap`}
     >
       <Eyebrow>{tile.label}</Eyebrow>
-      <span className="font-serif text-[28px] font-semibold leading-none tabular-nums text-ap-ink">
-        {tile.blocked ? EMPTY : fmt(tile.unit, tile.value, digits)}
+      <span
+        className={`font-serif text-[28px] font-semibold leading-none tabular-nums ${red ? "text-ap-bad" : "text-ap-ink"}`}
+      >
+        {value === EMPTY ? value : value + suffix}
       </span>
       {tile.blocked ? (
         <span className="text-xs leading-snug text-ap-muted">{tile.blocked}</span>
@@ -663,6 +673,78 @@ export function useHashScroll(ready: boolean) {
     );
     return () => cancelAnimationFrame(frame);
   }, [ready]);
+}
+
+/**
+ * The section being read: the one crossing a band across the middle of the screen, so that a
+ * short last section still gets there at the end of the page. The first until one does, as
+ * the design draws it.
+ */
+function useSectionInView(ids: string[], ready: boolean): string {
+  const [current, setCurrent] = useState(ids[0] ?? "");
+  // The ids as one value, so a new array with the same ids doesn't observe them again.
+  const key = ids.join(" ");
+  useEffect(() => {
+    if (!ready || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) if (e.isIntersecting) setCurrent(e.target.id);
+      },
+      { rootMargin: "-45% 0px -50% 0px" }
+    );
+    for (const id of key.split(" ")) {
+      const el = document.getElementById(id);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [ready, key]);
+  return current;
+}
+
+/**
+ * The design's pill bar of a page's sections, the one in view pressed. One row on a phone:
+ * the pills scroll sideways rather than wrap.
+ */
+export function SectionNav({
+  label,
+  sections,
+  ready,
+}: {
+  label: string;
+  sections: Array<{ id: string; label: string }>;
+  /** The sections exist (the page's figures have arrived). */
+  ready: boolean;
+}) {
+  const current = useSectionInView(
+    sections.map((s) => s.id),
+    ready
+  );
+  return (
+    <div className="max-w-full self-start overflow-x-auto">
+      <nav
+        aria-label={label}
+        className="flex w-max gap-1.5 rounded-full border border-ap-line bg-white p-1"
+      >
+        {sections.map((s) => {
+          const on = s.id === current;
+          return (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              aria-current={on ? "true" : undefined}
+              className={`inline-flex min-h-10 items-center rounded-full px-4 text-[13px] no-underline ${
+                on
+                  ? "bg-ap-ink font-bold text-white"
+                  : "font-semibold text-ap-body hover:bg-ap-ground"
+              }`}
+            >
+              {s.label}
+            </a>
+          );
+        })}
+      </nav>
+    </div>
+  );
 }
 
 /**

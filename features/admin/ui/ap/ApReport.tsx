@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { rangeLabel } from "@features/admin/server/ap/filters";
 import { delta, fmt, type Tone } from "@features/admin/server/ap/format";
@@ -24,6 +24,7 @@ import {
   PageHeader,
   Pills,
   SectionHead,
+  SectionNav,
   SortIcon,
   Spark,
   StatBox,
@@ -82,30 +83,6 @@ const SECTIONS = [
   { id: "chapters", label: "Chapters" },
   { id: "feedback", label: "Feedback" },
 ];
-
-/**
- * The section being read: the one crossing a band across the middle of the screen, so that a
- * short last section still gets there at the end of the page. The first until one does, as
- * the design draws it.
- */
-function useSectionInView(ready: boolean): string {
-  const [current, setCurrent] = useState(SECTIONS[0]!.id);
-  useEffect(() => {
-    if (!ready || typeof IntersectionObserver === "undefined") return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) if (e.isIntersecting) setCurrent(e.target.id);
-      },
-      { rootMargin: "-45% 0px -50% 0px" }
-    );
-    for (const s of SECTIONS) {
-      const el = document.getElementById(s.id);
-      if (el) io.observe(el);
-    }
-    return () => io.disconnect();
-  }, [ready]);
-  return current;
-}
 
 type Sort<K extends string> = { key: K; dir: 1 | -1 } | null;
 
@@ -239,7 +216,6 @@ export default function ApReport() {
     params
   );
   useHashScroll(Boolean(data));
-  const current = useSectionInView(Boolean(data));
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -450,31 +426,7 @@ export default function ApReport() {
             </BlackButton>
           }
         />
-        {/* One row on a phone: the pills scroll sideways rather than wrap. */}
-        <div className="max-w-full self-start overflow-x-auto">
-          <nav
-            aria-label="Report sections"
-            className="flex w-max gap-1.5 rounded-full border border-ap-line bg-white p-1"
-          >
-            {SECTIONS.map((s) => {
-              const on = s.id === current;
-              return (
-                <a
-                  key={s.id}
-                  href={`#${s.id}`}
-                  aria-current={on ? "true" : undefined}
-                  className={`inline-flex min-h-10 items-center rounded-full px-4 text-[13px] no-underline ${
-                    on
-                      ? "bg-ap-ink font-bold text-white"
-                      : "font-semibold text-ap-body hover:bg-ap-ground"
-                  }`}
-                >
-                  {s.label}
-                </a>
-              );
-            })}
-          </nav>
-        </div>
+        <SectionNav label="Report sections" sections={SECTIONS} ready={Boolean(data)} />
       </div>
       <ApFilterBar scope="assessment" />
       {loading && !data && <Loading label="the report page" />}
