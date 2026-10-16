@@ -1,0 +1,18 @@
+{
+  "criterion": "D1",
+  "label": "dead control",
+  "session_id": "01a1261d-30ee-784d-96cb-e00df636c3d7",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a1261d-30ee-784d-96cb-e00df636c3d7",
+  "viewport": {
+    "min": 1872,
+    "max": 1872,
+    "os": "Chrome OS"
+  },
+  "probes": [
+    {
+      "file": "verify-dead-click-target.mjs",
+      "output": "FAIL  Desktop Chrome (step 0) <button> \"\" is a DISABLED control — it looks live and does nothing (2 matched this selector) |  | FAIL (1) — the reader tapped a control that could not respond"
+    }
+  ],
+  "reproduced": true
+}
