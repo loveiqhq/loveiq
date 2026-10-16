@@ -484,6 +484,13 @@ member one sign-in code email.
 
 - **Who may sign in is the people registry.** An `@loveiq.org` address on an active
   person in `brain_person`: not a shared mailbox, not a personal address.
+- **A new colleague must be added to `brain_person`**, with every spelling and address
+  they appear under, or no filter by their name finds anything. Jarvis's daily self-check
+  (`brain-reconcile`) compares the list with the Google Workspace directory and names any
+  active account missing from it, as a person or as a shared account. After adding someone,
+  run `npx tsx scripts/brain-backfill-people.ts --all` so records that already name somebody
+  else gain them too. Google's notification senders ("Name (Google Docs)", "Name (via Google
+  Drive)") count as that person.
 - **Offboarding** is `update brain_person set active = false where canonical = '…'`.
   Every client they connected stops working within a minute, because membership is
   checked on each call, not once at sign-in.
@@ -1672,6 +1679,17 @@ there is no OCR here, and a chunk whose only real content is its own title match
 questions it cannot answer. And **one PDF is capped at 400,000 characters** (~167
 chunks) with the cut stated in the text, because nothing else in this pipeline caps
 a single document — see the note on `PDF_TEXT_LIMIT`.
+
+**A spreadsheet gets 800,000 characters, shared fairly between its tabs** (since
+2026-10-16; `SHEET_TEXT_LIMIT` and `fitTabs`). Before, the whole file was cut at 400,000,
+so a workbook's later tabs were never indexed: "Assessments" had 5 of its 22 tabs. Now a
+tab under its fair share goes in whole, the larger ones share the rest, and each cut tab
+says it was cut.
+
+**A document missing parts is read again.** A document's first part records how many parts
+it has, and the hourly walk re-reads a document whose stored parts are fewer, even when
+its edit date has not moved. Found 2026-10-16: seven documents were stored as a single
+clipped part and nothing re-read them, because nothing about them in Drive changed.
 
 A local run with the user credential produced **512 documents / 11,185 chunks**,
 which took the corpus from 4,797 to 15,835 and the database from ~121 MB to 289 MB.
