@@ -49,7 +49,7 @@ async function main() {
     let offset = 0;
     for (;;) {
       const res = await supabaseFetch(
-        `/rest/v1/brain_chunk?select=id,meta&source=eq.${source}&limit=${PAGE}&offset=${offset}`
+        `/rest/v1/brain_chunk?select=id,meta&source=eq.${source}&order=id.asc&limit=${PAGE}&offset=${offset}`
       );
       if (!res.ok) {
         console.error(`  ${source}: read failed ${res.status}`);

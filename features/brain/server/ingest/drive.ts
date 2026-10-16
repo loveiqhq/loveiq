@@ -757,14 +757,15 @@ export async function sheetTabsWithRows(token: string, fileId: string): Promise<
 }
 
 /**
- * One cell as `sheetText` writes it. A line inside a cell that starts with "#" gets a
- * leading space, so a cell can never forge the "## <tab>" heading `markedParts` splits a
- * spreadsheet at; a forged one would cut an example tab's later rows away from its mark.
+ * One cell as `sheetText` writes it: on one line. A line break inside a cell would let it
+ * forge the "## <tab>" heading `markedParts` splits a spreadsheet at (cutting an example
+ * tab's later rows away from its mark), and let `fitTabs`, which cuts at line ends, cut a
+ * row in the middle.
  */
 export function sheetCell(cell: unknown): string {
   return String(cell ?? "")
     .trim()
-    .replace(/\n(?=#)/g, "\n ");
+    .replace(/\s*\n\s*/g, " ");
 }
 
 async function sheetText(token: string, fileId: string): Promise<string> {
@@ -1591,7 +1592,11 @@ export async function ingestDrive(
     const sourceId = `doc:${file.id}`;
     const edited = file.modifiedTime ?? file.createdTime ?? null;
     const seen = known.get(sourceId);
-    const current = partIdsOf(known, sourceId, DRIVE_BUILDER_VERSION);
+    // Parts of THIS edit only: a run that died between two upsert batches leaves the
+    // later parts of a longer edit on the earlier one, and those must not count as there.
+    const current = partIdsOf(known, sourceId, DRIVE_BUILDER_VERSION).filter(
+      (id) => known.get(id)?.edited === seen?.edited
+    );
     /**
      * A DOCUMENT MISSING PARTS IS READ AGAIN, though its edit date has not moved. Measured
      * 2026-10-16: "Scoring Config V5" held 1 of the 46 parts its text makes and "Funnel
@@ -1600,8 +1605,9 @@ export async function ingestDrive(
      */
     const whole = !seen?.parts || 1 + current.length >= seen.parts;
     if (edited && seen && seen.edited === edited && seen.v === DRIVE_BUILDER_VERSION && whole) {
-      // Current version only: an orphan part from a longer previous version must
-      // look absent to the sweep, not be confirmed by it.
+      // Current version and edit only: an orphan part from a longer previous version, or
+      // one a failed run left on an older edit, must look absent to the sweep, not be
+      // confirmed by it.
       touch.push(sourceId, ...current);
     } else {
       toFetch.push(file);

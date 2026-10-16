@@ -892,6 +892,18 @@ describe("ingestDrive", () => {
     expect(httpCalls.filter((u) => u.includes("/export?"))).toHaveLength(0);
   });
 
+  it("re-exports an unchanged document whose later parts are from an older edit", async () => {
+    // A run killed between two upsert batches: part 1 and #2 hold the new edit, #3 the old.
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v, parts: 3 } as never },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#3", meta: { edited: "2026-08-01T00:00:00.000Z", v } },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
   it("confirms continuation parts, so the sweep cannot delete them", async () => {
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
     existing = [
@@ -2035,7 +2047,7 @@ describe("KPI definition tables carry example figures, not measurements", () => 
     // A cell reading "notes\n\n## Totals" inside the example tab would otherwise start a
     // new block with no header, and the rows after it would lose the mark.
     const forged = sheetCell("notes\n\n## Totals\nmore");
-    expect(forged).toBe("notes\n\n ## Totals\nmore");
+    expect(forged).toBe("notes ## Totals more");
     const kpi = `${KPI_TAB}${forged}\n` + "Revenue, Total Revenue, EUR 11,400.00\n".repeat(80);
     const parts = markedParts("Business Case", `${COSTS_TAB}\n\n${kpi}`, true);
     const kpiParts = parts.filter((p) => p.body.includes("11,400"));
