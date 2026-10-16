@@ -8772,6 +8772,14 @@ body:has(.rv3.rv4 [data-invite-modal]) .report-sticky-unlock {
   top: auto;
   transform: none;
 }
+/* From 700px the Summary's copy takes the whole column (896 at most), so the gate does too:
+ * the veiled lines keep the copy's measure, and the card sits in the column's middle rather
+ * than in a phone-wide box at its left edge (Fatih, 17.10). */
+@media (min-width: 700px) {
+  .rv3.rv4 .rv4-summary__gate {
+    width: 100%;
+  }
+}
 
 /* ── The slimmed chapters — sections, folds and the wall (1686:10036, 1665:6726, 1665:6950)
  * Each chapter body runs its opening, then sections: a heading row (Lora Bold 18/21.6 and

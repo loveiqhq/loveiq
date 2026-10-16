@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V3ArchetypeCard from "@features/report/ui/v3/V3ArchetypeCard";
@@ -73,6 +75,23 @@ describe("Part II's top three, slimmed (1665:3553)", () => {
     for (const [name, blurb] of Object.entries(report4ArchetypeBlurbs)) {
       expect(blurb, name).toMatch(/^[^.]+\.$/);
     }
+  });
+});
+
+describe("Part II's Summary gate on a desktop (Fatih, 17.10)", () => {
+  it("spans the column from 700px, so its card sits in the middle and the veil keeps the copy's measure", () => {
+    const css = readFileSync(join(process.cwd(), "features/report/ui/v3/reportV3.css"), "utf8");
+    // The phone's gate is the 356 text box (1665:3796); from 700px the copy takes the whole
+    // column, and a 356 gate sat at its left edge with the card off-centre.
+    expect(css).toContain(
+      [
+        "@media (min-width: 700px) {",
+        "  .rv3.rv4 .rv4-summary__gate {",
+        "    width: 100%;",
+        "  }",
+        "}",
+      ].join("\n")
+    );
   });
 });
 
