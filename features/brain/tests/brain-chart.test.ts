@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DaySeries } from "@features/brain/server/jumps";
 
-type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown> };
+type Day = { rollup?: Record<string, unknown>; ga4?: Record<string, unknown>; dashboard?: boolean };
 
 /**
  * loadSeries(until, extra) returns every day from `until - (29 + extra)` to `until`, oldest
@@ -191,6 +191,20 @@ describe("show_chart: what gets drawn", () => {
     expect(both.payload.footnote).toBe("daily · a gap is a day with no record · amounts in EUR");
     // Which days each figure is counted on, since they are not all the same days.
     expect(both.text).toContain("revenue are counted as the AP-Analytics dashboard counts them");
+  });
+
+  it("says which counting it drew: the dashboard's, or the old rollup's when that was all", async () => {
+    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: true });
+    const drawn = await draw({ metrics: ["visitors"], days: 7 });
+    expect(drawn.text).toContain("counted as the AP-Analytics dashboard counts them");
+    expect(drawn.payload.footnote).toBe("daily");
+    // The dashboard's facts could not be read: the rollup's own figures, by UTC day, and only
+    // that said, never that they are the dashboard's.
+    dayOf = () => ({ rollup: { unique_visitors: 120 }, dashboard: false });
+    const old = await draw({ metrics: ["visitors"], days: 7 });
+    expect(old.text).toContain("The dashboard's numbers could not be read just now");
+    expect(old.text).not.toContain("counted as the AP-Analytics dashboard counts them");
+    expect(old.payload.footnote).toBe("daily, UTC");
   });
 
   it("groups thousands in an amount, as the reader would write it", async () => {

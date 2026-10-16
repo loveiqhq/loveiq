@@ -261,8 +261,11 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
         : `a gap is a day with fewer than ${a.rate.minDen} ${a.rate.denLabel}`
       : "a gap is a day with no record";
   const ga4 = metrics.some((m) => m.ga4);
+  // What was served: the dashboard's counts by Berlin day, or, when its facts could not be
+  // read, the old rollup's alone, by UTC day (jumps.ts rollupOnly).
+  const fallback = rollupOnly(loaded).trim();
   const footnote = [
-    "daily",
+    fallback ? "daily, UTC" : "daily",
     gap,
     a.unit === "money" ? "amounts in EUR" : "",
     ga4 ? "GA4 misses visitors who decline cookies" : "",
@@ -292,10 +295,10 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
   const url = u.toString();
 
   const notes = [
-    "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
-      "dashboard counts them, by Berlin day; reports opened and paid are the daily rollup's, by " +
-      "UTC day.",
-    rollupOnly(loaded).trim(),
+    fallback ||
+      "Visitors, survey starts, finished surveys and revenue are counted as the AP-Analytics " +
+        "dashboard counts them, by Berlin day; reports opened and paid are the daily rollup's, " +
+        "by UTC day.",
     until === today ? "Today is still going, so its numbers are partial." : "",
     wantsAds && !ad ? "Google Ads spend could not be read just now, so it is left blank." : "",
     ga4
