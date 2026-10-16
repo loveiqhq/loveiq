@@ -1813,6 +1813,7 @@ describe("/api/mcp", () => {
         "export_status",
         "count_context",
         "browse_context",
+        "person_activity",
         "get_business_numbers",
         "list_product_tables",
         "query_product_data",
@@ -9302,5 +9303,217 @@ describe("search_company_context — an exact text it did not return", () => {
     expect(await search("who sent INV 2026004211")).toContain(
       'For an exact text such as "2026004211", find_text lists every record that holds it.'
     );
+  });
+});
+
+/**
+ * ONE PERSON'S PERIOD IN ONE CALL. On 12 Oct 2026 a review of one colleague's month made 230+
+ * calls in seven minutes; this is one read of the records the people list ties to them.
+ */
+describe("person_activity — everything one colleague is on, in one call", () => {
+  async function call(args: Record<string, unknown>) {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "person_activity", arguments: args },
+      })
+    );
+    return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+  }
+
+  const REGISTRY = [
+    { canonical: "Jane Doe", aliases: ["Jane", "jane@example.test"], kind: "person" },
+    { canonical: "Ops Bot", aliases: [], kind: "bot" },
+    { canonical: "Team Inbox", aliases: ["team@example.test"], kind: "shared" },
+  ];
+  const doc = (kind: string, source: string, i: number, over: Record<string, unknown> = {}) => ({
+    source,
+    source_id: `${kind}:${i}`,
+    title: `${kind} ${i}`,
+    period_end: `2026-10-${String(15 - i).padStart(2, "0")}`,
+    at: null,
+    kind,
+    ...over,
+  });
+
+  /** The brain_chunk reads the tool made, decoded. */
+  const reads = () =>
+    toolCalls()
+      .filter(([p]) => String(p).startsWith("/rest/v1/brain_chunk?"))
+      .map(([p]) => new URLSearchParams(String(p).slice("/rest/v1/brain_chunk?".length)));
+
+  function wire(
+    rows: Array<Record<string, unknown>>,
+    opts: { total?: number; registry?: unknown } = {}
+  ) {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (String(path).startsWith("/rest/v1/brain_person")) {
+        return opts.registry === null
+          ? { ok: false, status: 503, headers: new Headers(), json: async () => ({}) }
+          : {
+              ok: true,
+              status: 200,
+              headers: new Headers(),
+              json: async () => opts.registry ?? REGISTRY,
+            };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          "content-range": `0-${Math.max(0, rows.length - 1)}/${opts.total ?? rows.length}`,
+        }),
+        json: async () => rows,
+      };
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPeopleCache();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+  });
+
+  it("is offered as a read-only tool that needs a person", () => {
+    const tool = TOOLS.find((t) => t.name === "person_activity");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    expect(tool?.inputSchema.required).toEqual(["person"]);
+  });
+
+  it("reads the person's records in the window in ONE read, by their name on the list", async () => {
+    wire([doc("gmail-thread", "gmail", 1)]);
+    // An alias the list knows reads as the person, and the answer says which.
+    const r = await call({ person: "jane@example.test", since: "2026-10-01", until: "2026-10-16" });
+    expect(r.isError).toBeFalsy();
+    const qs = reads();
+    expect(qs).toHaveLength(1);
+    const [q] = qs as [URLSearchParams];
+    expect(q.get("meta")).toBe('cs.{"people":["Jane Doe"]}');
+    expect(q.getAll("period_end")).toEqual(["gte.2026-10-01", "lte.2026-10-16"]);
+    expect(q.get("or")).toBe("(meta->>part.is.null,meta->>part.eq.1)");
+    expect(q.get("source")).toBe("not.in.(book,paper,corporate)");
+    expect(q.get("limit")).toBe("1000");
+    expect(r.content[0]!.text).toContain(
+      'Jane Doe (asked as "jane@example.test"), 2026-10-01 to 2026-10-16'
+    );
+  });
+
+  it("defaults to the last 30 days, ending today in Berlin", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-16T22:30:00Z"), toFake: ["Date"] });
+    try {
+      wire([]);
+      await call({ person: "Jane Doe" });
+      // 00:30 on the 17th in Berlin: today there is the 17th.
+      expect(reads()[0]!.getAll("period_end")).toEqual(["gte.2026-09-17", "lte.2026-10-17"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts each group whole, shows the newest per group, and says how to list the rest", async () => {
+    wire([
+      ...Array.from({ length: 5 }, (_, i) => doc("gmail-thread", "gmail", i)),
+      doc("calendar-event", "calendar", 1, { at: "2026-10-14T08:00:00Z" }),
+      doc("task", "notion", 1),
+      doc("some-new-kind", "plan", 1),
+    ]);
+    const text = (
+      await call({ person: "Jane Doe", since: "2026-10-01", until: "2026-10-16", per_group: 2 })
+    ).content[0]!.text;
+    expect(text).toMatch(/^UNTRUSTED DATA/);
+    expect(text).toContain(
+      "Everything the people list ties to Jane Doe, 2026-10-01 to 2026-10-16: 8 records"
+    );
+    expect(text).toContain("Email threads: 5\n");
+    expect(text).toContain("gmail-thread 0");
+    expect(text).toContain("gmail-thread 1");
+    expect(text).not.toContain("gmail-thread 2");
+    expect(text).toContain(
+      '3 more: browse_context with {"sources":["gmail"],"meta":{"people":"Jane Doe","kind":"gmail-thread"},"since":"2026-10-01","until":"2026-10-16"}.'
+    );
+    // A meeting shows its time, in Berlin time.
+    expect(text).toContain("Meetings: 1\n  2026-10-14 10:00");
+    expect(text).toContain("id: calendar/calendar-event:1");
+    // A kind nobody listed is shown, never dropped.
+    expect(text).toContain("Other records (some-new-kind): 1");
+    // Groups come in their own order, and the empty ones are named.
+    expect(text.indexOf("Meetings:")).toBeLessThan(text.indexOf("Email threads:"));
+    expect(text.indexOf("Email threads:")).toBeLessThan(text.indexOf("Notion tasks:"));
+    expect(text).toMatch(
+      /None in this period: Meeting notes, WhatsApp conversations, .*Documents\./
+    );
+  });
+
+  it("says when the window holds more than one read, and the counts are of the newest", async () => {
+    wire(
+      Array.from({ length: 3 }, (_, i) => doc("gmail-thread", "gmail", i)),
+      { total: 1500 }
+    );
+    const text = (await call({ person: "Jane Doe" })).content[0]!.text;
+    expect(text).toContain("1500 records");
+    expect(text).toContain("The groups below count the newest 3 of the 1500");
+  });
+
+  it("says plainly when the person is not on the people list, and reads nothing else", async () => {
+    wire([doc("gmail-thread", "gmail", 1)]);
+    const r = await call({ person: "John Smith" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain('"John Smith" is not on the people list');
+    expect(r.content[0]!.text).toContain("find_text");
+    expect(reads()).toHaveLength(0);
+  });
+
+  it("says a bot or a shared mailbox carries no people tags", async () => {
+    wire([]);
+    const bot = await call({ person: "Ops Bot" });
+    expect(bot.isError).toBe(true);
+    expect(bot.content[0]!.text).toContain('"Ops Bot" is a bot on the people list');
+    const shared = await call({ person: "team@example.test" });
+    expect(shared.content[0]!.text).toContain("is a shared mailbox on the people list");
+    expect(reads()).toHaveLength(0);
+  });
+
+  it("calls an unreadable list or corpus an outage, never a quiet month", async () => {
+    wire([], { registry: null });
+    const noList = await call({ person: "Jane Doe" });
+    expect(noList.isError).toBe(true);
+    expect(noList.content[0]!.text).toContain("not a sign that they did nothing");
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      String(path).startsWith("/rest/v1/brain_person")
+        ? { ok: true, status: 200, headers: new Headers(), json: async () => REGISTRY }
+        : { ok: false, status: 500, headers: new Headers(), json: async () => ({}) }
+    );
+    const down = await call({ person: "Jane Doe" });
+    expect(down.isError).toBe(true);
+    expect(down.content[0]!.text).toContain("not a quiet month");
+  });
+
+  it("says what nothing in the window does and does not mean", async () => {
+    wire([]);
+    const r = await call({ person: "Jane", since: "2026-10-01", until: "2026-10-02" });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0]!.text).toContain(
+      'Nothing on record is tied to Jane Doe (asked as "Jane") from 2026-10-01 to 2026-10-02'
+    );
+    expect(r.content[0]!.text).toContain("not proof they did nothing");
+  });
+
+  it.each([
+    ["no person", {}],
+    ["a day that does not exist", { person: "Jane Doe", since: "2026-09-31" }],
+    ["a number for a day", { person: "Jane Doe", until: 20261016 }],
+    [
+      "a window that ends before it starts",
+      { person: "Jane Doe", since: "2026-10-10", until: "2026-10-01" },
+    ],
+  ])("refuses %s before reading anything", async (_what, args) => {
+    wire([]);
+    const r = await call(args);
+    expect(r.isError).toBe(true);
+    // The call log's own write aside, nothing is read.
+    expect(toolCalls()).toHaveLength(0);
   });
 });
